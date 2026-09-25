@@ -36,6 +36,7 @@ export function createPowerBiDashboardView({
   let report = null;
   let reportContainer = null;
   let openRevision = 0;
+  let onHomeAction = null;
 
   async function setNativePinchEnabled(enabled) {
     if (typeof powerBiZoom?.setEnabled !== "function") return false;
@@ -61,6 +62,7 @@ export function createPowerBiDashboardView({
       try { powerBiClient?.reset?.(reportContainer); } catch { /* The DOM still closes if SDK cleanup fails. */ }
     }
     reportContainer = null;
+    onHomeAction = null;
     current.removeEventListener("click", handleClick);
     documentRef.removeEventListener?.("keydown", handleKeydown);
     current.remove();
@@ -70,6 +72,12 @@ export function createPowerBiDashboardView({
   }
 
   function handleClick(event) {
+    if (event.target?.closest?.("[data-powerbi-home]")) {
+      const navigateHome = onHomeAction;
+      close();
+      navigateHome?.();
+      return;
+    }
     if (event.target?.closest?.("[data-powerbi-close]")) close();
   }
 
@@ -78,7 +86,10 @@ export function createPowerBiDashboardView({
   }
 
   function handleLoaded() {
-    if (dialog) dialog.querySelector(".powerbi-dashboard__hint").textContent = "Relatório conectado. Use as abas do Power BI para navegar.";
+    if (!dialog) return;
+    const hint = dialog.querySelector(".powerbi-dashboard__hint");
+    hint.textContent = "";
+    hint.hidden = true;
   }
 
   function handleError(event) {
@@ -89,9 +100,10 @@ export function createPowerBiDashboardView({
     hint.textContent = message
       ? `O Power BI não conseguiu carregar o relatório: ${message}`
       : "O Power BI não conseguiu carregar o relatório. Confira o acesso e a licença da conta Microsoft.";
+    hint.hidden = false;
   }
 
-  async function open({ accessToken, getAccessToken } = {}) {
+  async function open({ accessToken, getAccessToken, onHome } = {}) {
     if (dialog) return true;
     if (!String(accessToken || "").trim()) throw new TypeError("É necessário autenticar no Power BI antes de abrir o relatório.");
     if (typeof getAccessToken !== "function") throw new TypeError("A renovação segura do token do Power BI não está disponível.");
@@ -112,25 +124,28 @@ export function createPowerBiDashboardView({
     closeButton.className = "powerbi-dashboard__back";
     closeButton.setAttribute("aria-label", "Voltar para a conversa");
     closeButton.textContent = "‹";
+    const homeButton = documentRef.createElement("button");
+    homeButton.type = "button";
+    homeButton.dataset.powerbiHome = "true";
+    homeButton.className = "powerbi-dashboard__home";
+    homeButton.setAttribute("aria-label", "Ir ao menu principal");
+    homeButton.title = "Ir ao menu principal";
+    homeButton.textContent = "🏠";
     const heading = documentRef.createElement("div");
     heading.className = "powerbi-dashboard__heading";
     const title = documentRef.createElement("h1");
     title.textContent = "📊 POWER BI";
-    const subtitle = documentRef.createElement("p");
-    subtitle.textContent = "ENERGÉTICA · relatório com todas as abas";
-    heading.append(title, subtitle);
+    heading.append(title);
     const directLink = documentRef.createElement("a");
     directLink.className = "powerbi-dashboard__direct-link";
     directLink.href = POWERBI_REPORT_URL;
     directLink.target = "_blank";
     directLink.rel = "noopener noreferrer";
     directLink.textContent = "Abrir no Power BI";
-    header.append(closeButton, heading, directLink);
-
     const hint = documentRef.createElement("p");
     hint.className = "powerbi-dashboard__hint";
     hint.setAttribute("role", "status");
-    hint.textContent = "Conectando ao relatório protegido com sua conta Microsoft…";
+    hint.hidden = true;
 
     const frameWrap = documentRef.createElement("div");
     frameWrap.className = "powerbi-dashboard__frame-wrap";
@@ -138,6 +153,8 @@ export function createPowerBiDashboardView({
     reportContainer.className = "powerbi-dashboard__report";
     reportContainer.setAttribute("aria-label", "Relatório Power BI ENERGÉTICA com todas as abas");
     frameWrap.append(reportContainer);
+    header.append(closeButton, homeButton, heading, directLink);
+    onHomeAction = typeof onHome === "function" ? onHome : null;
     dialog.append(header, hint, frameWrap);
     dialog.addEventListener("click", handleClick);
     documentRef.addEventListener?.("keydown", handleKeydown);
@@ -174,6 +191,7 @@ export function createPowerBiDashboardView({
     } catch (error) {
       if (dialog === currentDialog && openRevision === revision) {
         hint.textContent = "Não foi possível incorporar o relatório. Confira a permissão Power BI da conta e tente novamente.";
+        hint.hidden = false;
       }
       throw error;
     }
