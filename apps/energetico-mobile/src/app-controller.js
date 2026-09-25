@@ -2873,6 +2873,7 @@ export function createAppController({
       if (stopped || account !== dashboardAccount) return false;
       return await (view.openPowerBiDashboard?.({
         accessToken,
+        onHome: () => sendText("", PORTAL_MAIN_MENU_CONFIRM_ID),
         getAccessToken: async () => {
           if (stopped || account !== dashboardAccount) throw new Error("A sessão do Power BI foi encerrada.");
           return powerBiAccessToken();

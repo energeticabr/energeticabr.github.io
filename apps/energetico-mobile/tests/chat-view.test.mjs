@@ -1438,6 +1438,50 @@ test("painel Power BI usa token Microsoft no SDK e renova o token sem autentica�
   dom.window.close();
 });
 
+test("cabeçalho do Power BI oferece retorno ao menu principal sem subtítulo ou faixa de conexão", async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  let homeCalls = 0;
+  const eventHandlers = new Map();
+  const powerBiClient = {
+    models: { TokenType: { Aad: 0 } },
+    embed() { return { on(event, handler) { eventHandlers.set(event, handler); }, off() {} }; },
+    reset() {},
+  };
+  const view = createPowerBiDashboardView({
+    documentRef: dom.window.document,
+    host: dom.window.document.querySelector("#app"),
+    powerBiClient,
+  });
+
+  assert.equal(await view.open({
+    accessToken: "token",
+    getAccessToken: async () => "token",
+    onHome: () => { homeCalls += 1; },
+  }), true);
+
+  const dialog = dom.window.document.querySelector('[role="dialog"][aria-label="Painel Power BI ENERGÉTICA"]');
+  assert.ok(dialog.querySelector(".powerbi-dashboard__back"));
+  assert.ok(dialog.querySelector('[data-powerbi-home][aria-label="Ir ao menu principal"]'));
+  assert.deepEqual([...dialog.querySelector(".powerbi-dashboard__header").children].map(element => element.className), [
+    "powerbi-dashboard__back",
+    "powerbi-dashboard__home",
+    "powerbi-dashboard__heading",
+    "powerbi-dashboard__direct-link",
+  ]);
+  assert.equal(dialog.querySelector(".powerbi-dashboard__heading p"), null);
+  assert.equal(dialog.querySelector(".powerbi-dashboard__heading h1")?.textContent, "📊 POWER BI");
+  assert.equal(dialog.querySelector(".powerbi-dashboard__direct-link")?.textContent, "Abrir no Power BI");
+
+  eventHandlers.get("loaded")?.();
+  assert.equal(dialog.querySelector(".powerbi-dashboard__hint")?.hidden, true);
+  dialog.querySelector("[data-powerbi-home]").click();
+  assert.equal(homeCalls, 1);
+  assert.equal(dom.window.document.querySelector('[role="dialog"][aria-label="Painel Power BI ENERGÉTICA"]'), null);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("habilita pinça nativa somente enquanto o painel Power BI está aberto", async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const calls = [];

@@ -101,7 +101,7 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e s�
   assert.deepEqual(destroyed.sort(), ["documents", "family", "group", "product", "subfamily"]);
 });
 
-test("abrir Power BI obtém token delegado, solicita consentimento e não envia resposta ao fluxo", async t => {
+test("abrir Power BI obtém token delegado, solicita consentimento e navega ao menu pela casa", async t => {
   const h = makeHarness();
   const opens = [];
   const tokenCalls = [];
@@ -130,7 +130,9 @@ test("abrir Power BI obtém token delegado, solicita consentimento e não envia 
   assert.equal(opens.length, 1);
   assert.equal(opens[0].accessToken, "powerbi-aad-token");
   assert.equal(await opens[0].getAccessToken(), "powerbi-aad-token");
-  assert.equal(h.chatCalls.length, before);
+  await opens[0].onHome();
+  assert.deepEqual(h.chatCalls.slice(before), [["text", { text: "", replyId: "portal_confirm_main_menu" }]]);
+  assert.equal(h.chatCalls.length, before + 1);
 });
 
 test("retoma a abertura do painel Power BI após consentimento Microsoft", async t => {
