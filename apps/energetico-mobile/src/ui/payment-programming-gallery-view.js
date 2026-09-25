@@ -345,7 +345,7 @@ export function createPaymentProgrammingGallery({
     const fields = row.fields || {};
     const id = text(field(fields, ["ID"]) ?? row.id);
     const hasAttachmentControl = row.hasAttachments !== false;
-    const card = el("article", `og-card pg-card${hasAttachmentControl ? " og-card--with-attachments pg-card--attachments" : ""}`);
+    const card = el("article", `og-card pg-card${hasAttachmentControl ? " og-card--with-attachments" : ""}${row.hasAttachments === true ? " pg-card--attachments" : ""}`);
     card.dataset.itemId = row.id;
     const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading pg-card-heading");

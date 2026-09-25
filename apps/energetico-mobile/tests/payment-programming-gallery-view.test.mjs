@@ -113,15 +113,21 @@ test("G28 mostra o clipe lateral salvo ausência confirmada e abre a coleção c
     "the attachment rail appears before the payment content");
   assert.equal(ctx.root().querySelector('.pg-card[data-item-id="307"] .og-card-attachment-rail'), null,
     "payments known to have no attachments do not show the icon");
-  assert.ok(ctx.root().querySelector('.pg-card[data-item-id="308"] .og-card-attachment-rail'),
+  const unknownCard = ctx.root().querySelector('.pg-card[data-item-id="308"]');
+  assert.ok(unknownCard.querySelector(".og-card-attachment-rail"),
     "Graph may not report attachment presence, so unknown rows keep the access control");
+  assert.equal(unknownCard.classList.contains("pg-card--attachments"), false,
+    "the green attachment accent is reserved for confirmed attachments");
 
   rail.click();
   await settle();
-  assert.deepEqual(ctx.calls.filter(call => call[0] === "listAttachments"), [["listAttachments", "306"]]);
-  assert.equal(opened.length, 1);
+  unknownCard.querySelector(".og-card-attachment-rail").click();
+  await settle();
+  assert.deepEqual(ctx.calls.filter(call => call[0] === "listAttachments"), [["listAttachments", "306"], ["listAttachments", "308"]]);
+  assert.equal(opened.length, 2);
   assert.deepEqual(opened[0].map(item => item.fileName), ["nota.pdf"]);
   assert.equal((await opened[0][0].source).type, "application/pdf");
+  assert.deepEqual(opened[1].map(item => item.fileName), ["nota.pdf"]);
 });
 
 test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visualizador compartilhado", async t => {
