@@ -186,6 +186,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-date-picker__close { position: static; flex: 0 0 var(--compact-control-size); display: grid; place-items: center; width: var(--compact-control-size); height: var(--compact-control-size); padding: 0; border: 0; border-radius: 50%; color: #b42318; background: #fee4e2; font-size: clamp(1.45rem, 2.2vw, 1.8rem); font-weight: 800; line-height: 1; }
 .chat-date-picker__close:hover { color: #8f1d14; background: #fecdca; }
 .chat-date-picker__close:focus-visible { outline: 3px solid rgb(180 35 24 / 28%); outline-offset: 2px; }
+.chat-pending-provisions__settings { flex: 0 0 var(--compact-control-size); display: grid; place-items: center; width: var(--compact-control-size); height: var(--compact-control-size); padding: 0; border: 1px solid #c6c9cc; border-radius: 12px; color: #4b5563; background: #e1e3e5; font-size: 1.2rem; line-height: 1; }
+.chat-pending-provisions__settings:hover { background: #d1d5d8; }
+.chat-pending-provisions__settings:focus-visible { outline: 3px solid rgb(75 85 99 / 28%); outline-offset: 2px; }
 .chat-pending-provisions { box-sizing: border-box; display: flex; flex-direction: column; width: min(100%, 880px); max-height: min(92dvh, calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); overflow: hidden; }
 .chat-pending-provisions-reminder { width: min(100%, 560px); }
 .chat-pending-provisions__header { flex: 0 0 auto; justify-content: flex-start; align-items: center; }

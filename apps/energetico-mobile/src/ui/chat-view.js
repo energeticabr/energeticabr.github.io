@@ -1274,10 +1274,11 @@ function pendingProvisionsMarkup(
       </div>
     </div>`;
   }
-  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="close-pending-provisions" data-pending-provisions-dialog>
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
-        <button class="chat-date-picker__close" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Fechar e escolher quando lembrar novamente" title="Fechar e escolher quando lembrar novamente">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" data-immediate-action="true" aria-label="Fechar avisos de provisões pendentes" title="Fechar avisos">×</button>
+        <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
         <h2 id="pending-provisions-title">💳 Provisões de pagamento pendentes</h2>
       </div>
       <p>Vencidas ou com vencimento hoje (${rows.length}).</p>

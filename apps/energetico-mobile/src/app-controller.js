@@ -1549,7 +1549,14 @@ export function createAppController({
   }
 
   function dismissPendingProvisions() {
-    return closePendingProvisions();
+    if (!pendingProvisionSnapshot) return false;
+    pendingProvisionSessionDismissed = true;
+    pendingProvisionSnapshot = null;
+    pendingProvisionReminderOpen = false;
+    pendingProvisionReminderError = "";
+    clearPendingProvisionAttachmentState();
+    render();
+    return true;
   }
 
   function cancelPendingProvisionReminderChoice() {

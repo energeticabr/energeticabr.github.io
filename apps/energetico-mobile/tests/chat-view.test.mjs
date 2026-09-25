@@ -238,14 +238,16 @@ test("exibe data e quantidade quando a data da última validação não tem pend
   assert.match(markup, /VER OUTRAS DATAS/);
 });
 
-test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
+test("lista de provisões oferece fechar com X e configurar lembrete pela engrenagem", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {
       due: true,
       rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026", product: "Material", total: "R$ 120,00" }],
     },
   }));
-  assert.match(markup, /data-action="close-pending-provisions"/);
+  assert.match(markup, /data-action="dismiss-pending-provisions"/);
+  assert.match(markup, /data-action="close-pending-provisions"[^>]*aria-label="Configurar lembrete das provisões"/);
+  assert.match(markup, /data-popup-close-action="dismiss-pending-provisions"/);
   assert.match(markup, /Fornecedor A/);
   const reminder = renderChatMarkup(signedInState({
     pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
@@ -526,17 +528,22 @@ test("atualiza o estado desabilitado dos checks sem exigir uma mudança na conve
   dom.window.close();
 });
 
-test("o X das provisões abre a escolha de lembrete no início do toque do iPhone", () => {
+test("X dispensa provisões e engrenagem abre lembrete no início do toque do iPhone", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
-  let closeRequests = 0;
+  let dismissRequests = 0;
+  let reminderRequests = 0;
   const reminderState = signedInState({
     pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] },
     pendingProvisionReminderOpen: true,
   });
+  view.on("dismiss-pending-provisions", () => {
+    dismissRequests += 1;
+    view.render(signedInState());
+  });
   view.on("close-pending-provisions", () => {
-    closeRequests += 1;
+    reminderRequests += 1;
     view.render(reminderState);
   });
   view.render(signedInState({
@@ -546,22 +553,35 @@ test("o X das provisões abre a escolha de lembrete no início do toque do iPhon
     },
   }));
 
-  const close = root.querySelector('[data-action="close-pending-provisions"]');
-  const touchStart = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
-  Object.defineProperties(touchStart, {
-    isPrimary: { value: true },
-    pointerType: { value: "touch" },
-  });
-  close.dispatchEvent(touchStart);
+  const tap = element => {
+    const touchStart = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+    Object.defineProperties(touchStart, {
+      isPrimary: { value: true },
+      pointerType: { value: "touch" },
+    });
+    element.dispatchEvent(touchStart);
 
-  const touchEnd = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
-  Object.defineProperties(touchEnd, {
-    isPrimary: { value: true },
-    pointerType: { value: "touch" },
-  });
-  close.dispatchEvent(touchEnd);
+    const touchEnd = new dom.window.Event("pointerup", { bubbles: true, cancelable: true });
+    Object.defineProperties(touchEnd, {
+      isPrimary: { value: true },
+      pointerType: { value: "touch" },
+    });
+    element.dispatchEvent(touchEnd);
+  };
 
-  assert.equal(closeRequests, 1);
+  const close = root.querySelector('[data-action="dismiss-pending-provisions"]');
+  assert.ok(close);
+  tap(close);
+  assert.equal(dismissRequests, 1);
+  assert.equal(reminderRequests, 0);
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+
+  view.render(signedInState({ pendingProvisions: { due: true, rows: [{ supplier: "Fornecedor A" }] } }));
+  const settings = root.querySelector('[data-action="close-pending-provisions"]');
+  assert.ok(settings);
+  tap(settings);
+
+  assert.equal(reminderRequests, 1);
   assert.ok(root.querySelector('[data-action="pending-provisions-reminder-choice"][data-value="2h"]'));
   dom.window.close();
 });
@@ -3525,7 +3545,7 @@ test("marca cada popup do chat com a ação equivalente ao cancelamento no fundo
     ["[data-date-picker-dialog]", "cancel-date-picker"],
     ["[data-signature-pad-dialog]", "cancel-signature-pad"],
     ["[data-signature-placement-dialog]", "close-signature-placement"],
-    ["[data-pending-provisions-dialog]", "close-pending-provisions"],
+    ["[data-pending-provisions-dialog]", "dismiss-pending-provisions"],
   ];
   for (const [selector, action] of expected) {
     assert.equal(dom.window.document.querySelector(selector)?.dataset.popupCloseAction, action, selector);
