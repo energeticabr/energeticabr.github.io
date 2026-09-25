@@ -2773,7 +2773,10 @@ export function createAppController({
       waiters.forEach(resolve => resolve());
     }
     const state = store.getState();
-    const nextEpiSelectionIds = [...epiSelectedProducts.keys()];
+    // Keep the checked batch visually stable while the VM records each item.
+    const nextEpiSelectionIds = epiFinalizeProgress
+      ? epiFinalizeProgress.products.map(product => String(product.id))
+      : [...epiSelectedProducts.keys()];
     const nextEpiSelectionIdsSignature = JSON.stringify(nextEpiSelectionIds);
     if (nextEpiSelectionIdsSignature !== epiSelectionIdsSignature) {
       epiSelectionIds = nextEpiSelectionIds;
@@ -3443,8 +3446,11 @@ export function createAppController({
     const editingSignature = replyId === DOCUMENT_SIGNING_EDIT_SIGNATURE_ID;
     const positioningSignature = String(replyId || "").startsWith("document_signing_position_point:");
     const previousState = store.getState();
+    const previousAssistantPollSnapshot = currentAssistantPollSnapshot;
     syncEpiDeliverySnapshot(previousState.activeFlow);
-    const previousPoll = latestAssistantPoll(previousState.messages);
+    const previousPoll = (behavior.epiFinalizeStep === true || epiFinalizeProgress?.phase === "quantity")
+      ? currentAssistantPoll() || latestAssistantPoll(previousState.messages)
+      : latestAssistantPoll(previousState.messages);
     const resumedEpiQuantity = previousState.activeFlow?.epiDelivery?.stage === "document_signing_epi_quantity";
     const epiFinalizeAdvanceRetry = Boolean(
       epiFinalizeProgress?.phase === "advance"
@@ -3481,6 +3487,7 @@ export function createAppController({
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
     let epiAdvanceError = null;
+    let remoteResponseReceived = false;
     try {
       if (editingSignature) {
         signaturePlacementEditPending = true;
@@ -3500,7 +3507,7 @@ export function createAppController({
               || (Array.isArray(message.options) && message.options.some(option => String(option?.reply || option?.id || "").startsWith("audit_log_row:")))
             : /log\s+de\s+a[cç][oõ]es/i.test(String(message?.caption || message?.text || ""))
         ))),
-        silent: behavior.silent === true,
+        silent: behavior.silent === true || behavior.epiFinalizeStep === true,
         preserveDraft: behavior.preserveDraft === true,
       });
       behavior.onRequest?.();
@@ -3508,6 +3515,7 @@ export function createAppController({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
+      remoteResponseReceived = true;
       result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
       const quantityResult = result;
       const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
@@ -3639,8 +3647,17 @@ export function createAppController({
         clearLegacyDocumentLineSelection();
         clearEpiProductSelection();
       }
-      const staged = stagedResponse(effectiveResult);
-      const confirmed = store.confirmText(operation, staged?.immediate || effectiveResult);
+      const hideEpiFinalizeResponse = behavior.epiFinalizeStep === true
+        && Boolean(epiFinalizeProgress)
+        && epiFinalizeProgress?.phase !== "finalize"
+        && !epiAdvanceError;
+      // Automatic batch prompts remain in the controller snapshot for routing,
+      // but their intermediate screens do not enter the visible conversation.
+      const presentationResult = hideEpiFinalizeResponse
+        ? { ...effectiveResult, messages: [] }
+        : effectiveResult;
+      const staged = stagedResponse(presentationResult);
+      const confirmed = store.confirmText(operation, staged?.immediate || presentationResult);
       let resumeEpiFinalize = false;
       if (confirmed) {
         if (epiQuantityAnswer && epiQuantityProduct && !isEpiQuantityQuestion(latestAssistantPoll(effectiveResult.messages))) {
@@ -3693,6 +3710,11 @@ export function createAppController({
       }
       return confirmed && !epiAdvanceError;
     } catch (error) {
+      // Preserve the hidden step so a failed automatic answer can be retried
+      // against the same VM question instead of a stale visible poll.
+      if (!remoteResponseReceived && behavior.epiFinalizeStep === true && previousAssistantPollSnapshot) {
+        currentAssistantPollSnapshot = previousAssistantPollSnapshot;
+      }
       if (operation && store.getState().activeText?.id === operation.id && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
@@ -3743,7 +3765,11 @@ export function createAppController({
 
     if (progress.phase === "finalize") {
       const state = store.getState();
-      const finalizeOption = currentLineDecisionOption(state.messages, state.activeFlow);
+      const currentPoll = currentAssistantPoll();
+      const finalizeOption = currentLineDecisionOption(
+        currentPoll ? [currentPoll] : state.messages,
+        currentAssistantActiveFlow() || state.activeFlow,
+      );
       if (!finalizeOption) {
         setSessionError(new Error("Não foi possível concluir a seleção de EPI. Tente novamente."));
         return false;

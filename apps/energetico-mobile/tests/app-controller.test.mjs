@@ -1637,6 +1637,63 @@ test("último EPI escolhido pelo botão volta à lista vazia com FINALIZAR e con
   assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
 });
 
+test("finalizar lote EPI não apresenta perguntas intermediárias nem comandos automáticos", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = epiOption(612, "CAPACETE");
+  const last = epiOption(613, "LUVA", "PAR");
+  const snapshot = (stage, items, pendingProduct = null) => ({
+    ...epiActiveFlow,
+    epiDelivery: { stage: `document_signing_epi_${stage}`, pendingProduct, items },
+  });
+  const committedFirst = { description: "CAPACETE", quantity: "1", unit: "UN" };
+  const committedLast = { description: "LUVA", quantity: "1", unit: "PAR" };
+  h.store.ingestRemoteMessages([epiProductPoll([first, last])], { activeFlow: snapshot("product", []) });
+  let quantityAttempts = 0;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "612") return {
+      status: "processed", activeFlow: snapshot("quantity", [], { description: "CAPACETE", unit: "UN" }),
+      messages: [epiQuantityPoll()],
+    }
+    if (payload.replyId === "613") return {
+      status: "processed", activeFlow: snapshot("quantity", [committedFirst], { description: "LUVA", unit: "PAR" }),
+      messages: [epiQuantityPoll()],
+    }
+    if (payload.text === "1") {
+      quantityAttempts += 1;
+      const items = quantityAttempts === 1 ? [committedFirst] : [committedFirst, committedLast];
+      return { status: "processed", activeFlow: snapshot("more", items), messages: [epiMorePoll()] };
+    }
+    if (payload.replyId === "yes") return {
+      status: "processed", activeFlow: snapshot("product", [committedFirst]), messages: [epiProductPoll([last])],
+    };
+    if (payload.replyId === "no") return {
+      status: "processed",
+      activeFlow: snapshot("more", [committedFirst, committedLast]),
+      messages: [{ type: "poll", question: "PDF GERADO. ESCOLHA COMO DESEJA CONTINUAR.", options: [] }],
+    };
+    throw new Error(`Resposta EPI inesperada: ${JSON.stringify(payload)}`);
+  };
+
+  await h.view.emit("epi-product-selection-changed", { productId: "612", selected: true });
+  await h.view.emit("epi-product-selection-changed", { productId: "613", selected: true });
+  const batchStartRender = h.view.renders.length;
+  await h.view.emit("select-reply", { replyId: "document_line_finalize", label: "✅ FINALIZAR" });
+
+  const renderedMessages = h.view.renders.flatMap(render => render.messages || []);
+  assert.equal(renderedMessages.some(message => /QUAL A QUANTIDADE|DESEJA APONTAR OUTRO PRODUTO EPI/i.test(message.question || "")), false);
+  assert.equal(h.store.getState().messages.some(message => message.role === "user"), false);
+  assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
+  const batchProductRenders = h.view.renders.slice(batchStartRender).filter(render => (
+    !render.messages?.some(message => /PDF GERADO/.test(message.question || ""))
+    && render.messages?.some(message => /QUAL PRODUTO EPI FOI ENTREGUE/.test(message.question || ""))
+  ));
+  assert.ok(batchProductRenders.length > 0);
+  for (const render of batchProductRenders) assert.deepEqual(render.epiSelectedProductIds, ["612", "613"]);
+});
+
 test("selecionar todos os produtos EPI finaliza sem tentar avançar para catálogo vazio", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
