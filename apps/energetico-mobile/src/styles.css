@@ -528,7 +528,7 @@ button { touch-action: manipulation; }
 .chat-choice-columns--registration-menu .chat-choice-button--gallery { font-size: clamp(.72rem, 2.9vw, .96rem); }
 .chat-choice-columns__secondary { min-width: 0; }
 .chat-gallery-actions > .chat-choice-button { width: 100%; }
-.chat-choice-button--gallery { color: #fff; border-color: #454c53; background: #454c53; }
+.chat-choice-button--gallery { border-radius: 14px; color: #fff; border-color: #454c53; background: #454c53; }
 .chat-choice-button--gallery:hover:not(:disabled) { color: #fff; border-color: #343a40; background: #343a40; }
 .chat-message--demand-menu { gap: 0; }
 .chat-message--demand-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
