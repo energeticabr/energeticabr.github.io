@@ -79,10 +79,11 @@ test("G7 filtra por padrão atividades criadas ou em atendimento e mantém o sta
   assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
   assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId).sort(), ["101", "102"]);
 
-  button(ctx.root(), "Limpar filtros").click();
-  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
   setFilter(ctx, "status", "EM ATENDIMENTO");
   assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId), ["102"]);
+  button(ctx.root(), "Limpar filtros").click();
+  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
+  assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId).sort(), ["101", "102"]);
 });
 
 test("G7 oferece EM ATENDIMENTO mesmo quando nenhum registro tem esse status", async t => {
