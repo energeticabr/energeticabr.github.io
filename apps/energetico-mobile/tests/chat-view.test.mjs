@@ -1693,6 +1693,60 @@ test("menu de Demandas remove o avatar e coloca Galeria Tarefas à direita de Ad
   dom.window.close();
 });
 
+test("botões de todas as galerias têm cantos arredondados como os azuis e mantêm o cinza", () => {
+  const messages = [
+    {
+      id: "gallery-style-launch",
+      role: "assistant",
+      type: "poll",
+      question: "📦 SUPRIMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
+        { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO", reply: "payment" },
+      ],
+    },
+    {
+      id: "gallery-style-registration",
+      role: "assistant",
+      type: "poll",
+      question: "📦 SUPRIMENTOS\nEFETUAR CADASTROS\nQUAL CADASTRO VOCÊ DESEJA EFETUAR?",
+      options: [
+        { id: "register_group", label: "CADASTRAR GRUPO", reply: "register_group" },
+        { id: "register_family", label: "CADASTRAR FAMÍLIA", reply: "register_family" },
+      ],
+    },
+    {
+      id: "gallery-style-demands",
+      role: "assistant",
+      type: "poll",
+      question: "📋 DEMANDAS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "add_task", label: "ADICIONAR UMA NOVA TAREFA", reply: "add_task" },
+        { id: "finish_task", label: "FINALIZAR UMA TAREFA", reply: "finish_task" },
+      ],
+    },
+  ];
+  const markup = renderChatMarkup(signedInState({ messages }));
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const dom = new JSDOM(markup);
+  const styleElement = dom.window.document.createElement("style");
+  styleElement.textContent = styles;
+  dom.window.document.head.append(styleElement);
+
+  const blueButton = dom.window.document.querySelector(".chat-choice-list button");
+  const expectedRadius = dom.window.getComputedStyle(blueButton).borderRadius;
+  const galleryButtons = [...dom.window.document.querySelectorAll(".chat-gallery-actions .chat-choice-button--gallery")];
+
+  assert.equal(expectedRadius, "14px");
+  assert.equal(galleryButtons.length, 9);
+  for (const button of galleryButtons) {
+    assert.equal(dom.window.getComputedStyle(button).borderRadius, expectedRadius, button.textContent);
+    assert.equal(dom.window.getComputedStyle(button).backgroundColor, "rgb(69, 76, 83)", button.textContent);
+  }
+
+  dom.window.close();
+});
+
 test("exibe tamanhos da compactação em KB ou MB, nunca em bytes", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
