@@ -4565,6 +4565,44 @@ test("toque no título ainda fecha a bandeja quando o WebView cancela o ponteiro
   dom.window.close();
 });
 
+test("offset de coordenadas no touchend não transforma toque no título em rolagem", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, target, clientY = 20) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 78, pointerType: "touch", isPrimary: true, clientX: 20, clientY,
+    })) Object.defineProperty(event, key, { value });
+    target.dispatchEvent(event);
+  };
+  const start = { identifier: 10, clientX: 20, clientY: 20 };
+  const shiftedRelease = { identifier: 10, clientX: 20, clientY: 46 };
+  const touch = (type, target, touches, changedTouches) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { touches: { value: touches }, changedTouches: { value: changedTouches } });
+    target.dispatchEvent(event);
+  };
+
+  pointer("pointerdown", summary);
+  touch("touchstart", summary, [start], [start]);
+  pointer("pointercancel", root);
+  // iOS may report a shifted release point after its pointer stream is
+  // cancelled, without delivering a touchmove for a physical scroll.
+  touch("touchend", root, [], [shiftedRelease]);
+  summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+
+  assert.equal(details.open, false);
+  view.destroy();
+  dom.window.close();
+});
+
 test("clique sintético redirecionado após fechar a bandeja não aciona um botão", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
