@@ -3,7 +3,7 @@ import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
 import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
-import { latestDatabaseFilter } from "../chat/database-filter.js";
+import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
@@ -234,14 +234,6 @@ function insertPowerBiAfterPersonalExpenses(options) {
   ));
   if (index < 0) return options;
   return [...options.slice(0, index + 1), powerBiDashboardOption(), ...options.slice(index + 1)];
-}
-
-function isDatabaseRegistrationOption(option) {
-  if (option?.registrationAction === true || option?.actionType === "registration") return true;
-  const replyId = normalizedDateText(option?.reply || option?.id || "");
-  const label = normalizedDateText([option?.label, option?.title, option?.text].filter(Boolean).join(" "));
-  return /^(?:register|registration|cadastro|cadastrar)(?:$|[:_-])/.test(replyId)
-    || /^(?:cadastrar|cadastro|efetuar\s+cadastro|fazer\s+cadastro|novo\s+cadastro)\b/.test(label);
 }
 
 function draftMenuOptions(message) {

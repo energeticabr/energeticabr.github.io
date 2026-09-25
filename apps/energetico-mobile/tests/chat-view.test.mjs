@@ -1852,6 +1852,27 @@ test("filtro preserva a ação de cadastro existente quando não corresponde ao 
   assert.doesNotMatch(markup, /WILLIAM SILVA/);
 });
 
+test("filtro mantém CADASTRAR NOVO com emoji mesmo quando nenhum registro corresponde", () => {
+  const markup = renderChatMarkup(signedInState({
+    draft: "Swi",
+    messages: [{
+      id: "supplier-filter-no-match",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL FORNECEDOR?",
+      databaseFilter: true,
+      databaseFilterKey: "supplier",
+      options: [
+        { id: "supplier:17", label: "17 - WILLIAM SILVA", reply: "17" },
+        { id: "create_supplier", label: "➕ CADASTRAR NOVO FORNECEDOR", reply: "create_supplier" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /CADASTRAR NOVO FORNECEDOR/);
+  assert.doesNotMatch(markup, /WILLIAM SILVA/);
+});
+
 test("lista de produtos EPI combina checkbox desmarcado com o botão de quantidade personalizada", () => {
   const poll = {
     id: "epi-products",
