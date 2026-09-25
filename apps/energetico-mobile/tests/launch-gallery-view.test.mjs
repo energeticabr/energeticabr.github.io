@@ -189,6 +189,58 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
 });
 
+test('launch summary formats SharePoint dates as dd/mm/yyyy and resolves the creator name instead of its numeric lookup id', async t => {
+  const item = row(3450);
+  item.createdBy = { user: { displayName: 'Bernardo Notini' } };
+  item.fields = {
+    ...item.fields,
+    'DATA DE COMPRA': '2026-09-24T03:00:00Z',
+    'DATA DE RMS': '2026-09-24T03:00:00Z',
+    MODIFICAÇÕES: '2026-09-25T00:43:17Z',
+    'ADICIONADO POR': 1073741822,
+  };
+  delete item.fields.DATA;
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+
+  await ctx.gallery.open();
+
+  const record = ctx.root().querySelector('.lg-record');
+  const values = new Map([...record.querySelectorAll('.lg-record-field')].map(pair => [
+    pair.querySelector('.lg-record-label').textContent,
+    pair.querySelector('.lg-record-value').textContent,
+  ]));
+  assert.equal(values.get('DATA DE COMPRA'), '24/09/2026');
+  assert.equal(values.get('DATA DE RMS'), '24/09/2026');
+  assert.equal(values.get('MODIFICAÇÕES'), '24/09/2026');
+  assert.equal(values.get('ADICIONADO POR'), 'Bernardo Notini');
+  assert.doesNotMatch(record.textContent, /2026-09-24T03:00:00Z|2026-09-25T00:43:17Z|1073741822/);
+
+  button(record, 'Detalhes').click(); await settle();
+  const details = ctx.root().querySelector('.lg-data-table');
+  const detailValues = new Map([...details.querySelectorAll('tr')].map(line => [
+    line.querySelector('th').textContent,
+    line.querySelector('td').textContent,
+  ]));
+  assert.equal(detailValues.get('DATA DE COMPRA'), '24/09/2026');
+  assert.equal(detailValues.get('MODIFICAÇÕES'), '24/09/2026');
+  assert.equal(detailValues.get('ADICIONADO POR'), 'Bernardo Notini');
+  assert.doesNotMatch(details.textContent, /1073741822|2026-09-25T00:43:17Z/);
+});
+
+test('launch creator lookup ids are never presented as person names when SharePoint omits the expanded identity', async t => {
+  const item = row(3451);
+  item.fields = { ...item.fields, 'ADICIONADO POR': 1073741822 };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+
+  await ctx.gallery.open();
+
+  const record = ctx.root().querySelector('.lg-record');
+  assert.match(record.textContent, /ADICIONADO PORUsuário não identificado/);
+  assert.doesNotMatch(record.textContent, /1073741822/);
+});
+
 test('launch rows keep the stable pre-parity layout while keeping attachments openable', async t => {
   const item = {
     ...row(3429),
