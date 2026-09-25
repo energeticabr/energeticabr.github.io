@@ -3113,27 +3113,32 @@ test("o check não escolhe quando a VM devolve IDs de pagamento ambíguos", asyn
   assert.match(h.view.renders.at(-1).error, /não encontrei o pagamento 306/i);
 });
 
-test("o X das provisões abre a escolha de lembrete sem reabrir no retorno à tela", async () => {
+test("o X fecha provisões sem perguntar o intervalo nem reabrir nesta sessão", async () => {
   const h = makeHarness();
-  h.client.getPendingProvisionSnapshot = async () => ({
-    due: true,
-    rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
-  });
+  let snapshotReads = 0;
+  h.client.getPendingProvisionSnapshot = async () => {
+    snapshotReads += 1;
+    return {
+      due: true,
+      rows: [{ supplier: "Fornecedor A", dueDate: "11/09/2026" }],
+    };
+  };
 
   await h.controller.start();
   assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
 
   await h.view.emit("dismiss-pending-provisions");
 
-  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, true);
-  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
   await h.controller.handleForeground();
-  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, true);
-  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(snapshotReads, 1);
   h.controller.stop();
 });
 
-test("o primeiro toque no X abre a escolha de lembrete na integração real do iPhone", async t => {
+test("o primeiro toque no X fecha o popup sem abrir as opções de lembrete no iPhone", async t => {
   const dom = new JSDOM('<div id="app"></div>', { url: "https://example.test/" });
   const root = dom.window.document.querySelector("#app");
   const store = createConversationStore();
@@ -3158,7 +3163,7 @@ test("o primeiro toque no X abre a escolha de lembrete na integração real do i
   });
 
   await controller.start();
-  const close = root.querySelector('[data-action="close-pending-provisions"]');
+  const close = root.querySelector('[data-action="dismiss-pending-provisions"]');
   assert.ok(close);
   const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
   Object.defineProperties(pointerDown, {
@@ -3174,7 +3179,8 @@ test("o primeiro toque no X abre a escolha de lembrete na integração real do i
   });
   close.dispatchEvent(pointerUp);
 
-  assert.ok(root.querySelector('[data-action="pending-provisions-reminder-choice"][data-value="2h"]'));
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+  assert.equal(root.querySelector('[data-action="pending-provisions-reminder-choice"]'), null);
 });
 
 test("lembrar provisões em duas horas fecha a escolha na integração real", async t => {
@@ -3207,12 +3213,9 @@ test("lembrar provisões em duas horas fecha a escolha na integração real", as
   });
 
   await controller.start();
-  assert.ok(root.querySelector('[data-action="close-pending-provisions"]'));
-
-  const openReminder = dom.window.document.createElement("button");
-  openReminder.dataset.action = "close-pending-provisions";
-  root.append(openReminder);
-  openReminder.click();
+  const settings = root.querySelector('[data-action="close-pending-provisions"]');
+  assert.ok(settings);
+  settings.click();
 
   const twoHours = root.querySelector('[data-action="pending-provisions-reminder-choice"][data-value="2h"]');
   assert.ok(twoHours);
