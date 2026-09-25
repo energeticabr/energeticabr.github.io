@@ -317,6 +317,31 @@ function normalizedDateText(value) {
     .toLocaleLowerCase("pt-BR");
 }
 
+function isMultipleLaunchSupplierPoll(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText([
+    message?.question,
+    message?.prompt,
+    message?.text,
+  ].filter(Boolean).join(" "));
+  return /\bha\s+mais\s+de\s+um\s+fornecedor\b/u.test(question)
+    && /\bnas\s+linhas\b/u.test(question)
+    && /\bqual\s+fornecedor\b/u.test(question)
+    && /\bagrupar\b/u.test(question)
+    && /\bnovo\s+pedido\b/u.test(question);
+}
+
+function databaseFilterForView(messages = []) {
+  const databaseFilter = latestDatabaseFilter(messages);
+  if (databaseFilter) return databaseFilter;
+
+  const latestPoll = [...messages].reverse()
+    .find(message => message?.role !== "user" && message?.type === "poll");
+  return isMultipleLaunchSupplierPoll(latestPoll)
+    ? { key: "", message: latestPoll }
+    : null;
+}
+
 function expiredTemporaryAttachmentOptions(message, options) {
   const messageText = normalizedDateText([
     message?.question,
@@ -338,9 +363,9 @@ function expiredTemporaryAttachmentOptions(message, options) {
 }
 
 function databaseFilteredOptions(message, options, draft = "", enabled = true) {
-  if (!enabled || message?.databaseFilter !== true) return options;
+  if (!enabled || (message?.databaseFilter !== true && !isMultipleLaunchSupplierPoll(message))) return options;
   const query = String(draft || "").trim();
-  if (!query || query.split(/\s+/u).length > 2) return options;
+  if (!query || (query.split(/\s+/u).length > 2 && !isMultipleLaunchSupplierPoll(message))) return options;
   const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);
   if (!words.length) return options;
   return options.filter(option => {
@@ -1541,7 +1566,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const latestPoll = [...visibleMessages]
     .reverse()
     .find(message => message?.role !== "user" && message?.type === "poll");
-  const databaseFilter = latestDatabaseFilter(visibleMessages);
+  const databaseFilter = databaseFilterForView(visibleMessages);
   const dateInput = !databaseFilter
     && !state.activeText
     && !state.resuming
@@ -1592,7 +1617,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft"${databaseFilter ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
@@ -2308,13 +2333,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function onlyDraftChanged(state) {
-    // Database-filtered polls use the draft as their local search query. The
-    // option buttons must be rebuilt while that query changes; otherwise the
-    // composer updates but the visible list stays unfiltered until the VM
-    // answers the debounced request.
+    // Searchable polls use the draft as their local query. Rebuild their
+    // options as the user types; otherwise only the composer changes.
     if (lastState
       && state.draft !== lastState.draft
-      && latestDatabaseFilter(state.messages || [])) return false;
+      && databaseFilterForView(state.messages || [])) return false;
     return lastState && state.sessionStatus === "authenticated"
       && lastState.sessionStatus === state.sessionStatus
       && lastState.account?.name === state.account?.name
@@ -2337,7 +2360,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const { draft } = composerControls;
     if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
     if (draft) {
-      const databaseFilter = latestDatabaseFilter(state.messages || []);
+      const databaseFilter = databaseFilterForView(state.messages || []);
       const dateInput = !databaseFilter
         && !state.activeText
         && !state.resuming
@@ -2346,7 +2369,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const documentIdInput = !databaseFilter && !dateInput
         && !state.activeText && !state.resuming && !state.responseTransitionPending
         && isActiveDocumentIdQuestion(state.messages || []);
-      if (databaseFilter) draft.dataset.databaseFilterKey = databaseFilter.key;
+      if (databaseFilter?.key) draft.dataset.databaseFilterKey = databaseFilter.key;
       else delete draft.dataset.databaseFilterKey;
       if (dateInput) {
         draft.dataset.dateInput = "true";

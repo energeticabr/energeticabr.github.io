@@ -1873,6 +1873,76 @@ test("filtro mantém CADASTRAR NOVO com emoji mesmo quando nenhum registro corre
   assert.doesNotMatch(markup, /WILLIAM SILVA/);
 });
 
+test("filtra fornecedores do agrupamento de lançamento múltiplo enquanto digita sem metadados da VM", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    messages: [{
+      id: "multiple-launch-supplier",
+      role: "assistant",
+      type: "poll",
+      question: "🏢 👥 HÁ MAIS DE UM FORNECEDOR NAS LINHAS. QUAL FORNECEDOR DEVE SER USADO PARA AGRUPAR O NOVO PEDIDO? CASO DESEJE FILTRAR, DIGITE UM TEXTO.",
+      options: [
+        { id: "1", label: "1 - JOSÉ GERALDO DOS SANTOS", reply: "1" },
+        { id: "2", label: "2 - FELICIANO ROGÉRIO DA SILVA", reply: "2" },
+        { id: "3", label: "3 - HELISON ROSA LUIS", reply: "3" },
+        { id: "4", label: "4 - SWILE", reply: "4" },
+        { id: "5", label: "5 - COFERMETA", reply: "5" },
+      ],
+    }],
+  });
+  const filters = [];
+  view.on("draft-changed", command => view.render({ ...state, draft: command.value }));
+  view.on("database-filter-changed", command => filters.push(command));
+  view.render(state);
+
+  const draft = root.querySelector('[data-role="draft"]');
+  assert.equal(draft.placeholder, "Digite para filtrar…");
+  assert.equal(draft.dataset.databaseFilterKey, undefined);
+  draft.value = "Swi";
+  draft.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+  assert.equal(root.querySelectorAll(".chat-choice-button").length, 1);
+  assert.match(root.textContent, /4 - SWILE/);
+  assert.doesNotMatch(root.textContent, /JOSÉ GERALDO|FELICIANO|HELISON|COFERMETA/);
+  assert.deepEqual(filters, [], "a busca local não deve ser enviada como resposta do fluxo");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("filtro do fornecedor em lançamento múltiplo aceita nomes com mais de duas palavras", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const state = signedInState({
+    messages: [{
+      id: "multiple-launch-supplier-long-name",
+      role: "assistant",
+      type: "poll",
+      question: "HÁ MAIS DE UM FORNECEDOR NAS LINHAS. QUAL FORNECEDOR DEVE SER USADO PARA AGRUPAR O NOVO PEDIDO?",
+      options: [
+        { id: "1", label: "1 - JOSÉ GERALDO DOS SANTOS", reply: "1" },
+        { id: "2", label: "2 - FELICIANO ROGÉRIO DA SILVA", reply: "2" },
+      ],
+    }],
+  });
+  view.on("draft-changed", command => view.render({ ...state, draft: command.value }));
+  view.render(state);
+
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = "José Geraldo dos Santos";
+  draft.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+  assert.equal(root.querySelectorAll(".chat-choice-button").length, 1);
+  assert.match(root.textContent, /JOSÉ GERALDO DOS SANTOS/);
+  assert.doesNotMatch(root.textContent, /FELICIANO/);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("unidades de medida são apresentadas em ordem crescente de ID numérico", () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({
     messages: [{
