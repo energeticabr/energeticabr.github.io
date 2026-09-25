@@ -600,6 +600,65 @@ test("filtro de banco é automático, preserva a digitação e limpa ao selecion
   assert.equal(h.store.getState().draft, "");
 });
 
+test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opções", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "supply_supplier_registration", title: "CADASTRAR FORNECEDOR" };
+  const registration = { id: "register_supplier", label: "➕ CADASTRAR NOVO FORNECEDOR", reply: "register_supplier" };
+  const filterPoll = options => ({
+    type: "poll",
+    question: "QUAL FORNECEDOR?",
+    databaseFilter: true,
+    databaseFilterKey: "supplier",
+    options,
+  });
+  h.store.ingestRemoteMessages([filterPoll([
+    { id: "supplier:17", label: "17 - WILLIAM SILVA", reply: "17" },
+    registration,
+  ])], { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === "register_supplier") {
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{ type: "poll", question: "QUAL É A RAZÃO SOCIAL DO FORNECEDOR?", options: [] }],
+      };
+    }
+    const options = payload.text === "Swi" ? [] : [
+      { id: "supplier:19", label: "19 - SWIFT MATERIAIS", reply: "19" },
+      { ...registration },
+    ];
+    return { status: "processed", activeFlow, messages: [filterPoll(options)] };
+  };
+
+  await h.view.emit("draft-changed", { value: "Swi" });
+  await h.view.emit("database-filter-changed", { value: "Swi", filterKey: "supplier" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  assert.deepEqual(payloads, [{ text: "Swi" }]);
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.reply), ["register_supplier"]);
+
+  await h.view.emit("draft-changed", { value: "Swift" });
+  await h.view.emit("database-filter-changed", { value: "Swift", filterKey: "supplier" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(h.store.getState().messages.at(-1).options.filter(option => option.reply === "register_supplier").length, 1);
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.reply), ["19", "register_supplier"]);
+
+  await h.view.emit("draft-changed", { value: "Swift Materiais LTDA" });
+  await h.view.emit("database-filter-changed", { value: "Swift Materiais LTDA", filterKey: "supplier" });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(payloads.length, 2, "consultas com mais de duas palavras continuam aguardando envio manual");
+  await h.view.emit("send-text", {});
+  assert.equal(h.store.getState().messages.at(-1).options.filter(option => option.reply === "register_supplier").length, 1);
+
+  await h.view.emit("select-reply", { replyId: "register_supplier", label: registration.label });
+  assert.equal(h.store.getState().messages.at(-1).question, "QUAL É A RAZÃO SOCIAL DO FORNECEDOR?");
+  assert.deepEqual(h.store.getState().messages.at(-1).options, []);
+});
+
 test("após validar uma presença mostra primeiro somente o mesmo dia e oferece outras datas", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());

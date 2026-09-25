@@ -1,5 +1,5 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
-import { latestDatabaseFilter } from "./chat/database-filter.js";
+import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
@@ -3495,6 +3495,7 @@ export function createAppController({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
       }));
+      result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
       const quantityResult = result;
       const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
         && epiFinalizeProgress.index === epiFinalizeProgress.products.length - 1;
