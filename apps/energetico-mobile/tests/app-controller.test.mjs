@@ -2268,9 +2268,9 @@ test("edita somente o vencimento da provisão escolhida e remove da lista quando
   assert.equal(await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" }), true);
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "306");
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditValue, "23/09/2026");
-  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "25/09/2026" }), true);
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "25/09/2099" }), true);
 
-  assert.deepEqual(writes, [["306", "2026-09-25"]]);
+  assert.deepEqual(writes, [["306", "2099-09-25"]]);
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["307"]);
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "");
 });
