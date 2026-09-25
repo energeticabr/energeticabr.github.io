@@ -65,6 +65,37 @@ test("pesquisa e filtros da G7 refinam a lista localmente sem novas escritas", a
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
 });
 
+test("G7 filtra por padrão atividades criadas ou em atendimento e mantém o status individual", async t => {
+  const rows = [
+    { id: "101", fields: { "ID 2": "101", TAREFA: "Atividade criada", STATUS: "ATIVIDADE CRIADA" } },
+    { id: "102", fields: { "ID 2": "102", TAREFA: "Em atendimento", STATUS: "EM ATENDIMENTO" } },
+    { id: "103", fields: { "ID 2": "103", TAREFA: "Não iniciada", STATUS: "NÃO INICIADA" } },
+    { id: "104", fields: { "ID 2": "104", TAREFA: "Concluída", STATUS: "CONCLUÍDA" } },
+  ];
+  const ctx = await setup(t, { rows });
+  await ctx.gallery.open();
+
+  const status = ctx.root().querySelector('[name="status"]');
+  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
+  assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId).sort(), ["101", "102"]);
+
+  button(ctx.root(), "Limpar filtros").click();
+  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
+  setFilter(ctx, "status", "EM ATENDIMENTO");
+  assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId), ["102"]);
+});
+
+test("G7 oferece EM ATENDIMENTO mesmo quando nenhum registro tem esse status", async t => {
+  const ctx = await setup(t, { rows: [
+    { id: "201", fields: { "ID 2": "201", TAREFA: "Atividade criada", STATUS: "ATIVIDADE CRIADA" } },
+  ] });
+  await ctx.gallery.open();
+
+  const status = ctx.root().querySelector('[name="status"]');
+  assert.ok([...status.options].some(option => option.value === "EM ATENDIMENTO"));
+  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
+});
+
 test("detalhes mostram os campos completos em tabela e anexos abrem no visualizador compartilhado", async t => {
   const opened = [];
   const ctx = await setup(t, { openMediaCollection: async items => opened.push(items) });
