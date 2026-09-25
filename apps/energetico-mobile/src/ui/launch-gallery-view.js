@@ -1,3 +1,5 @@
+import { bindAutoFilterForm } from './auto-filter-form.js';
+
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
   ['product', 'Produto'], ['stage', 'Etapa obra'], ['contract', 'Medição'],
@@ -266,14 +268,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const sort = element('select', 'lg-input'); sort.name = 'sort'; setOptions(sort, SORTS);
   filterGrid.append(label('Ordenação', sort));
   const filterActions = element('div', 'lg-actions');
-  const apply = button('Aplicar filtros', applyFilters, { locked: false });
-  filterActions.append(apply, button('Limpar filtros', () => {
+  filterActions.append(button('Limpar filtros', () => {
     for (const control of filterControls.values()) { control.value = ''; control.checked = false; }
-    sort.selectedIndex = 0; applyFilters();
+    sort.selectedIndex = 0; autoFilters.apply();
   }, { locked: false }));
   filterForm.append(filterGrid,
     element('p', 'lg-hint', 'Período de empenho: as datas inicial e final são incluídas.'), filterActions);
-  filterForm.addEventListener('submit', event => { event.preventDefault(); applyFilters(); });
+  const autoFilters = bindAutoFilterForm(filterForm, applyFilters);
   const totals = element('dl', 'lg-totals');
   const notice = element('p', 'lg-notice'); notice.hidden = true;
   const listStatus = element('div', 'lg-list-status'); listStatus.setAttribute('aria-live', 'polite');
@@ -861,6 +862,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function close() {
     if (!opened || destroyed) return;
+    autoFilters.cancelPending();
     opened = false; ++session; ++listVersion; ++detailVersion;
     if (detailLoading) needsDetailRefresh = true;
     listLoading = false; detailLoading = false; root.hidden = true;
@@ -871,6 +873,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    autoFilters.destroy();
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion;
     retryIds.clear(); selectedUploads.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });

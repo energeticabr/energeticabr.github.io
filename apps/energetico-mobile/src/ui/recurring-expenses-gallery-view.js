@@ -1,3 +1,5 @@
+import { bindAutoFilterForm } from './auto-filter-form.js';
+
 const PAGE_SIZES = [10, 20, 50, 100];
 const DATE_FIELD = /(data|date|criad|created|modific|modified|prox|agend|in[ií]cio|fim)/i;
 const MONEY_FIELDS = new Set(["VALORMENSAL", "VALORARBITRADO", "VALORTOTALESPERADO"]);
@@ -205,10 +207,9 @@ export function createRecurringExpensesGallery({
   pageSizeControl.value = String(pageSize);
 
   const actions = el("div", "og-actions");
-  const applyButton = el("button", "og-button og-button--primary", "Aplicar filtros"); applyButton.type = "submit";
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
   const refreshButton = el("button", "og-button", "Atualizar dados"); refreshButton.type = "button";
-  actions.append(applyButton, clearButton, refreshButton);
+  actions.append(clearButton, refreshButton);
   form.append(grid, actions);
   filterDisclosure.append(form);
 
@@ -469,13 +470,13 @@ export function createRecurringExpensesGallery({
     }
   }
 
-  form.addEventListener("submit", event => { event.preventDefault(); applyFilters(); });
+  const autoFilters = bindAutoFilterForm(form, applyFilters);
   clearButton.addEventListener("click", () => {
     controls.get("search").value = "";
     for (const [name] of FILTERS) controls.get(name).value = "";
     controls.get("sort").value = "id-desc";
     controls.get("pageSize").value = "10";
-    applyFilters();
+    autoFilters.apply();
   });
   refreshButton.addEventListener("click", () => { if (!listLoading) void loadSnapshot(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
@@ -503,6 +504,7 @@ export function createRecurringExpensesGallery({
 
   function close() {
     if (!opened) return;
+    autoFilters.cancelPending();
     opened = false;
     session += 1;
     controller?.abort();
@@ -518,6 +520,7 @@ export function createRecurringExpensesGallery({
 
   function destroy() {
     if (destroyed) return;
+    autoFilters.destroy();
     close();
     destroyed = true;
     root.remove();

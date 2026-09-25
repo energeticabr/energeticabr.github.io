@@ -1,3 +1,5 @@
+import { bindAutoFilterForm } from './auto-filter-form.js';
+
 const PAGE_SIZES = [10, 20, 50, 100];
 const DATE_FIELD = /(data|date|criad|created|modific|modified|conclus|fatal|identifica|in[ií]cio)/i;
 
@@ -135,9 +137,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   for (const value of PAGE_SIZES) { const option = el("option", "", String(value)); option.value = String(value); pageSizeControl.append(option); }
   pageSizeControl.value = String(pageSize);
   const actions = el("div", "og-actions");
-  const applyButton = el("button", "og-button og-button--primary", "Aplicar filtros"); applyButton.type = "submit";
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
-  actions.append(applyButton, clearButton); form.append(grid, actions); filterDisclosure.append(form);
+  actions.append(clearButton); form.append(grid, actions); filterDisclosure.append(form);
   const metrics = el("section", "og-metrics tg-metrics"); metrics.setAttribute("aria-label", "Resumo de tarefas");
   const notice = el("p", "og-notice"); notice.hidden = true;
   const listStatus = el("p", "og-list-status tg-list-status"); listStatus.setAttribute("aria-live", "polite");
@@ -324,8 +325,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     } finally { if (opened && !destroyed && current === session) { listLoading = false; updateBusy(); } }
   }
 
-  form.addEventListener("submit", event => { event.preventDefault(); applyLocalFilters(); });
-  clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; applyLocalFilters(); });
+  const autoFilters = bindAutoFilterForm(form, applyLocalFilters);
+  clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
   closeButton.addEventListener("click", () => { close(); onClose?.(); }); homeButton.addEventListener("click", () => { close(); onHome?.(); });
@@ -337,10 +338,11 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
   function close() {
     if (!opened) return;
+    autoFilters.cancelPending();
     opened = false; session += 1; controller?.abort(); controller = null; listLoading = false; attachmentLoading = false;
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; close(); destroyed = true; root.remove(); }
+  function destroy() { if (destroyed) return; autoFilters.destroy(); close(); destroyed = true; root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }
