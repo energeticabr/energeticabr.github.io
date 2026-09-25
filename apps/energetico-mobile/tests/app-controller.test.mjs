@@ -132,14 +132,28 @@ function pendingNoteWorkflowScreens() {
 function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanceBeforeFailure = false, wrongStage = -1, orderOffscreen = false, dateContextUnchanged = false, selectedOrderId = "13" } = {}) {
   const { screens, replies, personal } = pendingNoteWorkflowScreens();
   const calls = [];
-  let stage = initial === "personal" ? -1 : initial === "modality" || initial === "new-order-modality" ? 4 : initial === "date" ? 6 : 0;
+  let stage = initial === "diary" ? -4 : initial === "document" ? -2 : initial === "personal" ? -1 : initial === "modality" || initial === "new-order-modality" ? 4 : initial === "date" ? 6 : 0;
   let failed = false;
   h.client.getPendingNotesSnapshot = async () => ({ count: 1, rows: [{ id: "13", supplier: "Terceiro", label: "13 - Terceiro" }] });
   const response = () => {
-    const [question, options] = stage === -1
-      ? ["💰 GASTOS PESSOAIS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", [personal]]
-      : screens[stage];
-    return { status: "processed", activeFlow: stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO",
+    const [question, options] = stage === -4
+      ? ["QUAL É A DESCRIÇÃO DO DIÁRIO?", []]
+      : stage === -5
+        ? ["DESEJA POSTAR COMO PENDENTE OU SAIR SEM POSTAR AGORA?", [
+          { id: "diary_partial_save_yes", reply: "diary_partial_save_yes", label: "POSTAR COMO PENDENTE" },
+          { id: "diary_partial_save_no", reply: "diary_partial_save_no", label: "SAIR SEM POSTAR AGORA" },
+        ]]
+        : stage === -2
+      ? ["QUAL DOCUMENTO DESEJA ASSINAR?", []]
+      : stage === -3
+        ? ["ANTES DE ABRIR O MENU PRINCIPAL: DESEJA CONVERTER ESTE ITEM EM RASCUNHO?", [
+          { id: "portal_draft_exit_save", reply: "portal_draft_exit_save", label: "CRIAR RASCUNHO" },
+          { id: "portal_draft_exit_discard", reply: "portal_draft_exit_discard", label: "ELIMINAR RASCUNHO FORMULÁRIO" },
+        ]]
+        : stage === -1
+          ? ["💰 GASTOS PESSOAIS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", [personal]]
+          : screens[stage];
+    return { status: "processed", activeFlow: stage === -4 || stage === -5 ? { id: "construction_diary_fill", title: "DIÁRIO DE OBRAS" } : stage === -2 || stage === -3 ? { id: "document_signing", title: "ASSINAR DOCUMENTOS" } : stage >= 3 ? { id: "launch", title: "EFETUAR LANÇAMENTO",
       contextId: `launch-step-${stage === 6 && dateContextUnchanged ? 5 : stage}`,
       rows: stage === 6 ? [{ label: "TIPO DE PEDIDO", value: "PEDIDO EXISTENTE" },
         ...(selectedOrderId == null ? [] : [{ label: "ID DO PEDIDO EXISTENTE", value: selectedOrderId }])] : [] } : null,
@@ -148,7 +162,10 @@ function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanc
   h.client.sendText = async payload => {
     calls.push(payload.replyId);
     if (payload.replyId === "input_continue") return response();
-    if (payload.replyId === "portal_confirm_main_menu") { stage = 0; return response(); }
+    if (payload.replyId === "portal_confirm_main_menu") { stage = stage === -2 ? -3 : 0; return response(); }
+    if (payload.replyId === "abandon_construction_diary" && stage === -4) { stage = -5; return response(); }
+    if (payload.replyId === "diary_partial_save_no" && stage === -5) { stage = 0; return response(); }
+    if (payload.replyId === "portal_draft_exit_discard" && stage === -3) { stage = 0; return response(); }
     if (stage === 5 && orderOffscreen && !payload.replyId && payload.text === "13") { stage = 6; return response(); }
     if (payload.replyId !== replies[stage]) throw new Error(`resposta fora do fluxo: ${payload.replyId} na etapa ${stage}`);
     if (payload.replyId === failAt && !failed) {
@@ -1999,6 +2016,30 @@ test("lápis não confunde Efetuar Lançamento de Gastos Pessoais com o submenu 
   assert.equal(calls.includes("action_personal_expense_launch"), false);
 });
 
+test("lápis abandona Assinar documentos antes de iniciar lançamento da nota pendente", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "document" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
+    h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard",
+    "group_supplies", "action_supply_launches", "action_launch", "choice:pedido_lancamento:2",
+    "choice:tipo_lancamento:2", "choice:pedido_existente_lancamento:13"]);
+  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+});
+
+test("lápis abandona diário de obras sem o deixar pausado antes do novo fluxo", async t => {
+  const h = makeHarness();
+  const { calls } = configurePendingNoteWorkflow(h, { initial: "diary" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
+    h.view.renders.at(-1).error);
+  assert.deepEqual(calls, ["input_continue", "abandon_construction_diary", "diary_partial_save_no",
+    ...pendingNoteWorkflowScreens().replies]);
+});
+
 test("falha em cada transição preserva popup e erro real; retry retoma a etapa da VM", async t => {
   for (const failAt of pendingNoteWorkflowScreens().replies) {
     const h = makeHarness();
@@ -2028,24 +2069,24 @@ test("resposta perdida após a VM avançar permite retomar sem repetir escolha",
   assert.equal(calls.at(-1), "choice:pedido_existente_lancamento:13");
 });
 
-test("data de outro pedido em launch não fecha popup nem declara que selecionou nota 13", async t => {
+test("data de outro lançamento é abandonada antes de abrir a nota 13", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, { initial: "date" });
   t.after(() => h.controller.stop());
   await h.controller.start();
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
-  assert.deepEqual(calls, ["input_continue"]);
-  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", ...pendingNoteWorkflowScreens().replies]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
-test("modalidade já escolhida em NOVO PEDIDO não é retomada como Pedido Existente", async t => {
+test("modalidade já escolhida em NOVO PEDIDO é abandonada antes da nota 13", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, { initial: "new-order-modality" });
   t.after(() => h.controller.stop());
   await h.controller.start();
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
-  assert.deepEqual(calls, ["input_continue"]);
-  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", ...pendingNoteWorkflowScreens().replies]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
 test("resposta perdida após enviar ID 13 aceita data somente após ressincronizar a VM", async t => {
@@ -2114,7 +2155,7 @@ test("resposta perdida não aceita data se contexto da VM não avançou depois d
   assert.equal(calls.at(-1), "input_continue");
 });
 
-test("fechar popup limpa prova de envio do pedido antes da próxima sessão", async t => {
+test("fechar popup limpa prova anterior e nova sessão reinicia o pedido do zero", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, {
     failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
@@ -2125,9 +2166,9 @@ test("fechar popup limpa prova de envio do pedido antes da próxima sessão", as
   await h.view.emit("dismiss-pending-notes");
   await h.view.emit("sign-in");
   assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
-  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
-  assert.equal(calls.at(-1), "input_continue");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls.slice(-7), ["portal_confirm_main_menu", ...pendingNoteWorkflowScreens().replies]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
 test("X durante resposta pendente do ID 13 invalida a tentativa em andamento", async t => {
@@ -2152,8 +2193,9 @@ test("X durante resposta pendente do ID 13 invalida a tentativa em andamento", a
   release();
   assert.equal(await attempt, false);
   await h.view.emit("sign-in");
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
-  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls.slice(-7), ["portal_confirm_main_menu", ...pendingNoteWorkflowScreens().replies]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
 test("X durante verificação assíncrona de anexos impede envio tardio à VM", async t => {
@@ -2179,7 +2221,7 @@ test("X durante verificação assíncrona de anexos impede envio tardio à VM", 
   assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
-test("logout limpa prova de envio antes do login seguinte", async t => {
+test("logout limpa prova anterior e novo login reinicia o pedido do zero", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, {
     failAt: "choice:pedido_existente_lancamento:13", advanceBeforeFailure: true,
@@ -2190,9 +2232,9 @@ test("logout limpa prova de envio antes do login seguinte", async t => {
   await h.view.emit("sign-out");
   await h.view.emit("sign-in");
   assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
-  assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
-  assert.equal(calls.at(-1), "input_continue");
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true);
+  assert.deepEqual(calls.slice(-7), ["portal_confirm_main_menu", ...pendingNoteWorkflowScreens().replies]);
+  assert.equal(h.view.renders.at(-1).pendingNotes, null);
 });
 
 test("etapa inesperada não some com popup nem vira erro genérico de data", async t => {
@@ -2226,9 +2268,9 @@ test("edita somente o vencimento da provisão escolhida e remove da lista quando
   assert.equal(await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" }), true);
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "306");
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditValue, "23/09/2026");
-  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "25/09/2026" }), true);
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "25/09/2099" }), true);
 
-  assert.deepEqual(writes, [["306", "2026-09-25"]]);
+  assert.deepEqual(writes, [["306", "2099-09-25"]]);
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["307"]);
   assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId, "");
 });
@@ -2538,7 +2580,7 @@ test("o check também navega para Pendências quando a tela atual é o menu de D
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
-test("o check em outro fluxo solicita navegação segura e preserva a confirmação de rascunho", async t => {
+test("o check abandona o fluxo anterior antes de iniciar a baixa no popup", async t => {
   const h = makeHarness();
   const calls = [];
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
@@ -2561,17 +2603,37 @@ test("o check em outro fluxo solicita navegação segura e preserva a confirmaç
         ],
       }],
     };
+    if (payload.replyId === "portal_draft_exit_discard") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [
+        { id: "group_pending", reply: "group_pending", label: "PENDÊNCIAS" },
+      ] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS — ESCOLHA O TIPO", options: [
+        { id: "pending_payment_settlement", reply: "pending_payment_settlement", label: "BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "306", reply: "306", label: "306 - DIBRITA" },
+      ] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
     throw new Error(`resposta inesperada: ${payload.replyId}`);
   };
   t.after(() => h.controller.stop());
   await h.controller.start();
 
-  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
-  assert.match(h.view.renders.at(-1).messages.at(-1).question, /CRIAR UM RASCUNHO/i);
-  assert.match(h.view.renders.at(-1).error, /fluxo com rascunho em andamento/i);
-  assert.equal(h.view.renders.at(-1).activeFlow.id, "payment_provision_attachments");
-  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard", "group_pending", "pending_payment_settlement", "306"]);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD COMO 10/i);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
 });
 
 test("o check em um fluxo de anexos retoma a baixa quando a VM libera o menu sem rascunho", async t => {
@@ -2658,7 +2720,7 @@ test("o check reconhece o fluxo ativo de anexos mesmo quando a resposta mais rec
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
-test("o check interrompe antes de escolher como sair de um formulário e preserva o fluxo", async t => {
+test("o check não inicia baixa quando a VM não conclui a saída do formulário", async t => {
   const h = makeHarness();
   const calls = [];
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
@@ -2685,14 +2747,18 @@ test("o check interrompe antes de escolher como sair de um formulário e preserv
         ],
       }],
     };
-    throw new Error("O atalho não deve escolher uma opção de saída do formulário.");
+    if (payload.replyId === "portal_draft_exit_discard") return {
+      status: "processed", activeFlow: { id: "launch_create", title: "LANÇAMENTOS" },
+      messages: [{ type: "poll", question: "QUAL É A DATA?", options: [] }],
+    };
+    throw new Error("A baixa não deve iniciar antes de sair do formulário.");
   };
   t.after(() => h.controller.stop());
   await h.controller.start();
 
   assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
-  assert.match(h.view.renders.at(-1).error, /seus dados foram preservados/i);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard"]);
+  assert.match(h.view.renders.at(-1).error, /não confirmou a saída do fluxo anterior/i);
   assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
 });
 
@@ -2816,7 +2882,8 @@ test("o check não reutiliza uma opção de baixa que só aparece em um poll ant
   const callsAfterEmptyResponse = calls.length;
 
   assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.equal(calls.length, callsAfterEmptyResponse);
+  assert.equal(calls.length, callsAfterEmptyResponse + 1);
+  assert.equal(calls.at(-1).replyId, "portal_confirm_main_menu");
 });
 
 test("o check não usa poll de baixa de outro fluxo mesmo quando a pergunta parece compatível", async t => {
@@ -2840,7 +2907,7 @@ test("o check não usa poll de baixa de outro fluxo mesmo quando a pergunta pare
   await h.controller.start();
 
   assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.equal(calls.length, 1, "só deve ocorrer a retomada inicial");
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
 });
 
 test("o check não escolhe quando a VM devolve IDs de pagamento ambíguos", async t => {
