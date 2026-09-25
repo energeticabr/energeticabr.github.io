@@ -603,6 +603,17 @@ function isSuppliesRegistrationMenu(message) {
   return /efetuar\s+cadastros/.test(question);
 }
 
+function isAuditDocumentsMenu(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  return /auditoria\s+e\s+documentos/.test(question)
+    && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
+}
+
+function documentsGalleryOption() {
+  return { id: "action_documents_gallery", reply: "action_documents_gallery", label: "📄 GALERIA DOCUMENTOS" };
+}
+
 function registrationOptionOrder(option) {
   const label = normalizedDateText(option?.label || option?.title || "");
   if (/cadastr\w*\s+(?:um\s+)?grupo\b/.test(label)) return 0;
@@ -668,6 +679,9 @@ function menuOptionsWithoutApps(message, options) {
   });
   if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption()];
   if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
+  if (isAuditDocumentsMenu(message)) {
+    return [...filtered.filter(option => draftReplyId(option).trim().toLowerCase() !== "action_documents_gallery"), documentsGalleryOption()];
+  }
   return isDemandsTaskMenu(message) ? [...filtered, tasksGalleryOption()] : filtered;
 }
 
@@ -813,6 +827,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
   const isRegistrationMenu = isSuppliesRegistrationMenu(message);
+  const isAuditMenu = isAuditDocumentsMenu(message);
   const isTaskMenu = isDemandsTaskMenu(message);
   const taskCreateOption = isTaskMenu ? displayOptions.find(isAddTaskOption) : null;
   const taskGallery = isTaskMenu ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_tasks_gallery") : null;
@@ -822,6 +837,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return !compressionOptionIds.has(replyId)
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery"))
       && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
+      && (!isAuditMenu || replyId !== "action_documents_gallery")
       && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction));
   });
   const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions]
@@ -884,11 +900,16 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const recurringExpensesGallery = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_recurring_expenses_gallery")
     : null;
+  const documentsGallery = isAuditMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_documents_gallery")
+    : null;
   const choicesMarkup = choices
     ? isLaunchMenu
       ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}${pollButton(paymentProgrammingGallery, busy, { galleryButton: true })}${pollButton(recurringExpensesGallery, busy, { galleryButton: true })}</div></div></div>`
       : isRegistrationMenu
         ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
+      : isAuditMenu
+        ? `<div class="chat-choice-columns chat-choice-columns--audit-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(documentsGallery, busy, { galleryButton: true })}</div></div></div>`
       : taskCreateOption
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}">${choices}</div>`
@@ -1008,8 +1029,9 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
+    const auditMenu = isAuditDocumentsMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || registrationMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";

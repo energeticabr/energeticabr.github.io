@@ -118,6 +118,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_family_gallery: "family",
   action_subfamily_gallery: "subfamily",
   action_product_gallery: "product",
+  action_documents_gallery: "documents",
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
@@ -3391,6 +3392,18 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
+            ...(kind === "documents" ? {
+              openMediaCollection: items => {
+                assertSession();
+                const collection = (Array.isArray(items) ? items : []).map(item => ({
+                  fileName: String(item?.fileName || "arquivo"),
+                  source: item?.source,
+                })).filter(item => item.source != null);
+                if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
+                const first = collection[0];
+                return first ? showMedia(first.source, first.fileName) : undefined;
+              },
+            } : {}),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }

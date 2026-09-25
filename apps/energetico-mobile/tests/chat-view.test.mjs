@@ -4081,6 +4081,32 @@ test("mantém o LOG de ações dentro de Auditoria e Documentos", () => {
   assert.match(markup, /LOG DE AÇÕES/);
 });
 
+test("Auditoria e Documentos usa duas colunas e põe Galeria Documentos primeiro à direita", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "audit-menu",
+      role: "assistant",
+      type: "poll",
+      question: "🔎 AUDITORIA E DOCUMENTOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "audit_log", label: "🧾 LOG DE AÇÕES", reply: "audit_log" },
+        { id: "action_document", label: "📄 ADICIONAR UM NOVO DOCUMENTO", reply: "action_document" },
+        { id: "action_documents_gallery", label: "GALERIA DUPLICADA DO SERVIDOR", reply: "action_documents_gallery" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /chat-choice-columns--audit-menu/);
+  assert.match(markup, /chat-message--audit-menu/);
+  assert.match(markup, /data-reply-id="action_documents_gallery"[^>]*>📄 GALERIA DOCUMENTOS/);
+  assert.equal((markup.match(/data-reply-id="action_documents_gallery"/g) || []).length, 1);
+  const primaryStart = markup.indexOf('class="chat-choice-columns__primary"');
+  const secondaryStart = markup.indexOf('class="chat-choice-columns__secondary"');
+  assert.ok(primaryStart >= 0 && secondaryStart > primaryStart);
+  assert.doesNotMatch(markup.slice(primaryStart, secondaryStart), /action_documents_gallery/);
+  assert.match(markup.slice(secondaryStart), /data-reply-id="action_documents_gallery"/);
+});
+
 test("move a navegação do formulário para a faixa superior do fluxo", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "task", title: "ADICIONAR UMA TAREFA COM UM NOME MUITO LONGO PARA TESTAR A QUEBRA" },
