@@ -317,6 +317,45 @@ function normalizedDateText(value) {
     .toLocaleLowerCase("pt-BR");
 }
 
+function isPendingDocumentUpdatePoll(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText([message?.question, message?.prompt, message?.text]
+    .filter(Boolean)
+    .join(" "));
+  return /\bqual\s+documento\s+pendente\s+deseja\s+atualizar\b/u.test(question);
+}
+
+function pendingDocumentRecordId(option) {
+  const explicitId = [option?.document_id, option?.documentId, option?.record_id, option?.recordId]
+    .map(value => String(value ?? "").trim())
+    .find(value => /^\d+$/u.test(value));
+  if (explicitId) return explicitId;
+
+  for (const value of [option?.reply, option?.id]) {
+    const reference = String(value ?? "").trim();
+    const match = reference.match(/^(?:document|doc):(\d+)$/iu) || reference.match(/^(\d+)$/u);
+    if (match) return match[1];
+  }
+
+  const label = String(option?.label || option?.title || "");
+  const match = label.match(/^\s*(\d+)\s*[-–—]\s+/u)
+    || label.match(/^\s*.*?\bASSINAR\s*[—–-]\s*(\d+)\s*[-–—]\s+/iu);
+  return match?.[1] || "";
+}
+
+function documentDeleteAction(option, message) {
+  if (option?.terminal_option) return null;
+  if (option?.delete_action) return option.delete_action;
+  if (!isPendingDocumentUpdatePoll(message)) return null;
+  const documentId = pendingDocumentRecordId(option);
+  if (!documentId) return null;
+  return {
+    id: `pending_document_delete:${documentId}`,
+    reply: `pending_document_delete:${documentId}`,
+    title: "🗑️ EXCLUIR",
+  };
+}
+
 function isMultipleLaunchSupplierPoll(message) {
   if (message?.type !== "poll") return false;
   const question = normalizedDateText([
@@ -859,9 +898,10 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       const deleteOption = deleteByDraft.get(draftId);
       return [`<div class="chat-draft-option">${pollButton(option, busy)}${deleteOption ? pollButton(deleteOption, busy, { deleteButton: true }) : ""}</div>`];
     }
-    if (option?.delete_action && !option.terminal_option) {
+    const pendingDocumentDelete = documentDeleteAction(option, message);
+    if (pendingDocumentDelete) {
       const deleteAction = {
-        ...option.delete_action,
+        ...pendingDocumentDelete,
         deleteFor: "document",
         deleteTitle: draftTitle(option),
       };

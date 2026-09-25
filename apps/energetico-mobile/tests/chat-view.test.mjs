@@ -3425,6 +3425,41 @@ test("renderiza lixeira ao lado de cada documento pendente", () => {
   assert.match(markup, /class="chat-document-option__delete"[^>]*data-reply-id="pending_document_delete:262"/);
 });
 
+test("gera lixeira para opções reais de documentos pendentes sem metadados de exclusão", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "pending-documents",
+      role: "assistant",
+      type: "poll",
+      question: "📄 QUAL DOCUMENTO PENDENTE DESEJA ATUALIZAR? CASO DESEJE FILTRAR, DIGITE UM TEXTO.",
+      options: [
+        { id: "document:262", reply: "document:262", label: "262 - RAYNER CORREIA DE CASTRO (CONTRATO)" },
+        { id: "sign_document:282", reply: "sign_document:282", label: "✍️ ASSINAR — 282 - MAURO ANTONIO PEREIRA (COMPROVANTE PAGAMENTO)" },
+        { id: "done", reply: "done", label: "CONCLUIR", terminal_option: true },
+      ],
+    }],
+  }));
+
+  assert.equal((markup.match(/class="chat-document-option"/g) || []).length, 2);
+  assert.match(markup, /class="chat-document-option__delete"[^>]*data-reply-id="pending_document_delete:262"/);
+  assert.match(markup, /class="chat-document-option__delete"[^>]*data-reply-id="pending_document_delete:282"/);
+  assert.match(markup, /data-reply-id="done"/);
+});
+
+test("não cria lixeira para opções numéricas fora da pergunta de documentos pendentes", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "suppliers",
+      role: "assistant",
+      type: "poll",
+      question: "QUAL FORNECEDOR DEVE SER USADO?",
+      options: [{ id: "262", reply: "262", label: "262 - FORNECEDOR" }],
+    }],
+  }));
+
+  assert.doesNotMatch(markup, /chat-document-option__delete/);
+});
+
 test("lixeira de documento pendente abre confirmação e só o Sim envia a exclusão", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");
