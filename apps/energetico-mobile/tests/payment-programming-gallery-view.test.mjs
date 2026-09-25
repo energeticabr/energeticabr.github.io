@@ -58,16 +58,23 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
   for (const name of ["search", "recurrenceId", "type", "product", "supplier", "status", "branch", "property"]) {
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G28 filter ${name}`);
   }
-  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["306", "310"]);
+  assert.equal(ctx.root().querySelector('[name="status"]').value, "PAGAMENTO PREVISTO");
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["306"]);
+  assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /23\/09\/2026/);
-  assert.match(ctx.root().querySelector(".pg-cards").textContent, /24\/09\/2026/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /DIBRITA/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /1\.200,00/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /PAGAMENTO PREVISTO/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /VENCE HOJE/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="306"]').textContent, /PGTO NÃO AGENDADO/);
+  choose(ctx, "status", "PAGO");
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["310"]);
+  assert.match(ctx.root().querySelector(".pg-cards").textContent, /24\/09\/2026/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /AGENDAMENTO\s*PGTO PAGO/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /PAGO EM 24\/09\/2026/);
+  button(ctx.root(), "Limpar filtros").click();
+  assert.equal(ctx.root().querySelector('[name="status"]').value, "PAGAMENTO PREVISTO");
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["306"]);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"], [data-action="delete"]').length, 0);
 });
 
@@ -82,7 +89,6 @@ test("filtros de recorrência, tipo, produto, fornecedor, status, filial e imóv
   choose(ctx, "status", "PAGAMENTO PREVISTO");
   choose(ctx, "branch", "004 - EDIFÍCIO XAVANTE");
   choose(ctx, "property", "TODOS");
-  button(ctx.root(), "Aplicar filtros").click();
   await settle();
 
   assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["306"]);
@@ -161,12 +167,12 @@ test("PGTOAGENDADO=PAGO não é classificado como agendado e filtra como PAGO", 
   ];
   const ctx = await setup(t, { rows });
   await ctx.gallery.open();
+  choose(ctx, "status", "");
   const scheduleField = [...ctx.root().querySelectorAll('.pg-card[data-item-id="777"] .pg-card-field')]
     .find(pair => pair.querySelector("dt")?.textContent === "AGENDAMENTO");
   assert.equal(scheduleField.querySelector("dd").textContent, "PGTO PAGO");
 
   choose(ctx, "type", "PAGO");
-  button(ctx.root(), "Aplicar filtros").click();
   assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["777"]);
 });
 

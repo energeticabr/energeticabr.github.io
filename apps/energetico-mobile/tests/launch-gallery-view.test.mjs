@@ -122,10 +122,10 @@ test('body overlay survives chat rerenders; close/home/destroy preserve lifecycl
 test('all filters, inclusive date endpoints, server sorts, totals and paging reach the service', async t => {
   const ctx = await setup(t, { request: async (op, payload) => snapshot({ page: payload.page, count: 23, pages: 2 }) });
   await ctx.gallery.open();
+  assert.equal([...ctx.root().querySelectorAll('button')].some(node => node.textContent.trim() === 'Aplicar filtros'), false);
   for (const [name, value] of Object.entries({ branch: 'Obra A', supplier: 'Fornecedor A', status: 'PEDIDO EMPENHADO',
     id: '17', product: 'Cimento', stage: 'Fundação', contract: 'Contrato 1', pendingApproval: true,
     dateStart: '2026-09-01', dateEnd: '2026-09-19', sort: sorts[7] })) input(ctx, name, value);
-  button(ctx.root(), 'Aplicar filtros').click();
   await settle();
   assert.deepEqual(ctx.calls.at(-1), { operation: 'snapshot', payload: {
     filters: { branch: 'Obra A', supplier: 'Fornecedor A', status: 'PEDIDO EMPENHADO', id: '17', product: 'Cimento',
@@ -140,6 +140,21 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
   assert.equal(ctx.calls.at(-1).payload.page, 2);
   button(ctx.root(), 'Página anterior').click(); await settle();
   assert.equal(ctx.calls.at(-1).payload.page, 1);
+});
+
+test('typing in launch filters automatically and coalesces rapid keystrokes into one snapshot', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  const id = ctx.root().querySelector('[name="id"]');
+  id.value = '2';
+  id.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  id.value = '22';
+  id.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 250));
+
+  const snapshots = ctx.calls.filter(call => call.operation === 'snapshot');
+  assert.equal(snapshots.length, 2);
+  assert.equal(snapshots.at(-1).payload.filters.id, '22');
 });
 
 test('summary reproduces the PowerApps launch row with tolerant aliases and keeps details on the selected id', async t => {
@@ -455,15 +470,16 @@ test('late snapshots cannot replace newer rows or user filter edits and close in
   const pending = [];
   const ctx = await setup(t, { request: () => { const d = deferred(); pending.push(d); return d.promise; } });
   const first = ctx.gallery.open();
-  input(ctx, 'id', '22'); button(ctx.root(), 'Aplicar filtros').click();
+  input(ctx, 'id', '22');
   input(ctx, 'id', 'unsubmitted');
   pending[1].resolve(snapshot({ rows: [row(22)] })); await settle();
   pending[0].resolve(snapshot({ rows: [row(17)] })); await first;
   assert.equal(ctx.root().querySelector('[name="id"]').value, 'unsubmitted');
-  assert.match(ctx.root().querySelector('.lg-cards').textContent, /22/);
-  assert.doesNotMatch(ctx.root().querySelector('.lg-cards').textContent, /#17\b/);
-  button(ctx.root(), 'Aplicar filtros').click();
-  ctx.gallery.close(); pending[2].resolve(snapshot({ rows: [row(99)] })); await settle();
+  assert.doesNotMatch(ctx.root().querySelector('.lg-cards').textContent, /#22\b|#17\b/);
+  pending[2].resolve(snapshot({ rows: [row(23)] })); await settle();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-record-id')].map(node => node.textContent), ['23']);
+  input(ctx, 'id', '99');
+  ctx.gallery.close(); pending[3].resolve(snapshot({ rows: [row(99)] })); await settle();
   assert.equal(ctx.root().hidden, true);
   assert.doesNotMatch(ctx.root().querySelector('.lg-cards').textContent, /#99\b/);
   assert.equal(ctx.root().getAttribute('aria-busy'), 'false');
@@ -526,7 +542,7 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   await ctx.gallery.open(); await showDetail(ctx);
   button(ctx.root(), 'Editar').click();
   const field = input(ctx, 'QUANTIDADE', '3.75', ctx.root().querySelector('.lg-editor'));
-  button(ctx.root(), 'Aplicar filtros').click(); await settle();
+  input(ctx, 'id', '17'); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor [name="QUANTIDADE"]'), field);
   button(ctx.root(), 'Revisar alterações').click();
   assert.equal(mutations(ctx).length, 0);
@@ -716,8 +732,8 @@ test('stale detail responses are discarded and failed detail can be retried', as
 test('invalid periods and required fields prevent review and calls; editing blocks replacement of its detail', async t => {
   const ctx = await setup(t); await ctx.gallery.open();
   input(ctx, 'dateStart', '2026-10-01'); input(ctx, 'dateEnd', '2026-09-01');
-  button(ctx.root(), 'Aplicar filtros').click(); await settle();
-  assert.equal(ctx.calls.length, 1);
+  await settle();
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, 2);
   assert.match(ctx.root().querySelector('[role=alert]').textContent, /data final/);
   await showDetail(ctx);
   button(ctx.root(), 'Aplicar medição').click();

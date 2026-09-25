@@ -52,6 +52,7 @@ test("orders gallery opens read-only, sorts by descending ID and offers Screen10
   }
   assert.deepEqual([...ctx.root().querySelector('[name="pageSize"]').options].map(option => option.value), ["10", "20", "50", "100"]);
   assert.match(ctx.root().querySelector(".og-metrics").textContent, /3/);
+  assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"], [data-action="delete"]').length, 0);
 });
 
@@ -60,13 +61,11 @@ test("Screen10 filters refine rows and page navigation applies selected page siz
   await ctx.gallery.open();
   setInput(ctx, "supplier", "COFER");
   setInput(ctx, "pageSize", "10");
-  button(ctx.root(), "Aplicar filtros").click();
   await settle();
   assert.deepEqual([...ctx.root().querySelectorAll(".og-card")].map(card => card.dataset.itemId), ["320"]);
   assert.match(ctx.root().querySelector(".og-list-status").textContent, /1 pedido/i);
   setInput(ctx, "supplier", "");
   setInput(ctx, "pageSize", "10");
-  button(ctx.root(), "Aplicar filtros").click();
   await settle();
   assert.equal(ctx.root().querySelector('[name="sort"]').value, "id-desc");
   assert.equal(button(ctx.root(), "Próxima página").disabled, true);
@@ -80,7 +79,6 @@ test("page size and navigation paginate the complete local SharePoint snapshot",
   button(ctx.root(), "Próxima página").click();
   assert.equal(ctx.root().querySelectorAll(".og-card").length, 10);
   setInput(ctx, "pageSize", "20");
-  button(ctx.root(), "Aplicar filtros").click();
   assert.equal(ctx.root().querySelectorAll(".og-card").length, 20);
   assert.match(ctx.root().querySelector(".og-page-label").textContent, /Página 1 de 2/);
 });

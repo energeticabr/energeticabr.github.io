@@ -1,3 +1,5 @@
+import { bindAutoFilterForm } from './auto-filter-form.js';
+
 const PAGE_SIZES = [10, 20, 50, 100];
 const SORTS = [
   ["id-desc", "MAIOR ID"],
@@ -152,9 +154,8 @@ export function createOrdersGallery({
   for (const value of PAGE_SIZES) { const option = el("option", "", String(value)); option.value = String(value); pageSizeControl.append(option); }
   pageSizeControl.value = String(pageSize);
   const actions = el("div", "og-actions");
-  const applyButton = el("button", "og-button og-button--primary", "Aplicar filtros"); applyButton.type = "submit";
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
-  actions.append(applyButton, clearButton);
+  actions.append(clearButton);
   form.append(grid, actions);
   filterDisclosure.append(form);
   const metrics = el("section", "og-metrics");
@@ -402,10 +403,10 @@ export function createOrdersGallery({
   }
 
   function applyFilters() { applyLocalFilters(); }
-  form.addEventListener("submit", event => { event.preventDefault(); applyFilters(); });
+  const autoFilters = bindAutoFilterForm(form, applyFilters);
   clearButton.addEventListener("click", () => {
     for (const [name, control] of controls) control.value = name === "sort" ? "id-desc" : name === "pageSize" ? "10" : "";
-    sortValue = "id-desc"; pageSize = 10; applyFilters();
+    sortValue = "id-desc"; pageSize = 10; autoFilters.apply();
   });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
@@ -424,6 +425,7 @@ export function createOrdersGallery({
   }
   function close() {
     if (!opened) return;
+    autoFilters.cancelPending();
     opened = false;
     session += 1;
     controller?.abort(); controller = null;
@@ -436,7 +438,7 @@ export function createOrdersGallery({
   }
   function destroy() {
     if (destroyed) return;
-    close(); destroyed = true; root.remove();
+    autoFilters.destroy(); close(); destroyed = true; root.remove();
   }
 
   return Object.freeze({ open, close, destroy, reload: () => loadSnapshot({ retry: true }) });

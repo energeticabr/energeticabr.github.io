@@ -91,12 +91,12 @@ test("pesquisa e filtros G19 combinam localmente sem recarregar dados", async t 
   choose(ctx, "supplier", "CEMIG");
   choose(ctx, "recurrence", "Mensal");
   choose(ctx, "status", "ATIVO");
-  button(ctx.root(), "Aplicar filtros").click();
   await settle();
 
   assert.deepEqual([...ctx.root().querySelectorAll(".re-card")].map(card => card.dataset.itemId), ["33"]);
   assert.equal(ctx.calls.filter(([name]) => name === "snapshot").length, 1);
   assert.match(ctx.root().querySelector(".re-list-status").textContent, /1 despesa recorrente/i);
+  assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
 });
 
 test("detalhes escapam texto e anexos abrem no visualizador compartilhado", async t => {

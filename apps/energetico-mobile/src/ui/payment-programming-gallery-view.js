@@ -1,4 +1,7 @@
+import { bindAutoFilterForm } from './auto-filter-form.js';
+
 const PAGE_SIZES = [10, 20, 50, 100];
+const DEFAULT_STATUS = "PAGAMENTO PREVISTO";
 const DATE_FIELD = /(data|date|criad|created|modific|modified|previst|agend|execu)/i;
 const FILTERS = Object.freeze([
   ["recurrenceId", "ID recorrência", ["IDRECORRENCIA"]],
@@ -201,6 +204,7 @@ export function createPaymentProgrammingGallery({
   form.setAttribute("aria-label", "Filtros da Galeria de Programação de Pagamentos G28");
   const grid = el("div", "og-filter-grid pg-filter-grid");
   const controls = new Map();
+  let filtersPopulated = false;
 
   function addControl(name, label, tag = "select", type = "text") {
     const wrapper = el("label", "og-field");
@@ -229,10 +233,9 @@ export function createPaymentProgrammingGallery({
   pageSizeControl.value = String(pageSize);
 
   const actions = el("div", "og-actions");
-  const applyButton = el("button", "og-button og-button--primary", "Aplicar filtros"); applyButton.type = "submit";
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
   const refreshButton = el("button", "og-button", "Atualizar dados"); refreshButton.type = "button";
-  actions.append(applyButton, clearButton, refreshButton);
+  actions.append(clearButton, refreshButton);
   form.append(grid, actions);
   filterDisclosure.append(form);
 
@@ -280,7 +283,11 @@ export function createPaymentProgrammingGallery({
       const all = el("option", "", "Todos"); all.value = "";
       control.replaceChildren(all, ...values.map(value => { const option = el("option", "", value); option.value = value; return option; }));
       if (values.includes(current)) control.value = current;
+      else if (name === "status" && (!filtersPopulated || current)) {
+        control.value = values.find(value => key(value) === key(DEFAULT_STATUS)) || "";
+      }
     }
+    filtersPopulated = true;
   }
 
   function sortRows(items) {
@@ -450,6 +457,7 @@ export function createPaymentProgrammingGallery({
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pagamentos válida.");
       rows = result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || "")));
       populateFilters();
+      autoFilters.sync();
       applyFilters();
       return true;
     } catch (error) {
@@ -466,12 +474,12 @@ export function createPaymentProgrammingGallery({
     }
   }
 
-  form.addEventListener("submit", event => { event.preventDefault(); applyFilters(); });
+  const autoFilters = bindAutoFilterForm(form, applyFilters);
   clearButton.addEventListener("click", () => {
-    for (const [name, control] of controls) control.value = name === "sort" ? "due-asc" : name === "pageSize" ? "10" : "";
+    for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS : name === "sort" ? "due-asc" : name === "pageSize" ? "10" : "";
     sortValue = "due-asc";
     pageSize = 10;
-    applyFilters();
+    autoFilters.apply();
   });
   refreshButton.addEventListener("click", () => { void loadSnapshot(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
@@ -492,6 +500,7 @@ export function createPaymentProgrammingGallery({
 
   function close() {
     if (!opened) return;
+    autoFilters.cancelPending();
     opened = false;
     session += 1;
     controller?.abort();
@@ -508,6 +517,7 @@ export function createPaymentProgrammingGallery({
 
   function destroy() {
     if (destroyed) return;
+    autoFilters.destroy();
     close();
     destroyed = true;
     root.remove();

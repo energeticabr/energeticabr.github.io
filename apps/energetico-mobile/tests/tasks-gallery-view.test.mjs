@@ -59,10 +59,10 @@ test("pesquisa e filtros da G7 refinam a lista localmente sem novas escritas", a
   const search = ctx.root().querySelector('[name="search"]');
   search.value = "Revisar lançamento";
   setFilter(ctx, "priority", "SIM");
-  button(ctx.root(), "Aplicar filtros").click();
   await settle();
   assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId), ["176"]);
   assert.match(ctx.root().querySelector(".tg-list-status").textContent, /1 tarefa/i);
+  assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
 });
 
 test("detalhes mostram os campos completos em tabela e anexos abrem no visualizador compartilhado", async t => {
