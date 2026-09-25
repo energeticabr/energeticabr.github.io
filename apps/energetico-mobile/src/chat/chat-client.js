@@ -1,6 +1,10 @@
 import { validateAttachment } from "./file-policy.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
+const EMPTY_EPI_REPLY_IDS = new Set([
+  "document_signing_epi_order_blank",
+  "document_signing_epi_supplier_document_blank",
+]);
 
 function parseBaseUrl(value) {
   const url = new URL(String(value || ""));
@@ -126,9 +130,10 @@ export function createChatClient({
 
   async function sendText({ text = "", replyId } = {}) {
     const token = await acquireToken(tokenProvider);
+    const blankEpiReply = EMPTY_EPI_REPLY_IDS.has(String(replyId || ""));
     const payload = {
       messageId: newMessageId(),
-      text: String(text || "").trim(),
+      ...(!blankEpiReply ? { text: String(text || "").trim() } : {}),
       ...(replyId ? { replyId: String(replyId) } : {}),
     };
     return request(chatUrl.href, {

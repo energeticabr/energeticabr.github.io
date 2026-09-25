@@ -244,6 +244,42 @@ test("envia texto autenticado e exige confirmação estruturada", async () => {
   assert.equal(result.messages[0].text, "Certo");
 });
 
+test("seleção em branco do pedido EPI envia somente o replyId, sem texto", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+
+  await client.sendText({
+    text: "0 - EM BRANCO",
+    replyId: "document_signing_epi_order_blank",
+  });
+
+  assert.deepEqual(JSON.parse(request.body), {
+    messageId: "message-id",
+    replyId: "document_signing_epi_order_blank",
+  });
+});
+
+test("CPF/CNPJ EPI em branco não envia rótulo nem texto ao backend", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+
+  await client.sendText({
+    text: "⬜ EM BRANCO",
+    replyId: "document_signing_epi_supplier_document_blank",
+  });
+
+  assert.deepEqual(JSON.parse(request.body), {
+    messageId: "message-id",
+    replyId: "document_signing_epi_supplier_document_blank",
+  });
+});
+
 test("aceita recuperação estruturada da VM para respostas de texto", async () => {
   const client = clientWith(async () => jsonResponse({
     status: "processed_with_recovery",

@@ -1075,6 +1075,53 @@ test("finaliza checkbox EPI lançando quantidade 1 e respondendo não sem catál
   assert.match(h.store.getState().messages.at(-1).question, /PDF GERADO/);
 });
 
+test("opção pedido EPI em branco envia só o replyId e não publica balão em branco", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const blankReplyId = "document_signing_epi_order_blank";
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL PEDIDO DESEJA VINCULAR À ENTREGA?",
+    databaseFilterKey: "document_signing_epi_order",
+    options: [{ id: blankReplyId, reply: blankReplyId, label: "0 - EM BRANCO" }],
+  }], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    return { status: "processed", activeFlow: epiActiveFlow, messages: [{
+      type: "poll", question: "QUAL O NOME DO FORNECEDOR?", options: [],
+    }] };
+  };
+
+  await h.view.emit("select-reply", { replyId: blankReplyId, label: "0 - EM BRANCO" });
+
+  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "", replyId: blankReplyId }]);
+  assert.equal(h.store.getState().messages.some(message => message.role === "user" && message.text === "0 - EM BRANCO"), false);
+  assert.equal(h.store.getState().messages.some(message => message.role === "user" && message.text === ""), false);
+});
+
+test("opção CPF/CNPJ EPI em branco não publica balão com o rótulo", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const blankReplyId = "document_signing_epi_supplier_document_blank";
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "O FORNECEDOR ESTÁ SEM CPF/CNPJ NO CADASTRO. DESEJA APONTAR PARA ESTE COMPROVANTE?",
+    options: [{ id: blankReplyId, reply: blankReplyId, label: "⬜ EM BRANCO" }],
+  }], { activeFlow: epiActiveFlow });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    return { status: "processed", activeFlow: epiActiveFlow, messages: [] };
+  };
+
+  await h.view.emit("select-reply", { replyId: blankReplyId, label: "⬜ EM BRANCO" });
+
+  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "", replyId: blankReplyId }]);
+  assert.equal(h.store.getState().messages.some(message => message.role === "user" && message.text === "⬜ EM BRANCO"), false);
+  assert.equal(h.store.getState().messages.some(message => message.role === "user" && message.text === ""), false);
+});
+
 test("selecionar todos os EPI marca e desmarca o lote sem alterar a quantidade personalizada", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
