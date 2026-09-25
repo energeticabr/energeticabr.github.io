@@ -344,8 +344,8 @@ export function createPaymentProgrammingGallery({
   function renderCard(row) {
     const fields = row.fields || {};
     const id = text(field(fields, ["ID"]) ?? row.id);
-    const hasAttachments = row.hasAttachments === true;
-    const card = el("article", `og-card pg-card${hasAttachments ? " og-card--with-attachments pg-card--attachments" : ""}`);
+    const hasAttachmentControl = row.hasAttachments !== false;
+    const card = el("article", `og-card pg-card${hasAttachmentControl ? " og-card--with-attachments pg-card--attachments" : ""}`);
     card.dataset.itemId = row.id;
     const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading pg-card-heading");
@@ -375,7 +375,7 @@ export function createPaymentProgrammingGallery({
     main.append(heading, status, description, summary);
     if (timing) main.append(timing);
     main.append(actions);
-    if (hasAttachments) {
+    if (hasAttachmentControl) {
       const attachmentRail = el("button", "og-button og-card-attachment-rail");
       attachmentRail.type = "button";
       attachmentRail.dataset.action = "attachments";

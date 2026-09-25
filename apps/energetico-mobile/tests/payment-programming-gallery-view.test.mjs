@@ -95,7 +95,7 @@ test("filtros de recorrência, tipo, produto, fornecedor, status, filial e imóv
   assert.match(ctx.root().querySelector(".pg-list-status").textContent, /1 pagamento/i);
 });
 
-test("G28 mostra o clipe à esquerda apenas quando há anexos e abre a coleção compartilhada", async t => {
+test("G28 mostra o clipe lateral salvo ausência confirmada e abre a coleção compartilhada", async t => {
   const rows = [
     { id: "306", hasAttachments: true, fields: { ID: 306, FORNECEDOR: "COM ANEXOS", STATUS: "PAGAMENTO PREVISTO" } },
     { id: "307", hasAttachments: false, fields: { ID: 307, FORNECEDOR: "SEM ANEXOS", STATUS: "PAGAMENTO PREVISTO" } },
@@ -113,8 +113,8 @@ test("G28 mostra o clipe à esquerda apenas quando há anexos e abre a coleção
     "the attachment rail appears before the payment content");
   assert.equal(ctx.root().querySelector('.pg-card[data-item-id="307"] .og-card-attachment-rail'), null,
     "payments known to have no attachments do not show the icon");
-  assert.equal(ctx.root().querySelector('.pg-card[data-item-id="308"] .og-card-attachment-rail'), null,
-    "payments without confirmed attachments do not show the icon");
+  assert.ok(ctx.root().querySelector('.pg-card[data-item-id="308"] .og-card-attachment-rail'),
+    "Graph may not report attachment presence, so unknown rows keep the access control");
 
   rail.click();
   await settle();
