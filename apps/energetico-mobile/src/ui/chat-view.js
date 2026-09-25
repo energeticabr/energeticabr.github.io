@@ -442,11 +442,20 @@ function orderMeasurementUnitOptions(message, options) {
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
   if (!/\bunidade\s+de\s+medida\b/u.test(question)) return options;
 
-  const rows = options.map((option, index) => ({ option, index, id: measurementUnitOptionId(option) }));
-  if (rows.filter(row => row.id !== null).length < 2) return options;
+  const rows = options.map((option, index) => {
+    const label = String(option?.label || option?.title || "");
+    return {
+      option,
+      index,
+      id: measurementUnitOptionId(option),
+      isRecommended: option?.recommended === true || /⭐/u.test(label),
+    };
+  });
+  if (rows.filter(row => row.id !== null).length < 2 && !rows.some(row => row.isRecommended && row.index > 0)) return options;
 
   return rows
     .sort((left, right) => {
+      if (left.isRecommended !== right.isRecommended) return left.isRecommended ? -1 : 1;
       if (left.id === null) return right.id === null ? left.index - right.index : 1;
       if (right.id === null) return -1;
       return left.id - right.id || left.index - right.index;
