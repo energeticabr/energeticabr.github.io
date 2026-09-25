@@ -93,18 +93,48 @@ test("as quatro galerias de cadastro abrem localmente, reutilizam a tela e são 
   assert.deepEqual(destroyed.sort(), ["family", "group", "product", "subfamily"]);
 });
 
-test("abrir o painel Power BI é uma ação local e não envia uma resposta ao fluxo", async t => {
+test("abrir Power BI obtém token delegado, solicita consentimento e não envia resposta ao fluxo", async t => {
   const h = makeHarness();
-  let opens = 0;
-  h.view.openPowerBiDashboard = () => { opens += 1; return true; };
+  const opens = [];
+  const tokenCalls = [];
+  const authorizations = [];
+  let tokenAttempts = 0;
+  h.auth.getToken = async scopes => {
+    tokenCalls.push(scopes);
+    tokenAttempts += 1;
+    if (tokenAttempts === 1) throw { code: "AUTH_REQUIRED", message: "consentimento necessário" };
+    return "powerbi-aad-token";
+  };
+  h.auth.authorize = async (scopes, options) => { authorizations.push({ scopes, options }); };
+  h.view.openPowerBiDashboard = options => { opens.push(options); return true; };
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
 
-  await h.view.emit("select-reply", { replyId: "action_powerbi_dashboard", label: "📊 POWER BI" });
+  assert.equal(await h.view.emit("select-reply", { replyId: "action_powerbi_dashboard", label: "📊 POWER BI" }), true);
+
+  const powerBiScopes = ["https://analysis.windows.net/powerbi/api/Report.Read.All"];
+  assert.deepEqual(tokenCalls, [powerBiScopes, powerBiScopes]);
+  assert.deepEqual(authorizations, [{
+    scopes: powerBiScopes,
+    options: { resumeAction: "action_powerbi_dashboard" },
+  }]);
+  assert.equal(opens.length, 1);
+  assert.equal(opens[0].accessToken, "powerbi-aad-token");
+  assert.equal(await opens[0].getAccessToken(), "powerbi-aad-token");
+  assert.equal(h.chatCalls.length, before);
+});
+
+test("retoma a abertura do painel Power BI após consentimento Microsoft", async t => {
+  const h = makeHarness();
+  let opens = 0;
+  h.auth.consumePendingAction = () => "action_powerbi_dashboard";
+  h.view.openPowerBiDashboard = options => { opens += 1; assert.equal(options.accessToken, "token"); return true; };
+  t.after(() => h.controller.stop());
+
+  await h.controller.start();
 
   assert.equal(opens, 1);
-  assert.equal(h.chatCalls.length, before);
 });
 const backendWorkflowPath = join(homedir(), "OneDrive - energetica", "Documents", "New project", "whatsapp-sharepoint-oci", "worker", "workflow_config.json");
 const pendingNoteWorkflowConfig = JSON.parse(readFileSync(

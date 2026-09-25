@@ -3468,12 +3468,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (resizeSignatureCanvasToDisplay(canvas)) drawSignatureStrokes(canvas);
   }
 
-  function openPowerBiDashboard() {
+  function openPowerBiDashboard(options) {
     if (!powerBiDashboard) {
       const documentRef = root.ownerDocument || globalThis.document;
       powerBiDashboard = createPowerBiDashboardView({ documentRef, host: documentRef?.body || root });
     }
-    return powerBiDashboard.open();
+    return powerBiDashboard.open(options);
   }
 
   root.addEventListener("click", click);
