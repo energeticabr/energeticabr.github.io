@@ -27,7 +27,8 @@
     "@capacitor/splash-screen": "8.0.2",
     "@capacitor/status-bar": "8.0.3",
     "pdf-lib": "1.17.1",
-    "pdfjs-dist": "6.3.289"
+    "pdfjs-dist": "6.3.289",
+    "powerbi-client": "2.24.1"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.1",

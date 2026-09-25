@@ -218,6 +218,43 @@ test("retoma a abertura da Galeria de Despesas Recorrentes após consentimento M
   assert.equal(values.size, 0);
 });
 
+test("retoma o painel Power BI depois do consentimento delegado", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  const values = new Map();
+  const storage = {
+    getItem(key) { return values.get(key) ?? null; },
+    setItem(key, value) { values.set(key, value); },
+    removeItem(key) { values.delete(key); },
+  };
+  const scopes = ["https://analysis.windows.net/powerbi/api/Report.Read.All"];
+  const firstAuth = createBrowserAuth({
+    storage,
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; },
+      async acquireTokenRedirect() {},
+    },
+  });
+  await firstAuth.initialize();
+  await firstAuth.authorize(scopes, { resumeAction: "action_powerbi_dashboard" });
+
+  const resumedAuth = createBrowserAuth({
+    storage,
+    config,
+    client: {
+      async initialize() {},
+      async handleRedirectPromise() { return { account, accessToken: "powerbi-token", scopes }; },
+      getAllAccounts() { return [account]; },
+    },
+  });
+  await resumedAuth.initialize();
+
+  assert.equal(resumedAuth.consumePendingAction(), "action_powerbi_dashboard");
+  assert.equal(values.size, 0);
+});
+
 test("usa mensagem genérica se não puder preservar a ação durante a autorização Microsoft", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
   const calls = [];

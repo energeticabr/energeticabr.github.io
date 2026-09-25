@@ -112,6 +112,7 @@ const TASKS_GALLERY_ID = "action_tasks_gallery";
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
+const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_group_gallery: "group",
   action_family_gallery: "family",
@@ -2843,6 +2844,37 @@ export function createAppController({
     render();
   }
 
+  async function powerBiAccessToken() {
+    try {
+      return await auth.getToken(POWERBI_SCOPES);
+    } catch (error) {
+      if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+      await auth.authorize(POWERBI_SCOPES, { resumeAction: POWERBI_DASHBOARD_REPLY_ID });
+      return auth.getToken(POWERBI_SCOPES);
+    }
+  }
+
+  async function openPowerBiDashboard() {
+    const dashboardAccount = account;
+    if (!dashboardAccount || stopped) return false;
+    try {
+      const accessToken = await powerBiAccessToken();
+      if (stopped || account !== dashboardAccount) return false;
+      return await (view.openPowerBiDashboard?.({
+        accessToken,
+        getAccessToken: async () => {
+          if (stopped || account !== dashboardAccount) throw new Error("A sessão do Power BI foi encerrada.");
+          return powerBiAccessToken();
+        },
+      }) ?? false);
+    } catch (error) {
+      if (!stopped && account === dashboardAccount) {
+        setSessionError(error, "Não foi possível abrir o Power BI. Verifique a permissão Microsoft Report.Read.All e o acesso da conta ao relatório.");
+      }
+      return false;
+    }
+  }
+
   function updateEpiProductSelection({ productId, selected } = {}) {
     if (epiFinalizeProgress) {
       render();
@@ -4669,7 +4701,7 @@ export function createAppController({
     });
     bind("select-reply", command => {
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
-      if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return view.openPowerBiDashboard?.() ?? false;
+      if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
@@ -4946,6 +4978,7 @@ export function createAppController({
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
+    else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
   }
 

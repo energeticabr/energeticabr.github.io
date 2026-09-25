@@ -9,6 +9,7 @@ import {
   resizeSignatureCanvasToDisplay,
   signaturePointFromEvent,
 } from "../src/ui/chat-view.js";
+import { createPowerBiDashboardView, POWERBI_REPORT_ID } from "../src/ui/powerbi-dashboard-view.js";
 import { JSDOM } from "jsdom";
 
 function signedInState(overrides = {}) {
@@ -1375,19 +1376,35 @@ test("menu inicial posiciona Power BI logo depois de Gastos Pessoais", () => {
   dom.window.close();
 });
 
-test("painel Power BI abre incorporado e pode ser fechado sem sair da conversa", () => {
+test("painel Power BI usa token Microsoft no SDK e renova o token sem autenticação automática no iframe", async () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
-  const view = createChatView(root);
+  const embeds = [];
+  const eventHandlers = new Map();
+  const powerBiClient = {
+    models: { TokenType: { Aad: 0 } },
+    embed(element, config) {
+      embeds.push({ element, config });
+      return { on(event, handler) { eventHandlers.set(event, handler); }, off() {} };
+    },
+    reset() {},
+  };
+  const getAccessToken = async () => "token-renovado";
+  const view = createPowerBiDashboardView({ documentRef: dom.window.document, host: root, powerBiClient });
 
-  assert.equal(typeof view.openPowerBiDashboard, "function");
-  assert.equal(view.openPowerBiDashboard(), true);
+  assert.equal(await view.open({ accessToken: "token-inicial", getAccessToken }), true);
   const dialog = dom.window.document.querySelector('[role="dialog"][aria-label="Painel Power BI ENERGÉTICA"]');
-  const frame = dialog?.querySelector("iframe");
   assert.ok(dialog);
-  assert.equal(frame?.getAttribute("title"), "Relatório Power BI ENERGÉTICA com todas as abas");
-  assert.match(frame?.getAttribute("src") || "", /^https:\/\/app\.powerbi\.com\/reportEmbed\?/);
-  assert.match(frame?.getAttribute("src") || "", /reportId=188c0311-65d4-40f8-9bb9-02090f44a0fb/);
+  assert.equal(dialog.querySelector("iframe"), null, "o SDK deve criar o iframe depois de receber a configuração autenticada");
+  assert.equal(embeds.length, 1);
+  assert.equal(embeds[0].config.type, "report");
+  assert.equal(embeds[0].config.id, POWERBI_REPORT_ID);
+  assert.equal(embeds[0].config.accessToken, "token-inicial");
+  assert.equal(embeds[0].config.tokenType, 0);
+  assert.match(embeds[0].config.embedUrl, /^https:\/\/app\.powerbi\.com\/reportEmbed\?/);
+  assert.match(embeds[0].config.embedUrl, new RegExp(`reportId=${POWERBI_REPORT_ID}`));
+  assert.doesNotMatch(embeds[0].config.embedUrl, /autoAuth=true/);
+  assert.equal(await embeds[0].config.eventHooks.accessTokenProvider(), "token-renovado");
   assert.equal(dialog.querySelector('a[href^="https://app.powerbi.com/groups/me/reports/"]')?.textContent, "Abrir no Power BI");
   dialog.querySelector('[data-powerbi-close]')?.click();
   assert.equal(dom.window.document.querySelector('[role="dialog"][aria-label="Painel Power BI ENERGÉTICA"]'), null);
