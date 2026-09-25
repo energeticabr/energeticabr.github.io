@@ -1438,6 +1438,35 @@ test("painel Power BI usa token Microsoft no SDK e renova o token sem autentica�
   dom.window.close();
 });
 
+test("habilita pinça nativa somente enquanto o painel Power BI está aberto", async () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const calls = [];
+  const powerBiZoom = {
+    setEnabled({ enabled }) {
+      calls.push(enabled);
+      return Promise.resolve();
+    },
+  };
+  const powerBiClient = {
+    models: { TokenType: { Aad: 0 } },
+    embed() { return { on() {}, off() {} }; },
+    reset() {},
+  };
+  const view = createPowerBiDashboardView({
+    documentRef: dom.window.document,
+    host: dom.window.document.querySelector("#app"),
+    powerBiClient,
+    powerBiZoom,
+  });
+
+  assert.equal(await view.open({ accessToken: "token", getAccessToken: async () => "token" }), true);
+  assert.deepEqual(calls, [true]);
+  view.close();
+  assert.deepEqual(calls, [true, false]);
+
+  dom.window.close();
+});
+
 test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MicrosoftAuthPlugin.class);
         registerPlugin(DocumentPickerPlugin.class);
         registerPlugin(ShareInboxPlugin.class);
+        registerPlugin(PowerBiZoomPlugin.class);
         super.onCreate(savedInstanceState);
         handleIncomingIntent(getIntent());
     }

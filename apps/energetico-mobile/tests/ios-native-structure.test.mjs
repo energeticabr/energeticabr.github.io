@@ -65,3 +65,16 @@ test("configura login Microsoft seguro com MSAL compatível com iOS 16", async (
   assert.match(entitlements, /group\.br\.com\.energetica\.energetico/);
   assert.match(entitlements, /com\.microsoft\.adalcache/);
 });
+
+test("iOS ativa a pinça do WKWebView apenas sob comando da tela Power BI", async () => {
+  const controller = await readFile(new URL("EnergeticoBridgeViewController.swift", appUrl), "utf8");
+
+  assert.match(controller, /registerPluginInstance\(PowerBiZoomPlugin\(\)\)/);
+  assert.match(controller, /jsName = "PowerBiZoom"/);
+  assert.match(controller, /CAPPluginMethod\(name: "setEnabled", returnType: CAPPluginReturnPromise\)/);
+  assert.match(controller, /pinchGestureRecognizer\?\.isEnabled = true/);
+  assert.match(controller, /pinchGestureRecognizer\?\.isEnabled = false/);
+  assert.match(controller, /scrollView\.delegate = nil/);
+  assert.match(controller, /scrollView\.delegate = self\.previousScrollViewDelegate/);
+  assert.match(controller, /scrollView\.delegate = bridge\.webViewDelegationHandler/);
+});

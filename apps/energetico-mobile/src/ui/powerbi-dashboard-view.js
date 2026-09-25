@@ -24,6 +24,7 @@ export function createPowerBiDashboardView({
   documentRef = globalThis.document,
   host = documentRef?.body,
   powerBiClient: suppliedPowerBiClient = null,
+  powerBiZoom = null,
 } = {}) {
   if (!documentRef?.createElement || !host?.append) {
     throw new TypeError("A tela do Power BI requer um documento e um contêiner válidos.");
@@ -36,11 +37,23 @@ export function createPowerBiDashboardView({
   let reportContainer = null;
   let openRevision = 0;
 
+  async function setNativePinchEnabled(enabled) {
+    if (typeof powerBiZoom?.setEnabled !== "function") return false;
+    try {
+      await powerBiZoom.setEnabled({ enabled });
+      return true;
+    } catch {
+      // Browser/PWA zoom remains available if a native bridge is unavailable.
+      return false;
+    }
+  }
+
   function close() {
     if (!dialog) return false;
     const current = dialog;
     dialog = null;
     openRevision += 1;
+    void setNativePinchEnabled(false);
     report?.off?.("loaded", handleLoaded);
     report?.off?.("error", handleError);
     report = null;
@@ -134,6 +147,11 @@ export function createPowerBiDashboardView({
     const currentDialog = dialog;
     const revision = ++openRevision;
     try {
+      await setNativePinchEnabled(true);
+      if (dialog !== currentDialog || openRevision !== revision) {
+        await setNativePinchEnabled(false);
+        return false;
+      }
       powerBiClient ||= await createPowerBiClient();
       if (dialog !== currentDialog || openRevision !== revision) return false;
       report = powerBiClient.embed(reportContainer, {
