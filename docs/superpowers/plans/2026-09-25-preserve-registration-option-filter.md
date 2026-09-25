@@ -4,7 +4,7 @@
 
 **Goal:** Keep a poll's existing “CADASTRAR NOVO …” action visible while server-side filtering updates the matching records.
 
-**Architecture:** Preserve registration actions from the current database-filter poll when a filter request returns another poll with the same filter key and prompt. Share the registration-action classifier with the existing local filter so both layers apply the same definition. Do not carry actions into a different poll or flow.
+**Architecture:** Preserve registration actions from the current database-filter poll when a filter request returns another poll with the same filter key. Share the registration-action classifier with the existing local filter so both layers apply the same definition. Do not carry actions into a poll that is no longer a database-filter poll or has a different filter key.
 
 **Tech Stack:** JavaScript ES modules, Node.js test runner, existing mobile app test suite.
 
@@ -20,7 +20,7 @@
 
 - A filter response with zero matches must still show the existing registration action.
 - A response that already includes the registration action must not render duplicates.
-- A response for a different poll/filter key must not inherit the old action.
+- A response for a different filter key or a non-filter poll must not inherit the old action.
 - Manually submitted filters with more than two words must retain the action too.
 - Ordinary choices must remain filtered as before.
 
@@ -41,6 +41,6 @@
 
 - [ ] Add an app-controller regression test where the initial poll contains “CADASTRAR NOVO FORNECEDOR” and the filtered response omits it; verify it remains in the resulting poll.
 - [ ] Run that test and verify it fails because the action is missing.
-- [ ] Implement shared registration-action recognition and merge it whenever a server response remains on the same database-filter key and prompt, including manually submitted longer queries.
+- [ ] Implement shared registration-action recognition and merge it whenever a server response remains on the same database-filter key, including manually submitted longer queries and a changed no-results prompt.
 - [ ] Extend coverage for zero-match and already-present actions, run focused tests, then run the full mobile suite and builds plus `pnpm guard:signature-gestures`.
 - [ ] Review the diff, commit the implementation, and prepare it for normal PR/release verification.

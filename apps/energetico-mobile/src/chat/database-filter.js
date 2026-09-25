@@ -40,9 +40,7 @@ function registrationOptionKeys(option) {
 export function preserveDatabaseFilterRegistrationOptions(previousMessages, result) {
   const previous = latestDatabaseFilter(previousMessages);
   const incoming = latestDatabaseFilter(result?.messages);
-  const previousQuestion = normalizeFilterText(previous?.message.question || previous?.message.prompt).trim();
-  const incomingQuestion = normalizeFilterText(incoming?.message.question || incoming?.message.prompt).trim();
-  if (!previous || !incoming || previous.key !== incoming.key || previousQuestion !== incomingQuestion) return result;
+  if (!previous || !incoming || previous.key !== incoming.key) return result;
   const registrations = (Array.isArray(previous.message.options) ? previous.message.options : [])
     .filter(isDatabaseRegistrationOption);
   if (!registrations.length) return result;

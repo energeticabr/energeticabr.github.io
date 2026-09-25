@@ -606,9 +606,9 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
   await h.controller.start();
   const activeFlow = { id: "supply_supplier_registration", title: "CADASTRAR FORNECEDOR" };
   const registration = { id: "register_supplier", label: "➕ CADASTRAR NOVO FORNECEDOR", reply: "register_supplier" };
-  const filterPoll = options => ({
+  const filterPoll = (options, question = "QUAL FORNECEDOR?") => ({
     type: "poll",
-    question: "QUAL FORNECEDOR?",
+    question,
     databaseFilter: true,
     databaseFilterKey: "supplier",
     options,
@@ -631,7 +631,10 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
       { id: "supplier:19", label: "19 - SWIFT MATERIAIS", reply: "19" },
       { ...registration },
     ];
-    return { status: "processed", activeFlow, messages: [filterPoll(options)] };
+    const question = payload.text === "Swi"
+      ? "NENHUMA OPÇÃO CORRESPONDENTE FOI ENCONTRADA. DIGITE OUTRO TEXTO OU CADASTRE UM FORNECEDOR."
+      : "QUAL FORNECEDOR?";
+    return { status: "processed", activeFlow, messages: [filterPoll(options, question)] };
   };
 
   await h.view.emit("draft-changed", { value: "Swi" });
@@ -639,6 +642,7 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
   await new Promise(resolve => setTimeout(resolve, 20));
 
   assert.deepEqual(payloads, [{ text: "Swi" }]);
+  assert.match(h.store.getState().messages.at(-1).question, /NENHUMA OPÇÃO CORRESPONDENTE/);
   assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.reply), ["register_supplier"]);
 
   await h.view.emit("draft-changed", { value: "Swift" });
