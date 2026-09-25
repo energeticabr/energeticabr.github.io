@@ -7,6 +7,7 @@ import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/data
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
+import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
@@ -3578,7 +3579,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function openPowerBiDashboard(options) {
     if (!powerBiDashboard) {
       const documentRef = root.ownerDocument || globalThis.document;
-      powerBiDashboard = createPowerBiDashboardView({ documentRef, host: documentRef?.body || root });
+      powerBiDashboard = createPowerBiDashboardView({
+        documentRef,
+        host: documentRef?.body || root,
+        powerBiZoom: Capacitor.isNativePlatform() ? PowerBiZoom : null,
+      });
     }
     return powerBiDashboard.open(options);
   }

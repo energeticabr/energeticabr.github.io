@@ -48,6 +48,26 @@ test("Android preserva escopos OAuth e não reutiliza token de outra API SharePo
   assert.match(refreshRequest, /client_id=/, "a renovação do token precisa enviar o client_id do aplicativo");
 });
 
+test("Android disponibiliza zoom por pinça controlado pela tela Power BI", async () => {
+  const activity = await readFile(new URL("app/src/main/java/br/com/energetica/energetico/MainActivity.java", android), "utf8");
+  const pluginPath = new URL("app/src/main/java/br/com/energetica/energetico/PowerBiZoomPlugin.java", android);
+
+  assert.match(activity, /registerPlugin\(PowerBiZoomPlugin\.class\)/);
+  assert.doesNotMatch(activity, /setBuiltInZoomControls\(true\)/, "o zoom por pinça não deve ficar ativo fora do Power BI");
+  let plugin;
+  try {
+    plugin = await readFile(pluginPath, "utf8");
+  } catch {
+    assert.fail("a ponte PowerBiZoom do Android não foi criada");
+  }
+  assert.match(plugin, /@CapacitorPlugin\(name = "PowerBiZoom"\)/);
+  assert.match(plugin, /setSupportZoom\(true\)/);
+  assert.match(plugin, /setBuiltInZoomControls\(true\)/);
+  assert.match(plugin, /setDisplayZoomControls\(false\)/);
+  assert.match(plugin, /setSupportZoom\(previousSupportZoom\)/);
+  assert.match(plugin, /setBuiltInZoomControls\(previousBuiltInZoomControls\)/);
+});
+
 test("iOS fixa a autorização incremental na conta já autenticada", async () => {
   const ios = await readFile(new URL("../ios/App/App/MicrosoftAuthPlugin.swift", import.meta.url), "utf8");
   assert.match(ios, /authorizationMode.*incremental/);
