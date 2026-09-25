@@ -1,6 +1,9 @@
 import { bindAutoFilterForm } from './auto-filter-form.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
+const DEFAULT_STATUS_FILTER = "__ATIVIDADE_CRIADA_OU_EM_ATENDIMENTO__";
+const DEFAULT_STATUS_LABEL = "ATIVIDADE CRIADA OU EM ATENDIMENTO";
+const DEFAULT_TASK_STATUSES = ["ATIVIDADE CRIADA", "EM ATENDIMENTO"];
 const DATE_FIELD = /(data|date|criad|created|modific|modified|conclus|fatal|identifica|in[ií]cio)/i;
 
 function key(value) {
@@ -120,7 +123,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     controls.set(name, control); wrapper.append(control); grid.append(wrapper); return control;
   }
   addControl("search", "Descrição, ID ou responsável", "input", "search").placeholder = "Pesquisar tarefa…";
-  addControl("status", "Status");
+  const statusControl = addControl("status", "Status");
+  statusControl.append(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
+  statusControl.value = DEFAULT_STATUS_FILTER;
   for (const name of ["priority", "charge"]) {
     const control = addControl(name, name === "priority" ? "Prioritária" : "Cobrar");
     for (const value of ["SIM", "NÃO"]) { const option = el("option", "", value); option.value = value; control.append(option); }
@@ -179,10 +184,13 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   function filterOptions() {
     for (const [name, aliases] of [["status", ["STATUS"]], ["branch", ["FILIAL"]], ["association", ["ASSOCIAÇÃO", "ASSOCIACAO", "field_10"]]]) {
       const control = controls.get(name); const current = control.value;
-      const values = [...new Set(rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean))]
+      const rowValues = rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean);
+      const values = [...new Set(name === "status" ? [...DEFAULT_TASK_STATUSES, ...rowValues] : rowValues)]
         .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
-      control.replaceChildren(Object.assign(el("option", "", "Todos"), { value: "" }), ...values.map(value => Object.assign(el("option", "", value), { value })));
-      if (values.includes(current)) control.value = current;
+      const options = [Object.assign(el("option", "", "Todos"), { value: "" })];
+      if (name === "status") options.push(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
+      control.replaceChildren(...options, ...values.map(value => Object.assign(el("option", "", value), { value })));
+      if (current === DEFAULT_STATUS_FILTER || values.includes(current)) control.value = current;
     }
   }
 
@@ -215,7 +223,10 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       const fields = row.fields || {};
       const values = Object.values(fields).map(text);
       if (query && !normalized([row.id, ...values].join(" ")).includes(query)) return false;
-      if (filterValues.status && normalized(status(fields, today)) !== normalized(filterValues.status)) return false;
+      const taskStatus = status(fields, today);
+      if (filterValues.status === DEFAULT_STATUS_FILTER) {
+        if (!DEFAULT_TASK_STATUSES.some(value => normalized(value) === normalized(taskStatus))) return false;
+      } else if (filterValues.status && normalized(taskStatus) !== normalized(filterValues.status)) return false;
       if (filterValues.priority && String(priority(fields)) !== String(filterValues.priority === "SIM")) return false;
       if (filterValues.charge && String(charge(fields)) !== String(filterValues.charge === "SIM")) return false;
       if (filterValues.branch && normalized(field(fields, ["FILIAL"])) !== normalized(filterValues.branch)) return false;
@@ -326,7 +337,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
 
   const autoFilters = bindAutoFilterForm(form, applyLocalFilters);
-  clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
+  clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS_FILTER : name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
   closeButton.addEventListener("click", () => { close(); onClose?.(); }); homeButton.addEventListener("click", () => { close(); onHome?.(); });
