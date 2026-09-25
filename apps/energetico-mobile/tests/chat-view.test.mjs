@@ -2095,7 +2095,7 @@ test("filtro do fornecedor em lançamento múltiplo aceita nomes com mais de dua
   dom.window.close();
 });
 
-test("unidades de medida são apresentadas em ordem crescente de ID numérico", () => {
+test("mantém unidade de medida com estrela no topo e ordena as demais por ID crescente", () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({
     messages: [{
       id: "product-unit-filter",
@@ -2109,14 +2109,21 @@ test("unidades de medida são apresentadas em ordem crescente de ID numérico", 
         { id: "13", reply: "13", label: "13 - m" },
         { id: "3", reply: "3", label: "3 - UN" },
         { id: "19", reply: "19", label: "19 - MÊS" },
+        { id: "11", reply: "11", label: "11 - ⭐ DIÁRIA (PADRÃO DO PRODUTO)" },
       ],
     }],
   })));
 
   const buttons = Array.from(dom.window.document.querySelectorAll(".chat-choice-button[data-reply-id]"));
   const labels = buttons.map(button => button.textContent.trim());
-  assert.deepEqual(labels, ["3 - UN", "13 - m", "19 - MÊS", "27 - CAIXA"]);
-  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["3", "13", "19", "27"]);
+  assert.deepEqual(labels, [
+    "11 - ⭐ DIÁRIA (PADRÃO DO PRODUTO)",
+    "3 - UN",
+    "13 - m",
+    "19 - MÊS",
+    "27 - CAIXA",
+  ]);
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["11", "3", "13", "19", "27"]);
   dom.window.close();
 });
 
