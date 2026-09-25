@@ -92,6 +92,20 @@ test("as quatro galerias de cadastro abrem localmente, reutilizam a tela e são 
   h.controller.stop();
   assert.deepEqual(destroyed.sort(), ["family", "group", "product", "subfamily"]);
 });
+
+test("abrir o painel Power BI é uma ação local e não envia uma resposta ao fluxo", async t => {
+  const h = makeHarness();
+  let opens = 0;
+  h.view.openPowerBiDashboard = () => { opens += 1; return true; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "action_powerbi_dashboard", label: "📊 POWER BI" });
+
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+});
 const backendWorkflowPath = join(homedir(), "OneDrive - energetica", "Documents", "New project", "whatsapp-sharepoint-oci", "worker", "workflow_config.json");
 const pendingNoteWorkflowConfig = JSON.parse(readFileSync(
   existsSync(backendWorkflowPath) ? backendWorkflowPath : new URL("./fixtures/pending-note-workflow-config.json", import.meta.url),
