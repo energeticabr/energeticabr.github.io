@@ -417,10 +417,15 @@ test("oferece lápis de edição de vencimento antes do check da provisão", () 
   const root = dom.window.document;
   const edit = root.querySelector('[data-action="edit-pending-provision-due-date"]');
   const check = root.querySelector('[data-action="settle-pending-provision"]');
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const editRule = css.match(/\.chat-pending-provision__edit--due-date\s*\{([^}]*)\}/)?.[1] || "";
+  const editFontSize = Number(editRule.match(/font-size:\s*([\d.]+)rem/)?.[1]);
 
   assert.ok(edit);
+  assert.ok(edit.classList.contains("chat-pending-provision__edit--due-date"));
   assert.equal(edit.dataset.paymentId, "306");
-  assert.equal(edit.textContent, "✎");
+  assert.equal(edit.textContent, "✏️");
+  assert.ok(editFontSize > 1.25, "o lápis deve ficar maior que o ícone anterior");
   assert.match(edit.getAttribute("aria-label"), /DIBRITA/);
   assert.ok(edit.compareDocumentPosition(check) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   dom.window.close();

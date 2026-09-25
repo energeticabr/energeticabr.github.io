@@ -202,6 +202,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__summary span, .chat-pending-provision__summary small { color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
 .chat-pending-provision__actions { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 6px; }
 .chat-pending-provision__edit { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #c6c9cc; border-radius: 12px; color: #4b5563; background: #e1e3e5; font-size: 1.25rem; line-height: 1; }
+.chat-pending-provision__edit--due-date { color: #f2a900; font-size: 1.55rem; }
 .chat-pending-provision__edit:hover:not(:disabled) { background: #d1d5d8; }
 .chat-pending-provision__edit:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .6; }
 .chat-pending-provision__settle { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #16804a; border-radius: 12px; color: white; background: #16804a; font-size: 1.35rem; line-height: 1; }
