@@ -1757,7 +1757,7 @@ export function createAppController({
       && pendingNoteLaunchProgress.revision === targetRevision
       ? pendingNoteLaunchProgress
       : { orderId: id, account: targetAccount, revision: targetRevision,
-        existingOrderAttempted: false, modalityAttempted: false,
+        launchedByPopup: false, existingOrderAttempted: false, modalityAttempted: false,
         orderAttempted: false, orderPromptContextId: "" };
     pendingNoteLaunchProgress = progress;
     const currentAttempt = () => pendingNoteLaunchProgress === progress
@@ -1804,7 +1804,15 @@ export function createAppController({
         ["choice:tipo_lancamento:2", "Lançamento Múltiplo"],
       ];
       let stage = stages.findIndex(([reply]) => pendingNoteOption(poll, reply));
-      if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
+      if (currentAssistantActiveFlow()?.id === "launch" && stage >= 3
+        && !progress.launchedByPopup && !progress.existingOrderAttempted) {
+        // A launch already in progress belongs to a different action. The
+        // popup must start its own Pedido Existente flow, not inherit it.
+        stage = -1;
+      }
+      if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch"
+        && !progress.orderAttempted) stage = -1;
+      else if (isPendingNoteDateQuestion(poll) && currentAssistantActiveFlow()?.id === "launch") {
         const contextId = String(currentAssistantActiveFlow()?.contextId || "");
         if (resynced && progress.orderAttempted && progress.orderPromptContextId
           && contextId && contextId !== progress.orderPromptContextId
@@ -1825,14 +1833,21 @@ export function createAppController({
         return false;
       }
       if (stage < 0) {
-        if (currentAssistantActiveFlow() && !isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
-          setSessionError(new Error("Há outro fluxo em andamento. Conclua ou retome esse fluxo antes de lançar o pedido."));
-          return false;
-        }
-        if (!await advance({ reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" }, "o menu principal")) return false;
+        const diaryActive = /^construction_diary_(?:create|fill)$/.test(String(currentAssistantActiveFlow()?.id || ""));
+        if (!await advance(diaryActive
+          ? { reply: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" }
+          : { reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" }, "a saída do fluxo anterior")) return false;
         poll = currentAssistantPoll();
         if (isDraftExitConfirmation(poll)) {
-          setSessionError(new Error("Há um rascunho em andamento. Resolva a confirmação de saída antes de lançar o pedido."));
+          if (!await advance(pendingNoteOption(poll, "portal_draft_exit_discard"), "a saída sem salvar do fluxo anterior")) return false;
+          poll = currentAssistantPoll();
+        }
+        if (pendingNoteOption(poll, "diary_partial_save_no")) {
+          if (!await advance(pendingNoteOption(poll, "diary_partial_save_no"), "a saída do diário sem postar")) return false;
+          poll = currentAssistantPoll();
+        }
+        if (!isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
+          setSessionError(new Error("A VM não confirmou a saída do fluxo anterior. O popup permanece aberto."));
           return false;
         }
         stage = 0;
@@ -1840,7 +1855,8 @@ export function createAppController({
       for (let index = stage; index < stages.length; index++) {
         const [reply, name] = stages[index];
         const option = pendingNoteOption(poll, reply);
-        const onRequest = index === 3 ? () => { progress.existingOrderAttempted = true; }
+        const onRequest = index === 2 ? () => { progress.launchedByPopup = true; }
+          : index === 3 ? () => { progress.existingOrderAttempted = true; }
           : index === 4 ? () => { progress.modalityAttempted = true; } : undefined;
         if (!await advance(option, name, onRequest)) return false;
         if (!currentAttempt()) return false;
@@ -1924,15 +1940,32 @@ export function createAppController({
     if (!entry && !provisionsOption) {
       let pendingOption = restartFromMainMenu ? null : pendingGroupOption(poll);
       if (!pendingOption) {
-        if (!isPortalGroupMenu(poll, activeFlow) && !isPaymentProvisionAttachmentFlow(poll, activeFlow)) {
-          setSessionError(new Error("O fluxo atual não é um menu de áreas. Conclua ou retome o fluxo antes de iniciar a baixa do pagamento agendado."));
-          return null;
-        }
-        const returned = await sendSettlementReply("", PORTAL_MAIN_MENU_CONFIRM_ID, targetAccount, targetRevision);
+        const diaryActive = /^construction_diary_(?:create|fill)$/.test(String(activeFlow?.id || ""));
+        const returned = await sendSettlementReply(
+          diaryActive ? "ABANDONAR DIÁRIO DE OBRAS" : "",
+          diaryActive ? "abandon_construction_diary" : PORTAL_MAIN_MENU_CONFIRM_ID,
+          targetAccount, targetRevision,
+        );
         if (!returned) return null;
         poll = currentAssistantPoll();
         if (isDraftExitConfirmation(poll)) {
-          setSessionError(new Error("Há um fluxo com rascunho em andamento. Resolva a confirmação de saída antes de iniciar a baixa; seus dados foram preservados."));
+          const discard = pendingNoteOption(poll, "portal_draft_exit_discard");
+          if (!discard || !await sendSettlementReply(
+            String(discard.label || discard.title || "ELIMINAR RASCUNHO FORMULÁRIO"),
+            String(discard.reply || discard.id), targetAccount, targetRevision,
+          )) return null;
+          poll = currentAssistantPoll();
+        }
+        const diaryExit = pendingNoteOption(poll, "diary_partial_save_no");
+        if (diaryExit) {
+          if (!await sendSettlementReply(
+            String(diaryExit.label || diaryExit.title || "SAIR SEM POSTAR AGORA"),
+            String(diaryExit.reply || diaryExit.id), targetAccount, targetRevision,
+          )) return null;
+          poll = currentAssistantPoll();
+        }
+        if (!isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
+          setSessionError(new Error("A VM não confirmou a saída do fluxo anterior. A baixa não foi iniciada."));
           return null;
         }
         pendingOption = pendingGroupOption(poll);
