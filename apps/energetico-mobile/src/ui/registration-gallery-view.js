@@ -419,7 +419,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
   }
 
-  function hide() { root.hidden = true; request += 1; attachmentRequest += 1; attachmentLoading = false; returnFocus?.focus?.(); }
+  function hide() {
+    if (root.hidden) return;
+    root.hidden = true;
+    request += 1;
+    attachmentRequest += 1;
+    attachmentLoading = false;
+    if (returnFocus?.isConnected) returnFocus.focus?.();
+    returnFocus = null;
+  }
   close.addEventListener("click", hide);
   refresh.addEventListener("click", load);
   search.addEventListener("input", () => { page = 1; attachmentNotice = ""; render(); });
@@ -442,6 +450,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   });
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
+    close: hide,
     destroy() { destroyed = true; request += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

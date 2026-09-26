@@ -3116,6 +3116,17 @@ export function createAppController({
     registrationGalleryOpenings.clear();
   }
 
+  function closeGalleryOverlays() {
+    for (const gallery of [
+      launchGallery,
+      ordersGallery,
+      tasksGallery,
+      paymentProgrammingGallery,
+      recurringExpensesGallery,
+      ...registrationGalleries.values(),
+    ]) gallery?.close?.();
+  }
+
   function galleryAddToTray(assertSession) {
     return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
@@ -3142,9 +3153,10 @@ export function createAppController({
           : Object.assign(new Blob([attachmentBlob], { type }), { name }));
       }
 
-      const returnedToMenu = await sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
+      const returnedToMenu = await sendText("", PORTAL_MAIN_MENU_CONFIRM_ID, { requireMenuResult: true });
       if (!returnedToMenu) return false;
       assertSession();
+      closeGalleryOverlays();
       return queueSelectedFiles(() => files);
     };
   }
@@ -3617,6 +3629,7 @@ export function createAppController({
       // hides the newly generated document.
       if (positioningSignature) invalidateSignaturePlacement({ clearOverride: true });
       attachmentRevision += 1;
+      const menuResult = isMenuResult(result);
       const summaryStatus = result.results?.find(item => ["flow_summary", "no_active_flow", "flow_summary_failed"].includes(item.status))?.status;
       if (summaryStatus) {
         const confirmed = store.confirmText(operation, { ...result, readOnlySummary: true });
@@ -3632,9 +3645,8 @@ export function createAppController({
         } else {
           setSessionError(new Error(result.messages.find(item => item.type === "text")?.text || "Não foi possível gerar o resumo."));
         }
-        return true;
+        return confirmed && (behavior.requireMenuResult !== true || menuResult);
       }
-      const menuResult = isMenuResult(result);
       const transferPromptWasActive = attachmentTransferPending
         && hasAttachmentTransferPrompt(previousState.messages);
       const transferConfirmedInResponse = attachmentTransferPending
@@ -3737,7 +3749,7 @@ export function createAppController({
         scheduleCompletionMenu(effectiveResult);
         if (resumeEpiFinalize) await finalizeEpiProductSelection();
       }
-      return confirmed && !epiAdvanceError;
+      return confirmed && !epiAdvanceError && (behavior.requireMenuResult !== true || menuResult);
     } catch (error) {
       // Preserve the hidden step so a failed automatic answer can be retried
       // against the same VM question instead of a stale visible poll.
