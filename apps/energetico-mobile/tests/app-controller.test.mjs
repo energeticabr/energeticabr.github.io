@@ -125,14 +125,15 @@ test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo"
   await h.view.emit("select-reply", { replyId: "action_documents_gallery" });
 
   const blob = new Blob(["%PDF-1.7"], { type: "application/pdf" });
-  await callbacks.openMediaCollection([{ fileName: "comprovante.pdf", source: Promise.resolve(blob) }]);
+  const originalName = " comprovante.pdf ";
+  await callbacks.openMediaCollection([{ fileName: originalName, source: Promise.resolve(blob) }]);
   assert.equal(typeof previewOptions.onAddToTray, "function");
-  assert.equal(await previewOptions.onAddToTray({ blob, fileName: "comprovante.pdf" }), true);
+  assert.equal(await previewOptions.onAddToTray({ blob, fileName: originalName }), true);
 
-  assert.equal(uploadedFile.name, "comprovante.pdf");
+  assert.equal(uploadedFile.name, originalName);
   assert.equal(uploadedFile.type, "application/pdf");
   assert.equal(await uploadedFile.text(), "%PDF-1.7");
-  assert.ok(h.chatCalls.some(([type, name]) => type === "file" && name === "comprovante.pdf"));
+  assert.ok(h.chatCalls.some(([type, name]) => type === "file" && name === originalName));
 });
 
 test("abrir Power BI obtém token delegado, solicita consentimento e navega ao menu pela casa", async t => {

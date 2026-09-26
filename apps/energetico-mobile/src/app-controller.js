@@ -3122,7 +3122,7 @@ export function createAppController({
       if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") {
         throw new Error("O anexo selecionado não está disponível para adicionar.");
       }
-      const name = String(fileName || "anexo").trim() || "anexo";
+      const name = String(fileName || "anexo");
       const type = String(blob.type || "application/octet-stream");
       const FileConstructor = globalThis.File;
       const file = typeof FileConstructor === "function"
