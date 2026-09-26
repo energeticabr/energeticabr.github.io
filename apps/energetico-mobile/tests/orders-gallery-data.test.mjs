@@ -164,6 +164,38 @@ test("mantém presença de anexos desconhecida quando Graph não informa essa co
   assert.equal(snapshot.rows[0].hasAttachments, null);
 });
 
+test("usa o autor humano do item antes do campo SharePoint e não exibe a conta técnica", async () => {
+  const { repository } = repositoryHarness({
+    async getItemsPage() {
+      return { items: [
+        {
+          id: "401",
+          createdBy: { user: { displayName: "Bernardo Notini" } },
+          lastModifiedBy: { user: { displayName: "Ana Souza" } },
+          fields: { "Criado por": "SharePoint App", "Modificado por": "SharePoint App" },
+        },
+        {
+          id: "402",
+          createdBy: { application: { displayName: "SharePoint App" } },
+          fields: { "Criado por": 1073741822 },
+        },
+        {
+          id: "403",
+          createdBy: { user: { id: "user-403" } },
+          fields: { "Criado por": "Rafael Gontijo" },
+        },
+      ], hasMore: false };
+    },
+  });
+  const gallery = createOrdersGalleryData({ repository });
+  const snapshot = await gallery.loadSnapshot();
+
+  assert.equal(snapshot.rows.find(row => row.id === "401").fields["Criado por"], "Bernardo Notini");
+  assert.equal(snapshot.rows.find(row => row.id === "401").fields["Modificado por"], "Ana Souza");
+  assert.equal(snapshot.rows.find(row => row.id === "402").fields["Criado por"], "Usuário não identificado");
+  assert.equal(snapshot.rows.find(row => row.id === "403").fields["Criado por"], "Rafael Gontijo");
+});
+
 test("usa Graph Sites.Read.All para listar itens pela origem SharePoint configurada", async () => {
   const requestedScopes = [];
   const tokenProvider = async scopes => { requestedScopes.push(scopes); return "test-token"; };

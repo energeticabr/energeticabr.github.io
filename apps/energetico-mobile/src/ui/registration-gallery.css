@@ -17,11 +17,32 @@
 .rg-row-file { display: flex; min-width: 0; align-items: center; justify-content: center; flex-direction: column; gap: 5px; padding: 10px 6px; border-right: 1px solid #d6e3e7; background: #fbfdfe; text-align: center; }
 .rg-row-attachment { display: grid; width: 64px; height: 70px; place-items: center; padding: 7px; border: 2px solid #173f7a; border-radius: 3px; color: #123b77; font-size: 1.8rem; line-height: 1; }
 .rg-row-file__label { color: #123b77; font-size: .75rem; font-weight: 800; line-height: 1.3; }
+.rg-row-file__count { color: #5c6d74; font-size: .68rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .rg-row-main { min-width: 0; padding: 12px; }
 .rg-row-title { display: block; margin-bottom: 7px; color: #07566b; overflow-wrap: anywhere; }
 .rg-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; margin: 0; }
 .rg-detail { min-width: 0; }
 .rg-detail dt { color: #5c6d74; font-size: .75rem; font-weight: 700; }
 .rg-detail dd { margin: 0; overflow-wrap: anywhere; }
+.rg-document-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.rg-document-heading .rg-row-title { margin: 0; }
+.rg-document-id { flex: 0 0 auto; padding: 4px 8px; border-radius: 6px; color: #fff; background: #07566b; font-size: .85rem; font-weight: 800; }
+.rg-document-table { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rg-document-table .rg-detail { padding: 8px; border: 1px solid #e0e9ec; border-radius: 7px; background: #fbfdfe; }
+.rg-document-table .rg-detail--wide, .rg-document-dates, .rg-document-table .rg-detail--observation { grid-column: 1 / -1; }
+.rg-document-status { font-weight: 800; }
+.rg-document-status--submitted { color: #187447; }
+.rg-document-status--pending { color: #b4232d; }
+.rg-document-dates { min-width: 0; padding: 9px; border: 1px solid #d6e3e7; border-radius: 8px; background: #f3f8fa; }
+.rg-document-dates-title { display: block; margin-bottom: 7px; color: #07566b; font-size: .8rem; }
+.rg-document-date-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 0; }
+.rg-document-date { padding: 7px; border-radius: 6px; background: #fff; }
+.rg-document-date--created { border-left: 4px solid #25805b; background: #eff8f2; }
+.rg-document-date--modified { border-left: 4px solid #bc7a14; background: #fff7e9; }
+.rg-row-attachments { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 128px; margin-top: 10px; }
+.rg-row-attachment-icon { font-size: 1.4rem; line-height: 1.1; }
+.rg-row-attachment-label { font-size: .8rem; font-weight: 800; }
+.rg-row-attachment-count { color: #5c6d74; font-size: .75rem; font-weight: 700; }
 .rg-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding-bottom: 10px; }
 @media (max-width: 600px) { .rg-toolbar { grid-template-columns: minmax(0, 1fr) minmax(110px, .6fr); } .rg-toolbar > .rg-button { grid-column: 1 / -1; } .rg-toolbar--documents { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rg-toolbar--documents > .rg-field:first-child { grid-column: 1 / -1; } }
+@media (max-width: 380px) { .rg-document-table, .rg-document-date-grid { grid-template-columns: minmax(0, 1fr); } .rg-document-table .rg-detail--wide, .rg-document-dates, .rg-document-table .rg-detail--observation { grid-column: 1; } }
