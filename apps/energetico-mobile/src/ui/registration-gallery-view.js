@@ -14,14 +14,44 @@ function valueText(value) {
   return String(value);
 }
 
+function normalizedFieldName(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
 function fieldValue(fields, name, model) {
-  const normalized = key => String(key || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(normalized);
-  const entry = Object.entries(fields || {}).find(([key]) => accepted.includes(normalized(key)));
+  const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(normalizedFieldName);
+  const entry = Object.entries(fields || {}).find(([key]) => accepted.includes(normalizedFieldName(key)));
   const value = valueText(entry?.[1]);
-  if (!["data", "datavalidade", "datasubmetido", "criado", "modificado"].includes(normalized(name))) return value;
+  if (!["data", "datavalidade", "datasubmetido", "criado", "modificado"].includes(normalizedFieldName(name))) return value;
   const date = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
   return date ? `${date[3]}/${date[2]}/${date[1]}` : value;
+}
+
+function identityText(identity) {
+  const user = identity?.user ?? identity?.User ?? identity;
+  return valueText(user?.displayName ?? user?.DisplayName ?? user?.Title ?? user?.title ?? user?.email ?? user?.EMail ?? user);
+}
+
+function usefulPersonName(value) {
+  const name = String(valueText(value) || "").trim();
+  return Boolean(name)
+    && !/^\d+$/.test(name)
+    && !/^(?:sharepoint(?: app)?|system account|app|microsoft flow|power automate)$/i.test(name);
+}
+
+function knownAttachmentCount(row) {
+  if (Number.isInteger(row?.attachmentCount) && row.attachmentCount >= 0) return row.attachmentCount;
+  for (const [name, value] of Object.entries(row?.fields || {})) {
+    const key = normalizedFieldName(name);
+    if (["quantidadedeanexos", "attachmentcount", "attachmentscount"].includes(key)) {
+      const count = Number(valueText(value));
+      if (Number.isInteger(count) && count >= 0) return count;
+    }
+    if (["anexos", "attachments"].includes(key) && Array.isArray(value)) return value.length;
+  }
+  if (Array.isArray(row?.attachments)) return row.attachments.length;
+  if (row?.hasAttachments === false) return 0;
+  return null;
 }
 
 export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, openMediaCollection } = {}) {
@@ -103,6 +133,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let attachmentRequest = 0;
   let attachmentLoading = false;
   let attachmentNotice = "";
+  let attachmentCountEpoch = 0;
+  let attachmentCountWorkers = 0;
+  let attachmentCountQueue = [];
+  const attachmentCounts = new Map();
 
   function fieldLabel(field) {
     return ({ TIPOHOMOLOGACAO: "Tipo de homologação", PESSOARELACIONADA: "Pessoa relacionada", TIPODOCUMENTO: "Tipo de documento", STATUS: "Status", FILIAL: "Filial", IMOVEL: "Imóvel", ETAPA: "Etapa", TIPOMARCO: "Tipo marco", ID: "ID" })[field] || field;
@@ -110,6 +144,125 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function rowFieldValue(row, field) {
     return field === "ID" ? String(row.id || "") : fieldValue(row.fields, field, model);
+  }
+
+  function documentAuthorValue(row, field) {
+    const identity = field === "Criado por" ? row?.createdBy : row?.lastModifiedBy;
+    const name = identityText(identity);
+    if (usefulPersonName(name)) return name;
+    const stored = fieldValue(row.fields, field, model);
+    if (usefulPersonName(stored)) return stored;
+    return stored || identity ? "Usuário não identificado" : "";
+  }
+
+  function attachmentCountLabel(row) {
+    const known = knownAttachmentCount(row);
+    if (known != null) return `${known} ${known === 1 ? "anexo" : "anexos"}`;
+    const current = attachmentCounts.get(String(row.id));
+    if (current?.state === "ready") return `${current.count} ${current.count === 1 ? "anexo" : "anexos"}`;
+    if (current?.state === "error") return "Quantidade indisponível";
+    return "Contando anexos…";
+  }
+
+  function requestAttachmentCounts(visibleRows) {
+    if (!model.showAttachments) return;
+    for (const row of visibleRows) {
+      if (row.hasAttachments === false || knownAttachmentCount(row) != null) continue;
+      const id = String(row.id);
+      if (attachmentCounts.has(id)) continue;
+      attachmentCounts.set(id, { state: "loading" });
+      const epoch = attachmentCountEpoch;
+      if (typeof data.listAttachments !== "function") {
+        attachmentCounts.set(id, { state: "error" });
+        continue;
+      }
+      attachmentCountQueue.push({ row, id, epoch });
+    }
+    pumpAttachmentCountQueue();
+  }
+
+  function pumpAttachmentCountQueue() {
+    while (!destroyed && attachmentCountWorkers < 4 && attachmentCountQueue.length) {
+      const { row, id, epoch } = attachmentCountQueue.shift();
+      attachmentCountWorkers += 1;
+      void Promise.resolve().then(() => data.listAttachments(row.id, { refresh: true })).then(items => {
+        if (destroyed || epoch !== attachmentCountEpoch) return;
+        attachmentCounts.set(id, { state: "ready", count: Array.isArray(items) ? items.length : 0 });
+        if (!root.hidden) render();
+      }).catch(() => {
+        if (destroyed || epoch !== attachmentCountEpoch) return;
+        attachmentCounts.set(id, { state: "error" });
+        if (!root.hidden) render();
+      }).finally(() => {
+        attachmentCountWorkers -= 1;
+        pumpAttachmentCountQueue();
+      });
+    }
+  }
+
+  function appendDocumentDetail(details, field, label, value, className = "") {
+    if (!value) return null;
+    const pair = el("div", `rg-detail${className ? ` ${className}` : ""}`);
+    pair.dataset.field = field;
+    pair.append(el("dt", "", label), el("dd", "", value));
+    details.append(pair);
+    return pair;
+  }
+
+  function renderDocumentDetails(container, row, primary) {
+    const heading = el("div", "rg-document-heading");
+    heading.append(el("strong", "rg-row-title", primary), el("span", "rg-document-id", `ID ${row.id}`));
+    container.append(heading);
+
+    const details = el("dl", "rg-details rg-document-table");
+    const status = fieldValue(row.fields, "STATUS", model);
+    if (status) {
+      const normalizedStatus = normalizedFieldName(status);
+      const statusClass = normalizedStatus.includes("submetido")
+        ? "rg-document-status--submitted"
+        : normalizedStatus.includes("pendente") ? "rg-document-status--pending" : "";
+      const pair = appendDocumentDetail(details, "STATUS", "STATUS", status, "rg-document-status-cell");
+      const value = pair.querySelector("dd");
+      value.replaceChildren(el("strong", `rg-document-status${statusClass ? ` ${statusClass}` : ""}`, status));
+    }
+
+    const branch = fieldValue(row.fields, "FILIAL", model);
+    const property = fieldValue(row.fields, "IMOVEL", model);
+    appendDocumentDetail(details, "FILIAL", "FILIAL", [branch, property ? `(${property})` : ""].filter(Boolean).join(" "), "rg-detail--wide");
+    for (const [field, label] of [
+      ["TIPODOCUMENTO", "TIPO DE DOCUMENTO"],
+      ["TIPOHOMOLOGACAO", "TIPO DE HOMOLOGAÇÃO"],
+      ["ETAPA", "ETAPA"],
+      ["TIPOMARCO", "TIPO MARCO"],
+    ]) appendDocumentDetail(details, field, label, fieldValue(row.fields, field, model));
+
+    for (const [field, label] of [["Criado por", "CRIADO POR"], ["Modificado por", "MODIFICADO POR"]]) {
+      appendDocumentDetail(details, field, label, documentAuthorValue(row, field));
+    }
+
+    const dateGroup = el("div", "rg-document-dates");
+    dateGroup.setAttribute("role", "group");
+    dateGroup.setAttribute("aria-label", "Datas do documento");
+    dateGroup.append(el("strong", "rg-document-dates-title", "DATAS"));
+    const dates = el("dl", "rg-document-date-grid");
+    for (const [field, label, className] of [
+      ["DATA", "DATA", ""],
+      ["DATAVALIDADE", "DATA DE VALIDADE", ""],
+      ["DATASUBMETIDO", "DATA SUBMETIDO", ""],
+      ["Criado", "CRIADO EM", "rg-document-date--created"],
+      ["Modificado", "MODIFICADO EM", "rg-document-date--modified"],
+    ]) {
+      const value = fieldValue(row.fields, field, model);
+      if (!value) continue;
+      const pair = el("div", `rg-detail rg-document-date${className ? ` ${className}` : ""}`);
+      pair.dataset.field = field;
+      pair.append(el("dt", "", label), el("dd", "", value));
+      dates.append(pair);
+    }
+    dateGroup.append(dates);
+    if (dates.childElementCount) details.append(dateGroup);
+    appendDocumentDetail(details, "OBS", "OBS", fieldValue(row.fields, "OBS", model), "rg-detail--observation");
+    container.append(details);
   }
 
   function populateFilters() {
@@ -143,40 +296,46 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     page = Math.min(page, pages);
     list.replaceChildren();
-    for (const row of filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)) {
-      const card = el("article", model.showAttachments ? "rg-row rg-row--documents" : "rg-row");
+    const visibleRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    for (const row of visibleRows) {
+      const card = el("article", model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
       card.dataset.registrationRow = row.id;
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
-      const title = el("strong", "rg-row-title", primary);
-      const details = el("dl", "rg-details");
-      for (const field of model.fields) {
-        const value = field === "ID" ? row.id : fieldValue(row.fields, field, model);
-        if (!value || field === model.fields[0]) continue;
-        const pair = el("div", "rg-detail");
-        pair.append(el("dt", "", field), el("dd", "", value));
-        details.append(pair);
-      }
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
         const fileRail = el("aside", "rg-row-file");
         if (row.hasAttachments !== false) {
+          const countLabel = attachmentCountLabel(row);
           const attachments = el("button", "rg-button rg-row-attachment", "📎");
           attachments.type = "button";
           attachments.dataset.action = "registration-attachments";
-          attachments.setAttribute("aria-label", `Abrir anexos do documento ${row.id}`);
+          attachments.setAttribute("aria-label", `Abrir anexos do documento ${row.id}: ${countLabel}`);
           attachments.title = "Abrir anexos";
           attachments.disabled = attachmentLoading;
           attachments.addEventListener("click", () => { void openAttachments(row); });
           fileRail.append(attachments);
         }
-        fileRail.append(el("span", "rg-row-file__label", row.hasAttachments === false ? "SEM ANEXOS" : "ANEXOS"));
+        fileRail.append(
+          el("span", "rg-row-file__label", row.hasAttachments === false ? "SEM ANEXOS" : "ANEXOS"),
+          el("span", "rg-row-file__count", attachmentCountLabel(row)),
+        );
         const main = el("div", "rg-row-main");
-        main.append(title, details);
+        renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);
       } else {
-        card.append(title, details);
+        card.append(el("strong", "rg-row-title", primary));
+        const details = el("dl", "rg-details");
+        for (const field of model.fields) {
+          const value = field === "ID" ? row.id : fieldValue(row.fields, field, model);
+          if (!value || field === model.fields[0]) continue;
+          const pair = el("div", "rg-detail");
+          pair.dataset.field = field;
+          pair.append(el("dt", "", field), el("dd", "", value));
+          details.append(pair);
+        }
+        card.append(details);
       }
       list.append(card);
     }
@@ -186,6 +345,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     pageText.textContent = `Página ${page} de ${pages}`;
     previous.disabled = page <= 1;
     next.disabled = page >= pages;
+    requestAttachmentCounts(visibleRows);
   }
 
   async function openAttachments(row) {
@@ -223,6 +383,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   async function load() {
     const current = ++request;
+    attachmentCountEpoch += 1;
+    attachmentCounts.clear();
+    attachmentCountQueue = [];
     loadFailed = false;
     root.setAttribute("aria-busy", "true");
     feedback.textContent = "Carregando registros…";
@@ -273,6 +436,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   });
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
-    destroy() { destroyed = true; request += 1; root.remove(); },
+    destroy() { destroyed = true; request += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

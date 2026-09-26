@@ -53,6 +53,22 @@ function scalar(value) {
   return value;
 }
 
+function identityDisplayName(identity) {
+  const user = identity?.user ?? identity?.User ?? identity;
+  if (!user || typeof user !== "object") return "";
+  for (const key of ["displayName", "DisplayName", "title", "Title", "email", "EMail", "Email"]) {
+    if (user[key] != null && String(user[key]).trim()) return String(user[key]).trim();
+  }
+  return "";
+}
+
+function isUsefulPersonName(value) {
+  const name = String(scalar(value) ?? "").trim();
+  return Boolean(name)
+    && !/^\d+$/.test(name)
+    && !/^(?:sharepoint(?: app)?|system account|app|microsoft flow|power automate)$/i.test(name);
+}
+
 function fieldValue(fields, aliases) {
   const accepted = new Set(aliases.map(fieldKey));
   const entry = Object.entries(fields || {}).find(([name, value]) => accepted.has(fieldKey(name)) && value != null);
@@ -69,10 +85,14 @@ function normalizedFields(item) {
   const fields = { ...source };
   for (const [target, aliases] of KNOWN_FIELDS) {
     let value = fieldValue(source, aliases);
+    if (target === "Criado por" || target === "Modificado por") {
+      const identity = target === "Criado por" ? item?.createdBy : item?.lastModifiedBy;
+      const graphName = identityDisplayName(identity);
+      if (isUsefulPersonName(graphName)) value = graphName;
+      else if ((value != null && !isUsefulPersonName(value)) || identity) value = "Usuário não identificado";
+    }
     if (value == null && target === "Criado") value = item?.createdDateTime;
     if (value == null && target === "Modificado") value = item?.lastModifiedDateTime;
-    if (value == null && target === "Criado por") value = item?.createdBy?.user?.displayName || item?.createdBy?.application?.displayName;
-    if (value == null && target === "Modificado por") value = item?.lastModifiedBy?.user?.displayName || item?.lastModifiedBy?.application?.displayName;
     if (value != null) fields[target] = target === "Criado por" || target === "Modificado por" ? scalar(value) : value;
   }
   return fields;

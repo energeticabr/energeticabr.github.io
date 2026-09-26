@@ -72,12 +72,79 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(opened, [[{ fileName: "contrato.pdf", source: "21/contrato.pdf" }]]);
   assert.match(doc.querySelector("[data-registration-row]").textContent, /Observação A/);
-  assert.match(doc.querySelector("[data-registration-row]").textContent, /DATASUBMETIDO\s*20\/09\/2026/);
+  assert.match(doc.querySelector("[data-registration-row]").textContent, /DATA SUBMETIDO\s*20\/09\/2026/);
   filialFilter.value = "";
   filialFilter.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
   doc.querySelector('[data-registration-row="20"] [data-action="registration-attachments"]').click();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(doc.querySelector(".rg-feedback").textContent, /documento 20 não possui anexos/i);
+  gallery.destroy();
+  dom.window.close();
+});
+
+test("Galeria de documentos organiza os dados em tabela, destaca status, agrupa datas e mostra autor e quantidade de anexos", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const doc = dom.window.document;
+  const rows = [
+    {
+      id: "292",
+      hasAttachments: true,
+      createdBy: { user: { displayName: "Bernardo Notini" } },
+      fields: {
+        PESSOARELACIONADA: "MAURICIO HONORATO DE SOUZA",
+        STATUS: "SUBMETIDO",
+        FILIAL: "004 - EDIFÍCIO XAVANTE",
+        IMOVEL: "TODOS",
+        TIPODOCUMENTO: "COMPROVANTE PAGAMENTO",
+        TIPOHOMOLOGACAO: "HOMOLOGAÇÃO COMERCIAL",
+        DATA: "2026-09-24T03:00:00Z",
+        DATAVALIDADE: "2026-10-01T03:00:00Z",
+        DATASUBMETIDO: "2026-09-25T03:00:00Z",
+        "Criado": "2026-09-25T12:00:00Z",
+        "Criado por": "SharePoint App",
+        "Modificado": "2026-09-26T12:00:00Z",
+        "Modificado por": "SharePoint App",
+        OBS: "Forma de pagamento: dinheiro",
+      },
+    },
+    { id: "291", hasAttachments: false, fields: { PESSOARELACIONADA: "PESSOA PENDENTE", STATUS: "PENDENTE", FILIAL: "001 - CENTRAL" } },
+  ];
+  const calls = [];
+  const gallery = createRegistrationGallery({
+    document: doc,
+    kind: "documents",
+    data: {
+      async loadSnapshot() { return { rows }; },
+      async listAttachments(id) { calls.push(id); return [{ fileName: "um.pdf" }, { fileName: "dois.pdf" }]; },
+      downloadAttachment(id, name) { return `${id}/${name}`; },
+    },
+  });
+
+  await gallery.open();
+  await new Promise(resolve => setImmediate(resolve));
+
+  const submitted = doc.querySelector('[data-registration-row="292"]');
+  const pending = doc.querySelector('[data-registration-row="291"]');
+  assert.equal(submitted.querySelector(".rg-document-id").textContent, "ID 292");
+  assert.equal(submitted.querySelector(".rg-document-status").textContent, "SUBMETIDO");
+  assert.ok(submitted.querySelector(".rg-document-status--submitted"));
+  assert.equal(pending.querySelector(".rg-document-status").textContent, "PENDENTE");
+  assert.ok(pending.querySelector(".rg-document-status--pending"));
+  assert.equal(submitted.querySelector('[data-field="FILIAL"] dd').textContent, "004 - EDIFÍCIO XAVANTE (TODOS)");
+  assert.equal(submitted.querySelector('[data-field="IMOVEL"]'), null);
+  assert.equal(submitted.querySelector('[data-field="Criado por"] dd').textContent, "Bernardo Notini");
+  assert.equal(submitted.querySelector('[data-field="Modificado por"] dd').textContent, "Usuário não identificado");
+  assert.match(submitted.querySelector('.rg-document-dates').textContent, /DATA\s*24\/09\/2026/);
+  assert.match(submitted.querySelector('.rg-document-dates').textContent, /DATA DE VALIDADE\s*01\/10\/2026/);
+  assert.match(submitted.querySelector('.rg-document-dates').textContent, /DATA SUBMETIDO\s*25\/09\/2026/);
+  assert.ok(submitted.querySelector('.rg-document-date--created'));
+  assert.ok(submitted.querySelector('.rg-document-date--modified'));
+  const dataCells = [...submitted.querySelectorAll('.rg-document-table > .rg-detail')];
+  assert.equal(dataCells.at(-1).dataset.field, "OBS");
+  assert.equal(submitted.querySelector('.rg-row-file__label').textContent, "ANEXOS");
+  assert.equal(submitted.querySelector('.rg-row-file__count').textContent, "2 anexos");
+  assert.deepEqual(calls, ["292"]);
+
   gallery.destroy();
   dom.window.close();
 });
