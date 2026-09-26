@@ -27,7 +27,7 @@ async function setup(t, overrides = {}) {
   const calls = [];
   const data = {
     async loadSnapshot(options) { calls.push(["snapshot", options]); return { listName: "PROVISÃO PGTOS", rows }; },
-    async listAttachments(id) { calls.push(["listAttachments", id]); return [{ fileName: "nota.pdf", mimeType: "application/pdf", size: 2048 }]; },
+    async listAttachments(id, options) { assert.deepEqual(options, { refresh: true }); calls.push(["listAttachments", id]); return [{ fileName: "nota.pdf", mimeType: "application/pdf", size: 2048 }]; },
     async downloadAttachment(id, name) { calls.push(["downloadAttachment", id, name]); return new Blob(["pdf"], { type: "application/pdf" }); },
     ...overrides.data,
   };
@@ -128,6 +128,16 @@ test("G28 mostra o clipe lateral salvo ausência confirmada e abre a coleção c
   assert.deepEqual(opened[0].map(item => item.fileName), ["nota.pdf"]);
   assert.equal((await opened[0][0].source).type, "application/pdf");
   assert.deepEqual(opened[1].map(item => item.fileName), ["nota.pdf"]);
+});
+
+test("G28 mostra a quantidade de anexos abaixo do clipe à esquerda", async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  await settle();
+  const rail = ctx.root().querySelector('.pg-card[data-item-id="306"] .og-card-attachment-rail');
+  assert.equal(rail.querySelector(".og-card-attachment-icon").textContent, "📎");
+  assert.equal(rail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
+  assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
 });
 
 test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visualizador compartilhado", async t => {

@@ -1,4 +1,5 @@
 import { bindAutoFilterForm } from './auto-filter-form.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS_FILTER = "__ATIVIDADE_CRIADA_OU_EM_ATENDIMENTO__";
@@ -156,6 +157,20 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const detail = el("section", "og-detail tg-detail"); detail.hidden = true; detail.tabIndex = -1;
   detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes da tarefa");
   content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
+  const attachmentCounts = createGalleryAttachmentCounts({
+    loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
+    onChange: updateAttachmentCount,
+  });
+
+  function updateAttachmentCount(row) {
+    if (!opened || destroyed) return;
+    const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
+    const count = card?.querySelector('.og-card-attachment-count');
+    const label = attachmentCounts.label(row);
+    if (count) count.textContent = label;
+    const id = field(row.fields, ["ID 2", "ID"]) ?? row.id;
+    card?.querySelector('.og-card-attachment-rail')?.setAttribute('aria-label', `Abrir anexos da tarefa ${id}: ${label}`);
+  }
 
   function updateBusy() {
     const busy = opened && (listLoading || attachmentLoading);
@@ -255,7 +270,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       ["DATA CRIAÇÃO", createdDate(fields, row)], ["DATA IDENTIFICAÇÃO", field(fields, ["DATA IDENTIFICAÇÃO", "DATA IDENTIFICACAO"])],
       ["DATA INÍCIO", startDate(fields)], ["DATA FATAL", dueDate(fields)], ["DATA CONCLUSÃO", field(fields, ["DATA CONCLUSÃO", "DATA CONCLUSAO"])],
       ["GRAU URGÊNCIA", field(fields, ["GRAU URGÊNCIA", "GRAU URGENCIA", "URGÊNCIA", "URGENCIA"])],
-      ["ANEXOS", field(fields, ["QUANTIDADE DE ANEXOS", "QUANTIDADEANEXOS"]) ?? (row.hasAttachments ? "Disponíveis" : "Nenhum")],
+      ...(row.hasAttachments === false ? [["ANEXOS", "0 anexos"]] : []),
     ];
     for (const [name, value] of summaries) {
       if (value == null || value === "") continue;
@@ -267,9 +282,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     actions.append(detailsButton); main.append(heading, statusPill, cardFields, actions);
     if (hasAttachmentControl) {
       const attachmentButton = el("button", "og-button og-card-attachment-rail"); attachmentButton.type = "button"; attachmentButton.dataset.action = "attachments";
-      attachmentButton.setAttribute("aria-label", `Abrir anexos da tarefa ${id}`);
-      const count = text(field(fields, ["QUANTIDADE DE ANEXOS", "QUANTIDADEANEXOS"]));
-      attachmentButton.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", count ? `ANEXOS (${count})` : "ANEXOS"));
+      attachmentButton.setAttribute("aria-label", `Abrir anexos da tarefa ${id}: ${attachmentCounts.label(row)}`);
+      attachmentButton.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
+        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachmentButton.addEventListener("click", () => openAttachments(row)); card.append(attachmentButton);
     }
     card.append(main); return card;
@@ -277,7 +292,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
 
   function renderList() {
     const pageCount = Math.ceil(filteredRows.length / pageSize); page = Math.min(page, Math.max(1, pageCount));
-    const start = (page - 1) * pageSize; cards.replaceChildren(...filteredRows.slice(start, start + pageSize).map(renderCard));
+    const start = (page - 1) * pageSize; const visible = filteredRows.slice(start, start + pageSize);
+    cards.replaceChildren(...visible.map(renderCard));
+    void attachmentCounts.request(visible);
     listStatus.textContent = filteredRows.length ? `${filteredRows.length} tarefa(s)` : "Nenhuma tarefa encontrada para estes filtros.";
     pageLabel.textContent = `Página ${pageCount ? page : 0} de ${pageCount}`; updateBusy();
   }
@@ -307,8 +324,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     if (attachmentLoading || !opened || destroyed) return;
     const current = session; attachmentLoading = true; showNotice(""); updateBusy();
     try {
-      const attachments = await data.listAttachments(row.id);
+      const attachments = await attachmentCounts.load(row, { force: true });
       if (!opened || destroyed || current !== session) return;
+      if (!attachments) throw new Error("A consulta de anexos não está disponível.");
       if (!attachments.length) { showNotice(`A tarefa ${text(field(row.fields, ["ID 2", "ID"]) ?? row.id)} não possui anexos.`); return; }
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
       await openMediaCollection(attachments.map(item => ({ fileName: item.fileName, source: data.downloadAttachment(row.id, item.fileName) })));
@@ -321,6 +339,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
 
   async function loadSnapshot() {
     if (!opened || destroyed) return false;
+    attachmentCounts.reset();
     const current = session; controller?.abort(); controller = new AbortController(); listLoading = true;
     showNotice(""); listStatus.textContent = "Carregando tarefas…"; cards.replaceChildren(); updateBusy();
     try {
@@ -354,6 +373,6 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; autoFilters.destroy(); close(); destroyed = true; root.remove(); }
+  function destroy() { if (destroyed) return; autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }

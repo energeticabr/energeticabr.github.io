@@ -1,4 +1,5 @@
 import { bindAutoFilterForm } from './auto-filter-form.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const SORTS = [
@@ -174,6 +175,19 @@ export function createOrdersGallery({
   content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const attachmentCounts = createGalleryAttachmentCounts({
+    loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
+    onChange: updateAttachmentCount,
+  });
+
+  function updateAttachmentCount(row) {
+    if (!opened || destroyed) return;
+    const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
+    const count = card?.querySelector('.og-card-attachment-count');
+    const label = attachmentCounts.label(row);
+    if (count) count.textContent = label;
+    card?.querySelector('.og-card-attachment-rail')?.setAttribute('aria-label', `Abrir anexos do pedido #${row.id}: ${label}`);
+  }
 
   function updateBusy() {
     const busy = opened && (listLoading || attachmentLoading);
@@ -297,8 +311,9 @@ export function createOrdersGallery({
       const attachments = el("button", "og-button og-card-attachment-rail");
       attachments.type = "button";
       attachments.dataset.action = "attachments";
-      attachments.setAttribute("aria-label", `Abrir anexos do pedido #${row.id}`);
-      attachments.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"));
+      attachments.setAttribute("aria-label", `Abrir anexos do pedido #${row.id}: ${attachmentCounts.label(row)}`);
+      attachments.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
+        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachments.addEventListener("click", () => openAttachments(row));
       card.append(attachments);
     }
@@ -313,6 +328,7 @@ export function createOrdersGallery({
     const start = (page - 1) * pageSize;
     const visible = filteredRows.slice(start, start + pageSize);
     cards.replaceChildren(...visible.map(renderCard));
+    void attachmentCounts.request(visible);
     listStatus.textContent = filteredRows.length ? `${filteredRows.length} pedido(s)` : "Nenhum pedido encontrado para estes filtros.";
     pageLabel.textContent = `Página ${pageCount ? page : 0} de ${pageCount}`;
     updateBusy();
@@ -320,6 +336,7 @@ export function createOrdersGallery({
 
   async function loadSnapshot({ retry = false } = {}) {
     if (!opened || destroyed) return false;
+    attachmentCounts.reset();
     const currentSession = session;
     if (controller) controller.abort();
     controller = new AbortController();
@@ -386,8 +403,9 @@ export function createOrdersGallery({
     showNotice("");
     updateBusy();
     try {
-      const attachments = await data.listAttachments(row.id);
+      const attachments = await attachmentCounts.load(row, { force: true });
       if (!opened || destroyed || currentSession !== session) return;
+      if (!attachments) throw new Error("A consulta de anexos não está disponível.");
       if (!attachments.length) { showNotice(`O pedido #${row.id} não possui anexos.`); return; }
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
       const items = attachments.map(item => ({
@@ -438,7 +456,7 @@ export function createOrdersGallery({
   }
   function destroy() {
     if (destroyed) return;
-    autoFilters.destroy(); close(); destroyed = true; root.remove();
+    autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove();
   }
 
   return Object.freeze({ open, close, destroy, reload: () => loadSnapshot({ retry: true }) });

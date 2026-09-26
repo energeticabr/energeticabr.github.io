@@ -31,7 +31,7 @@ async function setup(t, overrides = {}) {
   const calls = [];
   const data = {
     async loadSnapshot(options) { calls.push(["snapshot", options]); return { listName: "DESPESASRECORRENTES", rows }; },
-    async listAttachments(id) { calls.push(["listAttachments", id]); return [{ fileName: "conta.pdf", mimeType: "application/pdf", size: 1024 }]; },
+    async listAttachments(id, options) { assert.deepEqual(options, { refresh: true }); calls.push(["listAttachments", id]); return [{ fileName: "conta.pdf", mimeType: "application/pdf", size: 1024 }]; },
     async downloadAttachment(id, name) { calls.push(["downloadAttachment", id, name]); return new Blob(["pdf"], { type: "application/pdf" }); },
     ...overrides.data,
   };
@@ -122,6 +122,19 @@ test("detalhes escapam texto e anexos abrem no visualizador compartilhado", asyn
   assert.deepEqual(opened[0].map(item => item.fileName), ["conta.pdf"]);
   assert.equal((await opened[0][0].source).type, "application/pdf");
   assert.deepEqual(ctx.calls.slice(-2), [["listAttachments", "33"], ["downloadAttachment", "33", "conta.pdf"]]);
+});
+
+test("G19 posiciona anexos na coluna esquerda e exibe a quantidade abaixo do ícone", async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  await settle();
+  const card = ctx.root().querySelector('.re-card[data-item-id="33"]');
+  const rail = card.querySelector(".og-card-attachment-rail");
+  assert.ok(rail);
+  assert.ok(rail.compareDocumentPosition(card.querySelector(".og-card-main")) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(rail.querySelector(".og-card-attachment-icon").textContent, "📎");
+  assert.equal(rail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
+  assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
 });
 
 test("pagina resultados extensos e usa um layout responsivo", async t => {

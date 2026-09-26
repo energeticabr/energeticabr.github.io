@@ -199,6 +199,7 @@
 }
 .lg-record-media-label { font-size: .65rem; font-weight: 800; text-transform: uppercase; }
 .lg-record-attachment-icon { font-size: 2rem; line-height: 1; }
+.lg-record-attachment-count { color: #526d7d; font-size: .6rem; font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
 .lg-record-preview { display: block; width: 100%; height: 76px; object-fit: cover; }
 .lg-record-media:not(.lg-record-media-loaded) .lg-record-preview { opacity: 0; }
 .lg-record-media-unavailable::after { content: 'Imagem'; font-size: .68rem; font-weight: 800; text-transform: uppercase; }

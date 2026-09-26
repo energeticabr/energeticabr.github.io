@@ -70,9 +70,10 @@
 .og-card:nth-child(even) { background: #e6f0f7; }
 .og-card--with-attachments { display: grid; grid-template-columns: minmax(68px, 82px) minmax(0, 1fr); align-items: stretch; gap: 12px; }
 .og-card-main { min-width: 0; }
-.og-card-attachment-rail { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 100%; padding: 12px 6px; border-radius: 0; background: #e6f0f7; }
+.og-card-attachment-rail { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 100%; padding: 12px 6px; border-radius: 0; background: #e6f0f7; }
 .og-card-attachment-icon { font-size: 1.9rem; line-height: 1; }
 .og-card-attachment-label { font-size: .7rem; font-weight: 850; text-align: center; overflow-wrap: anywhere; }
+.og-card-attachment-count { color: #526d7d; font-size: .64rem; font-weight: 750; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
 .og-card-heading { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 10px; border-bottom: 2px solid #0d3767; }
 .og-card-id { flex: 0 0 auto; min-width: 54px; padding: 6px 8px; color: #fff; background: #b51e2b; font-weight: 850; text-align: center; }
 .og-card-heading h2 { min-width: 0; margin: 0; color: #0d3767; font-size: 1.08rem; overflow-wrap: anywhere; }

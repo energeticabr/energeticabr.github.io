@@ -18,7 +18,7 @@ async function setup(t, overrides = {}) {
   ];
   const data = {
     async loadSnapshot(options) { calls.push(["snapshot", options]); return { listName: "NOTASPENDENTES", rows }; },
-    async listAttachments(id) { calls.push(["listAttachments", id]); return [{ fileName: "pedido.pdf", mimeType: "application/pdf", size: 2048 }, { fileName: "foto.jpg", mimeType: "image/jpeg", size: 4096 }]; },
+    async listAttachments(id, options) { assert.deepEqual(options, { refresh: true }); calls.push(["listAttachments", id]); return [{ fileName: "pedido.pdf", mimeType: "application/pdf", size: 2048 }, { fileName: "foto.jpg", mimeType: "image/jpeg", size: 4096 }]; },
     async downloadAttachment(id, fileName) { calls.push(["downloadAttachment", id, fileName]); return new Blob([fileName], { type: fileName.endsWith(".pdf") ? "application/pdf" : "image/jpeg" }); },
     ...overrides.data,
   };
@@ -140,6 +140,21 @@ test("orders with attachments show a full-height attachment rail on the left, be
   assert.equal(withoutAttachments.querySelector(".og-card-attachment-rail"), null,
     "orders without attachments keep the full-width card layout");
   assert.equal(withoutAttachments.classList.contains("og-card--with-attachments"), false);
+});
+
+test("orders show the attachment quantity below the left icon", async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  await settle();
+  const rail = ctx.root().querySelector('.og-card[data-item-id="319"] .og-card-attachment-rail');
+  const icon = rail.querySelector(".og-card-attachment-icon");
+  const label = rail.querySelector(".og-card-attachment-label");
+  const count = rail.querySelector(".og-card-attachment-count");
+  assert.ok(icon);
+  assert.equal(label.textContent, "ANEXOS");
+  assert.equal(count.textContent, "2 anexos");
+  assert.equal(icon.nextElementSibling, label);
+  assert.equal(label.nextElementSibling, count);
 });
 
 test("offers attachment access when the Graph list payload does not expose attachment presence", async t => {

@@ -127,7 +127,7 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
     id: '17', product: 'Cimento', stage: 'Fundação', contract: 'Contrato 1', pendingApproval: true,
     dateStart: '2026-09-01', dateEnd: '2026-09-19', sort: sorts[7] })) input(ctx, name, value);
   await settle();
-  assert.deepEqual(ctx.calls.at(-1), { operation: 'snapshot', payload: {
+  assert.deepEqual(ctx.calls.filter(call => call.operation === 'snapshot').at(-1), { operation: 'snapshot', payload: {
     filters: { branch: 'Obra A', supplier: 'Fornecedor A', status: 'PEDIDO EMPENHADO', id: '17', product: 'Cimento',
       stage: 'Fundação', contract: 'Contrato 1', pendingApproval: true, dateStart: '2026-09-01', dateEnd: '2026-09-19' },
     sort: sorts[7], page: 1, pageSize: 20,
@@ -137,9 +137,9 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
   for (const label of ['Empenhado', 'Liquidado', 'Pendente', 'Pago', 'Total']) assert.ok(totals.includes(label));
   assert.match(totals, /135,00/);
   button(ctx.root(), 'Próxima página').click(); await settle();
-  assert.equal(ctx.calls.at(-1).payload.page, 2);
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').at(-1).payload.page, 2);
   button(ctx.root(), 'Página anterior').click(); await settle();
-  assert.equal(ctx.calls.at(-1).payload.page, 1);
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').at(-1).payload.page, 1);
 });
 
 test('typing in launch filters automatically and coalesces rapid keystrokes into one snapshot', async t => {
@@ -355,6 +355,15 @@ test('launch cards read PowerApps attachment rows and make the PDF marker openab
     { id: 3429, fileName: 'foto.jpg', mediaUrl: '/api/portal-media/foto-jpg', mimeType: 'image/jpeg' },
     { id: 3429, fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/comprovante-pdf', mimeType: 'application/pdf' },
   ]);
+});
+
+test('launch cards show the actual attachment quantity below the left marker', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  await settle();
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.ok(media);
+  assert.equal(media.querySelector('.lg-record-attachment-count').textContent, '2 anexos');
 });
 
 test('clicking a PowerApps attachment marker opens the attachment navigator instead of launch details', async t => {
@@ -717,8 +726,9 @@ test('closing during signature capture never uploads or restores a closed galler
 
 test('stale detail responses are discarded and failed detail can be retried', async t => {
   const one = deferred(), two = deferred(); let count = 0;
-  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot({ rows: [row(17), row(18)] }) :
-    ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
+  const ctx = await setup(t, { request: async (op, payload) => op === 'snapshot' ? snapshot({ rows: [row(17), row(18)] }) :
+    payload?.purpose === 'attachment-count' ? detail({ item: row(payload.id) })
+      : ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
   await ctx.gallery.open();
   const buttons = [...ctx.root().querySelectorAll('[data-lg-action="details"]')];
   buttons[0].click(); buttons[1].click();
@@ -744,7 +754,7 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   button(ctx.root(), 'Detalhes').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), form);
   assert.equal(form.querySelector('[name="QUANTIDADE"]').value, '12');
-  assert.equal(ctx.calls.filter(c => c.operation === 'detail').length, 1);
+  assert.equal(ctx.calls.filter(c => c.operation === 'detail' && c.payload.purpose !== 'attachment-count').length, 1);
   assert.equal(mutations(ctx).length, 0);
 });
 
@@ -796,8 +806,9 @@ test('attachment read and viewer failures leave actionable errors with a usable 
 
 test('a confirmed mutation is never resent when its detail refresh fails', async t => {
   let details = 0;
-  const ctx = await setup(t, { request: async op => {
+  const ctx = await setup(t, { request: async (op, payload) => {
     if (op === 'snapshot') return snapshot();
+    if (op === 'detail' && payload?.purpose === 'attachment-count') return detail();
     if (op === 'detail') { if (++details === 2) throw new Error('Falha na atualização'); return detail(); }
     return { ok: true };
   } });
