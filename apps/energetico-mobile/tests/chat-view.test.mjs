@@ -4992,6 +4992,8 @@ test("arrastar o título da bandeja para rolar não altera o estado aberto", () 
       isPrimary: true,
       clientX: 20,
       clientY,
+      screenX: 120,
+      screenY: clientY + 500,
     })) Object.defineProperty(event, key, { value, configurable: true });
     target.dispatchEvent(event);
   };
@@ -5077,6 +5079,76 @@ test("offset de coordenadas no touchend não transforma toque no título em rola
   summary.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
 
   assert.equal(details.open, false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("mudança do viewport sob o dedo não cancela o fechamento da bandeja", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointer = (type, clientY) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({
+      pointerId: 81,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: 20,
+      clientY,
+      screenX: 140,
+      screenY: 620,
+    })) Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+
+  summary.dispatchEvent(pointer("pointerdown", 20));
+  // WKWebView can move the visual viewport under a stationary finger. The
+  // client coordinate changes, but the physical screen coordinate does not.
+  root.dispatchEvent(pointer("pointermove", 48));
+  root.dispatchEvent(pointer("pointerup", 48));
+
+  assert.equal(details.open, false, "um toque parado no título deve fechar a bandeja após um ajuste do viewport");
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque do iPhone completa coordenadas físicas ausentes no pointerdown", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    attachments: [{ id: "file-1", fileName: "comprovante.pdf", mimeType: "application/pdf", size: 20 }],
+  }));
+  const details = root.querySelector(".chat-attachments");
+  details.open = true;
+  const summary = details.querySelector("summary");
+  const pointerDown = new dom.window.Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperties(pointerDown, {
+    pointerId: { value: 82 }, pointerType: { value: "touch" }, isPrimary: { value: true },
+    clientX: { value: 20 }, clientY: { value: 20 },
+  });
+  const finger = (clientY, screenY) => ({ identifier: 12, clientX: 20, clientY, screenX: 140, screenY });
+  const touch = (type, target, current, changed = current) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      touches: { value: type === "touchend" ? [] : [current] },
+      changedTouches: { value: [changed] },
+    });
+    target.dispatchEvent(event);
+  };
+
+  summary.dispatchEvent(pointerDown);
+  touch("touchstart", summary, finger(20, 620));
+  touch("touchmove", root, finger(48, 620));
+  touch("touchend", root, finger(48, 620));
+
+  assert.equal(details.open, false, "o touchstart deve fornecer a coordenada de tela se pointerdown não a trouxe");
   view.destroy();
   dom.window.close();
 });

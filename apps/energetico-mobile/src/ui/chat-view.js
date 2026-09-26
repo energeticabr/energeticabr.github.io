@@ -3094,7 +3094,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       : contacts.find(contact => contact?.identifier === touchIdentifier)) || event;
     const clientX = Number(point?.clientX);
     const clientY = Number(point?.clientY);
-    return Number.isFinite(clientX) && Number.isFinite(clientY) ? { clientX, clientY } : null;
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+    const screenX = Number(point?.screenX);
+    const screenY = Number(point?.screenY);
+    return {
+      clientX,
+      clientY,
+      screenX: Number.isFinite(screenX) ? screenX : null,
+      screenY: Number.isFinite(screenY) ? screenY : null,
+    };
   }
 
   function attachmentGestureMatches(event, gesture = attachmentTrayGesture) {
@@ -3129,7 +3137,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!attachmentGestureMatches(event, gesture) || gesture.moved) return;
     const point = attachmentGesturePoint(event, gesture.touchIdentifier);
     if (!point) return;
-    if (Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY) < TAP_MOVE_TOLERANCE_PX) return;
+    const hasStableScreenCoordinates = gesture.touchLike
+      && Number.isFinite(gesture.startScreenX)
+      && Number.isFinite(gesture.startScreenY)
+      && Number.isFinite(point.screenX)
+      && Number.isFinite(point.screenY);
+    const distance = hasStableScreenCoordinates
+      ? Math.hypot(point.screenX - gesture.startScreenX, point.screenY - gesture.startScreenY)
+      : Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY);
+    if (distance < TAP_MOVE_TOLERANCE_PX) return;
     gesture.moved = true;
     syncAttachmentTrayOpen(gesture.initialOpen);
   }
@@ -3186,6 +3202,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       touchIdentifier,
       startX: point.clientX,
       startY: point.clientY,
+      startScreenX: point.screenX,
+      startScreenY: point.screenY,
       initialOpen,
       desiredOpen: !initialOpen,
       moved: false,
@@ -3416,6 +3434,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (attachmentTrayGesture) {
       if (attachmentTrayGesture.touchLike && attachmentTrayGesture.touchIdentifier == null) {
         attachmentTrayGesture.touchIdentifier = attachmentTouchIdentifier(event);
+        const point = attachmentGesturePoint(event, attachmentTrayGesture.touchIdentifier);
+        if (point && !Number.isFinite(attachmentTrayGesture.startScreenX)
+          && Number.isFinite(point.screenX) && Number.isFinite(point.screenY)) {
+          attachmentTrayGesture.startScreenX = point.screenX;
+          attachmentTrayGesture.startScreenY = point.screenY;
+        }
       }
       return;
     }
