@@ -144,11 +144,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     page = Math.min(page, pages);
     list.replaceChildren();
     for (const row of filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)) {
-      const card = el("article", "rg-row");
+      const card = el("article", model.showAttachments ? "rg-row rg-row--documents" : "rg-row");
       card.dataset.registrationRow = row.id;
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
-      card.append(el("strong", "rg-row-title", primary));
+      const title = el("strong", "rg-row-title", primary);
       const details = el("dl", "rg-details");
       for (const field of model.fields) {
         const value = field === "ID" ? row.id : fieldValue(row.fields, field, model);
@@ -157,15 +157,26 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         pair.append(el("dt", "", field), el("dd", "", value));
         details.append(pair);
       }
-      card.append(details);
-      if (model.showAttachments && row.hasAttachments !== false) {
-        const attachments = el("button", "rg-button rg-row-attachments", "📎 Abrir anexos");
-        attachments.type = "button";
-        attachments.dataset.action = "registration-attachments";
-        attachments.setAttribute("aria-label", `Abrir anexos do documento ${row.id}`);
-        attachments.disabled = attachmentLoading;
-        attachments.addEventListener("click", () => { void openAttachments(row); });
-        card.append(attachments);
+      if (model.showAttachments) {
+        const layout = el("div", "rg-row-layout");
+        const fileRail = el("aside", "rg-row-file");
+        if (row.hasAttachments !== false) {
+          const attachments = el("button", "rg-button rg-row-attachment", "📎");
+          attachments.type = "button";
+          attachments.dataset.action = "registration-attachments";
+          attachments.setAttribute("aria-label", `Abrir anexos do documento ${row.id}`);
+          attachments.title = "Abrir anexos";
+          attachments.disabled = attachmentLoading;
+          attachments.addEventListener("click", () => { void openAttachments(row); });
+          fileRail.append(attachments);
+        }
+        fileRail.append(el("span", "rg-row-file__label", row.hasAttachments === false ? "SEM ANEXOS" : "ANEXOS"));
+        const main = el("div", "rg-row-main");
+        main.append(title, details);
+        layout.append(fileRail, main);
+        card.append(layout);
+      } else {
+        card.append(title, details);
       }
       list.append(card);
     }

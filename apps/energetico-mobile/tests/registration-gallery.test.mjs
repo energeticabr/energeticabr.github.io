@@ -62,6 +62,12 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   assert.equal(doc.querySelectorAll("[data-registration-row]").length, 1);
   const attachmentButton = doc.querySelector('[data-action="registration-attachments"]');
   assert.ok(attachmentButton);
+  const attachmentRail = doc.querySelector('[data-registration-row="21"] .rg-row-file');
+  assert.ok(attachmentRail, "o ícone de anexos deve ficar na coluna lateral do cartão");
+  assert.equal(attachmentButton.closest(".rg-row-file"), attachmentRail);
+  assert.equal(attachmentRail.querySelector(".rg-row-file__label").textContent, "ANEXOS");
+  assert.equal(attachmentButton.textContent, "📎");
+  assert.equal(doc.querySelectorAll('[data-registration-row="21"] [data-action="registration-attachments"]').length, 1);
   attachmentButton.click();
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(opened, [[{ fileName: "contrato.pdf", source: "21/contrato.pdf" }]]);
