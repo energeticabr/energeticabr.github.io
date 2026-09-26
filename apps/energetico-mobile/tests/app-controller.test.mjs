@@ -123,6 +123,14 @@ test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo"
   };
   t.after(() => h.controller.stop());
   await h.controller.start();
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    return {
+      status: "processed",
+      returned_to_main_menu: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }],
+    };
+  };
   const before = h.chatCalls.length;
   await h.view.emit("select-reply", { replyId: "action_documents_gallery" });
 
@@ -146,19 +154,68 @@ test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo"
   ]);
 });
 
+test("adicionar anexo mantém a galeria aberta se a VM não retornar ao menu principal", async t => {
+  let callbacks;
+  let previewOptions;
+  let galleryCloseCount = 0;
+  let uploadCount = 0;
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async options => {
+      callbacks = options;
+      return { open() {}, close() { galleryCloseCount += 1; }, destroy() {} };
+    },
+  });
+  h.native.previewMediaCollection = async (_items, options) => { previewOptions = options; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    return {
+      status: "processed",
+      activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+      messages: [{ type: "text", text: "O fluxo anterior continua ativo." }],
+    };
+  };
+  h.client.sendFile = async file => { uploadCount += 1; h.chatCalls.push(["file", file.name]); return { status: "processed" }; };
+  await h.view.emit("select-reply", { replyId: "action_documents_gallery" });
+
+  const blob = new Blob(["PDF"], { type: "application/pdf" });
+  await callbacks.openMediaCollection([{ fileName: "comprovante.pdf", source: blob }]);
+  assert.equal(await previewOptions.onAddToTray({
+    blob,
+    fileName: "comprovante.pdf",
+    attachments: [{ fileName: "comprovante.pdf", source: blob }],
+  }), false);
+
+  assert.equal(galleryCloseCount, 0);
+  assert.equal(uploadCount, 0);
+  assert.equal(h.store.getState().activeFlow.id, "document_signing");
+});
+
 test("galeria reutiliza todos os anexos escolhidos e abre o menu principal antes de enviá-los à barra", async t => {
   let callbacks;
   let previewOptions;
+  let galleryCloseCount = 0;
   const uploadedFiles = [];
   const h = makeHarness({
     registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
     registrationGalleryFactory: async options => {
       callbacks = options;
-      return { open() {}, destroy() {} };
+      return { open() {}, close() { galleryCloseCount += 1; }, destroy() {} };
     },
   });
   h.native.previewMediaCollection = async (_items, options) => { previewOptions = options; };
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    return {
+      status: "processed",
+      returned_to_main_menu: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }],
+    };
+  };
   h.client.sendFile = async file => {
+    assert.equal(galleryCloseCount, 1, "a galeria deve fechar antes do primeiro envio de anexo");
     uploadedFiles.push(file);
     h.chatCalls.push(["file", file.name]);
     return { status: "processed", messages: [{ type: "text", text: `Recebi ${file.name}` }] };
