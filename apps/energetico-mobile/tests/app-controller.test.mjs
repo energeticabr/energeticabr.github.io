@@ -3891,9 +3891,50 @@ test('resumo sem fluxo ou indisponível preserva a pergunta e informa o motivo',
   assert.match(h.view.renders.at(-1).error, /nenhum fluxo/);
 });
 
-test('menu do portal pergunta pelo rascunho antes de sair e não mostra prévia sobre o menu', async () => {
+test('menu do portal sai direto sem rascunho quando só há campos vazios e texto de filtro', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
-  const activeFlow = { id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-1' };
+  const activeFlow = {
+    id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-empty',
+    rows: [{ label: 'FORNECEDOR', value: 'Em branco' }, { label: 'OBS', value: '   ' }],
+  };
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === 'portal_confirm_main_menu') {
+      return { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'Deseja deixar como rascunho?', options: [
+        { id: 'portal_draft_exit_save', label: 'SIM, SALVAR COMO RASCUNHO' },
+        { id: 'portal_draft_exit_discard', label: 'NÃO, SAIR SEM SALVAR' },
+      ] }] };
+    }
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true, activeFlow: null,
+      messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'Filtrar fornecedor', databaseFilterKey: 'supplier', options: [
+    { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
+  ] }], { activeFlow });
+  h.store.setDraft('Swi');
+  h.store.syncAttachments([{
+    id: 'read-only-source', fileName: 'consulta.pdf', mimeType: 'application/pdf', size: 123,
+    mediaUrl: '/api/portal-media/read-only-source', readOnly: true,
+  }]);
+
+  await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
+
+  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.match(h.store.getState().messages.at(-1).question, /QUAL ÁREA VOCÊ DESEJA ACESSAR/);
+  assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Deseja deixar como rascunho/);
+});
+
+test('menu do portal mantém a opção de rascunho quando o fluxo tem dado preenchido', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = {
+    id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-1',
+    rows: [{ label: 'OBRA', value: 'Obra A' }],
+  };
   const calls = [];
   h.client.sendText = async payload => {
     calls.push(payload);
@@ -3919,6 +3960,41 @@ test('menu do portal pergunta pelo rascunho antes de sair e não mostra prévia 
   assert.equal(calls.at(-1).replyId, 'portal_draft_exit_save');
   assert.equal(h.view.renders.at(-1).recoveryReference, null);
   assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Rascunho da conversa anterior/);
+});
+
+test('menu do portal reconhece linhas de lançamento como dados preenchidos', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = {
+    id: 'launch', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-launch',
+    launches: {
+      id: 'batch-1', currency: 'BRL', count: 1, total: '25', totalDisplay: 'R$ 25,00',
+      lines: [{
+        index: 1, product: 'AREIA', unit: 'M³', quantity: '1', unitPrice: '25', unitPriceDisplay: 'R$ 25,00',
+        freight: '0', freightDisplay: 'R$ 0,00', total: '25', totalDisplay: 'R$ 25,00',
+        details: { supplier: 'Fornecedor A', stage: 'Alvenaria', branch: 'Filial 004', account: 'Conta 1' },
+      }],
+    },
+  };
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    if (payload.replyId === 'portal_confirm_main_menu') {
+      return { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'Deseja deixar como rascunho?', options: [
+        { id: 'portal_draft_exit_save', label: 'SIM, SALVAR COMO RASCUNHO' },
+        { id: 'portal_draft_exit_discard', label: 'NÃO, SAIR SEM SALVAR' },
+      ] }] };
+    }
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'Confirme a linha', options: [
+    { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
+  ] }], { activeFlow });
+
+  await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
+
+  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu']);
+  assert.match(h.store.getState().messages.at(-1).question, /Deseja deixar como rascunho/);
 });
 
 for (const decision of ['portal_draft_exit_save', 'portal_draft_exit_discard']) {

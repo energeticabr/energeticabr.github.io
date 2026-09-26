@@ -54,6 +54,15 @@ test("edição digitada como comando troca comando pelo valor atual", () => {
   assert.equal(store.getState().draft, "0");
 });
 
+test("snapshot do fluxo conserva zero como dado preenchido", () => {
+  const store = createConversationStore();
+  store.ingestRemoteMessages([{ type: "poll", question: "QUAL O FRETE?", options: [] }], {
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "FRETE", value: 0 }] },
+  });
+
+  assert.equal(store.getState().activeFlow.rows[0].value, "0");
+});
+
 test("falha de mensagem preserva o rascunho e não cria mensagem confirmada", () => {
   const store = createConversationStore({ randomUUID: () => "text-op" });
   store.setDraft("Criar diário");

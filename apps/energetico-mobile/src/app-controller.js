@@ -1721,6 +1721,42 @@ export function createAppController({
       || /RASCUNHO.*MENU PRINCIPAL/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
   }
 
+  function hasSharePointValue(value) {
+    if (value == null) return false;
+    if (typeof value === "string") {
+      const normalized = value.trim().toLocaleLowerCase("pt-BR");
+      return Boolean(normalized) && !["-", "em branco", "none", "null", "undefined"].includes(normalized);
+    }
+    if (typeof value === "number" || typeof value === "boolean") return true;
+    if (Array.isArray(value)) return value.some(hasSharePointValue);
+    if (typeof value === "object") return Object.values(value).some(hasSharePointValue);
+    return false;
+  }
+
+  function flowHasSharePointData(activeFlow) {
+    if (!activeFlow || typeof activeFlow !== "object") return false;
+    if (Array.isArray(activeFlow.rows) && activeFlow.rows.some(row => hasSharePointValue(row?.value))) return true;
+    if (activeFlow.launches?.lines?.length > 0 || activeFlow.measurementLines?.lines?.length > 0) return true;
+    if (activeFlow.epiDelivery?.items?.length > 0) return true;
+    const placement = activeFlow.documentSigningPlacement;
+    if (hasSharePointValue(placement?.signature)) return true;
+    if (placement?.selection && typeof placement.selection === "object"
+      && Object.keys(placement.selection).length > 0) return true;
+    return false;
+  }
+
+  function hasSharePointDraftData(state, response) {
+    const attachments = [
+      ...(Array.isArray(state?.attachments) ? state.attachments : []),
+      ...(Array.isArray(response?.attachments) ? response.attachments : []),
+    ];
+    return flowHasSharePointData(state?.activeFlow)
+      || flowHasSharePointData(response?.activeFlow)
+      // A filter string is only a local query, not a value submitted to SharePoint.
+      || attachments.some(attachment => attachment?.readOnly !== true)
+      || (Array.isArray(state?.pendingFiles) && state.pendingFiles.length > 0);
+  }
+
   function scheduledPaymentOption(poll, paymentId) {
     const id = String(paymentId || "").trim();
     if (!/^\d+$/.test(id)) return null;
@@ -3558,6 +3594,19 @@ export function createAppController({
       }));
       remoteResponseReceived = true;
       result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
+      if (replyId === PORTAL_MAIN_MENU_CONFIRM_ID && !hasSharePointDraftData(previousState, result)) {
+        const draftExitPoll = [...(Array.isArray(result.messages) ? result.messages : [])]
+          .reverse()
+          .find(message => message?.type === "poll" && isDraftExitConfirmation(message));
+        const discard = pendingNoteOption(draftExitPoll, "portal_draft_exit_discard");
+        if (discard) {
+          result = preparePresenceResult(await client.sendText({
+            text: String(discard.label || discard.title || "SAIR SEM SALVAR"),
+            replyId: String(discard.reply || discard.id),
+          }));
+          result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
+        }
+      }
       const quantityResult = result;
       const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
         && epiFinalizeProgress.index === epiFinalizeProgress.products.length - 1;
