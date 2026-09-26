@@ -48,3 +48,8 @@ test("web ativa somente a etapa atual", async () => {
   const webEntry = await readFile(new URL("../src/web/main.js", import.meta.url), "utf8");
   assert.match(webEntry, /createConversationStore\(\{\s*historyMode:\s*"current-step"\s*\}\)/);
 });
+
+test("PWA inclui o CSS da galeria de documentos no bundle web", async () => {
+  const webEntry = await readFile(new URL("../src/web/main.js", import.meta.url), "utf8");
+  assert.match(webEntry, /import\s+"\.\.\/ui\/registration-gallery\.css"/);
+});
