@@ -298,7 +298,7 @@ export function createConversationStore({
           }),
         } : {}),
         ...(Array.isArray(result.activeFlow.rows) ? { rows: Object.freeze(result.activeFlow.rows.slice(0, 50)
-          .map(row => Object.freeze({ label: String(row.label || ""), value: String(row.value || "") }))) } : {}),
+          .map(row => Object.freeze({ label: String(row.label || ""), value: String(row.value ?? "") }))) } : {}),
       })
       : null;
   }
