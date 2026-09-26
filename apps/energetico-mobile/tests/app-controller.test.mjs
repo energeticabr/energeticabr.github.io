@@ -72,6 +72,7 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e s�
   const opened = [];
   const destroyed = [];
   const previews = [];
+  let previewOptions;
   const h = makeHarness({
     registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
     registrationGalleryFactory: async ({ kind, data, openMediaCollection }) => {
@@ -83,7 +84,7 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e s�
       return { open() { opened.push(kind); }, destroy() { destroyed.push(kind); } };
     },
   });
-  h.native.previewMediaCollection = items => { previews.push(items); };
+  h.native.previewMediaCollection = (items, options) => { previews.push(items); previewOptions = options; };
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
@@ -96,9 +97,43 @@ test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e s�
   assert.deepEqual(created, [["group", "group"], ["family", "family"], ["subfamily", "subfamily"], ["product", "product"], ["documents", "documents"]]);
   assert.deepEqual(opened, ["group", "family", "subfamily", "product", "documents", "group"]);
   assert.deepEqual(previews, [[{ fileName: "contrato.pdf", source: "arquivo-local" }]]);
+  assert.equal(typeof previewOptions.onAddToTray, "function");
   assert.equal(h.chatCalls.length, before);
   h.controller.stop();
   assert.deepEqual(destroyed.sort(), ["documents", "family", "group", "product", "subfamily"]);
+});
+
+test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo", async t => {
+  let callbacks;
+  let previewOptions;
+  let uploadedFile;
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async options => {
+      callbacks = options;
+      return { open() {}, destroy() {} };
+    },
+  });
+  h.native.previewMediaCollection = async (items, options) => { previewOptions = options; };
+  h.client.sendFile = async file => {
+    uploadedFile = file;
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [{ type: "text", text: `Recebi ${file.name}` }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_documents_gallery" });
+
+  const blob = new Blob(["%PDF-1.7"], { type: "application/pdf" });
+  const originalName = " comprovante.pdf ";
+  await callbacks.openMediaCollection([{ fileName: originalName, source: Promise.resolve(blob) }]);
+  assert.equal(typeof previewOptions.onAddToTray, "function");
+  assert.equal(await previewOptions.onAddToTray({ blob, fileName: originalName }), true);
+
+  assert.equal(uploadedFile.name, originalName);
+  assert.equal(uploadedFile.type, "application/pdf");
+  assert.equal(await uploadedFile.text(), "%PDF-1.7");
+  assert.ok(h.chatCalls.some(([type, name]) => type === "file" && name === originalName));
 });
 
 test("abrir Power BI obtém token delegado, solicita consentimento e navega ao menu pela casa", async t => {
@@ -264,11 +299,12 @@ test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar ban
 test("galeria abre coleção de anexos pelo visualizador sem cair no detalhe do lançamento", async t => {
   let callbacks;
   let collection;
+  let previewOptions;
   const h = makeHarness({ launchGalleryFactory: async options => {
     callbacks = options;
     return { open() {}, destroy() {} };
   } });
-  h.native.previewMediaCollection = async items => { collection = items; };
+  h.native.previewMediaCollection = async (items, options) => { collection = items; previewOptions = options; };
   h.client.launchGalleryRequest = async () => ({ rows: [] });
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -286,6 +322,30 @@ test("galeria abre coleção de anexos pelo visualizador sem cair no detalhe do 
     "/api/portal-media/foto-3429",
     "/api/portal-media/pdf-3429",
   ]);
+  assert.equal(typeof previewOptions.onAddToTray, "function");
+});
+
+test("anexo único da Galeria Lançamentos também pode ser adicionado à barra", async t => {
+  let callbacks;
+  let previewOptions;
+  let previewBlob;
+  const h = makeHarness({ launchGalleryFactory: async options => {
+    callbacks = options;
+    return { open() {}, destroy() {} };
+  } });
+  h.native.previewMedia = async (source, fileName, options) => {
+    previewBlob = await source;
+    previewOptions = options;
+    assert.equal(fileName, "foto.jpg");
+  };
+  h.client.fetchMedia = async () => new Blob(["foto"], { type: "image/jpeg" });
+  h.client.launchGalleryRequest = async () => ({ rows: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery" });
+  await callbacks.openMedia({ id: 3429, fileName: "foto.jpg" });
+  assert.equal(previewBlob.type, "image/jpeg");
+  assert.equal(typeof previewOptions.onAddToTray, "function");
 });
 
 test("Galeria Lançamentos abre localmente a partir do menu de Suprimentos", async t => {
@@ -314,6 +374,7 @@ test("Galeria Pedidos abre a Screen10 SharePoint localmente e usa o visualizador
   let opens = 0;
   let scopesRequested;
   let previewItems;
+  let previewOptions;
   const h = makeHarness({
     ordersGalleryFactory: async options => {
       callbacks = options;
@@ -324,7 +385,7 @@ test("Galeria Pedidos abre a Screen10 SharePoint localmente e usa o visualizador
     }),
   });
   h.auth.getToken = async scopes => { scopesRequested = scopes; return "sharepoint-token"; };
-  h.native.previewMediaCollection = async items => { previewItems = items; };
+  h.native.previewMediaCollection = async (items, options) => { previewItems = items; previewOptions = options; };
   h.client.launchGalleryRequest = async () => { throw new Error("não deve consultar a galeria de lançamentos"); };
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -338,6 +399,7 @@ test("Galeria Pedidos abre a Screen10 SharePoint localmente e usa o visualizador
   await callbacks.openMediaCollection([{ fileName: "nota.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
   assert.equal(previewItems.length, 1);
   assert.equal(previewItems[0].fileName, "nota.pdf");
+  assert.equal(typeof previewOptions.onAddToTray, "function");
 });
 
 test("retoma a Galeria Pedidos depois do retorno de consentimento Microsoft no navegador", async t => {
@@ -385,6 +447,7 @@ test("Galeria Tarefas consulta LANCAMENTOTAREFAS autenticada e abre seus anexos 
   let opens = 0;
   let scopesRequested;
   let previewItems;
+  let previewOptions;
   const h = makeHarness({
     tasksGalleryFactory: async options => {
       callbacks = options;
@@ -395,7 +458,7 @@ test("Galeria Tarefas consulta LANCAMENTOTAREFAS autenticada e abre seus anexos 
     }),
   });
   h.auth.getToken = async scopes => { scopesRequested = scopes; return "sharepoint-token"; };
-  h.native.previewMediaCollection = async items => { previewItems = items; };
+  h.native.previewMediaCollection = async (items, options) => { previewItems = items; previewOptions = options; };
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
@@ -407,6 +470,7 @@ test("Galeria Tarefas consulta LANCAMENTOTAREFAS autenticada e abre seus anexos 
   await callbacks.openMediaCollection([{ fileName: "foto.jpg", source: Promise.resolve(new Blob(["img"])) }]);
   assert.equal(previewItems.length, 1);
   assert.equal(previewItems[0].fileName, "foto.jpg");
+  assert.equal(typeof previewOptions.onAddToTray, "function");
 });
 
 test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da tela G7", async t => {
@@ -426,6 +490,7 @@ test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre 
   let opens = 0;
   let requestedScopes;
   let previewItems;
+  let previewOptions;
   const h = makeHarness({
     paymentProgrammingGalleryFactory: async options => {
       callbacks = options;
@@ -438,7 +503,7 @@ test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre 
     }),
   });
   h.auth.getToken = async scopes => { requestedScopes = scopes; return "sharepoint-token"; };
-  h.native.previewMediaCollection = async items => { previewItems = items; };
+  h.native.previewMediaCollection = async (items, options) => { previewItems = items; previewOptions = options; };
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
@@ -452,6 +517,7 @@ test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre 
   await callbacks.openMediaCollection([{ fileName: "nota.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
   assert.equal(previewItems.length, 1);
   assert.equal(previewItems[0].fileName, "nota.pdf");
+  assert.equal(typeof previewOptions.onAddToTray, "function");
 });
 
 test("Galeria Despesas Recorrentes consulta SharePoint e abre localmente pelo menu de Suprimentos", async t => {
@@ -460,6 +526,7 @@ test("Galeria Despesas Recorrentes consulta SharePoint e abre localmente pelo me
   let destroyed = 0;
   let requestedScopes;
   let previewItems;
+  let previewOptions;
   const h = makeHarness({
     recurringExpensesGalleryFactory: async options => {
       callbacks = options;
@@ -472,7 +539,7 @@ test("Galeria Despesas Recorrentes consulta SharePoint e abre localmente pelo me
     }),
   });
   h.auth.getToken = async scopes => { requestedScopes = scopes; return "sharepoint-token"; };
-  h.native.previewMediaCollection = async items => { previewItems = items; };
+  h.native.previewMediaCollection = async (items, options) => { previewItems = items; previewOptions = options; };
   t.after(() => h.controller.stop());
   await h.controller.start();
   const before = h.chatCalls.length;
@@ -486,6 +553,7 @@ test("Galeria Despesas Recorrentes consulta SharePoint e abre localmente pelo me
   await callbacks.openMediaCollection([{ fileName: "conta.pdf", source: Promise.resolve(new Blob(["pdf"])) }]);
   assert.equal(previewItems.length, 1);
   assert.equal(previewItems[0].fileName, "conta.pdf");
+  assert.equal(typeof previewOptions.onAddToTray, "function");
 
   await h.view.emit("sign-out");
   assert.equal(destroyed, 1);

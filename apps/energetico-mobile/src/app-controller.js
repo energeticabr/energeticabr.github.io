@@ -3116,6 +3116,41 @@ export function createAppController({
     registrationGalleryOpenings.clear();
   }
 
+  function galleryAddToTray(assertSession) {
+    return ({ blob, fileName } = {}) => {
+      assertSession();
+      if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") {
+        throw new Error("O anexo selecionado não está disponível para adicionar.");
+      }
+      const name = String(fileName || "anexo");
+      const type = String(blob.type || "application/octet-stream");
+      const FileConstructor = globalThis.File;
+      const file = typeof FileConstructor === "function"
+        ? new FileConstructor([blob], name, { type })
+        : Object.assign(new Blob([blob], { type }), { name });
+      return queueSelectedFiles(() => [file]);
+    };
+  }
+
+  function openGalleryMedia(sourceItems, assertSession) {
+    assertSession();
+    const items = (Array.isArray(sourceItems) ? sourceItems : []).map(item => ({
+      ...item,
+      fileName: String(item?.fileName || "arquivo"),
+      source: item?.source,
+    })).filter(item => item.source != null);
+    const first = items[0];
+    if (!first) return undefined;
+    const options = { onAddToTray: galleryAddToTray(assertSession) };
+    if (typeof native.previewMediaCollection === "function") {
+      return native.previewMediaCollection(items, options);
+    }
+    if (typeof native.previewMedia === "function") {
+      return native.previewMedia(first.source, first.fileName, options);
+    }
+    return showMedia(first.source, first.fileName);
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -3139,16 +3174,19 @@ export function createAppController({
               assertSession();
               return result;
             },
-            openMedia: descriptor => { assertSession(); return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo"); },
+            openMedia: descriptor => {
+              assertSession();
+              return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo", {
+                onAddToTray: galleryAddToTray(assertSession),
+              });
+            },
             openMediaCollection: descriptors => {
               assertSession();
               const items = (Array.isArray(descriptors) ? descriptors : []).map(descriptor => ({
                 ...descriptor,
                 source: client.fetchMedia(descriptor),
               }));
-              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(items);
-              const first = items[0];
-              return first ? showMedia(first.source, first.fileName || "arquivo") : undefined;
+              return openGalleryMedia(items, assertSession);
             },
             loadMediaPreview: async descriptor => {
               assertSession();
@@ -3209,16 +3247,7 @@ export function createAppController({
           assertSession();
           const panel = await ordersGalleryFactory({
             data,
-            openMediaCollection: items => {
-              assertSession();
-              const collection = (Array.isArray(items) ? items : []).map(item => ({
-                fileName: String(item?.fileName || "arquivo"),
-                source: item?.source,
-              })).filter(item => item.source != null);
-              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
-              const first = collection[0];
-              return first ? showMedia(first.source, first.fileName) : undefined;
-            },
+            openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
@@ -3258,16 +3287,7 @@ export function createAppController({
           assertSession();
           const panel = await tasksGalleryFactory({
             data,
-            openMediaCollection: items => {
-              assertSession();
-              const collection = (Array.isArray(items) ? items : []).map(item => ({
-                fileName: String(item?.fileName || "arquivo"),
-                source: item?.source,
-              })).filter(item => item.source != null);
-              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
-              const first = collection[0];
-              return first ? showMedia(first.source, first.fileName) : undefined;
-            },
+            openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
@@ -3307,16 +3327,7 @@ export function createAppController({
           assertSession();
           const panel = await paymentProgrammingGalleryFactory({
             data,
-            openMediaCollection: items => {
-              assertSession();
-              const collection = (Array.isArray(items) ? items : []).map(item => ({
-                fileName: String(item?.fileName || "arquivo"),
-                source: item?.source,
-              })).filter(item => item.source != null);
-              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
-              const first = collection[0];
-              return first ? showMedia(first.source, first.fileName) : undefined;
-            },
+            openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
@@ -3356,16 +3367,7 @@ export function createAppController({
           assertSession();
           const panel = await recurringExpensesGalleryFactory({
             data,
-            openMediaCollection: items => {
-              assertSession();
-              const collection = (Array.isArray(items) ? items : []).map(item => ({
-                fileName: String(item?.fileName || "arquivo"),
-                source: item?.source,
-              })).filter(item => item.source != null);
-              if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
-              const first = collection[0];
-              return first ? showMedia(first.source, first.fileName) : undefined;
-            },
+            openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
@@ -3412,9 +3414,7 @@ export function createAppController({
                   fileName: String(item?.fileName || "arquivo"),
                   source: item?.source,
                 })).filter(item => item.source != null);
-                if (typeof native.previewMediaCollection === "function") return native.previewMediaCollection(collection);
-                const first = collection[0];
-                return first ? showMedia(first.source, first.fileName) : undefined;
+                return openGalleryMedia(collection, assertSession);
               },
             } : {}),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
@@ -4343,8 +4343,8 @@ export function createAppController({
     return false;
   }
 
-  async function showMedia(source, fileName) {
-    if (native.previewMedia) return native.previewMedia(source, fileName);
+  async function showMedia(source, fileName, previewOptions) {
+    if (native.previewMedia) return native.previewMedia(source, fileName, previewOptions);
     const previewAccount = account;
     const blob = await source;
     if (!stopped && account === previewAccount) return native.exportMedia(blob, fileName);
