@@ -268,8 +268,64 @@ test("PDF da galeria pode ser adicionado à barra de anexos sem encaminhar o arq
 
   addButton.click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(additions, [{ blob: pdf, fileName: "comprovante.pdf" }]);
+  assert.deepEqual(additions, [{
+    blob: pdf,
+    fileName: "comprovante.pdf",
+    attachments: [{ source: pdf, fileName: "comprovante.pdf" }],
+  }]);
   assert.equal(dialog.open, false, "depois de adicionar, o usuário retorna ao chat");
+});
+
+test("galeria com vários anexos pergunta se deve reutilizar todos ou somente o aberto", async t => {
+  const selections = [];
+  const { preview, documentRef } = setup(t, {
+    readText: async blob => blob.text(),
+  });
+  const first = new Blob(["primeiro"], { type: "text/plain" });
+  const second = new Blob(["segundo"], { type: "text/plain" });
+  await preview.openCollection([
+    { source: first, fileName: "primeiro.txt" },
+    { source: Promise.resolve(second), fileName: "segundo.txt" },
+  ], { onAddToTray: selection => { selections.push(selection); return true; } });
+  const dialog = documentRef.querySelector("dialog");
+  const addButton = dialog.querySelector('[data-preview-action="add-to-tray"]');
+  const choice = dialog.querySelector(".attachment-preview-add-choice");
+
+  addButton.click();
+  assert.equal(choice.hidden, false);
+  assert.match(choice.textContent, /todos os anexos|todos/i);
+  assert.match(choice.textContent, /somente este|apenas/i);
+  assert.equal(selections.length, 0, "a escolha vem antes de adicionar os arquivos");
+
+  choice.querySelector('[data-preview-action="add-all"]')?.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(selections.length, 1);
+  assert.deepEqual(selections[0].attachments.map(item => item.fileName), ["primeiro.txt", "segundo.txt"]);
+  const selectedSources = await Promise.all(selections[0].attachments.map(item => item.source));
+  assert.deepEqual(selectedSources, [first, second]);
+  assert.equal(dialog.open, false);
+});
+
+test("em coleção com vários anexos o usuário pode reutilizar apenas o arquivo aberto", async t => {
+  let selection;
+  const { preview, documentRef } = setup(t);
+  const first = new Blob(["primeiro"], { type: "text/plain" });
+  const second = new Blob(["segundo"], { type: "text/plain" });
+  await preview.openCollection([
+    { source: first, fileName: "primeiro.txt" },
+    { source: second, fileName: "segundo.txt" },
+  ], { onAddToTray: value => { selection = value; return true; } });
+  const dialog = documentRef.querySelector("dialog");
+  dialog.querySelector('[data-preview-action="next"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  dialog.querySelector('[data-preview-action="add-to-tray"]').click();
+  dialog.querySelector('[data-preview-action="add-current"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(selection.attachments.length, 1);
+  assert.equal(selection.attachments[0].fileName, "segundo.txt");
+  assert.equal(selection.attachments[0].source, second);
+  assert.equal(dialog.open, false);
 });
 
 test("galeria permite adicionar qualquer tipo de anexo à barra", async t => {
@@ -281,15 +337,21 @@ test("galeria permite adicionar qualquer tipo de anexo à barra", async t => {
   });
   const button = documentRef.querySelector('[data-preview-action="add-to-tray"]');
   assert.equal(button.hidden, false);
+  assert.equal(documentRef.querySelector(".attachment-preview-add-choice").hidden, true);
   button.click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(added, { blob: image, fileName: "foto.jpg" });
+  assert.deepEqual(added, {
+    blob: image,
+    fileName: "foto.jpg",
+    attachments: [{ source: image, fileName: "foto.jpg" }],
+  });
   assert.equal(documentRef.querySelector("dialog").open, false);
 });
 
 test("o CSS respeita o atributo hidden do botão de adicionar", () => {
   const css = readFileSync(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
   assert.match(css, /\.attachment-preview-dialog\s+\.attachment-preview-add-to-tray\[hidden\]\s*\{\s*display:\s*none\s*;/);
+  assert.match(css, /\.attachment-preview-dialog\s+\.attachment-preview-add-choice\[hidden\]\s*\{\s*display:\s*none\s*;/);
 });
 
 test("trocar PDF cancela trabalho anterior e ignora erro tardio", async t => {
