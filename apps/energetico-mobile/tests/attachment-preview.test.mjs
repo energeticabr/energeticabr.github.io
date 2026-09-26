@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { createAttachmentPreview } from "../src/web/attachment-preview.js";
 
@@ -284,6 +285,11 @@ test("galeria permite adicionar qualquer tipo de anexo à barra", async t => {
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(added, { blob: image, fileName: "foto.jpg" });
   assert.equal(documentRef.querySelector("dialog").open, false);
+});
+
+test("o CSS respeita o atributo hidden do botão de adicionar", () => {
+  const css = readFileSync(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  assert.match(css, /\.attachment-preview-dialog\s+\.attachment-preview-add-to-tray\[hidden\]\s*\{\s*display:\s*none\s*;/);
 });
 
 test("trocar PDF cancela trabalho anterior e ignora erro tardio", async t => {
