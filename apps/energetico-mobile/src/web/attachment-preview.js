@@ -66,6 +66,22 @@ export function createAttachmentPreview({
   const backButton = element("button", "attachment-preview-back", "Voltar ao chat");
   const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 ADICIONAR À BARRA");
   const exportButton = element("button", "attachment-preview-export");
+  const addChoice = element("section", "attachment-preview-add-choice");
+  addChoice.hidden = true;
+  addChoice.setAttribute("role", "group");
+  addChoice.setAttribute("aria-label", "Escolher anexos para o novo fluxo");
+  const addChoicePrompt = element("p", "attachment-preview-add-choice-prompt");
+  const addChoiceActions = element("div", "attachment-preview-add-choice-actions");
+  const addAllButton = element("button", "attachment-preview-add-all", "Todos os anexos");
+  const addCurrentButton = element("button", "attachment-preview-add-current", "Somente este anexo");
+  const cancelAddChoiceButton = element("button", "attachment-preview-add-cancel", "Cancelar");
+  addAllButton.type = addCurrentButton.type = cancelAddChoiceButton.type = "button";
+  addAllButton.dataset.previewAction = "add-all";
+  addCurrentButton.dataset.previewAction = "add-current";
+  cancelAddChoiceButton.dataset.previewAction = "cancel-add-choice";
+  addChoicePrompt.textContent = "Este registro tem mais de um anexo. Como deseja continuar?";
+  addChoiceActions.append(addAllButton, addCurrentButton, cancelAddChoiceButton);
+  addChoice.append(addChoicePrompt, addChoiceActions);
   const forwardIcon = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
   forwardIcon.setAttribute("viewBox", "0 0 24 24");
   forwardIcon.setAttribute("aria-hidden", "true");
@@ -92,7 +108,7 @@ export function createAttachmentPreview({
   collectionStatus.dataset.previewAction = "collection-status";
   nextButton.dataset.previewAction = "next";
   collectionNav.append(previousButton, collectionStatus, nextButton);
-  footer.append(collectionNav, backButton, addToTrayButton, exportButton);
+  footer.append(collectionNav, addChoice, backButton, addToTrayButton, exportButton);
   dialog.append(header, content, status, footer);
   documentRef.body.append(dialog);
   let active = null;
@@ -111,6 +127,81 @@ export function createAttachmentPreview({
     collectionStatus.textContent = `${collection.index + 1} de ${collection.items.length}`;
   }
 
+  function selectedAttachments(session, includeAll) {
+    const available = collection?.items?.length
+      ? collection.items
+      : [{ source: session.blob, fileName: session.fileName }];
+    const indexes = includeAll
+      ? available.map((_item, index) => index)
+      : [collection?.items?.length ? collection.index : 0];
+    return indexes.map(index => {
+      const item = available[index];
+      return {
+        fileName: String(item?.fileName || session.fileName || "arquivo"),
+        source: collection?.items?.length && index !== collection.index ? item.source : session.blob,
+      };
+    });
+  }
+
+  async function addAttachmentsToTray(session, attachments, choosingCollection) {
+    const addToTray = addToTrayHandler;
+    if (!session?.blob || typeof addToTray !== "function") return;
+    addToTrayButton.disabled = true;
+    addAllButton.disabled = true;
+    addCurrentButton.disabled = true;
+    cancelAddChoiceButton.disabled = true;
+    status.textContent = attachments.length > 1
+      ? `Adicionando ${attachments.length} anexos à barra…`
+      : "Adicionando anexo à barra de anexos…";
+    try {
+      const added = await addToTray({ blob: session.blob, fileName: session.fileName, attachments });
+      if (active !== session) return;
+      if (added === false) {
+        status.textContent = "Não foi possível adicionar os anexos à barra. Tente novamente.";
+        addToTrayButton.disabled = false;
+        addAllButton.disabled = false;
+        addCurrentButton.disabled = false;
+        cancelAddChoiceButton.disabled = false;
+        return;
+      }
+      close();
+    } catch {
+      if (active === session) {
+        status.textContent = "Não foi possível adicionar os anexos à barra. Tente novamente.";
+        addToTrayButton.disabled = false;
+        addAllButton.disabled = false;
+        addCurrentButton.disabled = false;
+        cancelAddChoiceButton.disabled = false;
+      }
+    }
+    if (active === session && !choosingCollection) addToTrayButton.disabled = false;
+  }
+
+  function offerCollectionAttachmentChoice() {
+    if (!active || !collection || collection.items.length <= 1) return false;
+    addChoicePrompt.textContent = `Este registro tem ${collection.items.length} anexos. Deseja usar todos no novo fluxo ou somente o anexo aberto?`;
+    addChoice.hidden = false;
+    addToTrayButton.hidden = true;
+    status.textContent = "Escolha quais anexos deseja levar ao novo fluxo.";
+    addAllButton.focus({ preventScroll: true });
+    return true;
+  }
+
+  addAllButton.addEventListener("click", () => {
+    if (active) void addAttachmentsToTray(active, selectedAttachments(active, true), true);
+  });
+  addCurrentButton.addEventListener("click", () => {
+    if (active) void addAttachmentsToTray(active, selectedAttachments(active, false), true);
+  });
+  cancelAddChoiceButton.addEventListener("click", () => {
+    if (!active) return;
+    addChoice.hidden = true;
+    addToTrayButton.hidden = false;
+    addToTrayButton.disabled = false;
+    status.textContent = "Escolha encerrada. O arquivo continua aberto.";
+    addToTrayButton.focus({ preventScroll: true });
+  });
+
   function release() {
     if (!active) return;
     const previous = active;
@@ -121,6 +212,10 @@ export function createAttachmentPreview({
     previous.urls.forEach(url => urlApi.revokeObjectURL(url));
     previous.urls.clear();
     content.replaceChildren();
+    addChoice.hidden = true;
+    addAllButton.disabled = false;
+    addCurrentButton.disabled = false;
+    cancelAddChoiceButton.disabled = false;
     addToTrayButton.hidden = true;
     addToTrayButton.disabled = true;
     exportButton.disabled = true;
@@ -369,25 +464,9 @@ export function createAttachmentPreview({
   });
   addToTrayButton.addEventListener("click", async () => {
     const session = active;
-    const addToTray = addToTrayHandler;
-    if (!session?.blob || typeof addToTray !== "function") return;
-    addToTrayButton.disabled = true;
-    status.textContent = "Adicionando anexo à barra de anexos…";
-    try {
-      const added = await addToTray({ blob: session.blob, fileName: session.fileName });
-      if (active !== session) return;
-      if (added === false) {
-        status.textContent = "Não foi possível adicionar o anexo à barra de anexos. Tente novamente.";
-        addToTrayButton.disabled = false;
-        return;
-      }
-      close();
-    } catch {
-      if (active === session) {
-        status.textContent = "Não foi possível adicionar o anexo à barra de anexos. Tente novamente.";
-        addToTrayButton.disabled = false;
-      }
-    }
+    if (!session?.blob || typeof addToTrayHandler !== "function") return;
+    if (offerCollectionAttachmentChoice()) return;
+    void addAttachmentsToTray(session, selectedAttachments(session, false), false);
   });
 
   return Object.freeze({ open, openCollection, close, destroy() { if (destroyed) return; close(); dialog.remove(); destroyed = true; } });

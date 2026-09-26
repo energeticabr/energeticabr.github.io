@@ -3117,18 +3117,35 @@ export function createAppController({
   }
 
   function galleryAddToTray(assertSession) {
-    return ({ blob, fileName } = {}) => {
+    return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
       if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") {
         throw new Error("O anexo selecionado não está disponível para adicionar.");
       }
-      const name = String(fileName || "anexo");
-      const type = String(blob.type || "application/octet-stream");
       const FileConstructor = globalThis.File;
-      const file = typeof FileConstructor === "function"
-        ? new FileConstructor([blob], name, { type })
-        : Object.assign(new Blob([blob], { type }), { name });
-      return queueSelectedFiles(() => [file]);
+      const selected = Array.isArray(attachments) && attachments.length
+        ? attachments
+        : [{ source: blob, fileName }];
+      const files = [];
+      for (const item of selected) {
+        assertSession();
+        const attachmentBlob = await (item?.source ?? item?.blob ?? blob);
+        assertSession();
+        if (!attachmentBlob || typeof attachmentBlob.slice !== "function"
+          || typeof attachmentBlob.arrayBuffer !== "function") {
+          throw new Error(`O anexo ${String(item?.fileName || "selecionado")} não está disponível para adicionar.`);
+        }
+        const name = String(item?.fileName || fileName || "anexo");
+        const type = String(attachmentBlob.type || "application/octet-stream");
+        files.push(typeof FileConstructor === "function"
+          ? new FileConstructor([attachmentBlob], name, { type })
+          : Object.assign(new Blob([attachmentBlob], { type }), { name }));
+      }
+
+      const returnedToMenu = await sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
+      if (!returnedToMenu) return false;
+      assertSession();
+      return queueSelectedFiles(() => files);
     };
   }
 

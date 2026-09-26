@@ -33,6 +33,13 @@
 .attachment-preview-collection-nav { display: flex; flex: 1 1 100%; align-items: center; justify-content: center; gap: 12px; }
 .attachment-preview-collection-nav[hidden] { display: none; }
 .attachment-preview-collection-status { min-width: 76px; color: #526860; font-size: 13px; font-weight: 700; text-align: center; }
+.attachment-preview-add-choice { display: flex; flex: 1 1 100%; flex-direction: column; gap: 10px; width: 100%; padding: 12px; border: 1px solid #c8d9d1; border-radius: 12px; background: #f2f7f5; }
+.attachment-preview-dialog .attachment-preview-add-choice[hidden] { display: none; }
+.attachment-preview-add-choice-prompt { margin: 0; color: #193d30; font-size: 14px; font-weight: 700; line-height: 1.45; text-align: center; }
+.attachment-preview-add-choice-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.attachment-preview-add-choice-actions button { flex: 1 1 140px; }
+.attachment-preview-dialog .attachment-preview-add-all { background: #146b44; color: #fff; border-color: #146b44; }
+.attachment-preview-dialog .attachment-preview-add-current { background: #edf4f2; color: #0b5261; border-color: #b8cec6; }
 .attachment-preview-dialog .attachment-preview-export { display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; background: #146b44; color: #fff; border-color: #146b44; }
 .attachment-preview-dialog .attachment-preview-add-to-tray { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; background: #edf4f2; color: #0b5261; border-color: #b8cec6; }
 .attachment-preview-dialog .attachment-preview-add-to-tray[hidden] { display: none; }

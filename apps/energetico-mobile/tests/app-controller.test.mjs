@@ -122,18 +122,71 @@ test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo"
   };
   t.after(() => h.controller.stop());
   await h.controller.start();
+  const before = h.chatCalls.length;
   await h.view.emit("select-reply", { replyId: "action_documents_gallery" });
 
   const blob = new Blob(["%PDF-1.7"], { type: "application/pdf" });
   const originalName = " comprovante.pdf ";
   await callbacks.openMediaCollection([{ fileName: originalName, source: Promise.resolve(blob) }]);
   assert.equal(typeof previewOptions.onAddToTray, "function");
-  assert.equal(await previewOptions.onAddToTray({ blob, fileName: originalName }), true);
+  assert.equal(await previewOptions.onAddToTray({
+    blob,
+    fileName: originalName,
+    attachments: [{ fileName: originalName, source: blob }],
+  }), true);
 
   assert.equal(uploadedFile.name, originalName);
   assert.equal(uploadedFile.type, "application/pdf");
   assert.equal(await uploadedFile.text(), "%PDF-1.7");
-  assert.ok(h.chatCalls.some(([type, name]) => type === "file" && name === originalName));
+  assert.deepEqual(h.chatCalls.slice(before), [
+    ["text", { text: "", replyId: "portal_confirm_main_menu" }],
+    ["file", originalName],
+  ]);
+});
+
+test("galeria reutiliza todos os anexos escolhidos e abre o menu principal antes de enviá-los à barra", async t => {
+  let callbacks;
+  let previewOptions;
+  const uploadedFiles = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
+    registrationGalleryFactory: async options => {
+      callbacks = options;
+      return { open() {}, destroy() {} };
+    },
+  });
+  h.native.previewMediaCollection = async (_items, options) => { previewOptions = options; };
+  h.client.sendFile = async file => {
+    uploadedFiles.push(file);
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [{ type: "text", text: `Recebi ${file.name}` }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_documents_gallery" });
+
+  const first = new Blob(["PDF"], { type: "application/pdf" });
+  const second = new Blob(["imagem"], { type: "image/jpeg" });
+  await callbacks.openMediaCollection([
+    { fileName: "comprovante.pdf", source: first },
+    { fileName: "foto.jpg", source: Promise.resolve(second) },
+  ]);
+  assert.equal(await previewOptions.onAddToTray({
+    blob: first,
+    fileName: "comprovante.pdf",
+    attachments: [
+      { fileName: "comprovante.pdf", source: first },
+      { fileName: "foto.jpg", source: Promise.resolve(second) },
+    ],
+  }), true);
+
+  assert.deepEqual(h.chatCalls.slice(-3), [
+    ["text", { text: "", replyId: "portal_confirm_main_menu" }],
+    ["file", "comprovante.pdf"],
+    ["file", "foto.jpg"],
+  ]);
+  assert.deepEqual(await Promise.all(uploadedFiles.map(file => file.text())), ["PDF", "imagem"]);
+  assert.deepEqual(uploadedFiles.map(file => file.type), ["application/pdf", "image/jpeg"]);
 });
 
 test("abrir Power BI obtém token delegado, solicita consentimento e navega ao menu pela casa", async t => {
