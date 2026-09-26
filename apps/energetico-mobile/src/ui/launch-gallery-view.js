@@ -1,4 +1,5 @@
 import { bindAutoFilterForm } from './auto-filter-form.js';
+import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
@@ -292,6 +293,23 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   content.append(filterDisclosure, totals, notice, listStatus, cards, pagination);
   root.append(header, content, panel);
   doc.body.append(root);
+  const attachmentCounts = createGalleryAttachmentCounts({
+    loadAttachments: async item => {
+      const result = await request('detail', { id: item.id, purpose: 'attachment-count' });
+      return attachmentDescriptors(item, result);
+    },
+    onChange: updateAttachmentCount,
+  });
+
+  function updateAttachmentCount(item) {
+    if (!active(session)) return;
+    const card = [...cards.children].find(node => String(node.dataset.itemId) === String(item.id));
+    const count = card?.querySelector('.lg-record-attachment-count');
+    const label = attachmentCounts.label(item);
+    if (count) count.textContent = label;
+    const media = card?.querySelector('.lg-record-media');
+    if (media) media.setAttribute('aria-label', `${media.dataset.mediaKind === 'pdf' ? 'Abrir PDF e anexos' : 'Abrir anexos'} do lançamento: ${label}`);
+  }
   let applied = query(1);
 
   function query(targetPage) {
@@ -307,6 +325,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function loadSnapshot(data = applied) {
     if (!opened || destroyed) return;
+    attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
     listLoading = true; listStatus.replaceChildren(element('p', 'lg-hint', 'Carregando lançamentos…')); updateBusy();
@@ -330,6 +349,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       }
       if (result.sortOptions?.length) setOptions(sort, result.sortOptions);
       cards.replaceChildren(...result.rows.map(renderCard));
+      void attachmentCounts.request(result.rows.filter(item => recordMedia(item)));
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
       pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
     } catch (error) {
@@ -377,20 +397,21 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     host.type = 'button';
     host.dataset.lgLock = 'true';
     host.dataset.mediaKind = media.kind;
+    host.dataset.itemId = String(item.id);
     const fileName = attachmentFileName(media.attachment);
     host.setAttribute('aria-label', media.kind === 'pdf' ? `Abrir ${fileName || 'arquivo PDF'}`
       : media.kind === 'image' ? `Abrir ${fileName || 'primeiro anexo'}` : 'Abrir anexos do lançamento');
     host.addEventListener('click', () => { if (canChangeDetail()) openRecordAttachments(item); });
     if (media.kind === 'pdf') {
-      const count = field(item.fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
       host.append(element('span', 'lg-record-pdf-icon', 'PDF'),
-        element('span', 'lg-record-media-label', count == null ? 'Documento' : `${display(count)} anexos`));
+        element('span', 'lg-record-media-label', 'ANEXOS'),
+        element('span', 'lg-record-attachment-count', attachmentCounts.label(item)));
       return host;
     }
     if (media.kind === 'attachments') {
-      const count = field(item.fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
       host.append(element('span', 'lg-record-attachment-icon', '📎'),
-        element('span', 'lg-record-media-label', count ? `${display(count)} anexos` : 'Anexos'));
+        element('span', 'lg-record-media-label', 'ANEXOS'),
+        element('span', 'lg-record-attachment-count', attachmentCounts.label(item)));
       return host;
     }
     const image = element('img', 'lg-record-preview');
@@ -410,7 +431,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         host.classList.add('lg-record-media-loaded');
       }).catch(() => host.classList.add('lg-record-media-unavailable'));
     } else host.classList.add('lg-record-media-unavailable');
-    host.append(image);
+    host.append(image, element('span', 'lg-record-attachment-icon', '📎'),
+      element('span', 'lg-record-media-label', 'ANEXOS'),
+      element('span', 'lg-record-attachment-count', attachmentCounts.label(item)));
     return host;
   }
   function attachmentDescriptors(item, result) {
@@ -450,10 +473,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function openRecordAttachments(item) {
     external(async epoch => {
-      let result;
       let attachments = attachmentEntries(item);
-      if (!attachments.length) result = await request('detail', { id: item.id });
-      if (!attachments.length) attachments = attachmentDescriptors(item, result);
+      if (!attachments.length) attachments = await attachmentCounts.load(item, { force: true });
+      if (attachments == null) throw new Error('Não foi possível consultar os anexos do lançamento');
       const descriptors = [];
       for (const attachment of attachments) {
         const descriptor = await resolveMediaDescriptor(item, attachment, epoch);
@@ -487,9 +509,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const quantity = field(fields, 'QUANTIDADE');
     const unit = field(fields, 'UN', 'UNIDADE');
     const quantityText = quantity == null ? undefined : `${display(quantity)}${unit == null ? '' : ` ${display(unit)}`}`;
-    const attachmentCount = field(fields, 'QUANTIDADE DE ANEXOS', 'QTD ANEXOS', 'ANEXOS');
+    const attachmentCount = knownGalleryAttachmentCount(item);
     const totalValue = field(fields, 'VALOR TOTAL', 'TOTAL') ?? money(item.total);
     const card = element('article', 'lg-card lg-record');
+    card.dataset.itemId = String(item.id);
     const recordPreview = renderRecordMedia(item);
     if (recordPreview) card.classList.add('lg-record--with-media');
     const identity = element('header', 'lg-record-heading');
@@ -874,6 +897,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function destroy() {
     if (destroyed) return;
     autoFilters.destroy();
+    attachmentCounts.destroy();
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion;
     retryIds.clear(); selectedUploads.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });

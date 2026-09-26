@@ -14,7 +14,7 @@ async function setup(t, overrides = {}) {
   ];
   const data = {
     async loadSnapshot(options) { calls.push(["snapshot", options]); return { listName: "LANCAMENTOTAREFAS", rows }; },
-    async listAttachments(id) { calls.push(["listAttachments", id]); return [{ fileName: "tarefa.pdf", mimeType: "application/pdf", size: 512 }]; },
+    async listAttachments(id, options) { assert.deepEqual(options, { refresh: true }); calls.push(["listAttachments", id]); return [{ fileName: "tarefa.pdf", mimeType: "application/pdf", size: 512 }]; },
     async downloadAttachment(id, name) { calls.push(["downloadAttachment", id, name]); return new Blob(["pdf"], { type: "application/pdf" }); },
     ...overrides.data,
   };
@@ -115,6 +115,17 @@ test("detalhes mostram os campos completos em tabela e anexos abrem no visualiza
   assert.equal(opened.length, 1);
   assert.deepEqual(opened[0].map(item => item.fileName), ["tarefa.pdf"]);
   assert.equal((await opened[0][0].source).type, "application/pdf");
+});
+
+test("tarefas mostram a quantidade de anexos abaixo do ícone no trilho esquerdo", async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  await settle();
+  const rail = ctx.root().querySelector('.tg-card[data-item-id="176"] .og-card-attachment-rail');
+  assert.ok(rail);
+  assert.equal(rail.querySelector(".og-card-attachment-icon").textContent, "📎");
+  assert.equal(rail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
+  assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
 });
 
 test("retorno ao menu e fechamento limpam a sessão visual da galeria", async t => {

@@ -67,6 +67,7 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   assert.equal(attachmentButton.closest(".rg-row-file"), attachmentRail);
   assert.equal(attachmentRail.querySelector(".rg-row-file__label").textContent, "ANEXOS");
   assert.equal(attachmentButton.textContent, "📎");
+  assert.equal(attachmentRail.querySelector(".rg-row-file__label").nextElementSibling, attachmentRail.querySelector(".rg-row-file__count"));
   assert.equal(doc.querySelectorAll('[data-registration-row="21"] [data-action="registration-attachments"]').length, 1);
   attachmentButton.click();
   await new Promise(resolve => setImmediate(resolve));

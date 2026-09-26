@@ -1,4 +1,5 @@
 import { bindAutoFilterForm } from './auto-filter-form.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DATE_FIELD = /(data|date|criad|created|modific|modified|prox|agend|in[ií]cio|fim)/i;
@@ -230,6 +231,20 @@ export function createRecurringExpensesGallery({
   content.append(filterDisclosure, notice, listStatus, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const attachmentCounts = createGalleryAttachmentCounts({
+    loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
+    onChange: updateAttachmentCount,
+  });
+
+  function updateAttachmentCount(row) {
+    if (!opened || destroyed) return;
+    const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
+    const count = card?.querySelector('.og-card-attachment-count');
+    const label = attachmentCounts.label(row);
+    if (count) count.textContent = label;
+    const id = text(field(row.fields, ["ID"]) ?? row.id);
+    card?.querySelector('.og-card-attachment-rail')?.setAttribute("aria-label", `Abrir anexos da despesa recorrente ${id}: ${label}`);
+  }
 
   function updateBusy() {
     const busy = opened && (listLoading || attachmentLoading);
@@ -286,7 +301,9 @@ export function createRecurringExpensesGallery({
     const pages = Math.ceil(filteredRows.length / pageSize);
     page = Math.min(page, Math.max(1, pages));
     const start = (page - 1) * pageSize;
-    cards.replaceChildren(...filteredRows.slice(start, start + pageSize).map(renderCard));
+    const visible = filteredRows.slice(start, start + pageSize);
+    cards.replaceChildren(...visible.map(renderCard));
+    void attachmentCounts.request(visible);
     const count = filteredRows.length;
     listStatus.textContent = count
       ? `${count} despesa${count === 1 ? "" : "s"} recorrente${count === 1 ? "" : "s"}`
@@ -337,6 +354,10 @@ export function createRecurringExpensesGallery({
   function renderCard(row) {
     const fields = row.fields || {};
     const id = text(field(fields, ["ID"]) ?? row.id);
+    const hasAttachmentControl = row.hasAttachments !== false;
+    const card = el("article", `og-card re-card${hasAttachmentControl ? " og-card--with-attachments re-card--attachments" : ""}`);
+    card.dataset.itemId = row.id;
+    const main = el("div", "og-card-main");
     const titleText = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO"]) || field(fields, ["EQUIPAMENTO", "PRODUTO"]) || "Despesa recorrente");
     const heading = el("header", "og-card-heading re-card-heading");
     heading.append(el("span", "og-card-id", id), el("h2", "", titleText));
@@ -363,20 +384,20 @@ export function createRecurringExpensesGallery({
     detailsButton.dataset.action = "details";
     detailsButton.addEventListener("click", () => openDetails(row));
     actions.append(detailsButton);
-    if (row.hasAttachments !== false) {
-      const attachmentButton = el("button", "og-button re-attachments", "📎 Anexos");
+    main.append(heading, status, summary);
+    if (meta.childNodes.length) main.append(meta);
+    main.append(actions);
+    if (hasAttachmentControl) {
+      const attachmentButton = el("button", "og-button og-card-attachment-rail");
       attachmentButton.type = "button";
       attachmentButton.dataset.action = "attachments";
-      attachmentButton.setAttribute("aria-label", `Abrir anexos da despesa recorrente ${id}`);
+      attachmentButton.setAttribute("aria-label", `Abrir anexos da despesa recorrente ${id}: ${attachmentCounts.label(row)}`);
+      attachmentButton.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
+        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachmentButton.addEventListener("click", () => openAttachments(row));
-      actions.append(attachmentButton);
+      card.append(attachmentButton);
     }
-
-    const card = el("article", `og-card re-card${row.hasAttachments === false ? "" : " re-card--attachments"}`);
-    card.dataset.itemId = row.id;
-    card.append(heading, status, summary);
-    if (meta.childNodes.length) card.append(meta);
-    card.append(actions);
+    card.append(main);
     return card;
   }
 
@@ -425,8 +446,9 @@ export function createRecurringExpensesGallery({
     setNotice("");
     updateBusy();
     try {
-      const attachments = await data.listAttachments(row.id);
+      const attachments = await attachmentCounts.load(row, { force: true });
       if (!opened || requestSession !== session) return;
+      if (!attachments) throw new Error("A consulta de anexos não está disponível.");
       if (!attachments.length) { setNotice("Este item não possui anexos."); return; }
       const items = attachments.map(attachment => ({
         fileName: attachment.fileName,
@@ -443,6 +465,7 @@ export function createRecurringExpensesGallery({
 
   async function loadSnapshot() {
     if (!opened || listLoading) return;
+    attachmentCounts.reset();
     const requestSession = session;
     controller?.abort();
     controller = new AbortController();
@@ -523,6 +546,7 @@ export function createRecurringExpensesGallery({
     autoFilters.destroy();
     close();
     destroyed = true;
+    attachmentCounts.destroy();
     root.remove();
   }
 

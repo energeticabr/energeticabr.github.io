@@ -1,4 +1,5 @@
 import { bindAutoFilterForm } from './auto-filter-form.js';
+import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS = "PAGAMENTO PREVISTO";
@@ -256,6 +257,20 @@ export function createPaymentProgrammingGallery({
   content.append(filterDisclosure, notice, listStatus, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const attachmentCounts = createGalleryAttachmentCounts({
+    loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
+    onChange: updateAttachmentCount,
+  });
+
+  function updateAttachmentCount(row) {
+    if (!opened || destroyed) return;
+    const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
+    const count = card?.querySelector('.og-card-attachment-count');
+    const label = attachmentCounts.label(row);
+    if (count) count.textContent = label;
+    const id = text(field(row.fields, ["ID"]) ?? row.id);
+    card?.querySelector('.og-card-attachment-rail')?.setAttribute('aria-label', `Abrir anexos do pagamento ${id}: ${label}`);
+  }
 
   function updateBusy() {
     const busy = opened && (listLoading || attachmentLoading);
@@ -311,7 +326,9 @@ export function createPaymentProgrammingGallery({
     const pages = Math.ceil(filteredRows.length / pageSize);
     page = Math.min(page, Math.max(1, pages));
     const start = (page - 1) * pageSize;
-    cards.replaceChildren(...filteredRows.slice(start, start + pageSize).map(renderCard));
+    const visible = filteredRows.slice(start, start + pageSize);
+    cards.replaceChildren(...visible.map(renderCard));
+    void attachmentCounts.request(visible);
     listStatus.textContent = filteredRows.length ? `${filteredRows.length} pagamento(s) previsto(s)` : "Nenhum pagamento encontrado para estes filtros.";
     pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
     updateBusy();
@@ -379,8 +396,9 @@ export function createPaymentProgrammingGallery({
       const attachmentRail = el("button", "og-button og-card-attachment-rail");
       attachmentRail.type = "button";
       attachmentRail.dataset.action = "attachments";
-      attachmentRail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}`);
-      attachmentRail.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"));
+      attachmentRail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${attachmentCounts.label(row)}`);
+      attachmentRail.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
+        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachmentRail.addEventListener("click", () => openAttachments(row));
       card.append(attachmentRail);
     }
@@ -431,8 +449,9 @@ export function createPaymentProgrammingGallery({
     setNotice("");
     updateBusy();
     try {
-      const attachments = await data.listAttachments(row.id);
+      const attachments = await attachmentCounts.load(row, { force: true });
       if (!opened || destroyed || current !== session) return;
+      if (!attachments) throw new Error("A consulta de anexos não está disponível.");
       if (!attachments.length) { setNotice(`O pagamento previsto #${row.id} não possui anexos.`); return; }
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
       await openMediaCollection(attachments.map(item => ({ fileName: item.fileName, source: data.downloadAttachment(row.id, item.fileName) })));
@@ -445,6 +464,7 @@ export function createPaymentProgrammingGallery({
 
   async function loadSnapshot() {
     if (!opened || destroyed) return false;
+    attachmentCounts.reset();
     const current = session;
     controller?.abort();
     controller = new AbortController();
@@ -522,6 +542,7 @@ export function createPaymentProgrammingGallery({
     autoFilters.destroy();
     close();
     destroyed = true;
+    attachmentCounts.destroy();
     root.remove();
   }
 
