@@ -45,6 +45,7 @@ test("orders gallery opens read-only, sorts by descending ID and offers Screen10
   const ctx = await setup(t);
   await ctx.gallery.open();
   assert.equal(ctx.root().getAttribute("role"), "dialog");
+  assert.equal(ctx.root().querySelector("details.og-filters")?.open, false, "filtros de pedidos começam recolhidos");
   assert.match(ctx.root().querySelector("h1").textContent, /Galeria Pedidos/i);
   assert.deepEqual([...ctx.root().querySelectorAll(".og-card")].map(card => card.dataset.itemId), ["320", "319", "318"]);
   for (const name of ["search", "branch", "supplier", "status", "total", "id", "paymentForm", "invoice", "sort", "pageSize"]) {

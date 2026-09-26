@@ -51,6 +51,10 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   await gallery.open();
 
   assert.equal(doc.querySelector('[role="dialog"] h1').textContent, "GALERIA DOCUMENTOS");
+  const filterDisclosure = doc.querySelector("details.rg-filters");
+  assert.ok(filterDisclosure, "os filtros dos documentos devem ficar em um painel suspenso");
+  assert.equal(filterDisclosure.open, false, "os filtros começam recolhidos");
+  assert.equal(filterDisclosure.querySelector(".rg-toolbar"), doc.querySelector(".rg-toolbar"));
   assert.deepEqual([...doc.querySelectorAll("[data-filter-field]")].map(control => control.dataset.filterField), [
     "TIPOHOMOLOGACAO", "FILIAL", "IMOVEL", "ETAPA", "ID", "TIPODOCUMENTO", "PESSOARELACIONADA", "STATUS",
   ]);
@@ -67,6 +71,7 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   assert.equal(attachmentButton.closest(".rg-row-file"), attachmentRail);
   assert.equal(attachmentRail.querySelector(".rg-row-file__label").textContent, "ANEXOS");
   assert.equal(attachmentButton.textContent, "📎");
+  assert.equal(attachmentButton.classList.contains("rg-row-attachment"), true);
   assert.equal(attachmentRail.querySelector(".rg-row-file__label").nextElementSibling, attachmentRail.querySelector(".rg-row-file__count"));
   assert.equal(doc.querySelectorAll('[data-registration-row="21"] [data-action="registration-attachments"]').length, 1);
   attachmentButton.click();
@@ -79,6 +84,10 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   doc.querySelector('[data-registration-row="20"] [data-action="registration-attachments"]').click();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(doc.querySelector(".rg-feedback").textContent, /documento 20 não possui anexos/i);
+  const css = readFileSync(new URL("../src/ui/registration-gallery.css", import.meta.url), "utf8");
+  assert.match(css, /\.rg-row-layout\s*\{[^}]*align-items:\s*stretch/s);
+  assert.match(css, /\.rg-row-file\s*\{[^}]*background:\s*#e6f0f7/s);
+  assert.match(css, /\.rg-row-attachment\s*\{[^}]*border:\s*0/s);
   gallery.destroy();
   dom.window.close();
 });
@@ -183,6 +192,7 @@ test("galeria exibe registros, filtra pelo nome e permite voltar", async () => {
   });
   await gallery.open();
   assert.equal(doc.querySelector('[role="dialog"] h1').textContent, "GALERIA FAMÍLIA");
+  assert.equal(doc.querySelector("details.rg-filters")?.open, false, "filtros de cadastro também começam recolhidos");
   assert.equal(doc.querySelector('[role="dialog"] select').value, "ATIVO");
   assert.equal(doc.querySelectorAll("[data-registration-row]").length, 1);
   const status = doc.querySelector('[role="dialog"] select');
@@ -215,7 +225,7 @@ test("falha ao atualizar mantém aviso de erro e reinicia paginação", async ()
   next.click();
   assert.match(doc.querySelector(".rg-pagination span").textContent, /Página 2/);
   fails = true;
-  doc.querySelector(".rg-toolbar > button").click();
+  doc.querySelector(".rg-toolbar button").click();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(doc.querySelector(".rg-feedback").textContent, /Não foi possível carregar/);
   assert.match(doc.querySelector(".rg-pagination span").textContent, /Página 1 de 1/);
@@ -237,6 +247,13 @@ test("galeria mantém Tab dentro do diálogo e cabeçalho visível na rolagem", 
   await gallery.open();
   const dialog = doc.querySelector('.rg-overlay');
   const first = dialog.querySelector('button');
+  const filterSummary = dialog.querySelector('.rg-filter-toggle');
+  const next = dialog.querySelector('.rg-pagination button:last-child');
+  first.focus();
+  first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  assert.equal(doc.activeElement, filterSummary, 'o painel de filtros deve continuar acessível por teclado');
+  filterSummary.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  assert.equal(doc.activeElement, next, 'controles escondidos dentro do painel recolhido não entram na navegação por Tab');
   const last = dialog.querySelector('.rg-pagination button:last-child');
   last.focus();
   last.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));

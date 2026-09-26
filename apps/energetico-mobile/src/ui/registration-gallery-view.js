@@ -88,6 +88,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     home.addEventListener("click", async () => { hide(); await onHome(); });
     header.append(home);
   }
+  const filterDisclosure = el("details", "rg-filters");
+  filterDisclosure.append(el("summary", "rg-filter-toggle", "Filtros"));
   const toolbar = el("div", "rg-toolbar");
   const filterFields = model.filterFields || ["STATUS"];
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");
@@ -111,6 +113,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   refresh.type = "button";
   toolbar.prepend(searchLabel);
   toolbar.append(refresh);
+  filterDisclosure.append(toolbar);
   const feedback = el("p", "rg-feedback");
   feedback.setAttribute("role", "status");
   const list = el("div", "rg-list");
@@ -120,7 +123,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const pageText = el("span", "", "Página 1");
   const next = el("button", "rg-button", "Próxima"); next.type = "button";
   pagination.append(previous, pageText, next);
-  root.append(header, toolbar, feedback, list, pagination);
+  root.append(header, filterDisclosure, feedback, list, pagination);
   doc.body.append(root);
 
   let rows = [];
@@ -426,7 +429,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   root.addEventListener("keydown", event => {
     if (event.key === "Escape") { hide(); return; }
     if (event.key !== "Tab" || root.hidden) return;
-    const focusable = [...root.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)")];
+    const focusable = [...root.querySelectorAll("summary, button:not(:disabled), input:not(:disabled), select:not(:disabled)")]
+      .filter(node => !node.disabled && !node.closest("[hidden]")
+        && (node.tagName === "SUMMARY" || !node.closest("details:not([open])")));
     if (!focusable.length) { event.preventDefault(); root.focus(); return; }
     const current = focusable.indexOf(doc.activeElement);
     const next = event.shiftKey

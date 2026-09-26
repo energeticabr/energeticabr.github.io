@@ -54,6 +54,7 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
   await ctx.gallery.open();
 
   assert.equal(ctx.root().getAttribute("role"), "dialog");
+  assert.equal(ctx.root().querySelector("details.pg-filters")?.open, false, "filtros de pagamentos começam recolhidos");
   assert.match(ctx.root().querySelector("h1").textContent, /GALERIA PROGRAMAÇÃO DE PAGAMENTOS/i);
   for (const name of ["search", "recurrenceId", "type", "product", "supplier", "status", "branch", "property"]) {
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G28 filter ${name}`);

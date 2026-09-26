@@ -63,6 +63,7 @@ test("G19 mostra campos de despesas, recorrência em português, moeda e datas b
   await ctx.gallery.open();
 
   assert.equal(ctx.root().getAttribute("role"), "dialog");
+  assert.equal(ctx.root().querySelector("details.re-filters")?.open, false, "filtros de despesas recorrentes começam recolhidos");
   assert.match(ctx.root().querySelector("h1").textContent, /GALERIA DESPESAS RECORRENTES/i);
   for (const name of ["search", "id", "property", "branch", "supplier", "product", "responsible", "paymentMethod", "status", "recurrence"]) {
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G19 filter ${name}`);

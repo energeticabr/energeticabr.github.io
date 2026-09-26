@@ -40,6 +40,7 @@ test("Galeria G7 exibe métricas e filtros reais e formata datas em dd/mm/aaaa",
   const ctx = await setup(t);
   await ctx.gallery.open();
   assert.equal(ctx.root().getAttribute("role"), "dialog");
+  assert.equal(ctx.root().querySelector("details.og-filters")?.open, false, "filtros de tarefas começam recolhidos");
   assert.match(ctx.root().querySelector("h1").textContent, /GALERIA TAREFAS/i);
   for (const name of ["search", "status", "priority", "charge", "branch", "association", "identificationDate"]) {
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G7 filter ${name}`);

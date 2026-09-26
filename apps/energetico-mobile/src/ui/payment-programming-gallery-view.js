@@ -199,7 +199,6 @@ export function createPaymentProgrammingGallery({
 
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters pg-filters");
-  filterDisclosure.open = true;
   filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros da G28"));
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros da Galeria de Programação de Pagamentos G28");
