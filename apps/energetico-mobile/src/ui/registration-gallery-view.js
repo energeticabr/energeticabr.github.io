@@ -158,6 +158,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function attachmentCountLabel(row) {
     const known = knownAttachmentCount(row);
     if (known != null) return `${known} ${known === 1 ? "anexo" : "anexos"}`;
+    if (typeof data.listAttachments !== "function") return "Quantidade indisponível";
     const current = attachmentCounts.get(String(row.id));
     if (current?.state === "ready") return `${current.count} ${current.count === 1 ? "anexo" : "anexos"}`;
     if (current?.state === "error") return "Quantidade indisponível";
@@ -218,7 +219,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const status = fieldValue(row.fields, "STATUS", model);
     if (status) {
       const normalizedStatus = normalizedFieldName(status);
-      const statusClass = normalizedStatus.includes("submetido")
+      const statusClass = normalizedStatus.includes("submetido") && !normalizedStatus.includes("naosubmetido")
         ? "rg-document-status--submitted"
         : normalizedStatus.includes("pendente") ? "rg-document-status--pending" : "";
       const pair = appendDocumentDetail(details, "STATUS", "STATUS", status, "rg-document-status-cell");

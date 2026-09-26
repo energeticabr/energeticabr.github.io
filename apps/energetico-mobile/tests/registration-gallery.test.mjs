@@ -108,6 +108,7 @@ test("Galeria de documentos organiza os dados em tabela, destaca status, agrupa 
       },
     },
     { id: "291", hasAttachments: false, fields: { PESSOARELACIONADA: "PESSOA PENDENTE", STATUS: "PENDENTE", FILIAL: "001 - CENTRAL" } },
+    { id: "290", hasAttachments: false, fields: { PESSOARELACIONADA: "PESSOA NÃO SUBMETIDA", STATUS: "NÃO SUBMETIDO", FILIAL: "001 - CENTRAL" } },
   ];
   const calls = [];
   const gallery = createRegistrationGallery({
@@ -130,6 +131,9 @@ test("Galeria de documentos organiza os dados em tabela, destaca status, agrupa 
   assert.ok(submitted.querySelector(".rg-document-status--submitted"));
   assert.equal(pending.querySelector(".rg-document-status").textContent, "PENDENTE");
   assert.ok(pending.querySelector(".rg-document-status--pending"));
+  const notSubmitted = doc.querySelector('[data-registration-row="290"] .rg-document-status');
+  assert.equal(notSubmitted.textContent, "NÃO SUBMETIDO");
+  assert.equal(notSubmitted.classList.contains("rg-document-status--submitted"), false);
   assert.equal(submitted.querySelector('[data-field="FILIAL"] dd').textContent, "004 - EDIFÍCIO XAVANTE (TODOS)");
   assert.equal(submitted.querySelector('[data-field="IMOVEL"]'), null);
   assert.equal(submitted.querySelector('[data-field="Criado por"] dd').textContent, "Bernardo Notini");
@@ -145,6 +149,22 @@ test("Galeria de documentos organiza os dados em tabela, destaca status, agrupa 
   assert.equal(submitted.querySelector('.rg-row-file__count').textContent, "2 anexos");
   assert.deepEqual(calls, ["292"]);
 
+  gallery.destroy();
+  dom.window.close();
+});
+
+test("galeria informa quantidade indisponível quando o serviço de anexos não existe", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const doc = dom.window.document;
+  const gallery = createRegistrationGallery({
+    document: doc,
+    kind: "documents",
+    data: { async loadSnapshot() { return { rows: [{ id: "293", hasAttachments: true, fields: { TIPODOCUMENTO: "CONTRATO" } }] }; } },
+  });
+
+  await gallery.open();
+
+  assert.equal(doc.querySelector('[data-registration-row="293"] .rg-row-file__count').textContent, "Quantidade indisponível");
   gallery.destroy();
   dom.window.close();
 });

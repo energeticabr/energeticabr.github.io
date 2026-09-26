@@ -89,7 +89,8 @@ function normalizedFields(item) {
       const identity = target === "Criado por" ? item?.createdBy : item?.lastModifiedBy;
       const graphName = identityDisplayName(identity);
       if (isUsefulPersonName(graphName)) value = graphName;
-      else if ((value != null && !isUsefulPersonName(value)) || identity) value = "Usuário não identificado";
+      else if (value != null && !isUsefulPersonName(value)) value = "Usuário não identificado";
+      else if (value == null && identity) value = "Usuário não identificado";
     }
     if (value == null && target === "Criado") value = item?.createdDateTime;
     if (value == null && target === "Modificado") value = item?.lastModifiedDateTime;

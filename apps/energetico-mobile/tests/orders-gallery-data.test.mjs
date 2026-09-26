@@ -179,6 +179,11 @@ test("usa o autor humano do item antes do campo SharePoint e não exibe a conta 
           createdBy: { application: { displayName: "SharePoint App" } },
           fields: { "Criado por": 1073741822 },
         },
+        {
+          id: "403",
+          createdBy: { user: { id: "user-403" } },
+          fields: { "Criado por": "Rafael Gontijo" },
+        },
       ], hasMore: false };
     },
   });
@@ -188,6 +193,7 @@ test("usa o autor humano do item antes do campo SharePoint e não exibe a conta 
   assert.equal(snapshot.rows.find(row => row.id === "401").fields["Criado por"], "Bernardo Notini");
   assert.equal(snapshot.rows.find(row => row.id === "401").fields["Modificado por"], "Ana Souza");
   assert.equal(snapshot.rows.find(row => row.id === "402").fields["Criado por"], "Usuário não identificado");
+  assert.equal(snapshot.rows.find(row => row.id === "403").fields["Criado por"], "Rafael Gontijo");
 });
 
 test("usa Graph Sites.Read.All para listar itens pela origem SharePoint configurada", async () => {
