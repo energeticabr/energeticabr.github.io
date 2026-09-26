@@ -167,6 +167,63 @@ test("renderiza a conferência da auditoria de pagamento com IDs e totais", () =
   assert.match(markup, /R\$ 466,00/);
 });
 
+test("resume o vínculo de pagamento na confirmação final do lançamento", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: {
+      id: "launch",
+      title: "EFETUAR LANÇAMENTO",
+      launches: {
+        id: "batch-1",
+        currency: "BRL",
+        count: 2,
+        total: "1005.00",
+        totalDisplay: "R$ 1.005,00",
+        lines: [
+          { index: 1, product: "SERVIÇO A", unit: "DIÁRIA", quantity: "1", unitPrice: "905", unitPriceDisplay: "R$ 905,00", freight: "0", freightDisplay: "R$ 0,00", total: "905", totalDisplay: "R$ 905,00" },
+          { index: 2, product: "SERVIÇO B", unit: "DIÁRIA", quantity: "1", unitPrice: "100", unitPriceDisplay: "R$ 100,00", freight: "0", freightDisplay: "R$ 0,00", total: "100", totalDisplay: "R$ 100,00" },
+        ],
+      },
+    },
+    messages: [{
+      id: "launch-payment-link",
+      role: "assistant",
+      type: "poll",
+      question: "🏢 FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO PARA O FORNECEDOR. IDS: 2128, 2118, 2108, 2098, 2088. SOMA VLORDIARIO: R$ 905,00. DESEJA SUBMETER O ID DO LANÇAMENTO 3450 COMO IDPGTO E ATUALIZAR O STATUS PARA PAGO?",
+      options: [
+        { id: "yes", label: "✅ SIM", reply: "yes" },
+        { id: "no", label: "❌ NÃO", reply: "no" },
+      ],
+    }],
+  }));
+
+  assert.match(markup, /chat-launch-payment-summary/);
+  assert.match(markup, /2128, 2118, 2108, 2098, 2088/);
+  assert.match(markup, /R\$ 1\.005,00/);
+  assert.match(markup, /R\$ 905,00/);
+  assert.match(markup, /R\$ 100,00/);
+  assert.match(markup, /3450/);
+  assert.match(markup, /data-reply-id="yes"/);
+  assert.match(markup, /data-reply-id="no"/);
+  assert.ok(markup.indexOf("chat-launch-payment-summary") < markup.indexOf('data-reply-id="yes"'));
+  assert.doesNotMatch(markup, /SOMA VLORDIARIO: R\$ 905,00/);
+});
+
+test("não altera perguntas de vínculo que não pertencem ao fluxo de lançamento", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    messages: [{
+      id: "not-a-launch-payment-link",
+      role: "assistant",
+      type: "poll",
+      question: "FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO. IDS: 12. SOMA VLORDIARIO: R$ 10,00. DESEJA SUBMETER O ID DO LANÇAMENTO 34 COMO IDPGTO?",
+      options: [{ id: "yes", label: "SIM", reply: "yes" }],
+    }],
+  }));
+
+  assert.doesNotMatch(markup, /chat-launch-payment-summary/);
+  assert.match(markup, /FORAM ENCONTRADOS DESCRITIVOS DE/);
+});
+
 test("mantém o FINALIZAR fornecido pelo servidor antes dos produtos", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },

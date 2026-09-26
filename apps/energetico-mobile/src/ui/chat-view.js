@@ -781,6 +781,65 @@ function paymentAuditTableMarkup(table) {
   return `<div class="chat-payment-audit-table" role="table" aria-label="Comparação dos valores da auditoria de pagamento"><strong>${formatChatText(title)}</strong><div class="chat-payment-audit-table__row chat-payment-audit-table__row--header" role="row">${headers.map(header => `<span role="columnheader">${escapeHtml(header)}</span>`).join("")}</div>${normalizedRows.map(row => `<div class="chat-payment-audit-table__row" role="row">${row.map(value => `<span role="cell">${escapeHtml(value)}</span>`).join("")}</div>`).join("")}<div class="chat-payment-audit-table__row chat-payment-audit-table__row--total" role="row"><strong role="cell">TOTAL</strong><strong role="cell">${escapeHtml(totalDaily)}</strong><strong role="cell">${escapeHtml(totalLaunch)}</strong></div></div>`;
 }
 
+function paymentAmountCents(value) {
+  const raw = String(value ?? "").trim().replace(/R\$\s*/gi, "").replace(/\s/g, "");
+  if (!raw) return null;
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const match = normalized.match(/^(-?)(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+  const fraction = match[3] || "";
+  let cents = BigInt(match[2]) * 100n + BigInt(fraction.padEnd(2, "0").slice(0, 2) || "0");
+  if (fraction[2] && fraction[2] >= "5") cents += 1n;
+  return match[1] ? -cents : cents;
+}
+
+function paymentAmountDisplay(cents) {
+  const negative = cents < 0n;
+  const absolute = negative ? -cents : cents;
+  const integer = String(absolute / 100n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const fraction = String(absolute % 100n).padStart(2, "0");
+  return `R$ ${negative ? "-" : ""}${integer},${fraction}`;
+}
+
+function launchPresencePaymentSummary(message, activeFlow) {
+  if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "launch" || message?.type !== "poll") return null;
+  const question = normalizedDateText(message.question || message.prompt || message.text).replace(/\s+/g, " ");
+  if (!/foram encontrados descri\w* de presenca.*status pendente pgto/.test(question)) return null;
+  const idsMatch = question.match(/\bids?\s*:\s*([\d,\s]+)(?=\.?\s*soma\s+vlordiario\b)/);
+  const dailyMatch = question.match(/soma\s+vlordiario\s*:\s*(r\$\s*[\d.]+(?:,\d{1,2})?)/);
+  const paymentIdMatch = question.match(/submeter\s+o\s+id\s+do\s+lancamento\s+(\d+)\s+como\s+idpgto\b/);
+  const presenceIds = idsMatch?.[1]?.split(",").map(id => id.trim()).filter(Boolean) || [];
+  const dailyCents = paymentAmountCents(dailyMatch?.[1]);
+  const launches = activeFlow?.launches;
+  const lineTotals = Array.isArray(launches?.lines) ? launches.lines.map(line => paymentAmountCents(line?.total)) : [];
+  const launchCents = paymentAmountCents(launches?.totalDisplay)
+    ?? paymentAmountCents(launches?.total)
+    ?? (lineTotals.length && lineTotals.every(total => total !== null)
+      ? lineTotals.reduce((total, line) => total + line, 0n)
+      : null);
+  if (!presenceIds.length || dailyCents === null || launchCents === null || !paymentIdMatch) return null;
+  return {
+    presenceIds,
+    launchTotal: paymentAmountDisplay(launchCents),
+    dailyTotal: paymentAmountDisplay(dailyCents),
+    difference: paymentAmountDisplay(launchCents - dailyCents),
+    comparison: launchCents === dailyCents ? "Valores iguais" : launchCents > dailyCents ? "acima de VLRDIARIO" : "abaixo de VLRDIARIO",
+    paymentId: paymentIdMatch[1],
+  };
+}
+
+function launchPresencePaymentSummaryMarkup(summary) {
+  if (!summary) return "";
+  const rows = [
+    ["IDs de presença", summary.presenceIds.join(", ")],
+    ["Total do lançamento", summary.launchTotal],
+    ["Soma de VLRDIARIO", summary.dailyTotal],
+    ["Diferença (lançamento − VLRDIARIO)", `${summary.difference} (${summary.comparison})`],
+    ["IDPGTO a submeter", summary.paymentId],
+  ];
+  return `<div class="chat-launch-payment-summary" role="table" aria-label="Resumo do vínculo dos pagamentos de presença"><strong>📊 RESUMO PARA CONFIRMAÇÃO</strong>${rows.map(([label, value]) => `<div class="chat-launch-payment-summary__row" role="row"><span role="rowheader">${escapeHtml(label)}</span><b role="cell">${escapeHtml(value)}</b></div>`).join("")}</div>`;
+}
+
 function presenceDateSummaryMarkup(summary) {
   if (!summary || typeof summary !== "object") return "";
   const rawDate = String(summary.date || "").trim();
@@ -921,6 +980,10 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   }).join("");
   const rawChangeTable = message.change_table || message.changeTable;
   const questionText = String(message.question || message.prompt || "");
+  const launchPaymentSummary = launchPresencePaymentSummary(message, activeFlow);
+  const displayQuestionText = launchPaymentSummary
+    ? "Há pagamentos de presença pendentes para este fornecedor. Deseja submeter este lançamento como IDPGTO e atualizar o status para pago?"
+    : questionText;
   const changeTable = rawChangeTable
     && Array.isArray(rawChangeTable.rows)
     && rawChangeTable.rows.length
@@ -990,10 +1053,11 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    <p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
+    <p>${formatQuestionText(launchPaymentSummary ? displayQuestionText : presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
+    ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
