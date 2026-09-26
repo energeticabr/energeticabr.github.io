@@ -64,6 +64,7 @@ export function createAttachmentPreview({
   status.setAttribute("role", "status");
   const footer = element("footer", "attachment-preview-footer");
   const backButton = element("button", "attachment-preview-back", "Voltar ao chat");
+  const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 ADICIONAR À BARRA");
   const exportButton = element("button", "attachment-preview-export");
   const forwardIcon = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
   forwardIcon.setAttribute("viewBox", "0 0 24 24");
@@ -78,7 +79,9 @@ export function createAttachmentPreview({
   forwardGlyph.setAttribute("d", "M12 15V2m0 0L7.5 6.5M12 2l4.5 4.5M5 10H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1");
   forwardIcon.append(forwardGlyph);
   exportButton.append(forwardIcon, element("span", "", "ENCAMINHAR"));
-  backButton.type = exportButton.type = "button";
+  backButton.type = addToTrayButton.type = exportButton.type = "button";
+  addToTrayButton.dataset.previewAction = "add-to-tray";
+  addToTrayButton.hidden = true;
   exportButton.dataset.previewAction = "export";
   const collectionNav = element("div", "attachment-preview-collection-nav");
   const previousButton = element("button", "attachment-preview-collection-previous", "‹ Anterior");
@@ -89,13 +92,14 @@ export function createAttachmentPreview({
   collectionStatus.dataset.previewAction = "collection-status";
   nextButton.dataset.previewAction = "next";
   collectionNav.append(previousButton, collectionStatus, nextButton);
-  footer.append(collectionNav, backButton, exportButton);
+  footer.append(collectionNav, backButton, addToTrayButton, exportButton);
   dialog.append(header, content, status, footer);
   documentRef.body.append(dialog);
   let active = null;
   let returnFocus = null;
   let destroyed = false;
   let collection = null;
+  let addToTrayHandler = null;
 
   function updateCollectionNavigation() {
     const hasCollection = Boolean(collection?.items?.length);
@@ -117,6 +121,8 @@ export function createAttachmentPreview({
     previous.urls.forEach(url => urlApi.revokeObjectURL(url));
     previous.urls.clear();
     content.replaceChildren();
+    addToTrayButton.hidden = true;
+    addToTrayButton.disabled = true;
     exportButton.disabled = true;
   }
 
@@ -129,6 +135,7 @@ export function createAttachmentPreview({
   function close() {
     release();
     collection = null;
+    addToTrayHandler = null;
     updateCollectionNavigation();
     if (dialog.open) {
       if (typeof dialog.close === "function") dialog.close();
@@ -184,6 +191,9 @@ export function createAttachmentPreview({
       exportButton.disabled = typeof exportMedia !== "function";
       const kind = previewKind(blob, session.fileName);
       session.kind = kind;
+      const canAddToTray = typeof addToTrayHandler === "function";
+      addToTrayButton.hidden = !canAddToTray;
+      addToTrayButton.disabled = !canAddToTray;
       if (kind === "image") {
         const img = element("img", "attachment-preview-image");
         let imageBaseWidth = 0;
@@ -303,17 +313,19 @@ export function createAttachmentPreview({
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo") {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray } = {}) {
     collection = null;
+    addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
     return openOne(blobOrPromise, fileName);
   }
 
-  async function openCollection(items) {
+  async function openCollection(items, { onAddToTray } = {}) {
     const normalized = (Array.isArray(items) ? items : [])
       .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo") }))
       .filter(item => item.source != null);
     if (!normalized.length) throw new Error("Nenhum anexo disponível.");
+    addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     collection = { items: normalized, index: 0 };
     updateCollectionNavigation();
     return openOne(normalized[0].source, normalized[0].fileName);
@@ -353,6 +365,28 @@ export function createAttachmentPreview({
       if (active === session && error?.name !== "AbortError") status.textContent = "Não foi possível abrir ou salvar. Tente novamente.";
     } finally {
       if (active === session) exportButton.disabled = false;
+    }
+  });
+  addToTrayButton.addEventListener("click", async () => {
+    const session = active;
+    const addToTray = addToTrayHandler;
+    if (!session?.blob || typeof addToTray !== "function") return;
+    addToTrayButton.disabled = true;
+    status.textContent = "Adicionando anexo à barra de anexos…";
+    try {
+      const added = await addToTray({ blob: session.blob, fileName: session.fileName });
+      if (active !== session) return;
+      if (added === false) {
+        status.textContent = "Não foi possível adicionar o anexo à barra de anexos. Tente novamente.";
+        addToTrayButton.disabled = false;
+        return;
+      }
+      close();
+    } catch {
+      if (active === session) {
+        status.textContent = "Não foi possível adicionar o anexo à barra de anexos. Tente novamente.";
+        addToTrayButton.disabled = false;
+      }
     }
   });
 

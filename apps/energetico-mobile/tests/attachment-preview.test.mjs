@@ -238,6 +238,54 @@ test("PDF mostra páginas e tamanho no rodapé, sem a mensagem de instrução", 
   assert.equal(forwardButton.querySelector('svg[aria-hidden="true"]')?.getAttribute("viewBox"), "0 0 24 24");
 });
 
+test("PDF da galeria pode ser adicionado à barra de anexos sem encaminhar o arquivo", async t => {
+  const additions = [];
+  const { preview, documentRef } = setup(t, {
+    loadPdfPreview: async () => ({ createPdfPreview: () => ({
+      ready: Promise.resolve(),
+      getSummary: () => "1 página • 1 KB",
+      destroy() {},
+    }) }),
+  });
+  const pdf = new Blob(["%PDF-1.7"], { type: "application/pdf" });
+  const dialog = documentRef.querySelector("dialog");
+
+  await preview.openCollection([{ source: pdf, fileName: "comprovante.pdf" }]);
+  const addButton = dialog.querySelector('[data-preview-action="add-to-tray"]');
+  assert.equal(addButton.hidden, true, "a ação não aparece fora da galeria autorizada");
+
+  await preview.openCollection([{ source: pdf, fileName: "comprovante.pdf" }], {
+    onAddToTray: async item => { additions.push(item); return true; },
+  });
+
+  assert.equal(addButton.hidden, false);
+  assert.equal(addButton.textContent.trim(), "📎 ADICIONAR À BARRA");
+  const backButton = dialog.querySelector(".attachment-preview-back");
+  const forwardButton = dialog.querySelector(".attachment-preview-export");
+  assert.ok(backButton.compareDocumentPosition(addButton) & documentRef.defaultView.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(addButton.compareDocumentPosition(forwardButton) & documentRef.defaultView.Node.DOCUMENT_POSITION_FOLLOWING);
+
+  addButton.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(additions, [{ blob: pdf, fileName: "comprovante.pdf" }]);
+  assert.equal(dialog.open, false, "depois de adicionar, o usuário retorna ao chat");
+});
+
+test("galeria permite adicionar qualquer tipo de anexo à barra", async t => {
+  let added;
+  const { preview, documentRef } = setup(t);
+  const image = new Blob(["imagem"], { type: "image/jpeg" });
+  await preview.openCollection([{ source: image, fileName: "foto.jpg" }], {
+    onAddToTray: item => { added = item; return true; },
+  });
+  const button = documentRef.querySelector('[data-preview-action="add-to-tray"]');
+  assert.equal(button.hidden, false);
+  button.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(added, { blob: image, fileName: "foto.jpg" });
+  assert.equal(documentRef.querySelector("dialog").open, false);
+});
+
 test("trocar PDF cancela trabalho anterior e ignora erro tardio", async t => {
   let rejectRender;
   let disposed = 0;
