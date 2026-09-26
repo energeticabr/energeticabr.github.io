@@ -107,11 +107,12 @@ test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo"
   let callbacks;
   let previewOptions;
   let uploadedFile;
+  let galleryCloseCount = 0;
   const h = makeHarness({
     registrationGalleryDataFactory: async ({ kind }) => ({ kind, loadSnapshot: async () => ({ rows: [] }) }),
     registrationGalleryFactory: async options => {
       callbacks = options;
-      return { open() {}, destroy() {} };
+      return { open() {}, close() { galleryCloseCount += 1; }, destroy() {} };
     },
   });
   h.native.previewMediaCollection = async (items, options) => { previewOptions = options; };
@@ -138,6 +139,7 @@ test("PDF da galeria de documentos pode ser adicionado à barra como novo anexo"
   assert.equal(uploadedFile.name, originalName);
   assert.equal(uploadedFile.type, "application/pdf");
   assert.equal(await uploadedFile.text(), "%PDF-1.7");
+  assert.equal(galleryCloseCount, 1, "a galeria deve fechar para revelar o menu inicial após adicionar o PDF");
   assert.deepEqual(h.chatCalls.slice(before), [
     ["text", { text: "", replyId: "portal_confirm_main_menu" }],
     ["file", originalName],

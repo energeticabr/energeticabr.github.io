@@ -3116,6 +3116,17 @@ export function createAppController({
     registrationGalleryOpenings.clear();
   }
 
+  function closeGalleryOverlays() {
+    for (const gallery of [
+      launchGallery,
+      ordersGallery,
+      tasksGallery,
+      paymentProgrammingGallery,
+      recurringExpensesGallery,
+      ...registrationGalleries.values(),
+    ]) gallery?.close?.();
+  }
+
   function galleryAddToTray(assertSession) {
     return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
@@ -3145,6 +3156,7 @@ export function createAppController({
       const returnedToMenu = await sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
       if (!returnedToMenu) return false;
       assertSession();
+      closeGalleryOverlays();
       return queueSelectedFiles(() => files);
     };
   }
