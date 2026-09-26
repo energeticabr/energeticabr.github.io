@@ -174,7 +174,6 @@ export function createRecurringExpensesGallery({
 
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters re-filters");
-  filterDisclosure.open = true;
   filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros da G19"));
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros da Galeria de Despesas Recorrentes G19");
