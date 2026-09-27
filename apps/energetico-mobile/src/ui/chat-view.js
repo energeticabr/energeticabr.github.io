@@ -549,7 +549,7 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "" } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
@@ -563,14 +563,18 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
     : option?.tone === "finish" ? " chat-choice-button--finish" : "";
   const galleryClass = galleryButton ? " chat-choice-button--gallery" : "";
   const launchMenuClass = launchMenuButton ? " chat-choice-button--launch-menu-primary" : "";
+  const suppliesClass = suppliesButton ? " chat-choice-button--supplies" : "";
   const galleryAttribute = galleryButton ? " data-gallery-button" : "";
+  const content = displayIcon
+    ? `<span class="chat-supplies-button-icon" aria-hidden="true">${escapeHtml(displayIcon)}</span><span class="chat-supplies-button-text">${escapeHtml(displayLabel || label)}</span>`
+    : displayLabel ? escapeHtml(displayLabel) : formatChatText(label);
   if (replyId.trim().toLowerCase() === "action_rhid_attendance_report") {
     return `<button class="chat-choice-button" type="button" data-action="open-rhid-attendance-report" data-reply-id="${escapeHtml(replyId)}" aria-label="Abrir relatório de presenças RHID"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
   if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
     return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
-  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}${suppliesClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${content}</button>`;
 }
 
 function compressionPreviewData(message) {
@@ -741,7 +745,43 @@ function isWorksiteVisitOption(option) {
 }
 
 function isLaunchFlowOption(option) {
-  return draftReplyId(option).trim().toLocaleLowerCase("pt-BR") === "new_document";
+  const replyId = draftReplyId(option).trim().toLocaleLowerCase("pt-BR");
+  return replyId === "new_document" || replyId === "action_supply_launches"
+    || /\blancamentos\b/.test(normalizedDateText(option?.label || option?.title || ""));
+}
+
+function isSupplyPaymentOption(option) {
+  const replyId = draftReplyId(option).trim().toLocaleLowerCase("pt-BR");
+  return replyId === "payment"
+    || /\bprovisao\b/.test(normalizedDateText(option?.label || option?.title || ""));
+}
+
+function suppliesOptionVisual(option) {
+  const label = normalizedDateText(option?.label || option?.title || "");
+  if (isLaunchFlowOption(option)) return { displayIcon: "🧾", displayLabel: "LANÇAMENTOS" };
+  if (isSupplyPaymentOption(option)) return { displayIcon: "📅", displayLabel: "PGTO PROVISÃO E RECORRENTES" };
+  if (/\bcadastros?\b/.test(label)) return { displayIcon: "🗂️", displayLabel: "EFETUAR CADASTROS" };
+  if (/\bobter\s+dados\b/.test(label)) return { displayIcon: "📊", displayLabel: "OBTER DADOS" };
+  if (/\bcotacao\b/.test(label)) return { displayIcon: "📝", displayLabel: "NOVA COTAÇÃO" };
+  if (/\bimobilizados?\b/.test(label)) return { displayIcon: "🏷️", displayLabel: "IMOBILIZADOS" };
+  return {};
+}
+
+function suppliesMenuChoices(options, galleries, busy) {
+  const launches = options.find(isLaunchFlowOption);
+  const payment = options.find(isSupplyPaymentOption);
+  const others = options.filter(option => option !== launches && option !== payment);
+  const primary = option => option ? pollButton(option, busy, { suppliesButton: true, ...suppliesOptionVisual(option) }) : "";
+  const gallery = (option, label) => option ? pollButton(option, busy, { galleryButton: true, displayLabel: label }) : "";
+  const pair = (option, firstGallery, firstLabel, secondGallery, secondLabel) => `<div class="chat-supplies-pair">
+    <div class="chat-supplies-pair__primary">${primary(option)}</div>
+    <div class="chat-gallery-actions">${gallery(firstGallery, firstLabel)}${gallery(secondGallery, secondLabel)}</div>
+  </div>`;
+  return `<div class="chat-choice-columns chat-choice-columns--launch-menu">
+    ${pair(launches, galleries.orders, "PEDIDOS", galleries.launches, "LANÇAMENTOS")}
+    ${pair(payment, galleries.payments, "PGTOS PREVISTOS", galleries.recurring, "DESPESAS RECORRENTES")}
+    <div class="chat-supplies-extras"><div class="chat-supplies-extras__primary">${others.map(primary).join("")}</div></div>
+  </div>`;
 }
 
 function launchGalleryOption() {
@@ -1069,7 +1109,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     : null;
   const choicesMarkup = choices
     ? isLaunchMenu
-      ? `<div class="chat-choice-columns chat-choice-columns--launch-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(ordersGallery, busy, { galleryButton: true })}${pollButton(galleryOption, busy, { galleryButton: true })}${pollButton(paymentProgrammingGallery, busy, { galleryButton: true })}${pollButton(recurringExpensesGallery, busy, { galleryButton: true })}</div></div></div>`
+      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, recurring: recurringExpensesGallery }, busy)
       : isRegistrationMenu
         ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
       : isAuditMenu
@@ -1104,7 +1144,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    <p>${formatQuestionText(launchPaymentSummary ? displayQuestionText : presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
+    <p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(launchPaymentSummary ? displayQuestionText : presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${paymentAuditTableMarkup(paymentAuditTable)}

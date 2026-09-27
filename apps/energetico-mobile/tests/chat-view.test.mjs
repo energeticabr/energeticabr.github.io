@@ -1763,11 +1763,17 @@ test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a p
   assert.match(suppliesMarkup, /chat-message chat-message--assistant chat-message--launch-menu/);
   assert.match(suppliesMarkup, /class="chat-choice-columns chat-choice-columns--launch-menu"/);
   const suppliesDom = new JSDOM(suppliesMarkup);
-  assert.equal(suppliesDom.window.document.querySelector('[data-reply-id="action_construction_visit"]'), null);
-  assert.match(suppliesMarkup, /class="chat-choice-columns__secondary"[\s\S]*data-reply-id="action_orders_gallery"[^>]*>GALERIA PEDIDOS[\s\S]*data-reply-id="action_launch_gallery"[^>]*>GAL\. LANÇAMENTOS[\s\S]*data-reply-id="action_payment_programming_gallery"[^>]*>GAL\. PGTOS PREVISTOS[\s\S]*data-reply-id="action_recurring_expenses_gallery"[^>]*>GAL\. DESPESAS RECORRENTES/);
-  assert.match(suppliesMarkup, /class="chat-choice-columns__primary"[\s\S]*data-reply-id="new_document"[\s\S]*class="chat-choice-columns__secondary"/);
+  const suppliesDoc = suppliesDom.window.document;
+  assert.equal(suppliesDoc.querySelector('[data-reply-id="action_construction_visit"]'), null);
+  assert.equal(suppliesDoc.querySelector(".chat-supplies-heading").textContent, "📦 SUPRIMENTOS");
+  assert.doesNotMatch(suppliesDoc.querySelector(".chat-message--launch-menu .chat-choice-card").textContent, /QUAL FLUXO VOCÊ DESEJA INICIAR/);
+  const supplyPairs = [...suppliesDoc.querySelectorAll(".chat-supplies-pair")];
+  assert.deepEqual(supplyPairs.map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
+    ["new_document", "action_orders_gallery", "action_launch_gallery"],
+    ["payment", "action_payment_programming_gallery", "action_recurring_expenses_gallery"],
+  ]);
   assert.equal((suppliesMarkup.match(/data-gallery-button/g) || []).length, 4);
-  assert.doesNotMatch(suppliesMarkup, /data-reply-id="action_orders_gallery"[\s\S]*data-reply-id="new_document"/);
+  assert.deepEqual([...suppliesDoc.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations"]);
   assert.doesNotMatch(suppliesMarkup, /<article class="chat-message chat-message--assistant chat-message--launch-menu"><span class="chat-avatar/);
   assert.doesNotMatch(suppliesMarkup, /📱 APPS/);
   suppliesDom.window.close();
@@ -1840,7 +1846,7 @@ test("Efetuar Cadastros alinha as quatro galerias aos cadastros e remove o masco
   ]);
 });
 
-test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Suprimentos", () => {
+test("botões principais de Suprimentos ocupam a altura de suas duas galerias", () => {
   const suppliesMarkup = renderChatMarkup(signedInState({
     messages: [{
       id: "supplies-launch-menu-height",
@@ -1857,16 +1863,15 @@ test("botão Lançamentos ocupa a altura das duas galerias iguais no menu de Sup
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
   const dom = new JSDOM(suppliesMarkup);
-  const primary = dom.window.document.querySelector(".chat-choice-columns__primary");
-  const secondary = dom.window.document.querySelector(".chat-choice-columns__secondary");
-  assert.equal(primary.querySelector(".chat-choice-list").firstElementChild.dataset.replyId, "new_document");
-  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["new_document", "payment"]);
-  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => button.textContent), ["GALERIA PEDIDOS", "GAL. LANÇAMENTOS", "GAL. PGTOS PREVISTOS", "GAL. DESPESAS RECORRENTES"]);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(4,\s*var\(--launch-gallery-button-height\)\)/s);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--launch-menu-primary\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--launch-gallery-button-height\)\s*\+\s*var\(--launch-gallery-gap\)\)/s);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--gallery\s*\{[^}]*white-space:\s*nowrap/s);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--gallery\s*\{[^}]*min-width:\s*0/s);
-  assert.match(styles, /@media \(max-width: 320px\)\s*\{[^}]*\.chat-choice-columns--launch-menu\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*\.85fr\) minmax\(0,\s*1\.15fr\)/s);
+  const pairs = [...dom.window.document.querySelectorAll(".chat-supplies-pair")];
+  assert.deepEqual(pairs.map(pair => pair.querySelector(".chat-supplies-pair__primary [data-reply-id]")?.dataset.replyId), ["new_document", "payment"]);
+  assert.deepEqual(pairs.map(pair => [...pair.querySelectorAll(".chat-gallery-actions button")].map(button => button.textContent)), [
+    ["PEDIDOS", "LANÇAMENTOS"],
+    ["PGTOS PREVISTOS", "DESPESAS RECORRENTES"],
+  ]);
+  assert.match(styles, /\.chat-supplies-pair\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--supplies-gallery-height\)\s*\+\s*var\(--supplies-gap\)\)/s);
+  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(2,\s*minmax\(var\(--supplies-gallery-height\),\s*1fr\)\)/s);
+  assert.match(styles, /\.chat-supplies-pair, \.chat-supplies-extras\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   dom.window.close();
 });
 
@@ -1881,23 +1886,22 @@ test("Galeria Pgtos Previstos fica abaixo de Gal. Lançamentos e à direita da P
         { id: "new_document", label: "📄 LANÇAMENTOS", reply: "new_document" },
         { id: "payment", label: "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES", reply: "payment" },
         { id: "registrations", label: "🗂️ EFETUAR CADASTROS", reply: "registrations" },
+        { id: "data", label: "📊 OBTER DADOS", reply: "data" },
+        { id: "quote", label: "📝 NOVA COTAÇÃO", reply: "quote" },
+        { id: "assets", label: "🏷️ IMOBILIZADOS", reply: "assets" },
       ],
     }],
   }));
-  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const dom = new JSDOM(markup);
-  const primary = dom.window.document.querySelector(".chat-choice-columns__primary");
-  const secondary = dom.window.document.querySelector(".chat-choice-columns__secondary");
-
-  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [
-    ["action_orders_gallery", "GALERIA PEDIDOS"],
-    ["action_launch_gallery", "GAL. LANÇAMENTOS"],
-    ["action_payment_programming_gallery", "GAL. PGTOS PREVISTOS"],
-    ["action_recurring_expenses_gallery", "GAL. DESPESAS RECORRENTES"],
+  const pairs = [...dom.window.document.querySelectorAll(".chat-supplies-pair")];
+  assert.deepEqual([...pairs[1].querySelectorAll("[data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [
+    ["payment", "📅PGTO PROVISÃO E RECORRENTES"],
+    ["action_payment_programming_gallery", "PGTOS PREVISTOS"],
+    ["action_recurring_expenses_gallery", "DESPESAS RECORRENTES"],
   ]);
-  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].slice(0, 2).map(button => button.dataset.replyId), ["new_document", "payment"]);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-gallery-actions\s*\{[^}]*grid-template-rows:\s*repeat\(4,\s*var\(--launch-gallery-button-height\)\)/s);
-  assert.match(styles, /\.chat-choice-columns--launch-menu \.chat-choice-button--launch-menu-primary\s*\{[^}]*min-height:\s*calc\(2\s*\*\s*var\(--launch-gallery-button-height\)\s*\+\s*var\(--launch-gallery-gap\)\)/s);
+  assert.equal(pairs[1].querySelector('[data-reply-id="payment"]').dataset.label, "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES");
+  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations", "data", "quote", "assets"]);
+  assert.equal(dom.window.document.querySelector(".chat-supplies-extras .chat-gallery-actions"), null);
   dom.window.close();
 });
 
