@@ -148,6 +148,27 @@ test("relatório RHID oferece retorno e acesso ao menu principal", () => {
   dom.window.close();
 });
 
+test("relatório RHID exibe uma tabela única com colunas de batidas e total", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-table", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
+    detail_table: {
+      kind: "rhid_attendance", title: "📋 PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const table = dom.window.document.querySelector(".chat-rhid-attendance-table table");
+  assert.ok(table, "o relatório deve usar uma tabela real, não cartões separados");
+  assert.match(dom.window.document.querySelector(".chat-rhid-attendance-table").textContent, /Deslize para ver os horários/i);
+  assert.deepEqual([...table.querySelectorAll("thead th")].map(cell => cell.textContent),
+    ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
+  assert.deepEqual([...table.querySelectorAll("tbody tr:first-child > *")].map(cell => cell.textContent),
+    ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"]);
+  assert.equal(table.querySelectorAll("tbody tr").length, 1);
+  dom.window.close();
+});
+
 test("escapa conteúdo do usuário e da VM", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "<img onerror=alert(1)>",

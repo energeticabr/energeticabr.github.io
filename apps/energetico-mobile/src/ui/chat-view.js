@@ -841,6 +841,20 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
+function rhidAttendanceTableMarkup(table) {
+  if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return "";
+  const headers = table.headers;
+  return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
+    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong><small>Deslize para ver os horários →</small></div>
+    <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças; deslize para ver todos os horários">
+      <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
+      <tbody>${table.rows.filter(Array.isArray).map(row => `<tr>${headers.map((_, index) => index === 0
+        ? `<th scope="row">${escapeHtml(row[index] ?? "—")}</th>`
+        : `<td${index === headers.length - 1 ? ' class="chat-rhid-attendance-table__total"' : ""}>${escapeHtml(row[index] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    </div>
+  </section>`;
+}
+
 function paymentAuditValue(row, keys, fallback = "-") {
   if (!row || typeof row !== "object") return fallback;
   for (const key of keys) {
@@ -1147,6 +1161,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     <p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(launchPaymentSummary ? displayQuestionText : presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
+    ${rhidAttendanceTableMarkup(presenceTable)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}
