@@ -93,9 +93,28 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.deepEqual(requested, ["2026-09-25"]);
   const report = h.store.getState().messages.at(-1);
   assert.match(report.question, /25\/09\/2026/);
-  assert.equal(report.detail_table.rows.length, 1);
-  assert.match(JSON.stringify(report.detail_table), /Pessoa A/);
-  assert.match(JSON.stringify(report.detail_table), /MARCAÇÃO RECEBIDA/);
+  assert.equal(report.detail_table.kind, "rhid_attendance");
+  assert.deepEqual(report.detail_table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
+  assert.deepEqual(report.detail_table.rows, [["Pessoa A", "07:01", "12:00", "13:00", "17:02", "09:01"]]);
+});
+
+test("relatório RHID reúne batidas da mesma pessoa, ordena horários e sinaliza total parcial", async t => {
+  const h = makeHarness();
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "2026-09-25T18:00:00-03:00; 2026-09-25T07:00:00-03:00; 12:00" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "BRUNO", BATIDAS_RHID: "06:55; 12:00; 13:00" },
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA", BATIDAS_RHID: ["13:00", "17:00", "19:00", "07:00"] },
+  ] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+
+  const table = h.store.getState().messages.at(-1).detail_table;
+  assert.deepEqual(table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Entrada 3", "Saída 3", "Total de horas/dia"]);
+  assert.deepEqual(table.rows, [
+    ["ANA", "07:00", "12:00", "13:00", "17:00", "18:00", "19:00", "10:00"],
+    ["BRUNO", "06:55", "12:00", "13:00", "—", "—", "—", "05:05 (parcial)"],
+  ]);
 });
 
 test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {

@@ -1,6 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
+import { buildRhidAttendanceTable } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -1534,35 +1535,17 @@ export function createAppController({
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
-        const formatValue = value => {
-          if (value == null || value === "") return "—";
-          if (Array.isArray(value)) return value.map(item => (
-            item && typeof item === "object" ? JSON.stringify(item) : String(item)
-          )).join(" · ") || "—";
-          if (typeof value === "object") return JSON.stringify(value);
-          return String(value).trim() || "—";
-        };
         const reportDate = formatDatePickerValue(report.date || day);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
-        const message = rows.length
+        const table = buildRhidAttendanceTable(rows);
+        const message = table.rows.length
           ? {
             type: "poll",
             question: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}`,
             options: [],
             detail_table: {
-              kind: "presence",
+              ...table,
               title: `📋 PRESENÇAS • ${reportDate}`,
-              rows: rows.map(row => {
-                const minutes = formatValue(row.MINUTOS_TRABALHADOS);
-                const status = formatValue(row.STATUS_RHID);
-                const collectedAt = formatValue(row.COLETADO_EM);
-                return [
-                  { label: "ID RHID", value: formatValue(row.ID_PESSOA_RHID ?? row.Id) },
-                  { label: "COLABORADOR", value: formatValue(row.NOME_COLABORADOR) },
-                  { label: "BATIDAS", value: formatValue(row.BATIDAS_RHID) },
-                  { label: "MINUTOS · STATUS · COLETADO", value: `${minutes} · ${status} · ${collectedAt}` },
-                ];
-              }),
             },
           }
           : {
