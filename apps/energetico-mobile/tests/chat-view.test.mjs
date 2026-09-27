@@ -64,6 +64,63 @@ test("renderiza conversa acessível com câmera, anexo e compositor", () => {
     "o clipe deve ficar acima da câmera na coluna de anexos");
 });
 
+test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Humanos", () => {
+  const menu = {
+    id: "hr-menu",
+    role: "assistant",
+    type: "poll",
+    question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [
+      { id: "hr-attendance", reply: "action_create_supplier_attendance", label: "➕ CRIAR PRESENÇA DE FORNECEDOR" },
+      { id: "hr-contract", reply: "action_contract", label: "📑 CONTRATO" },
+    ],
+  };
+  const markup = renderChatMarkup(signedInState({ messages: [menu] }));
+  const contract = markup.indexOf('data-reply-id="action_contract"');
+  const report = markup.indexOf('data-reply-id="action_rhid_attendance_report"');
+
+  assert.ok(contract >= 0);
+  assert.ok(report > contract, "o novo botão deve vir logo após Contrato");
+  assert.match(markup, /RELATÓRIO DE PRESENÇAS RHID/);
+
+  const unrelated = renderChatMarkup(signedInState({ messages: [{
+    ...menu,
+    question: "📦 SUPRIMENTOS\nQUAL FLUXO?",
+    options: [{ id: "launch", reply: "action_launch", label: "LANÇAMENTOS" }],
+  }] }));
+  assert.doesNotMatch(unrelated, /action_rhid_attendance_report/);
+});
+
+test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const requests = [];
+  view.on("rhid-attendance-report-generate", event => requests.push(event.value));
+  view.render(signedInState({ messages: [{
+    id: "hr-menu",
+    role: "assistant",
+    type: "poll",
+    question: "👥 RECURSOS HUMANOS",
+    options: [{ id: "hr", reply: "action_create_supplier_attendance", label: "PRESENÇA" }, { id: "contract", reply: "contract", label: "CONTRATO" }],
+  }] }));
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  const dateInput = root.querySelector('[data-role="rhid-attendance-report-date"]');
+  assert.ok(dateInput?.value, "a data local de hoje deve vir preenchida");
+  root.querySelector('[data-action="cancel-rhid-attendance-report"]').click();
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null);
+  assert.deepEqual(requests, [], "cancelar deve apenas fechar a janela");
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  root.querySelector('[data-role="rhid-attendance-report-date"]').value = "2026-09-25";
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+  assert.deepEqual(requests, ["2026-09-25"]);
+  assert.ok(root.querySelector('[data-rhid-attendance-report-dialog]'), "o popup aguarda a resposta do servidor");
+  view.destroy();
+  dom.window.close();
+});
+
 test("escapa conteúdo do usuário e da VM", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "<img onerror=alert(1)>",

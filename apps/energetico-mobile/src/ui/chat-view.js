@@ -20,6 +20,23 @@ function localDateIso(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function saoPauloDateIso(value = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(value);
+    const part = name => parts.find(item => item.type === name)?.value || "";
+    const year = part("year");
+    const month = part("month");
+    const day = part("day");
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch { /* mantém a data local se o fuso não estiver disponível */ }
+  return localDateIso(value);
+}
+
 function formatBytes(value) {
   const bytes = Math.max(0, Number(value) || 0);
   if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
@@ -547,6 +564,9 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const galleryClass = galleryButton ? " chat-choice-button--gallery" : "";
   const launchMenuClass = launchMenuButton ? " chat-choice-button--launch-menu-primary" : "";
   const galleryAttribute = galleryButton ? " data-gallery-button" : "";
+  if (replyId.trim().toLowerCase() === "action_rhid_attendance_report") {
+    return `<button class="chat-choice-button" type="button" data-action="open-rhid-attendance-report" data-reply-id="${escapeHtml(replyId)}" aria-label="Abrir relatório de presenças RHID"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
+  }
   if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
     return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
@@ -683,6 +703,35 @@ function isDemandsTaskMenu(message) {
   if (message?.type !== "poll") return false;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
   return /demandas/.test(question) && /qual\s+fluxo\s+voce\s+deseja\s+iniciar/.test(question);
+}
+
+const HUMAN_RESOURCES_ACTIONS = new Set([
+  "action_create_supplier_attendance",
+  "action_register_hr_activity",
+  "action_hr_registrations",
+  "action_validate_attendance",
+  "action_link_attendance_payment",
+  "action_hr_reports",
+]);
+
+function humanResourcesReportInsertion(message, options) {
+  if (message?.type !== "poll") return null;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/recursos\s+humanos/.test(question)) return null;
+  if (options.some(option => draftReplyId(option).trim().toLowerCase() === "action_rhid_attendance_report")) return null;
+  const actionIds = new Set(options.map(option => draftReplyId(option).trim().toLowerCase()));
+  if (![...HUMAN_RESOURCES_ACTIONS].some(id => actionIds.has(id))) return null;
+  const contractIndex = options.findIndex(option => /contrato/.test(normalizedDateText(option?.label || option?.title || ""))
+    || /contrat/.test(draftReplyId(option)));
+  if (contractIndex < 0) return null;
+  return {
+    index: contractIndex + 1,
+    option: {
+      id: "action_rhid_attendance_report",
+      reply: "action_rhid_attendance_report",
+      label: "📊 RELATÓRIO DE PRESENÇAS RHID",
+    },
+  };
 }
 
 function isWorksiteVisitOption(option) {
@@ -927,6 +976,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
   const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
+  const hrReport = humanResourcesReportInsertion(message, options);
+  if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
     || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
@@ -1420,6 +1471,26 @@ function datePickerMarkup(value = "") {
   </div>`;
 }
 
+function rhidAttendanceReportMarkup({ open = false, date = "", busy = false, error = "" } = {}) {
+  if (!open) return "";
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-rhid-attendance-report" data-rhid-attendance-report-dialog>
+    <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="rhid-attendance-report-title">
+      <div class="chat-date-picker__header">
+        <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
+        <h2 id="rhid-attendance-report-title">📊 Relatório de presenças RHID</h2>
+      </div>
+      <p>Escolha a data das presenças que deseja consultar.</p>
+      <label for="rhidAttendanceReportDate">Data</label>
+      <input class="chat-date-picker__input" id="rhidAttendanceReportDate" type="date" data-role="rhid-attendance-report-date" value="${escapeHtml(date || saoPauloDateIso())}" aria-label="Data do relatório"${busy ? " disabled" : ""}>
+      ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
+      <div class="chat-confirmation__actions">
+        <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report"${busy ? " disabled" : ""}>${busy ? "⏳ Gerando…" : "Gerar relatório"}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function isSignaturePrompt(state = {}) {
   if (String(state.activeFlow?.id || "").trim().toLowerCase() !== "document_signing") return false;
   const messages = Array.isArray(state.messages) ? state.messages : [];
@@ -1679,7 +1750,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [] } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], rhidAttendanceReport = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -1766,6 +1837,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionUploads)}
     ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "")}
+    ${rhidAttendanceReportMarkup(rhidAttendanceReport || {})}
   </section>`;
 }
 
@@ -1803,6 +1875,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attachmentSourceOpen = false;
   let datePickerOpen = false;
   let datePickerValue = "";
+  let rhidAttendanceReportOpen = false;
+  let rhidAttendanceReportDate = "";
+  let rhidAttendanceReportBusy = false;
+  let rhidAttendanceReportError = "";
   let pendingDateSeparatorDeletion = null;
   let pendingDocumentSeparatorDeletion = null;
   let signaturePadOpen = false;
@@ -2791,6 +2867,39 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "open-rhid-attendance-report") {
+      if (rhidAttendanceReportOpen) return;
+      rhidAttendanceReportOpen = true;
+      rhidAttendanceReportDate = saoPauloDateIso();
+      rhidAttendanceReportBusy = false;
+      rhidAttendanceReportError = "";
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "cancel-rhid-attendance-report") {
+      if (rhidAttendanceReportBusy) return;
+      rhidAttendanceReportOpen = false;
+      rhidAttendanceReportDate = "";
+      rhidAttendanceReportError = "";
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "generate-rhid-attendance-report") {
+      if (rhidAttendanceReportBusy) return;
+      const selectedDate = String(root.querySelector('[data-role="rhid-attendance-report-date"]')?.value || rhidAttendanceReportDate || "").trim();
+      const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? new Date(`${selectedDate}T00:00:00Z`) : null;
+      if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== selectedDate) {
+        rhidAttendanceReportError = "Selecione uma data válida.";
+        if (lastState) { const state = lastState; lastState = null; render(state); }
+        return;
+      }
+      rhidAttendanceReportDate = selectedDate;
+      rhidAttendanceReportBusy = true;
+      rhidAttendanceReportError = "";
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      emit({ type: "rhid-attendance-report-generate", value: selectedDate });
+      return;
+    }
     if (command.type === "open-date-picker") {
       if (datePickerOpen) return;
       datePickerOpen = true;
@@ -3496,6 +3605,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function change(event) {
     const checkbox = event.target;
+    if (checkbox?.dataset?.role === "rhid-attendance-report-date") {
+      rhidAttendanceReportDate = checkbox.value;
+      return;
+    }
     if (checkbox?.matches?.('input[data-action="epi-product-select-all"]') && !checkbox.disabled) {
       const productIds = [...checkbox.closest(".chat-epi-product-select").querySelectorAll('input[data-action="epi-product-select-toggle"]')]
         .filter(input => !input.disabled)
@@ -3616,6 +3729,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentSource: attachmentSourceOpen,
       datePicker: datePickerOpen,
       datePickerValue,
+      rhidAttendanceReport: {
+        open: rhidAttendanceReportOpen,
+        date: rhidAttendanceReportDate,
+        busy: rhidAttendanceReportBusy,
+        error: rhidAttendanceReportError,
+      },
       signaturePad: signaturePadOpen,
       signaturePadError,
       signaturePlacementStampApplied: Boolean(
@@ -3657,6 +3776,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
+    if (rhidAttendanceReportOpen) {
+      root.querySelector('[data-role="rhid-attendance-report-date"]')?.focus?.();
+    }
     // SIGNATURE_GESTURE_LOCK_START: signature-pad-mount
     if (signaturePadOpen) setupSignaturePad();
     setupSignaturePlacement(renderState.signaturePlacement);
@@ -3683,6 +3805,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       });
     }
     return powerBiDashboard.open(options);
+  }
+
+  function setRhidAttendanceReportStatus({ busy = false, error = "" } = {}) {
+    if (!rhidAttendanceReportOpen) return false;
+    rhidAttendanceReportBusy = Boolean(busy);
+    rhidAttendanceReportError = String(error || "");
+    if (lastState) { const state = lastState; lastState = null; render(state); }
+    return true;
+  }
+
+  function closeRhidAttendanceReport() {
+    if (!rhidAttendanceReportOpen) return false;
+    rhidAttendanceReportOpen = false;
+    rhidAttendanceReportDate = "";
+    rhidAttendanceReportBusy = false;
+    rhidAttendanceReportError = "";
+    if (lastState) { const state = lastState; lastState = null; render(state); }
+    return true;
   }
 
   root.addEventListener("click", click);
@@ -3714,6 +3854,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   return Object.freeze({
     render,
     openPowerBiDashboard,
+    setRhidAttendanceReportStatus,
+    closeRhidAttendanceReport,
     on(type, handler) {
       if (!handlers.has(type)) handlers.set(type, new Set());
       handlers.get(type).add(handler);
@@ -3765,6 +3907,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attachmentSourceOpen = false;
       datePickerOpen = false;
       datePickerValue = "";
+      rhidAttendanceReportOpen = false;
+      rhidAttendanceReportDate = "";
+      rhidAttendanceReportBusy = false;
+      rhidAttendanceReportError = "";
       signaturePadOpen = false;
       signaturePadTargetFileId = "";
       signaturePadError = "";
