@@ -634,6 +634,7 @@ export function createAppController({
   let uploadQueue = Promise.resolve();
   let attachmentRevision = 0;
   let snapshotPending = null;
+  let rhidAttendanceReportRequest = null;
   let resuming = false;
   let attachmentActionBusy = false;
   const idleWaiters = new Set();
@@ -1513,6 +1514,79 @@ export function createAppController({
       }
     });
     return delegatedTasksRequest;
+  }
+
+  async function generateRhidAttendanceReport(selectedDate) {
+    const day = String(selectedDate || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      view.setRhidAttendanceReportStatus?.({ error: "Selecione uma data válida." });
+      return false;
+    }
+    if (!account || stopped || typeof client.getRhidAttendanceReport !== "function") {
+      view.setRhidAttendanceReportStatus?.({ error: "A consulta do relatório RHID está indisponível nesta sessão." });
+      return false;
+    }
+    if (rhidAttendanceReportRequest) return rhidAttendanceReportRequest;
+    const reportAccount = account;
+    const reportRevision = sessionRevision;
+    view.setRhidAttendanceReportStatus?.({ busy: true, error: "" });
+    rhidAttendanceReportRequest = Promise.resolve().then(async () => {
+      try {
+        const report = await client.getRhidAttendanceReport(day);
+        if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
+        const formatValue = value => {
+          if (value == null || value === "") return "—";
+          if (Array.isArray(value)) return value.map(item => (
+            item && typeof item === "object" ? JSON.stringify(item) : String(item)
+          )).join(" · ") || "—";
+          if (typeof value === "object") return JSON.stringify(value);
+          return String(value).trim() || "—";
+        };
+        const reportDate = formatDatePickerValue(report.date || day);
+        const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
+        const message = rows.length
+          ? {
+            type: "poll",
+            question: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}`,
+            options: [],
+            detail_table: {
+              kind: "presence",
+              title: `📋 PRESENÇAS • ${reportDate}`,
+              rows: rows.map(row => {
+                const minutes = formatValue(row.MINUTOS_TRABALHADOS);
+                const status = formatValue(row.STATUS_RHID);
+                const collectedAt = formatValue(row.COLETADO_EM);
+                return [
+                  { label: "ID RHID", value: formatValue(row.ID_PESSOA_RHID ?? row.Id) },
+                  { label: "COLABORADOR", value: formatValue(row.NOME_COLABORADOR) },
+                  { label: "BATIDAS", value: formatValue(row.BATIDAS_RHID) },
+                  { label: "MINUTOS · STATUS · COLETADO", value: `${minutes} · ${status} · ${collectedAt}` },
+                ];
+              }),
+            },
+          }
+          : {
+            type: "text",
+            text: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}\nNenhuma presença foi encontrada para esta data.`,
+          };
+        const current = store.getState();
+        store.ingestRemoteMessages([message], {
+          resetConversation: false,
+          activeFlow: current.activeFlow,
+          attachments: current.attachments,
+        });
+        view.closeRhidAttendanceReport?.();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
+          view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
+        }
+        return false;
+      } finally {
+        rhidAttendanceReportRequest = null;
+      }
+    });
+    return rhidAttendanceReportRequest;
   }
 
   async function completeDelegatedTask(taskId) {
@@ -5023,6 +5097,7 @@ export function createAppController({
     bind("remove-pending-provision-upload", command => removePendingProvisionUpload(command.paymentId, command.uploadId));
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
+    bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);

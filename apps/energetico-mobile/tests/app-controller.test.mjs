@@ -67,6 +67,37 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
+test("relatório RHID consulta a data escolhida e coloca os registros no chat", async t => {
+  const h = makeHarness();
+  const requested = [];
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    return {
+      date: selectedDate,
+      rows: [{
+        Id: 81,
+        ID_PESSOA_RHID: "rh-9",
+        DATA_REFERENCIA: selectedDate,
+        NOME_COLABORADOR: "Pessoa A",
+        BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+        MINUTOS_TRABALHADOS: 541,
+        STATUS_RHID: "MARCAÇÃO RECEBIDA",
+      }],
+    };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+
+  assert.deepEqual(requested, ["2026-09-25"]);
+  const report = h.store.getState().messages.at(-1);
+  assert.match(report.question, /25\/09\/2026/);
+  assert.equal(report.detail_table.rows.length, 1);
+  assert.match(JSON.stringify(report.detail_table), /Pessoa A/);
+  assert.match(JSON.stringify(report.detail_table), /MARCAÇÃO RECEBIDA/);
+});
+
 test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {
   const created = [];
   const opened = [];

@@ -127,6 +127,32 @@ test("consulta notas sem lançamento sem enviar texto ao fluxo", async () => {
   assert.deepEqual(JSON.parse(request.body), { action: "pending_notes_snapshot" });
 });
 
+test("consulta o relatório RHID do dia selecionado com a sessão Microsoft", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({
+      status: "processed",
+      messages: [],
+      attendanceReport: { date: "2026-09-25", rows: [{ Id: 81, NOME_COLABORADOR: "Pessoa A" }] },
+    });
+  });
+
+  const report = await client.getRhidAttendanceReport("2026-09-25");
+
+  assert.equal(report.rows[0].NOME_COLABORADOR, "Pessoa A");
+  assert.equal(request.url, `${API_BASE}/api/portal-chat`);
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_report", date: "2026-09-25" });
+});
+
+test("relatório RHID rejeita datas inexistentes antes de consultar a VM", async () => {
+  let calls = 0;
+  const client = clientWith(async () => { calls += 1; return jsonResponse({ status: "processed", messages: [] }); });
+  await assert.rejects(client.getRhidAttendanceReport("2026-02-30"), /data/i);
+  assert.equal(calls, 0);
+});
+
 test("exclui um anexo confirmado sem enviar texto para o fluxo", async () => {
   let request;
   const client = clientWith(async (url, options) => {

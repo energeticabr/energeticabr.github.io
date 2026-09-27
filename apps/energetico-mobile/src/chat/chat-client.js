@@ -23,6 +23,13 @@ async function acquireToken(tokenProvider) {
   return token;
 }
 
+function validIsoDate(value) {
+  const text = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
+}
+
 async function readJson(response) {
   try {
     return await response.json();
@@ -269,6 +276,24 @@ export function createChatClient({
     return snapshot;
   }
 
+  async function getRhidAttendanceReport(selectedDate) {
+    const date = String(selectedDate || "").trim();
+    if (!validIsoDate(date)) throw new Error("Selecione uma data válida para o relatório RHID.");
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_attendance_report", date }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "O relatório de presenças RHID", { allowRecovery: true }), true);
+    const report = result?.attendanceReport;
+    if (!report || report.date !== date || !Array.isArray(report.rows)) {
+      throw new Error("A VM não devolveu o relatório RHID da data escolhida.");
+    }
+    return report;
+  }
+
   async function completeDelegatedTask(taskId) {
     const id = String(taskId || "").trim();
     if (!/^\d+$/.test(id) || Number(id) <= 0) throw new Error("A tarefa delegada não foi identificada.");
@@ -365,5 +390,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }
