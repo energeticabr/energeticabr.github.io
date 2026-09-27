@@ -718,6 +718,13 @@ const HUMAN_RESOURCES_ACTIONS = new Set([
   "action_hr_reports",
 ]);
 
+function isHumanResourcesMenu(message) {
+  if (message?.type !== "poll") return false;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/recursos\s+humanos/.test(question)) return false;
+  return (message.options || []).some(option => HUMAN_RESOURCES_ACTIONS.has(draftReplyId(option).trim().toLowerCase()));
+}
+
 function humanResourcesReportInsertion(message, options) {
   if (message?.type !== "poll") return null;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -845,7 +852,7 @@ function rhidAttendanceTableMarkup(table) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return "";
   const headers = table.headers;
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
-    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong><small>Deslize para ver os horários →</small></div>
+    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
     <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
       <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
@@ -1267,9 +1274,13 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const finish = !homeOnly && asksToFinishFlow(messages)
     ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
     : "";
+  const latestAssistantMessage = [...messages].reverse().find(message => message?.role !== "user");
+  const quickRhid = isHumanResourcesMenu(latestAssistantMessage);
   const actions = homeOnly
     ? ""
-    : `${finish}<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`;
+    : `${finish}${quickRhid
+      ? `<button class="chat-flow-summary" type="button" data-action="rhid-attendance-report-today" aria-label="Abrir relatório RHID de hoje"${busy ? " disabled" : ""}><span aria-hidden="true">📊</span> RHID</button>`
+      : `<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`}`;
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
@@ -2976,6 +2987,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportBusy = false;
       rhidAttendanceReportError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "rhid-attendance-report-today") {
+      emit({ type: "rhid-attendance-report-today", value: saoPauloDateIso() });
       return;
     }
     if (command.type === "cancel-rhid-attendance-report") {

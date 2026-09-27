@@ -1,7 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
-import { buildRhidAttendanceTable } from "./chat/rhid-attendance-table.js";
+import { buildRhidAttendanceTable, rhidUpdateLabel } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -1517,14 +1517,16 @@ export function createAppController({
     return delegatedTasksRequest;
   }
 
-  async function generateRhidAttendanceReport(selectedDate) {
+  async function generateRhidAttendanceReport(selectedDate, { openPdf = false } = {}) {
     const day = String(selectedDate || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
       view.setRhidAttendanceReportStatus?.({ error: "Selecione uma data válida." });
       return false;
     }
     if (!account || stopped || typeof client.getRhidAttendanceReport !== "function") {
-      view.setRhidAttendanceReportStatus?.({ error: "A consulta do relatório RHID está indisponível nesta sessão." });
+      const message = "A consulta do relatório RHID está indisponível nesta sessão.";
+      if (openPdf) setSessionError(new Error(message));
+      else view.setRhidAttendanceReportStatus?.({ error: message });
       return false;
     }
     if (rhidAttendanceReportRequest) return rhidAttendanceReportRequest;
@@ -1538,6 +1540,7 @@ export function createAppController({
         const reportDate = formatDatePickerValue(report.date || day);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         const table = buildRhidAttendanceTable(rows);
+        const updateLabel = rhidUpdateLabel(report);
         const message = table.rows.length
           ? {
             type: "poll",
@@ -1546,11 +1549,12 @@ export function createAppController({
             detail_table: {
               ...table,
               title: `📋 PRESENÇAS • ${reportDate}`,
+              updateLabel,
             },
           }
           : {
             type: "text",
-            text: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}\nNenhuma presença foi encontrada para esta data.`,
+            text: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}\n${updateLabel ? `${updateLabel}\n` : ""}Nenhuma presença foi encontrada para esta data.`,
           };
         const current = store.getState();
         store.ingestRemoteMessages([message], {
@@ -1559,10 +1563,17 @@ export function createAppController({
           attachments: current.attachments,
         });
         view.closeRhidAttendanceReport?.();
+        if (openPdf) {
+          const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
+          const pdf = await buildRhidAttendancePdf(table, { dateLabel: reportDate, updateLabel });
+          if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
+          await showMedia(pdf, `presencas-rhid-${day}.pdf`);
+        }
         return true;
       } catch (error) {
         if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
-          view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
+          if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
+          else view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
         }
         return false;
       } finally {
@@ -5081,6 +5092,7 @@ export function createAppController({
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value));
+    bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);

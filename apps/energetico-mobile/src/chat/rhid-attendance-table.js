@@ -29,6 +29,28 @@ function totalFromPunches(times) {
   return times.length % 2 ? `${total} (parcial)` : total;
 }
 
+function timestampInSaoPaulo(value) {
+  const text = String(value || "").trim();
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(text)) return null;
+  const parsed = new Date(text);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+export function rhidUpdateLabel(report = {}) {
+  const deviceTime = timestampInSaoPaulo(report.clockUpdatedAt);
+  const collectionTimes = (Array.isArray(report.rows) ? report.rows : [])
+    .map(row => timestampInSaoPaulo(row?.COLETADO_EM)).filter(Boolean);
+  const stamp = deviceTime || (collectionTimes.length
+    ? new Date(Math.max(...collectionTimes.map(value => value.getTime()))) : null);
+  if (!stamp) return "HORÁRIO DA COLETA DO RHID INDISPONÍVEL";
+  const time = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(stamp);
+  return deviceTime
+    ? `DADOS ATUALIZADOS NO RELÓGIO DE PONTO ÀS ${time}`
+    : `ÚLTIMA COLETA DO RHID ÀS ${time}`;
+}
+
 export function buildRhidAttendanceTable(rows = []) {
   const people = new Map();
   for (const row of rows) {
