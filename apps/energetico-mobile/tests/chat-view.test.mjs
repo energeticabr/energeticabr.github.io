@@ -121,6 +121,33 @@ test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", 
   dom.window.close();
 });
 
+test("relatório RHID oferece retorno e acesso ao menu principal", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", event => replies.push(event.replyId));
+  view.render(signedInState({ messages: [{
+    id: "rhid-report",
+    role: "assistant",
+    type: "poll",
+    question: "📊 RELATÓRIO DE PRESENÇAS RHID — 27/09/2026",
+    options: [],
+    detail_table: { kind: "presence", title: "📋 PRESENÇAS • 27/09/2026", rows: [] },
+  }] }));
+
+  const back = root.querySelector('[aria-label="Retornar à pergunta anterior"]');
+  const home = root.querySelector('[aria-label="Retornar ao menu inicial"]');
+  assert.ok(back, "a página do relatório deve oferecer retorno");
+  assert.ok(home, "a página do relatório deve oferecer acesso ao menu principal");
+  back.click();
+  home.click();
+
+  assert.deepEqual(replies, ["navigation_back", "navigation_main_menu"]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("escapa conteúdo do usuário e da VM", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "<img onerror=alert(1)>",
