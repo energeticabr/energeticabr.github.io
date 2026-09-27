@@ -64,7 +64,8 @@ export function createAttachmentPreview({
   status.setAttribute("role", "status");
   const footer = element("footer", "attachment-preview-footer");
   const backButton = element("button", "attachment-preview-back", "Voltar ao chat");
-  const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 ADICIONAR À BARRA");
+  const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 BARRA");
+  addToTrayButton.setAttribute("aria-label", "Adicionar este anexo à barra");
   const exportButton = element("button", "attachment-preview-export");
   const addChoice = element("section", "attachment-preview-add-choice");
   addChoice.hidden = true;

@@ -260,7 +260,8 @@ test("PDF da galeria pode ser adicionado à barra de anexos sem encaminhar o arq
   });
 
   assert.equal(addButton.hidden, false);
-  assert.equal(addButton.textContent.trim(), "📎 ADICIONAR À BARRA");
+  assert.equal(addButton.textContent.trim(), "📎 BARRA");
+  assert.equal(addButton.getAttribute("aria-label"), "Adicionar este anexo à barra");
   const backButton = dialog.querySelector(".attachment-preview-back");
   const forwardButton = dialog.querySelector(".attachment-preview-export");
   assert.ok(backButton.compareDocumentPosition(addButton) & documentRef.defaultView.Node.DOCUMENT_POSITION_FOLLOWING);
