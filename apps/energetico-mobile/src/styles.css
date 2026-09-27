@@ -139,7 +139,7 @@ button:disabled { cursor: wait; opacity: .55; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: max(4px, env(safe-area-inset-top)) 12px 6px;
+  padding: 4px 12px;
   color: white;
   background: linear-gradient(135deg, var(--brand-strong), var(--brand));
   box-shadow: 0 4px 16px rgb(0 0 0 / 12%);

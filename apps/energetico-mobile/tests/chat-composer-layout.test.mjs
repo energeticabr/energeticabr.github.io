@@ -50,7 +50,16 @@ test("o shell ocupa a viewport e o cabeçalho não revela faixas ao rolar", asyn
   assert.match(shell, /position:\s*fixed/);
   assert.match(shell, /inset:\s*0/);
   assert.match(css, /\.chat-transcript\s*\{[^}]*overscroll-behavior:\s*contain/);
-  assert.match(header, /padding:\s*max\(4px,\s*env\(safe-area-inset-top\)\)/);
+  assert.match(header, /padding:\s*4px\s+12px/);
+});
+
+test("cabeçalho mantém os dados centralizados e não duplica espaço vertical da área segura", async () => {
+  const css = await readFile(stylesPath, "utf8");
+  const header = css.match(/\.chat-header\s*\{[^}]*\}/)?.[0] || "";
+
+  assert.match(header, /align-items:\s*center/);
+  assert.match(header, /padding:\s*4px\s+12px/);
+  assert.doesNotMatch(header, /safe-area-inset-top/);
 });
 
 test("tablet horizontal usa a largura da tela e distribui melhor os menus", async () => {
