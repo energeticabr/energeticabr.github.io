@@ -846,11 +846,11 @@ function rhidAttendanceTableMarkup(table) {
   const headers = table.headers;
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
     <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong><small>Deslize para ver os horários →</small></div>
-    <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças; deslize para ver todos os horários">
+    <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${table.rows.filter(Array.isArray).map(row => `<tr>${headers.map((_, index) => index === 0
+      <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => index === 0
         ? `<th scope="row">${escapeHtml(row[index] ?? "—")}</th>`
-        : `<td${index === headers.length - 1 ? ' class="chat-rhid-attendance-table__total"' : ""}>${escapeHtml(row[index] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>
+        : `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(row[index] ?? "—")}"${index === headers.length - 1 ? ' class="chat-rhid-attendance-table__total"' : ""}>${escapeHtml(row[index] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>
     </div>
   </section>`;
 }
@@ -1260,7 +1260,8 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const registrationMenu = isSuppliesRegistrationMenu(message);
     const auditMenu = isAuditDocumentsMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";

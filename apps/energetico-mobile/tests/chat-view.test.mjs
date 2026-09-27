@@ -160,12 +160,34 @@ test("relatório RHID exibe uma tabela única com colunas de batidas e total", (
   const dom = new JSDOM(markup);
   const table = dom.window.document.querySelector(".chat-rhid-attendance-table table");
   assert.ok(table, "o relatório deve usar uma tabela real, não cartões separados");
-  assert.match(dom.window.document.querySelector(".chat-rhid-attendance-table").textContent, /Deslize para ver os horários/i);
+  assert.match(dom.window.document.querySelector(".chat-rhid-attendance-table__heading small")?.textContent || "", /Deslize para ver os horários/i);
   assert.deepEqual([...table.querySelectorAll("thead th")].map(cell => cell.textContent),
     ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual([...table.querySelectorAll("tbody tr:first-child > *")].map(cell => cell.textContent),
     ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"]);
   assert.equal(table.querySelectorAll("tbody tr").length, 1);
+  dom.window.close();
+});
+
+test("relatório RHID usa a largura do chat e identifica cada horário sem rolagem lateral", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-compact", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
+    detail_table: {
+      kind: "rhid_attendance", title: "📋 PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Entrada 3", "Saída 3", "Total de horas/dia"],
+      rows: [["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "16:20", "17:00", "08:34"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const document = dom.window.document;
+  const message = document.querySelector(".chat-message--rhid-report");
+
+  assert.ok(message, "o relatório deve ter layout próprio");
+  assert.equal(message.querySelector(".chat-avatar"), null, "o mascote lateral não ocupa a largura do relatório");
+  assert.equal(message.querySelectorAll(".chat-rhid-attendance-table tbody tr").length, 1);
+  assert.deepEqual([...message.querySelectorAll(".chat-rhid-attendance-table tbody td")].map(cell => cell.dataset.label),
+    ["Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Entrada 3", "Saída 3", "Total"]);
+  assert.match(message.querySelector(".chat-rhid-attendance-table__heading small")?.textContent || "", /Deslize para ver os horários/i);
   dom.window.close();
 });
 
