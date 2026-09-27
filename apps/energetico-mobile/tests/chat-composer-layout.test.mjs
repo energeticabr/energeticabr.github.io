@@ -2,9 +2,31 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
 
 const stylesPath = fileURLToPath(new URL("../src/styles.css", import.meta.url));
 const chatViewPath = fileURLToPath(new URL("../src/ui/chat-view.js", import.meta.url));
+const capacitorConfigPath = fileURLToPath(new URL("../capacitor.config.json", import.meta.url));
+
+test("o azul-claro do compositor também pinta o fundo e a área segura do app", async () => {
+  const [css, configText] = await Promise.all([
+    readFile(stylesPath, "utf8"),
+    readFile(capacitorConfigPath, "utf8"),
+  ]);
+  const config = JSON.parse(configText);
+  const dom = new JSDOM(`<!doctype html><html><head><style>${css}</style></head><body><div id="app"></div></body></html>`);
+  const { document } = dom.window;
+  const background = "var(--surface-soft)";
+  const softColor = dom.window.getComputedStyle(document.documentElement).getPropertyValue("--surface-soft");
+
+  assert.equal(softColor, "#e4f0f3");
+  assert.equal(dom.window.getComputedStyle(document.documentElement).background, background);
+  assert.equal(dom.window.getComputedStyle(document.body).background, background);
+  assert.equal(dom.window.getComputedStyle(document.querySelector("#app")).background, background);
+  assert.equal(config.backgroundColor, "#e4f0f3");
+  assert.equal(config.ios.contentInset, "never");
+  dom.window.close();
+});
 
 test("a barra de digitação fica no fluxo do shell e não cria espaço vazio no rodapé", async () => {
   const css = await readFile(stylesPath, "utf8");
