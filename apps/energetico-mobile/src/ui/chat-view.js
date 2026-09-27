@@ -845,7 +845,7 @@ function rhidAttendanceTableMarkup(table) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return "";
   const headers = table.headers;
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
-    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong></div>
+    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong><small>Deslize para ver os horários →</small></div>
     <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
       <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => index === 0

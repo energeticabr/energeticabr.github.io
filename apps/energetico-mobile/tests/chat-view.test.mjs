@@ -160,7 +160,7 @@ test("relatório RHID exibe uma tabela única com colunas de batidas e total", (
   const dom = new JSDOM(markup);
   const table = dom.window.document.querySelector(".chat-rhid-attendance-table table");
   assert.ok(table, "o relatório deve usar uma tabela real, não cartões separados");
-  assert.doesNotMatch(dom.window.document.querySelector(".chat-rhid-attendance-table").textContent, /Deslize para ver os horários/i);
+  assert.match(dom.window.document.querySelector(".chat-rhid-attendance-table__heading small")?.textContent || "", /Deslize para ver os horários/i);
   assert.deepEqual([...table.querySelectorAll("thead th")].map(cell => cell.textContent),
     ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual([...table.querySelectorAll("tbody tr:first-child > *")].map(cell => cell.textContent),
@@ -187,7 +187,7 @@ test("relatório RHID usa a largura do chat e identifica cada horário sem rolag
   assert.equal(message.querySelectorAll(".chat-rhid-attendance-table tbody tr").length, 1);
   assert.deepEqual([...message.querySelectorAll(".chat-rhid-attendance-table tbody td")].map(cell => cell.dataset.label),
     ["Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Entrada 3", "Saída 3", "Total"]);
-  assert.doesNotMatch(message.textContent, /Deslize para ver os horários/i);
+  assert.match(message.querySelector(".chat-rhid-attendance-table__heading small")?.textContent || "", /Deslize para ver os horários/i);
   dom.window.close();
 });
 
