@@ -1131,6 +1131,15 @@ function flowNavigation(messages) {
   return result;
 }
 
+function isRhidAttendanceReportMessage(message) {
+  const heading = normalizedDateText([
+    message?.question,
+    message?.prompt,
+    message?.text,
+  ].filter(Boolean).join(" "));
+  return heading.includes("relatorio de presencas rhid");
+}
+
 function latestPollTitle(messages) {
   const latestPoll = [...(Array.isArray(messages) ? messages : [])]
     .reverse()
@@ -1787,8 +1796,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const inferredIntermediateFlow = !state.activeFlow
     && !isAutomaticMainMenuMessage(latestPoll)
     && (navigation.back || navigation.home);
+  const latestAssistantMessage = [...visibleMessages].reverse()
+    .find(message => message?.role !== "user" && (message?.type === "poll" || message?.type === "text"));
+  const rhidAttendanceReportPage = isRhidAttendanceReportMessage(latestAssistantMessage);
   const completedCreation = state.completionNavigation?.homeOnly === true;
-  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation);
+  const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation || rhidAttendanceReportPage);
   // Falhas são notificadas no banner de erro; não devem permanecer na barra
   // suspensa como se ainda estivessem aguardando envio.
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
@@ -1809,7 +1821,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, latestPollTitle(visibleMessages), { homeOnly: completedCreation }) : ""}
+    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation }) : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
