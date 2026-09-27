@@ -542,13 +542,29 @@ button { touch-action: manipulation; }
 .chat-payment-audit-table__row--header > span { color: #375563; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .chat-payment-audit-table__row--total { background: #e7f5f0; }
 .chat-payment-audit-table__row--total > strong { color: #12634f; font-weight: 850; }
-.chat-launch-payment-summary { display: grid; gap: 0; margin: 10px 0 12px; overflow: hidden; border: 1px solid #c8d9d1; border-radius: 12px; background: #fff; }
-.chat-launch-payment-summary > strong { padding: 8px 10px; color: #fff; background: #07566b; font-size: 11px; text-align: center; }
-.chat-launch-payment-summary__row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); border-top: 1px solid #e1eaed; }
-.chat-launch-payment-summary__row:nth-child(odd) { background: #f6fafb; }
-.chat-launch-payment-summary__row > span, .chat-launch-payment-summary__row > b { min-width: 0; padding: 7px 9px; color: #173042; font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
-.chat-launch-payment-summary__row > span { color: #526a75; font-weight: 750; }
-.chat-launch-payment-summary__row > b { border-left: 1px solid #e1eaed; font-weight: 800; }
+.chat-message--launch-payment { justify-content: center; gap: 0; }
+.chat-message--launch-payment .chat-bubble { box-sizing: border-box; width: min(100%, 720px); max-width: 100%; min-width: 0; border-radius: 20px; }
+.chat-launch-payment-confirmation { display: grid; gap: 12px; color: #173042; }
+.chat-launch-payment-confirmation__intro { display: flex; align-items: flex-start; gap: 12px; }
+.chat-launch-payment-confirmation__intro > span { display: grid; flex: 0 0 42px; height: 42px; place-items: center; border-radius: 12px; background: #e8f4f6; font-size: 23px; }
+.chat-launch-payment-confirmation__intro strong { display: block; font-size: clamp(15px, 3vw, 21px); line-height: 1.15; }
+.chat-launch-payment-confirmation__intro em { color: #aa2525; font-style: normal; }
+.chat-choice-card .chat-launch-payment-confirmation__intro p { margin: 5px 0 0; color: #607684; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.chat-launch-payment-confirmation__supplier { display: grid; gap: 3px; padding: 13px 16px; border: 1px solid #d4e7e9; border-radius: 13px; background: #eaf7f8; }
+.chat-launch-payment-confirmation__supplier span, .chat-launch-payment-confirmation__amounts span { color: #607684; font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+.chat-launch-payment-confirmation__supplier strong { font-size: 20px; overflow-wrap: anywhere; }
+.chat-launch-payment-confirmation__presence { overflow: hidden; border: 1px solid #dce6ea; border-radius: 13px; }
+.chat-launch-payment-confirmation__presence > strong { display: block; padding: 9px 13px; background: #f2f8fa; font-size: 11px; }
+.chat-launch-payment-confirmation__ids { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+.chat-launch-payment-confirmation__ids span { min-width: 45px; padding: 6px 9px; border-radius: 9px; color: #aa2525; background: #ffeded; font-size: 15px; font-weight: 850; text-align: center; }
+.chat-launch-payment-confirmation__amounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.chat-launch-payment-confirmation__amounts > div { display: grid; align-content: center; gap: 4px; min-width: 0; padding: 11px; border: 1px solid #e0ebee; border-radius: 11px; background: #f8fbfc; }
+.chat-launch-payment-confirmation__amounts strong { font-size: clamp(16px, 4vw, 25px); font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.chat-launch-payment-confirmation__status { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #ebc5bd; border-radius: 12px; color: #8d231e; background: #fff2ef; font-size: 12px; line-height: 1.4; }
+.chat-launch-payment-confirmation__status.is-matching { border-color: #b8ddcb; color: #166534; background: #eaf8f0; }
+.chat-launch-payment-confirmation__status span { color: #425966; font-weight: 650; }
+.chat-choice-list.chat-choice-list--launch-payment { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
+.chat-choice-list--launch-payment button { min-width: 0; }
 .chat-presence-date-summary { display: grid; gap: 3px; margin: 10px 0 12px; padding: 10px 12px; border: 1px solid #c8d9d1; border-radius: 10px; color: #173042; background: #f7fbfc; line-height: 1.3; }
 .chat-presence-date-summary strong { color: #12634f; }
 .chat-presence-date-summary small { color: #60747d; font-size: 10px; }
