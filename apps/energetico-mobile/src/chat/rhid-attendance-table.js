@@ -35,6 +35,8 @@ export function buildRhidAttendanceTable(rows = []) {
     if (!row || typeof row !== "object") continue;
     const name = String(row.NOME_COLABORADOR ?? "").trim();
     const id = String(row.ID_PESSOA_RHID ?? row.Id ?? "").trim();
+    const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ").trim();
+    if (/^PIS NAO LOCALIZADO\b/.test(normalizedName)) continue;
     const key = name
       ? `name:${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")}`
       : `id:${id}`;
