@@ -848,9 +848,15 @@ function rhidAttendanceTableMarkup(table) {
     <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong><small>Deslize para ver os horários →</small></div>
     <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => index === 0
-        ? `<th scope="row">${escapeHtml(row[index] ?? "—")}</th>`
-        : `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(row[index] ?? "—")}"${index === headers.length - 1 ? ' class="chat-rhid-attendance-table__total"' : ""}>${escapeHtml(row[index] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody></table>
+      <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
+        const value = row[index] ?? "—";
+        if (index === 0) return `<th scope="row">${escapeHtml(value)}</th>`;
+        const isPunch = /^\d{1,2}:\d{2}$/.test(String(value).trim());
+        const cellClass = index === headers.length - 1 ? "chat-rhid-attendance-table__total"
+          : isPunch && /^Entrada(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__entry"
+          : isPunch && /^Saída(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__exit" : "";
+        return `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(value)}"${cellClass ? ` class="${cellClass}"` : ""}>${escapeHtml(value)}</td>`;
+      }).join("")}</tr>`).join("")}</tbody></table>
     </div>
   </section>`;
 }

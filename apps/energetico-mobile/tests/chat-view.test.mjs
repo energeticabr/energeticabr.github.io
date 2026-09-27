@@ -169,6 +169,26 @@ test("relatório RHID exibe uma tabela única com colunas de batidas e total", (
   dom.window.close();
 });
 
+test("relatório RHID distingue entradas e saídas preenchidas sem destacar horários ausentes", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-punch-colors", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
+    detail_table: {
+      kind: "rhid_attendance", title: "📋 PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "—", "05:03 (parcial)"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const cells = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-table tbody td")];
+
+  assert.ok(cells[0].classList.contains("chat-rhid-attendance-table__entry"));
+  assert.ok(cells[1].classList.contains("chat-rhid-attendance-table__exit"));
+  assert.ok(cells[2].classList.contains("chat-rhid-attendance-table__entry"));
+  assert.ok(!cells[3].classList.contains("chat-rhid-attendance-table__exit"), "sem batida, o traço permanece neutro");
+  assert.ok(cells[4].classList.contains("chat-rhid-attendance-table__total"));
+  dom.window.close();
+});
+
 test("relatório RHID usa a largura do chat e identifica cada horário sem rolagem lateral", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-compact", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
