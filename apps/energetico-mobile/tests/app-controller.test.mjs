@@ -82,6 +82,7 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
         BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
         MINUTOS_TRABALHADOS: 541,
         STATUS_RHID: "MARCAÇÃO RECEBIDA",
+        COLETADO_EM: "2026-09-25T20:12:00Z",
       }],
     };
   };
@@ -96,6 +97,47 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.kind, "rhid_attendance");
   assert.deepEqual(report.detail_table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual(report.detail_table.rows, [["Pessoa A", "07:01", "12:00", "13:00", "17:02", "09:01"]]);
+  assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
+});
+
+test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças acessível", async t => {
+  const h = makeHarness();
+  const requested = [];
+  const previews = [];
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [{
+      ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00",
+      COLETADO_EM: "2026-09-27T20:11:00Z",
+    }] };
+  };
+  h.native.previewMedia = async (source, fileName) => previews.push({ blob: await source, fileName });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-today", { value: "2026-09-27" });
+
+  assert.deepEqual(requested, ["2026-09-27"]);
+  assert.equal(h.store.getState().messages.at(-1).detail_table.kind, "rhid_attendance");
+  assert.equal(h.store.getState().messages.at(-1).detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:11");
+  assert.equal(previews.length, 1);
+  assert.equal(previews[0].blob.type, "application/pdf");
+  assert.match(previews[0].fileName, /2026-09-27.*\.pdf$/);
+});
+
+test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => {
+  const h = makeHarness();
+  const previews = [];
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [] });
+  h.native.previewMedia = async (source, name) => previews.push({ blob: await source, name });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-today", { value: "2026-09-27" });
+
+  assert.match(h.store.getState().messages.at(-1).text, /Nenhuma presença/);
+  assert.equal(previews.length, 1);
+  assert.equal(previews[0].blob.type, "application/pdf");
 });
 
 test("relatório RHID reúne batidas da mesma pessoa, ordena horários e sinaliza total parcial", async t => {

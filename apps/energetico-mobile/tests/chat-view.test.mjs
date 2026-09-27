@@ -91,6 +91,38 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   assert.doesNotMatch(unrelated, /action_rhid_attendance_report/);
 });
 
+test("atalho RHID substitui Ver resumo somente no menu de Recursos Humanos e usa a data de hoje", () => {
+  const menu = {
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [
+      { id: "hr", reply: "action_create_supplier_attendance", label: "CRIAR PRESENÇA" },
+      { id: "contract", reply: "action_contract", label: "CONTRATO" },
+    ],
+  };
+  const state = signedInState({ activeFlow: { title: "👥 RECURSOS HUMANOS" }, messages: [menu] });
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const dates = [];
+  view.on("rhid-attendance-report-today", event => dates.push(event.value));
+  view.render(state);
+
+  const shortcut = root.querySelector('.chat-flow-status [data-action="rhid-attendance-report-today"]');
+  assert.ok(shortcut, "o atalho deve ocupar o lugar de Ver resumo no cabeçalho");
+  assert.match(shortcut.textContent, /📊\s*RHID/);
+  assert.equal(root.querySelector('.chat-flow-status [data-action="show-summary"]'), null);
+  shortcut.click();
+  assert.match(dates[0], /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null, "o atalho não abre seleção de data");
+
+  view.render(signedInState({ activeFlow: { title: "CONTRATO" }, messages: [{ ...menu, question: "📑 CONTRATO" }] }));
+  assert.equal(root.querySelector('.chat-flow-status [data-action="rhid-attendance-report-today"]'), null);
+  assert.ok(root.querySelector('.chat-flow-status [data-action="show-summary"]'));
+  view.destroy();
+  dom.window.close();
+});
+
 test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
@@ -146,6 +178,20 @@ test("relatório RHID oferece retorno e acesso ao menu principal", () => {
   assert.deepEqual(replies, ["navigation_back", "navigation_main_menu"]);
   view.destroy();
   dom.window.close();
+});
+
+test("relatório RHID mostra o horário real de coleta junto da tabela", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-updated", role: "assistant", type: "poll",
+    question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
+    detail_table: {
+      kind: "rhid_attendance", title: "PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+      updateLabel: "ÚLTIMA COLETA DO RHID ÀS 17:12",
+    },
+  }] }));
+  assert.match(markup, /ÚLTIMA COLETA DO RHID ÀS 17:12/);
 });
 
 test("relatório RHID exibe uma tabela única com colunas de batidas e total", () => {
