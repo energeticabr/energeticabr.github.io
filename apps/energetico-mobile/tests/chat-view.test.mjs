@@ -326,8 +326,8 @@ test("resume o vínculo de pagamento na confirmação final do lançamento", () 
         total: "1005.00",
         totalDisplay: "R$ 1.005,00",
         lines: [
-          { index: 1, product: "SERVIÇO A", unit: "DIÁRIA", quantity: "1", unitPrice: "905", unitPriceDisplay: "R$ 905,00", freight: "0", freightDisplay: "R$ 0,00", total: "905", totalDisplay: "R$ 905,00" },
-          { index: 2, product: "SERVIÇO B", unit: "DIÁRIA", quantity: "1", unitPrice: "100", unitPriceDisplay: "R$ 100,00", freight: "0", freightDisplay: "R$ 0,00", total: "100", totalDisplay: "R$ 100,00" },
+          { index: 1, product: "SERVIÇO A", unit: "DIÁRIA", quantity: "1", unitPrice: "905", unitPriceDisplay: "R$ 905,00", freight: "0", freightDisplay: "R$ 0,00", total: "905", totalDisplay: "R$ 905,00", details: { supplier: "EDGAR" } },
+          { index: 2, product: "SERVIÇO B", unit: "DIÁRIA", quantity: "1", unitPrice: "100", unitPriceDisplay: "R$ 100,00", freight: "0", freightDisplay: "R$ 0,00", total: "100", totalDisplay: "R$ 100,00", details: { supplier: "EDGAR" } },
         ],
       },
     },
@@ -343,16 +343,79 @@ test("resume o vínculo de pagamento na confirmação final do lançamento", () 
     }],
   }));
 
-  assert.match(markup, /chat-launch-payment-summary/);
-  assert.match(markup, /2128, 2118, 2108, 2098, 2088/);
+  const dom = new JSDOM(markup);
+  const card = dom.window.document.querySelector(".chat-launch-payment-confirmation");
+  assert.ok(card);
+  assert.ok(dom.window.document.querySelector(".chat-message--launch-payment"));
+  assert.match(card.textContent, /DESCRITIVO DE PRESENÇA PENDENTE/);
+  assert.equal(card.querySelector(".chat-launch-payment-confirmation__supplier strong").textContent, "EDGAR");
+  assert.deepEqual([...card.querySelectorAll(".chat-launch-payment-confirmation__ids span")].map(node => node.textContent), ["2128", "2118", "2108", "2098", "2088"]);
   assert.match(markup, /R\$ 1\.005,00/);
   assert.match(markup, /R\$ 905,00/);
   assert.match(markup, /R\$ 100,00/);
   assert.match(markup, /3450/);
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__status").textContent, /Os valores não conferem/);
   assert.match(markup, /data-reply-id="yes"/);
   assert.match(markup, /data-reply-id="no"/);
-  assert.ok(markup.indexOf("chat-launch-payment-summary") < markup.indexOf('data-reply-id="yes"'));
+  assert.ok(markup.indexOf("chat-launch-payment-confirmation") < markup.indexOf('data-reply-id="yes"'));
+  const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list--launch-payment button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["no", "yes"]);
+  assert.deepEqual(buttons.map(button => commandFromTarget(button).replyId), ["no", "yes"]);
   assert.doesNotMatch(markup, /SOMA VLORDIARIO: R\$ 905,00/);
+  dom.window.close();
+});
+
+test("confirmação de vínculo destaca valores iguais sem inverter as respostas", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: {
+      id: "launch", title: "EFETUAR LANÇAMENTO",
+      launches: { totalDisplay: "R$ 905,00", lines: [{ details: { supplier: "EDGAR" }, total: "905" }] },
+    },
+    messages: [{
+      role: "assistant", type: "poll",
+      question: "FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO PARA O FORNECEDOR. IDS: 2125, 2115. SOMA VLORDIARIO: R$ 905,00. DESEJA SUBMETER O ID DO LANÇAMENTO 3451 COMO IDPGTO E ATUALIZAR O STATUS PARA PAGO?",
+      options: [{ id: "yes", label: "✅ SIM", reply: "yes" }, { id: "no", label: "❌ NÃO", reply: "no" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const card = dom.window.document.querySelector(".chat-launch-payment-confirmation");
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__status").textContent, /Os valores conferem/);
+  assert.match(card.textContent, /3451 como IDPGTO/);
+  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-choice-list--launch-payment button")].map(button => button.dataset.replyId), ["no", "yes"]);
+  dom.window.close();
+});
+
+test("ordena as respostas da confirmação pelo identificador mesmo com rótulos alternativos", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", launches: { totalDisplay: "R$ 10,00", lines: [{ total: "10", details: { supplier: "EDGAR" } }] } },
+    messages: [{ role: "assistant", type: "poll",
+      question: "FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO PARA O FORNECEDOR. IDS: 12. SOMA VLORDIARIO: R$ 10,00. DESEJA SUBMETER O ID DO LANÇAMENTO 34 COMO IDPGTO E ATUALIZAR O STATUS PARA PAGO?",
+      options: [{ id: "yes", label: "Confirmar", reply: "yes" }, { id: "no", label: "Cancelar", reply: "no" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-choice-list--launch-payment button")].map(button => button.dataset.replyId), ["no", "yes"]);
+  dom.window.close();
+});
+
+test("alerta quando os lançamentos incluem fornecedores diferentes", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", launches: { totalDisplay: "R$ 20,00", lines: [
+      { total: "10", details: { supplier: "EDGAR" } },
+      { total: "10", details: { supplier: "MARIA" } },
+    ] } },
+    messages: [{ role: "assistant", type: "poll",
+      question: "FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO PARA O FORNECEDOR. IDS: 12. SOMA VLORDIARIO: R$ 20,00. DESEJA SUBMETER O ID DO LANÇAMENTO 34 COMO IDPGTO E ATUALIZAR O STATUS PARA PAGO?",
+      options: [{ id: "yes", label: "✅ SIM", reply: "yes" }, { id: "no", label: "❌ NÃO", reply: "no" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const card = dom.window.document.querySelector(".chat-launch-payment-confirmation");
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__supplier").textContent, /FORNECEDORES DO LANÇAMENTO/);
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__supplier").textContent, /EDGAR, MARIA/);
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__status").textContent, /mais de um fornecedor/);
+  assert.ok(card.querySelector(".chat-launch-payment-confirmation__status.is-different"));
+  dom.window.close();
 });
 
 test("não altera perguntas de vínculo que não pertencem ao fluxo de lançamento", () => {

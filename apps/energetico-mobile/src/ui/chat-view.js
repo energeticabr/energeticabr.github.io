@@ -927,7 +927,21 @@ function launchPresencePaymentSummary(message, activeFlow) {
       ? lineTotals.reduce((total, line) => total + line, 0n)
       : null);
   if (!presenceIds.length || dailyCents === null || launchCents === null || !paymentIdMatch) return null;
+  const suppliers = [...new Set((Array.isArray(launches?.lines) ? launches.lines : [])
+    .map(line => String(line?.details?.supplier || "").trim())
+    .filter(name => name && !/^em branco$/i.test(name)))];
+  if (!suppliers.length) {
+    suppliers.push(...(Array.isArray(activeFlow?.rows) ? activeFlow.rows : [])
+      .filter(row => normalizedDateText(row?.label).trim() === "fornecedor")
+      .map(row => String(row?.value || "").trim())
+      .filter(Boolean));
+  }
   return {
+    supplier: [...new Set(suppliers)].join(", ") || "Fornecedor não informado",
+    supplierWarning: suppliers.length > 1
+      ? "Há mais de um fornecedor no lançamento. Confira qual será vinculado aos IDs de presença."
+      : suppliers.length === 0 ? "O fornecedor do lançamento não foi identificado. Confira antes de vincular." : "",
+    multipleSuppliers: suppliers.length > 1,
     presenceIds,
     launchTotal: paymentAmountDisplay(launchCents),
     dailyTotal: paymentAmountDisplay(dailyCents),
@@ -939,14 +953,27 @@ function launchPresencePaymentSummary(message, activeFlow) {
 
 function launchPresencePaymentSummaryMarkup(summary) {
   if (!summary) return "";
-  const rows = [
-    ["IDs de presença", summary.presenceIds.join(", ")],
-    ["Total do lançamento", summary.launchTotal],
-    ["Soma de VLRDIARIO", summary.dailyTotal],
-    ["Diferença (lançamento − VLRDIARIO)", `${summary.difference} (${summary.comparison})`],
-    ["IDPGTO a submeter", summary.paymentId],
-  ];
-  return `<div class="chat-launch-payment-summary" role="table" aria-label="Resumo do vínculo dos pagamentos de presença"><strong>📊 RESUMO PARA CONFIRMAÇÃO</strong>${rows.map(([label, value]) => `<div class="chat-launch-payment-summary__row" role="row"><span role="rowheader">${escapeHtml(label)}</span><b role="cell">${escapeHtml(value)}</b></div>`).join("")}</div>`;
+  const matches = summary.comparison === "Valores iguais";
+  const amountStatus = matches ? "Os valores conferem." : `Os valores não conferem. Diferença: ${summary.difference}.`;
+  const status = summary.supplierWarning ? `${summary.supplierWarning} ${amountStatus}` : amountStatus;
+  const safeToMatch = matches && !summary.supplierWarning;
+  return `<section class="chat-launch-payment-confirmation" aria-label="Confirmação do vínculo dos pagamentos de presença">
+    <div class="chat-launch-payment-confirmation__intro"><span aria-hidden="true">📄</span><div><strong>DESCRITIVO DE <em>PRESENÇA PENDENTE</em></strong><p>Confirme os dados do fornecedor antes de submeter o ID do lançamento.</p></div></div>
+    <div class="chat-launch-payment-confirmation__supplier"><span>${summary.multipleSuppliers ? "FORNECEDORES DO LANÇAMENTO" : "FORNECEDOR"}</span><strong>${escapeHtml(summary.supplier)}</strong></div>
+    <div class="chat-launch-payment-confirmation__presence"><strong>IDs DESCRITIVO DE PRESENÇA PENDENTES</strong><div class="chat-launch-payment-confirmation__ids">${summary.presenceIds.map(id => `<span>${escapeHtml(id)}</span>`).join("")}</div></div>
+    <div class="chat-launch-payment-confirmation__amounts"><div><span>VALOR TOTAL DO LANÇAMENTO</span><strong>${escapeHtml(summary.launchTotal)}</strong></div><div><span>SOMA VLRDIARIO</span><strong>${escapeHtml(summary.dailyTotal)}</strong></div></div>
+    <div class="chat-launch-payment-confirmation__status${safeToMatch ? " is-matching" : " is-different"}" role="status"><strong>${safeToMatch ? "✅" : "⚠️"} ${escapeHtml(status)}</strong><span>Deseja submeter o ID do lançamento ${escapeHtml(summary.paymentId)} como IDPGTO e atualizar o status para pago?</span></div>
+  </section>`;
+}
+
+function launchPaymentChoiceRank(option) {
+  const replyId = normalizedDateText(draftReplyId(option));
+  if (/(?:^|[:_-])(?:no|nao|cancel)(?:$|[:_-])/.test(replyId)) return 0;
+  if (/(?:^|[:_-])(?:yes|sim|confirm)(?:$|[:_-])/.test(replyId)) return 1;
+  const label = normalizedDateText(option?.label || option?.title);
+  if (/\b(?:nao|cancelar)\b/.test(label)) return 0;
+  if (/\b(?:sim|confirmar)\b/.test(label)) return 1;
+  return 2;
 }
 
 function presenceDateSummaryMarkup(summary) {
@@ -1062,13 +1089,17 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions]
     : isRegistrationMenu ? [...regularOptions].sort((left, right) => registrationOptionOrder(left) - registrationOptionOrder(right))
       : regularOptions;
+  const launchPaymentSummary = launchPresencePaymentSummary(message, activeFlow);
+  const orderedChoiceOptions = launchPaymentSummary
+    ? [...choiceOptions].sort((left, right) => launchPaymentChoiceRank(left) - launchPaymentChoiceRank(right))
+    : choiceOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
     .map(option => [draftReplyId(option), option])
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
-  const choices = choiceOptions.flatMap(option => {
+  const choices = orderedChoiceOptions.flatMap(option => {
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
@@ -1091,10 +1122,6 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   }).join("");
   const rawChangeTable = message.change_table || message.changeTable;
   const questionText = String(message.question || message.prompt || "");
-  const launchPaymentSummary = launchPresencePaymentSummary(message, activeFlow);
-  const displayQuestionText = launchPaymentSummary
-    ? "Há pagamentos de presença pendentes para este fornecedor. Deseja submeter este lançamento como IDPGTO e atualizar o status para pago?"
-    : questionText;
   const changeTable = rawChangeTable
     && Array.isArray(rawChangeTable.rows)
     && rawChangeTable.rows.length
@@ -1136,7 +1163,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
         ? `<div class="chat-choice-columns chat-choice-columns--audit-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(documentsGallery, busy, { galleryButton: true })}</div></div></div>`
       : taskCreateOption
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
-      : `<div class="${choiceListClass}">${choices}</div>`
+      : `<div class="${choiceListClass}${launchPaymentSummary ? " chat-choice-list--launch-payment" : ""}">${choices}</div>`
     : "";
   const epiMarkup = isEpiProductSelection
     ? renderEpiProductSelection(choiceOptions, busy, attendanceCurrent, attendanceCurrent ? message.epiSelectedProductIds || [] : [])
@@ -1164,7 +1191,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    <p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(launchPaymentSummary ? displayQuestionText : presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>
+    ${launchPaymentSummary ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${rhidAttendanceTableMarkup(presenceTable)}
@@ -1267,7 +1294,8 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const auditMenu = isAuditDocumentsMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
