@@ -102,6 +102,10 @@ button:disabled { cursor: wait; opacity: .55; }
   background: var(--surface);
 }
 
+@media (display-mode: standalone) {
+  .chat-shell { padding-top: env(safe-area-inset-top); }
+}
+
 .chat-file-drop-zone {
   position: absolute;
   inset: 0;

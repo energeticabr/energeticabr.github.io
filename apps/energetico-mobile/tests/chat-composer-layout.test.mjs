@@ -62,6 +62,12 @@ test("cabeçalho mantém os dados centralizados e não duplica espaço vertical 
   assert.doesNotMatch(header, /safe-area-inset-top/);
 });
 
+test("PWA standalone reserva área segura fora da faixa azul compacta", async () => {
+  const css = await readFile(stylesPath, "utf8");
+
+  assert.match(css, /@media\s*\(display-mode:\s*standalone\)\s*\{\s*\.chat-shell\s*\{[^}]*padding-top:\s*env\(safe-area-inset-top\)/);
+});
+
 test("tablet horizontal usa a largura da tela e distribui melhor os menus", async () => {
   const css = await readFile(stylesPath, "utf8");
 
