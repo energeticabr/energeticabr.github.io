@@ -1274,8 +1274,8 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const finish = !homeOnly && asksToFinishFlow(messages)
     ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
     : "";
-  const latestPoll = [...messages].reverse().find(message => message?.role !== "user" && message?.type === "poll");
-  const quickRhid = isHumanResourcesMenu(latestPoll);
+  const latestAssistantMessage = [...messages].reverse().find(message => message?.role !== "user");
+  const quickRhid = isHumanResourcesMenu(latestAssistantMessage);
   const actions = homeOnly
     ? ""
     : `${finish}${quickRhid

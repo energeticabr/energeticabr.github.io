@@ -123,6 +123,23 @@ test("atalho RHID substitui Ver resumo somente no menu de Recursos Humanos e usa
   dom.window.close();
 });
 
+test("atalho RHID não permanece no cabeçalho após relatório vazio", () => {
+  const menu = {
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [{ id: "hr", reply: "action_create_supplier_attendance", label: "CRIAR PRESENÇA" }],
+  };
+  const emptyReport = {
+    id: "rhid-empty", role: "assistant", type: "text",
+    text: "📊 RELATÓRIO DE PRESENÇAS RHID — 27/09/2026\nNenhuma presença foi encontrada para esta data.",
+  };
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { title: "👥 RECURSOS HUMANOS" }, messages: [menu, emptyReport],
+  }));
+  assert.doesNotMatch(markup, /data-action="rhid-attendance-report-today"/);
+  assert.match(markup, /Nenhuma presença foi encontrada/);
+});
+
 test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");

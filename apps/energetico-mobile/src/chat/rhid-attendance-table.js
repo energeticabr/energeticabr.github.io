@@ -42,7 +42,7 @@ export function rhidUpdateLabel(report = {}) {
     .map(row => timestampInSaoPaulo(row?.COLETADO_EM)).filter(Boolean);
   const stamp = deviceTime || (collectionTimes.length
     ? new Date(Math.max(...collectionTimes.map(value => value.getTime()))) : null);
-  if (!stamp) return "";
+  if (!stamp) return "HORÁRIO DA COLETA DO RHID INDISPONÍVEL";
   const time = new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).format(stamp);

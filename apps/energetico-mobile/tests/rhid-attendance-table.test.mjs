@@ -29,3 +29,9 @@ test("horário próprio do relógio, quando fornecido, recebe a legenda solicita
   assert.equal(rhid.rhidUpdateLabel({ clockUpdatedAt: "2026-09-25T20:10:00Z", rows: [] }),
     "DADOS ATUALIZADOS NO RELÓGIO DE PONTO ÀS 17:10");
 });
+
+test("relatório informa quando a coleta não tem horário verificável", () => {
+  assert.equal(rhid.rhidUpdateLabel({ rows: [] }), "HORÁRIO DA COLETA DO RHID INDISPONÍVEL");
+  assert.equal(rhid.rhidUpdateLabel({ rows: [{ COLETADO_EM: "2026-09-25T17:12:00" }] }),
+    "HORÁRIO DA COLETA DO RHID INDISPONÍVEL");
+});
