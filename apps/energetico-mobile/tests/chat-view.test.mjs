@@ -365,6 +365,39 @@ test("confirmação de vínculo destaca valores iguais sem inverter as respostas
   dom.window.close();
 });
 
+test("ordena as respostas da confirmação pelo identificador mesmo com rótulos alternativos", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", launches: { totalDisplay: "R$ 10,00", lines: [{ total: "10", details: { supplier: "EDGAR" } }] } },
+    messages: [{ role: "assistant", type: "poll",
+      question: "FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO PARA O FORNECEDOR. IDS: 12. SOMA VLORDIARIO: R$ 10,00. DESEJA SUBMETER O ID DO LANÇAMENTO 34 COMO IDPGTO E ATUALIZAR O STATUS PARA PAGO?",
+      options: [{ id: "yes", label: "Confirmar", reply: "yes" }, { id: "no", label: "Cancelar", reply: "no" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-choice-list--launch-payment button")].map(button => button.dataset.replyId), ["no", "yes"]);
+  dom.window.close();
+});
+
+test("alerta quando os lançamentos incluem fornecedores diferentes", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", launches: { totalDisplay: "R$ 20,00", lines: [
+      { total: "10", details: { supplier: "EDGAR" } },
+      { total: "10", details: { supplier: "MARIA" } },
+    ] } },
+    messages: [{ role: "assistant", type: "poll",
+      question: "FORAM ENCONTRADOS DESCRITIVOS DE PRESENÇA COM STATUS PENDENTE PGTO PARA O FORNECEDOR. IDS: 12. SOMA VLORDIARIO: R$ 20,00. DESEJA SUBMETER O ID DO LANÇAMENTO 34 COMO IDPGTO E ATUALIZAR O STATUS PARA PAGO?",
+      options: [{ id: "yes", label: "✅ SIM", reply: "yes" }, { id: "no", label: "❌ NÃO", reply: "no" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const card = dom.window.document.querySelector(".chat-launch-payment-confirmation");
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__supplier").textContent, /FORNECEDORES DO LANÇAMENTO/);
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__supplier").textContent, /EDGAR, MARIA/);
+  assert.match(card.querySelector(".chat-launch-payment-confirmation__status").textContent, /mais de um fornecedor/);
+  assert.ok(card.querySelector(".chat-launch-payment-confirmation__status.is-different"));
+  dom.window.close();
+});
+
 test("não altera perguntas de vínculo que não pertencem ao fluxo de lançamento", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },

@@ -543,7 +543,7 @@ button { touch-action: manipulation; }
 .chat-payment-audit-table__row--total { background: #e7f5f0; }
 .chat-payment-audit-table__row--total > strong { color: #12634f; font-weight: 850; }
 .chat-message--launch-payment { justify-content: center; gap: 0; }
-.chat-message--launch-payment .chat-bubble { box-sizing: border-box; width: min(100%, 720px); max-width: 100%; min-width: 0; border-radius: 20px; }
+.chat-message--assistant.chat-message--launch-payment .chat-bubble { box-sizing: border-box; width: min(100%, 720px); max-width: 720px; min-width: 0; border-radius: 20px; }
 .chat-launch-payment-confirmation { display: grid; gap: 12px; color: #173042; }
 .chat-launch-payment-confirmation__intro { display: flex; align-items: flex-start; gap: 12px; }
 .chat-launch-payment-confirmation__intro > span { display: grid; flex: 0 0 42px; height: 42px; place-items: center; border-radius: 12px; background: #e8f4f6; font-size: 23px; }

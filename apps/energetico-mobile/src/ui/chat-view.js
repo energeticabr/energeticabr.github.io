@@ -932,6 +932,10 @@ function launchPresencePaymentSummary(message, activeFlow) {
   }
   return {
     supplier: [...new Set(suppliers)].join(", ") || "Fornecedor não informado",
+    supplierWarning: suppliers.length > 1
+      ? "Há mais de um fornecedor no lançamento. Confira qual será vinculado aos IDs de presença."
+      : suppliers.length === 0 ? "O fornecedor do lançamento não foi identificado. Confira antes de vincular." : "",
+    multipleSuppliers: suppliers.length > 1,
     presenceIds,
     launchTotal: paymentAmountDisplay(launchCents),
     dailyTotal: paymentAmountDisplay(dailyCents),
@@ -944,14 +948,26 @@ function launchPresencePaymentSummary(message, activeFlow) {
 function launchPresencePaymentSummaryMarkup(summary) {
   if (!summary) return "";
   const matches = summary.comparison === "Valores iguais";
-  const status = matches ? "Os valores conferem." : `Os valores não conferem. Diferença: ${summary.difference}.`;
+  const amountStatus = matches ? "Os valores conferem." : `Os valores não conferem. Diferença: ${summary.difference}.`;
+  const status = summary.supplierWarning ? `${summary.supplierWarning} ${amountStatus}` : amountStatus;
+  const safeToMatch = matches && !summary.supplierWarning;
   return `<section class="chat-launch-payment-confirmation" aria-label="Confirmação do vínculo dos pagamentos de presença">
     <div class="chat-launch-payment-confirmation__intro"><span aria-hidden="true">📄</span><div><strong>DESCRITIVO DE <em>PRESENÇA PENDENTE</em></strong><p>Confirme os dados do fornecedor antes de submeter o ID do lançamento.</p></div></div>
-    <div class="chat-launch-payment-confirmation__supplier"><span>FORNECEDOR</span><strong>${escapeHtml(summary.supplier)}</strong></div>
+    <div class="chat-launch-payment-confirmation__supplier"><span>${summary.multipleSuppliers ? "FORNECEDORES DO LANÇAMENTO" : "FORNECEDOR"}</span><strong>${escapeHtml(summary.supplier)}</strong></div>
     <div class="chat-launch-payment-confirmation__presence"><strong>IDs DESCRITIVO DE PRESENÇA PENDENTES</strong><div class="chat-launch-payment-confirmation__ids">${summary.presenceIds.map(id => `<span>${escapeHtml(id)}</span>`).join("")}</div></div>
     <div class="chat-launch-payment-confirmation__amounts"><div><span>VALOR TOTAL DO LANÇAMENTO</span><strong>${escapeHtml(summary.launchTotal)}</strong></div><div><span>SOMA VLRDIARIO</span><strong>${escapeHtml(summary.dailyTotal)}</strong></div></div>
-    <div class="chat-launch-payment-confirmation__status${matches ? " is-matching" : " is-different"}" role="status"><strong>${matches ? "✅" : "⚠️"} ${escapeHtml(status)}</strong><span>Deseja submeter o ID do lançamento ${escapeHtml(summary.paymentId)} como IDPGTO e atualizar o status para pago?</span></div>
+    <div class="chat-launch-payment-confirmation__status${safeToMatch ? " is-matching" : " is-different"}" role="status"><strong>${safeToMatch ? "✅" : "⚠️"} ${escapeHtml(status)}</strong><span>Deseja submeter o ID do lançamento ${escapeHtml(summary.paymentId)} como IDPGTO e atualizar o status para pago?</span></div>
   </section>`;
+}
+
+function launchPaymentChoiceRank(option) {
+  const replyId = normalizedDateText(draftReplyId(option));
+  if (/(?:^|[:_-])(?:no|nao|cancel)(?:$|[:_-])/.test(replyId)) return 0;
+  if (/(?:^|[:_-])(?:yes|sim|confirm)(?:$|[:_-])/.test(replyId)) return 1;
+  const label = normalizedDateText(option?.label || option?.title);
+  if (/\b(?:nao|cancelar)\b/.test(label)) return 0;
+  if (/\b(?:sim|confirmar)\b/.test(label)) return 1;
+  return 2;
 }
 
 function presenceDateSummaryMarkup(summary) {
@@ -1069,7 +1085,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       : regularOptions;
   const launchPaymentSummary = launchPresencePaymentSummary(message, activeFlow);
   const orderedChoiceOptions = launchPaymentSummary
-    ? [...choiceOptions].sort((left, right) => Number(/\b(?:sim|yes)\b/.test(normalizedDateText(left.label || left.title || left.id))) - Number(/\b(?:sim|yes)\b/.test(normalizedDateText(right.label || right.title || right.id))))
+    ? [...choiceOptions].sort((left, right) => launchPaymentChoiceRank(left) - launchPaymentChoiceRank(right))
     : choiceOptions;
   const isDraftMenu = /RASCUNHOS?/i.test(String(message.question || message.prompt || ""));
   const deleteByDraft = new Map(regularOptions
