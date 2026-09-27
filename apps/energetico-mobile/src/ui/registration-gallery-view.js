@@ -204,10 +204,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
   }
 
-  function appendDocumentDetail(details, field, label, value, className = "") {
+  function appendDocumentDetail(details, field, label, value, className = "", icon = "") {
     if (!value) return null;
     const pair = el("div", `rg-detail${className ? ` ${className}` : ""}`);
     pair.dataset.field = field;
+    if (icon) {
+      const symbol = el("span", "rg-detail__icon", icon);
+      symbol.setAttribute("aria-hidden", "true");
+      pair.append(symbol);
+    }
     pair.append(el("dt", "", label), el("dd", "", value));
     details.append(pair);
     return pair;
@@ -219,35 +224,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     container.append(heading);
 
     const details = el("dl", "rg-details rg-document-table");
-    const status = fieldValue(row.fields, "STATUS", model);
-    if (status) {
-      const normalizedStatus = normalizedFieldName(status);
-      const statusClass = normalizedStatus.includes("submetido") && !normalizedStatus.includes("naosubmetido")
-        ? "rg-document-status--submitted"
-        : normalizedStatus.includes("pendente") ? "rg-document-status--pending" : "";
-      const pair = appendDocumentDetail(details, "STATUS", "STATUS", status, "rg-document-status-cell");
-      const value = pair.querySelector("dd");
-      value.replaceChildren(el("strong", `rg-document-status${statusClass ? ` ${statusClass}` : ""}`, status));
-    }
-
-    const branch = fieldValue(row.fields, "FILIAL", model);
-    const property = fieldValue(row.fields, "IMOVEL", model);
-    appendDocumentDetail(details, "FILIAL", "FILIAL", [branch, property ? `(${property})` : ""].filter(Boolean).join(" "), "rg-detail--wide");
-    for (const [field, label] of [
-      ["TIPODOCUMENTO", "TIPO DE DOCUMENTO"],
-      ["TIPOHOMOLOGACAO", "TIPO DE HOMOLOGAÇÃO"],
-      ["ETAPA", "ETAPA"],
-      ["TIPOMARCO", "TIPO MARCO"],
-    ]) appendDocumentDetail(details, field, label, fieldValue(row.fields, field, model));
-
-    for (const [field, label] of [["Criado por", "CRIADO POR"], ["Modificado por", "MODIFICADO POR"]]) {
-      appendDocumentDetail(details, field, label, documentAuthorValue(row, field));
-    }
-
     const dateGroup = el("div", "rg-document-dates");
     dateGroup.setAttribute("role", "group");
     dateGroup.setAttribute("aria-label", "Datas do documento");
-    dateGroup.append(el("strong", "rg-document-dates-title", "DATAS"));
+    const datesTitle = el("strong", "rg-document-dates-title", "DATAS");
+    const datesTitleIcon = el("span", "rg-document-dates-title-icon", "▣");
+    datesTitleIcon.setAttribute("aria-hidden", "true");
+    datesTitle.prepend(datesTitleIcon);
+    dateGroup.append(datesTitle);
     const dates = el("dl", "rg-document-date-grid");
     for (const [field, label, className] of [
       ["DATA", "DATA", ""],
@@ -260,12 +244,40 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (!value) continue;
       const pair = el("div", `rg-detail rg-document-date${className ? ` ${className}` : ""}`);
       pair.dataset.field = field;
-      pair.append(el("dt", "", label), el("dd", "", value));
+      const symbol = el("span", "rg-detail__icon", "▣");
+      symbol.setAttribute("aria-hidden", "true");
+      pair.append(symbol, el("dt", "", label), el("dd", "", value));
       dates.append(pair);
     }
     dateGroup.append(dates);
     if (dates.childElementCount) details.append(dateGroup);
-    appendDocumentDetail(details, "OBS", "OBS", fieldValue(row.fields, "OBS", model), "rg-detail--observation");
+
+    const status = fieldValue(row.fields, "STATUS", model);
+    if (status) {
+      const normalizedStatus = normalizedFieldName(status);
+      const statusClass = normalizedStatus.includes("submetido") && !normalizedStatus.includes("naosubmetido")
+        ? "rg-document-status--submitted"
+        : normalizedStatus.includes("pendente") ? "rg-document-status--pending" : "";
+      const pair = appendDocumentDetail(details, "STATUS", "STATUS", status, "rg-document-status-cell", statusClass === "rg-document-status--submitted" ? "✓" : "!");
+      pair.classList.add(statusClass || "rg-document-status--other");
+      const value = pair.querySelector("dd");
+      value.replaceChildren(el("strong", `rg-document-status${statusClass ? ` ${statusClass}` : ""}`, status));
+    }
+
+    const branch = fieldValue(row.fields, "FILIAL", model);
+    const property = fieldValue(row.fields, "IMOVEL", model);
+    appendDocumentDetail(details, "FILIAL", "FILIAL", [branch, property ? `(${property})` : ""].filter(Boolean).join(" "), "", "▥");
+    for (const [field, label, icon] of [
+      ["TIPODOCUMENTO", "TIPO DE DOCUMENTO", "▤"],
+      ["TIPOHOMOLOGACAO", "TIPO DE HOMOLOGAÇÃO", "▤"],
+      ["ETAPA", "ETAPA", "▦"],
+      ["TIPOMARCO", "TIPO MARCO", "▦"],
+    ]) appendDocumentDetail(details, field, label, fieldValue(row.fields, field, model), "", icon);
+
+    for (const [field, label] of [["Criado por", "CRIADO POR"], ["Modificado por", "MODIFICADO POR"]]) {
+      appendDocumentDetail(details, field, label, documentAuthorValue(row, field), field === "Modificado por" ? "rg-detail--wide" : "", field === "Criado por" ? "♙" : "✎");
+    }
+    appendDocumentDetail(details, "OBS", "OBS", fieldValue(row.fields, "OBS", model), "rg-detail--observation", "▧");
     container.append(details);
   }
 

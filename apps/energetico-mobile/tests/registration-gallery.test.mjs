@@ -157,6 +157,18 @@ test("Galeria de documentos organiza os dados em tabela, destaca status, agrupa 
   assert.equal(dataCells.at(-1).dataset.field, "OBS");
   assert.equal(submitted.querySelector('.rg-row-file__label').textContent, "ANEXOS");
   assert.equal(submitted.querySelector('.rg-row-file__count').textContent, "2 anexos");
+  const cardSections = [...submitted.querySelector('.rg-document-table').children];
+  assert.equal(cardSections[0].className, "rg-document-dates", "as datas aparecem primeiro");
+  assert.deepEqual(cardSections.slice(1).map(node => node.dataset.field), [
+    "STATUS", "FILIAL", "TIPODOCUMENTO", "TIPOHOMOLOGACAO", "Criado por", "Modificado por", "OBS",
+  ]);
+  assert.equal(submitted.querySelector('.rg-document-date-grid').children.length, 5);
+  assert.equal(submitted.querySelector('[data-field="STATUS"] .rg-detail__icon').textContent, "✓");
+  assert.equal(pending.querySelector('[data-field="STATUS"] .rg-detail__icon').textContent, "!");
+  assert.equal(submitted.querySelector('[data-field="TIPODOCUMENTO"] .rg-detail__icon').textContent, "▤");
+  assert.equal(submitted.querySelector('.rg-document-dates-title-icon').textContent, "▣");
+  assert.equal(submitted.querySelector('[data-field="Criado por"]').classList.contains('rg-detail--wide'), false);
+  assert.equal(submitted.querySelector('[data-field="Modificado por"]').classList.contains('rg-detail--wide'), true);
   assert.deepEqual(calls, ["292"]);
 
   gallery.destroy();
