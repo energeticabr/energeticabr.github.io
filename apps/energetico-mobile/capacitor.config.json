@@ -2,7 +2,6 @@
   "appId": "br.com.energetica.energetico",
   "appName": "Energético",
   "webDir": "dist",
-  "backgroundColor": "#e4f0f3",
   "server": {
     "hostname": "localhost",
     "iosScheme": "capacitor",

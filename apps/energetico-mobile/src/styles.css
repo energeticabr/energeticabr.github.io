@@ -806,7 +806,7 @@ button { touch-action: manipulation; }
 
 @media (prefers-color-scheme: dark) {
   :root { --surface: #102b35; --surface-soft: #173844; --text: #edf7f9; --muted: #b2c8ce; }
-  body, .chat-transcript { background: #091e26; }
+  .chat-transcript { background: #091e26; }
   .auth-card { background: #102b35; }
   .chat-composer textarea { border-color: #41616b; }
   .error-banner { color: #ffd4d4; background: #5b2020; }
