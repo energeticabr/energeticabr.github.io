@@ -74,6 +74,11 @@ async function defaultPendingProvisionAttachmentsDataFactory(options) {
   return createPendingProvisionAttachmentsData(options);
 }
 
+async function defaultHrPayrollGalleryFactory(options) {
+  const { createHrPayrollGallery } = await import("./ui/hr-payroll-gallery-view.js");
+  return createHrPayrollGallery(options);
+}
+
 function errorMessage(error, fallback) {
   return error?.message || fallback;
 }
@@ -591,6 +596,7 @@ export function createAppController({
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
+  hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -631,6 +637,9 @@ export function createAppController({
   let recurringExpensesGalleryOpening = null;
   const registrationGalleries = new Map();
   const registrationGalleryOpenings = new Map();
+  let hrPayrollGallery = null;
+  let hrPayrollGalleryName = "";
+  let hrPayrollGalleryOpening = null;
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -3347,6 +3356,7 @@ export function createAppController({
       tasksGallery,
       paymentProgrammingGallery,
       recurringExpensesGallery,
+      hrPayrollGallery,
       ...registrationGalleries.values(),
     ]) gallery?.close?.();
   }
@@ -3433,6 +3443,56 @@ export function createAppController({
     } finally {
       if (ordersGalleryDataOpening.get(cacheKey) === opening) ordersGalleryDataOpening.delete(cacheKey);
     }
+  }
+
+  function disposeHrPayrollGallery() {
+    hrPayrollGallery?.destroy?.();
+    hrPayrollGallery = null;
+    hrPayrollGalleryName = "";
+  }
+
+  async function openHrPayrollGallery(gallery) {
+    if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery) || !account || stopped || flowBusy()) return false;
+    if (hrPayrollGalleryOpening) return hrPayrollGalleryOpening;
+    const galleryAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria foi encerrada.");
+    };
+    hrPayrollGalleryOpening = (async () => {
+      try {
+        if (hrPayrollGalleryName !== gallery) {
+          disposeHrPayrollGallery();
+          let panel;
+          panel = await hrPayrollGalleryFactory({
+            gallery,
+            request: async (selectedGallery, page, pageSize, cursor) => {
+              assertSession();
+              const result = await client.hrPayrollGalleryRequest(selectedGallery, { page, pageSize, cursor });
+              assertSession();
+              return result;
+            },
+            onClose: () => {
+              if (hrPayrollGallery === panel) {
+                panel?.destroy?.();
+                hrPayrollGallery = null;
+                hrPayrollGalleryName = "";
+              }
+            },
+          });
+          if (stopped || account !== galleryAccount) { panel?.destroy?.(); return false; }
+          hrPayrollGallery = panel;
+          hrPayrollGalleryName = gallery;
+        }
+        await hrPayrollGallery.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria de folha.");
+        return false;
+      } finally {
+        hrPayrollGalleryOpening = null;
+      }
+    })();
+    return hrPayrollGalleryOpening;
   }
 
   async function openLaunchGallery() {
@@ -4474,6 +4534,7 @@ export function createAppController({
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
+    disposeHrPayrollGallery();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -5057,6 +5118,8 @@ export function createAppController({
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
+      if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
+      if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
       if ([EPI_ORDER_BLANK_REPLY_ID, EPI_SUPPLIER_DOCUMENT_BLANK_REPLY_ID].includes(command.replyId)) {
@@ -5358,6 +5421,7 @@ export function createAppController({
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
+    disposeHrPayrollGallery();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

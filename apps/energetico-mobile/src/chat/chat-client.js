@@ -207,6 +207,26 @@ export function createChatClient({
     return result.launchGallery;
   }
 
+  async function hrPayrollGalleryRequest(gallery, { page = 1, pageSize = 25, cursor = null } = {}) {
+    if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery)
+      || !Number.isInteger(page) || page < 1 || page > 500
+      || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50
+      || (cursor !== null && (typeof cursor !== "string" || !cursor || cursor.length > 8192))) {
+      throw new Error("Galeria de folha ou página inválida.");
+    }
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "hr_payroll_gallery", gallery, page, pageSize, ...(cursor ? { cursor } : {}) }),
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "A galeria de folha"), true);
+    if (!result.hrPayrollGallery || typeof result.hrPayrollGallery !== "object") {
+      throw new Error("A VM não devolveu os dados da galeria de folha.");
+    }
+    return result.hrPayrollGallery;
+  }
+
   async function uploadLaunchGalleryFile(itemId, file, options = {}) {
     const id = String(itemId || "").trim();
     if (!/^[1-9][0-9]*$/.test(id)) throw new Error("Lançamento inválido.");
@@ -422,5 +442,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, hrPayrollGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

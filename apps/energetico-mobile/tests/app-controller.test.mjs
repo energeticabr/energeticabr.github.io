@@ -26,7 +26,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, hrPayrollGalleryFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -64,7 +64,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, hrPayrollGalleryFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -743,6 +743,20 @@ function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanc
   return { calls, replies };
 }
 
+test("atalhos IDFOLHA e FOLHA PGTO abrem suas galerias sem responder ao fluxo RH", async t => {
+  const opened = [];
+  const h = makeHarness({ hrPayrollGalleryFactory: async options => ({
+    open() { opened.push(options.gallery); },
+    destroy() {},
+  }) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_idfolha", label: "GALERIA IDFOLHA" });
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_folhapgto", label: "GALERIA FOLHA PGTO" });
+  assert.deepEqual(opened, ["IDFOLHA", "FOLHAPGTO"]);
+  assert.equal(h.chatCalls.length, before);
+});
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
   let callbacks;
   let opens = 0;

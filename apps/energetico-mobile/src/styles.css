@@ -454,6 +454,8 @@ button { touch-action: manipulation; }
 .chat-bubble > strong { display: block; margin-bottom: 4px; font-size: .78rem; }
 .chat-bubble p { margin: 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-message--assistant .chat-bubble p { font-weight: 600; }
+.chat-message--hr-gallery-menu { align-items: stretch; }
+.chat-message--hr-gallery-menu .chat-bubble { width: 100%; max-width: 100%; min-width: 0; }
 .chat-bubble p strong { font-weight: 700; }
 .chat-bubble p .chat-question-field { color: #b42318; font-weight: 800; }
 .chat-presence-confirmation { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; color: #173042; line-height: 1.45; overflow-wrap: anywhere; }
@@ -654,6 +656,12 @@ button { touch-action: manipulation; }
   .chat-choice-columns--audit-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--audit-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
 }
+.chat-choice-columns--hr-galleries { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(108px, .8fr); align-items: start; gap: clamp(8px, 2vw, 16px); width: 100%; }
+.chat-choice-columns--hr-galleries > * { min-width: 0; }
+.chat-choice-columns--hr-galleries .chat-choice-list { width: 100%; }
+.chat-choice-columns__galleries { display: grid; gap: clamp(8px, 1vw, 14px); }
+.chat-choice-columns__galleries .chat-choice-button { display: flex; align-items: center; justify-content: center; min-height: 62px; padding: 8px 6px; color: #123c68; border: 1px solid #8aaab7; background: #edf6f8; font-size: clamp(.72rem, 2vw, .92rem); line-height: 1.2; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.chat-choice-columns__galleries .chat-choice-button:hover { background: #dcecf1; }
 .chat-delegated-tasks { display: grid; gap: 9px; margin-top: 10px; }
 .chat-delegated-tasks__search { display: block; }
 .chat-delegated-tasks__search input { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid #a9c5ce; border-radius: 11px; color: var(--text); background: #fff; font: inherit; }
@@ -863,6 +871,12 @@ button { touch-action: manipulation; }
 @media (min-width: 760px) {
   body { padding: 20px; overflow: auto; }
   .chat-shell { position: relative; inset: auto; width: min(100%, 760px); height: calc(100dvh - 40px); min-height: 0; margin: 0 auto; border-radius: 28px; box-shadow: var(--shadow); }
+}
+
+@media (max-width: 420px) {
+  .chat-choice-columns--hr-galleries { grid-template-columns: minmax(0, 1.35fr) minmax(96px, .75fr); gap: 7px; }
+  .chat-choice-columns__galleries { gap: 7px; }
+  .chat-choice-columns__galleries .chat-choice-button { min-height: 58px; padding: 7px 4px; font-size: .72rem; }
 }
 
 /* Tablets in landscape have much more horizontal room than the phone-sized
