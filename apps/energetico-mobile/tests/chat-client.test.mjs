@@ -157,6 +157,25 @@ test("consulta o relatório RHID do dia selecionado com a sessão Microsoft", as
   assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_report", date: "2026-09-25" });
 });
 
+test("atualização RHID usa a sessão Microsoft e exige conclusão do fluxo", async () => {
+  const requests = [];
+  const client = clientWith(async (url, options) => {
+    requests.push({ url, ...options });
+    const action = JSON.parse(options.body).action;
+    return jsonResponse({ status: "processed", messages: [], rhidRefresh: {
+      status: action === "rhid_refresh" ? "running" : "completed",
+      requestId: "a".repeat(32),
+    } });
+  });
+  const refresh = await client.refreshRhidAttendance();
+  assert.equal(refresh.status, "running");
+  assert.equal(requests[0].headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(requests[0].body), { action: "rhid_refresh" });
+  const final = await client.getRhidRefreshStatus(refresh.requestId);
+  assert.equal(final.status, "completed");
+  assert.deepEqual(JSON.parse(requests[1].body), { action: "rhid_refresh_status", requestId: "a".repeat(32) });
+});
+
 test("relatório RHID rejeita datas inexistentes antes de consultar a VM", async () => {
   let calls = 0;
   const client = clientWith(async () => { calls += 1; return jsonResponse({ status: "processed", messages: [] }); });

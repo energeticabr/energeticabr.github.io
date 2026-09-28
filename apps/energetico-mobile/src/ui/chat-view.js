@@ -1285,7 +1285,7 @@ function asksToFinishFlow(messages) {
     && /\bfinalizar\b/i.test(promptText);
 }
 
-function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly = false } = {}) {
+function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly = false, rhidRefresh = null } = {}) {
   // An active flow always has navigation, including text-only/confirmation
   // screens whose latest message is not a poll. The root menu has no
   // activeFlow, so it remains the only screen without this green bar.
@@ -1305,7 +1305,7 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const actions = homeOnly
     ? ""
     : `${finish}${quickRhid
-      ? `<button class="chat-flow-summary" type="button" data-action="rhid-attendance-report-today" aria-label="Abrir relatório RHID de hoje"${busy ? " disabled" : ""}><span aria-hidden="true">📊</span> RHID</button>`
+      ? `<button class="chat-flow-rhid-refresh${rhidRefresh?.busy ? " chat-flow-rhid-refresh--busy" : ""}" type="button" data-action="rhid-refresh" aria-label="Atualizar RHID e SharePoint" title="Consultar dados já transmitidos ao RHID e atualizar o SharePoint"${busy || rhidRefresh?.busy ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v5h5M4 13a8 8 0 0 0 14.9 4M20 20v-5h-5"/></svg></button><button class="chat-flow-summary" type="button" data-action="rhid-attendance-report-today" aria-label="Abrir relatório RHID de hoje"${busy || rhidRefresh?.busy ? " disabled" : ""}><span aria-hidden="true">📊</span> RHID</button>`
       : canChangeRhidReportDate
         ? `<button class="chat-flow-summary chat-flow-summary--calendar" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(latestAssistantMessage.id)}" data-value="${escapeHtml(attendanceTable.reportDate)}" aria-label="Alterar data do relatório RHID" title="Alterar data do relatório RHID"${busy ? " disabled" : ""}><span aria-hidden="true">📅</span></button>`
         : `<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`}`;
@@ -1313,7 +1313,7 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
     <div class="chat-flow-actions">${actions}</div>
-  </div>`;
+  </div>${quickRhid && rhidRefresh?.message ? `<div class="chat-rhid-refresh-status${rhidRefresh.error ? " chat-rhid-refresh-status--error" : ""}" role="status">${escapeHtml(rhidRefresh.message)}</div>` : ""}`;
 }
 
 function presenceConfirmationMarkup(value = {}) {
@@ -1889,7 +1889,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], rhidAttendanceReport = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], rhidAttendanceReport = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -1951,7 +1951,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
-    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation }) : ""}
+    ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation, rhidRefresh }) : ""}
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
@@ -2022,6 +2022,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
   let rhidAttendanceReportError = "";
+  let rhidRefresh = { busy: false, message: "", error: false };
   let pendingDateSeparatorDeletion = null;
   let pendingDocumentSeparatorDeletion = null;
   let signaturePadOpen = false;
@@ -3041,6 +3042,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       emit({ type: "rhid-attendance-report-today", value: saoPauloDateIso() });
       return;
     }
+    if (command.type === "rhid-refresh") {
+      if (!rhidRefresh.busy) emit({ type: "rhid-refresh" });
+      return;
+    }
     if (command.type === "cancel-rhid-attendance-report") {
       if (rhidAttendanceReportBusy) return;
       rhidAttendanceReportOpen = false;
@@ -3906,6 +3911,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         busy: rhidAttendanceReportBusy,
         error: rhidAttendanceReportError,
       },
+      rhidRefresh,
       signaturePad: signaturePadOpen,
       signaturePadError,
       signaturePlacementStampApplied: Boolean(
@@ -3986,6 +3992,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
+  function setRhidRefreshStatus({ busy = false, message = "", error = false } = {}) {
+    rhidRefresh = { busy: Boolean(busy), message: String(message || ""), error: Boolean(error) };
+    if (lastState) { const state = lastState; lastState = null; render(state); }
+  }
+
   function closeRhidAttendanceReport() {
     if (!rhidAttendanceReportOpen) return false;
     rhidAttendanceReportOpen = false;
@@ -4027,6 +4038,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     render,
     openPowerBiDashboard,
     setRhidAttendanceReportStatus,
+    setRhidRefreshStatus,
     closeRhidAttendanceReport,
     on(type, handler) {
       if (!handlers.has(type)) handlers.set(type, new Set());

@@ -105,10 +105,18 @@ test("atalho RHID substitui Ver resumo somente no menu de Recursos Humanos e usa
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
   const dates = [];
+  let refreshes = 0;
   view.on("rhid-attendance-report-today", event => dates.push(event.value));
+  view.on("rhid-refresh", () => { refreshes += 1; });
   view.render(state);
 
   const shortcut = root.querySelector('.chat-flow-status [data-action="rhid-attendance-report-today"]');
+  const refresh = root.querySelector('.chat-flow-status [data-action="rhid-refresh"]');
+  assert.ok(refresh, "a atualização deve estar no cabeçalho RH");
+  assert.ok(refresh.compareDocumentPosition(shortcut) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING, "ícone antes de RHID");
+  assert.match(refresh.getAttribute("aria-label"), /atualizar.*rhid.*sharepoint/i);
+  refresh.click();
+  assert.equal(refreshes, 1);
   assert.ok(shortcut, "o atalho deve ocupar o lugar de Ver resumo no cabeçalho");
   assert.match(shortcut.textContent, /📊\s*RHID/);
   assert.equal(root.querySelector('.chat-flow-status [data-action="show-summary"]'), null);

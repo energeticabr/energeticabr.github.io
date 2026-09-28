@@ -294,6 +294,38 @@ export function createChatClient({
     return report;
   }
 
+  async function refreshRhidAttendance() {
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_refresh" }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "A atualização RHID"));
+    if (result?.rhidRefresh?.status !== "running" || !result.rhidRefresh.requestId) {
+      throw new Error("A VM não confirmou o início da atualização RHID.");
+    }
+    return result.rhidRefresh;
+  }
+
+  async function getRhidRefreshStatus(requestId) {
+    const id = String(requestId || "").trim();
+    if (!/^[a-f0-9]{32}$/i.test(id)) throw new Error("Pedido RHID inválido.");
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_refresh_status", requestId: id }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "O acompanhamento RHID", { allowRecovery: true }), true);
+    if (!result?.rhidRefresh || result.rhidRefresh.requestId !== id) {
+      throw new Error("A VM não confirmou o estado da atualização RHID.");
+    }
+    return result.rhidRefresh;
+  }
+
   async function completeDelegatedTask(taskId) {
     const id = String(taskId || "").trim();
     if (!/^\d+$/.test(id) || Number(id) <= 0) throw new Error("A tarefa delegada não foi identificada.");
@@ -390,5 +422,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }
