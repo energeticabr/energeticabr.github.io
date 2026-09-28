@@ -60,6 +60,15 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G28 filter ${name}`);
   }
   assert.equal(ctx.root().querySelector('[name="status"]').value, "PAGAMENTO PREVISTO");
+  assert.equal(ctx.root().querySelector(".pg-filters summary").textContent, "Filtros");
+  assert.equal(ctx.root().querySelector(".pg-filters [name=sort]"), null,
+    "the order selector stays outside the collapsible filters");
+  const order = ctx.root().querySelector(".pg-list-toolbar [name=sort]");
+  assert.ok(order, "the list toolbar exposes the ordering selector");
+  assert.deepEqual([...order.options].map(option => option.textContent), [
+    "Todos", "Vencimento mais próximo", "Vencimento mais distante", "Maior ID", "Modificado recentemente",
+  ]);
+  assert.equal(order.value, "due-asc");
   assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["306"]);
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /23\/09\/2026/);
@@ -112,8 +121,13 @@ test("G28 mostra o clipe lateral salvo ausência confirmada e abre a coleção c
   assert.equal(rail.dataset.action, "attachments");
   assert.equal(rail.compareDocumentPosition(cardWithAttachments.querySelector(".og-card-main")) & 4, 4,
     "the attachment rail appears before the payment content");
-  assert.equal(ctx.root().querySelector('.pg-card[data-item-id="307"] .og-card-attachment-rail'), null,
-    "payments known to have no attachments do not show the icon");
+  const emptyRail = ctx.root().querySelector('.pg-card[data-item-id="307"] .pg-attachment-rail');
+  assert.ok(emptyRail, "the left attachment rail remains visible to report zero attachments");
+  assert.equal(emptyRail.querySelector(".og-card-attachment-icon"), null,
+    "payments known to have no attachments do not show the clip icon");
+  assert.equal(emptyRail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
+  assert.equal(emptyRail.querySelector(".og-card-attachment-count").textContent, "0 anexos");
+  assert.equal(emptyRail.matches("button"), false, "an empty rail is informational rather than clickable");
   const unknownCard = ctx.root().querySelector('.pg-card[data-item-id="308"]');
   assert.ok(unknownCard.querySelector(".og-card-attachment-rail"),
     "Graph may not report attachment presence, so unknown rows keep the access control");
@@ -141,6 +155,61 @@ test("G28 mostra a quantidade de anexos abaixo do clipe à esquerda", async t =>
   assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
 });
 
+test("ordenar por continua disponível fora dos filtros e reorganiza os cartões", async t => {
+  const rows = [
+    { id: "321", hasAttachments: false, fields: { ID: 321, FORNECEDOR: "VENCIMENTO LONGE", STATUS: "PAGAMENTO PREVISTO", "DATA PREVISTO PGTO": "2026-10-02" } },
+    { id: "322", hasAttachments: false, fields: { ID: 322, FORNECEDOR: "VENCIMENTO PERTO", STATUS: "PAGAMENTO PREVISTO", "DATA PREVISTO PGTO": "2026-09-28" } },
+  ];
+  const ctx = await setup(t, { rows });
+  await ctx.gallery.open();
+  const order = ctx.root().querySelector(".pg-list-toolbar [name=sort]");
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["322", "321"]);
+  order.value = "due-desc";
+  order.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
+  assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["321", "322"]);
+});
+
+test("G28 segue o cartão compacto da referência, mantendo status, dados, observação e ação de detalhes", async t => {
+  const rows = [{ id: "313", hasAttachments: false, fields: {
+    ID: 313, FORNECEDOR: "ML COMERCIO CIMENTO", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": 1425, QTD: 50,
+    "DATA PREVISTO PGTO": "2026-09-29", FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS",
+    PGTOAGENDADO: "PENDENTE", DESCRICAOPGTO: "Cimento entregue para a obra.", OBS: "Pagamento de cimento para a obra.",
+  } }];
+  const ctx = await setup(t, { rows, now: () => new Date("2026-09-27T12:00:00-03:00") });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.pg-card[data-item-id="313"]');
+  assert.ok(card.querySelector(".pg-card-heading .pg-status"), "status badge is aligned with ID and supplier");
+  assert.equal(card.querySelector(".pg-card-heading h2").textContent, "ML COMERCIO CIMENTO");
+  assert.equal(card.querySelectorAll(".pg-card-grid .pg-card-field:not(.pg-summary-field--wide)").length, 6);
+  assert.match(card.querySelector('.pg-card-field[data-field="FILIAL"]').textContent, /004 - EDIFÍCIO XAVANTE/);
+  assert.match(card.querySelector('.pg-card-field[data-field="IMÓVEL"]').textContent, /TODOS/);
+  assert.match(card.querySelector('.pg-summary-field[data-field="DESCRIÇÃO"]').textContent, /Cimento entregue/);
+  assert.match(card.querySelector(".pg-observation").textContent, /Pagamento de cimento para a obra/);
+  assert.match(card.querySelector(".pg-deadline").textContent, /VENCERÁ EM 2 DIAS/);
+  assert.equal(button(card, "Ver detalhes").dataset.action, "details");
+});
+
+test("G28 esconde o clipe se a contagem consultada confirmar que não há anexos", async t => {
+  const rows = [{ id: "309", fields: { ID: 309, FORNECEDOR: "SEM ANEXOS", STATUS: "PAGAMENTO PREVISTO" } }];
+  const ctx = await setup(t, { rows, data: {
+    async loadSnapshot() { return { rows }; },
+    async listAttachments() { return []; },
+    async downloadAttachment() { return new Blob(); },
+  } });
+  await ctx.gallery.open();
+  await settle();
+  const rail = ctx.root().querySelector('.pg-card[data-item-id="309"] .pg-attachment-rail');
+  assert.ok(rail);
+  assert.equal(rail.querySelector(".og-card-attachment-icon"), null);
+  assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "0 anexos");
+  assert.equal(rail.matches("button"), false);
+  const order = ctx.root().querySelector(".pg-list-toolbar [name=sort]");
+  order.value = "due-desc";
+  order.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
+  assert.equal(ctx.root().querySelector('.pg-card[data-item-id="309"] .pg-attachment-rail .og-card-attachment-icon'), null,
+    "a later rerender keeps the confirmed empty rail free of the clip");
+});
+
 test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visualizador compartilhado", async t => {
   const rows = [{ id: "306", hasAttachments: true, fields: {
     ID: 306, FORNECEDOR: "DIBRITA", OBS: "texto <img src=x onerror=alert(1)>", "DATA PREVISTO PGTO": "2026-09-23T03:00:00Z",
@@ -151,7 +220,7 @@ test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visua
   const opened = [];
   const ctx = await setup(t, { rows, openMediaCollection: async items => opened.push(items) });
   await ctx.gallery.open();
-  button(ctx.root(), "Detalhes").click();
+  button(ctx.root(), "Ver detalhes").click();
   const detail = ctx.root().querySelector(".pg-detail");
   assert.equal(detail.getAttribute("role"), "dialog");
   assert.ok(detail.querySelector("table"));
@@ -195,7 +264,7 @@ test("datas de criação e modificação mostram o dia local de São Paulo", asy
   } }];
   const ctx = await setup(t, { rows });
   await ctx.gallery.open();
-  button(ctx.root(), "Detalhes").click();
+  button(ctx.root(), "Ver detalhes").click();
   assert.match(ctx.root().querySelector(".pg-detail").textContent, /21\/09\/2026/);
 });
 
@@ -259,7 +328,9 @@ test("layout G28 mantém filtros em duas colunas no celular e lista os pagamento
   const styles = readFileSync(new URL("../src/ui/orders-gallery.css", import.meta.url), "utf8");
   assert.match(styles, /\.pg-filter-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(styles, /\.pg-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
-  assert.match(styles, /\.pg-card-fields\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(styles, /\.pg-card-fields\.pg-card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(styles, /\.pg-list-toolbar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s);
+  assert.match(styles, /\.pg-attachment-rail:not\(button\)/);
   assert.match(styles, /\.pg-deadline--today[^}]*color:/s);
   assert.match(styles, /\.pg-deadline--overdue[^}]*color:/s);
 });
