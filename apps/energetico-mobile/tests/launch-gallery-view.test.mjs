@@ -196,12 +196,225 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
     'PIRATININGA FERRAMENTAS LTDA', 'PEDIDO FINALIZADO', 'SHAREPOINT APP EM 20/09/2026 14:27',
     '004 - EDIFÍCIO XAVANTE', '20/09/2026', 'SEM MODIFICAÇÕES APÓS CRIAÇÃO', 'R$ 2,85',
     'CUSTO', 'PENDENTE DE APROVAÇÃO', '19/09/2026', '1 UN', 'AMAEL PF - CAIXA', '318',
-    '2 ANEXOS', 'SEM AVALIAÇÃO']) assert.ok(record.textContent.includes(value), value);
+    '2 anexos', 'SEM AVALIAÇÃO']) assert.ok(record.textContent.includes(value), value);
   assert.equal([...ctx.root().querySelectorAll('.lg-filter-grid .lg-label')]
     .some(label => label.textContent === 'Medição'), true);
   assert.match(ctx.root().querySelector('.lg-totals').textContent, /3\s+R\$\s*85,00/);
   button(record, 'Detalhes').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
+});
+
+test('launch card presents AGRUPAR and supplier as cluster actions while preserving the left clip/count rail', async t => {
+  const item = row(3451);
+  item.fields = { ...item.fields, AGRUPAR: 334, 'QUANTIDADE DE ANEXOS': 2 };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open(); await settle();
+
+  const card = ctx.root().querySelector('.lg-record');
+  const supplier = card.querySelector('[data-cluster-kind="supplier"]');
+  const order = card.querySelector('[data-cluster-kind="order"]');
+  assert.equal(supplier.textContent, 'Fornecedor A');
+  assert.equal(order.textContent, '334');
+  assert.ok(card.querySelector('.lg-record-media').compareDocumentPosition(card.querySelector('.lg-record-heading'))
+    & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING, 'attachment control remains left/before the card content');
+  assert.equal(card.querySelector('.lg-record-media .lg-record-attachment-icon').textContent, '📎');
+  assert.equal(card.querySelector('.lg-record-media .lg-record-attachment-count').textContent, '2 anexos');
+  assert.ok(card.querySelector('.lg-record-dates'));
+  assert.ok(card.querySelector('.lg-record-values'));
+  assert.equal(card.querySelector('.lg-record-dates .lg-record-label')?.textContent, 'DATA DE COMPRA');
+});
+
+test('supplier cluster loads every matching launch page and summarizes the supplier', async t => {
+  const first = row(3451); first.fields = { ...first.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 905,00' };
+  const second = row(3450); second.fields = { ...second.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 181,00' };
+  const supplierPages = [];
+  const ctx = await setup(t, { request: async (operation, payload) => {
+    if (operation !== 'snapshot') return detail();
+    if (payload.filters?.supplier === 'Fornecedor A') {
+      supplierPages.push(payload.page);
+      return snapshot({ rows: [payload.page === 1 ? first : second], page: payload.page, pages: 2, count: 2 });
+    }
+    return snapshot({ rows: [first] });
+  } });
+  await ctx.gallery.open();
+  const supplierTrigger = ctx.root().querySelector('[data-cluster-kind="supplier"]');
+  supplierTrigger.focus(); supplierTrigger.click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.equal(modal.hidden, false);
+  assert.match(modal.textContent, /Fornecedor A/);
+  assert.deepEqual(supplierPages, [1, 2]);
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3451', '3450']);
+  assert.match(modal.textContent, /R\$\s*1\.086,00/);
+  button(modal, 'Fechar').click();
+  assert.equal(modal.hidden, true);
+  assert.equal(ctx.document.activeElement, supplierTrigger);
+});
+
+test('order cluster joins AGRUPAR to the SharePoint order and renders the order plus all linked launches', async t => {
+  const orderLaunch = row(3451);
+  orderLaunch.fields = { ...orderLaunch.fields, AGRUPAR: '334', 'ID PEDIDO': 334, 'DATA DE COMPRA': '2026-09-27',
+    'VALOR TOTAL': 'R$ 905,00', QUANTIDADE: 5, UNIDADE: 'DIÁRIA', FRETE: 'R$ 0,00' };
+  const otherLaunch = row(3450);
+  otherLaunch.fields = { ...otherLaunch.fields, AGRUPAR: '335', 'VALOR TOTAL': 'R$ 999,00' };
+  const orderPages = [];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {
+      FILIAL: '004 - EDIFÍCIO XAVANTE', FORNECEDOR: 'MAURO ANTONIO PEREIRA', FORMAPGTO: 'DINHEIRO',
+      VALORTOTAL: 905, STATUS: 'PENDENTE AUDITORIA', OBS: 'Sem observação',
+    } }] }),
+    request: async (operation, payload) => {
+      if (operation !== 'snapshot') return detail({ item: orderLaunch });
+      if (payload.pageSize === 100) {
+        orderPages.push(payload.page);
+        return snapshot({ rows: payload.page === 1 ? [orderLaunch] : [otherLaunch], page: payload.page, pages: 2, count: 2 });
+      }
+      return snapshot({ rows: [orderLaunch] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.equal(modal.hidden, false);
+  assert.deepEqual(orderPages, [1, 2]);
+  assert.match(modal.textContent, /CABEÇALHO DO PEDIDO/);
+  assert.match(modal.textContent, /MAURO ANTONIO PEREIRA/);
+  assert.match(modal.textContent, /LANÇAMENTOS VINCULADOS AO PEDIDO 334/i);
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3451']);
+  assert.match(modal.textContent, /R\$\s*905,00/);
+  assert.match(modal.textContent, /Valores conferem/i);
+  assert.match(modal.textContent, /Soma dos lançamentos:[\s\S]*905,00/i);
+});
+
+test('order reconciliation stays indeterminate when linked launch amounts are missing', async t => {
+  const item = row(3451);
+  item.total = undefined;
+  item.fields = { ...item.fields, AGRUPAR: '334' };
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: { VALORTOTAL: 0 } }] }),
+    request: async (operation, payload) => operation !== 'snapshot' ? detail({ item })
+      : payload.pageSize === 100 ? snapshot({ rows: [item] }) : snapshot({ rows: [item] }),
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.doesNotMatch(modal.textContent, /Valores conferem/i);
+  assert.match(modal.textContent, /não foi possível comparar|valor.*incompleto|total incompleto/i);
+  assert.match(modal.textContent, /Total incompleto/i);
+});
+
+test('stale launch-page request cannot overwrite a newer cluster cache after gallery refresh', async t => {
+  const stale = row(3451); stale.fields = { ...stale.fields, AGRUPAR: '334' };
+  const fresh = row(3452); fresh.fields = { ...fresh.fields, AGRUPAR: '334' };
+  const oldPage = deferred(); let fullPageRequests = 0;
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: { VALORTOTAL: 85 } }] }),
+    request: async (operation, payload) => {
+      if (operation !== 'snapshot') return detail({ item: fresh });
+      if (payload.pageSize !== 100) return snapshot({ rows: [fresh] });
+      fullPageRequests += 1;
+      return fullPageRequests === 1 ? oldPage.promise : snapshot({ rows: [fresh] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle();
+  ctx.root().querySelector('details.lg-filters').open = true;
+  button(ctx.root(), 'Limpar filtros').click();
+  await settle();
+  let modal = ctx.root().querySelector('.lg-cluster-modal');
+  button(modal, 'Fechar').click();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3452']);
+
+  oldPage.resolve(snapshot({ rows: [stale] }));
+  await settle(); await settle();
+  button(modal, 'Fechar').click();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3452']);
+});
+
+test('cluster modal keeps keyboard focus inside the active dialog', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="supplier"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  const close = button(modal, 'Fechar');
+  close.focus();
+  const tab = new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+  close.dispatchEvent(tab);
+
+  assert.equal(tab.defaultPrevented, true);
+  assert.equal(ctx.document.activeElement, close);
+});
+
+test('order cluster renders expanded SharePoint lookup values as readable text', async t => {
+  const item = row(3451); item.fields = { ...item.fields, AGRUPAR: '334' };
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {
+      FORNECEDOR: { LookupId: 21, LookupValue: 'Fornecedor da lista' },
+      FILIAL: { LookupId: 4, LookupValue: '004 - EDIFÍCIO XAVANTE' },
+      VALORTOTAL: 85,
+    } }] }),
+    request: async (operation, payload) => operation !== 'snapshot' ? detail({ item })
+      : payload.pageSize === 100 ? snapshot({ rows: [item] }) : snapshot({ rows: [item] }),
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+
+  assert.match(modal.textContent, /Fornecedor da lista/);
+  assert.match(modal.textContent, /004 - EDIFÍCIO XAVANTE/);
+  assert.doesNotMatch(modal.textContent, /LookupId|LookupValue/);
+});
+
+test('closing the order-cluster modal invalidates its pending result', async t => {
+  const loadOrder = deferred();
+  const item = row(); item.fields = { ...item.fields, AGRUPAR: '334' };
+  const ctx = await setup(t, { loadOrderSnapshot: () => loadOrder.promise,
+    request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  button(modal, 'Fechar').click();
+  loadOrder.resolve({ rows: [{ id: '334', fields: { FORNECEDOR: 'Fornecedor obsoleto' } }] });
+  await settle();
+
+  assert.equal(modal.hidden, true);
+  assert.doesNotMatch(modal.textContent, /Fornecedor obsoleto/);
+});
+
+test('missing order and unlinked AGRUPAR show a safe empty state; Escape closes only the modal', async t => {
+  const item = row(3451); item.fields = { ...item.fields, AGRUPAR: '334' };
+  const unrelated = row(3450); unrelated.fields = { ...unrelated.fields, AGRUPAR: '335' };
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [] }),
+    request: async (operation, payload) => {
+      if (operation !== 'snapshot') return detail({ item });
+      return payload.pageSize === 100 ? snapshot({ rows: [unrelated] }) : snapshot({ rows: [item] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.match(modal.textContent, /Pedido #334 não encontrado/);
+  assert.match(modal.textContent, /Nenhum lançamento encontrado com AGRUPAR = 334/);
+  assert.equal(modal.querySelectorAll('[data-launch-id]').length, 0);
+
+  ctx.root().dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(modal.hidden, true);
+  assert.equal(ctx.root().hidden, false);
 });
 
 test('launch summary formats SharePoint dates as dd/mm/yyyy and resolves the creator name instead of its numeric lookup id', async t => {
@@ -298,9 +511,10 @@ test('launch rows keep the stable pre-parity layout while keeping attachments op
     assert.ok(record.querySelector(selector), selector);
   }
   assert.match(record.querySelector('.lg-record-media').textContent, /PDF|3\s*ANEXOS/i);
-  assert.match(record.querySelector('.lg-record-badges').textContent, /PEDIDO FINALIZADO|PENDENTE DE APROVAÇÃO/i);
+  assert.match(record.querySelector('.lg-record-status').textContent, /PEDIDO FINALIZADO/i);
+  assert.match(record.querySelector('.lg-record-badges').textContent, /PENDENTE DE APROVAÇÃO/i);
   assert.equal(record.querySelector('[data-lg-action="attachments"]'), null);
-  assert.ok(record.querySelector('.lg-record > .lg-button'), 'details stays as the single row action');
+  assert.ok(record.querySelector('.lg-record-content > .lg-button'), 'details stays as the single row action');
 });
 
 test('launch cards show a PDF marker on the left when any PDF attachment exists', async t => {
@@ -879,15 +1093,18 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   const css = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
   assert.match(css, /--lg-navy:\s*#0b3764/i);
   assert.match(css, /--lg-red:\s*#b51f24/i);
-  assert.match(css, /\.lg-record:nth-child\(even\)/);
-  assert.match(css, /\.lg-record\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s);
+  assert.match(css, /\.lg-record\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  assert.match(css, /\.lg-record--with-media\s*\{[^}]*grid-template-columns:\s*\d+px\s+minmax\(0,\s*1fr\)/s);
   assert.match(css, /\.lg-record-main\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:/s);
+  assert.match(css, /\.lg-record-content\s*\{[^}]*display:\s*grid/s);
   assert.doesNotMatch(css, /\.lg-record--powerapps\s*\{/);
   assert.doesNotMatch(css, /\.lg-record-select\s*\{/);
   assert.match(css, /\.lg-record-media\s*\{[^}]*cursor:\s*pointer/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*background:\s*var\(--lg-sky\)/s);
+  assert.match(css, /\.lg-cluster-table-wrap\s*\{[^}]*overflow:\s*auto/s);
   assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
-  assert.match(css, /\.lg-record\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.lg-record-content\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
 });
 
 test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {

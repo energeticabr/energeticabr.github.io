@@ -10,7 +10,17 @@ const SORTS = ['MAIOR ID', 'MAIOR DATA', 'MAIOR DATA PGTO PREVISTO', 'MAIOR DATA
   'CRIADO MAIS RECENTE', 'CRIADO MAIS ANTIGO', 'MODIFICADO MAIS RECENTE', 'MODIFICADO MAIS ANTIGO'];
 const TOTALS = [['committed', 'Empenhado'], ['liquidated', 'Liquidado'], ['pending', 'Pendente'], ['paid', 'Pago'], ['total', 'Total']];
 const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const display = value => value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+const display = value => {
+  if (value == null) return '';
+  if (Array.isArray(value)) return value.map(display).filter(Boolean).join(', ');
+  if (typeof value === 'object') {
+    for (const name of ['LookupValue', 'Value', 'value', 'DisplayName', 'displayName', 'Title', 'title', 'Name', 'name', 'Email', 'email', 'user', 'application']) {
+      if (value[name] != null) return display(value[name]);
+    }
+    return JSON.stringify(value);
+  }
+  return String(value);
+};
 const key = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[^A-Z0-9]/g, '');
 const ATTACHMENT_COLLECTION_KEYS = ['attachments', 'anexos', 'files', 'arquivos', 'attachmentList', 'listaAnexos', 'attachmentFiles', 'attachmentfiles'];
@@ -106,6 +116,26 @@ function formatGalleryDate(name, value) {
   }).format(instant);
 }
 
+function clusterKey(value) {
+  if (Array.isArray(value)) return clusterKey(value[0]);
+  if (value && typeof value === 'object') {
+    for (const name of ['LookupValue', 'Value', 'value', 'ID', 'Id', 'id', 'Title', 'title']) {
+      if (value[name] != null) return clusterKey(value[name]);
+    }
+    return '';
+  }
+  return String(value ?? '').trim().replace(/^#\s*/, '').replace(/\s+/g, '').toLocaleUpperCase('pt-BR');
+}
+
+function numericAmount(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  let raw = String(value ?? '').trim().replace(/\s/g, '').replace(/^R\$/i, '').replace(/[^\d,.-]/g, '');
+  if (!raw) return null;
+  if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.');
+  const amount = Number(raw);
+  return Number.isFinite(amount) ? amount : null;
+}
+
 function personDisplayName(value) {
   if (value == null) return '';
   if (typeof value === 'object') {
@@ -128,7 +158,8 @@ function personDisplayName(value) {
  * Nothing here owns the chat, the viewer, or the signature canvas.
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
-  request, upload, openMedia, openMediaCollection, loadMediaPreview, captureSignature, onClose, onHome } = {}) {
+  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot,
+  captureSignature, onClose, onHome } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
   let opened = false, destroyed = false, suspended = false, busy = false;
@@ -136,6 +167,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let listLoading = false, detailLoading = false, returnFocus;
   let current = null, selectedId = null, editor = null, review = null, attachmentIndex = 0;
   let page = 1, pages = 0, needsDetailRefresh = false;
+  let clusterVersion = 0, clusterReturnFocus = null, allLaunchRowsCache = null, allLaunchRowsRequest = null;
+  let allLaunchRowsGeneration = 0;
   const retryIds = new Map();
   const selectedUploads = new Map();
   const filterControls = new Map();
@@ -287,11 +320,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   pagination.append(previous, pageLabel, next);
   const panel = element('section', 'lg-detail lg-detail-modal'); panel.hidden = true; panel.tabIndex = -1;
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Detalhes do lançamento');
+  const clusterPanel = element('section', 'lg-detail lg-detail-modal lg-cluster-modal'); clusterPanel.hidden = true; clusterPanel.tabIndex = -1;
+  clusterPanel.setAttribute('role', 'dialog'); clusterPanel.setAttribute('aria-modal', 'true');
+  clusterPanel.setAttribute('aria-label', 'Detalhes do agrupamento');
   const reviewHost = element('section', 'lg-review'); reviewHost.hidden = true;
   reviewHost.setAttribute('aria-label', 'Revisão e confirmação'); reviewHost.tabIndex = -1;
   filterDisclosure.append(filterForm);
   content.append(filterDisclosure, totals, notice, listStatus, cards, pagination);
-  root.append(header, content, panel);
+  root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: async item => {
@@ -325,6 +361,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function loadSnapshot(data = applied) {
     if (!opened || destroyed) return;
+    allLaunchRowsGeneration += 1;
+    allLaunchRowsCache = null;
+    allLaunchRowsRequest = null;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
@@ -402,16 +441,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     host.setAttribute('aria-label', media.kind === 'pdf' ? `Abrir ${fileName || 'arquivo PDF'}`
       : media.kind === 'image' ? `Abrir ${fileName || 'primeiro anexo'}` : 'Abrir anexos do lançamento');
     host.addEventListener('click', () => { if (canChangeDetail()) openRecordAttachments(item); });
+    const knownCount = knownGalleryAttachmentCount(item);
+    const countLabel = knownCount == null ? attachmentCounts.label(item)
+      : `${display(knownCount)} ${Number(knownCount) === 1 ? 'anexo' : 'anexos'}`;
     if (media.kind === 'pdf') {
       host.append(element('span', 'lg-record-pdf-icon', 'PDF'),
         element('span', 'lg-record-media-label', 'ANEXOS'),
-        element('span', 'lg-record-attachment-count', attachmentCounts.label(item)));
+        element('span', 'lg-record-attachment-count', countLabel));
       return host;
     }
     if (media.kind === 'attachments') {
       host.append(element('span', 'lg-record-attachment-icon', '📎'),
         element('span', 'lg-record-media-label', 'ANEXOS'),
-        element('span', 'lg-record-attachment-count', attachmentCounts.label(item)));
+        element('span', 'lg-record-attachment-count', countLabel));
       return host;
     }
     const image = element('img', 'lg-record-preview');
@@ -433,7 +475,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     } else host.classList.add('lg-record-media-unavailable');
     host.append(image, element('span', 'lg-record-attachment-icon', '📎'),
       element('span', 'lg-record-media-label', 'ANEXOS'),
-      element('span', 'lg-record-attachment-count', attachmentCounts.label(item)));
+      element('span', 'lg-record-attachment-count', countLabel));
     return host;
   }
   function attachmentDescriptors(item, result) {
@@ -503,13 +545,221 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     table.append(body);
     return table;
   }
+  function clusterAction(labelText, value, kind) {
+    if (value == null || display(value).trim() === '') return summaryField(labelText, value);
+    const pair = element('div', `lg-record-field${kind === 'supplier' ? ' lg-record-supplier' : ' lg-record-order'}`);
+    const trigger = button(display(value), () => {
+      if (!canChangeDetail()) return;
+      void openCluster(kind, value);
+    });
+    trigger.classList.add('lg-cluster-trigger', 'lg-record-value');
+    trigger.dataset.clusterKind = kind;
+    trigger.setAttribute('aria-label', `${kind === 'supplier' ? 'Ver lançamentos do fornecedor' : 'Ver pedido agrupado'}: ${display(value)}`);
+    pair.append(element('span', 'lg-record-label', labelText), trigger);
+    return pair;
+  }
+  async function fetchLaunchRows(filters = {}) {
+    const rowsById = new Map();
+    let pagesToLoad = 1;
+    const pageSize = 100;
+    for (let targetPage = 1; targetPage <= pagesToLoad; targetPage += 1) {
+      if (targetPage > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+      const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize });
+      if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
+      for (const item of result.rows) {
+        const id = String(item?.id ?? field(item?.fields, 'ID') ?? '').trim();
+        if (id) rowsById.set(id, item);
+      }
+      const reportedPages = Number(result.pages);
+      if (Number.isFinite(reportedPages) && reportedPages > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+      pagesToLoad = Number.isFinite(reportedPages) && reportedPages > 0
+        ? Math.max(pagesToLoad, Math.min(100, Math.trunc(reportedPages)))
+        : result.rows.length >= pageSize ? targetPage + 1 : targetPage;
+      if (targetPage >= pagesToLoad) break;
+    }
+    return [...rowsById.values()];
+  }
+  function fetchAllLaunchRows() {
+    if (allLaunchRowsCache) return Promise.resolve(allLaunchRowsCache);
+    if (allLaunchRowsRequest) return allLaunchRowsRequest;
+    const generation = allLaunchRowsGeneration;
+    let requestPromise;
+    requestPromise = fetchLaunchRows().then(rows => {
+      if (generation === allLaunchRowsGeneration) allLaunchRowsCache = rows;
+      return rows;
+    }).finally(() => { if (allLaunchRowsRequest === requestPromise) allLaunchRowsRequest = null; });
+    allLaunchRowsRequest = requestPromise;
+    return requestPromise;
+  }
+  function amountFor(item) {
+    return numericAmount(field(item?.fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
+  }
+  function summarizeLaunchAmounts(rows) {
+    let total = 0, missing = 0;
+    for (const item of rows) {
+      const amount = amountFor(item);
+      if (amount == null) missing += 1;
+      else total += amount;
+    }
+    return { total, missing };
+  }
+  function launchTable(rows, mode, orderId = '') {
+    const table = element('table', 'lg-data-table lg-cluster-table');
+    const headers = mode === 'order'
+      ? ['ID', 'Data', 'Fornecedor', 'Forma pgto', 'Produto (descrição)', 'Qtd', 'Valor unitário', 'Frete', 'Valor total', 'Valor acumulado', 'Status']
+      : ['ID', 'Data', 'Produto', 'AGRUPAR', 'Filial', 'Qtd', 'Valor unitário', 'Frete', 'Valor total', 'Status'];
+    const head = element('thead'), heading = element('tr');
+    for (const title of headers) heading.append(element('th', '', title));
+    head.append(heading);
+    const body = element('tbody');
+    let accumulated = 0, accumulatedComplete = true;
+    for (const item of rows) {
+      const fields = item.fields ?? {};
+      const amount = amountFor(item);
+      if (amount != null) accumulated += amount;
+      else accumulatedComplete = false;
+      const date = field(fields, 'DATA DE COMPRA', 'DATA', 'DATA PGTO EFETUADO');
+      const quantity = field(fields, 'QUANTIDADE', 'QTD');
+      const unit = field(fields, 'UNIDADE', 'UN');
+      const quantityLabel = [quantity, unit].filter(value => value != null && display(value).trim()).map(display).join(' ');
+      const cells = mode === 'order'
+        ? [item.id, fieldText('DATA', date) || '—', field(fields, 'FORNECEDOR') ?? '—',
+          field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO') ?? '—',
+          field(fields, 'PRODUTO', 'DESCRIÇÃO', 'DESCRICAO') ?? '—', quantityLabel || '—',
+          fieldText('VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')) || '—',
+          fieldText('FRETE', field(fields, 'FRETE')) || '—', amount == null ? fieldText('VALOR TOTAL', field(fields, 'VALOR TOTAL')) || '—' : money(amount),
+          accumulatedComplete ? money(accumulated) : '—', field(fields, 'CONCLUÍDO', 'STATUS') ?? '—']
+        : [item.id, fieldText('DATA', date) || '—', field(fields, 'PRODUTO', 'DESCRIÇÃO', 'DESCRICAO') ?? '—',
+          field(fields, 'AGRUPAR') ?? '—', field(fields, 'FILIAL') ?? '—', quantityLabel || '—',
+          fieldText('VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')) || '—',
+          fieldText('FRETE', field(fields, 'FRETE')) || '—', amount == null ? fieldText('VALOR TOTAL', field(fields, 'VALOR TOTAL')) || '—' : money(amount),
+          field(fields, 'CONCLUÍDO', 'STATUS') ?? '—'];
+      const rowNode = element('tr');
+      rowNode.dataset.launchId = String(item.id);
+      for (const value of cells) rowNode.append(element('td', '', display(value)));
+      body.append(rowNode);
+    }
+    table.append(head, body);
+    const wrapper = element('div', 'lg-cluster-table-wrap');
+    wrapper.append(table);
+    const totals = element('div', 'lg-cluster-summary');
+    const amounts = summarizeLaunchAmounts(rows);
+    const totalLabel = amounts.missing ? `Total incompleto · parcial ${money(amounts.total)}` : money(amounts.total);
+    const countLabel = `${rows.length} lançamento(s)${amounts.missing ? ` · ${amounts.missing} sem valor total` : ''}`;
+    totals.append(element('span', '', countLabel), element('strong', '', totalLabel));
+    if (mode === 'order' && orderId) totals.setAttribute('aria-label', `Total dos lançamentos do pedido ${orderId}: ${totalLabel}`);
+    return { table: wrapper, totals, ...amounts };
+  }
+  function renderOrderHeader(order, orderId, launches) {
+    const fields = order?.fields ?? {};
+    const overview = element('section', 'lg-order-overview');
+    overview.append(element('h3', 'lg-order-overview-title', 'CABEÇALHO DO PEDIDO'));
+    const grid = element('div', 'lg-order-overview-grid');
+    const entries = [
+      ['ID', order?.id ?? orderId, 'id'],
+      ['DATA PGTO EFETUADO', field(fields, 'DATAPGTOEFETUADO', 'DATA PGTO EFETUADO') || 'EM BRANCO', 'warning'],
+      ['FILIAL', field(fields, 'FILIAL') || 'EM BRANCO', ''],
+      ['FORNECEDOR', field(fields, 'FORNECEDOR') || 'EM BRANCO', ''],
+      ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO') || 'EM BRANCO', ''],
+      ['VALOR TOTAL', field(fields, 'VALORTOTAL', 'VALOR TOTAL') ?? 'EM BRANCO', ''],
+      ['OBS', field(fields, 'OBS') || 'SEM OBS', 'warning'],
+      ['NOTA FISCAL', field(fields, 'NOTA FISCAL') || 'PENDENTE', 'warning'],
+      ['OBS FISCAL', field(fields, 'OBS FISCAL') || 'EM BRANCO', 'warning'],
+      ['STATUS', field(fields, 'STATUS') || 'EM BRANCO', 'warning'],
+    ];
+    for (const [name, value, tone] of entries) {
+      const tile = element('div', `lg-order-overview-tile${tone ? ` lg-order-overview-${tone}` : ''}`);
+      const formatted = name === 'VALOR TOTAL' && numericAmount(value) != null
+        ? money(numericAmount(value)) : fieldText(name, value);
+      tile.append(element('span', '', name), element('strong', '', formatted));
+      grid.append(tile);
+    }
+    overview.append(grid);
+    const expected = numericAmount(field(fields, 'VALORTOTAL', 'VALOR TOTAL'));
+    const amounts = summarizeLaunchAmounts(launches);
+    const actual = amounts.total;
+    const difference = expected == null || !launches.length || amounts.missing ? null : expected - actual;
+    const reconciled = difference != null && Math.abs(difference) < 0.005;
+    const reconcile = element('div', `lg-order-reconcile${reconciled ? ' lg-order-reconcile-ok' : ''}`);
+    const statusText = !launches.length ? 'Não foi possível comparar: o pedido não possui lançamentos vinculados.'
+      : amounts.missing ? `Não foi possível comparar: ${amounts.missing} lançamento(s) sem valor total.`
+        : expected == null ? 'Não foi possível comparar: o pedido não informa o valor total.'
+      : reconciled ? 'Valores conferem.' : `Diferença de ${money(difference)} entre pedido e lançamentos.`;
+    reconcile.append(element('strong', '', statusText),
+      element('span', '', `Valor do pedido: ${expected == null ? '—' : money(expected)} · Soma dos lançamentos: ${amounts.missing ? `incompleta (parcial ${money(actual)})` : money(actual)}`));
+    return { overview, reconcile };
+  }
+  async function openCluster(kind, value) {
+    if (!opened || destroyed || !canChangeDetail()) return;
+    if (clusterPanel.hidden) clusterReturnFocus = doc.activeElement;
+    const epoch = session, version = ++clusterVersion;
+    const rawValue = String(value ?? '').trim();
+    clusterPanel.hidden = false;
+    clusterPanel.setAttribute('aria-busy', 'true');
+    const title = kind === 'supplier' ? `Lançamentos do fornecedor ${display(value)}` : `Pedido agrupado #${display(value)}`;
+    const closeButton = button('Fechar', closeCluster, { locked: false });
+    closeButton.classList.add('lg-detail-close');
+    clusterPanel.replaceChildren(element('div', 'lg-detail-header', ''), element('p', 'lg-hint', 'Carregando informações…'));
+    const heading = element('h2', 'lg-section-title', title);
+    clusterPanel.querySelector('.lg-detail-header').replaceChildren(heading, closeButton);
+    focus(closeButton);
+    try {
+      if (kind === 'supplier') {
+        const results = await fetchLaunchRows({ supplier: rawValue });
+        if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+        const supplierRows = results.filter(item => clusterKey(field(item.fields, 'FORNECEDOR')) === clusterKey(rawValue));
+        const listing = launchTable(supplierRows, 'supplier');
+        const introduction = element('p', 'lg-cluster-intro', `Todos os lançamentos de ${display(value)} encontrados na galeria.`);
+        const content = supplierRows.length ? [introduction, listing.table, listing.totals]
+          : [introduction, element('p', 'lg-hint', 'Nenhum lançamento encontrado para este fornecedor.')];
+        clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
+      } else {
+        if (!rawValue || !clusterKey(rawValue)) throw new Error('O valor de AGRUPAR não identifica um pedido válido.');
+        if (typeof loadOrderSnapshot !== 'function') throw new Error('A consulta de pedidos do SharePoint não está disponível nesta sessão.');
+        const [orders, launchRows] = await Promise.all([loadOrderSnapshot(), fetchAllLaunchRows()]);
+        if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+        if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
+        const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
+        const linked = launchRows.filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
+        const content = [];
+        if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
+        if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
+        if (order) {
+          const headerData = renderOrderHeader(order, rawValue, linked);
+          content.push(headerData.overview, headerData.reconcile);
+        }
+        if (linked.length) {
+          content.push(element('h3', 'lg-cluster-table-title', `Lançamentos vinculados ao pedido ${rawValue}`));
+          const listing = launchTable(linked, 'order', rawValue);
+          content.push(listing.table, listing.totals);
+        }
+        clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
+      }
+      focus(closeButton);
+    } catch (error) {
+      if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+      const retry = button('Tentar novamente', () => { void openCluster(kind, value); }, { locked: false });
+      clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), element('p', 'lg-error', failure(error, 'Não foi possível carregar o agrupamento')), retry);
+      focus(retry);
+    } finally {
+      if (active(epoch) && version === clusterVersion && !clusterPanel.hidden) clusterPanel.setAttribute('aria-busy', 'false');
+    }
+  }
+  function closeCluster() {
+    ++clusterVersion;
+    clusterPanel.hidden = true;
+    clusterPanel.setAttribute('aria-busy', 'false');
+    clusterPanel.replaceChildren();
+    const returnTo = clusterReturnFocus;
+    clusterReturnFocus = null;
+    if (opened && !destroyed) focus(returnTo?.isConnected ? returnTo : root.querySelector('.lg-cluster-trigger'));
+  }
   function renderCard(item) {
     const fields = item.fields ?? {};
     const product = field(fields, 'PRODUTO') ?? 'Lançamento';
     const quantity = field(fields, 'QUANTIDADE');
     const unit = field(fields, 'UN', 'UNIDADE');
     const quantityText = quantity == null ? undefined : `${display(quantity)}${unit == null ? '' : ` ${display(unit)}`}`;
-    const attachmentCount = knownGalleryAttachmentCount(item);
     const totalValue = field(fields, 'VALOR TOTAL', 'TOTAL') ?? money(item.total);
     const card = element('article', 'lg-card lg-record');
     card.dataset.itemId = String(item.id);
@@ -518,50 +768,77 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const identity = element('header', 'lg-record-heading');
     identity.append(element('span', 'lg-record-id', display(field(fields, 'ID') ?? item.id)),
       element('h2', 'lg-record-product', display(product)));
+    const status = field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS');
+    if (status) {
+      const normalizedStatus = key(status);
+      const statusClass = normalizedStatus.includes('FINALIZADO') || normalizedStatus.includes('PAGO')
+        ? 'lg-status-final' : normalizedStatus.includes('PENDENTE') ? 'lg-status-pending' : 'lg-status-other';
+      identity.append(element('span', `lg-record-status ${statusClass}`, display(status)));
+    }
 
     const main = element('div', 'lg-record-main');
     const commercial = element('section', 'lg-record-group lg-record-commercial');
-    const execution = element('section', 'lg-record-group lg-record-execution');
-    const finance = element('section', 'lg-record-group lg-record-finance');
-    const meta = element('section', 'lg-record-group lg-record-meta');
-    const groups = [
-      [commercial, [
-        ['FORNECEDOR', field(fields, 'FORNECEDOR')],
-        ['FILIAL', field(fields, 'FILIAL')],
-        ['DATA DE COMPRA', field(fields, 'DATA DE COMPRA', 'DATA')],
-        ['VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')],
-        ['QUANTIDADE', quantityText],
-        ['FRETE', field(fields, 'FRETE')],
-      ]],
-      [execution, [
-        ['ETAPA OBRA', field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA')],
-        ['DATA DE RMS', field(fields, 'DATA DE RMS', 'DATA RMS')],
-        ['DATA DE LIQUIDAÇÃO', field(fields, 'DATA DE LIQUIDAÇÃO', 'DATA LIQUIDAÇÃO')],
-        ['DATA DE PAGAMENTO', field(fields, 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
-      ]],
-      [finance, [
-        ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
-        ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
-        ['ID PEDIDO', field(fields, 'ID PEDIDO', 'PEDIDO')],
-        ['VALOR TOTAL', totalValue],
-      ]],
-      [meta, [
-        ['ADICIONADO POR', creatorName(item)],
-        ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
-        ['AVALIAÇÃO', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
-      ]],
+    const supplier = field(fields, 'FORNECEDOR');
+    const branch = field(fields, 'FILIAL');
+    const stage = field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA');
+    const group = field(fields, 'AGRUPAR');
+    commercial.append(...[
+      clusterAction('FORNECEDOR', supplier, 'supplier'),
+      summaryField('FILIAL', branch),
+      summaryField('ETAPA', stage),
+      clusterAction('AGRUPAR', group, 'order'),
+    ].filter(Boolean));
+
+    const execution = element('section', 'lg-record-group lg-record-execution lg-record-dates');
+    execution.append(element('h3', 'lg-record-section-title', '▦ Datas'));
+    const dateEntries = [
+      ['DATA DE COMPRA', field(fields, 'DATA DE COMPRA', 'DATA')],
+      ['DATA PREVISTO PGTO', field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO')],
+      ['DATA DE PAGAMENTO', field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
+      ['DATA DE RMS', field(fields, 'DATA DE RMS', 'DATA RMS')],
+      ['DATA DE LIQUIDAÇÃO', field(fields, 'DATA DE LIQUIDAÇÃO', 'DATA LIQUIDAÇÃO')],
+      ['CRIADO', field(fields, 'CRIADO', 'CREATED')],
+      ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO')],
     ];
-    for (const [group, entries] of groups) {
-      const nodes = entries.map(([labelText, value]) => summaryField(labelText, value)).filter(Boolean);
-      group.replaceChildren(...nodes);
-      if (nodes.length) main.append(group);
+    for (const [name, value] of dateEntries) {
+      const date = summaryField(name, value);
+      if (date) execution.append(date);
     }
+
+    const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
+    const values = [
+      ['VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')],
+      ['QUANTIDADE', quantityText],
+      ['FRETE', field(fields, 'FRETE')],
+      ['VALOR TOTAL', totalValue],
+    ];
+    for (const [name, value] of values) {
+      const entry = summaryField(name, value);
+      if (entry) finance.append(entry);
+    }
+
+    const meta = element('section', 'lg-record-group lg-record-meta');
+    const metaValues = [
+      ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
+      ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
+      ['ID PEDIDO', field(fields, 'ID PEDIDO', 'PEDIDO')],
+      ['ADICIONADO POR', creatorName(item)],
+      ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
+      ['AVALIAÇÃO', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
+    ];
+    for (const [name, value] of metaValues) {
+      const entry = summaryField(name, value);
+      if (entry) meta.append(entry);
+    }
+    if (execution.children.length <= 1) execution.hidden = true;
+    if (!commercial.childElementCount) commercial.hidden = true;
+    if (!finance.childElementCount) finance.hidden = true;
+    if (!meta.childElementCount) meta.hidden = true;
+    main.append(commercial, execution, finance, meta);
+
     const badges = element('div', 'lg-record-badges');
     const badgeValues = [
-      ['lg-badge-status', field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS')],
       ['lg-badge-approval', field(fields, 'APROVAÇÃO', 'APROVACAO', 'STATUS APROVAÇÃO', 'STATUS APROVACAO')],
-      ['lg-badge-attachment', attachmentCount == null ? (item.hasAttachments ? 'COM ANEXOS' : 'SEM ANEXOS')
-        : `${display(attachmentCount)} ${Number(attachmentCount) === 1 ? 'ANEXO' : 'ANEXOS'}`],
       ['lg-badge-rating', field(fields, 'AVALIAÇÃO', 'AVALIACAO')],
     ];
     for (const [className, value] of badgeValues) {
@@ -570,7 +847,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     const details = button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); });
     details.dataset.lgAction = 'details';
-    card.append(...(recordPreview ? [recordPreview] : []), identity, main, badges, details);
+    const body = element('div', 'lg-record-content');
+    body.append(identity, main);
+    body.append(badges);
+    body.append(details);
+    card.append(...(recordPreview ? [recordPreview] : []), body);
     return card;
   }
   function canChangeDetail() {
@@ -866,13 +1147,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!opened || suspended || event.defaultPrevented) return;
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation();
+      if (!clusterPanel.hidden) { closeCluster(); return; }
       if (!panel.hidden) { dismissDetail(); return; }
       close(); return;
     }
     if (event.key !== 'Tab') return;
-    const controls = [...root.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
+    const activeModal = !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;
+    const controls = [...activeModal.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
       .filter(node => !node.disabled && !node.closest('[hidden]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
-    const first = controls[0], last = controls.at(-1);
+    const first = controls[0] ?? activeModal, last = controls.at(-1) ?? activeModal;
     if (event.shiftKey && (doc.activeElement === first || !controls.includes(doc.activeElement))) { event.preventDefault(); focus(last); }
     else if (!event.shiftKey && (doc.activeElement === last || !controls.includes(doc.activeElement))) { event.preventDefault(); focus(first); }
   }
@@ -886,9 +1169,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function close() {
     if (!opened || destroyed) return;
     autoFilters.cancelPending();
-    opened = false; ++session; ++listVersion; ++detailVersion;
+    opened = false; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     if (detailLoading) needsDetailRefresh = true;
     listLoading = false; detailLoading = false; root.hidden = true;
+    clusterPanel.hidden = true; clusterPanel.replaceChildren();
     if (!busy) clearReview();
     updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
@@ -898,7 +1182,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (destroyed) return;
     autoFilters.destroy();
     attachmentCounts.destroy();
-    opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion;
+    opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     retryIds.clear(); selectedUploads.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   }

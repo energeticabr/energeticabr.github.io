@@ -830,6 +830,72 @@ test("Galeria Lançamentos abre localmente a partir do menu de Suprimentos", asy
   assert.equal(h.chatCalls.length, before, "abrir a galeria também deve permanecer local");
 });
 
+test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup AGRUPAR", async t => {
+  let callbacks;
+  let reads = 0;
+  let tokenScopes;
+  const h = makeHarness({
+    launchGalleryFactory: async options => {
+      callbacks = options;
+      return { async open() {}, destroy() {} };
+    },
+    ordersGalleryDataFactory: async ({ tokenProvider }) => ({
+      async loadSnapshot() {
+        reads += 1;
+        assert.equal(await tokenProvider(["Sites.Read.All"]), "sharepoint-token");
+        return { rows: [{ id: "334", fields: { FORNECEDOR: "Fornecedor A" } }] };
+      },
+    }),
+  });
+  h.auth.getToken = async scopes => { tokenScopes = scopes; return "sharepoint-token"; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
+
+  const snapshot = await callbacks.loadOrderSnapshot();
+  assert.equal(reads, 1);
+  assert.deepEqual(tokenScopes, ["Sites.Read.All"]);
+  assert.equal(snapshot.rows[0].id, "334");
+});
+
+test("Galeria Pedidos e popup AGRUPAR preservam o próprio retorno após consentimento SharePoint", async t => {
+  let launchOptions, orderData;
+  const resumeActions = [], factories = [];
+  const h = makeHarness({
+    launchGalleryFactory: async options => {
+      launchOptions = options;
+      return { async open() {}, destroy() {} };
+    },
+    ordersGalleryFactory: async options => {
+      orderData = options.data;
+      return { async open() {}, destroy() {} };
+    },
+    ordersGalleryDataFactory: async ({ tokenProvider }) => {
+      factories.push(tokenProvider);
+      return { async loadSnapshot() {
+        return { rows: [], token: await tokenProvider(["Sites.Read.All"]) };
+      } };
+    },
+  });
+  let tokenAttempts = 0;
+  h.auth.getToken = async () => {
+    tokenAttempts += 1;
+    if (tokenAttempts % 2 === 1) throw { code: "AUTH_REQUIRED", message: "consentimento necessário" };
+    return "sharepoint-token";
+  };
+  h.auth.authorize = async (_scopes, options) => resumeActions.push(options.resumeAction);
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("select-reply", { replyId: "action_orders_gallery" });
+  await orderData.loadSnapshot();
+  await h.view.emit("select-reply", { replyId: "action_launch_gallery" });
+  await launchOptions.loadOrderSnapshot();
+
+  assert.equal(factories.length, 2);
+  assert.deepEqual(resumeActions, ["action_orders_gallery", "action_launch_gallery"]);
+});
+
 test("Galeria Pedidos abre a Screen10 SharePoint localmente e usa o visualizador compartilhado", async t => {
   let callbacks;
   let opens = 0;
