@@ -134,21 +134,22 @@ export function buildRhidAttendanceTable(rows = []) {
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const name = String(row.NOME_COLABORADOR ?? "").trim();
-    const id = String(row.ID_PESSOA_RHID ?? row.Id ?? "").trim();
+    const rhidId = String(row.ID_PESSOA_RHID ?? "").trim();
+    const id = rhidId || String(row.Id ?? "").trim();
     const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ").trim();
     if (/^PIS NAO LOCALIZADO\b/.test(normalizedName) || /\bNAO APAGAR\b/.test(normalizedName)) continue;
-    const key = name
-      ? `name:${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")}`
-      : `id:${id}`;
+    const key = rhidId ? `rhid:${rhidId}` : name ? `name:${normalizedName}` : `id:${id}`;
     if (!name && !id) continue;
     const times = punchTimes(row.BATIDAS_RHID);
-    if (!people.has(key)) people.set(key, { name: name || `ID ${id}`, times: new Set() });
+    if (!people.has(key)) people.set(key, { name: name || `ID ${id}`, times: new Set(), inactive: false });
     const person = people.get(key);
+    if (String(row.STATUS_RHID ?? "").trim().toUpperCase() === "INATIVO") person.inactive = true;
     for (const time of times) person.times.add(time);
   }
 
   const persons = [...people.values()]
     .map(person => ({ ...person, punches: [...person.times].sort() }))
+    .filter(person => person.punches.length || !person.inactive)
     .sort((left, right) => Number(Boolean(right.punches.length)) - Number(Boolean(left.punches.length))
       || left.name.localeCompare(right.name, "pt-BR", { sensitivity: "base" }));
   const pairs = Math.max(2, Math.ceil(Math.max(0, ...persons.map(person => person.punches.length)) / 2));
