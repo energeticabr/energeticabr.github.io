@@ -638,6 +638,7 @@ export function createAppController({
   let attachmentRevision = 0;
   let snapshotPending = null;
   const rhidAttendanceReportRequests = new Map();
+  let rhidAttendanceReportPreviousSnapshot = null;
   let rhidRefreshRequest = null;
   let resuming = false;
   let attachmentActionBusy = false;
@@ -1616,6 +1617,12 @@ export function createAppController({
         if (replaceMessageId) {
           if (!store.replaceMessage?.(replaceMessageId, message)) return false;
         } else {
+          rhidAttendanceReportPreviousSnapshot = {
+            messages: current.messages,
+            activeFlow: current.activeFlow,
+            completionNavigation: current.completionNavigation,
+            attachments: current.attachments,
+          };
           store.ingestRemoteMessages([message], {
             resetConversation: false,
             activeFlow: current.activeFlow,
@@ -4468,6 +4475,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    rhidAttendanceReportPreviousSnapshot = null;
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
@@ -5050,6 +5058,15 @@ export function createAppController({
     });
     bind("select-reply", command => {
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
+      if (command.replyId === NAVIGATION_BACK_ID) {
+        const latestPoll = latestAssistantPoll(store.getState().messages);
+        const table = latestPoll?.detail_table || latestPoll?.detailTable;
+        if (table?.kind === "rhid_attendance" && rhidAttendanceReportPreviousSnapshot?.messages?.length) {
+          const previous = rhidAttendanceReportPreviousSnapshot;
+          rhidAttendanceReportPreviousSnapshot = null;
+          return store.restoreSnapshot(previous);
+        }
+      }
       if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
@@ -5107,6 +5124,7 @@ export function createAppController({
         return chooseAttachmentCompression(command.replyId);
       }
       if (command.replyId === "navigation_main_menu") {
+        rhidAttendanceReportPreviousSnapshot = null;
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
       }
       if (command.replyId === "attachment_upload_skip") {
@@ -5350,6 +5368,7 @@ export function createAppController({
   }
 
   function stop() {
+    rhidAttendanceReportPreviousSnapshot = null;
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     disposeLaunchGallery();

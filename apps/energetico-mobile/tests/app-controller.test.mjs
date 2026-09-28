@@ -102,6 +102,32 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
 });
 
+test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao menu principal", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  const previousScreen = {
+    id: "hr-menu",
+    role: "assistant",
+    type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [{ id: "rhid-report", reply: "rhid-report", label: "RELATÓRIO DE PRESENÇAS RHID" }],
+  };
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([previousScreen]);
+  assert.equal(h.store.getState().messages.at(-1)?.question, previousScreen.question, "a tela RH deve estar ativa antes da consulta");
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  assert.equal(h.store.getState().messages.at(-1)?.detail_table?.kind, "rhid_attendance");
+  const callsBeforeReturn = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+
+  assert.equal(h.chatCalls.length, callsBeforeReturn, "o retorno local não deve enviar navigation_back ao servidor");
+  assert.equal(h.store.getState().messages.length, 1);
+  assert.equal(h.store.getState().messages[0].question, previousScreen.question);
+});
+
 test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
   const h = makeHarness();
   const requested = [];
