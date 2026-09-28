@@ -1548,6 +1548,7 @@ export function createAppController({
             options: [],
             detail_table: {
               ...table,
+              reportDate: report.date || day,
               title: `📋 PRESENÇAS • ${reportDate}`,
               updateLabel,
             },
@@ -1581,6 +1582,39 @@ export function createAppController({
       }
     });
     return rhidAttendanceReportRequest;
+  }
+
+  let rhidAttendanceShareBusy = false;
+  async function shareRhidAttendanceReport(messageId) {
+    if (!account || stopped || rhidAttendanceShareBusy || typeof native.exportMedia !== "function") return false;
+    const id = String(messageId || "").trim();
+    const message = store.getState().messages.find(item => String(item?.id || "") === id);
+    const table = message?.detail_table || message?.detailTable;
+    const day = String(table?.reportDate || "");
+    if (message?.type !== "poll" || table?.kind !== "rhid_attendance"
+      || !/^\d{4}-\d{2}-\d{2}$/.test(day)
+      || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return false;
+
+    const shareAccount = account;
+    const shareRevision = sessionRevision;
+    const isCurrent = () => !stopped && account === shareAccount && sessionRevision === shareRevision
+      && store.getState().messages.some(item => String(item?.id || "") === id);
+    rhidAttendanceShareBusy = true;
+    try {
+      const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
+      const pdf = await buildRhidAttendancePdf(table, {
+        dateLabel: formatDatePickerValue(day),
+        updateLabel: table.updateLabel,
+      });
+      if (!isCurrent()) return false;
+      await native.exportMedia(pdf, `presencas-rhid-${day}.pdf`);
+      return isCurrent();
+    } catch (error) {
+      if (isCurrent()) setSessionError(error, "Não foi possível compartilhar o PDF de presenças RHID.");
+      return false;
+    } finally {
+      rhidAttendanceShareBusy = false;
+    }
   }
 
   async function completeDelegatedTask(taskId) {
@@ -5093,6 +5127,7 @@ export function createAppController({
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value));
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
+    bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);

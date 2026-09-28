@@ -848,11 +848,14 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
-function rhidAttendanceTableMarkup(table) {
+function rhidAttendanceTableMarkup(table, messageId) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return "";
   const headers = table.headers;
+  const shareButton = /^\d{4}-\d{2}-\d{2}$/.test(String(table.reportDate || "")) && messageId
+    ? `<button class="chat-rhid-attendance-table__share" type="button" data-action="share-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Compartilhar relatório RHID em PDF">↗ Compartilhar PDF</button>`
+    : "";
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
-    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
+    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${shareButton}${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
     <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
       <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
@@ -1201,7 +1204,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${launchPaymentSummary ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
-    ${rhidAttendanceTableMarkup(presenceTable)}
+    ${rhidAttendanceTableMarkup(presenceTable, message.id)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}

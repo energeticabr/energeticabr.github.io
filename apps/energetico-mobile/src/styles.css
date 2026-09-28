@@ -489,6 +489,9 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-table { max-width: 100%; margin: 9px 0 12px; overflow: hidden; border: 1px solid #bed6d0; border-radius: 11px; background: #fff; }
 .chat-rhid-attendance-table__heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 9px 12px; color: #0c5f4d; background: #e7f5f0; font-size: 13px; }
 .chat-rhid-attendance-table__heading small { font-size: 10px; font-weight: 700; }
+.chat-rhid-attendance-table__share { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; margin-left: auto; padding: 6px 10px; border: 1px solid #0c5f4d; border-radius: 8px; color: #0c5f4d; background: #fff; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.chat-rhid-attendance-table__share:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.chat-rhid-attendance-table__share:disabled { opacity: .55; cursor: wait; }
 .chat-rhid-attendance-table__heading .chat-rhid-attendance-table__updated { flex-basis: 100%; color: #164b58; overflow-wrap: anywhere; }
 .chat-rhid-attendance-table__scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
 .chat-rhid-attendance-table__scroll:focus-visible { outline: 3px solid #e3aa19; outline-offset: -3px; }
@@ -510,6 +513,7 @@ button { touch-action: manipulation; }
   .chat-rhid-attendance-table__heading { padding: 7px 8px; font-size: 11px; }
   .chat-rhid-attendance-table__heading small { display: none; }
   .chat-rhid-attendance-table__heading .chat-rhid-attendance-table__updated { display: block; font-size: 10px; }
+  .chat-rhid-attendance-table__share { min-height: 34px; padding: 5px 8px; font-size: 10px; }
   .chat-rhid-attendance-table__scroll { overflow-x: visible; }
   .chat-rhid-attendance-table table, .chat-rhid-attendance-table tbody { display: block; width: 100%; min-width: 0; }
   .chat-rhid-attendance-table thead { display: none; }
