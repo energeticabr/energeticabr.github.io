@@ -199,7 +199,7 @@ export function createPaymentProgrammingGallery({
 
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters pg-filters");
-  filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros da G28"));
+  filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros"));
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros da Galeria de Programação de Pagamentos G28");
   const grid = el("div", "og-filter-grid pg-filter-grid");
@@ -228,6 +228,8 @@ export function createPaymentProgrammingGallery({
     const option = el("option", "", label); option.value = value; sort.append(option);
   }
   sort.value = sortValue;
+  const sortField = sort.parentElement;
+  sortField.classList.add("pg-sort-field");
   const pageSizeControl = addControl("pageSize", "Itens por página");
   for (const value of PAGE_SIZES) { const option = el("option", "", String(value)); option.value = String(value); pageSizeControl.append(option); }
   pageSizeControl.value = String(pageSize);
@@ -241,6 +243,8 @@ export function createPaymentProgrammingGallery({
 
   const notice = el("p", "og-notice pg-notice"); notice.hidden = true;
   const listStatus = el("p", "og-list-status pg-list-status"); listStatus.setAttribute("aria-live", "polite");
+  const listToolbar = el("div", "pg-list-toolbar");
+  listToolbar.append(listStatus, sortField);
   const cards = el("div", "og-cards pg-cards"); cards.setAttribute("aria-label", "Programação de pagamentos");
   const pagination = el("nav", "og-pagination"); pagination.setAttribute("aria-label", "Páginas de programação de pagamentos");
   const previous = el("button", "og-button", "Página anterior"); previous.type = "button";
@@ -253,7 +257,7 @@ export function createPaymentProgrammingGallery({
   detail.setAttribute("role", "dialog");
   detail.setAttribute("aria-modal", "true");
   detail.setAttribute("aria-label", "Detalhes do pagamento previsto");
-  content.append(filterDisclosure, notice, listStatus, cards, pagination);
+  content.append(filterDisclosure, notice, listToolbar, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
   const attachmentCounts = createGalleryAttachmentCounts({
@@ -264,11 +268,20 @@ export function createPaymentProgrammingGallery({
   function updateAttachmentCount(row) {
     if (!opened || destroyed) return;
     const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
-    const count = card?.querySelector('.og-card-attachment-count');
+    let rail = card?.querySelector(".pg-attachment-rail");
+    const count = rail?.querySelector('.og-card-attachment-count');
     const label = attachmentCounts.label(row);
     if (count) count.textContent = label;
     const id = text(field(row.fields, ["ID"]) ?? row.id);
-    card?.querySelector('.og-card-attachment-rail')?.setAttribute('aria-label', `Abrir anexos do pagamento ${id}: ${label}`);
+    const attachments = attachmentCounts.attachmentsFor(row);
+    if (attachments) card?.classList.toggle("pg-card--attachments", attachments.length > 0);
+    if (rail && attachments?.length === 0 && rail.matches("button")) {
+      const informationalRail = el("aside", "pg-attachment-rail og-card-attachment-rail");
+      informationalRail.append(el("span", "og-card-attachment-label", "ANEXOS"), el("span", "og-card-attachment-count", label));
+      rail.replaceWith(informationalRail);
+      rail = informationalRail;
+    }
+    if (rail?.matches("button")) rail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${label}`);
   }
 
   function updateBusy() {
@@ -350,18 +363,23 @@ export function createPaymentProgrammingGallery({
     renderList();
   }
 
-  function appendField(list, label, value) {
+  function appendSummaryField(list, label, value, icon, { wide = false } = {}) {
     if (value == null || value === "") return;
-    const pair = el("div", "og-card-field pg-card-field");
-    pair.append(el("dt", "", label), el("dd", "", displayValue(label, value)));
+    const pair = el("div", `og-card-field pg-card-field pg-summary-field${wide ? " pg-summary-field--wide" : ""}${label === "OBS" ? " pg-observation" : ""}`);
+    pair.dataset.field = label;
+    const symbol = el("span", "pg-summary-icon", icon);
+    symbol.setAttribute("aria-hidden", "true");
+    pair.append(symbol, el("dt", "", label), el("dd", "", displayValue(label, value)));
     list.append(pair);
   }
 
   function renderCard(row) {
     const fields = row.fields || {};
     const id = text(field(fields, ["ID"]) ?? row.id);
-    const hasAttachmentControl = row.hasAttachments !== false;
-    const card = el("article", `og-card pg-card${hasAttachmentControl ? " og-card--with-attachments" : ""}${row.hasAttachments === true ? " pg-card--attachments" : ""}`);
+    const resolvedAttachments = attachmentCounts.attachmentsFor(row);
+    const hasAttachmentControl = row.hasAttachments !== false && resolvedAttachments?.length !== 0;
+    const hasAttachments = resolvedAttachments ? resolvedAttachments.length > 0 : row.hasAttachments === true;
+    const card = el("article", `og-card pg-card og-card--with-attachments${hasAttachments ? " pg-card--attachments" : ""}`);
     card.dataset.itemId = row.id;
     const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading pg-card-heading");
@@ -369,36 +387,44 @@ export function createPaymentProgrammingGallery({
     const statusText = text(field(fields, ["STATUS"]) || "Status não informado");
     const paid = /pago|efetuado|quitado/i.test(statusText);
     const pending = /pendente|previst/i.test(statusText);
-    const status = el("span", `og-status${pending ? " og-status--pending" : paid ? " pg-status--paid" : ""}`, statusText);
-    const description = el("p", "pg-description", text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO", "OBS"]) || "Pagamento previsto"));
-    const summary = el("dl", "og-card-fields pg-card-fields");
-    appendField(summary, "VALOR TOTAL", paymentTotal(fields));
-    appendField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]));
-    appendField(summary, "DATA PREVISTO PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
-    appendField(summary, "DATA PGTO EFETUADO", field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]));
-    appendField(summary, "FILIAL", field(fields, ["FILIAL"]));
-    appendField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]));
-    appendField(summary, "ID RECORRÊNCIA", field(fields, ["IDRECORRENCIA"]));
-    appendField(summary, "AGENDAMENTO", paymentScheduleSummary(fields));
+    const status = el("span", `og-status pg-status${pending ? " og-status--pending" : paid ? " pg-status--paid" : ""}`, statusText);
+    heading.append(status);
+    const summary = el("dl", "og-card-fields pg-card-fields pg-card-grid");
+    appendSummaryField(summary, "VALOR TOTAL", paymentTotal(fields), "$");
+    appendSummaryField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]), "◇");
+    appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "▣");
+    appendSummaryField(summary, "DATA DO PAGAMENTO", field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]), "▣");
+    appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "▦");
+    appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "⌂");
+    appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "◷");
+    const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO"]) || "").trim();
+    const observation = text(field(fields, ["OBS", "OBSERVACAO", "OBSERVAÇÃO"]) || "").trim();
+    if (description) appendSummaryField(summary, "DESCRIÇÃO", description, "▤", { wide: true });
+    if (observation) appendSummaryField(summary, "OBS", observation, "▤", { wide: true });
     const timingText = paymentTiming(fields, now());
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
     const actions = el("div", "og-card-actions pg-card-actions");
-    const detailsButton = el("button", "og-button og-button--detail", "Detalhes");
+    const detailsButton = el("button", "og-button og-button--detail pg-detail-button", "Ver detalhes");
     detailsButton.type = "button";
     detailsButton.dataset.action = "details";
     detailsButton.addEventListener("click", () => openDetails(row));
     actions.append(detailsButton);
-    main.append(heading, status, description, summary);
+    main.append(heading, summary);
     if (timing) main.append(timing);
     main.append(actions);
     if (hasAttachmentControl) {
-      const attachmentRail = el("button", "og-button og-card-attachment-rail");
+      const attachmentRail = el("button", "og-button og-card-attachment-rail pg-attachment-rail");
       attachmentRail.type = "button";
       attachmentRail.dataset.action = "attachments";
       attachmentRail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${attachmentCounts.label(row)}`);
       attachmentRail.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
         el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachmentRail.addEventListener("click", () => openAttachments(row));
+      card.append(attachmentRail);
+    } else {
+      const attachmentRail = el("aside", "og-card-attachment-rail pg-attachment-rail");
+      attachmentRail.append(el("span", "og-card-attachment-label", "ANEXOS"),
+        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       card.append(attachmentRail);
     }
     card.append(main);
@@ -496,6 +522,7 @@ export function createPaymentProgrammingGallery({
   }
 
   const autoFilters = bindAutoFilterForm(form, applyFilters);
+  sort.addEventListener("change", () => autoFilters.apply());
   clearButton.addEventListener("click", () => {
     for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS : name === "sort" ? "due-asc" : name === "pageSize" ? "10" : "";
     sortValue = "due-asc";
