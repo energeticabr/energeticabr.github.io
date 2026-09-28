@@ -544,6 +544,11 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-report__summary-value--missing { color: #9a6519; }
 .chat-rhid-attendance-report__summary span { color: #718096; font-size: 9px; font-weight: 800; line-height: 1.2; }
 .chat-rhid-attendance-report__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 9px; color: #0c5f4d; font-size: 13px; }
+.chat-rhid-attendance-report__toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
+.chat-rhid-attendance-table__refresh { display: inline-grid; place-items: center; flex: 0 0 auto; width: 36px; min-height: 34px; padding: 6px; border: 1px solid #1476c8; border-radius: 9px; color: #1168b4; background: #e8f4ff; }
+.chat-rhid-attendance-table__refresh svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.chat-rhid-attendance-table__refresh--busy svg { animation: rhid-refresh-spin 1.1s linear infinite; }
+.chat-rhid-attendance-table__refresh:disabled { opacity: .65; }
 .chat-rhid-attendance-report__cards { display: grid; gap: 9px; }
 .chat-rhid-attendance-card { padding: 11px 12px; border: 1px solid #e1e5eb; border-radius: 13px; background: #fff; box-shadow: 0 1px 1px rgb(23 48 66 / 4%); }
 .chat-rhid-attendance-card__main { display: grid; grid-template-columns: minmax(132px, 1.15fr) minmax(208px, 1.9fr) minmax(98px, .8fr); align-items: center; gap: 12px; min-width: 0; }

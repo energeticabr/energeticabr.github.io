@@ -93,6 +93,6 @@ bootstrap().catch(() => {
 
 if (globalThis.navigator?.serviceWorker) {
   globalThis.addEventListener?.("load", () => {
-    globalThis.navigator.serviceWorker.register("/energetico/service-worker.js", { scope: "/energetico/" });
+    globalThis.navigator.serviceWorker.register("/energetico/service-worker.js?v=5", { scope: "/energetico/" });
   });
 }

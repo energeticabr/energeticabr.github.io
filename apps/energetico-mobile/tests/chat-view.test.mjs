@@ -243,6 +243,29 @@ test("relatório RHID oferece compartilhar PDF da própria mensagem", () => {
   dom.window.close();
 });
 
+test("relatório RHID exibe a ressincronização no próprio cabeçalho", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-inline-refresh",
+    role: "assistant",
+    type: "poll",
+    question: "RELATÓRIO RHID",
+    options: [],
+    detail_table: {
+      kind: "rhid_attendance",
+      reportDate: "2026-09-25",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }), { rhidRefresh: { busy: false, message: "", error: false } });
+  const dom = new JSDOM(markup);
+  const refresh = dom.window.document.querySelector('.chat-rhid-attendance-report [data-action="rhid-refresh"]');
+
+  assert.ok(refresh, "o relatório deve exibir o botão de ressincronização");
+  assert.match(refresh.getAttribute("aria-label"), /atualizar.*rhid.*sharepoint/i);
+  assert.match(refresh.className, /chat-rhid-attendance-table__refresh/);
+  dom.window.close();
+});
+
 test("não oferece compartilhar RHID quando a data é impossível", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-invalid-date",
