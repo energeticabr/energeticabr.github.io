@@ -5675,3 +5675,75 @@ test("arquivo recém-selecionado também oferece encaminhamento individual", () 
   view.destroy();
   dom.window.close();
 });
+
+test("relatório RHID mostra navegação diária centrada sem o cabeçalho Energético nem o título redundante", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-nav-25", role: "assistant", type: "poll",
+    question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-25", title: "📋 PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const report = dom.window.document.querySelector(".chat-message--rhid-report");
+  const navigation = report.querySelector(".chat-rhid-date-navigation");
+  const buttons = navigation?.querySelectorAll("button") || [];
+
+  assert.equal(report.querySelector(".chat-bubble > strong"), null, "remove a marca no início do cartão RHID");
+  assert.equal(report.querySelector(".chat-choice-card > p"), null, "não repete o título com emoji de gráfico");
+  assert.equal(navigation.querySelector("time")?.textContent, "25/09/2026");
+  assert.equal(buttons.length, 2);
+  assert.equal(commandFromTarget(buttons[0]).type, "rhid-attendance-report-navigate");
+  assert.deepEqual(
+    { messageId: commandFromTarget(buttons[0]).messageId, value: commandFromTarget(buttons[0]).value },
+    { messageId: "rhid-nav-25", value: "-1" },
+  );
+  assert.deepEqual(
+    { messageId: commandFromTarget(buttons[1]).messageId, value: commandFromTarget(buttons[1]).value },
+    { messageId: "rhid-nav-25", value: "1" },
+  );
+  assert.match(report.textContent, /PRESENÇAS/);
+  assert.doesNotMatch(report.textContent, /RELATÓRIO DE PRESENÇAS RHID/);
+  dom.window.close();
+});
+
+test("relatório RHID vazio mantém as setas e informa que não há presenças", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-empty", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-26", title: "PRESENÇAS • 26/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"], rows: [],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const report = dom.window.document.querySelector(".chat-message--rhid-report");
+  assert.equal(report.querySelectorAll(".chat-rhid-date-navigation button").length, 2);
+  assert.match(report.textContent, /Nenhuma presença foi encontrada/);
+  dom.window.close();
+});
+
+test("relatório RHID mostra estado de carregamento e erro sem remover a data", () => {
+  const report = extra => ({
+    id: "rhid-nav-status", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-25", title: "📋 PRESENÇAS",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"], rows: [], ...extra,
+    },
+  });
+  const loadingDom = new JSDOM(renderChatMarkup(signedInState({ messages: [report({ navigationBusy: true })] })));
+  const loading = loadingDom.window.document.querySelector(".chat-message--rhid-report");
+  assert.equal(loading.querySelectorAll(".chat-rhid-date-navigation button:disabled").length, 2);
+  assert.match(loading.textContent, /Atualizando dados do RHID/);
+  assert.equal(loading.querySelector(".chat-rhid-date-navigation time")?.textContent, "25/09/2026");
+  loadingDom.window.close();
+
+  const errorDom = new JSDOM(renderChatMarkup(signedInState({ messages: [report({
+    navigationBusy: false, navigationError: "Não foi possível atualizar o relatório. Tente novamente.",
+  })] })));
+  const error = errorDom.window.document.querySelector('.chat-message--rhid-report [role="alert"]');
+  assert.match(error?.textContent || "", /Não foi possível atualizar o relatório/);
+  assert.equal(errorDom.window.document.querySelectorAll(".chat-rhid-date-navigation button:disabled").length, 0);
+  errorDom.window.close();
+});

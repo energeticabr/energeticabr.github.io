@@ -1,7 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
-import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel } from "./chat/rhid-attendance-table.js";
+import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -635,7 +635,7 @@ export function createAppController({
   let uploadQueue = Promise.resolve();
   let attachmentRevision = 0;
   let snapshotPending = null;
-  let rhidAttendanceReportRequest = null;
+  const rhidAttendanceReportRequests = new Map();
   let resuming = false;
   let attachmentActionBusy = false;
   const idleWaiters = new Set();
@@ -1517,8 +1517,9 @@ export function createAppController({
     return delegatedTasksRequest;
   }
 
-  async function generateRhidAttendanceReport(selectedDate, { openPdf = false } = {}) {
+  async function generateRhidAttendanceReport(selectedDate, { openPdf = false, replaceMessageId = "" } = {}) {
     const day = String(selectedDate || "").trim();
+    const requestKey = replaceMessageId ? `message:${String(replaceMessageId)}` : "new-report";
     if (!isValidRhidReportDate(day)) {
       view.setRhidAttendanceReportStatus?.({ error: "Selecione uma data válida." });
       return false;
@@ -1529,11 +1530,21 @@ export function createAppController({
       else view.setRhidAttendanceReportStatus?.({ error: message });
       return false;
     }
-    if (rhidAttendanceReportRequest) return rhidAttendanceReportRequest;
+    if (rhidAttendanceReportRequests.has(requestKey)) return rhidAttendanceReportRequests.get(requestKey);
+    if (replaceMessageId) {
+      const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
+      const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
+      if (currentMessage?.type !== "poll" || currentTable?.kind !== "rhid_attendance" || currentTable.navigationBusy === true) return false;
+      if (!store.replaceMessage?.(replaceMessageId, {
+        ...currentMessage,
+        detail_table: { ...currentTable, navigationBusy: true, navigationError: "" },
+      })) return false;
+    }
     const reportAccount = account;
     const reportRevision = sessionRevision;
     view.setRhidAttendanceReportStatus?.({ busy: true, error: "" });
-    rhidAttendanceReportRequest = Promise.resolve().then(async () => {
+    let request;
+    request = Promise.resolve().then(async () => {
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
@@ -1542,28 +1553,27 @@ export function createAppController({
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         const table = { ...buildRhidAttendanceTable(rows), reportDate: reportDay };
         const updateLabel = rhidUpdateLabel(report);
-        const message = table.rows.length
-          ? {
-            type: "poll",
-            question: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}`,
-            options: [],
-            detail_table: {
-              ...table,
-              reportDate: reportDay,
-              title: `📋 PRESENÇAS • ${reportDate}`,
-              updateLabel,
-            },
-          }
-          : {
-            type: "text",
-            text: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}\n${updateLabel ? `${updateLabel}\n` : ""}Nenhuma presença foi encontrada para esta data.`,
-          };
+        const message = {
+          type: "poll",
+          question: `📊 RELATÓRIO DE PRESENÇAS RHID — ${reportDate}`,
+          options: [],
+          detail_table: {
+            ...table,
+            reportDate: reportDay,
+            title: "📋 PRESENÇAS",
+            updateLabel,
+          },
+        };
         const current = store.getState();
-        store.ingestRemoteMessages([message], {
-          resetConversation: false,
-          activeFlow: current.activeFlow,
-          attachments: current.attachments,
-        });
+        if (replaceMessageId) {
+          if (!store.replaceMessage?.(replaceMessageId, message)) return false;
+        } else {
+          store.ingestRemoteMessages([message], {
+            resetConversation: false,
+            activeFlow: current.activeFlow,
+            attachments: current.attachments,
+          });
+        }
         view.closeRhidAttendanceReport?.();
         if (openPdf) {
           const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
@@ -1574,15 +1584,38 @@ export function createAppController({
         return true;
       } catch (error) {
         if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
-          if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
+          if (replaceMessageId) {
+            const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
+            const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
+            if (currentMessage?.type === "poll" && currentTable?.kind === "rhid_attendance") {
+              store.replaceMessage(replaceMessageId, {
+                ...currentMessage,
+                detail_table: {
+                  ...currentTable,
+                  navigationBusy: false,
+                  navigationError: "Não foi possível atualizar o relatório. Tente novamente.",
+                },
+              });
+            }
+          } else if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
           else view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
         }
         return false;
       } finally {
-        rhidAttendanceReportRequest = null;
+        if (rhidAttendanceReportRequests.get(requestKey) === request) rhidAttendanceReportRequests.delete(requestKey);
       }
     });
-    return rhidAttendanceReportRequest;
+    rhidAttendanceReportRequests.set(requestKey, request);
+    return request;
+  }
+
+  function navigateRhidAttendanceReport({ messageId, value } = {}) {
+    const id = String(messageId || "").trim();
+    const message = store.getState().messages.find(item => String(item?.id || "") === id);
+    const table = message?.detail_table || message?.detailTable;
+    if (!id || message?.type !== "poll" || table?.kind !== "rhid_attendance" || table.navigationBusy === true) return false;
+    const day = shiftRhidReportDate(table.reportDate, Number(value));
+    return day ? generateRhidAttendanceReport(day, { replaceMessageId: id }) : false;
   }
 
   let rhidAttendanceShareBusy = false;
@@ -5128,6 +5161,7 @@ export function createAppController({
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value));
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
+    bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);

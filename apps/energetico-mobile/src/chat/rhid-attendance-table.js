@@ -18,6 +18,13 @@ export function isValidRhidReportDate(value) {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
 }
 
+export function shiftRhidReportDate(value, days) {
+  if (!isValidRhidReportDate(value) || !Number.isInteger(days) || Math.abs(days) !== 1) return "";
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function saoPauloClockParts(value) {
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) return null;

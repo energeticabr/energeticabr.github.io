@@ -598,6 +598,18 @@ export function createConversationStore({
     return true;
   }
 
+  function replaceMessage(messageId, message) {
+    const id = String(messageId || "");
+    const index = state.messages.findIndex(item => item.id === id);
+    if (index < 0 || !message || typeof message !== "object") return false;
+    const [replacement] = remoteMessages([{ ...message, id }]);
+    if (!replacement) return false;
+    const messages = [...state.messages];
+    messages[index] = replacement;
+    publish({ ...state, messages, error: null });
+    return true;
+  }
+
   function discardFile(fileId) {
     const pendingFiles = state.pendingFiles.filter(item => item.id !== fileId);
     if (pendingFiles.length === state.pendingFiles.length) return false;
@@ -619,6 +631,7 @@ export function createConversationStore({
     revertFileConfirmation,
     ingestRemoteMessages,
     replaceCurrentResponse,
+    replaceMessage,
     syncAttachments,
     setMessagePreview,
     setAttachmentPreview,

@@ -96,9 +96,124 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   const report = h.store.getState().messages.at(-1);
   assert.match(report.question, /25\/09\/2026/);
   assert.equal(report.detail_table.kind, "rhid_attendance");
+  assert.equal(report.detail_table.title, "📋 PRESENÇAS");
   assert.deepEqual(report.detail_table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual(report.detail_table.rows, [["Pessoa A", "07:01", "12:00", "13:00", "17:02", "09:01"]]);
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
+});
+
+test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
+  const h = makeHarness();
+  const requested = [];
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    return { date: selectedDate, rows: selectedDate === "2026-09-26" ? [] : [{
+      ID_PESSOA_RHID: "rh-9", DATA_REFERENCIA: selectedDate, NOME_COLABORADOR: "Pessoa A",
+      BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-26" });
+  const original = h.store.getState().messages.at(-1);
+  assert.deepEqual(original.detail_table.rows, [], "o relatório vazio também precisa manter a navegação");
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: original.id, value: "-1" });
+  assert.equal(h.store.getState().messages.at(-1).detail_table.reportDate, "2026-09-25");
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: original.id, value: "1" });
+
+  assert.deepEqual(requested, ["2026-09-26", "2026-09-25", "2026-09-26"]);
+  const reportMessages = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+  assert.equal(reportMessages.length, 1);
+  assert.equal(reportMessages[0].id, original.id);
+  assert.equal(reportMessages[0].detail_table.reportDate, "2026-09-26");
+});
+
+test("setas RHID ficam bloqueadas durante a consulta e liberam após atualizar o cartão", async t => {
+  const h = makeHarness();
+  const requested = [];
+  let resolveAdjacent;
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    if (selectedDate === "2026-09-25") return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+    return new Promise(resolve => { resolveAdjacent = resolve; });
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const report = h.store.getState().messages.at(-1);
+
+  const pending = h.view.emit("rhid-attendance-report-navigate", { messageId: report.id, value: "-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.store.getState().messages.at(-1).detail_table.navigationBusy, true);
+  assert.equal(h.view.emit("rhid-attendance-report-navigate", { messageId: report.id, value: "-1" }), false);
+  assert.deepEqual(requested, ["2026-09-25", "2026-09-24"]);
+
+  resolveAdjacent({ date: "2026-09-24", rows: [] });
+  await pending;
+  assert.notEqual(h.store.getState().messages.at(-1).detail_table.navigationBusy, true);
+});
+
+test("cartões RHID diferentes podem consultar seus próximos dias em paralelo", async t => {
+  const h = makeHarness();
+  const requested = [];
+  const callsByDate = new Map();
+  const pending = new Map();
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    const calls = callsByDate.get(selectedDate) || 0;
+    callsByDate.set(selectedDate, calls + 1);
+    if (calls === 0 && ["2026-09-25", "2026-09-26"].includes(selectedDate)) {
+      return { date: selectedDate, rows: [{
+        ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+      }] };
+    }
+    return new Promise(resolve => pending.set(selectedDate, resolve));
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-26" });
+  const [first, second] = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+
+  const firstNavigation = h.view.emit("rhid-attendance-report-navigate", { messageId: first.id, value: "-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  const secondNavigation = h.view.emit("rhid-attendance-report-navigate", { messageId: second.id, value: "-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  const requestedWhilePending = [...requested];
+  for (const [date, resolve] of pending) resolve({ date, rows: [] });
+  await Promise.all([firstNavigation, secondNavigation]);
+
+  assert.deepEqual(requestedWhilePending, ["2026-09-25", "2026-09-26", "2026-09-24", "2026-09-25"]);
+  const reports = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+  assert.deepEqual(reports.map(message => message.detail_table.reportDate), ["2026-09-24", "2026-09-25"]);
+  assert.deepEqual(reports.map(message => message.id), [first.id, second.id]);
+});
+
+test("falha ao consultar outro dia aparece no cartão sem perder os dados anteriores", async t => {
+  const h = makeHarness();
+  let call = 0;
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    call += 1;
+    if (call > 1) throw new Error("Falha de conexão com o RHID");
+    return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const report = h.store.getState().messages.at(-1);
+
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: report.id, value: "-1" });
+
+  const current = h.store.getState().messages.at(-1);
+  assert.equal(current.detail_table.reportDate, "2026-09-25");
+  assert.equal(current.detail_table.navigationBusy, false);
+  assert.match(current.detail_table.navigationError, /não foi possível atualizar/i);
+  assert.equal(current.detail_table.rows.length, 1);
 });
 
 test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças acessível", async t => {
@@ -136,7 +251,8 @@ test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => 
 
   await h.view.emit("rhid-attendance-report-today", { value: "2026-09-27" });
 
-  assert.match(h.store.getState().messages.at(-1).text, /Nenhuma presença/);
+  assert.equal(h.store.getState().messages.at(-1).detail_table.kind, "rhid_attendance");
+  assert.deepEqual(h.store.getState().messages.at(-1).detail_table.rows, []);
   assert.equal(previews.length, 1);
   assert.equal(previews[0].blob.type, "application/pdf");
 });
