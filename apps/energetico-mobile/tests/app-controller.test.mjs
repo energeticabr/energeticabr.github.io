@@ -129,6 +129,60 @@ test("setas do relatório consultam o dia adjacente e substituem o relatório no
   assert.equal(reportMessages[0].detail_table.reportDate, "2026-09-26");
 });
 
+test("seletor de calendário RHID atualiza a data escolhida no mesmo cartão do relatório", async t => {
+  const h = makeHarness();
+  const requested = [];
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", DATA_REFERENCIA: selectedDate, NOME_COLABORADOR: "Pessoa A",
+      BATIDAS_RHID: selectedDate === "2026-09-25" ? "07:01; 12:00; 13:00; 17:02" : "08:00; 12:00; 13:00; 18:00",
+    }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const original = h.store.getState().messages.at(-1);
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-26", messageId: original.id });
+
+  const reports = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+  assert.deepEqual(requested, ["2026-09-25", "2026-09-26"]);
+  assert.equal(reports.length, 1, "trocar a data deve atualizar o relatório exposto, sem criar outro cartão");
+  assert.equal(reports[0].id, original.id);
+  assert.equal(reports[0].detail_table.reportDate, "2026-09-26");
+  assert.deepEqual(reports[0].detail_table.rows[0], ["Pessoa A", "08:00", "12:00", "13:00", "18:00", "09:00"]);
+});
+
+test("falha ao trocar data pelo calendário libera o popup e preserva o relatório atual", async t => {
+  const h = makeHarness();
+  const statuses = [];
+  let requestCount = 0;
+  h.view.setRhidAttendanceReportStatus = status => statuses.push(status);
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requestCount += 1;
+    if (requestCount > 1) throw new Error("Falha de conexão");
+    return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const original = h.store.getState().messages.at(-1);
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-26", messageId: original.id });
+
+  assert.deepEqual(statuses.at(-1), {
+    busy: false,
+    error: "Não foi possível atualizar o relatório. Tente novamente.",
+  });
+  const current = h.store.getState().messages.at(-1);
+  assert.equal(current.id, original.id);
+  assert.equal(current.detail_table.reportDate, "2026-09-25");
+  assert.equal(current.detail_table.rows.length, 1);
+});
+
 test("setas RHID ficam bloqueadas durante a consulta e liberam após atualizar o cartão", async t => {
   const h = makeHarness();
   const requested = [];
