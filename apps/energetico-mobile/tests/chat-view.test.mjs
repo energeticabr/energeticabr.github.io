@@ -64,6 +64,64 @@ test("renderiza conversa acessível com câmera, anexo e compositor", () => {
     "o clipe deve ficar acima da câmera na coluna de anexos");
 });
 
+test("microfone aparece acima de Enviar somente ao preencher diário de obras", () => {
+  const activeMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+  const activeVoice = activeMarkup.indexOf('data-role="voice-input"');
+  const activeSend = activeMarkup.indexOf('data-action="send-text"');
+
+  assert.ok(activeVoice >= 0, "o fluxo de preenchimento deve oferecer transcrição");
+  assert.ok(activeVoice < activeSend, "o microfone deve ficar antes/acima do envio");
+  assert.match(activeMarkup, /Segurar para transcrever áudio/);
+
+  const inactiveMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_diary_create", title: "COMEÇAR DIÁRIO DE OBRAS" },
+  }));
+  assert.match(inactiveMarkup, /data-role="voice-input"[^>]*hidden/);
+});
+
+test("segurar e soltar o microfone controla a transcrição no diário de obras", () => {
+  class Recognition {
+    static instance = null;
+
+    constructor() {
+      Recognition.instance = this;
+      this.stopped = 0;
+    }
+
+    start() { this.onstart?.(); }
+    stop() { this.stopped += 1; this.onend?.(); }
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] });
+    }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const changes = [];
+  view.on("draft-changed", event => changes.push(event.value));
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const draft = root.querySelector('[data-role="draft"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  Recognition.instance.emit("Concretagem da laje");
+  assert.equal(draft.value, "Concretagem da laje");
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  assert.equal(Recognition.instance.stopped, 1);
+  assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  assert.ok(changes.includes("Concretagem da laje"));
+  view.destroy();
+  dom.window.close();
+});
+
 test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Humanos", () => {
   const menu = {
     id: "hr-menu",
