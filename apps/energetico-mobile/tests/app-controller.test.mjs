@@ -295,6 +295,20 @@ test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças a
   assert.match(previews[0].fileName, /2026-09-27.*\.pdf$/);
 });
 
+test("ícone de atualização aguarda a sincronização RHID/SharePoint e informa conclusão", async t => {
+  const h = makeHarness();
+  const statuses = [];
+  h.view.setRhidRefreshStatus = status => statuses.push(status);
+  h.client.refreshRhidAttendance = async () => ({ status: "running", requestId: "a".repeat(32) });
+  h.client.getRhidRefreshStatus = async () => ({ status: "completed", requestId: "a".repeat(32) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-refresh");
+  assert.equal(statuses[0].busy, true);
+  assert.match(statuses.at(-1).message, /sharepoint.*atualizad/i);
+  assert.equal(statuses.at(-1).busy, false);
+});
+
 test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => {
   const h = makeHarness();
   const previews = [];

@@ -638,6 +638,7 @@ export function createAppController({
   let attachmentRevision = 0;
   let snapshotPending = null;
   const rhidAttendanceReportRequests = new Map();
+  let rhidRefreshRequest = null;
   let resuming = false;
   let attachmentActionBusy = false;
   const idleWaiters = new Set();
@@ -1517,6 +1518,51 @@ export function createAppController({
       }
     });
     return delegatedTasksRequest;
+  }
+
+  async function refreshRhidAttendance() {
+    if (!account || stopped || typeof client.refreshRhidAttendance !== "function"
+      || typeof client.getRhidRefreshStatus !== "function") {
+      view.setRhidRefreshStatus?.({ error: true, message: "A atualização RHID está indisponível nesta sessão." });
+      return false;
+    }
+    if (rhidRefreshRequest) return rhidRefreshRequest;
+    const refreshAccount = account;
+    const refreshRevision = sessionRevision;
+    view.setRhidRefreshStatus?.({ busy: true, message: "Consultando RHID e atualizando o SharePoint…" });
+    let request;
+    request = Promise.resolve().then(async () => {
+      try {
+        const started = await client.refreshRhidAttendance();
+        let status = started;
+        for (let attempt = 0; status?.status === "running" && attempt < 225; attempt += 1) {
+          if (stopped || account !== refreshAccount || sessionRevision !== refreshRevision) return false;
+          if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 4000));
+          status = await client.getRhidRefreshStatus(started.requestId);
+        }
+        if (status?.status !== "completed") {
+          throw new Error(status?.status === "failed"
+            ? "O fluxo RHID falhou antes de confirmar a atualização."
+            : "A atualização ainda não foi confirmada. Tente consultar novamente em alguns minutos.");
+        }
+        if (stopped || account !== refreshAccount || sessionRevision !== refreshRevision) return false;
+        view.setRhidRefreshStatus?.({ busy: false, message: "SharePoint atualizado com os dados disponíveis no RHID." });
+        return true;
+      } catch (error) {
+        if (!stopped && account === refreshAccount && sessionRevision === refreshRevision) {
+          view.setRhidRefreshStatus?.({
+            busy: false,
+            error: true,
+            message: error?.message || "A atualização RHID não foi confirmada. Tente novamente.",
+          });
+        }
+        return false;
+      } finally {
+        if (rhidRefreshRequest === request) rhidRefreshRequest = null;
+      }
+    });
+    rhidRefreshRequest = request;
+    return request;
   }
 
   async function generateRhidAttendanceReport(selectedDate, { openPdf = false, replaceMessageId = "" } = {}) {
@@ -5200,6 +5246,7 @@ export function createAppController({
       replaceMessageId: command.messageId || "",
     }));
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
+    bind("rhid-refresh", refreshRhidAttendance);
     bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
