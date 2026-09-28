@@ -366,6 +366,45 @@ test('launch cards show the actual attachment quantity below the left marker', a
   assert.equal(media.querySelector('.lg-record-attachment-count').textContent, '2 anexos');
 });
 
+test('launch attachment counting and opening send only the supported item id', async t => {
+  const item = { ...row(3451), hasAttachments: true };
+  const attachments = [
+    { fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/comprovante' },
+    { fileName: 'foto.jpg', mediaUrl: '/api/portal-media/foto' },
+  ];
+  const detailPayloads = [];
+  let opened;
+  const ctx = await setup(t, {
+    request: async (operation, payload) => {
+      if (operation === 'snapshot') return snapshot({ rows: [item] });
+      if (operation === 'detail') {
+        detailPayloads.push(payload);
+        if (Object.keys(payload).some(key => key !== 'id')) {
+          throw new Error('O payload contém parâmetros não permitidos.');
+        }
+        return detail({ item, attachments });
+      }
+      throw new Error(`unexpected ${operation} ${JSON.stringify(payload)}`);
+    },
+    openMediaCollection: async descriptors => { opened = descriptors; },
+  });
+
+  await ctx.gallery.open();
+  await settle();
+
+  const media = ctx.root().querySelector('.lg-record-media');
+  assert.deepEqual(detailPayloads, [{ id: item.id }]);
+  assert.equal(media.querySelector('.lg-record-attachment-count').textContent, '2 anexos');
+
+  media.click();
+  await settle();
+  assert.deepEqual(opened, [
+    { id: item.id, fileName: 'comprovante.pdf', mediaUrl: '/api/portal-media/comprovante' },
+    { id: item.id, fileName: 'foto.jpg', mediaUrl: '/api/portal-media/foto' },
+  ]);
+  assert.deepEqual(detailPayloads, [{ id: item.id }]);
+});
+
 test('clicking a PowerApps attachment marker opens the attachment navigator instead of launch details', async t => {
   const attachments = [
     { DisplayName: 'foto.jpg', Value: '/sharepoint/foto.jpg' },
@@ -726,9 +765,9 @@ test('closing during signature capture never uploads or restores a closed galler
 
 test('stale detail responses are discarded and failed detail can be retried', async t => {
   const one = deferred(), two = deferred(); let count = 0;
-  const ctx = await setup(t, { request: async (op, payload) => op === 'snapshot' ? snapshot({ rows: [row(17), row(18)] }) :
-    payload?.purpose === 'attachment-count' ? detail({ item: row(payload.id) })
-      : ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
+  const ctx = await setup(t, { request: async op => op === 'snapshot'
+    ? snapshot({ rows: [{ ...row(17), hasAttachments: false }, { ...row(18), hasAttachments: false }] })
+    : ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
   await ctx.gallery.open();
   const buttons = [...ctx.root().querySelectorAll('[data-lg-action="details"]')];
   buttons[0].click(); buttons[1].click();
@@ -740,7 +779,9 @@ test('stale detail responses are discarded and failed detail can be retried', as
 });
 
 test('invalid periods and required fields prevent review and calls; editing blocks replacement of its detail', async t => {
-  const ctx = await setup(t); await ctx.gallery.open();
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [{ ...row(), hasAttachments: false }] }) : detail() });
+  await ctx.gallery.open();
   input(ctx, 'dateStart', '2026-10-01'); input(ctx, 'dateEnd', '2026-09-01');
   await settle();
   assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, 2);
@@ -754,7 +795,7 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   button(ctx.root(), 'Detalhes').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), form);
   assert.equal(form.querySelector('[name="QUANTIDADE"]').value, '12');
-  assert.equal(ctx.calls.filter(c => c.operation === 'detail' && c.payload.purpose !== 'attachment-count').length, 1);
+  assert.equal(ctx.calls.filter(c => c.operation === 'detail').length, 1);
   assert.equal(mutations(ctx).length, 0);
 });
 
@@ -807,8 +848,7 @@ test('attachment read and viewer failures leave actionable errors with a usable 
 test('a confirmed mutation is never resent when its detail refresh fails', async t => {
   let details = 0;
   const ctx = await setup(t, { request: async (op, payload) => {
-    if (op === 'snapshot') return snapshot();
-    if (op === 'detail' && payload?.purpose === 'attachment-count') return detail();
+    if (op === 'snapshot') return snapshot({ rows: [{ ...row(), hasAttachments: false }] });
     if (op === 'detail') { if (++details === 2) throw new Error('Falha na atualização'); return detail(); }
     return { ok: true };
   } });
