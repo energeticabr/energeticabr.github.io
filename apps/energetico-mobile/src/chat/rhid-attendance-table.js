@@ -133,6 +133,7 @@ export function buildRhidAttendanceTable(rows = []) {
   const people = new Map();
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
+    if (String(row.STATUS_RHID ?? "").trim().toLocaleUpperCase("pt-BR") === "INATIVO") continue;
     const name = String(row.NOME_COLABORADOR ?? "").trim();
     const id = String(row.ID_PESSOA_RHID ?? row.Id ?? "").trim();
     const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ").trim();

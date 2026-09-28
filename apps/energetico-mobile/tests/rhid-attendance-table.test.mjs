@@ -36,6 +36,15 @@ test("inclui cadastrados sem batidas ao final e omite cadastro NÃO APAGAR", () 
   assert.equal(rhid.isRhidAttendanceRowWithoutPunches(table.rows[1]), true);
 });
 
+test("omite cadastro inativo mesmo quando ele possui batidas", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ARTHUR MARCOS", BATIDAS_RHID: "07:00", STATUS_RHID: "INATIVO" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "SERVENTE 1", BATIDAS_RHID: "", STATUS_RHID: "INATIVO" },
+    { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "ATIVO", BATIDAS_RHID: "07:01", STATUS_RHID: "MARCAÇÃO RECEBIDA" },
+  ]);
+  assert.deepEqual(table.rows.map(row => row[0]), ["ATIVO"]);
+});
+
 test("valida a data RHID como uma data real do calendário", () => {
   assert.equal(typeof rhid.isValidRhidReportDate, "function");
   assert.equal(rhid.isValidRhidReportDate("2026-09-25"), true);
