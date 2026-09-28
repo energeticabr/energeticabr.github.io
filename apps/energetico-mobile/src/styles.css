@@ -502,6 +502,7 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-table thead th:first-child { z-index: 2; }
 .chat-rhid-attendance-table tbody th { background: #fff; font-weight: 750; }
 .chat-rhid-attendance-table tbody tr:nth-child(even) th, .chat-rhid-attendance-table tbody tr:nth-child(even) td { background: #f5faf9; }
+.chat-rhid-attendance-table tbody tr.chat-rhid-attendance-table__row--discrepant > th, .chat-rhid-attendance-table tbody tr.chat-rhid-attendance-table__row--discrepant > td { background-color: #fde8e6; }
 .chat-rhid-attendance-table tbody tr:last-child th, .chat-rhid-attendance-table tbody tr:last-child td { border-bottom: 0; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__entry { color: #146b36; font-weight: 800; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__exit { color: #ad2525; font-weight: 800; }

@@ -186,6 +186,35 @@ test("destaca entradas em verde, saídas em vermelho e total em negrito", async 
   }
 });
 
+test("pinta de vermelho claro a linha divergente no PDF e mantém neutra a linha no mínimo", async () => {
+  async function includesLightRedFill(table) {
+    const { loadingTask, pages } = await inspect(await buildPdf(table));
+    try {
+      const operators = await pages[0].page.getOperatorList();
+      return operators.argsArray.some((args, index) => {
+        if (operators.fnArray[index] !== OPS.setFillRGBColor) return false;
+        const components = String(args[0]).match(/[\da-f]{2}/gi)?.map(value => parseInt(value, 16)) || [];
+        return components.length === 3 && components[0] >= 245 && components[1] >= 220 && components[2] >= 220
+          && components[0] > components[1];
+      });
+    } finally {
+      await loadingTask.destroy();
+    }
+  }
+
+  const discrepant = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA SOUZA", BATIDAS_RHID: "07:00; 12:00; 13:00; 15:42" },
+  ]);
+  discrepant.reportDate = "2026-09-25";
+  const complete = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "BIA SOUZA", BATIDAS_RHID: "07:00; 12:00; 13:00; 15:45" },
+  ]);
+  complete.reportDate = "2026-09-25";
+
+  assert.equal(await includesLightRedFill(discrepant), true);
+  assert.equal(await includesLightRedFill(complete), false);
+});
+
 test("pagina também uma pessoa com muitos pares de horários", async () => {
   const pairs = 40;
   const headers = ["Nome"];

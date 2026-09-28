@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import * as rhid from "../src/chat/rhid-attendance-table.js";
 
-const { buildRhidAttendanceTable } = rhid;
+const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant } = rhid;
 
 test("relatório omite PIS não localizado sem perder colaboradores identificados", () => {
   const table = buildRhidAttendanceTable([
@@ -42,4 +42,28 @@ test("relatório informa quando a coleta não tem horário verificável", () => 
   assert.equal(rhid.rhidUpdateLabel({ rows: [] }), "HORÁRIO DA COLETA DO RHID INDISPONÍVEL");
   assert.equal(rhid.rhidUpdateLabel({ rows: [{ COLETADO_EM: "2026-09-25T17:12:00" }] }),
     "HORÁRIO DA COLETA DO RHID INDISPONÍVEL");
+});
+
+test("considera o dia atual encerrado às 17:15 de Brasília e dias anteriores encerrados", () => {
+  assert.equal(isRhidAttendanceDayFinalized("2026-09-25", new Date("2026-09-25T20:14:59Z")), false);
+  assert.equal(isRhidAttendanceDayFinalized("2026-09-25", new Date("2026-09-25T20:15:00Z")), true);
+  assert.equal(isRhidAttendanceDayFinalized("2026-09-25", new Date("2026-09-26T12:00:00Z")), true);
+  assert.equal(isRhidAttendanceDayFinalized("2026-09-26", new Date("2026-09-25T20:15:00Z")), false);
+  assert.equal(isRhidAttendanceDayFinalized("2026-02-31", new Date("2026-09-26T12:00:00Z")), false);
+});
+
+test("marca discrepância por batidas incompletas ou carga semanal abaixo do mínimo", () => {
+  const afterClose = new Date("2026-09-26T12:00:00Z");
+  const row = (...punches) => ["PESSOA", ...punches, "08:45"];
+
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "16:44"), "2026-09-24", afterClose), true);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "16:45"), "2026-09-24", afterClose), false);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "15:44"), "2026-09-25", afterClose), true);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "15:45"), "2026-09-25", afterClose), false);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "16:00", "—", "—"), "2026-09-25", afterClose), true);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "15:45", "16:00", "17:00"), "2026-09-25", afterClose), false);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "15:45", "16:00", "—"), "2026-09-25", afterClose), true);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "25:99"), "2026-09-25", afterClose), true);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "—", "—"), "2026-09-25", new Date("2026-09-25T20:14:59Z")), false);
+  assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "—", "—"), "2026-09-26", afterClose), false);
 });

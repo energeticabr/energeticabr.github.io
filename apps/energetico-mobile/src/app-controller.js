@@ -1540,7 +1540,7 @@ export function createAppController({
         const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
-        const table = buildRhidAttendanceTable(rows);
+        const table = { ...buildRhidAttendanceTable(rows), reportDate: reportDay };
         const updateLabel = rhidUpdateLabel(report);
         const message = table.rows.length
           ? {
