@@ -559,8 +559,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     pair.append(element('span', 'lg-record-label', labelText), trigger);
     return pair;
   }
-  async function fetchLaunchRows(filters = {}, { signal } = {}) {
+  async function fetchLaunchRows(filters = {}, { signal, parallelPages = 1 } = {}) {
     const pageSize = 100;
+    const concurrency = Math.max(1, Math.min(4, Math.trunc(Number(parallelPages) || 1)));
     const loadPage = async targetPage => {
       if (targetPage > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
       const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize }, { signal });
@@ -575,7 +576,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const reportedCount = Number(firstPage.count);
     let pagesToLoad = Number.isFinite(firstPageCount) && firstPageCount > 0
       ? Math.trunc(firstPageCount)
-      : Number.isFinite(reportedCount) && reportedCount > 0
+      : concurrency > 1 && Number.isFinite(reportedCount) && reportedCount > 0
         ? Math.ceil(reportedCount / pageSize)
         : firstPage.rows.length >= pageSize ? 2 : 1;
     if (pagesToLoad > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
@@ -583,7 +584,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     let targetPage = 2;
     while (targetPage <= pagesToLoad) {
       const batch = [];
-      while (batch.length < 4 && targetPage <= pagesToLoad) {
+      while (batch.length < concurrency && targetPage <= pagesToLoad) {
         batch.push(targetPage++);
       }
       const results = await Promise.all(batch.map(loadPage));
@@ -611,7 +612,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (allLaunchRowsRequest) return allLaunchRowsRequest;
     const generation = allLaunchRowsGeneration;
     let requestPromise;
-    requestPromise = fetchLaunchRows({}, { signal }).then(rows => {
+    requestPromise = fetchLaunchRows({}, { signal, parallelPages: 4 }).then(rows => {
       if (generation === allLaunchRowsGeneration) allLaunchRowsCache = rows;
       return rows;
     }).finally(() => { if (allLaunchRowsRequest === requestPromise) allLaunchRowsRequest = null; });

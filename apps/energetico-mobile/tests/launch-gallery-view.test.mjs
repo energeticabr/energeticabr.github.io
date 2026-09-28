@@ -229,11 +229,17 @@ test('supplier cluster loads every matching launch page and summarizes the suppl
   const first = row(3451); first.fields = { ...first.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 905,00' };
   const second = row(3450); second.fields = { ...second.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 181,00' };
   const supplierPages = [];
+  let activeSupplierRequests = 0, maxActiveSupplierRequests = 0;
   const ctx = await setup(t, { request: async (operation, payload) => {
     if (operation !== 'snapshot') return detail();
     if (payload.filters?.supplier === 'Fornecedor A') {
       supplierPages.push(payload.page);
-      return snapshot({ rows: [payload.page === 1 ? first : second], page: payload.page, pages: 2, count: 2 });
+      activeSupplierRequests += 1;
+      maxActiveSupplierRequests = Math.max(maxActiveSupplierRequests, activeSupplierRequests);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return snapshot({ rows: [payload.page === 1 ? first : second], page: payload.page, pages: 6, count: 6 });
+      } finally { activeSupplierRequests -= 1; }
     }
     return snapshot({ rows: [first] });
   } });
@@ -241,11 +247,15 @@ test('supplier cluster loads every matching launch page and summarizes the suppl
   const supplierTrigger = ctx.root().querySelector('[data-cluster-kind="supplier"]');
   supplierTrigger.focus(); supplierTrigger.click();
   await settle(); await settle();
-
   const modal = ctx.root().querySelector('.lg-cluster-modal');
+  for (let attempt = 0; (supplierPages.length < 6 || modal.getAttribute('aria-busy') !== 'false') && attempt < 100; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+
   assert.equal(modal.hidden, false);
   assert.match(modal.textContent, /Fornecedor A/);
-  assert.deepEqual(supplierPages, [1, 2]);
+  assert.deepEqual(supplierPages, [1, 2, 3, 4, 5, 6]);
+  assert.equal(maxActiveSupplierRequests, 1);
   assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3451', '3450']);
   assert.match(modal.textContent, /R\$\s*1\.086,00/);
   button(modal, 'Fechar').click();
