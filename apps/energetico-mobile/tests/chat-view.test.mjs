@@ -1836,6 +1836,25 @@ test("não mostra tabela de fornecedor vazia no menu principal", () => {
   assert.doesNotMatch(markup, /Nenhuma alteração identificada/);
 });
 
+test("menu inicial remove cabeçalho redundante e preserva as opções", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "main-menu-compact",
+      role: "assistant",
+      type: "poll",
+      question: "👉 QUAL ÁREA VOCÊ DESEJA ACESSAR?",
+      options: [{ id: "group_supplies", label: "📦 SUPRIMENTOS", reply: "group_supplies" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const message = dom.window.document.querySelector(".chat-message--assistant");
+
+  assert.ok(message);
+  assert.equal(message.querySelector(".chat-bubble > strong"), null);
+  assert.equal(message.querySelector(".chat-choice-card > p"), null);
+  assert.match(message.textContent, /SUPRIMENTOS/);
+});
+
 test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{

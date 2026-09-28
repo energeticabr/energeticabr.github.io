@@ -665,6 +665,16 @@ function isAutomaticMainMenuMessage(message) {
   return /qual\s+area\s+voce\s+deseja\s+acessar/.test(question);
 }
 
+function isInitialAreaSelectionMenu(message) {
+  if (message?.type !== "poll") return false;
+  const heading = normalizedDateText(String(message?.question || message?.prompt || message?.text || "")
+    .split(/\r?\n/, 1)[0]
+    .replace(/[^\p{L}\p{N}\s]/gu, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+  return heading === "qual area voce deseja acessar";
+}
+
 function isSuppliesLaunchMenu(message) {
   if (message?.type !== "poll") return false;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -1184,6 +1194,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
+  const initialAreaMenu = isInitialAreaSelectionMenu(message);
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
@@ -1241,7 +1252,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    ${launchPaymentSummary || rhidAttendanceReport ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh)}
@@ -1355,8 +1366,9 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const auditMenu = isAuditDocumentsMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
+    const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
