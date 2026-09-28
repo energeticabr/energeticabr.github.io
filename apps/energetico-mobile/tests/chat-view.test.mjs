@@ -5771,6 +5771,35 @@ test("ícone de calendário abre o relatório exibido na data atual e consulta a
   dom.window.close();
 });
 
+test("relatório RHID também expõe a mesma ação de ressincronização do menu de Recursos Humanos", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let refreshes = 0;
+  view.on("rhid-refresh", () => { refreshes += 1; });
+  view.render(signedInState({
+    activeFlow: { title: "👥 RECURSOS HUMANOS" },
+    messages: [{
+      id: "rhid-refresh-report", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+      detail_table: {
+        kind: "rhid_attendance", reportDate: "2026-09-25", title: "PRESENÇAS • 25/09/2026",
+        headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+        rows: [["ANA", "07:00", "12:00", "05:00"]],
+      },
+    }],
+  }));
+
+  const refresh = root.querySelector('.chat-flow-status [data-action="rhid-refresh"]');
+  const calendar = root.querySelector('.chat-flow-status [data-action="open-rhid-attendance-report"]');
+  assert.ok(refresh, "a tela do relatório deve oferecer ressincronização");
+  assert.ok(calendar, "o calendário deve permanecer disponível");
+  assert.match(refresh.getAttribute("aria-label"), /atualizar.*rhid.*sharepoint/i);
+  refresh.click();
+  assert.equal(refreshes, 1);
+  view.destroy();
+  dom.window.close();
+});
+
 test("relatório RHID vazio mantém as setas e informa que não há presenças", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-empty", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],

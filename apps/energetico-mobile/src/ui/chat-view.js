@@ -1307,13 +1307,13 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
     : `${finish}${quickRhid
       ? `<button class="chat-flow-rhid-refresh${rhidRefresh?.busy ? " chat-flow-rhid-refresh--busy" : ""}" type="button" data-action="rhid-refresh" aria-label="Atualizar RHID e SharePoint" title="Consultar dados já transmitidos ao RHID e atualizar o SharePoint"${busy || rhidRefresh?.busy ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v5h5M4 13a8 8 0 0 0 14.9 4M20 20v-5h-5"/></svg></button><button class="chat-flow-summary" type="button" data-action="rhid-attendance-report-today" aria-label="Abrir relatório RHID de hoje"${busy || rhidRefresh?.busy ? " disabled" : ""}><span aria-hidden="true">📊</span> RHID</button>`
       : canChangeRhidReportDate
-        ? `<button class="chat-flow-summary chat-flow-summary--calendar" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(latestAssistantMessage.id)}" data-value="${escapeHtml(attendanceTable.reportDate)}" aria-label="Alterar data do relatório RHID" title="Alterar data do relatório RHID"${busy ? " disabled" : ""}><span aria-hidden="true">📅</span></button>`
+        ? `<button class="chat-flow-rhid-refresh${rhidRefresh?.busy ? " chat-flow-rhid-refresh--busy" : ""}" type="button" data-action="rhid-refresh" aria-label="Atualizar RHID e SharePoint" title="Consultar dados já transmitidos ao RHID e atualizar o SharePoint"${busy || rhidRefresh?.busy ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v5h5M4 13a8 8 0 0 0 14.9 4M20 20v-5h-5"/></svg></button><button class="chat-flow-summary chat-flow-summary--calendar" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(latestAssistantMessage.id)}" data-value="${escapeHtml(attendanceTable.reportDate)}" aria-label="Alterar data do relatório RHID" title="Alterar data do relatório RHID"${busy || rhidRefresh?.busy ? " disabled" : ""}><span aria-hidden="true">📅</span></button>`
         : `<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`}`;
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
     <div class="chat-flow-actions">${actions}</div>
-  </div>${quickRhid && rhidRefresh?.message ? `<div class="chat-rhid-refresh-status${rhidRefresh.error ? " chat-rhid-refresh-status--error" : ""}" role="status">${escapeHtml(rhidRefresh.message)}</div>` : ""}`;
+  </div>${(quickRhid || canChangeRhidReportDate) && rhidRefresh?.message ? `<div class="chat-rhid-refresh-status${rhidRefresh.error ? " chat-rhid-refresh-status--error" : ""}" role="status">${escapeHtml(rhidRefresh.message)}</div>` : ""}`;
 }
 
 function presenceConfirmationMarkup(value = {}) {
