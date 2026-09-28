@@ -635,7 +635,7 @@ export function createAppController({
   let uploadQueue = Promise.resolve();
   let attachmentRevision = 0;
   let snapshotPending = null;
-  let rhidAttendanceReportRequest = null;
+  const rhidAttendanceReportRequests = new Map();
   let resuming = false;
   let attachmentActionBusy = false;
   const idleWaiters = new Set();
@@ -1519,6 +1519,7 @@ export function createAppController({
 
   async function generateRhidAttendanceReport(selectedDate, { openPdf = false, replaceMessageId = "" } = {}) {
     const day = String(selectedDate || "").trim();
+    const requestKey = replaceMessageId ? `message:${String(replaceMessageId)}` : "new-report";
     if (!isValidRhidReportDate(day)) {
       view.setRhidAttendanceReportStatus?.({ error: "Selecione uma data válida." });
       return false;
@@ -1529,7 +1530,7 @@ export function createAppController({
       else view.setRhidAttendanceReportStatus?.({ error: message });
       return false;
     }
-    if (rhidAttendanceReportRequest) return rhidAttendanceReportRequest;
+    if (rhidAttendanceReportRequests.has(requestKey)) return rhidAttendanceReportRequests.get(requestKey);
     if (replaceMessageId) {
       const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
       const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
@@ -1542,7 +1543,8 @@ export function createAppController({
     const reportAccount = account;
     const reportRevision = sessionRevision;
     view.setRhidAttendanceReportStatus?.({ busy: true, error: "" });
-    rhidAttendanceReportRequest = Promise.resolve().then(async () => {
+    let request;
+    request = Promise.resolve().then(async () => {
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
@@ -1600,10 +1602,11 @@ export function createAppController({
         }
         return false;
       } finally {
-        rhidAttendanceReportRequest = null;
+        if (rhidAttendanceReportRequests.get(requestKey) === request) rhidAttendanceReportRequests.delete(requestKey);
       }
     });
-    return rhidAttendanceReportRequest;
+    rhidAttendanceReportRequests.set(requestKey, request);
+    return request;
   }
 
   function navigateRhidAttendanceReport({ messageId, value } = {}) {

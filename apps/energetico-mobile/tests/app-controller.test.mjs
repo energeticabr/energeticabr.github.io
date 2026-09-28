@@ -156,6 +156,42 @@ test("setas RHID ficam bloqueadas durante a consulta e liberam após atualizar o
   assert.notEqual(h.store.getState().messages.at(-1).detail_table.navigationBusy, true);
 });
 
+test("cartões RHID diferentes podem consultar seus próximos dias em paralelo", async t => {
+  const h = makeHarness();
+  const requested = [];
+  const callsByDate = new Map();
+  const pending = new Map();
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    const calls = callsByDate.get(selectedDate) || 0;
+    callsByDate.set(selectedDate, calls + 1);
+    if (calls === 0 && ["2026-09-25", "2026-09-26"].includes(selectedDate)) {
+      return { date: selectedDate, rows: [{
+        ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+      }] };
+    }
+    return new Promise(resolve => pending.set(selectedDate, resolve));
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-26" });
+  const [first, second] = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+
+  const firstNavigation = h.view.emit("rhid-attendance-report-navigate", { messageId: first.id, value: "-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  const secondNavigation = h.view.emit("rhid-attendance-report-navigate", { messageId: second.id, value: "-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  const requestedWhilePending = [...requested];
+  for (const [date, resolve] of pending) resolve({ date, rows: [] });
+  await Promise.all([firstNavigation, secondNavigation]);
+
+  assert.deepEqual(requestedWhilePending, ["2026-09-25", "2026-09-26", "2026-09-24", "2026-09-25"]);
+  const reports = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+  assert.deepEqual(reports.map(message => message.detail_table.reportDate), ["2026-09-24", "2026-09-25"]);
+  assert.deepEqual(reports.map(message => message.id), [first.id, second.id]);
+});
+
 test("falha ao consultar outro dia aparece no cartão sem perder os dados anteriores", async t => {
   const h = makeHarness();
   let call = 0;
