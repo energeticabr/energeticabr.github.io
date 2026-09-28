@@ -99,6 +99,18 @@ function currentQuestion(messages) {
     .filter(Boolean).join("\n");
 }
 
+function sameRecordsExceptPreview(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((record, index) => {
+    const candidate = right[index];
+    if (record === candidate) return true;
+    if (!record || !candidate || typeof record !== "object" || typeof candidate !== "object") return false;
+    const keys = new Set([...Object.keys(record), ...Object.keys(candidate)]);
+    keys.delete("previewUrl");
+    return [...keys].every(key => record[key] === candidate[key]);
+  });
+}
+
 function newUploadMessageId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   const hex = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(32, "0").slice(0, 32);
@@ -1627,8 +1639,8 @@ export function createAppController({
         const current = store.getState();
         if (!replaceMessageId && (
           rhidAttendanceReportNavigationRevision !== navigationRevision
-          || current.messages !== reportOriginSnapshot.messages
-          || current.attachments !== reportOriginSnapshot.attachments
+          || !sameRecordsExceptPreview(current.messages, reportOriginSnapshot.messages)
+          || !sameRecordsExceptPreview(current.attachments, reportOriginSnapshot.attachments)
           || current.activeText
           || current.activeFlow !== reportOriginSnapshot.activeFlow
           || current.completionNavigation !== reportOriginSnapshot.completionNavigation
@@ -1652,6 +1664,8 @@ export function createAppController({
         if (replaceMessageId) {
           if (!store.replaceMessage?.(replaceMessageId, message)) return false;
         } else {
+          reportOriginSnapshot.messages = current.messages;
+          reportOriginSnapshot.attachments = current.attachments;
           rhidAttendanceReportPreviousSnapshot = reportOriginSnapshot;
           store.ingestRemoteMessages([message], {
             resetConversation: false,

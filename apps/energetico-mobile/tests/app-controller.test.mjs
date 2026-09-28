@@ -202,6 +202,40 @@ test("resposta tardia do RHID não restaura anexo removido enquanto carregava", 
   assert.deepEqual(h.store.getState().attachments, []);
 });
 
+test("prévia carregada em segundo plano não cancela nem perde a origem do relatório RHID", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+  h.store.syncAttachments([{
+    id: "file-preview", fileName: "relatorio.pdf", mediaUrl: "/api/portal-media/file-preview",
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  h.store.setMessagePreview("hr-menu", "blob:hr-menu-preview");
+  h.store.setAttachmentPreview("file-preview", "blob:file-preview");
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  const report = h.store.getState().messages.at(-1);
+  assert.equal(report?.detail_table?.kind, "rhid_attendance");
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+  assert.equal(h.store.getState().messages[0].previewUrl, "blob:hr-menu-preview");
+  assert.equal(h.store.getState().attachments[0].previewUrl, "blob:file-preview");
+});
+
 test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
   const h = makeHarness();
   const requested = [];
