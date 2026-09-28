@@ -159,7 +159,7 @@ function personDisplayName(value) {
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
   request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot,
-  captureSignature, onClose, onHome } = {}) {
+  captureSignature, onClose, onHome, clusterTimeoutMs = 30_000 } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
   let opened = false, destroyed = false, suspended = false, busy = false;
@@ -167,7 +167,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let listLoading = false, detailLoading = false, returnFocus;
   let current = null, selectedId = null, editor = null, review = null, attachmentIndex = 0;
   let page = 1, pages = 0, needsDetailRefresh = false;
-  let clusterVersion = 0, clusterReturnFocus = null, allLaunchRowsCache = null, allLaunchRowsRequest = null;
+  let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
+  let allLaunchRowsCache = null, allLaunchRowsRequest = null;
   let allLaunchRowsGeneration = 0;
   const retryIds = new Map();
   const selectedUploads = new Map();
@@ -558,13 +559,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     pair.append(element('span', 'lg-record-label', labelText), trigger);
     return pair;
   }
-  async function fetchLaunchRows(filters = {}) {
+  async function fetchLaunchRows(filters = {}, { signal } = {}) {
     const rowsById = new Map();
     let pagesToLoad = 1;
     const pageSize = 100;
     for (let targetPage = 1; targetPage <= pagesToLoad; targetPage += 1) {
       if (targetPage > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
-      const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize });
+      const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize }, { signal });
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       for (const item of result.rows) {
         const id = String(item?.id ?? field(item?.fields, 'ID') ?? '').trim();
@@ -579,12 +580,12 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     return [...rowsById.values()];
   }
-  function fetchAllLaunchRows() {
+  function fetchAllLaunchRows({ signal } = {}) {
     if (allLaunchRowsCache) return Promise.resolve(allLaunchRowsCache);
     if (allLaunchRowsRequest) return allLaunchRowsRequest;
     const generation = allLaunchRowsGeneration;
     let requestPromise;
-    requestPromise = fetchLaunchRows().then(rows => {
+    requestPromise = fetchLaunchRows({}, { signal }).then(rows => {
       if (generation === allLaunchRowsGeneration) allLaunchRowsCache = rows;
       return rows;
     }).finally(() => { if (allLaunchRowsRequest === requestPromise) allLaunchRowsRequest = null; });
@@ -689,8 +690,21 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       element('span', '', `Valor do pedido: ${expected == null ? '—' : money(expected)} · Soma dos lançamentos: ${amounts.missing ? `incompleta (parcial ${money(actual)})` : money(actual)}`));
     return { overview, reconcile };
   }
+  function cancelClusterLoad() {
+    if (clusterTimer != null) clearTimeout(clusterTimer);
+    clusterTimer = null;
+    if (clusterAbortController) {
+      clusterAbortController.abort();
+      clusterAbortController = null;
+      if (allLaunchRowsRequest) { allLaunchRowsGeneration += 1; allLaunchRowsRequest = null; }
+    }
+  }
   async function openCluster(kind, value) {
     if (!opened || destroyed || !canChangeDetail()) return;
+    cancelClusterLoad();
+    const controller = new AbortController();
+    const signal = controller.signal;
+    clusterAbortController = controller;
     if (clusterPanel.hidden) clusterReturnFocus = doc.activeElement;
     const epoch = session, version = ++clusterVersion;
     const rawValue = String(value ?? '').trim();
@@ -703,9 +717,23 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const heading = element('h2', 'lg-section-title', title);
     clusterPanel.querySelector('.lg-detail-header').replaceChildren(heading, closeButton);
     focus(closeButton);
+    const timeout = Math.max(1, Number(clusterTimeoutMs) || 30_000);
+    clusterTimer = setTimeout(() => {
+      if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+      controller.abort();
+      clusterAbortController = null;
+      clusterTimer = null;
+      if (allLaunchRowsRequest) { allLaunchRowsGeneration += 1; allLaunchRowsRequest = null; }
+      clusterVersion += 1;
+      clusterPanel.setAttribute('aria-busy', 'false');
+      const retry = button('Tentar novamente', () => { void openCluster(kind, value); }, { locked: false });
+      clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'),
+        element('p', 'lg-error', 'A consulta demorou mais que o esperado. Verifique a conexão e tente novamente.'), retry);
+      focus(retry);
+    }, timeout);
     try {
       if (kind === 'supplier') {
-        const results = await fetchLaunchRows({ supplier: rawValue });
+        const results = await fetchLaunchRows({ supplier: rawValue }, { signal });
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         const supplierRows = results.filter(item => clusterKey(field(item.fields, 'FORNECEDOR')) === clusterKey(rawValue));
         const listing = launchTable(supplierRows, 'supplier');
@@ -716,7 +744,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       } else {
         if (!rawValue || !clusterKey(rawValue)) throw new Error('O valor de AGRUPAR não identifica um pedido válido.');
         if (typeof loadOrderSnapshot !== 'function') throw new Error('A consulta de pedidos do SharePoint não está disponível nesta sessão.');
-        const [orders, launchRows] = await Promise.all([loadOrderSnapshot(), fetchAllLaunchRows()]);
+        const [orders, launchRows] = await Promise.all([loadOrderSnapshot({ signal }), fetchAllLaunchRows({ signal })]);
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
         const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
@@ -742,10 +770,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), element('p', 'lg-error', failure(error, 'Não foi possível carregar o agrupamento')), retry);
       focus(retry);
     } finally {
+      if (clusterAbortController === controller) {
+        if (clusterTimer != null) clearTimeout(clusterTimer);
+        clusterTimer = null;
+        clusterAbortController = null;
+      }
       if (active(epoch) && version === clusterVersion && !clusterPanel.hidden) clusterPanel.setAttribute('aria-busy', 'false');
     }
   }
   function closeCluster() {
+    cancelClusterLoad();
     ++clusterVersion;
     clusterPanel.hidden = true;
     clusterPanel.setAttribute('aria-busy', 'false');
@@ -1169,6 +1203,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function close() {
     if (!opened || destroyed) return;
     autoFilters.cancelPending();
+    cancelClusterLoad();
     opened = false; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     if (detailLoading) needsDetailRefresh = true;
     listLoading = false; detailLoading = false; root.hidden = true;
@@ -1182,6 +1217,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (destroyed) return;
     autoFilters.destroy();
     attachmentCounts.destroy();
+    cancelClusterLoad();
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     retryIds.clear(); selectedUploads.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });

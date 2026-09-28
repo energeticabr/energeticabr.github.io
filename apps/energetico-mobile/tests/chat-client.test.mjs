@@ -35,6 +35,17 @@ test("galeria consulta dados autenticados sem responder ao formulário", async (
   assert.deepEqual(JSON.parse(sent.body), { action: "launch_gallery", operation: "snapshot", payload: { filters: { supplier: "A" }, page: 2 } });
 });
 
+test("consulta da galeria encaminha o sinal para permitir cancelar chamadas pendentes", async () => {
+  let sent;
+  const controller = new AbortController();
+  const client = clientWith(async (_url, options) => {
+    sent = options;
+    return jsonResponse({ status: "processed", messages: [], launchGallery: { rows: [] } });
+  });
+  await client.launchGalleryRequest("snapshot", {}, { signal: controller.signal });
+  assert.equal(sent.signal, controller.signal);
+});
+
 test("upload da galeria usa destino separado sem cair na bandeja", async () => {
   let sent;
   const client = clientWith(async (url, options) => {

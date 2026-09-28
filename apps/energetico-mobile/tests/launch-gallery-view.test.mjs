@@ -14,9 +14,9 @@ async function setup(t, overrides = {}) {
   const dom = new JSDOM('<button id="origin">Galeria</button><main id="chat"></main>', { url: 'https://example.test' });
   const document = dom.window.document;
   const calls = [];
-  const request = async (operation, payload) => {
+  const request = async (operation, payload, options) => {
     calls.push({ operation, payload });
-    return overrides.request ? overrides.request(operation, payload) : operation === 'snapshot' ? snapshot() : detail();
+    return overrides.request ? overrides.request(operation, payload, options) : operation === 'snapshot' ? snapshot() : detail();
   };
   const gallery = module.createLaunchGallery({ document, request, ...overrides, request });
   t.after(() => { gallery.destroy(); dom.window.close(); });
@@ -251,6 +251,69 @@ test('supplier cluster loads every matching launch page and summarizes the suppl
   button(modal, 'Fechar').click();
   assert.equal(modal.hidden, true);
   assert.equal(ctx.document.activeElement, supplierTrigger);
+});
+
+for (const kind of ['supplier', 'order']) {
+  test(`${kind} cluster leaves the endless loading state when its data request exceeds the deadline`, async t => {
+    const pending = deferred();
+    const item = row(3451);
+    item.fields = { ...item.fields, AGRUPAR: '334' };
+    const ctx = await setup(t, {
+      clusterTimeoutMs: 15,
+      loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {} }] }),
+      request: async (operation, payload) => {
+        if (operation === 'snapshot' && (payload.pageSize === 100 || payload.filters?.supplier)) return pending.promise;
+        return operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item });
+      },
+    });
+    await ctx.gallery.open();
+    ctx.root().querySelector(`[data-cluster-kind="${kind}"]`).click();
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+    const modal = ctx.root().querySelector('.lg-cluster-modal');
+    assert.equal(modal.getAttribute('aria-busy'), 'false');
+    assert.doesNotMatch(modal.textContent, /Carregando informações/);
+    assert.match(modal.textContent, /demorou mais|tempo limite/i);
+    button(modal, 'Tentar novamente');
+  });
+}
+
+test('closing a cluster aborts its pending launch request', async t => {
+  const pending = deferred();
+  let requestSignal;
+  const ctx = await setup(t, {
+    request: async (operation, payload, options) => {
+      if (operation === 'snapshot' && payload.filters?.supplier) {
+        requestSignal = options?.signal;
+        return pending.promise;
+      }
+      return operation === 'snapshot' ? snapshot() : detail();
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="supplier"]').click();
+  assert.ok(requestSignal, 'the network request receives an abort signal');
+  button(ctx.root().querySelector('.lg-cluster-modal'), 'Fechar').click();
+  assert.equal(requestSignal.aborted, true);
+});
+
+test('order cluster timeout cancels a pending SharePoint snapshot too', async t => {
+  const pending = deferred();
+  const item = row(3451);
+  item.fields = { ...item.fields, AGRUPAR: '334' };
+  let sharePointSignal;
+  const ctx = await setup(t, {
+    clusterTimeoutMs: 15,
+    loadOrderSnapshot: ({ signal }) => { sharePointSignal = signal; return pending.promise; },
+    request: async (operation, payload) => operation === 'snapshot'
+      ? snapshot({ rows: [item] }) : detail({ item }),
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await new Promise(resolve => setTimeout(resolve, 30));
+
+  assert.equal(sharePointSignal?.aborted, true);
+  assert.match(ctx.root().querySelector('.lg-cluster-modal').textContent, /demorou mais/i);
 });
 
 test('order cluster joins AGRUPAR to the SharePoint order and renders the order plus all linked launches', async t => {
