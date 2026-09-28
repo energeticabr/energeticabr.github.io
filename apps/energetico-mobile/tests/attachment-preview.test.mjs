@@ -355,6 +355,12 @@ test("o CSS respeita o atributo hidden do botão de adicionar", () => {
   assert.match(css, /\.attachment-preview-dialog\s+\.attachment-preview-add-choice\[hidden\]\s*\{\s*display:\s*none\s*;/);
 });
 
+test("o botão de encaminhar tem um pouco mais de largura no layout móvel", () => {
+  const css = readFileSync(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
+  const mobileStyles = css.match(/@media\s*\(max-width:\s*600px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(mobileStyles, /\.attachment-preview-dialog\s+\.attachment-preview-export\s*\{[^}]*flex-grow:\s*1\.5\s*;/);
+});
+
 test("trocar PDF cancela trabalho anterior e ignora erro tardio", async t => {
   let rejectRender;
   let disposed = 0;
