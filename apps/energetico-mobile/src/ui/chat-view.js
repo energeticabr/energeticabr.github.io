@@ -5,7 +5,7 @@ import { signatureDocumentLayout as documentSignatureLayout } from "../web/signa
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
-import { isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
+import { isRhidAttendanceRowDiscrepant, isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
@@ -859,15 +859,19 @@ function rhidAttendanceTableMarkup(table, messageId) {
     <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${shareButton}${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
     <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${table.rows.filter(Array.isArray).map(row => `<tr style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
-        const value = row[index] ?? "—";
-        if (index === 0) return `<th scope="row">${escapeHtml(value)}</th>`;
-        const isPunch = /^\d{1,2}:\d{2}$/.test(String(value).trim());
-        const cellClass = index === headers.length - 1 ? "chat-rhid-attendance-table__total"
-          : isPunch && /^Entrada(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__entry"
-          : isPunch && /^Saída(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__exit" : "";
-        return `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(value)}"${cellClass ? ` class="${cellClass}"` : ""}>${escapeHtml(value)}</td>`;
-      }).join("")}</tr>`).join("")}</tbody></table>
+      <tbody>${table.rows.filter(Array.isArray).map(row => {
+        const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
+        const rowClass = discrepant ? "chat-rhid-attendance-table__row--discrepant" : "";
+        return `<tr class="${rowClass}" style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
+          const value = row[index] ?? "—";
+          if (index === 0) return `<th scope="row">${escapeHtml(value)}</th>`;
+          const isPunch = /^\d{1,2}:\d{2}$/.test(String(value).trim());
+          const cellClass = index === headers.length - 1 ? "chat-rhid-attendance-table__total"
+            : isPunch && /^Entrada(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__entry"
+            : isPunch && /^Saída(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__exit" : "";
+          return `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(value)}"${cellClass ? ` class="${cellClass}"` : ""}>${escapeHtml(value)}</td>`;
+        }).join("")}</tr>`;
+      }).join("")}</tbody></table>
     </div>
   </section>`;
 }

@@ -294,6 +294,29 @@ test("relatório RHID distingue entradas e saídas preenchidas sem destacar hor�
   dom.window.close();
 });
 
+test("relatório RHID preenche de vermelho claro só a linha discrepante após o fechamento", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-discrepancies", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-25", title: "📋 PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [
+        ["ABAIXO DO MÍNIMO", "07:00", "12:00", "13:00", "15:42", "07:44"],
+        ["NO MÍNIMO", "07:00", "12:00", "13:00", "15:45", "07:45"],
+      ],
+    },
+  }] }));
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const dom = new JSDOM(`<style>${styles}</style>${markup}`);
+  const rows = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-table tbody tr")];
+
+  assert.ok(rows[0].classList.contains("chat-rhid-attendance-table__row--discrepant"));
+  assert.ok(!rows[1].classList.contains("chat-rhid-attendance-table__row--discrepant"));
+  assert.equal(dom.window.getComputedStyle(rows[0].querySelector("td")).backgroundColor, "rgb(253, 232, 230)");
+  assert.notEqual(dom.window.getComputedStyle(rows[1].querySelector("td")).backgroundColor, "rgb(253, 232, 230)");
+  dom.window.close();
+});
+
 test("relatório RHID usa a largura do chat e identifica cada horário sem rolagem lateral", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-compact", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],

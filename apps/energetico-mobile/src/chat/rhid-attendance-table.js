@@ -18,6 +18,65 @@ export function isValidRhidReportDate(value) {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
 }
 
+function saoPauloClockParts(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const fields = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(date);
+  return Object.fromEntries(fields.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+}
+
+export function isRhidAttendanceDayFinalized(reportDate, now = new Date()) {
+  if (!isValidRhidReportDate(reportDate)) return false;
+  const local = saoPauloClockParts(now);
+  if (!local) return false;
+  const today = `${local.year}-${local.month}-${local.day}`;
+  if (reportDate < today) return true;
+  if (reportDate > today) return false;
+  return Number(local.hour) * 60 + Number(local.minute) >= 17 * 60 + 15;
+}
+
+export function isRhidAttendanceRowDiscrepant(row, reportDate, now = new Date()) {
+  if (!Array.isArray(row) || row.length < 6 || !isRhidAttendanceDayFinalized(reportDate, now)) return false;
+  const day = new Date(`${reportDate}T00:00:00.000Z`);
+  const weekday = day.getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+
+  const requiredMinutes = weekday === 5 ? 7 * 60 + 45 : 8 * 60 + 45;
+  const slots = row.slice(1, -1).map(value => String(value ?? "").trim());
+  const isTime = value => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const isBlank = value => !value || value === "—" || value === "-";
+  if (slots.length < 4 || slots.slice(0, 4).some(value => !isTime(value))) return true;
+
+  const extraSlots = slots.slice(4);
+  let foundGap = false;
+  const extraPunches = [];
+  for (const value of extraSlots) {
+    if (isTime(value)) {
+      if (foundGap) return true;
+      extraPunches.push(value);
+    } else if (isBlank(value)) {
+      foundGap = true;
+    } else {
+      return true;
+    }
+  }
+  if (extraPunches.length % 2) return true;
+
+  const punches = [...slots.slice(0, 4), ...extraPunches];
+  let workedMinutes = 0;
+  for (let index = 0; index < punches.length; index += 2) {
+    const [entryHour, entryMinute] = punches[index].split(":").map(Number);
+    const [exitHour, exitMinute] = punches[index + 1].split(":").map(Number);
+    const interval = (exitHour * 60 + exitMinute) - (entryHour * 60 + entryMinute);
+    if (interval < 0) return true;
+    workedMinutes += interval;
+  }
+  return workedMinutes < requiredMinutes;
+}
+
 function punchTimes(value) {
   return punchText(value).flatMap(text => [...text.replace(/[+-](?:[01]?\d|2[0-3]):[0-5]\d\b/g, "")
     .matchAll(/(?:^|[^\d])((?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)(?!\d)/g)]
