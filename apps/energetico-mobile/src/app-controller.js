@@ -1628,6 +1628,7 @@ export function createAppController({
         if (!replaceMessageId && (
           rhidAttendanceReportNavigationRevision !== navigationRevision
           || current.messages !== reportOriginSnapshot.messages
+          || current.attachments !== reportOriginSnapshot.attachments
           || current.activeText
           || current.activeFlow !== reportOriginSnapshot.activeFlow
           || current.completionNavigation !== reportOriginSnapshot.completionNavigation

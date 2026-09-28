@@ -169,6 +169,39 @@ test("resposta tardia do RHID não substitui uma tela aberta durante a consulta"
   assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
 });
 
+test("resposta tardia do RHID não restaura anexo removido enquanto carregava", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  h.client.deleteAttachment = async () => ({ status: "processed", messages: [], attachments: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+  h.store.syncAttachments([{
+    id: "remove-me", fileName: "remover.pdf", mediaUrl: "/api/portal-media/remove-me",
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  await h.view.emit("remove-attachment", { fileId: "remove-me" });
+  assert.deepEqual(h.store.getState().attachments, []);
+
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
 test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
   const h = makeHarness();
   const requested = [];
