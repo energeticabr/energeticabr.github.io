@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 
 import * as rhid from "../src/chat/rhid-attendance-table.js";
 
-const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant } = rhid;
+const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, shiftRhidReportDate } = rhid;
+
+test("navegação do relatório RHID avança e retorna um dia inclusive nas viradas do calendário", () => {
+  assert.equal(shiftRhidReportDate("2026-10-01", -1), "2026-09-30");
+  assert.equal(shiftRhidReportDate("2026-12-31", 1), "2027-01-01");
+  assert.equal(shiftRhidReportDate("2026-02-31", 1), "");
+  assert.equal(shiftRhidReportDate("2026-09-25", 2), "");
+});
 
 test("relatório omite PIS não localizado sem perder colaboradores identificados", () => {
   const table = buildRhidAttendanceTable([

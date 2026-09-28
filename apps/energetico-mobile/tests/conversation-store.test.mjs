@@ -496,3 +496,19 @@ test("sair limpa referências locais e invalida envio pendente sem apagar o arqu
   assert.equal(store.confirmText(operation, { messages: [{ type: "text", text: "Resposta antiga" }] }), false);
   assert.equal(file.size, 4);
 });
+
+test("substitui a mensagem RHID navegada sem duplicar o relatório e preserva seu identificador", () => {
+  const store = createConversationStore({ randomUUID: () => "novo-id" });
+  store.ingestRemoteMessages([
+    { id: "relatorio-rhid", type: "poll", question: "25/09/2026", options: [], detail_table: { reportDate: "2026-09-25" } },
+    { type: "text", text: "Outra mensagem" },
+  ]);
+
+  assert.equal(store.replaceMessage("relatorio-rhid", {
+    type: "poll", question: "24/09/2026", options: [], detail_table: { reportDate: "2026-09-24" },
+  }), true);
+  assert.equal(store.getState().messages.length, 2);
+  assert.equal(store.getState().messages[0].id, "relatorio-rhid");
+  assert.equal(store.getState().messages[0].detail_table.reportDate, "2026-09-24");
+  assert.equal(store.replaceMessage("inexistente", { type: "text", text: "Ignorar" }), false);
+});

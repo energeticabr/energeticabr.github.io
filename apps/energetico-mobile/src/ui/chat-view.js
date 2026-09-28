@@ -850,16 +850,27 @@ function presenceDetailTableMarkup(table) {
 }
 
 function rhidAttendanceTableMarkup(table, messageId) {
-  if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return "";
+  if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
   const headers = table.headers;
-  const shareButton = isValidRhidReportDate(table.reportDate) && messageId
+  const rows = table.rows.filter(Array.isArray);
+  const shareButton = rows.length && isValidRhidReportDate(table.reportDate) && messageId
     ? `<button class="chat-rhid-attendance-table__share" type="button" data-action="share-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Compartilhar relatório RHID em PDF">↗ Compartilhar PDF</button>`
     : "";
+  const date = String(table.reportDate || "");
+  const dateLabel = isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
+  const navigation = dateLabel && messageId
+    ? `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
+      <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior">←</button>
+      <time class="chat-rhid-date-navigation__date" datetime="${escapeHtml(date)}">${dateLabel}</time>
+      <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia">→</button>
+    </nav>`
+    : "";
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
+    ${navigation}
     <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${shareButton}${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
-    <div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
+    ${rows.length ? `<div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${table.rows.filter(Array.isArray).map(row => {
+      <tbody>${rows.map(row => {
         const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
         const rowClass = discrepant ? "chat-rhid-attendance-table__row--discrepant" : "";
         return `<tr class="${rowClass}" style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
@@ -872,7 +883,7 @@ function rhidAttendanceTableMarkup(table, messageId) {
           return `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(value)}"${cellClass ? ` class="${cellClass}"` : ""}>${escapeHtml(value)}</td>`;
         }).join("")}</tr>`;
       }).join("")}</tbody></table>
-    </div>
+    </div>` : `<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença foi encontrada para esta data.</p>`}
   </section>`;
 }
 
@@ -1144,6 +1155,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
+  const rhidAttendanceReport = presenceTable?.kind === "rhid_attendance";
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
@@ -1206,7 +1218,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
-    ${launchPaymentSummary ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${launchPaymentSummary || rhidAttendanceReport ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${rhidAttendanceTableMarkup(presenceTable, message.id)}
@@ -1314,7 +1326,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const taskMenu = isDemandsTaskMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong>${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";

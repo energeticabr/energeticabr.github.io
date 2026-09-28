@@ -96,9 +96,35 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   const report = h.store.getState().messages.at(-1);
   assert.match(report.question, /25\/09\/2026/);
   assert.equal(report.detail_table.kind, "rhid_attendance");
+  assert.equal(report.detail_table.title, "📋 PRESENÇAS");
   assert.deepEqual(report.detail_table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual(report.detail_table.rows, [["Pessoa A", "07:01", "12:00", "13:00", "17:02", "09:01"]]);
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
+});
+
+test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
+  const h = makeHarness();
+  const requested = [];
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", DATA_REFERENCIA: selectedDate, NOME_COLABORADOR: "Pessoa A",
+      BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const original = h.store.getState().messages.at(-1);
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: original.id, value: "-1" });
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: original.id, value: "1" });
+
+  assert.deepEqual(requested, ["2026-09-25", "2026-09-24", "2026-09-25"]);
+  const reportMessages = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
+  assert.equal(reportMessages.length, 1);
+  assert.equal(reportMessages[0].id, original.id);
+  assert.equal(reportMessages[0].detail_table.reportDate, "2026-09-25");
 });
 
 test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças acessível", async t => {
@@ -136,7 +162,8 @@ test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => 
 
   await h.view.emit("rhid-attendance-report-today", { value: "2026-09-27" });
 
-  assert.match(h.store.getState().messages.at(-1).text, /Nenhuma presença/);
+  assert.equal(h.store.getState().messages.at(-1).detail_table.kind, "rhid_attendance");
+  assert.deepEqual(h.store.getState().messages.at(-1).detail_table.rows, []);
   assert.equal(previews.length, 1);
   assert.equal(previews[0].blob.type, "application/pdf");
 });
