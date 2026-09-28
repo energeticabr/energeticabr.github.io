@@ -102,6 +102,140 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
 });
 
+test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao menu principal", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  const previousScreen = {
+    id: "hr-menu",
+    role: "assistant",
+    type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [{ id: "rhid-report", reply: "rhid-report", label: "RELATÓRIO DE PRESENÇAS RHID" }],
+  };
+  const requested = [];
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([previousScreen]);
+  assert.equal(h.store.getState().messages.at(-1)?.question, previousScreen.question, "a tela RH deve estar ativa antes da consulta");
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  const initialReport = h.store.getState().messages.at(-1);
+  assert.equal(initialReport?.detail_table?.kind, "rhid_attendance");
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: initialReport.id, value: "-1" });
+  assert.equal(h.store.getState().messages.at(-1)?.detail_table?.reportDate, "2026-09-27");
+  const callsBeforeReturn = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+
+  assert.equal(h.chatCalls.length, callsBeforeReturn, "o retorno local não deve enviar navigation_back ao servidor");
+  assert.equal(h.store.getState().messages.length, 1);
+  assert.equal(h.store.getState().messages[0].question, previousScreen.question);
+  assert.deepEqual(requested, ["2026-09-28", "2026-09-27"]);
+});
+
+test("resposta tardia do RHID não substitui uma tela aberta durante a consulta", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  h.client.sendText = async () => ({
+    status: "processed",
+    messages: [{ type: "poll", question: "📦 OUTRA TELA", options: [] }],
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  await h.view.emit("select-reply", { replyId: "next-screen", label: "Abrir outra tela" });
+  assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
+
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
+});
+
+test("resposta tardia do RHID não restaura anexo removido enquanto carregava", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  h.client.deleteAttachment = async () => ({ status: "processed", messages: [], attachments: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+  h.store.syncAttachments([{
+    id: "remove-me", fileName: "remover.pdf", mediaUrl: "/api/portal-media/remove-me",
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  await h.view.emit("remove-attachment", { fileId: "remove-me" });
+  assert.deepEqual(h.store.getState().attachments, []);
+
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test("prévia carregada em segundo plano não cancela nem perde a origem do relatório RHID", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+  h.store.syncAttachments([{
+    id: "file-preview", fileName: "relatorio.pdf", mediaUrl: "/api/portal-media/file-preview",
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  h.store.setMessagePreview("hr-menu", "blob:hr-menu-preview");
+  h.store.setAttachmentPreview("file-preview", "blob:file-preview");
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  const report = h.store.getState().messages.at(-1);
+  assert.equal(report?.detail_table?.kind, "rhid_attendance");
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+  assert.equal(h.store.getState().messages[0].previewUrl, "blob:hr-menu-preview");
+  assert.equal(h.store.getState().attachments[0].previewUrl, "blob:file-preview");
+});
+
 test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
   const h = makeHarness();
   const requested = [];

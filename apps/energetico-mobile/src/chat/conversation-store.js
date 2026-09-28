@@ -610,6 +610,19 @@ export function createConversationStore({
     return true;
   }
 
+  function restoreSnapshot(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.messages)) return false;
+    publish({
+      ...state,
+      messages: snapshot.messages,
+      activeFlow: snapshot.activeFlow ?? null,
+      completionNavigation: snapshot.completionNavigation ?? null,
+      attachments: Array.isArray(snapshot.attachments) ? snapshot.attachments : [],
+      error: null,
+    });
+    return true;
+  }
+
   function discardFile(fileId) {
     const pendingFiles = state.pendingFiles.filter(item => item.id !== fileId);
     if (pendingFiles.length === state.pendingFiles.length) return false;
@@ -632,6 +645,7 @@ export function createConversationStore({
     ingestRemoteMessages,
     replaceCurrentResponse,
     replaceMessage,
+    restoreSnapshot,
     syncAttachments,
     setMessagePreview,
     setAttachmentPreview,

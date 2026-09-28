@@ -99,6 +99,18 @@ function currentQuestion(messages) {
     .filter(Boolean).join("\n");
 }
 
+function sameRecordsExceptPreview(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((record, index) => {
+    const candidate = right[index];
+    if (record === candidate) return true;
+    if (!record || !candidate || typeof record !== "object" || typeof candidate !== "object") return false;
+    const keys = new Set([...Object.keys(record), ...Object.keys(candidate)]);
+    keys.delete("previewUrl");
+    return [...keys].every(key => record[key] === candidate[key]);
+  });
+}
+
 function newUploadMessageId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   const hex = `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(32, "0").slice(0, 32);
@@ -638,6 +650,8 @@ export function createAppController({
   let attachmentRevision = 0;
   let snapshotPending = null;
   const rhidAttendanceReportRequests = new Map();
+  let rhidAttendanceReportPreviousSnapshot = null;
+  let rhidAttendanceReportNavigationRevision = 0;
   let rhidRefreshRequest = null;
   let resuming = false;
   let attachmentActionBusy = false;
@@ -1597,6 +1611,14 @@ export function createAppController({
       return false;
     }
     if (rhidAttendanceReportRequests.has(requestKey)) return rhidAttendanceReportRequests.get(requestKey);
+    const reportOrigin = store.getState();
+    const reportOriginSnapshot = !replaceMessageId ? {
+      messages: reportOrigin.messages,
+      activeFlow: reportOrigin.activeFlow,
+      completionNavigation: reportOrigin.completionNavigation,
+      attachments: reportOrigin.attachments,
+    } : null;
+    const navigationRevision = rhidAttendanceReportNavigationRevision;
     if (replaceMessageId) {
       const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
       const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
@@ -1614,6 +1636,15 @@ export function createAppController({
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
+        const current = store.getState();
+        if (!replaceMessageId && (
+          rhidAttendanceReportNavigationRevision !== navigationRevision
+          || !sameRecordsExceptPreview(current.messages, reportOriginSnapshot.messages)
+          || !sameRecordsExceptPreview(current.attachments, reportOriginSnapshot.attachments)
+          || current.activeText
+          || current.activeFlow !== reportOriginSnapshot.activeFlow
+          || current.completionNavigation !== reportOriginSnapshot.completionNavigation
+        )) return false;
         const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
@@ -1630,10 +1661,12 @@ export function createAppController({
             updateLabel,
           },
         };
-        const current = store.getState();
         if (replaceMessageId) {
           if (!store.replaceMessage?.(replaceMessageId, message)) return false;
         } else {
+          reportOriginSnapshot.messages = current.messages;
+          reportOriginSnapshot.attachments = current.attachments;
+          rhidAttendanceReportPreviousSnapshot = reportOriginSnapshot;
           store.ingestRemoteMessages([message], {
             resetConversation: false,
             activeFlow: current.activeFlow,
@@ -4502,6 +4535,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    rhidAttendanceReportPreviousSnapshot = null;
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
@@ -5062,7 +5096,13 @@ export function createAppController({
   }
 
   function bind(type, handler) {
-    unsubscribeCommands.push(view.on(type, handler));
+    unsubscribeCommands.push(view.on(type, command => {
+      if (rhidAttendanceReportRequests.has("new-report")
+        && ["select-reply", "send-text", "date-selected", "show-summary", "finish-flow"].includes(type)) {
+        rhidAttendanceReportNavigationRevision += 1;
+      }
+      return handler(command);
+    }));
   }
 
   function bindCommands() {
@@ -5084,6 +5124,15 @@ export function createAppController({
     });
     bind("select-reply", command => {
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
+      if (command.replyId === NAVIGATION_BACK_ID) {
+        const latestPoll = latestAssistantPoll(store.getState().messages);
+        const table = latestPoll?.detail_table || latestPoll?.detailTable;
+        if (table?.kind === "rhid_attendance" && rhidAttendanceReportPreviousSnapshot?.messages?.length) {
+          const previous = rhidAttendanceReportPreviousSnapshot;
+          rhidAttendanceReportPreviousSnapshot = null;
+          return store.restoreSnapshot(previous);
+        }
+      }
       if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
@@ -5141,6 +5190,7 @@ export function createAppController({
         return chooseAttachmentCompression(command.replyId);
       }
       if (command.replyId === "navigation_main_menu") {
+        rhidAttendanceReportPreviousSnapshot = null;
         return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
       }
       if (command.replyId === "attachment_upload_skip") {
@@ -5384,6 +5434,7 @@ export function createAppController({
   }
 
   function stop() {
+    rhidAttendanceReportPreviousSnapshot = null;
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     disposeLaunchGallery();
