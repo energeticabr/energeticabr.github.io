@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createOrdersGalleryData, createPendingProvisionAttachmentsData, OrdersGalleryDataError } from "../src/chat/orders-gallery-data.js";
+import * as galleryData from "../src/chat/orders-gallery-data.js";
+
+const { createOrdersGalleryData, createPendingProvisionAttachmentsData, OrdersGalleryDataError } = galleryData;
 
 function repositoryHarness(overrides = {}) {
   const calls = [];
@@ -35,6 +37,63 @@ function repositoryHarness(overrides = {}) {
   };
   return { repository, calls };
 }
+
+test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalização de campos", async () => {
+  assert.equal(typeof galleryData.createHrPayrollGalleryData, "function", "a leitura direta SharePoint da folha precisa estar disponível");
+  const calls = [];
+  const repository = {
+    async resolveList(siteKey, aliases) {
+      calls.push(["resolveList", siteKey, aliases]);
+      return { status: "resolved", id: `list-${aliases[0]}` };
+    },
+    async getItemsPage(siteKey, listId, query, options) {
+      calls.push(["getItemsPage", siteKey, listId, query, options]);
+      if (listId === "list-IDFOLHA") return {
+        items: [{ id: "12", fields: { "MÊS REFERÊNCIA": "09/2026", FORNECEDOR: { LookupValue: "EDGAR" } } }],
+        nextLink: "idfolha-next", hasMore: true,
+      };
+      return {
+        items: [{ id: "81", fields: {
+          FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200,
+          QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12,
+        } }],
+        nextLink: "", hasMore: false,
+      };
+    },
+  };
+  const data = galleryData.createHrPayrollGalleryData({ repository });
+
+  const first = await data.loadPage("IDFOLHA", { page: 1, pageSize: 25 });
+  const next = await data.loadPage("IDFOLHA", { page: 2, pageSize: 25, cursor: first.nextCursor });
+  const payroll = await data.loadPage("FOLHAPGTO", { page: 1, pageSize: 25 });
+
+  assert.deepEqual(first.rows, [{ id: "12", MESREFERENCIA: "09/2026", FORNECEDOR: "EDGAR" }]);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.nextCursor, "idfolha-next");
+  assert.equal(next.page, 2);
+  assert.deepEqual(payroll.rows, [{
+    id: "81", FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200,
+    QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12,
+  }]);
+  assert.deepEqual(calls, [
+    ["resolveList", "personal", ["IDFOLHA"]],
+    ["getItemsPage", "personal", "list-IDFOLHA", "$expand=fields&$top=25", { pageNumber: 1, maxPages: 500 }],
+    ["getItemsPage", "personal", "list-IDFOLHA", "$expand=fields&$top=25", { pageNumber: 2, maxPages: 500, cursor: "idfolha-next" }],
+    ["resolveList", "personal", ["FOLHAPGTO"]],
+    ["getItemsPage", "personal", "list-FOLHAPGTO", "$expand=fields&$top=25", { pageNumber: 1, maxPages: 500 }],
+  ]);
+});
+
+test("galeria de folha recusa lista e parâmetros fora da allowlist", async () => {
+  assert.equal(typeof galleryData.createHrPayrollGalleryData, "function", "a fábrica da galeria precisa estar disponível");
+  const data = galleryData.createHrPayrollGalleryData({ repository: {
+    async resolveList() { return { status: "resolved", id: "list" }; },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+  } });
+  await assert.rejects(data.loadPage("LANÇAMENTOS"), /galeria de folha/i);
+  await assert.rejects(data.loadPage("IDFOLHA", { page: 0 }), /página/i);
+  await assert.rejects(data.loadPage("FOLHAPGTO", { pageSize: 100 }), /página/i);
+});
 
 test("carrega a lista Screen10 autenticada, percorre páginas e normaliza os campos dos pedidos", async () => {
   const { repository, calls } = repositoryHarness();

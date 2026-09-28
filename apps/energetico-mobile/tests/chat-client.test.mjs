@@ -46,22 +46,6 @@ test("consulta da galeria encaminha o sinal para permitir cancelar chamadas pend
   assert.equal(sent.signal, controller.signal);
 });
 
-test("consulta galerias de folha pela rota autenticada sem aceitar campos de lista do cliente", async () => {
-  let sent;
-  const client = clientWith(async (url, options) => {
-    sent = { url, ...options };
-    return jsonResponse({ status: "processed", messages: [], hrPayrollGallery: {
-      gallery: "IDFOLHA", page: 2, pageSize: 25, hasMore: false, rows: [],
-    } });
-  });
-  assert.equal(typeof client.hrPayrollGalleryRequest, "function");
-  const result = await client.hrPayrollGalleryRequest("IDFOLHA", { page: 2, pageSize: 25, cursor: "opaque-next-page" });
-  assert.equal(result.gallery, "IDFOLHA");
-  assert.equal(sent.headers.Authorization, "Bearer graph-token");
-  assert.deepEqual(JSON.parse(sent.body), { action: "hr_payroll_gallery", gallery: "IDFOLHA", page: 2, pageSize: 25, cursor: "opaque-next-page" });
-  await assert.rejects(client.hrPayrollGalleryRequest("LANCAMENTOS", { page: 1 }), /galeria/i);
-});
-
 test("upload da galeria usa destino separado sem cair na bandeja", async () => {
   let sent;
   const client = clientWith(async (url, options) => {

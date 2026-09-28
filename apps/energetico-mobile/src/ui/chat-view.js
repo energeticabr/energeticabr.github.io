@@ -234,9 +234,15 @@ function hrGalleryAction(option) {
 }
 
 function isHrPayrollGalleryMenu(message) {
-  const ids = new Set((Array.isArray(message?.options) ? message.options : [])
-    .flatMap(option => [option?.id, option?.reply, option?.value].map(value => String(value || ""))));
-  return ids.has("action_hr_gallery_idfolha") && ids.has("action_hr_gallery_folhapgto");
+  return isHumanResourcesMenu(message);
+}
+
+function hrPayrollGalleryOptions(options) {
+  const definitions = [
+    { id: "action_hr_gallery_idfolha", reply: "action_hr_gallery_idfolha", label: "📚 GALERIA IDFOLHA" },
+    { id: "action_hr_gallery_folhapgto", reply: "action_hr_gallery_folhapgto", label: "💵 GALERIA FOLHA PGTO" },
+  ];
+  return definitions.map(definition => options.find(option => draftReplyId(option).trim().toLowerCase() === definition.id) || definition);
 }
 
 function userAvatar(account) {
@@ -729,6 +735,8 @@ const HUMAN_RESOURCES_ACTIONS = new Set([
   "action_validate_attendance",
   "action_link_attendance_payment",
   "action_hr_reports",
+  "action_hr_report",
+  "action_hr_registration",
 ]);
 
 function isHumanResourcesMenu(message) {
@@ -1103,7 +1111,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   // choices for their current question.
   const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
   const isHrGalleryMenu = isHrPayrollGalleryMenu(message);
-  const galleryOptions = isHrGalleryMenu ? options.filter(hrGalleryAction) : [];
+  const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
   if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable

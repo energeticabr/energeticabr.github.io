@@ -74,6 +74,11 @@ async function defaultPendingProvisionAttachmentsDataFactory(options) {
   return createPendingProvisionAttachmentsData(options);
 }
 
+async function defaultHrPayrollGalleryDataFactory(options) {
+  const { createHrPayrollGalleryData } = await import("./chat/orders-gallery-data.js");
+  return createHrPayrollGalleryData(options);
+}
+
 async function defaultHrPayrollGalleryFactory(options) {
   const { createHrPayrollGallery } = await import("./ui/hr-payroll-gallery-view.js");
   return createHrPayrollGallery(options);
@@ -597,6 +602,7 @@ export function createAppController({
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
+  hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -640,6 +646,7 @@ export function createAppController({
   let hrPayrollGallery = null;
   let hrPayrollGalleryName = "";
   let hrPayrollGalleryOpening = null;
+  let hrPayrollGalleryData = null;
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -3449,6 +3456,7 @@ export function createAppController({
     hrPayrollGallery?.destroy?.();
     hrPayrollGallery = null;
     hrPayrollGalleryName = "";
+    hrPayrollGalleryData = null;
   }
 
   async function openHrPayrollGallery(gallery) {
@@ -3462,12 +3470,19 @@ export function createAppController({
       try {
         if (hrPayrollGalleryName !== gallery) {
           disposeHrPayrollGallery();
+          const resumeAction = gallery === "IDFOLHA" ? "action_hr_gallery_idfolha" : "action_hr_gallery_folhapgto";
+          const data = await hrPayrollGalleryDataFactory({
+            tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
+          });
+          assertSession();
+          if (typeof data?.loadPage !== "function") throw new Error("A consulta das listas de folha do SharePoint não está disponível.");
+          hrPayrollGalleryData = data;
           let panel;
           panel = await hrPayrollGalleryFactory({
             gallery,
             request: async (selectedGallery, page, pageSize, cursor) => {
               assertSession();
-              const result = await client.hrPayrollGalleryRequest(selectedGallery, { page, pageSize, cursor });
+              const result = await hrPayrollGalleryData.loadPage(selectedGallery, { page, pageSize, cursor });
               assertSession();
               return result;
             },
