@@ -5,7 +5,7 @@ import { signatureDocumentLayout as documentSignatureLayout } from "../web/signa
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
-import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
+import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
@@ -858,6 +858,12 @@ function rhidAttendanceTableMarkup(table, messageId) {
     : "";
   const date = String(table.reportDate || "");
   const dateLabel = isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
+  const summary = summarizeRhidAttendance(rows);
+  const updateLabel = String(table.updateLabel || "").trim();
+  const updateTime = updateLabel.match(/\b(?:[01]\d|2[0-3]):[0-5]\d\b/)?.[0] || "—";
+  const updateHeading = /DADOS ATUALIZADOS NO RELÓGIO DE PONTO/i.test(updateLabel)
+    ? "DADOS ATUALIZADOS NO RELÓGIO DE PONTO" : "ÚLTIMA COLETA DO RHID";
+  const pairCount = Math.max(1, Math.floor((headers.length - 2) / 2));
   const navigation = dateLabel && messageId
     ? `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior"${table.navigationBusy === true ? " disabled" : ""}>←</button>
@@ -865,25 +871,40 @@ function rhidAttendanceTableMarkup(table, messageId) {
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia"${table.navigationBusy === true ? " disabled" : ""}>→</button>
     </nav>${table.navigationBusy === true ? `<p class="chat-rhid-attendance-table__status" role="status">Atualizando dados do RHID…</p>` : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
     : "";
-  return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
+  return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
-    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${shareButton}${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
-    ${rows.length ? `<div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
-      <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map(row => {
+    <header class="chat-rhid-attendance-report__header">
+      <div class="chat-rhid-attendance-report__identity"><span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2></div>
+      <div class="chat-rhid-attendance-report__updated" title="${escapeHtml(updateLabel)}"><span>${escapeHtml(updateHeading)}</span><strong>${escapeHtml(updateTime)}</strong></div>
+      <div class="chat-rhid-attendance-report__date"><span>DATA DO RELATÓRIO</span><time datetime="${escapeHtml(date)}">${escapeHtml(dateLabel || "—")}</time></div>
+    </header>
+    ${updateLabel ? `<p class="chat-rhid-attendance-report__updated-detail">${escapeHtml(updateLabel)}</p>` : ""}
+    <div class="chat-rhid-attendance-report__summary" aria-label="Resumo do relatório RHID">
+      <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.collaborators).padStart(2, "0")}</strong><span>COLABORADORES</span></div>
+      <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
+      <div><strong class="chat-rhid-attendance-report__summary-value chat-rhid-attendance-report__summary-value--missing">${String(summary.withoutPunches).padStart(2, "0")}</strong><span>SEM MARCAÇÃO</span></div>
+    </div>
+    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong>${shareButton}</div>
+    ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
+      ${rows.map(row => {
+        const noPunches = isRhidAttendanceRowWithoutPunches(row);
         const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
-        const rowClass = isRhidAttendanceRowWithoutPunches(row) ? "chat-rhid-attendance-table__row--no-punches"
-          : discrepant ? "chat-rhid-attendance-table__row--discrepant" : "";
-        return `<tr class="${rowClass}" style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
-          const value = row[index] ?? "—";
-          if (index === 0) return `<th scope="row">${escapeHtml(value)}</th>`;
-          const isPunch = /^\d{1,2}:\d{2}$/.test(String(value).trim());
-          const cellClass = index === headers.length - 1 ? "chat-rhid-attendance-table__total"
-            : isPunch && /^Entrada(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__entry"
-            : isPunch && /^Saída(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__exit" : "";
-          return `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(value)}"${cellClass ? ` class="${cellClass}"` : ""}>${escapeHtml(value)}</td>`;
-        }).join("")}</tr>`;
-      }).join("")}</tbody></table>
+        const rowClass = noPunches ? "chat-rhid-attendance-card--no-punches" : discrepant ? "chat-rhid-attendance-card--discrepant" : "";
+        const name = row[0] ?? "—";
+        const total = row[row.length - 1] ?? "—";
+        const slots = Array.from({ length: pairCount }, (_, index) => {
+          const entryLabel = String(headers[1 + index * 2] ?? `Entrada ${index + 1}`);
+          const exitLabel = String(headers[2 + index * 2] ?? `Saída ${index + 1}`);
+          const entry = String(row[1 + index * 2] ?? "—");
+          const exit = String(row[2 + index * 2] ?? "—");
+          const entryClass = /^\d{1,2}:\d{2}$/.test(entry.trim()) ? "chat-rhid-attendance-card__entry" : "";
+          const exitClass = /^\d{1,2}:\d{2}$/.test(exit.trim()) ? "chat-rhid-attendance-card__exit" : "";
+          return `<div class="chat-rhid-attendance-card__slot"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div>`;
+        }).join("");
+        return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
+          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(total)}</strong>${/\(parcial\)/i.test(total) ? `<small>PARCIAL</small>` : ""}</div></div>
+        </article>`;
+      }).join("")}
     </div>` : `<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença foi encontrada para esta data.</p>`}
   </section>`;
 }

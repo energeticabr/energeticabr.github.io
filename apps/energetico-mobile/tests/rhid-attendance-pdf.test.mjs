@@ -39,8 +39,8 @@ test("gera PDF vertical com metadados literais e todos os horários da tabela RH
   const { pdf, loadingTask, pages } = await inspect(await buildPdf(table, { dateLabel: "27/09/2026", updateLabel }));
   try {
     assert.equal(pdf.getPageCount(), 1);
-    assert.equal(pdf.getPage(0).getWidth(), 360);
-    assert.ok(pdf.getPage(0).getHeight() > 360);
+    assert.equal(pdf.getPage(0).getWidth(), 595);
+    assert.ok(pdf.getPage(0).getHeight() > 595);
     const items = pages[0].items;
     const text = items.map(item => item.str).join(" ");
     assert.ok(text.includes("27/09/2026"));
@@ -49,9 +49,35 @@ test("gera PDF vertical com metadados literais e todos os horários da tabela RH
       assert.ok(text.includes(value), `PDF sem ${value}`);
     }
     for (const item of items) {
-      assert.ok(item.transform[4] >= 12, `${item.str} sai pela margem esquerda`);
-      assert.ok(item.transform[4] + item.width <= 348.5, `${item.str} sai pela margem direita`);
+      assert.ok(item.transform[4] >= 28, `${item.str} sai pela margem esquerda`);
+      assert.ok(item.transform[4] + item.width <= 567, `${item.str} sai pela margem direita`);
     }
+  } finally {
+    await loadingTask.destroy();
+  }
+});
+
+test("gera PDF RHID no layout diário com indicadores e cartões", async () => {
+  const table = {
+    kind: "rhid_attendance",
+    reportDate: "2026-09-28",
+    headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+    rows: [
+      ["CLEITON CESAR NONATO", "07:00", "11:59", "13:02", "—", "04:59 (parcial)"],
+      ["EDGAR NELSON DA SILVA", "06:57", "12:54", "—", "—", "05:57"],
+      ["BERNARDO NOTINI MOREIRA BAHIA", "—", "—", "—", "—", "— (parcial)"],
+    ],
+  };
+  const { pdf, loadingTask, pages } = await inspect(await buildPdf(table, {
+    dateLabel: "28/09/2026", updateLabel: "ÚLTIMA COLETA DO RHID ÀS 13:58",
+  }));
+  try {
+    assert.equal(pdf.getPage(0).getWidth(), 595);
+    const text = pages.flatMap(({ items }) => items.map(item => item.str)).join(" ");
+    for (const value of ["RELATÓRIO DIÁRIO", "Presenças RHID", "COLABORADORES", "COM MARCAÇÃO", "SEM MARCAÇÃO", "03", "02", "01", "SEM MARCAÇÃO", "04:59", "PARCIAL"]) {
+      assert.ok(text.includes(value), `PDF sem ${value}`);
+    }
+    assert.ok(text.indexOf("BERNARDO NOTINI MOREIRA BAHIA") > text.indexOf("EDGAR NELSON DA SILVA"), "sem marcação deve ficar no fim");
   } finally {
     await loadingTask.destroy();
   }
@@ -133,7 +159,8 @@ test("mantém travessão e total parcial da tabela RHID", async () => {
   try {
     const text = pages[0].items.map(item => item.str).join(" ");
     assert.ok(text.includes("—"));
-    assert.ok(text.includes("05:00 (parcial)"));
+    assert.ok(text.includes("05:00"));
+    assert.ok(text.includes("PARCIAL"));
   } finally {
     await loadingTask.destroy();
   }
@@ -153,7 +180,7 @@ test("preserva o updateLabel recebido, inclusive espaços internos", async () =>
   }
 });
 
-test("exibe por inteiro os dois rótulos reais do SharePoint no topo de 360 pt", async () => {
+test("exibe por inteiro os dois rótulos reais do SharePoint no topo do A4", async () => {
   for (const updateLabel of [
     "ÚLTIMA COLETA DO RHID ÀS 17:12",
     "DADOS ATUALIZADOS NO RELÓGIO DE PONTO ÀS 17:10",
@@ -162,9 +189,9 @@ test("exibe por inteiro os dois rótulos reais do SharePoint no topo de 360 pt",
     try {
       const label = pages[0].items.find(item => item.str === updateLabel);
       assert.ok(label, `rótulo ausente ou alterado: ${updateLabel}`);
-      assert.ok(label.transform[4] >= 16);
-      assert.ok(label.transform[4] + label.width <= 344, `rótulo cortado: ${updateLabel}`);
-      assert.ok(label.transform[5] > 540, `rótulo não está no topo: ${updateLabel}`);
+      assert.ok(label.transform[4] >= 32);
+      assert.ok(label.transform[4] + label.width <= 563, `rótulo cortado: ${updateLabel}`);
+      assert.ok(label.transform[5] > 600, `rótulo não está no topo: ${updateLabel}`);
     } finally {
       await loadingTask.destroy();
     }

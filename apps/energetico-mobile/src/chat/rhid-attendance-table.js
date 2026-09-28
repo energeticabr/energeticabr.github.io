@@ -89,6 +89,17 @@ export function isRhidAttendanceRowWithoutPunches(row) {
     .every(value => !/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(String(value ?? "").trim()));
 }
 
+export function summarizeRhidAttendance(tableOrRows) {
+  const rows = Array.isArray(tableOrRows) ? tableOrRows : tableOrRows?.rows;
+  const validRows = Array.isArray(rows) ? rows.filter(Array.isArray) : [];
+  const withPunches = validRows.filter(row => !isRhidAttendanceRowWithoutPunches(row)).length;
+  return {
+    collaborators: validRows.length,
+    withPunches,
+    withoutPunches: validRows.length - withPunches,
+  };
+}
+
 function punchTimes(value) {
   return punchText(value).flatMap(text => [...text.replace(/[+-](?:[01]?\d|2[0-3]):[0-5]\d\b/g, "")
     .matchAll(/(?:^|[^\d])((?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)(?!\d)/g)]
