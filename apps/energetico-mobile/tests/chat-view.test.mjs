@@ -211,6 +211,48 @@ test("relatório RHID mostra o horário real de coleta junto da tabela", () => {
   assert.match(markup, /ÚLTIMA COLETA DO RHID ÀS 17:12/);
 });
 
+test("relatório RHID oferece compartilhar PDF da própria mensagem", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-share-25",
+    role: "assistant",
+    type: "poll",
+    question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026",
+    options: [],
+    detail_table: {
+      kind: "rhid_attendance",
+      reportDate: "2026-09-25",
+      title: "📋 PRESENÇAS • 25/09/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const button = dom.window.document.querySelector('[data-action="share-rhid-attendance-report"]');
+
+  assert.ok(button, "a tabela deve expor a ação de compartilhar o PDF");
+  assert.equal(button.dataset.messageId, "rhid-share-25", "a ação deve identificar exatamente o relatório clicado");
+  assert.match(button.getAttribute("aria-label"), /PDF/i);
+  dom.window.close();
+});
+
+test("não oferece compartilhar RHID quando a data é impossível", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-invalid-date",
+    role: "assistant",
+    type: "poll",
+    question: "📊 RELATÓRIO DE PRESENÇAS RHID — 31/02/2026",
+    options: [],
+    detail_table: {
+      kind: "rhid_attendance",
+      reportDate: "2026-02-31",
+      title: "📋 PRESENÇAS • 31/02/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }));
+  assert.doesNotMatch(markup, /data-action="share-rhid-attendance-report"/);
+});
+
 test("relatório RHID exibe uma tabela única com colunas de batidas e total", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-table", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],

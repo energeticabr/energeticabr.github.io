@@ -1,7 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
-import { buildRhidAttendanceTable, rhidUpdateLabel } from "./chat/rhid-attendance-table.js";
+import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -1519,7 +1519,7 @@ export function createAppController({
 
   async function generateRhidAttendanceReport(selectedDate, { openPdf = false } = {}) {
     const day = String(selectedDate || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    if (!isValidRhidReportDate(day)) {
       view.setRhidAttendanceReportStatus?.({ error: "Selecione uma data válida." });
       return false;
     }
@@ -1537,7 +1537,8 @@ export function createAppController({
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
-        const reportDate = formatDatePickerValue(report.date || day);
+        const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
+        const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         const table = buildRhidAttendanceTable(rows);
         const updateLabel = rhidUpdateLabel(report);
@@ -1548,6 +1549,7 @@ export function createAppController({
             options: [],
             detail_table: {
               ...table,
+              reportDate: reportDay,
               title: `📋 PRESENÇAS • ${reportDate}`,
               updateLabel,
             },
@@ -1581,6 +1583,39 @@ export function createAppController({
       }
     });
     return rhidAttendanceReportRequest;
+  }
+
+  let rhidAttendanceShareBusy = false;
+  async function shareRhidAttendanceReport(messageId) {
+    if (!account || stopped || rhidAttendanceShareBusy || typeof native.exportMedia !== "function") return false;
+    const id = String(messageId || "").trim();
+    const message = store.getState().messages.find(item => String(item?.id || "") === id);
+    const table = message?.detail_table || message?.detailTable;
+    const day = String(table?.reportDate || "");
+    if (message?.type !== "poll" || table?.kind !== "rhid_attendance"
+      || !/^\d{4}-\d{2}-\d{2}$/.test(day)
+      || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return false;
+
+    const shareAccount = account;
+    const shareRevision = sessionRevision;
+    const isCurrent = () => !stopped && account === shareAccount && sessionRevision === shareRevision
+      && store.getState().messages.some(item => String(item?.id || "") === id);
+    rhidAttendanceShareBusy = true;
+    try {
+      const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
+      const pdf = await buildRhidAttendancePdf(table, {
+        dateLabel: formatDatePickerValue(day),
+        updateLabel: table.updateLabel,
+      });
+      if (!isCurrent()) return false;
+      await native.exportMedia(pdf, `presencas-rhid-${day}.pdf`);
+      return isCurrent();
+    } catch (error) {
+      if (isCurrent()) setSessionError(error, "Não foi possível compartilhar o PDF de presenças RHID.");
+      return false;
+    } finally {
+      rhidAttendanceShareBusy = false;
+    }
   }
 
   async function completeDelegatedTask(taskId) {
@@ -5093,6 +5128,7 @@ export function createAppController({
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value));
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
+    bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);

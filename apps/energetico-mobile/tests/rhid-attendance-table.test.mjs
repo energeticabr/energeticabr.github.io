@@ -15,6 +15,14 @@ test("relatório omite PIS não localizado sem perder colaboradores identificado
   assert.deepEqual(table.rows, [["ANA SOUZA", "07:00", "12:00", "—", "—", "05:00"]]);
 });
 
+test("valida a data RHID como uma data real do calendário", () => {
+  assert.equal(typeof rhid.isValidRhidReportDate, "function");
+  assert.equal(rhid.isValidRhidReportDate("2026-09-25"), true);
+  assert.equal(rhid.isValidRhidReportDate("2026-02-31"), false);
+  assert.equal(rhid.isValidRhidReportDate("2026-13-01"), false);
+  assert.equal(rhid.isValidRhidReportDate("25/09/2026"), false);
+});
+
 test("horário de coleta não é apresentado falsamente como atualização do relógio", () => {
   assert.equal(typeof rhid.rhidUpdateLabel, "function");
   const label = rhid.rhidUpdateLabel({ rows: [

@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
@@ -138,6 +139,92 @@ test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => 
   assert.match(h.store.getState().messages.at(-1).text, /Nenhuma presença/);
   assert.equal(previews.length, 1);
   assert.equal(previews[0].blob.type, "application/pdf");
+});
+
+test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem refazer a consulta", async t => {
+  const h = makeHarness();
+  const requested = [];
+  const exported = [];
+  const collectedAt = "2026-09-25T21:19:00Z";
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [
+      { Id: 1, NOME_COLABORADOR: "BERNARDO NOTINI MOREIRA BAHIA", BATIDAS_RHID: "12:31", COLETADO_EM: collectedAt },
+      { Id: 2, NOME_COLABORADOR: "CLEITON CESAR NONATO", BATIDAS_RHID: "06:58; 12:01; 12:59; 15:50", COLETADO_EM: collectedAt },
+      { Id: 3, NOME_COLABORADOR: "EDGAR NELSON DA SILVA", BATIDAS_RHID: "06:55; 12:00", COLETADO_EM: collectedAt },
+      { Id: 4, NOME_COLABORADOR: "FELICIANO ROGERIO DA SILVA", BATIDAS_RHID: "06:54; 12:04; 13:00; 16:01", COLETADO_EM: collectedAt },
+      { Id: 5, NOME_COLABORADOR: "HELISON ROSA LUIS", BATIDAS_RHID: "07:01; 12:05; 13:01", COLETADO_EM: collectedAt },
+      { Id: 6, NOME_COLABORADOR: "JOSE GERALDO DOS SANTOS", BATIDAS_RHID: "07:00; 12:04; 12:56; 16:04", COLETADO_EM: collectedAt },
+      { Id: 7, NOME_COLABORADOR: "LUIZ BERNARDO DOS SANTOS", BATIDAS_RHID: "06:54; 12:10; 16:00", COLETADO_EM: collectedAt },
+      { Id: 8, NOME_COLABORADOR: "MAURICIO HONORATO DE SOUZA", BATIDAS_RHID: "06:53; 12:01; 12:59; 15:52", COLETADO_EM: collectedAt },
+      { Id: 9, NOME_COLABORADOR: "MAURO ANTONIO PEREIRA", BATIDAS_RHID: "06:57; 12:00; 13:03; 16:01", COLETADO_EM: collectedAt },
+    ] };
+  };
+  h.native.exportMedia = async (blob, name) => { exported.push({ blob, name }); return "shared"; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const report = h.store.getState().messages.at(-1);
+  assert.equal(report.detail_table.rows.length, 9, "a tela e o PDF devem partir das mesmas nove pessoas");
+  const expectedRows = [
+    ["BERNARDO NOTINI MOREIRA BAHIA", "12:31", "—", "—", "—", "— (parcial)"],
+    ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"],
+    ["EDGAR NELSON DA SILVA", "06:55", "12:00", "—", "—", "05:05"],
+    ["FELICIANO ROGERIO DA SILVA", "06:54", "12:04", "13:00", "16:01", "08:11"],
+    ["HELISON ROSA LUIS", "07:01", "12:05", "13:01", "—", "05:04 (parcial)"],
+    ["JOSE GERALDO DOS SANTOS", "07:00", "12:04", "12:56", "16:04", "08:12"],
+    ["LUIZ BERNARDO DOS SANTOS", "06:54", "12:10", "16:00", "—", "05:16 (parcial)"],
+    ["MAURICIO HONORATO DE SOUZA", "06:53", "12:01", "12:59", "15:52", "08:01"],
+    ["MAURO ANTONIO PEREIRA", "06:57", "12:00", "13:03", "16:01", "08:01"],
+  ];
+  assert.deepEqual(report.detail_table.rows, expectedRows, "a tabela deve manter cada horário na linha do colaborador da tela");
+  await h.view.emit("share-rhid-attendance-report", { messageId: report.id });
+
+  assert.deepEqual(requested, ["2026-09-25"], "compartilhar deve usar a tabela já consultada, sem uma segunda fonte ou data");
+  assert.equal(exported.length, 1);
+  assert.equal(exported[0].name, "presencas-rhid-2026-09-25.pdf");
+  assert.equal(exported[0].blob.type, "application/pdf");
+  const bytes = new Uint8Array(await exported[0].blob.arrayBuffer());
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 8)), "%PDF-1.7");
+  const task = getDocument({ data: bytes.slice(), useSystemFonts: true });
+  const viewer = await task.promise;
+  try {
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= viewer.numPages; pageNumber += 1) {
+      pages.push(await (await viewer.getPage(pageNumber)).getTextContent());
+    }
+    const text = pages.flatMap(page => page.items).map(item => item.str).join(" ");
+    for (let index = 0; index < expectedRows.length; index += 1) {
+      const row = expectedRows[index];
+      const name = row[0];
+      const start = text.indexOf(name);
+      assert.notEqual(start, -1, `PDF compartilhado sem ${name}`);
+      const nextNames = expectedRows.slice(index + 1).map(next => text.indexOf(next[0], start + name.length)).filter(position => position >= 0);
+      const end = nextNames.length ? Math.min(...nextNames) : text.length;
+      const section = text.slice(start, end).replaceAll("ÚLTIMA COLETA DO RHID ÀS 18:19", "");
+      const expectedTimes = row.slice(1, -1).filter(value => /^\d{2}:\d{2}$/.test(value));
+      const totalTime = row.at(-1).match(/^(\d{2}:\d{2})/)?.[1];
+      if (totalTime) expectedTimes.push(totalTime);
+      assert.deepEqual(section.match(/\b\d{2}:\d{2}\b/g) || [], expectedTimes, `PDF deve associar apenas as batidas e total de ${name}`);
+    }
+    assert.ok(text.includes("25/09/2026"), "PDF deve exibir a data da tabela selecionada");
+    assert.ok(text.includes("ÚLTIMA COLETA DO RHID ÀS 18:19"), "PDF deve preservar o horário de coleta do relatório");
+  } finally {
+    await task.destroy();
+  }
+});
+
+test("não consulta RHID para uma data impossível no calendário", async t => {
+  const h = makeHarness();
+  let calls = 0;
+  h.client.getRhidAttendanceReport = async () => { calls += 1; return { rows: [] }; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const result = await h.view.emit("rhid-attendance-report-generate", { value: "2026-02-31" });
+  assert.equal(result, false);
+  assert.equal(calls, 0);
 });
 
 test("relatório RHID reúne batidas da mesma pessoa, ordena horários e sinaliza total parcial", async t => {

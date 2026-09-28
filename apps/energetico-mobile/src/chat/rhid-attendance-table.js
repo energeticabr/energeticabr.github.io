@@ -11,6 +11,13 @@ function punchText(value) {
   return [raw];
 }
 
+export function isValidRhidReportDate(value) {
+  const text = String(value ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const parsed = new Date(`${text}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
+}
+
 function punchTimes(value) {
   return punchText(value).flatMap(text => [...text.replace(/[+-](?:[01]?\d|2[0-3]):[0-5]\d\b/g, "")
     .matchAll(/(?:^|[^\d])((?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)(?!\d)/g)]
