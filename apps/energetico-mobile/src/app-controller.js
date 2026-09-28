@@ -1530,6 +1530,15 @@ export function createAppController({
       return false;
     }
     if (rhidAttendanceReportRequest) return rhidAttendanceReportRequest;
+    if (replaceMessageId) {
+      const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
+      const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
+      if (currentMessage?.type !== "poll" || currentTable?.kind !== "rhid_attendance" || currentTable.navigationBusy === true) return false;
+      if (!store.replaceMessage?.(replaceMessageId, {
+        ...currentMessage,
+        detail_table: { ...currentTable, navigationBusy: true, navigationError: "" },
+      })) return false;
+    }
     const reportAccount = account;
     const reportRevision = sessionRevision;
     view.setRhidAttendanceReportStatus?.({ busy: true, error: "" });
@@ -1573,7 +1582,20 @@ export function createAppController({
         return true;
       } catch (error) {
         if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
-          if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
+          if (replaceMessageId) {
+            const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
+            const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
+            if (currentMessage?.type === "poll" && currentTable?.kind === "rhid_attendance") {
+              store.replaceMessage(replaceMessageId, {
+                ...currentMessage,
+                detail_table: {
+                  ...currentTable,
+                  navigationBusy: false,
+                  navigationError: "Não foi possível atualizar o relatório. Tente novamente.",
+                },
+              });
+            }
+          } else if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
           else view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
         }
         return false;
@@ -1588,7 +1610,7 @@ export function createAppController({
     const id = String(messageId || "").trim();
     const message = store.getState().messages.find(item => String(item?.id || "") === id);
     const table = message?.detail_table || message?.detailTable;
-    if (!id || message?.type !== "poll" || table?.kind !== "rhid_attendance") return false;
+    if (!id || message?.type !== "poll" || table?.kind !== "rhid_attendance" || table.navigationBusy === true) return false;
     const day = shiftRhidReportDate(table.reportDate, Number(value));
     return day ? generateRhidAttendanceReport(day, { replaceMessageId: id }) : false;
   }

@@ -860,10 +860,10 @@ function rhidAttendanceTableMarkup(table, messageId) {
   const dateLabel = isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
   const navigation = dateLabel && messageId
     ? `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
-      <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior">←</button>
+      <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior"${table.navigationBusy === true ? " disabled" : ""}>←</button>
       <time class="chat-rhid-date-navigation__date" datetime="${escapeHtml(date)}">${dateLabel}</time>
-      <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia">→</button>
-    </nav>`
+      <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia"${table.navigationBusy === true ? " disabled" : ""}>→</button>
+    </nav>${table.navigationBusy === true ? `<p class="chat-rhid-attendance-table__status" role="status">Atualizando dados do RHID…</p>` : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
     : "";
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
     ${navigation}

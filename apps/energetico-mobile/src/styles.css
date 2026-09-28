@@ -498,6 +498,9 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-table__share:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
 .chat-rhid-attendance-table__share:disabled { opacity: .55; cursor: wait; }
 .chat-rhid-attendance-table__heading .chat-rhid-attendance-table__updated { flex-basis: 100%; color: #164b58; overflow-wrap: anywhere; }
+.chat-rhid-attendance-table__status, .chat-rhid-attendance-table__error { margin: 0; padding: 7px 10px; font-size: 12px; font-weight: 700; }
+.chat-rhid-attendance-table__status { color: #164b58; background: #f2f8f6; }
+.chat-rhid-attendance-table__error { color: #8b1e18; background: #fff0ef; }
 .chat-rhid-attendance-table__scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
 .chat-rhid-attendance-table__scroll:focus-visible { outline: 3px solid #e3aa19; outline-offset: -3px; }
 .chat-rhid-attendance-table table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }

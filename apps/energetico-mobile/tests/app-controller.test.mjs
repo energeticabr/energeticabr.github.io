@@ -107,7 +107,7 @@ test("setas do relatório consultam o dia adjacente e substituem o relatório no
   const requested = [];
   h.client.getRhidAttendanceReport = async selectedDate => {
     requested.push(selectedDate);
-    return { date: selectedDate, rows: [{
+    return { date: selectedDate, rows: selectedDate === "2026-09-26" ? [] : [{
       ID_PESSOA_RHID: "rh-9", DATA_REFERENCIA: selectedDate, NOME_COLABORADOR: "Pessoa A",
       BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
     }] };
@@ -115,16 +115,69 @@ test("setas do relatório consultam o dia adjacente e substituem o relatório no
   t.after(() => h.controller.stop());
   await h.controller.start();
 
-  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-26" });
   const original = h.store.getState().messages.at(-1);
+  assert.deepEqual(original.detail_table.rows, [], "o relatório vazio também precisa manter a navegação");
   await h.view.emit("rhid-attendance-report-navigate", { messageId: original.id, value: "-1" });
+  assert.equal(h.store.getState().messages.at(-1).detail_table.reportDate, "2026-09-25");
   await h.view.emit("rhid-attendance-report-navigate", { messageId: original.id, value: "1" });
 
-  assert.deepEqual(requested, ["2026-09-25", "2026-09-24", "2026-09-25"]);
+  assert.deepEqual(requested, ["2026-09-26", "2026-09-25", "2026-09-26"]);
   const reportMessages = h.store.getState().messages.filter(message => message.detail_table?.kind === "rhid_attendance");
   assert.equal(reportMessages.length, 1);
   assert.equal(reportMessages[0].id, original.id);
-  assert.equal(reportMessages[0].detail_table.reportDate, "2026-09-25");
+  assert.equal(reportMessages[0].detail_table.reportDate, "2026-09-26");
+});
+
+test("setas RHID ficam bloqueadas durante a consulta e liberam após atualizar o cartão", async t => {
+  const h = makeHarness();
+  const requested = [];
+  let resolveAdjacent;
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    requested.push(selectedDate);
+    if (selectedDate === "2026-09-25") return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+    return new Promise(resolve => { resolveAdjacent = resolve; });
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const report = h.store.getState().messages.at(-1);
+
+  const pending = h.view.emit("rhid-attendance-report-navigate", { messageId: report.id, value: "-1" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.store.getState().messages.at(-1).detail_table.navigationBusy, true);
+  assert.equal(h.view.emit("rhid-attendance-report-navigate", { messageId: report.id, value: "-1" }), false);
+  assert.deepEqual(requested, ["2026-09-25", "2026-09-24"]);
+
+  resolveAdjacent({ date: "2026-09-24", rows: [] });
+  await pending;
+  assert.notEqual(h.store.getState().messages.at(-1).detail_table.navigationBusy, true);
+});
+
+test("falha ao consultar outro dia aparece no cartão sem perder os dados anteriores", async t => {
+  const h = makeHarness();
+  let call = 0;
+  h.client.getRhidAttendanceReport = async selectedDate => {
+    call += 1;
+    if (call > 1) throw new Error("Falha de conexão com o RHID");
+    return { date: selectedDate, rows: [{
+      ID_PESSOA_RHID: "rh-9", NOME_COLABORADOR: "Pessoa A", BATIDAS_RHID: "07:01; 12:00; 13:00; 17:02",
+    }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const report = h.store.getState().messages.at(-1);
+
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: report.id, value: "-1" });
+
+  const current = h.store.getState().messages.at(-1);
+  assert.equal(current.detail_table.reportDate, "2026-09-25");
+  assert.equal(current.detail_table.navigationBusy, false);
+  assert.match(current.detail_table.navigationError, /não foi possível atualizar/i);
+  assert.equal(current.detail_table.rows.length, 1);
 });
 
 test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças acessível", async t => {
