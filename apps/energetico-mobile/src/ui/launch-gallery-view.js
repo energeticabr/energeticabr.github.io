@@ -295,7 +295,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   doc.body.append(root);
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: async item => {
-      const result = await request('detail', { id: item.id, purpose: 'attachment-count' });
+      const result = await request('detail', { id: item.id });
       return attachmentDescriptors(item, result);
     },
     onChange: updateAttachmentCount,
