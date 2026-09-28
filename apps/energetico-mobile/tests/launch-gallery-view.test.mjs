@@ -377,6 +377,38 @@ test('order cluster joins AGRUPAR to the SharePoint order and renders the order 
   assert.match(modal.textContent, /Soma dos lançamentos:[\s\S]*905,00/i);
 });
 
+test('order cluster fetches the launch snapshot in bounded parallel pages before filtering AGRUPAR locally', async t => {
+  const item = row(3451); item.fields = { ...item.fields, AGRUPAR: '334' };
+  const requestedPages = [];
+  const pendingPages = new Map([2, 3, 4, 5, 6].map(page => [page, deferred()]));
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {} }] }),
+    request: async (operation, payload) => {
+      if (operation !== 'snapshot') return detail({ item });
+      if (payload.pageSize !== 100) return snapshot({ rows: [item] });
+      requestedPages.push(payload.page);
+      if (payload.page === 1) return snapshot({ rows: [item], page: 1, pages: 6, count: 6 });
+      return pendingPages.get(payload.page).promise;
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle();
+
+  try {
+    assert.deepEqual([...requestedPages], [1, 2, 3, 4, 5]);
+    for (const page of [2, 3, 4, 5]) pendingPages.get(page).resolve(snapshot({ rows: [], page, pages: 6, count: 6 }));
+    await settle();
+    assert.deepEqual([...requestedPages], [1, 2, 3, 4, 5, 6]);
+  } finally {
+    for (const [page, pending] of pendingPages) pending.resolve(snapshot({ rows: [], page, pages: 6, count: 6 }));
+  }
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.equal(modal.querySelectorAll('[data-launch-id]').length, 1);
+});
+
 test('order reconciliation stays indeterminate when linked launch amounts are missing', async t => {
   const item = row(3451);
   item.total = undefined;

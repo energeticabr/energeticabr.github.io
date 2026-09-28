@@ -560,23 +560,49 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return pair;
   }
   async function fetchLaunchRows(filters = {}, { signal } = {}) {
-    const rowsById = new Map();
-    let pagesToLoad = 1;
     const pageSize = 100;
-    for (let targetPage = 1; targetPage <= pagesToLoad; targetPage += 1) {
+    const loadPage = async targetPage => {
       if (targetPage > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
       const result = await request('snapshot', { filters, sort: SORTS[0], page: targetPage, pageSize }, { signal });
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
-      for (const item of result.rows) {
+      const reportedPages = Number(result.pages);
+      if (Number.isFinite(reportedPages) && reportedPages > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+      return result;
+    };
+    const firstPage = await loadPage(1);
+    const pageRows = [firstPage.rows];
+    const firstPageCount = Number(firstPage.pages);
+    const reportedCount = Number(firstPage.count);
+    let pagesToLoad = Number.isFinite(firstPageCount) && firstPageCount > 0
+      ? Math.trunc(firstPageCount)
+      : Number.isFinite(reportedCount) && reportedCount > 0
+        ? Math.ceil(reportedCount / pageSize)
+        : firstPage.rows.length >= pageSize ? 2 : 1;
+    if (pagesToLoad > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+
+    let targetPage = 2;
+    while (targetPage <= pagesToLoad) {
+      const batch = [];
+      while (batch.length < 4 && targetPage <= pagesToLoad) {
+        batch.push(targetPage++);
+      }
+      const results = await Promise.all(batch.map(loadPage));
+      results.forEach((result, index) => {
+        const pageNumber = batch[index];
+        pageRows[pageNumber - 1] = result.rows;
+        const resultPageCount = Number(result.pages);
+        if (Number.isFinite(resultPageCount) && resultPageCount > 0) pagesToLoad = Math.max(pagesToLoad, Math.trunc(resultPageCount));
+        else if (result.rows.length >= pageSize) pagesToLoad = Math.max(pagesToLoad, pageNumber + 1);
+      });
+      if (pagesToLoad > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
+    }
+
+    const rowsById = new Map();
+    for (const rows of pageRows) {
+      for (const item of rows ?? []) {
         const id = String(item?.id ?? field(item?.fields, 'ID') ?? '').trim();
         if (id) rowsById.set(id, item);
       }
-      const reportedPages = Number(result.pages);
-      if (Number.isFinite(reportedPages) && reportedPages > 100) throw new Error('A consulta ultrapassou o limite seguro de páginas.');
-      pagesToLoad = Number.isFinite(reportedPages) && reportedPages > 0
-        ? Math.max(pagesToLoad, Math.min(100, Math.trunc(reportedPages)))
-        : result.rows.length >= pageSize ? targetPage + 1 : targetPage;
-      if (targetPage >= pagesToLoad) break;
     }
     return [...rowsById.values()];
   }
