@@ -22,6 +22,20 @@ test("relatório omite PIS não localizado sem perder colaboradores identificado
   assert.deepEqual(table.rows, [["ANA SOUZA", "07:00", "12:00", "—", "—", "05:00"]]);
 });
 
+test("inclui cadastrados sem batidas ao final e omite cadastro NÃO APAGAR", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "ZÉ COM BATIDA", BATIDAS_RHID: "07:00" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "BRUNO SEM BATIDA", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA SEM BATIDA", BATIDAS_RHID: null },
+    { ID_PESSOA_RHID: "4", NOME_COLABORADOR: "Cadastro - Não Apagar", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "BRUNO SEM BATIDA", BATIDAS_RHID: "" },
+  ]);
+  assert.deepEqual(table.rows.map(row => row[0]), ["ZÉ COM BATIDA", "ANA SEM BATIDA", "BRUNO SEM BATIDA"]);
+  assert.deepEqual(table.rows[1].slice(1), ["—", "—", "—", "—", "— (parcial)"]);
+  assert.equal(rhid.isRhidAttendanceRowWithoutPunches(table.rows[0]), false);
+  assert.equal(rhid.isRhidAttendanceRowWithoutPunches(table.rows[1]), true);
+});
+
 test("valida a data RHID como uma data real do calendário", () => {
   assert.equal(typeof rhid.isValidRhidReportDate, "function");
   assert.equal(rhid.isValidRhidReportDate("2026-09-25"), true);

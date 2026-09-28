@@ -215,6 +215,28 @@ test("pinta de vermelho claro a linha divergente no PDF e mantém neutra a linha
   assert.equal(await includesLightRedFill(complete), false);
 });
 
+test("pinta de laranja no PDF o cadastro sem nenhuma batida", async () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA PRESENTE", BATIDAS_RHID: "07:00" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "BIA SEM BATIDA", BATIDAS_RHID: "" },
+  ]);
+  table.reportDate = "2026-09-25";
+  const { loadingTask, pages } = await inspect(await buildPdf(table));
+  try {
+    const text = pages.flatMap(({ items }) => items.map(item => item.str)).join(" ");
+    assert.ok(text.includes("BIA SEM BATIDA"));
+    const operators = await pages[0].page.getOperatorList();
+    assert.ok(operators.argsArray.some((args, index) => {
+      if (operators.fnArray[index] !== OPS.setFillRGBColor) return false;
+      const components = String(args[0]).match(/[\da-f]{2}/gi)?.map(value => parseInt(value, 16)) || [];
+      return components.length === 3 && components[0] > 245 && components[1] >= 180 && components[1] <= 235
+        && components[2] >= 180 && components[2] < 220 && components[1] > components[2];
+    }), "linha sem batidas deve receber preenchimento laranja");
+  } finally {
+    await loadingTask.destroy();
+  }
+});
+
 test("pagina também uma pessoa com muitos pares de horários", async () => {
   const pairs = 40;
   const headers = ["Nome"];
