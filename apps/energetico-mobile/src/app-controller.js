@@ -621,6 +621,8 @@ export function createAppController({
   let launchGalleryOpening = null;
   let ordersGallery = null;
   let ordersGalleryOpening = null;
+  const ordersGalleryData = new Map();
+  const ordersGalleryDataOpening = new Map();
   let tasksGallery = null;
   let tasksGalleryOpening = null;
   let paymentProgrammingGallery = null;
@@ -3267,6 +3269,8 @@ export function createAppController({
   function disposeOrdersGallery() {
     ordersGallery?.destroy?.();
     ordersGallery = null;
+    ordersGalleryData.clear();
+    ordersGalleryDataOpening.clear();
   }
 
   function disposeTasksGallery() {
@@ -3354,6 +3358,37 @@ export function createAppController({
     return showMedia(first.source, first.fileName);
   }
 
+  function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID) {
+    return scopes => {
+      assertSession();
+      return auth.getToken(scopes).catch(async error => {
+        if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+        await auth.authorize(scopes, { resumeAction });
+        assertSession();
+        return auth.getToken(scopes);
+      });
+    };
+  }
+
+  async function getOrdersGalleryData(assertSession, resumeAction = ORDERS_GALLERY_ID) {
+    const cacheKey = String(resumeAction || ORDERS_GALLERY_ID);
+    if (ordersGalleryData.has(cacheKey)) return ordersGalleryData.get(cacheKey);
+    if (ordersGalleryDataOpening.has(cacheKey)) return ordersGalleryDataOpening.get(cacheKey);
+    const opening = Promise.resolve().then(() => ordersGalleryDataFactory({
+      tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
+    }));
+    ordersGalleryDataOpening.set(cacheKey, opening);
+    try {
+      const data = await opening;
+      assertSession();
+      if (!data) throw new Error("A consulta de pedidos do SharePoint não está disponível.");
+      if (ordersGalleryDataOpening.get(cacheKey) === opening) ordersGalleryData.set(cacheKey, data);
+      return data;
+    } finally {
+      if (ordersGalleryDataOpening.get(cacheKey) === opening) ordersGalleryDataOpening.delete(cacheKey);
+    }
+  }
+
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (launchGalleryOpening) return launchGalleryOpening;
@@ -3365,6 +3400,14 @@ export function createAppController({
       try {
         if (!launchGallery) {
           const panel = await launchGalleryFactory({
+            loadOrderSnapshot: async () => {
+              assertSession();
+              const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
+              if (typeof data.loadSnapshot !== "function") throw new Error("A consulta de pedidos do SharePoint não está disponível.");
+              const snapshot = await data.loadSnapshot();
+              assertSession();
+              return snapshot;
+            },
             request: async (operation, payload) => {
               assertSession();
               const result = await client.launchGalleryRequest(operation, payload);
@@ -3438,15 +3481,7 @@ export function createAppController({
     ordersGalleryOpening = (async () => {
       try {
         if (!ordersGallery) {
-          const data = await ordersGalleryDataFactory({ tokenProvider: scopes => {
-            assertSession();
-            return auth.getToken(scopes).catch(async error => {
-              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-              await auth.authorize(scopes, { resumeAction: ORDERS_GALLERY_ID });
-              assertSession();
-              return auth.getToken(scopes);
-            });
-          } });
+          const data = await getOrdersGalleryData(assertSession);
           assertSession();
           const panel = await ordersGalleryFactory({
             data,
@@ -5258,7 +5293,8 @@ export function createAppController({
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();
     const pendingAction = account ? auth.consumePendingAction?.() : null;
-    if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
+    if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
+    else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
