@@ -84,6 +84,11 @@ export function isRhidAttendanceRowDiscrepant(row, reportDate, now = new Date())
   return workedMinutes < requiredMinutes;
 }
 
+export function isRhidAttendanceRowWithoutPunches(row) {
+  return Array.isArray(row) && row.length >= 4 && row.slice(1, -1)
+    .every(value => !/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(String(value ?? "").trim()));
+}
+
 function punchTimes(value) {
   return punchText(value).flatMap(text => [...text.replace(/[+-](?:[01]?\d|2[0-3]):[0-5]\d\b/g, "")
     .matchAll(/(?:^|[^\d])((?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)(?!\d)/g)]
@@ -131,13 +136,12 @@ export function buildRhidAttendanceTable(rows = []) {
     const name = String(row.NOME_COLABORADOR ?? "").trim();
     const id = String(row.ID_PESSOA_RHID ?? row.Id ?? "").trim();
     const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ").trim();
-    if (/^PIS NAO LOCALIZADO\b/.test(normalizedName)) continue;
+    if (/^PIS NAO LOCALIZADO\b/.test(normalizedName) || /\bNAO APAGAR\b/.test(normalizedName)) continue;
     const key = name
       ? `name:${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")}`
       : `id:${id}`;
     if (!name && !id) continue;
     const times = punchTimes(row.BATIDAS_RHID);
-    if (!times.length) continue;
     if (!people.has(key)) people.set(key, { name: name || `ID ${id}`, times: new Set() });
     const person = people.get(key);
     for (const time of times) person.times.add(time);
@@ -145,7 +149,8 @@ export function buildRhidAttendanceTable(rows = []) {
 
   const persons = [...people.values()]
     .map(person => ({ ...person, punches: [...person.times].sort() }))
-    .sort((left, right) => left.name.localeCompare(right.name, "pt-BR", { sensitivity: "base" }));
+    .sort((left, right) => Number(Boolean(right.punches.length)) - Number(Boolean(left.punches.length))
+      || left.name.localeCompare(right.name, "pt-BR", { sensitivity: "base" }));
   const pairs = Math.max(2, Math.ceil(Math.max(0, ...persons.map(person => person.punches.length)) / 2));
   const headers = ["Nome"];
   for (let index = 1; index <= pairs; index += 1) headers.push(`Entrada ${index}`, `Saída ${index}`);

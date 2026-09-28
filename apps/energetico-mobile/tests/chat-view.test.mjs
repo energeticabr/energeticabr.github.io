@@ -317,6 +317,24 @@ test("relatório RHID preenche de vermelho claro só a linha discrepante após o
   dom.window.close();
 });
 
+test("relatório RHID destaca em laranja o cadastro sem batidas", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-without-punches", role: "assistant", type: "poll", question: "Relatório RHID", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-25", title: "PRESENÇAS",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [["ANA PRESENTE", "07:00", "12:00", "13:00", "15:45", "07:45"],
+        ["BIA SEM BATIDA", "—", "—", "—", "—", "— (parcial)"]],
+    },
+  }] }));
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const dom = new JSDOM(`<style>${styles}</style>${markup}`);
+  const rows = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-table tbody tr")];
+  assert.ok(rows[1].classList.contains("chat-rhid-attendance-table__row--no-punches"));
+  assert.equal(dom.window.getComputedStyle(rows[1].querySelector("td")).backgroundColor, "rgb(255, 235, 204)");
+  dom.window.close();
+});
+
 test("relatório RHID usa a largura do chat e identifica cada horário sem rolagem lateral", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-compact", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],

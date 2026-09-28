@@ -5,7 +5,7 @@ import { signatureDocumentLayout as documentSignatureLayout } from "../web/signa
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
-import { isRhidAttendanceRowDiscrepant, isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
+import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
@@ -872,7 +872,8 @@ function rhidAttendanceTableMarkup(table, messageId) {
       <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
       <tbody>${rows.map(row => {
         const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
-        const rowClass = discrepant ? "chat-rhid-attendance-table__row--discrepant" : "";
+        const rowClass = isRhidAttendanceRowWithoutPunches(row) ? "chat-rhid-attendance-table__row--no-punches"
+          : discrepant ? "chat-rhid-attendance-table__row--discrepant" : "";
         return `<tr class="${rowClass}" style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
           const value = row[index] ?? "—";
           if (index === 0) return `<th scope="row">${escapeHtml(value)}</th>`;
