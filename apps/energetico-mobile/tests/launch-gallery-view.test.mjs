@@ -795,7 +795,7 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   button(ctx.root(), 'Detalhes').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), form);
   assert.equal(form.querySelector('[name="QUANTIDADE"]').value, '12');
-  assert.equal(ctx.calls.filter(c => c.operation === 'detail' && c.payload.purpose !== 'attachment-count').length, 1);
+  assert.equal(ctx.calls.filter(c => c.operation === 'detail').length, 1);
   assert.equal(mutations(ctx).length, 0);
 });
 
