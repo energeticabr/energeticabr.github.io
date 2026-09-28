@@ -261,7 +261,7 @@ test("não oferece compartilhar RHID quando a data é impossível", () => {
   assert.doesNotMatch(markup, /data-action="share-rhid-attendance-report"/);
 });
 
-test("relatório RHID exibe uma tabela única com colunas de batidas e total", () => {
+test("relatório RHID exibe cartões diários com colunas de batidas e total", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-table", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
     detail_table: {
@@ -271,14 +271,47 @@ test("relatório RHID exibe uma tabela única com colunas de batidas e total", (
     },
   }] }));
   const dom = new JSDOM(markup);
-  const table = dom.window.document.querySelector(".chat-rhid-attendance-table table");
-  assert.ok(table, "o relatório deve usar uma tabela real, não cartões separados");
-  assert.match(dom.window.document.querySelector(".chat-rhid-attendance-table__heading small")?.textContent || "", /Deslize para ver os horários/i);
-  assert.deepEqual([...table.querySelectorAll("thead th")].map(cell => cell.textContent),
-    ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
-  assert.deepEqual([...table.querySelectorAll("tbody tr:first-child > *")].map(cell => cell.textContent),
-    ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"]);
-  assert.equal(table.querySelectorAll("tbody tr").length, 1);
+  const report = dom.window.document.querySelector(".chat-rhid-attendance-report");
+  assert.ok(report, "o relatório deve usar o layout diário");
+  assert.equal(report.querySelectorAll(".chat-rhid-attendance-card").length, 1);
+  assert.deepEqual([...report.querySelectorAll(".chat-rhid-attendance-card__entry, .chat-rhid-attendance-card__exit")].map(cell => cell.textContent),
+    ["06:58", "12:01", "12:59", "15:50"]);
+  assert.match(report.querySelector(".chat-rhid-attendance-card__total")?.textContent || "", /07:54/);
+  assert.equal(report.querySelector("table"), null);
+  dom.window.close();
+});
+
+test("relatório RHID segue o layout diário com indicadores e cartões individuais", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-daily-layout", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-28", updateLabel: "ÚLTIMA COLETA DO RHID ÀS 13:58",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [
+        ["CLEITON CESAR NONATO", "07:00", "11:59", "13:02", "—", "04:59 (parcial)"],
+        ["EDGAR NELSON DA SILVA", "06:57", "12:54", "—", "—", "05:57"],
+        ["BERNARDO NOTINI MOREIRA BAHIA", "—", "—", "—", "—", "— (parcial)"],
+      ],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const report = dom.window.document.querySelector(".chat-rhid-attendance-report");
+
+  assert.ok(report, "o relatório deve usar o cartão de relatório diário");
+  assert.equal(report.querySelector(".chat-rhid-attendance-report__kicker")?.textContent, "RELATÓRIO DIÁRIO");
+  assert.equal(report.querySelector("h2")?.textContent, "Presenças RHID");
+  assert.match(report.querySelector(".chat-rhid-attendance-report__updated")?.textContent || "", /13:58/);
+  assert.deepEqual(
+    [...report.querySelectorAll(".chat-rhid-attendance-report__summary-value")].map(node => node.textContent),
+    ["03", "02", "01"],
+  );
+  assert.equal(report.querySelectorAll(".chat-rhid-attendance-card").length, 3);
+  assert.equal(report.querySelectorAll(".chat-rhid-attendance-card__entry").length, 3);
+  assert.equal(report.querySelectorAll(".chat-rhid-attendance-card__exit").length, 2);
+  assert.match(report.querySelector(".chat-rhid-attendance-card__total")?.textContent || "", /04:59/);
+  assert.ok(report.querySelector(".chat-rhid-attendance-card--no-punches"));
+  assert.match(report.querySelector(".chat-rhid-attendance-card--no-punches")?.textContent || "", /SEM MARCAÇÃO/);
+  assert.equal(report.querySelector("table"), null, "a apresentação não deve voltar à tabela horizontal");
   dom.window.close();
 });
 
@@ -292,13 +325,14 @@ test("relatório RHID distingue entradas e saídas preenchidas sem destacar hor�
     },
   }] }));
   const dom = new JSDOM(markup);
-  const cells = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-table tbody td")];
+  const cells = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-card__slot strong")];
+  const total = dom.window.document.querySelector(".chat-rhid-attendance-card__total");
 
-  assert.ok(cells[0].classList.contains("chat-rhid-attendance-table__entry"));
-  assert.ok(cells[1].classList.contains("chat-rhid-attendance-table__exit"));
-  assert.ok(cells[2].classList.contains("chat-rhid-attendance-table__entry"));
-  assert.ok(!cells[3].classList.contains("chat-rhid-attendance-table__exit"), "sem batida, o traço permanece neutro");
-  assert.ok(cells[4].classList.contains("chat-rhid-attendance-table__total"));
+  assert.ok(cells[0].classList.contains("chat-rhid-attendance-card__entry"));
+  assert.ok(cells[1].classList.contains("chat-rhid-attendance-card__exit"));
+  assert.ok(cells[2].classList.contains("chat-rhid-attendance-card__entry"));
+  assert.equal(cells[3].textContent, "—", "sem batida, o traço permanece neutro");
+  assert.ok(total, "o total deve continuar visível");
   dom.window.close();
 });
 
@@ -316,12 +350,12 @@ test("relatório RHID preenche de vermelho claro só a linha discrepante após o
   }] }));
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const dom = new JSDOM(`<style>${styles}</style>${markup}`);
-  const rows = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-table tbody tr")];
+  const rows = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-card")];
 
-  assert.ok(rows[0].classList.contains("chat-rhid-attendance-table__row--discrepant"));
-  assert.ok(!rows[1].classList.contains("chat-rhid-attendance-table__row--discrepant"));
-  assert.equal(dom.window.getComputedStyle(rows[0].querySelector("td")).backgroundColor, "rgb(253, 232, 230)");
-  assert.notEqual(dom.window.getComputedStyle(rows[1].querySelector("td")).backgroundColor, "rgb(253, 232, 230)");
+  assert.ok(rows[0].classList.contains("chat-rhid-attendance-card--discrepant"));
+  assert.ok(!rows[1].classList.contains("chat-rhid-attendance-card--discrepant"));
+  assert.equal(dom.window.getComputedStyle(rows[0]).backgroundColor, "rgb(253, 232, 230)");
+  assert.notEqual(dom.window.getComputedStyle(rows[1]).backgroundColor, "rgb(253, 232, 230)");
   dom.window.close();
 });
 
@@ -337,9 +371,9 @@ test("relatório RHID destaca em laranja o cadastro sem batidas", () => {
   }] }));
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const dom = new JSDOM(`<style>${styles}</style>${markup}`);
-  const rows = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-table tbody tr")];
-  assert.ok(rows[1].classList.contains("chat-rhid-attendance-table__row--no-punches"));
-  assert.equal(dom.window.getComputedStyle(rows[1].querySelector("td")).backgroundColor, "rgb(255, 235, 204)");
+  const rows = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-card")];
+  assert.ok(rows[1].classList.contains("chat-rhid-attendance-card--no-punches"));
+  assert.equal(dom.window.getComputedStyle(rows[1]).backgroundColor, "rgb(255, 235, 204)");
   dom.window.close();
 });
 
@@ -358,10 +392,10 @@ test("relatório RHID usa a largura do chat e identifica cada horário sem rolag
 
   assert.ok(message, "o relatório deve ter layout próprio");
   assert.equal(message.querySelector(".chat-avatar"), null, "o mascote lateral não ocupa a largura do relatório");
-  assert.equal(message.querySelectorAll(".chat-rhid-attendance-table tbody tr").length, 1);
-  assert.deepEqual([...message.querySelectorAll(".chat-rhid-attendance-table tbody td")].map(cell => cell.dataset.label),
-    ["Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Entrada 3", "Saída 3", "Total"]);
-  assert.match(message.querySelector(".chat-rhid-attendance-table__heading small")?.textContent || "", /Deslize para ver os horários/i);
+  assert.equal(message.querySelectorAll(".chat-rhid-attendance-card").length, 1);
+  assert.deepEqual([...message.querySelectorAll(".chat-rhid-attendance-card__entry, .chat-rhid-attendance-card__exit")].map(cell => cell.textContent),
+    ["06:58", "12:01", "12:59", "15:50", "16:20", "17:00"]);
+  assert.equal(message.querySelector(".chat-rhid-attendance-table__horizontal-hint"), null);
   dom.window.close();
 });
 

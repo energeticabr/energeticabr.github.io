@@ -525,6 +525,64 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__exit { color: #ad2525; font-weight: 800; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__total { min-width: 126px; color: #145b3a; font-weight: 800; }
 .chat-rhid-attendance-table__empty { margin: 0; padding: 14px 10px; color: #53676f; text-align: center; font-weight: 700; }
+.chat-rhid-attendance-report { padding: 0 18px 18px; border-color: #e0e5eb; border-radius: 16px; background: #fff; color: #173042; }
+.chat-rhid-attendance-report__header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(142px, .72fr) minmax(132px, .68fr); align-items: stretch; gap: 14px; padding: 22px 0 15px; border-bottom: 1px solid #dfe5eb; }
+.chat-rhid-attendance-report__identity { min-width: 0; align-self: center; }
+.chat-rhid-attendance-report__kicker { display: block; margin-bottom: 7px; color: #718096; font-size: 10px; font-weight: 800; letter-spacing: .03em; }
+.chat-rhid-attendance-report__identity h2 { margin: 0; color: #173b66; font-size: clamp(21px, 4vw, 31px); line-height: 1.05; }
+.chat-rhid-attendance-report__updated, .chat-rhid-attendance-report__date { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: 12px 14px; border-radius: 12px; }
+.chat-rhid-attendance-report__updated { color: #fff; background: #173f6b; }
+.chat-rhid-attendance-report__updated span, .chat-rhid-attendance-report__date span { font-size: 9px; font-weight: 800; letter-spacing: .04em; line-height: 1.2; }
+.chat-rhid-attendance-report__updated strong { margin-top: 3px; font-size: clamp(24px, 4vw, 32px); line-height: 1; font-variant-numeric: tabular-nums; }
+.chat-rhid-attendance-report__date { color: #173f6b; background: #f1f4f9; }
+.chat-rhid-attendance-report__date time { margin-top: 8px; font-size: clamp(16px, 3vw, 23px); font-weight: 850; line-height: 1; font-variant-numeric: tabular-nums; }
+.chat-rhid-attendance-report__updated-detail { margin: 8px 0 0; color: #718096; font-size: 10px; font-weight: 700; }
+.chat-rhid-attendance-report__summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 13px; padding: 13px 0 8px; border-bottom: 1px solid #dfe5eb; }
+.chat-rhid-attendance-report__summary > div { display: flex; min-width: 0; align-items: baseline; gap: 9px; padding: 0 13px; border-right: 1px solid #dfe5eb; }
+.chat-rhid-attendance-report__summary > div:last-child { border-right: 0; }
+.chat-rhid-attendance-report__summary-value { color: #173b66; font-size: 25px; line-height: 1; font-variant-numeric: tabular-nums; }
+.chat-rhid-attendance-report__summary-value--missing { color: #9a6519; }
+.chat-rhid-attendance-report__summary span { color: #718096; font-size: 9px; font-weight: 800; line-height: 1.2; }
+.chat-rhid-attendance-report__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 9px; color: #0c5f4d; font-size: 13px; }
+.chat-rhid-attendance-report__cards { display: grid; gap: 9px; }
+.chat-rhid-attendance-card { padding: 11px 12px; border: 1px solid #e1e5eb; border-radius: 13px; background: #fff; box-shadow: 0 1px 1px rgb(23 48 66 / 4%); }
+.chat-rhid-attendance-card__main { display: grid; grid-template-columns: minmax(132px, 1.15fr) minmax(208px, 1.9fr) minmax(98px, .8fr); align-items: center; gap: 12px; min-width: 0; }
+.chat-rhid-attendance-card__person { min-width: 0; }
+.chat-rhid-attendance-card__person h3 { margin: 0; color: #173042; font-size: 13px; font-weight: 850; line-height: 1.22; overflow-wrap: anywhere; }
+.chat-rhid-attendance-card__missing { display: inline-flex; margin-top: 6px; padding: 3px 8px; border-radius: 999px; color: #9a6519; background: #f6e3bd; font-size: 8px; font-weight: 850; }
+.chat-rhid-attendance-card__slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.chat-rhid-attendance-card__slot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; column-gap: 5px; row-gap: 2px; min-width: 0; }
+.chat-rhid-attendance-card__slot span { color: #718096; font-size: 8px; font-weight: 800; line-height: 1.15; }
+.chat-rhid-attendance-card__slot strong { color: #718096; font-size: 13px; font-weight: 850; line-height: 1.1; text-align: right; font-variant-numeric: tabular-nums; }
+.chat-rhid-attendance-card__slot .chat-rhid-attendance-card__entry { color: #16804b; }
+.chat-rhid-attendance-card__slot .chat-rhid-attendance-card__exit { color: #ad3041; }
+.chat-rhid-attendance-card__total { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; padding: 8px 6px; border-radius: 10px; color: #173f6b; background: #edf3f9; text-align: center; }
+.chat-rhid-attendance-card__total span { color: #718096; font-size: 8px; font-weight: 800; line-height: 1.2; }
+.chat-rhid-attendance-card__total strong { margin-top: 3px; font-size: 20px; font-weight: 850; line-height: 1; font-variant-numeric: tabular-nums; }
+.chat-rhid-attendance-card__total small { display: inline-flex; margin-top: 5px; padding: 2px 7px; border-radius: 999px; color: #9a6519; background: #f6e3bd; font-size: 8px; font-weight: 850; }
+.chat-rhid-attendance-card--discrepant { border-color: #efc4c1; background: #fde8e6; }
+.chat-rhid-attendance-card--no-punches { border-color: #ead2a9; background: #ffebcc; }
+.chat-rhid-attendance-card--no-punches .chat-rhid-attendance-card__total { background: #f9e6c4; }
+@media (max-width: 600px) {
+  .chat-rhid-attendance-report { padding: 0 10px 12px; }
+  .chat-rhid-attendance-report__header { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 16px 0 11px; }
+  .chat-rhid-attendance-report__identity { grid-column: 1 / -1; }
+  .chat-rhid-attendance-report__updated, .chat-rhid-attendance-report__date { padding: 10px; }
+  .chat-rhid-attendance-report__updated strong { font-size: 24px; }
+  .chat-rhid-attendance-report__date time { font-size: 16px; }
+  .chat-rhid-attendance-report__summary { padding-top: 10px; }
+  .chat-rhid-attendance-report__summary > div { display: flex; flex-direction: column; gap: 3px; padding: 0 7px; }
+  .chat-rhid-attendance-report__summary-value { font-size: 21px; }
+  .chat-rhid-attendance-report__summary span { font-size: 8px; }
+  .chat-rhid-attendance-card { padding: 9px 8px; }
+  .chat-rhid-attendance-card__main { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.8fr) minmax(70px, .7fr); gap: 6px; }
+  .chat-rhid-attendance-card__slots { gap: 5px; }
+  .chat-rhid-attendance-card__slot span { font-size: 7px; }
+  .chat-rhid-attendance-card__slot strong { font-size: 11px; }
+  .chat-rhid-attendance-card__total { padding: 7px 3px; }
+  .chat-rhid-attendance-card__total strong { font-size: 16px; }
+  .chat-rhid-attendance-card__total span { font-size: 7px; }
+}
 @media (max-width: 600px) {
   .chat-message--rhid-report .chat-bubble { padding: 10px 7px; }
   .chat-message--rhid-report .chat-bubble > p { font-size: 12px; line-height: 1.3; }
