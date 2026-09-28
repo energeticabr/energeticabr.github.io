@@ -487,12 +487,20 @@ button { touch-action: manipulation; }
 .chat-message--rhid-report { gap: 0; }
 .chat-message--rhid-report .chat-bubble { box-sizing: border-box; flex: 1 1 100%; width: 100%; max-width: none; min-width: 0; }
 .chat-rhid-attendance-table { max-width: 100%; margin: 9px 0 12px; overflow: hidden; border: 1px solid #bed6d0; border-radius: 11px; background: #fff; }
+.chat-rhid-date-navigation { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 7px 9px; border-bottom: 1px solid #dce8e5; background: #fff; }
+.chat-rhid-date-navigation__button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 0; border: 1px solid #0c5f4d; border-radius: 9px; color: #0c5f4d; background: #f4faf8; font: inherit; font-size: 24px; font-weight: 800; line-height: 1; cursor: pointer; }
+.chat-rhid-date-navigation__button:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.chat-rhid-date-navigation__button:disabled { opacity: .55; cursor: wait; }
+.chat-rhid-date-navigation__date { min-width: 0; color: #173042; font-size: 15px; font-weight: 850; text-align: center; font-variant-numeric: tabular-nums; }
 .chat-rhid-attendance-table__heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 9px 12px; color: #0c5f4d; background: #e7f5f0; font-size: 13px; }
 .chat-rhid-attendance-table__heading small { font-size: 10px; font-weight: 700; }
 .chat-rhid-attendance-table__share { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; margin-left: auto; padding: 6px 10px; border: 1px solid #0c5f4d; border-radius: 8px; color: #0c5f4d; background: #fff; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .chat-rhid-attendance-table__share:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
 .chat-rhid-attendance-table__share:disabled { opacity: .55; cursor: wait; }
 .chat-rhid-attendance-table__heading .chat-rhid-attendance-table__updated { flex-basis: 100%; color: #164b58; overflow-wrap: anywhere; }
+.chat-rhid-attendance-table__status, .chat-rhid-attendance-table__error { margin: 0; padding: 7px 10px; font-size: 12px; font-weight: 700; }
+.chat-rhid-attendance-table__status { color: #164b58; background: #f2f8f6; }
+.chat-rhid-attendance-table__error { color: #8b1e18; background: #fff0ef; }
 .chat-rhid-attendance-table__scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
 .chat-rhid-attendance-table__scroll:focus-visible { outline: 3px solid #e3aa19; outline-offset: -3px; }
 .chat-rhid-attendance-table table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
@@ -507,6 +515,7 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__entry { color: #146b36; font-weight: 800; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__exit { color: #ad2525; font-weight: 800; }
 .chat-rhid-attendance-table .chat-rhid-attendance-table__total { min-width: 126px; color: #145b3a; font-weight: 800; }
+.chat-rhid-attendance-table__empty { margin: 0; padding: 14px 10px; color: #53676f; text-align: center; font-weight: 700; }
 @media (max-width: 600px) {
   .chat-message--rhid-report .chat-bubble { padding: 10px 7px; }
   .chat-message--rhid-report .chat-bubble > p { font-size: 12px; line-height: 1.3; }
