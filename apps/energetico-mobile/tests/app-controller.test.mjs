@@ -5166,6 +5166,76 @@ test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
   h.controller.stop();
 });
 
+test("trata conclusão já gravada como sucesso quando a confirmação da VM é perdida", async () => {
+  const h = makeHarness();
+  let snapshotCalls = 0;
+  h.client.getDelegatedTasks = async () => {
+    snapshotCalls += 1;
+    return {
+      rows: snapshotCalls === 1
+        ? [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }]
+        : [],
+    };
+  };
+  h.client.completeDelegatedTask = async () => {
+    const error = new Error("A conexão foi interrompida antes da confirmação.");
+    error.code = "NETWORK_UNCERTAIN";
+    throw error;
+  };
+
+  await h.controller.start();
+  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
+
+  assert.equal(completed, true);
+  assert.equal(snapshotCalls, 2);
+  assert.deepEqual(h.view.renders.at(-1).delegatedTasks.rows, []);
+  assert.equal(h.view.renders.at(-1).error, null);
+  h.controller.stop();
+});
+
+test("não repete a escrita quando a confirmação chega sem a nova lista", async () => {
+  const h = makeHarness();
+  let snapshotCalls = 0;
+  h.client.getDelegatedTasks = async () => {
+    snapshotCalls += 1;
+    if (snapshotCalls > 1) throw new Error("A leitura da lista demorou.");
+    return { rows: [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }] };
+  };
+  h.client.completeDelegatedTask = async () => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Tarefa concluída." }],
+  });
+
+  await h.controller.start();
+  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
+
+  assert.equal(completed, true);
+  assert.equal(snapshotCalls, 2);
+  assert.deepEqual(h.view.renders.at(-1).delegatedTasks.rows, []);
+  assert.equal(h.view.renders.at(-1).error, null);
+  h.controller.stop();
+});
+
+test("mantém o erro quando a tarefa continua pendente após a reconciliação", async () => {
+  const h = makeHarness();
+  h.client.getDelegatedTasks = async () => ({
+    rows: [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }],
+  });
+  h.client.completeDelegatedTask = async () => {
+    const error = new Error("A VM recusou a conclusão.");
+    error.status = 400;
+    throw error;
+  };
+
+  await h.controller.start();
+  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
+
+  assert.equal(completed, false);
+  assert.match(h.view.renders.at(-1).error, /VM recusou/);
+  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 1);
+  h.controller.stop();
+});
+
 test("ações da prévia permitem editar assinatura ou voltar para a escolha", async () => {
   const h = makeHarness();
   h.client.fetchMedia = async item => new Blob([item.id], {

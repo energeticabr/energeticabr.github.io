@@ -1521,6 +1521,24 @@ export function createAppController({
     return delegatedTasksRequest;
   }
 
+  function delegatedTaskIsPending(taskId) {
+    const id = String(taskId || "").trim();
+    return Boolean(id && delegatedTasksSnapshot?.rows?.some(row => String(row.id) === id));
+  }
+
+  async function reconcileDelegatedTaskCompletion(taskId) {
+    // A completion is a write. If the response is lost after SharePoint has
+    // accepted it, the only safe recovery is to read the pending list again
+    // and check whether the submitted item is gone. Do not retry the write.
+    if (!delegatedTaskIsPending(taskId)) return false;
+    await refreshDelegatedTasksSnapshot();
+    return Boolean(
+      delegatedTasksSnapshot
+      && Array.isArray(delegatedTasksSnapshot.rows)
+      && !delegatedTaskIsPending(taskId),
+    );
+  }
+
   async function refreshRhidAttendance() {
     if (!account || stopped || typeof client.refreshRhidAttendance !== "function"
       || typeof client.getRhidRefreshStatus !== "function") {
@@ -1715,10 +1733,26 @@ export function createAppController({
     try {
       const result = await client.completeDelegatedTask(id);
       if (result?.delegatedTasks) delegatedTasksSnapshot = normalizeDelegatedTasks(result.delegatedTasks, account);
-      else await refreshDelegatedTasksSnapshot();
+      else {
+        // Keep the successful write visible even when the follow-up snapshot
+        // is unavailable. A later foreground refresh can reconcile the list.
+        if (delegatedTasksSnapshot?.rows) {
+          delegatedTasksSnapshot = {
+            ...delegatedTasksSnapshot,
+            rows: delegatedTasksSnapshot.rows.filter(row => String(row.id) !== id),
+          };
+        }
+        await refreshDelegatedTasksSnapshot();
+      }
+      sessionError = null;
       render();
       return true;
     } catch (error) {
+      if (await reconcileDelegatedTaskCompletion(id)) {
+        sessionError = null;
+        render();
+        return true;
+      }
       setSessionError(error, "Não foi possível concluir a tarefa delegada.");
       return false;
     }
