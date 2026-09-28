@@ -49,6 +49,13 @@ test("web ativa somente a etapa atual", async () => {
   assert.match(webEntry, /createConversationStore\(\{\s*historyMode:\s*"current-step"\s*\}\)/);
 });
 
+test("PWA força a instalação de um service worker novo quando o shell muda", async () => {
+  const webEntry = await readFile(new URL("../src/web/main.js", import.meta.url), "utf8");
+  const serviceWorker = await readFile(new URL("../pwa/service-worker.js", import.meta.url), "utf8");
+  assert.match(webEntry, /service-worker\.js\?v=5/);
+  assert.match(serviceWorker, /energetico-shell-v5/);
+});
+
 test("PWA inclui o CSS da galeria de documentos no bundle web", async () => {
   const webEntry = await readFile(new URL("../src/web/main.js", import.meta.url), "utf8");
   assert.match(webEntry, /import\s+"\.\.\/ui\/registration-gallery\.css"/);

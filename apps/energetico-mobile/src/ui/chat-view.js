@@ -849,10 +849,11 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
-function rhidAttendanceTableMarkup(table, messageId) {
+function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
   const headers = table.headers;
   const rows = table.rows.filter(Array.isArray);
+  const refreshButton = `<button class="chat-rhid-attendance-table__refresh${rhidRefresh?.busy ? " chat-rhid-attendance-table__refresh--busy" : ""}" type="button" data-action="rhid-refresh" aria-label="Atualizar RHID e SharePoint" title="Consultar dados já transmitidos ao RHID e atualizar o SharePoint"${rhidRefresh?.busy ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v5h5M4 13a8 8 0 0 0 14.9 4M20 20v-5h-5"/></svg></button>`;
   const shareButton = rows.length && isValidRhidReportDate(table.reportDate) && messageId
     ? `<button class="chat-rhid-attendance-table__share" type="button" data-action="share-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Compartilhar relatório RHID em PDF">↗ Compartilhar PDF</button>`
     : "";
@@ -884,7 +885,7 @@ function rhidAttendanceTableMarkup(table, messageId) {
       <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
       <div><strong class="chat-rhid-attendance-report__summary-value chat-rhid-attendance-report__summary-value--missing">${String(summary.withoutPunches).padStart(2, "0")}</strong><span>SEM MARCAÇÃO</span></div>
     </div>
-    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong>${shareButton}</div>
+    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong><div class="chat-rhid-attendance-report__toolbar-actions">${refreshButton}${shareButton}</div></div>
     ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
       ${rows.map(row => {
         const noPunches = isRhidAttendanceRowWithoutPunches(row);
@@ -1099,7 +1100,7 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
   return "<div class=\"chat-epi-product-select chat-choice-list\">" + rows + selectAll + finalize + "</div>";
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null) {
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1243,7 +1244,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${launchPaymentSummary || rhidAttendanceReport ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
-    ${rhidAttendanceTableMarkup(presenceTable, message.id)}
+    ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}
@@ -1347,7 +1348,7 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
@@ -1355,7 +1356,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const taskMenu = isDemandsTaskMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -1977,7 +1978,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll, rhidRefresh })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
