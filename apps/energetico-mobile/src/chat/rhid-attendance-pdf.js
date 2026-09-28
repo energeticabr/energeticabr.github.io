@@ -168,8 +168,11 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
   }
 
   function drawCard(row, name, rowFill, slots, total, isPartial) {
-    const nameLines = wrapText(name, bold, 10.5, 178);
-    const cardHeight = Math.max(58, 27 + nameLines.length * 10 + Math.ceil(slots.length / 4) * 17);
+    const nameLines = wrapText(name, bold, 10.5, INNER_WIDTH - 32);
+    const nameLineHeight = 12;
+    const slotRows = Math.max(1, Math.ceil(slots.length / 4));
+    const detailsHeight = Math.max(45, slotRows * 17 + 8);
+    const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight);
     ensureSpace(cardHeight + 4);
     const cardTop = y;
     page.drawRectangle({
@@ -182,11 +185,12 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
       borderWidth: 0.8,
       borderRadius: 9,
     });
-    nameLines.forEach((line, index) => drawText(line, MARGIN + 16, cardTop - 19 - index * 12, bold, 10.5, ink));
-    if (rowFill === noPunchFill) drawBadge("SEM MARCAÇÃO", MARGIN + 16, cardTop - 19 - nameLines.length * 12, 72);
-    const contentX = MARGIN + 16 + 178;
+    nameLines.forEach((line, index) => drawText(line, MARGIN + 16, cardTop - 19 - index * nameLineHeight, bold, 10.5, ink));
+    const detailsTop = cardTop - 19 - nameLines.length * nameLineHeight - (rowFill === noPunchFill ? 17 : 7);
+    if (rowFill === noPunchFill) drawBadge("SEM MARCAÇÃO", MARGIN + 16, detailsTop + 8, 72);
+    const contentX = MARGIN + 16;
     const totalX = PAGE_WIDTH - MARGIN - 106;
-    const slotStartY = cardTop - 17;
+    const slotStartY = detailsTop - 4;
     const slotWidth = 56;
     for (let index = 0; index < slots.length; index += 1) {
       const rowIndex = Math.floor(index / 4);
@@ -198,11 +202,11 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
       drawText(slot.label, x, slotStartY - rowIndex * 17, regular, 6.5, muted);
       drawText(slot.value, x, slotStartY - 10 - rowIndex * 17, bold, 9.5, slotColor);
     }
-    page.drawRectangle({ x: totalX, y: cardTop - cardHeight + 9, width: 90, height: cardHeight - 18, color: rowFill === noPunchFill ? rgb(0.98, 0.90, 0.72) : blueFill, borderRadius: 7 });
-    drawCentered("TOTAL DE HORAS/DIA", totalX + 45, cardTop - 18, bold, 6.5, muted);
+    page.drawRectangle({ x: totalX, y: detailsTop - detailsHeight, width: 90, height: detailsHeight, color: rowFill === noPunchFill ? rgb(0.98, 0.90, 0.72) : blueFill, borderRadius: 7 });
+    drawCentered("TOTAL DE HORAS/DIA", totalX + 45, detailsTop - 8, bold, 6.5, muted);
     const displayTotal = total.replace(/\s*\(parcial\)/i, "").trim() || "—";
-    drawCentered(displayTotal, totalX + 45, cardTop - 34, bold, 15, navy);
-    if (isPartial) drawBadge("PARCIAL", totalX + 22, cardTop - 49, 46);
+    drawCentered(displayTotal, totalX + 45, detailsTop - 23, bold, 15, navy);
+    if (isPartial) drawBadge("PARCIAL", totalX + 22, detailsTop - 39, 46);
     y = cardTop - cardHeight - 4;
   }
 

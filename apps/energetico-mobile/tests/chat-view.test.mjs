@@ -332,6 +332,15 @@ test("relatório RHID segue o layout diário com indicadores e cartões individu
   assert.equal(report.querySelectorAll(".chat-rhid-attendance-card__entry").length, 3);
   assert.equal(report.querySelectorAll(".chat-rhid-attendance-card__exit").length, 2);
   assert.match(report.querySelector(".chat-rhid-attendance-card__total")?.textContent || "", /04:59/);
+  const firstCard = report.querySelector(".chat-rhid-attendance-card");
+  const person = firstCard?.querySelector(".chat-rhid-attendance-card__person");
+  const details = firstCard?.querySelector(".chat-rhid-attendance-card__details");
+  assert.equal(person?.nextElementSibling, details, "o nome deve ocupar uma faixa própria acima dos horários");
+  assert.equal(firstCard?.querySelector(".chat-rhid-attendance-card__total strong")?.textContent, "04:59");
+  assert.equal(firstCard?.querySelector(".chat-rhid-attendance-card__total small")?.textContent, "PARCIAL");
+  assert.doesNotMatch(firstCard?.querySelector(".chat-rhid-attendance-card__total strong")?.textContent || "", /parcial/i);
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.chat-rhid-attendance-card__person h3\s*\{[^}]*white-space:\s*nowrap/s);
   assert.ok(report.querySelector(".chat-rhid-attendance-card--no-punches"));
   assert.match(report.querySelector(".chat-rhid-attendance-card--no-punches")?.textContent || "", /SEM MARCAÇÃO/);
   assert.equal(report.querySelector("table"), null, "a apresentação não deve voltar à tabela horizontal");

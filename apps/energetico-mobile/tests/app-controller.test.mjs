@@ -386,7 +386,9 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
       assert.notEqual(start, -1, `PDF compartilhado sem ${name}`);
       const nextNames = expectedRows.slice(index + 1).map(next => text.indexOf(next[0], start + name.length)).filter(position => position >= 0);
       const end = nextNames.length ? Math.min(...nextNames) : text.length;
-      const section = text.slice(start, end).replaceAll("ÚLTIMA COLETA DO RHID ÀS 18:19", "");
+      const section = text.slice(start, end)
+        .replaceAll("ÚLTIMA COLETA DO RHID ÀS 18:19", "")
+        .replaceAll(/\b18:19\b/g, "");
       const expectedTimes = row.slice(1, -1).filter(value => /^\d{2}:\d{2}$/.test(value));
       const totalTime = row.at(-1).match(/^(\d{2}:\d{2})/)?.[1];
       if (totalTime) expectedTimes.push(totalTime);
