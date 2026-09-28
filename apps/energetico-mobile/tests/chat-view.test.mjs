@@ -235,6 +235,24 @@ test("relatório RHID oferece compartilhar PDF da própria mensagem", () => {
   dom.window.close();
 });
 
+test("não oferece compartilhar RHID quando a data é impossível", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-invalid-date",
+    role: "assistant",
+    type: "poll",
+    question: "📊 RELATÓRIO DE PRESENÇAS RHID — 31/02/2026",
+    options: [],
+    detail_table: {
+      kind: "rhid_attendance",
+      reportDate: "2026-02-31",
+      title: "📋 PRESENÇAS • 31/02/2026",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }));
+  assert.doesNotMatch(markup, /data-action="share-rhid-attendance-report"/);
+});
+
 test("relatório RHID exibe uma tabela única com colunas de batidas e total", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-table", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],

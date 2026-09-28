@@ -1,7 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
-import { buildRhidAttendanceTable, rhidUpdateLabel } from "./chat/rhid-attendance-table.js";
+import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -1519,7 +1519,7 @@ export function createAppController({
 
   async function generateRhidAttendanceReport(selectedDate, { openPdf = false } = {}) {
     const day = String(selectedDate || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    if (!isValidRhidReportDate(day)) {
       view.setRhidAttendanceReportStatus?.({ error: "Selecione uma data válida." });
       return false;
     }
@@ -1537,7 +1537,8 @@ export function createAppController({
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
-        const reportDate = formatDatePickerValue(report.date || day);
+        const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
+        const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         const table = buildRhidAttendanceTable(rows);
         const updateLabel = rhidUpdateLabel(report);
@@ -1548,7 +1549,7 @@ export function createAppController({
             options: [],
             detail_table: {
               ...table,
-              reportDate: report.date || day,
+              reportDate: reportDay,
               title: `📋 PRESENÇAS • ${reportDate}`,
               updateLabel,
             },

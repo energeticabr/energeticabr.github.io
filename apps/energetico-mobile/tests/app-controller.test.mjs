@@ -167,6 +167,18 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
   await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
   const report = h.store.getState().messages.at(-1);
   assert.equal(report.detail_table.rows.length, 9, "a tela e o PDF devem partir das mesmas nove pessoas");
+  const expectedRows = [
+    ["BERNARDO NOTINI MOREIRA BAHIA", "12:31", "—", "—", "—", "— (parcial)"],
+    ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"],
+    ["EDGAR NELSON DA SILVA", "06:55", "12:00", "—", "—", "05:05"],
+    ["FELICIANO ROGERIO DA SILVA", "06:54", "12:04", "13:00", "16:01", "08:11"],
+    ["HELISON ROSA LUIS", "07:01", "12:05", "13:01", "—", "05:04 (parcial)"],
+    ["JOSE GERALDO DOS SANTOS", "07:00", "12:04", "12:56", "16:04", "08:12"],
+    ["LUIZ BERNARDO DOS SANTOS", "06:54", "12:10", "16:00", "—", "05:16 (parcial)"],
+    ["MAURICIO HONORATO DE SOUZA", "06:53", "12:01", "12:59", "15:52", "08:01"],
+    ["MAURO ANTONIO PEREIRA", "06:57", "12:00", "13:03", "16:01", "08:01"],
+  ];
+  assert.deepEqual(report.detail_table.rows, expectedRows, "a tabela deve manter cada horário na linha do colaborador da tela");
   await h.view.emit("share-rhid-attendance-report", { messageId: report.id });
 
   assert.deepEqual(requested, ["2026-09-25"], "compartilhar deve usar a tabela já consultada, sem uma segunda fonte ou data");
@@ -183,19 +195,36 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
       pages.push(await (await viewer.getPage(pageNumber)).getTextContent());
     }
     const text = pages.flatMap(page => page.items).map(item => item.str).join(" ");
-    for (const name of [
-      "BERNARDO NOTINI MOREIRA BAHIA", "CLEITON CESAR NONATO", "EDGAR NELSON DA SILVA",
-      "FELICIANO ROGERIO DA SILVA", "HELISON ROSA LUIS", "JOSE GERALDO DOS SANTOS",
-      "LUIZ BERNARDO DOS SANTOS", "MAURICIO HONORATO DE SOUZA", "MAURO ANTONIO PEREIRA",
-    ]) assert.ok(text.includes(name), `PDF compartilhado sem ${name}`);
-    for (const time of ["12:31", "06:58", "15:50", "06:55", "12:00", "13:00", "16:01", "07:01", "12:05", "13:01", "07:00", "12:04", "12:56", "16:04", "06:54", "12:10", "16:00", "06:53", "15:52", "06:57", "13:03"]) {
-      assert.ok(text.includes(time), `PDF compartilhado sem a batida ${time}`);
+    for (let index = 0; index < expectedRows.length; index += 1) {
+      const row = expectedRows[index];
+      const name = row[0];
+      const start = text.indexOf(name);
+      assert.notEqual(start, -1, `PDF compartilhado sem ${name}`);
+      const nextNames = expectedRows.slice(index + 1).map(next => text.indexOf(next[0], start + name.length)).filter(position => position >= 0);
+      const end = nextNames.length ? Math.min(...nextNames) : text.length;
+      const section = text.slice(start, end).replaceAll("ÚLTIMA COLETA DO RHID ÀS 18:19", "");
+      const expectedTimes = row.slice(1, -1).filter(value => /^\d{2}:\d{2}$/.test(value));
+      const totalTime = row.at(-1).match(/^(\d{2}:\d{2})/)?.[1];
+      if (totalTime) expectedTimes.push(totalTime);
+      assert.deepEqual(section.match(/\b\d{2}:\d{2}\b/g) || [], expectedTimes, `PDF deve associar apenas as batidas e total de ${name}`);
     }
     assert.ok(text.includes("25/09/2026"), "PDF deve exibir a data da tabela selecionada");
     assert.ok(text.includes("ÚLTIMA COLETA DO RHID ÀS 18:19"), "PDF deve preservar o horário de coleta do relatório");
   } finally {
     await task.destroy();
   }
+});
+
+test("não consulta RHID para uma data impossível no calendário", async t => {
+  const h = makeHarness();
+  let calls = 0;
+  h.client.getRhidAttendanceReport = async () => { calls += 1; return { rows: [] }; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const result = await h.view.emit("rhid-attendance-report-generate", { value: "2026-02-31" });
+  assert.equal(result, false);
+  assert.equal(calls, 0);
 });
 
 test("relatório RHID reúne batidas da mesma pessoa, ordena horários e sinaliza total parcial", async t => {

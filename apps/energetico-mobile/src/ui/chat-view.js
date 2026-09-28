@@ -5,6 +5,7 @@ import { signatureDocumentLayout as documentSignatureLayout } from "../web/signa
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
+import { isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
@@ -851,7 +852,7 @@ function presenceDetailTableMarkup(table) {
 function rhidAttendanceTableMarkup(table, messageId) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return "";
   const headers = table.headers;
-  const shareButton = /^\d{4}-\d{2}-\d{2}$/.test(String(table.reportDate || "")) && messageId
+  const shareButton = isValidRhidReportDate(table.reportDate) && messageId
     ? `<button class="chat-rhid-attendance-table__share" type="button" data-action="share-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Compartilhar relatório RHID em PDF">↗ Compartilhar PDF</button>`
     : "";
   return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
