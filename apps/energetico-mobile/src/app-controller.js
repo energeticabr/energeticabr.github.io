@@ -3400,17 +3400,17 @@ export function createAppController({
       try {
         if (!launchGallery) {
           const panel = await launchGalleryFactory({
-            loadOrderSnapshot: async () => {
+            loadOrderSnapshot: async ({ signal } = {}) => {
               assertSession();
               const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
               if (typeof data.loadSnapshot !== "function") throw new Error("A consulta de pedidos do SharePoint não está disponível.");
-              const snapshot = await data.loadSnapshot();
+              const snapshot = await data.loadSnapshot({ signal });
               assertSession();
               return snapshot;
             },
-            request: async (operation, payload) => {
+            request: async (operation, payload, options) => {
               assertSession();
-              const result = await client.launchGalleryRequest(operation, payload);
+              const result = await client.launchGalleryRequest(operation, payload, options);
               assertSession();
               return result;
             },

@@ -834,13 +834,15 @@ test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup
   let callbacks;
   let reads = 0;
   let tokenScopes;
+  let receivedSignal;
   const h = makeHarness({
     launchGalleryFactory: async options => {
       callbacks = options;
       return { async open() {}, destroy() {} };
     },
     ordersGalleryDataFactory: async ({ tokenProvider }) => ({
-      async loadSnapshot() {
+      async loadSnapshot({ signal } = {}) {
+        receivedSignal = signal;
         reads += 1;
         assert.equal(await tokenProvider(["Sites.Read.All"]), "sharepoint-token");
         return { rows: [{ id: "334", fields: { FORNECEDOR: "Fornecedor A" } }] };
@@ -852,8 +854,10 @@ test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup
   await h.controller.start();
   await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
 
-  const snapshot = await callbacks.loadOrderSnapshot();
+  const controller = new AbortController();
+  const snapshot = await callbacks.loadOrderSnapshot({ signal: controller.signal });
   assert.equal(reads, 1);
+  assert.equal(receivedSignal, controller.signal);
   assert.deepEqual(tokenScopes, ["Sites.Read.All"]);
   assert.equal(snapshot.rows[0].id, "334");
 });
