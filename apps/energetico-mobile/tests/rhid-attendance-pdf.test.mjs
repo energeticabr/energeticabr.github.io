@@ -107,6 +107,24 @@ test("gera PDF válido com aviso quando não há presenças", async () => {
   }
 });
 
+test("PDF do app omite apenas ausentes inativos e mantém batidas anteriores", async () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "ARTHUR INATIVO", STATUS_RHID: "INATIVO", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "4", NOME_COLABORADOR: "EX-ATIVO COM PONTO", STATUS_RHID: "INATIVO", BATIDAS_RHID: "2026-09-25 07:00; 2026-09-25 12:00" },
+    { ID_PESSOA_RHID: "5", NOME_COLABORADOR: "ATIVO AUSENTE", STATUS_RHID: "SEM BATIDAS", BATIDAS_RHID: "" },
+  ]);
+  const { loadingTask, pages } = await inspect(await buildPdf(table, { dateLabel: "25/09/2026" }));
+  try {
+    const text = pages.flatMap(page => page.items.map(item => item.str)).join(" ");
+    assert.doesNotMatch(text, /ARTHUR INATIVO/);
+    assert.match(text, /EX-ATIVO COM PONTO/);
+    assert.match(text, /07:00/);
+    assert.match(text, /ATIVO AUSENTE/);
+  } finally {
+    await loadingTask.destroy();
+  }
+});
+
 test("mantém travessão e total parcial da tabela RHID", async () => {
   const table = buildRhidAttendanceTable([
     { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA SOUZA", BATIDAS_RHID: "07:00; 12:00; 13:00" },

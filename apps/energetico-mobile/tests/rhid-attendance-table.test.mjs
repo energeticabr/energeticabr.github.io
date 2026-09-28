@@ -36,6 +36,41 @@ test("inclui cadastrados sem batidas ao final e omite cadastro NÃO APAGAR", () 
   assert.equal(rhid.isRhidAttendanceRowWithoutPunches(table.rows[1]), true);
 });
 
+test("omite inativos sem batidas e preserva inativos com batidas históricas", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "ARTHUR", STATUS_RHID: "INATIVO", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "8", NOME_COLABORADOR: "SERVENTE 1", STATUS_RHID: "SEM BATIDAS", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "8", NOME_COLABORADOR: "SERVENTE 1", STATUS_RHID: " inativo ", BATIDAS_RHID: null },
+    { ID_PESSOA_RHID: "4", NOME_COLABORADOR: "EX-FUNCIONÁRIO", STATUS_RHID: "INATIVO", BATIDAS_RHID: "2026-09-25 07:01; 2026-09-25 12:05" },
+    { ID_PESSOA_RHID: "6", NOME_COLABORADOR: "EX-FUNCIONÁRIO COM DUPLICATA", STATUS_RHID: "INATIVO", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "6", NOME_COLABORADOR: "EX-FUNCIONÁRIO COM DUPLICATA", STATUS_RHID: "MARCAÇÃO RECEBIDA", BATIDAS_RHID: "2026-09-25 06:58" },
+    { ID_PESSOA_RHID: "5", NOME_COLABORADOR: "ATIVO SEM BATIDA", STATUS_RHID: "SEM BATIDAS", BATIDAS_RHID: "" },
+  ]);
+
+  assert.deepEqual(table.rows.map(row => row[0]), [
+    "EX-FUNCIONÁRIO", "EX-FUNCIONÁRIO COM DUPLICATA", "ATIVO SEM BATIDA",
+  ]);
+  assert.deepEqual(table.rows[0].slice(1, 3), ["07:01", "12:05"]);
+  assert.equal(table.rows[1][1], "06:58");
+  assert.equal(rhid.isRhidAttendanceRowWithoutPunches(table.rows[2]), true);
+});
+
+test("não confunde pessoas com mesmo nome e IDs RHID diferentes", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "10", NOME_COLABORADOR: "JOSE SILVA", STATUS_RHID: "INATIVO", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "11", NOME_COLABORADOR: "JOSE SILVA", STATUS_RHID: "SEM BATIDAS", BATIDAS_RHID: "" },
+  ]);
+  assert.deepEqual(table.rows.map(row => row[0]), ["JOSE SILVA"]);
+});
+
+test("consolida o mesmo ID RHID mesmo com variação de espaços no nome", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "8", NOME_COLABORADOR: "SERVENTE 1", STATUS_RHID: "INATIVO", BATIDAS_RHID: "" },
+    { ID_PESSOA_RHID: "8", NOME_COLABORADOR: "SERVENTE  1", STATUS_RHID: "SEM BATIDAS", BATIDAS_RHID: "" },
+  ]);
+  assert.deepEqual(table.rows, []);
+});
+
 test("valida a data RHID como uma data real do calendário", () => {
   assert.equal(typeof rhid.isValidRhidReportDate, "function");
   assert.equal(rhid.isValidRhidReportDate("2026-09-25"), true);
