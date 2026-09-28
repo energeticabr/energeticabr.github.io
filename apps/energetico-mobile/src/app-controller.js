@@ -1585,6 +1585,7 @@ export function createAppController({
       } catch (error) {
         if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
           if (replaceMessageId) {
+            const retryMessage = "Não foi possível atualizar o relatório. Tente novamente.";
             const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
             const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
             if (currentMessage?.type === "poll" && currentTable?.kind === "rhid_attendance") {
@@ -1593,10 +1594,11 @@ export function createAppController({
                 detail_table: {
                   ...currentTable,
                   navigationBusy: false,
-                  navigationError: "Não foi possível atualizar o relatório. Tente novamente.",
+                  navigationError: retryMessage,
                 },
               });
             }
+            view.setRhidAttendanceReportStatus?.({ busy: false, error: retryMessage });
           } else if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
           else view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
         }
@@ -5159,7 +5161,9 @@ export function createAppController({
     bind("remove-pending-provision-upload", command => removePendingProvisionUpload(command.paymentId, command.uploadId));
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
-    bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value));
+    bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value, {
+      replaceMessageId: command.messageId || "",
+    }));
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
     bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));

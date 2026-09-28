@@ -5709,6 +5709,42 @@ test("relatório RHID mostra navegação diária centrada sem o cabeçalho Energ
   dom.window.close();
 });
 
+test("ícone de calendário abre o relatório exibido na data atual e consulta a data selecionada no mesmo cartão", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const requests = [];
+  view.on("rhid-attendance-report-generate", event => requests.push(event));
+  view.render(signedInState({
+    activeFlow: { title: "👥 RECURSOS HUMANOS" },
+    messages: [{
+      id: "rhid-calendar-25", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+      detail_table: {
+        kind: "rhid_attendance", reportDate: "2026-09-25", title: "PRESENÇAS • 25/09/2026",
+        headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+        rows: [["ANA", "07:00", "12:00", "05:00"]],
+      },
+    }],
+  }));
+
+  const calendar = root.querySelector('.chat-flow-status [data-action="open-rhid-attendance-report"]');
+  assert.ok(calendar, "o botão Ver resumo deve virar um ícone de calendário no relatório RHID");
+  assert.match(calendar.textContent, /📅/);
+  assert.equal(calendar.getAttribute("aria-label"), "Alterar data do relatório RHID");
+  assert.equal(calendar.dataset.messageId, "rhid-calendar-25");
+  assert.equal(root.querySelector('.chat-flow-status [data-action="show-summary"]'), null);
+
+  calendar.click();
+  const dateInput = root.querySelector('[data-role="rhid-attendance-report-date"]');
+  assert.equal(dateInput?.value, "2026-09-25", "o seletor deve começar na data já exibida");
+  dateInput.value = "2026-09-26";
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+
+  assert.deepEqual(requests, [{ type: "rhid-attendance-report-generate", value: "2026-09-26", messageId: "rhid-calendar-25" }]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("relatório RHID vazio mantém as setas e informa que não há presenças", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-empty", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],

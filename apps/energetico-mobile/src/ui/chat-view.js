@@ -1296,11 +1296,18 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
     : "";
   const latestAssistantMessage = [...messages].reverse().find(message => message?.role !== "user");
   const quickRhid = isHumanResourcesMenu(latestAssistantMessage);
+  const attendanceTable = latestAssistantMessage?.detail_table || latestAssistantMessage?.detailTable;
+  const canChangeRhidReportDate = latestAssistantMessage?.type === "poll"
+    && attendanceTable?.kind === "rhid_attendance"
+    && Boolean(String(latestAssistantMessage?.id || "").trim())
+    && isValidRhidReportDate(attendanceTable.reportDate);
   const actions = homeOnly
     ? ""
     : `${finish}${quickRhid
       ? `<button class="chat-flow-summary" type="button" data-action="rhid-attendance-report-today" aria-label="Abrir relatório RHID de hoje"${busy ? " disabled" : ""}><span aria-hidden="true">📊</span> RHID</button>`
-      : `<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`}`;
+      : canChangeRhidReportDate
+        ? `<button class="chat-flow-summary chat-flow-summary--calendar" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(latestAssistantMessage.id)}" data-value="${escapeHtml(attendanceTable.reportDate)}" aria-label="Alterar data do relatório RHID" title="Alterar data do relatório RHID"${busy ? " disabled" : ""}><span aria-hidden="true">📅</span></button>`
+        : `<button class="chat-flow-summary" type="button" data-action="show-summary"${busy ? " disabled" : ""}>Ver resumo</button>`}`;
   return `<div class="chat-flow-status">
     <div class="chat-flow-navigation" aria-label="Navegação do fluxo">${back}${home}</div>
     <strong class="chat-flow-title" title="${escapeHtml(title)}">${escapeHtml(title)}</strong>
@@ -1601,21 +1608,22 @@ function datePickerMarkup(value = "") {
   </div>`;
 }
 
-function rhidAttendanceReportMarkup({ open = false, date = "", busy = false, error = "" } = {}) {
+function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "" } = {}) {
   if (!open) return "";
+  const changingExistingReport = Boolean(messageId);
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-rhid-attendance-report" data-rhid-attendance-report-dialog>
     <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="rhid-attendance-report-title">
       <div class="chat-date-picker__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
-        <h2 id="rhid-attendance-report-title">📊 Relatório de presenças RHID</h2>
+        <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
-      <p>Escolha a data das presenças que deseja consultar.</p>
+      <p>${changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
       <label for="rhidAttendanceReportDate">Data</label>
       <input class="chat-date-picker__input" id="rhidAttendanceReportDate" type="date" data-role="rhid-attendance-report-date" value="${escapeHtml(date || saoPauloDateIso())}" aria-label="Data do relatório"${busy ? " disabled" : ""}>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
-        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report"${busy ? " disabled" : ""}>${busy ? "⏳ Gerando…" : "Gerar relatório"}</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report"${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
       </div>
     </div>
   </div>`;
@@ -2010,6 +2018,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let datePickerValue = "";
   let rhidAttendanceReportOpen = false;
   let rhidAttendanceReportDate = "";
+  let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
   let rhidAttendanceReportError = "";
   let pendingDateSeparatorDeletion = null;
@@ -3002,11 +3011,29 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "open-rhid-attendance-report") {
       if (rhidAttendanceReportOpen) return;
+      rhidAttendanceReportMessageId = String(command.messageId || "").trim();
       rhidAttendanceReportOpen = true;
-      rhidAttendanceReportDate = saoPauloDateIso();
+      const currentMessage = rhidAttendanceReportMessageId
+        ? lastState?.messages?.find(message => String(message?.id || "") === rhidAttendanceReportMessageId)
+        : null;
+      const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
+      if (rhidAttendanceReportMessageId
+        && (currentMessage?.type !== "poll" || currentTable?.kind !== "rhid_attendance" || !isValidRhidReportDate(currentTable.reportDate))) {
+        rhidAttendanceReportOpen = false;
+        rhidAttendanceReportMessageId = "";
+        return;
+      }
+      rhidAttendanceReportDate = currentTable?.reportDate || saoPauloDateIso();
       rhidAttendanceReportBusy = false;
       rhidAttendanceReportError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
+      if (rhidAttendanceReportMessageId) {
+        globalThis.setTimeout?.(() => {
+          const input = root.querySelector('[data-role="rhid-attendance-report-date"]');
+          input?.focus?.();
+          try { input?.showPicker?.(); } catch { /* the native calendar picker is optional */ }
+        }, 0);
+      }
       return;
     }
     if (command.type === "rhid-attendance-report-today") {
@@ -3017,6 +3044,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (rhidAttendanceReportBusy) return;
       rhidAttendanceReportOpen = false;
       rhidAttendanceReportDate = "";
+      rhidAttendanceReportMessageId = "";
       rhidAttendanceReportError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
@@ -3034,7 +3062,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportBusy = true;
       rhidAttendanceReportError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
-      emit({ type: "rhid-attendance-report-generate", value: selectedDate });
+      emit({
+        type: "rhid-attendance-report-generate",
+        value: selectedDate,
+        ...(rhidAttendanceReportMessageId ? { messageId: rhidAttendanceReportMessageId } : {}),
+      });
       return;
     }
     if (command.type === "open-date-picker") {
@@ -3869,6 +3901,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReport: {
         open: rhidAttendanceReportOpen,
         date: rhidAttendanceReportDate,
+        messageId: rhidAttendanceReportMessageId,
         busy: rhidAttendanceReportBusy,
         error: rhidAttendanceReportError,
       },
@@ -3956,6 +3989,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!rhidAttendanceReportOpen) return false;
     rhidAttendanceReportOpen = false;
     rhidAttendanceReportDate = "";
+    rhidAttendanceReportMessageId = "";
     rhidAttendanceReportBusy = false;
     rhidAttendanceReportError = "";
     if (lastState) { const state = lastState; lastState = null; render(state); }
