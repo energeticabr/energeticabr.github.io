@@ -83,7 +83,7 @@ test("gera PDF RHID no layout diário com indicadores e cartões", async () => {
   }
 });
 
-test("quebra nomes extensos e pagina colaboradores sem cortar horários", async () => {
+test("mantém nomes extensos em uma linha e pagina colaboradores sem cortar horários", async () => {
   const longName = "ALEXANDRA MARIA APARECIDA DE OLIVEIRA FERREIRA SILVA DOS SANTOS";
   const table = {
     kind: "rhid_attendance",
@@ -107,7 +107,7 @@ test("quebra nomes extensos e pagina colaboradores sem cortar horários", async 
     for (const value of ["06:59", "12:01", "13:02", "18:03", "10:03"]) assert.ok(text.includes(value));
     const first = allItems.find(item => item.str.includes("ALEXANDRA"));
     const last = allItems.find(item => item.str.includes("DOS SANTOS"));
-    assert.notEqual(first.transform[5], last.transform[5], "nome longo deve ocupar mais de uma linha");
+    assert.equal(first.transform[5], last.transform[5], "nome longo deve permanecer em uma única linha");
     for (const { page, items } of pages) {
       const [width, height] = page.view.slice(2);
       for (const item of items) {
@@ -161,6 +161,25 @@ test("mantém travessão e total parcial da tabela RHID", async () => {
     assert.ok(text.includes("—"));
     assert.ok(text.includes("05:00"));
     assert.ok(text.includes("PARCIAL"));
+  } finally {
+    await loadingTask.destroy();
+  }
+});
+
+test("coloca o nome acima dos horários no cartão PDF e mantém parcial discreto", async () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA SOUZA", BATIDAS_RHID: "07:00; 12:00; 13:00" },
+  ]);
+  const { loadingTask, pages } = await inspect(await buildPdf(table));
+  try {
+    const items = pages[0].items;
+    const name = items.find(item => item.str === "ANA SOUZA");
+    const firstPunch = items.find(item => item.str === "07:00");
+    const partial = items.find(item => item.str === "PARCIAL");
+    assert.ok(name && firstPunch, "nome e horário devem existir no PDF");
+    assert.ok(name.transform[5] > firstPunch.transform[5] + 20, "nome deve ficar em uma faixa própria acima dos horários");
+    assert.ok(partial, "o indicador parcial deve continuar visível");
+    assert.ok(!items.some(item => item.str === "05:00 (parcial)"), "parcial não deve ficar junto do total grande");
   } finally {
     await loadingTask.destroy();
   }
