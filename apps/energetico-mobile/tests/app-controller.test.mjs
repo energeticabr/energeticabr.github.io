@@ -111,14 +111,21 @@ test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao 
     question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
     options: [{ id: "rhid-report", reply: "rhid-report", label: "RELATÓRIO DE PRESENÇAS RHID" }],
   };
-  h.client.getRhidAttendanceReport = async date => ({ date, rows: [] });
+  const requested = [];
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [] };
+  };
   t.after(() => h.controller.stop());
   await h.controller.start();
   h.store.ingestRemoteMessages([previousScreen]);
   assert.equal(h.store.getState().messages.at(-1)?.question, previousScreen.question, "a tela RH deve estar ativa antes da consulta");
 
   await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
-  assert.equal(h.store.getState().messages.at(-1)?.detail_table?.kind, "rhid_attendance");
+  const initialReport = h.store.getState().messages.at(-1);
+  assert.equal(initialReport?.detail_table?.kind, "rhid_attendance");
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: initialReport.id, value: "-1" });
+  assert.equal(h.store.getState().messages.at(-1)?.detail_table?.reportDate, "2026-09-27");
   const callsBeforeReturn = h.chatCalls.length;
 
   await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
@@ -126,6 +133,40 @@ test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao 
   assert.equal(h.chatCalls.length, callsBeforeReturn, "o retorno local não deve enviar navigation_back ao servidor");
   assert.equal(h.store.getState().messages.length, 1);
   assert.equal(h.store.getState().messages[0].question, previousScreen.question);
+  assert.deepEqual(requested, ["2026-09-28", "2026-09-27"]);
+});
+
+test("resposta tardia do RHID não substitui uma tela aberta durante a consulta", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  h.client.sendText = async () => ({
+    status: "processed",
+    messages: [{ type: "poll", question: "📦 OUTRA TELA", options: [] }],
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  await h.view.emit("select-reply", { replyId: "next-screen", label: "Abrir outra tela" });
+  assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
+
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
 });
 
 test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {

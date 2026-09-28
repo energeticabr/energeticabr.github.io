@@ -639,6 +639,7 @@ export function createAppController({
   let snapshotPending = null;
   const rhidAttendanceReportRequests = new Map();
   let rhidAttendanceReportPreviousSnapshot = null;
+  let rhidAttendanceReportNavigationRevision = 0;
   let rhidRefreshRequest = null;
   let resuming = false;
   let attachmentActionBusy = false;
@@ -1598,6 +1599,14 @@ export function createAppController({
       return false;
     }
     if (rhidAttendanceReportRequests.has(requestKey)) return rhidAttendanceReportRequests.get(requestKey);
+    const reportOrigin = store.getState();
+    const reportOriginSnapshot = !replaceMessageId ? {
+      messages: reportOrigin.messages,
+      activeFlow: reportOrigin.activeFlow,
+      completionNavigation: reportOrigin.completionNavigation,
+      attachments: reportOrigin.attachments,
+    } : null;
+    const navigationRevision = rhidAttendanceReportNavigationRevision;
     if (replaceMessageId) {
       const currentMessage = store.getState().messages.find(item => String(item?.id || "") === String(replaceMessageId));
       const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
@@ -1615,6 +1624,14 @@ export function createAppController({
       try {
         const report = await client.getRhidAttendanceReport(day);
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
+        const current = store.getState();
+        if (!replaceMessageId && (
+          rhidAttendanceReportNavigationRevision !== navigationRevision
+          || current.messages !== reportOriginSnapshot.messages
+          || current.activeText
+          || current.activeFlow !== reportOriginSnapshot.activeFlow
+          || current.completionNavigation !== reportOriginSnapshot.completionNavigation
+        )) return false;
         const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
@@ -1631,16 +1648,10 @@ export function createAppController({
             updateLabel,
           },
         };
-        const current = store.getState();
         if (replaceMessageId) {
           if (!store.replaceMessage?.(replaceMessageId, message)) return false;
         } else {
-          rhidAttendanceReportPreviousSnapshot = {
-            messages: current.messages,
-            activeFlow: current.activeFlow,
-            completionNavigation: current.completionNavigation,
-            attachments: current.attachments,
-          };
+          rhidAttendanceReportPreviousSnapshot = reportOriginSnapshot;
           store.ingestRemoteMessages([message], {
             resetConversation: false,
             activeFlow: current.activeFlow,
@@ -5070,7 +5081,13 @@ export function createAppController({
   }
 
   function bind(type, handler) {
-    unsubscribeCommands.push(view.on(type, handler));
+    unsubscribeCommands.push(view.on(type, command => {
+      if (rhidAttendanceReportRequests.has("new-report")
+        && ["select-reply", "send-text", "date-selected", "show-summary", "finish-flow"].includes(type)) {
+        rhidAttendanceReportNavigationRevision += 1;
+      }
+      return handler(command);
+    }));
   }
 
   function bindCommands() {
