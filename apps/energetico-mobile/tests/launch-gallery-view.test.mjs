@@ -316,6 +316,30 @@ test('order cluster timeout cancels a pending SharePoint snapshot too', async t 
   assert.match(ctx.root().querySelector('.lg-cluster-modal').textContent, /demorou mais/i);
 });
 
+test('order cluster aborts its sibling request when either data source fails', async t => {
+  const pendingLaunches = deferred();
+  const item = row(3451);
+  item.fields = { ...item.fields, AGRUPAR: '334' };
+  let launchSignal;
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => { throw new Error('SharePoint indisponível'); },
+    request: async (operation, payload, options) => {
+      if (operation === 'snapshot' && payload.pageSize === 100) {
+        launchSignal = options?.signal;
+        return pendingLaunches.promise;
+      }
+      return operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.match(modal.textContent, /SharePoint indisponível/);
+  assert.equal(launchSignal?.aborted, true);
+});
+
 test('order cluster joins AGRUPAR to the SharePoint order and renders the order plus all linked launches', async t => {
   const orderLaunch = row(3451);
   orderLaunch.fields = { ...orderLaunch.fields, AGRUPAR: '334', 'ID PEDIDO': 334, 'DATA DE COMPRA': '2026-09-27',

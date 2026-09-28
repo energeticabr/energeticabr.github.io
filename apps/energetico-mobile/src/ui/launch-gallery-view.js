@@ -766,6 +766,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       focus(closeButton);
     } catch (error) {
       if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+      cancelClusterLoad();
       const retry = button('Tentar novamente', () => { void openCluster(kind, value); }, { locked: false });
       clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), element('p', 'lg-error', failure(error, 'Não foi possível carregar o agrupamento')), retry);
       focus(retry);
