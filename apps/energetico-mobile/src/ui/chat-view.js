@@ -21,16 +21,24 @@ function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
 }
 
-function isStructuredVoicePrompt(message, visibleMessages, databaseFilter) {
+function isStructuredVoicePrompt(message, visibleMessages, databaseFilter, activeFlow = null) {
   if (databaseFilter || isActiveDateQuestion(visibleMessages) || isActiveDocumentIdQuestion(visibleMessages)) return true;
-  if (Array.isArray(message?.options) && message.options.length) return true;
+  if (Array.isArray(message?.options) && message.options.length) {
+    const diaryFlow = isVoiceInputFlow(activeFlow);
+    const flowActions = new Set(["abandon_construction_diary", "navigation_back", "navigation_main_menu"]);
+    const hasAnswerChoices = message.options.some(option => {
+      const replyId = String(option?.reply || option?.id || "").trim().toLocaleLowerCase("pt-BR");
+      return !diaryFlow || !flowActions.has(replyId);
+    });
+    if (hasAnswerChoices) return true;
+  }
   const question = String(message?.question || message?.prompt || "");
   return /(?:quantidade|quantos|quantas|n[úu]mero|cpf|cnpj|data|dia|hora|hor[áa]rio|valor|telefone|whatsapp|e-?mail)/i.test(question);
 }
 
 function shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice) {
   if (generatedSignatureChoice || !state?.activeFlow) return false;
-  if (isStructuredVoicePrompt(latestAssistantMessage, visibleMessages, databaseFilter)) return false;
+  if (isStructuredVoicePrompt(latestAssistantMessage, visibleMessages, databaseFilter, state.activeFlow)) return false;
   return isVoiceInputFlow(state.activeFlow)
     || Boolean(String(latestAssistantMessage?.question || latestAssistantMessage?.prompt || "").trim());
 }
