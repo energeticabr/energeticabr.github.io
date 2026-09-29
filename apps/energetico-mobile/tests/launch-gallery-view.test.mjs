@@ -225,6 +225,40 @@ test('launch card presents AGRUPAR and supplier as cluster actions while preserv
   assert.equal(card.querySelector('.lg-record-dates .lg-record-label')?.textContent, 'DATA DE COMPRA');
 });
 
+test('launch card keeps a compact summary and reveals secondary fields without hiding supplier or order actions', async t => {
+  const item = row(3451);
+  item.fields = { ...item.fields, AGRUPAR: 334, 'VALOR UNITÁRIO': 'R$ 30,00',
+    'DATA PGTO EFETUADO': '2026-09-25', 'QUANTIDADE DE ANEXOS': 2 };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open();
+
+  const card = ctx.root().querySelector('.lg-record');
+  const extra = card.querySelector('.lg-record-extra');
+  const expand = button(card, 'Ver mais informações');
+  assert.ok(extra, 'secondary launch fields are grouped in the disclosure');
+  assert.equal(extra.hidden, true);
+  assert.equal(expand.getAttribute('aria-expanded'), 'false');
+  assert.equal(card.querySelector('[data-cluster-kind="supplier"]')?.textContent, 'Fornecedor A');
+  assert.equal(card.querySelector('[data-cluster-kind="order"]')?.textContent, '334');
+  assert.match(card.querySelector('.lg-record-summary')?.textContent ?? '', /R\$\s*30,00/);
+  assert.match(card.querySelector('.lg-record-summary')?.textContent ?? '', /2\.5 SC/);
+  assert.equal(card.querySelector('.lg-record-media .lg-record-attachment-count')?.textContent, '2 anexos');
+
+  expand.click();
+  assert.equal(extra.hidden, false);
+  assert.equal(expand.getAttribute('aria-expanded'), 'true');
+  assert.equal(expand.textContent, 'Ver menos informações');
+  assert.match(extra.textContent, /Obra A/);
+  assert.match(extra.textContent, /2026|17\/09\/2026/);
+  assert.equal(card.querySelector('.lg-record-media').parentElement, card,
+    'attachment rail remains a sibling in the same expanding grid card');
+
+  expand.click();
+  assert.equal(extra.hidden, true);
+  assert.equal(expand.getAttribute('aria-expanded'), 'false');
+});
+
 test('supplier cluster loads every matching launch page and summarizes the supplier', async t => {
   const first = row(3451); first.fields = { ...first.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 905,00' };
   const second = row(3450); second.fields = { ...second.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 181,00' };
@@ -1224,7 +1258,8 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   assert.match(css, /--lg-red:\s*#b51f24/i);
   assert.match(css, /\.lg-record\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   assert.match(css, /\.lg-record--with-media\s*\{[^}]*grid-template-columns:\s*\d+px\s+minmax\(0,\s*1fr\)/s);
-  assert.match(css, /\.lg-record-main\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:/s);
+  assert.match(css, /\.lg-record--with-media\s*\{[^}]*align-items:\s*stretch/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*align-self:\s*stretch/s);
   assert.match(css, /\.lg-record-content\s*\{[^}]*display:\s*grid/s);
   assert.doesNotMatch(css, /\.lg-record--powerapps\s*\{/);
   assert.doesNotMatch(css, /\.lg-record-select\s*\{/);
@@ -1232,7 +1267,7 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   assert.match(css, /\.lg-record-media\s*\{[^}]*background:\s*var\(--lg-sky\)/s);
   assert.match(css, /\.lg-cluster-table-wrap\s*\{[^}]*overflow:\s*auto/s);
   assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
-  assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-summary-primary\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
   assert.match(css, /\.lg-record-content\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
 });
 

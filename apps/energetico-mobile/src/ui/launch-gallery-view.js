@@ -839,17 +839,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
 
     const main = element('div', 'lg-record-main');
-    const commercial = element('section', 'lg-record-group lg-record-commercial');
     const supplier = field(fields, 'FORNECEDOR');
     const branch = field(fields, 'FILIAL');
     const stage = field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA');
     const group = field(fields, 'AGRUPAR');
-    commercial.append(...[
-      clusterAction('FORNECEDOR', supplier, 'supplier'),
-      summaryField('FILIAL', branch),
-      summaryField('ETAPA', stage),
-      clusterAction('AGRUPAR', group, 'order'),
-    ].filter(Boolean));
+    const supplierEntry = clusterAction('FORNECEDOR', supplier, 'supplier');
+    const orderEntry = clusterAction('AGRUPAR', group, 'order');
+
+    const extraCommercial = element('section', 'lg-record-group lg-record-commercial lg-record-commercial-extra');
+    extraCommercial.append(...[summaryField('FILIAL', branch), summaryField('ETAPA', stage)].filter(Boolean));
+    if (!extraCommercial.childElementCount) extraCommercial.hidden = true;
 
     const execution = element('section', 'lg-record-group lg-record-execution lg-record-dates');
     execution.append(element('h3', 'lg-record-section-title', '▦ Datas'));
@@ -866,6 +865,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const date = summaryField(name, value);
       if (date) execution.append(date);
     }
+    const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
+    const plannedDate = field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO');
+    const summaryPaymentDate = summaryField(paidDate ? 'PAGAMENTO' : 'PGTO PREVISTO', paidDate ?? plannedDate);
 
     const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
     const values = [
@@ -893,10 +895,17 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (entry) meta.append(entry);
     }
     if (execution.children.length <= 1) execution.hidden = true;
-    if (!commercial.childElementCount) commercial.hidden = true;
     if (!finance.childElementCount) finance.hidden = true;
     if (!meta.childElementCount) meta.hidden = true;
-    main.append(commercial, execution, finance, meta);
+
+    const summary = element('div', 'lg-record-summary');
+    const summaryPrimary = element('div', 'lg-record-summary-primary');
+    summaryPrimary.append(...[supplierEntry, orderEntry, summaryPaymentDate].filter(Boolean));
+    summary.append(summaryPrimary, finance);
+    main.append(summary);
+
+    const extra = element('div', 'lg-record-extra');
+    extra.append(extraCommercial, execution, meta);
 
     const badges = element('div', 'lg-record-badges');
     const badgeValues = [
@@ -907,12 +916,23 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (value == null || display(value).trim() === '') continue;
       badges.append(element('span', `lg-record-badge ${className}`, display(value)));
     }
+    if (badges.childElementCount) extra.append(badges);
+    extra.hidden = true;
+    const disclosure = button('Ver mais informações', () => {
+      const expanded = extra.hidden;
+      extra.hidden = !expanded;
+      card.classList.toggle('lg-record--expanded', expanded);
+      disclosure.setAttribute('aria-expanded', String(expanded));
+      disclosure.textContent = expanded ? 'Ver menos informações' : 'Ver mais informações';
+    }, { locked: false });
+    disclosure.classList.add('lg-record-disclosure');
+    disclosure.setAttribute('aria-expanded', 'false');
+    disclosure.setAttribute('aria-controls', `lg-record-extra-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`);
+    extra.id = disclosure.getAttribute('aria-controls');
     const details = button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); });
     details.dataset.lgAction = 'details';
     const body = element('div', 'lg-record-content');
-    body.append(identity, main);
-    body.append(badges);
-    body.append(details);
+    body.append(identity, main, disclosure, extra, details);
     card.append(...(recordPreview ? [recordPreview] : []), body);
     return card;
   }
