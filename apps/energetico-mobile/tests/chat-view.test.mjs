@@ -181,6 +181,64 @@ test("ao soltar o microfone, transforma a transcrição em registro técnico", (
   dom.window.close();
 });
 
+test("WebView nativo grava no microfone somente após o toque e transcreve ao soltar", async () => {
+  class Recorder {
+    static instance = null;
+
+    constructor(stream) {
+      Recorder.instance = this;
+      this.stream = stream;
+      this.state = "inactive";
+    }
+
+    start() {
+      this.state = "recording";
+      this.onstart?.();
+    }
+
+    stop() {
+      this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  let streamCalls = 0;
+  const stream = { getTracks: () => [{ stop() {} }] };
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => { streamCalls += 1; return stream; } },
+  });
+  dom.window.MediaRecorder = Recorder;
+  const view = createChatView(root, {
+    ensureMicrophonePermission: async () => { throw new Error("não deve pedir fora do toque"); },
+    transcribeAudio: async file => {
+      assert.equal(file.name, "energetico-voice-input.webm");
+      return "Execução de concretagem concluída";
+    },
+  });
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  assert.equal(streamCalls, 0, "a permissão não deve ser solicitada durante a renderização");
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const draft = root.querySelector('[data-role="draft"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(streamCalls, 1, "o acesso deve acontecer ao pressionar o microfone");
+  assert.equal(Recorder.instance.state, "recording");
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(draft.value, "Execução de concretagem concluída.");
+  view.destroy();
+  dom.window.close();
+});
+
 test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Humanos", () => {
   const menu = {
     id: "hr-menu",

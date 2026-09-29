@@ -2137,7 +2137,7 @@ export function commandFromTarget(target) {
   };
 }
 
-export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, demo = false } = {}) {
+export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
@@ -2153,7 +2153,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let voiceInput = null;
   let voiceInputHeld = false;
   let voiceInputPointerId = null;
-  let voicePermissionAttempted = false;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2215,7 +2214,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (icon) icon.textContent = active ? "🔴" : "🎙️";
     if (status) {
       status.hidden = !error && !active && !pending;
-      status.textContent = error || (pending ? "Solicitando acesso ao microfone…" : active ? "Ouvindo… solte para parar." : "");
+      status.textContent = error || (pending ? "Preparando o microfone ou transcrevendo o áudio…" : active ? "Ouvindo… solte para parar." : "");
     }
   }
 
@@ -2226,7 +2225,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput = null;
       voiceInputHeld = false;
       voiceInputPointerId = null;
-      voicePermissionAttempted = false;
       setVoiceInputButtonState({ enabled: false });
       return;
     }
@@ -2243,15 +2241,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           emit({ type: "draft-changed", value });
         },
         getRecognition: () => windowRef?.SpeechRecognition || windowRef?.webkitSpeechRecognition || null,
+        getRecorder: () => windowRef?.MediaRecorder || null,
+        getAudioStream: () => windowRef?.navigator?.mediaDevices?.getUserMedia?.call(windowRef.navigator.mediaDevices, { audio: true }),
+        transcribeAudio,
         ensureAudioPermission: ensureMicrophonePermission,
         onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
         onError: error => setVoiceInputButtonState({ error }),
-      });
-    }
-    if (!voicePermissionAttempted && typeof ensureMicrophonePermission === "function") {
-      voicePermissionAttempted = true;
-      Promise.resolve().then(() => ensureMicrophonePermission()).catch(error => {
-        setVoiceInputButtonState({ error });
       });
     }
     setVoiceInputButtonState({ active: voiceInput.isActive(), enabled });
@@ -2279,7 +2274,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     voiceInputHeld = false;
     voiceInputPointerId = null;
     const stopped = voiceInput?.stop();
-    if (stopped && voiceInputEnabled()) {
+    const normalizeVoiceDraft = () => {
+      if (!voiceInputEnabled()) return;
       const draft = composerControls.draft?.value || "";
       const technicalText = normalizeConstructionDiaryText(draft);
       if (technicalText && technicalText !== draft) {
@@ -2288,6 +2284,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         syncComposerInset();
         emit({ type: "draft-changed", value: technicalText });
       }
+    };
+    if (stopped && typeof stopped.then === "function") {
+      stopped.then(normalizeVoiceDraft).catch(() => {});
+    } else if (stopped) {
+      normalizeVoiceDraft();
     }
     return true;
   }

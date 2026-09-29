@@ -44,9 +44,14 @@ async function start() {
   }) : null;
   const ports = createBrowserPorts();
   const preview = createAttachmentPreview({ exportMedia: ports.exportMedia });
+  const client = createChatClient({
+    apiBaseUrl: APP_CONFIG.apiBaseUrl,
+    tokenProvider: scopes => auth.getToken(scopes),
+  });
   const view = createChatView(root, {
     onOpenSettings: installView ? () => installView.open() : undefined,
     ensureMicrophonePermission: ports.requestMicrophonePermission,
+    transcribeAudio: file => client.transcribeAudio(file),
   });
   view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
@@ -55,10 +60,7 @@ async function start() {
     store: createConversationStore({ historyMode: "current-step" }),
     view,
     native: { ...ports, previewMedia: preview.open, previewMediaCollection: preview.openCollection, closePreview: preview.close },
-    client: createChatClient({
-      apiBaseUrl: APP_CONFIG.apiBaseUrl,
-      tokenProvider: scopes => auth.getToken(scopes),
-    }),
+    client,
   });
   // Bind before the first network await: iOS may hide/kill the page while resuming.
   let stopAttachmentSync = () => {};
