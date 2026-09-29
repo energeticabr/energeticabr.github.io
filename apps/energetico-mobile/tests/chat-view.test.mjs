@@ -1956,6 +1956,57 @@ test("permite prosseguir sem incluir lançamentos quando nenhum checkbox da folh
   dom.window.close();
 });
 
+test("limpa os IDs selecionados quando chega outro lote de seleção da folha", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  const buildPoll = (id, options) => ({
+    id,
+    role: "assistant",
+    type: "poll",
+    presentation: "launch_payroll_multi_select",
+    question: "SELECIONE OS LANÇAMENTOS QUE DESEJA INCLUIR NA FOLHA.",
+    options,
+  });
+  const launch700 = { id: "choice:launch_payroll_entries:700", reply: "choice:launch_payroll_entries:700", label: "ID 700 — FORNECEDOR A — R$ 20,00" };
+
+  view.render(signedInState({ messages: [buildPoll("launch-payroll-options-one", [launch700])] }));
+  root.querySelector('input[data-reply-id="700"]').click();
+  assert.equal(root.querySelector('input[data-reply-id="700"]').checked, true);
+  root.querySelector('[data-action="launch-payroll-select-proceed"]').click();
+
+  view.render(signedInState({ messages: [buildPoll("launch-payroll-options-two", [
+    launch700,
+    { id: "choice:launch_payroll_entries:701", reply: "choice:launch_payroll_entries:701", label: "ID 701 — FORNECEDOR A — R$ 60,00" },
+  ])] }));
+  assert.equal(root.querySelectorAll('.chat-launch-payroll-select input:checked').length, 0);
+  root.querySelector('[data-action="launch-payroll-select-proceed"]').click();
+
+  assert.deepEqual(replies, ["launch_payroll_selected:700", "launch_payroll_selected:"]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("opções sem ID numérico na seleção de folha ficam indisponíveis, não viram botões", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "launch-payroll-options-malformed",
+    role: "assistant",
+    type: "poll",
+    presentation: "launch_payroll_multi_select",
+    question: "SELECIONE OS LANÇAMENTOS QUE DESEJA INCLUIR NA FOLHA.",
+    options: [{ id: "launch-unknown", reply: "launch-unknown", label: "Lançamento sem ID válido" }],
+  }] }));
+  const dom = new JSDOM(markup);
+  const card = dom.window.document.querySelector(".chat-launch-payroll-select");
+
+  assert.ok(card.querySelector('input[type="checkbox"][disabled]'));
+  assert.equal(card.querySelectorAll('[data-action="select-reply"]').length, 0);
+  assert.ok(card.querySelector('[role="alert"]'));
+  dom.window.close();
+});
+
 test("resumo em lote colore presença presente e ausente por fornecedor", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "attendance-summary",

@@ -354,6 +354,17 @@ function draftReplyId(option) {
   return reply || scopedId;
 }
 
+function launchPayrollEntryId(option) {
+  return String(draftReplyId(option)).match(/^(?:choice:launch_payroll_entries:)?(\d+)$/)?.[1] || "";
+}
+
+function launchPayrollSelectionKey(message) {
+  const id = String(message?.id || "").trim();
+  if (id) return `id:${id}`;
+  const replyIds = Array.isArray(message?.options) ? message.options.map(option => String(draftReplyId(option))) : [];
+  return JSON.stringify([String(message?.question || message?.prompt || ""), replyIds]);
+}
+
 function normalizedDateText(value) {
   return String(value || "")
     .normalize("NFD")
@@ -1297,22 +1308,24 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
     const selected = new Set(launchPayrollSelectedIds.map(String));
     const records = [];
-    const controls = [];
+    let unavailableCount = 0;
     for (const option of choiceOptions) {
-      const replyId = draftReplyId(option);
-      const match = String(replyId).match(/^(?:choice:launch_payroll_entries:)?(\d+)$/);
-      if (!match) {
-        controls.push(pollButton(option, busy || !launchPayrollCurrent));
+      const id = launchPayrollEntryId(option);
+      const label = String(option.label || option.title || (id ? `Lançamento ${id}` : "Lançamento indisponível"));
+      if (!id) {
+        unavailableCount += 1;
+        records.push(`<div class="chat-launch-payroll-select__row chat-launch-payroll-select__row--unavailable" aria-disabled="true"><input type="checkbox" aria-label="Lançamento indisponível para seleção" disabled><span>${formatChatText(label)}</span></div>`);
         continue;
       }
-      const id = match[1];
-      const label = String(option.label || option.title || `Lançamento ${id}`);
       records.push(`<label class="chat-launch-payroll-select__row"><input type="checkbox" data-action="launch-payroll-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !launchPayrollCurrent ? " disabled" : ""}><span>${formatChatText(label)}</span></label>`);
     }
+    const unavailableWarning = unavailableCount
+      ? `<p class="chat-launch-payroll-select__warning" role="alert">${unavailableCount === 1 ? "Um lançamento está" : "Alguns lançamentos estão"} sem ID válido para seleção e não poderão ser enviados à folha.</p>`
+      : "";
     const proceedLabel = selected.size
       ? `PROSSEGUIR COM ${selected.size} SELECIONADO${selected.size === 1 ? "" : "S"}`
       : "PROSSEGUIR SEM FOLHA";
-    return `<div class="chat-launch-payroll-select">${records.join("")}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button>${controls.join("")}</div>`;
+    return `<div class="chat-launch-payroll-select">${records.join("")}${unavailableWarning}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button></div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
@@ -2113,6 +2126,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
   const launchPayrollSelectedIds = new Set();
+  let launchPayrollSelectionPollKey = "";
+  let launchPayrollEligibleIds = new Set();
   let composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
   let composerBusy = false;
   let composing = false;
@@ -3160,7 +3175,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "launch-payroll-select-proceed") {
-      const selectedIds = [...launchPayrollSelectedIds];
+      const selectedIds = [...launchPayrollSelectedIds].filter(id => launchPayrollEligibleIds.has(id));
       emit({
         type: "select-reply",
         replyId: `launch_payroll_selected:${selectedIds.join(",")}`,
@@ -4054,7 +4069,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (checkbox?.matches?.('input[data-action="launch-payroll-select-toggle"]') && !checkbox.disabled) {
       const id = String(checkbox.dataset.replyId || "");
-      if (!/^\d+$/.test(id)) return;
+      if (!launchPayrollEligibleIds.has(id)) return;
       if (checkbox.checked) launchPayrollSelectedIds.add(id);
       else launchPayrollSelectedIds.delete(id);
       if (lastState) {
@@ -4089,7 +4104,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function render(state) {
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
     if (newestPoll?.presentation !== "attendance_multi_select") attendanceSelectedIds.clear();
-    if (newestPoll?.presentation !== "launch_payroll_multi_select") launchPayrollSelectedIds.clear();
+    const isLaunchPayrollPoll = newestPoll?.presentation === "launch_payroll_multi_select";
+    const nextLaunchPayrollPollKey = isLaunchPayrollPoll ? launchPayrollSelectionKey(newestPoll) : "";
+    if (nextLaunchPayrollPollKey !== launchPayrollSelectionPollKey) launchPayrollSelectedIds.clear();
+    launchPayrollSelectionPollKey = nextLaunchPayrollPollKey;
+    launchPayrollEligibleIds = new Set(isLaunchPayrollPoll
+      ? (Array.isArray(newestPoll.options) ? newestPoll.options : []).map(launchPayrollEntryId).filter(Boolean)
+      : []);
+    for (const id of launchPayrollSelectedIds) {
+      if (!launchPayrollEligibleIds.has(id)) launchPayrollSelectedIds.delete(id);
+    }
     if (onlyDraftChanged(state)) {
       syncComposer(state, true);
       lastState = state;
