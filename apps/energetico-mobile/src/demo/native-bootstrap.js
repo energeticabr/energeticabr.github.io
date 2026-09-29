@@ -33,8 +33,19 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
       ? createAttachmentPreview({ documentRef, exportMedia: ports.exportMedia })
       : null;
     activePreview = preview;
-    const chatView = createChatView(root, demo ? { demo: true, onSignOut: leaveDemo }
-      : config.demoAccessEnabled === true ? { onDemoAccess: showDemoForm } : {});
+    const viewOptions = {
+      ensureMicrophonePermission: ports.requestMicrophonePermission,
+    };
+    const client = createChatClient({ apiBaseUrl: demo ? DEMO_API_ORIGIN : config.apiBaseUrl,
+      apiPrefix: demo ? "/api/demo" : "/api", fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) });
+    viewOptions.transcribeAudio = file => client.transcribeAudio(file);
+    if (demo) {
+      viewOptions.demo = true;
+      viewOptions.onSignOut = leaveDemo;
+    } else if (config.demoAccessEnabled === true) {
+      viewOptions.onDemoAccess = showDemoForm;
+    }
+    const chatView = createChatView(root, viewOptions);
     // Late confirmations may complete after stop; they must never redraw the
     // previous account over the next session's DOM.
     const view = { ...chatView, render(state) { if (mountedRevision === revision) chatView.render(state); } };
@@ -46,8 +57,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     } : ports;
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
       store: createConversationStore({ historyMode: "current-step" }),
-      client: createChatClient({ apiBaseUrl: demo ? DEMO_API_ORIGIN : config.apiBaseUrl,
-        apiPrefix: demo ? "/api/demo" : "/api", fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) }),
+      client,
     });
     return controller.start();
   }

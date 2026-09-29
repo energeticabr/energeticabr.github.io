@@ -85,8 +85,10 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
   const muted = rgb(0.39, 0.44, 0.52);
   const navy = rgb(0.08, 0.24, 0.43);
   const navyText = rgb(1, 1, 1);
-  const green = rgb(0.05, 0.44, 0.25);
-  const red = rgb(0.67, 0.10, 0.16);
+  const entryClusterFill = rgb(0.09, 0.50, 0.29);
+  const exitClusterFill = rgb(0.68, 0.19, 0.25);
+  const emptyClusterFill = rgb(0.93, 0.95, 0.96);
+  const clusterText = rgb(1, 1, 1);
   const blueFill = rgb(0.93, 0.96, 0.99);
   const panelFill = rgb(0.93, 0.95, 0.98);
   const summaryRule = rgb(0.84, 0.87, 0.91);
@@ -171,7 +173,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     const nameLines = wrapText(name, bold, 10.5, INNER_WIDTH - 32);
     const nameLineHeight = 12;
     const slotRows = Math.max(1, Math.ceil(slots.length / 4));
-    const detailsHeight = Math.max(45, slotRows * 17 + 8);
+    const detailsHeight = Math.max(45, slotRows * 29 + 4);
     const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight);
     ensureSpace(cardHeight + 4);
     const cardTop = y;
@@ -190,17 +192,24 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     if (rowFill === noPunchFill) drawBadge("SEM MARCAÇÃO", MARGIN + 16, detailsTop + 8, 72);
     const contentX = MARGIN + 16;
     const totalX = PAGE_WIDTH - MARGIN - 106;
-    const slotStartY = detailsTop - 4;
-    const slotWidth = 56;
+    const slotStartY = detailsTop - 3;
+    const slotGap = 6;
+    const slotHeight = 22;
+    const slotWidth = Math.max(64, (totalX - contentX - 14 - slotGap * 3) / 4);
     for (let index = 0; index < slots.length; index += 1) {
       const rowIndex = Math.floor(index / 4);
       const colIndex = index % 4;
-      const x = contentX + colIndex * slotWidth;
+      const x = contentX + colIndex * (slotWidth + slotGap);
       const slot = slots[index];
       const isTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(slot.value).trim());
-      const slotColor = !isTime ? muted : slot.kind === "entry" ? green : red;
-      drawText(slot.label, x, slotStartY - rowIndex * 17, regular, 6.5, muted);
-      drawText(slot.value, x, slotStartY - 10 - rowIndex * 17, bold, 9.5, slotColor);
+      const clusterFill = !isTime ? emptyClusterFill : slot.kind === "entry" ? entryClusterFill : exitClusterFill;
+      const textColor = isTime ? clusterText : muted;
+      const clusterY = slotStartY - rowIndex * (slotHeight + 7) - slotHeight;
+      page.drawRectangle({ x, y: clusterY, width: slotWidth, height: slotHeight, color: clusterFill, borderRadius: 5 });
+      const valueText = String(slot.value ?? "");
+      const valueWidth = bold.widthOfTextAtSize(valueText, 9.5);
+      drawText(slot.label, x + 6, clusterY + 8, bold, 6.5, textColor);
+      drawText(valueText, x + slotWidth - 6 - valueWidth, clusterY + 8, bold, 9.5, textColor);
     }
     page.drawRectangle({ x: totalX, y: detailsTop - detailsHeight, width: 90, height: detailsHeight, color: rowFill === noPunchFill ? rgb(0.98, 0.90, 0.72) : blueFill, borderRadius: 7 });
     drawCentered("TOTAL DE HORAS/DIA", totalX + 45, detailsTop - 8, bold, 6.5, muted);

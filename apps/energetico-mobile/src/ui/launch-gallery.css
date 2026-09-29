@@ -204,7 +204,8 @@
 .lg-record-preview { display: block; width: 100%; height: 76px; object-fit: cover; }
 .lg-record-media:not(.lg-record-media-loaded) .lg-record-preview { opacity: 0; }
 .lg-record-media-unavailable::after { content: 'Imagem'; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
-.lg-record-content { display: grid; gap: 9px; min-width: 0; padding: 0 0 0 12px; }
+.lg-record-content { display: grid; grid-row: 1; align-self: stretch; align-content: start; gap: 9px; min-width: 0; padding: 0 0 0 12px; }
+.lg-record--with-media .lg-record-content { grid-column: 2; }
 .lg-record-heading {
   display: grid;
   grid-template-columns: minmax(58px, auto) minmax(0, 1fr) minmax(125px, auto);
@@ -235,9 +236,28 @@
   min-width: 0;
 }
 .lg-record-summary { display: grid; gap: 8px; min-width: 0; }
-.lg-record-summary-primary { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr) minmax(0, 1fr); gap: 0 8px; min-width: 0; }
-.lg-record-summary-primary > .lg-record-field { padding-inline: 4px; }
-.lg-record-extra { display: grid; gap: 9px; min-width: 0; padding-top: 9px; border-top: 1px solid var(--lg-line); }
+.lg-record-summary-fields { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .75fr) minmax(0, .85fr); gap: 0 8px; min-width: 0; }
+.lg-record-summary-fields .lg-record-field { padding-inline: 4px; }
+.lg-record-expand {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  padding: 7px 10px;
+  border: 0;
+  border-top: 1px solid var(--lg-line);
+  border-radius: 0;
+  color: var(--lg-muted);
+  background: transparent;
+  font-weight: 750;
+}
+.lg-record-expand::after { content: '⌄'; color: var(--lg-navy); font-size: 1.35rem; line-height: 1; }
+.lg-record-expand[aria-expanded="true"]::after { content: '⌃'; }
+.lg-record-expand:hover:not(:disabled) { background: var(--lg-sky); }
+.lg-record-extra { display: grid; gap: 9px; min-width: 0; }
 .lg-record-group { min-width: 0; }
 .lg-record-commercial { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; align-content: start; }
 .lg-record-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin: 0; padding: 7px 8px; border-bottom: 1px solid var(--lg-line); }
@@ -274,7 +294,7 @@
 .lg-badge-status { color: #1b6b3a; border-color: #77a98a; background: #eef8f1; }
 .lg-badge-approval { color: #8d4a00; border-color: #d7a765; background: #fff7e8; }
 .lg-badge-attachment { color: var(--lg-navy); background: var(--lg-sky-strong); }
-.lg-record-content > .lg-button {
+.lg-record-extra > .lg-button {
   grid-column: 1 / -1;
   width: 100%;
   min-height: 44px;
@@ -376,12 +396,13 @@
   .lg-record-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-record--with-media { grid-template-columns: 58px minmax(0, 1fr); }
   .lg-record--with-media .lg-record-media { grid-column: 1; grid-row: 1; height: auto; }
-  .lg-record-content { grid-column: 2; padding-left: 8px; }
+  .lg-record-content { grid-row: 1; padding-left: 8px; }
+  .lg-record--with-media .lg-record-content { grid-column: 2; }
   .lg-record-heading { grid-template-columns: 50px minmax(0, 1fr); gap: 7px; }
   .lg-record-status { grid-column: 1 / -1; justify-self: start; }
   .lg-record-dates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .lg-record-summary-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .lg-record-summary-primary > .lg-record-field:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .lg-record-summary-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lg-record-summary-fields .lg-record-supplier { grid-column: 1 / -1; }
   .lg-record-badges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-cluster-modal .lg-detail-header { align-items: flex-start; padding: 10px; }
   .lg-cluster-modal .lg-detail-header .lg-button { padding-inline: 8px; }
@@ -394,6 +415,7 @@
 @media (max-width: 390px) {
   .lg-record-badges { grid-template-columns: 1fr; }
   .lg-record-dates { grid-template-columns: 1fr; }
+  .lg-record-summary-fields { grid-template-columns: 1fr; }
   .lg-record-finance, .lg-record-meta { grid-template-columns: 1fr; }
   .lg-actions > .lg-button { flex: 1 1 100%; }
   .lg-review > .lg-button { width: 100%; margin-right: 0; }

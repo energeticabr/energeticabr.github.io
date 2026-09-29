@@ -177,6 +177,38 @@ test("negação de câmera vira erro de permissão estável", async () => {
   ));
 });
 
+test("solicita permissão nativa do microfone e encerra a captura de permissão", async () => {
+  const calls = [];
+  const track = { stop: () => calls.push("stop") };
+  const ports = createNativePorts({
+    navigatorRef: {
+      mediaDevices: {
+        getUserMedia: async constraints => {
+          calls.push(constraints);
+          return { getTracks: () => [track] };
+        },
+      },
+    },
+  });
+
+  assert.equal(await ports.requestMicrophonePermission(), true);
+  assert.deepEqual(calls, [{ audio: true }, "stop"]);
+});
+
+test("negação da permissão nativa do microfone vira erro estável", async () => {
+  const ports = createNativePorts({
+    navigatorRef: {
+      mediaDevices: {
+        getUserMedia: async () => { throw Object.assign(new Error("denied"), { name: "NotAllowedError" }); },
+      },
+    },
+  });
+
+  await assert.rejects(ports.requestMicrophonePermission(), error => (
+    error instanceof NativePermissionError && error.code === "NATIVE_PERMISSION_DENIED"
+  ));
+});
+
 test("converte documentos nativos e preserva metadados", async () => {
   const ports = createNativePorts({
     documentPicker: {

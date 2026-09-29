@@ -52,7 +52,7 @@ test("extensão aceita arquivos e fecha após confirmação", async () => {
 test("o envio confirmado fecha a extensão sem botões adicionais", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("private func acquireTokenSilently"));
-  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*finish\(message: nil, closeImmediately: true\)/);
+  assert.match(sending, /uploaded == uploadItems\.count[\s\S]*audioItems\.isEmpty[\s\S]*finish\(message: nil, closeImmediately: true\)/);
   assert.doesNotMatch(controller, /showSuccessAndOfferApp/);
   assert.doesNotMatch(controller, /submissionFinished/);
   assert.doesNotMatch(controller, /title: "Concluir"/);
@@ -74,14 +74,14 @@ test("envio bloqueia detalhes concorrentes para não esconder o alerta final", a
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("@objc private func cancel"));
   assert.match(sending, /cancelButton\.isEnabled = false[\s\S]*failuresButton\.isEnabled = false/);
-  assert.match(sending, /for item in stagedItems[\s\S]*await upload/);
+  assert.match(sending, /for item in uploadItems[\s\S]*await upload/);
 });
 
 test("envio totalmente confirmado fecha a extensão sem alerta de sucesso", async () => {
   const controller = await readFile(new URL("ShareExtension/ShareViewController.swift", ios), "utf8");
   const sending = controller.slice(controller.indexOf("private func sendItems"), controller.indexOf("@objc private func cancel"));
   assert.match(controller, /stagedItems\.isEmpty[\s\S]*await sendItems\(\)/);
-  assert.match(sending, /uploaded == stagedItems\.count[\s\S]*finish\(message: nil, closeImmediately: true\)/);
+  assert.match(sending, /uploaded == uploadItems\.count[\s\S]*audioItems\.isEmpty[\s\S]*finish\(message: nil, closeImmediately: true\)/);
   assert.doesNotMatch(controller, /private func showSuccessAndOfferApp/);
   assert.match(controller, /private func completeExtension\(\)[\s\S]*completeRequest\(returningItems: \[\], completionHandler: nil\)/);
   assert.match(controller, /UIAlertController\(title: "Envio ao Energético"/);

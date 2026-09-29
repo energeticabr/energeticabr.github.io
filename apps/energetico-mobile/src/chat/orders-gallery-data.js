@@ -5,11 +5,14 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
+const LAUNCH_LIST_ALIASES = Object.freeze(["LANCAMENTOS"]);
 const PENDING_PROVISION_LIST_ALIASES = Object.freeze([
   "PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS",
 ]);
 const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
+const LAUNCH_GROUP_PAGE_SIZE = 100;
+const LAUNCH_GROUP_MAX_PAGES = 100;
 const KNOWN_FIELDS = Object.freeze([
   ["FILIAL", ["FILIAL"]],
   ["FORNECEDOR", ["FORNECEDOR"]],
@@ -171,12 +174,90 @@ function asBlob(value, mimeType) {
 }
 
 export function createOrdersGalleryData(options = {}) {
-  return createSharePointListData({
-    ...options,
+  const siteConfig = options.siteConfig || SHAREPOINT_SITES;
+  let repository = options.repository;
+  if (!repository) {
+    if (typeof options.tokenProvider !== "function") throw new TypeError("A consulta SharePoint requer a sessão Microsoft ativa.");
+    const graph = createGraphClient(options.tokenProvider, { fetch: options.fetchImpl || globalThis.fetch });
+    const attachments = createSharePointAttachmentTransport({
+      tokenProvider: options.tokenProvider,
+      allowedSites: Object.values(siteConfig),
+      fetch: options.fetchImpl || globalThis.fetch,
+    });
+    repository = createSharePointRepository(graph, siteConfig, { attachmentTransport: attachments });
+  }
+  const sharedOptions = { ...options, siteConfig, repository };
+  const data = createSharePointListData({
+    ...sharedOptions,
     siteKey: options.siteKey || SITE_KEY,
     listAliases: options.listAliases || LIST_ALIASES,
     listName: options.listName || "NOTASPENDENTES",
   });
+  const launchGroups = createLaunchClusterData(sharedOptions);
+  return Object.freeze({ ...data, loadLaunchGroup: launchGroups.loadGroup });
+}
+
+export function createLaunchClusterData({
+  tokenProvider,
+  repository: suppliedRepository,
+  siteConfig = SHAREPOINT_SITES,
+  fetchImpl = globalThis.fetch,
+  siteKey = SITE_KEY,
+  listAliases = LAUNCH_LIST_ALIASES,
+} = {}) {
+  let repository = suppliedRepository;
+  if (!repository) {
+    if (typeof tokenProvider !== "function") throw new TypeError("A consulta SharePoint requer a sessão Microsoft ativa.");
+    const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
+    repository = createSharePointRepository(graph, siteConfig);
+  }
+  if (typeof repository.resolveList !== "function" || typeof repository.getItemsPage !== "function") {
+    throw new TypeError("A consulta de lançamentos agrupados requer um repositório SharePoint somente leitura.");
+  }
+
+  let resolvedList;
+  async function resolveList(signal) {
+    if (resolvedList) return resolvedList;
+    const list = await repository.resolveList(siteKey, listAliases, signal ? { signal } : {});
+    if (list?.status !== "resolved" || !list.id) {
+      throw new OrdersGalleryDataError("launches_list_missing", "A lista LANCAMENTOS não está disponível nesta conta SharePoint.");
+    }
+    if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
+    resolvedList = list;
+    return list;
+  }
+
+  async function loadGroup(rawGroupId, { signal } = {}) {
+    const groupId = String(rawGroupId ?? "").trim();
+    if (!/^\d{1,15}$/.test(groupId)) throw new RangeError("O valor de AGRUPAR deve ser um ID numérico válido.");
+    const list = await resolveList(signal);
+    const rowsById = new Map();
+    const query = `$select=id&$expand=fields&$filter=fields/AGRUPAR eq '${groupId}'&$top=${LAUNCH_GROUP_PAGE_SIZE}`;
+    let cursor = "";
+    for (let pageNumber = 1; pageNumber <= LAUNCH_GROUP_MAX_PAGES; pageNumber += 1) {
+      if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
+      const page = await repository.getItemsPage(
+        siteKey,
+        list.id,
+        query,
+        { pageNumber, maxPages: LAUNCH_GROUP_MAX_PAGES, ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}) },
+      );
+      for (const item of Array.isArray(page?.items) ? page.items : []) {
+        const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
+        if (String(scalar(fieldValue(fields, ["AGRUPAR"])) ?? "").trim() !== groupId) continue;
+        const id = String(item?.id ?? fieldValue(fields, ["ID"]) ?? "").trim();
+        if (id) rowsById.set(id, Object.freeze({ ...item, id, fields }));
+      }
+      if (!page?.hasMore || !page?.nextLink) {
+        const rows = [...rowsById.values()].sort((left, right) => Number(right.id) - Number(left.id));
+        return Object.freeze(rows);
+      }
+      cursor = page.nextLink;
+    }
+    throw new OrdersGalleryDataError("launches_group_page_limit", "Os lançamentos do pedido ultrapassaram o limite seguro de páginas.");
+  }
+
+  return Object.freeze({ loadGroup });
 }
 
 export function createTasksGalleryData(options = {}) {
@@ -359,21 +440,17 @@ function createSharePointListData({
     throw new TypeError("A Galeria de Pedidos requer um repositório SharePoint compatível.");
   }
 
-  let listRequest;
+  let resolvedList;
   const attachmentCache = new Map();
   async function resolveList(signal) {
-    if (!listRequest) {
-      listRequest = Promise.resolve(repository.resolveList(siteKey, listAliases, signal ? { signal } : {})).then(list => {
-        if (list?.status !== "resolved" || !list.id) {
-          throw new OrdersGalleryDataError(listMissingCode, `A lista ${listName} não está disponível nesta conta SharePoint.`);
-        }
-        return list;
-      }).catch(error => {
-        listRequest = null;
-        throw error;
-      });
+    if (resolvedList) return resolvedList;
+    const list = await repository.resolveList(siteKey, listAliases, signal ? { signal } : {});
+    if (list?.status !== "resolved" || !list.id) {
+      throw new OrdersGalleryDataError(listMissingCode, `A lista ${listName} não está disponível nesta conta SharePoint.`);
     }
-    return listRequest;
+    if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
+    resolvedList = list;
+    return list;
   }
 
   async function loadSnapshot({ signal } = {}) {
@@ -399,6 +476,25 @@ function createSharePointListData({
       cursor = page.nextLink;
     }
     throw new OrdersGalleryDataError("orders_page_limit", "A lista de pedidos ultrapassou o limite seguro de páginas.");
+  }
+
+  async function loadItem(rawId, { signal } = {}) {
+    const id = itemId(rawId);
+    const list = await resolveList(signal);
+    if (typeof repository.getItem !== "function") throw new Error("A consulta pontual de pedidos do SharePoint não está disponível.");
+    if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
+    let item;
+    try {
+      item = await repository.getItem(siteKey, list.id, id, "$expand=fields", signal ? { signal } : {});
+    } catch (error) {
+      if (Number(error?.status) === 404 || String(error?.code || "").toLowerCase() === "itemnotfound") return null;
+      throw error;
+    }
+    if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
+    if (item == null) return null;
+    const row = normalizeItem(item);
+    if (!row || row.id !== id) throw new OrdersGalleryDataError("orders_item_invalid", "O SharePoint não devolveu o pedido solicitado.");
+    return row;
   }
 
   async function listAttachments(rawId, { refresh = false } = {}) {
@@ -473,5 +569,5 @@ function createSharePointListData({
     return result;
   }
 
-  return Object.freeze({ loadSnapshot, listAttachments, downloadAttachment, uploadAttachment, updateDueDate });
+  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateDueDate });
 }

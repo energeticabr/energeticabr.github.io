@@ -88,6 +88,350 @@ test("microfone aparece acima de Enviar somente ao preencher diário de obras", 
   assert.match(inactiveMarkup, /data-role="voice-input"[^>]*hidden/);
 });
 
+test("microfone aparece em perguntas de texto livre e fica oculto em campos estruturados", () => {
+  const textMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_task", title: "TAREFAS" },
+    messages: [{ role: "assistant", type: "poll", question: "INFORME AS OBSERVAÇÕES DA EXECUÇÃO", options: [] }],
+  }));
+  assert.match(textMarkup, /data-role="voice-input"(?![^>]*hidden)/);
+
+  const dateMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_task", title: "TAREFAS" },
+    messages: [{ role: "assistant", type: "poll", question: "INFORME A DATA DA EXECUÇÃO", options: [] }],
+  }));
+  assert.match(dateMarkup, /data-role="voice-input"[^>]*hidden/);
+});
+
+test("microfone continua clicável no diário quando a única opção é abandonar o fluxo", () => {
+  class Recognition {
+    static instances = [];
+    constructor() { this.started = 0; Recognition.instances.push(this); }
+    start() { this.started += 1; this.onstart?.(); }
+    stop() { this.onend?.(); }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+    messages: [{
+      role: "assistant",
+      type: "poll",
+      question: "DIGITE AS ATIVIDADES EXECUTADAS",
+      options: [{ reply: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" }],
+    }],
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  assert.equal(voice.hidden, false, "ação para abandonar não transforma a pergunta em campo estruturado");
+  assert.equal(voice.disabled, false, "microfone deve estar habilitado durante a pergunta de texto");
+  voice.click();
+  assert.equal(Recognition.instances.length, 1, "o clique deve iniciar a transcrição");
+  assert.equal(Recognition.instances[0].started, 1, "o clique deve chamar start no reconhecimento de voz");
+
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+    messages: [{
+      role: "assistant",
+      type: "poll",
+      question: "QUAL ATIVIDADE FOI EXECUTADA?",
+      options: [
+        { reply: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" },
+        { reply: "activity_fundacao", label: "FUNDAÇÃO" },
+      ],
+    }],
+  }));
+  assert.equal(root.querySelector('[data-role="voice-input"]').hidden, true,
+    "a presença de uma resposta real junto à ação auxiliar mantém o microfone oculto");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque simples no microfone inicia e encerra a transcrição quando o WebView não entrega gesto de pressão", () => {
+  class Recognition {
+    static instances = [];
+
+    constructor() {
+      this.stopped = 0;
+      Recognition.instances.push(this);
+    }
+
+    start() { this.onstart?.(); }
+    stop() { this.stopped += 1; this.onend?.(); }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.click();
+  assert.equal(Recognition.instances.length, 1);
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
+
+  voice.click();
+  assert.equal(Recognition.instances[0].stopped, 1);
+  assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("soltar durante a permissão não cancela o microfone no iPhone", async () => {
+  class Recognition {
+    static instance = null;
+    constructor() { Recognition.instance = this; this.stopped = 0; }
+    start() { this.onstart?.(); }
+    stop() { this.stopped += 1; this.onend?.(); }
+  }
+  let grantPermission;
+  const permission = new Promise(resolve => { grantPermission = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { ensureMicrophonePermission: () => permission });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  grantPermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.ok(Recognition.instance, "a captação deve iniciar após a permissão ser concedida");
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  assert.equal(Recognition.instance.stopped, 1, "outro toque deve encerrar a captação");
+  view.destroy();
+  dom.window.close();
+});
+
+test("microfone permanece selecionável enquanto espera permissão e outro toque cancela", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  const grants = [];
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => new Promise(resolve => { grants.push(resolve); }),
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  assert.equal(voice.disabled, false);
+  assert.match(voice.getAttribute("aria-label"), /cancelar/i);
+
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  grants[0](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recognition.instances.length, 0);
+  assert.equal(voice.disabled, false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("eventos pointer e touch do mesmo toque não reiniciam microfone cancelado", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  const grants = [];
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => new Promise(resolve => { grants.push(resolve); }),
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+  const voice = root.querySelector('[data-role="voice-input"]');
+  for (let index = 0; index < 2; index += 1) {
+    for (const type of ["pointerdown", "touchstart", "pointerup", "touchend"]) {
+      voice.dispatchEvent(new dom.window.Event(type, { bubbles: true, cancelable: true }));
+    }
+  }
+  assert.equal(grants.length, 1, "o segundo toque deve cancelar, não pedir nova permissão");
+  assert.equal(voice.disabled, false);
+  grants[0](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recognition.instances.length, 0);
+  view.destroy();
+  dom.window.close();
+});
+
+test("modo de clique permite nova tentativa imediatamente após cancelar", async () => {
+  class Recognition { start() {} }
+  const grants = [];
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => new Promise(resolve => { grants.push(resolve); }),
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.click();
+  voice.click();
+  voice.click();
+  assert.equal(grants.length, 2);
+  assert.equal(voice.disabled, false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("iPhone com microfone negado orienta ativar em Ajustes e permite tentar novamente", async () => {
+  class Recognition { start() {} }
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", { value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  let attempts = 0;
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => {
+      attempts += 1;
+      return Promise.reject(new Error("Permissão negada pelo iPhone."));
+    },
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.click();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /Ajustes.*Energético.*Microfone/i);
+  assert.equal(voice.disabled, false);
+  voice.click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(attempts, 2);
+  view.destroy();
+  dom.window.close();
+});
+
+test("cancelar gesto durante a permissão não inicia a captação depois", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  let grantPermission;
+  const permission = new Promise(resolve => { grantPermission = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { ensureMicrophonePermission: () => permission });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointercancel", { bubbles: true, cancelable: true }));
+  grantPermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(Recognition.instances.length, 0);
+  assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque no iPhone aguarda o gravador e mostra como parar depois", async () => {
+  class Recorder {
+    static instance = null;
+    constructor(stream) { this.stream = stream; this.stopped = 0; Recorder.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {
+      this.stopped += 1;
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+  let grantStream;
+  const pendingStream = new Promise(resolve => { grantStream = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: () => pendingStream },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "Concretagem concluída" });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  grantStream({ getTracks: () => [{ stop() {} }] });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.ok(Recorder.instance);
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recorder.instance.stopped, 1);
+  view.destroy();
+  dom.window.close();
+});
+
+test("captura pendente pode ser cancelada pelo botão sem iniciar gravação", async () => {
+  class Recorder {
+    static instances = [];
+    constructor() { Recorder.instances.push(this); }
+    start() {}
+  }
+  let grantStream;
+  let stoppedTracks = 0;
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: () => new Promise(resolve => { grantStream = resolve; }) },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  assert.equal(voice.disabled, false);
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  grantStream({ getTracks: () => [{ stop: () => { stoppedTracks += 1; } }] });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(Recorder.instances.length, 0);
+  assert.equal(stoppedTracks, 1);
+  assert.equal(voice.disabled, false);
+  view.destroy();
+  dom.window.close();
+});
+
 test("segurar e soltar o microfone controla a transcrição no diário de obras", () => {
   class Recognition {
     static instance = null;
@@ -163,6 +507,91 @@ test("ao soltar o microfone, transforma a transcrição em registro técnico", (
     "Execução de concretagem da laje. Utilização de 10 sacos de cimento."
   );
   assert.doesNotMatch(draft.value, /\b(eu|nós|meu|minha|nosso|nossa)\b/i);
+  view.destroy();
+  dom.window.close();
+});
+
+test("última frase entregue após soltar também vira registro técnico", () => {
+  class Recognition {
+    static instance = null;
+    constructor() { Recognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] });
+    }
+  }
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  Recognition.instance.emit("Eu fiz a concretagem da laje");
+  Recognition.instance.onend?.();
+
+  assert.equal(root.querySelector('[data-role="draft"]').value, "Execução de concretagem da laje.");
+  view.destroy();
+  dom.window.close();
+});
+
+test("WebView nativo grava no microfone somente após o toque e transcreve ao soltar", async () => {
+  class Recorder {
+    static instance = null;
+
+    constructor(stream) {
+      Recorder.instance = this;
+      this.stream = stream;
+      this.state = "inactive";
+    }
+
+    start() {
+      this.state = "recording";
+      this.onstart?.();
+    }
+
+    stop() {
+      this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  let streamCalls = 0;
+  const stream = { getTracks: () => [{ stop() {} }] };
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => { streamCalls += 1; return stream; } },
+  });
+  dom.window.MediaRecorder = Recorder;
+  const view = createChatView(root, {
+    ensureMicrophonePermission: async () => { throw new Error("não deve pedir fora do toque"); },
+    transcribeAudio: async file => {
+      assert.equal(file.name, "energetico-voice-input.webm");
+      return "Execução de concretagem concluída";
+    },
+  });
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  assert.equal(streamCalls, 0, "a permissão não deve ser solicitada durante a renderização");
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const draft = root.querySelector('[data-role="draft"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(streamCalls, 1, "o acesso deve acontecer ao pressionar o microfone");
+  assert.equal(Recorder.instance.state, "recording");
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(draft.value, "Execução de concretagem concluída.");
   view.destroy();
   dom.window.close();
 });
@@ -391,6 +820,33 @@ test("relatório RHID exibe a ressincronização no próprio cabeçalho", () => 
   dom.window.close();
 });
 
+test("relatório RHID posiciona ressincronização e PDF no topo, alinhados ao relatório diário", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-top-actions",
+    role: "assistant",
+    type: "poll",
+    question: "RELATÓRIO RHID",
+    options: [],
+    detail_table: {
+      kind: "rhid_attendance",
+      reportDate: "2026-09-25",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const report = dom.window.document.querySelector(".chat-rhid-attendance-report");
+  const header = report.querySelector(".chat-rhid-attendance-report__header");
+  const actions = header.querySelector(".chat-rhid-attendance-report__header-actions");
+
+  assert.ok(actions, "as ações devem ficar no cabeçalho do relatório");
+  assert.ok(actions.querySelector('[data-action="rhid-refresh"]'));
+  assert.ok(actions.querySelector('[data-action="share-rhid-attendance-report"]'));
+  assert.equal(report.querySelector(".chat-rhid-attendance-report__toolbar-actions"), null);
+  assert.ok(header.textContent.indexOf("RELATÓRIO DIÁRIO") < header.textContent.indexOf("Compartilhar PDF"));
+  dom.window.close();
+});
+
 test("não oferece compartilhar RHID quando a data é impossível", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-invalid-date",
@@ -490,6 +946,34 @@ test("relatório RHID distingue entradas e saídas preenchidas sem destacar hor�
   assert.ok(cells[2].classList.contains("chat-rhid-attendance-card__entry"));
   assert.equal(cells[3].textContent, "—", "sem batida, o traço permanece neutro");
   assert.ok(total, "o total deve continuar visível");
+  dom.window.close();
+});
+
+test("relatório RHID agrupa cada entrada e saída em clusters legíveis", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-clusters", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-28",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [["CLEITON CESAR NONATO", "07:00", "11:59", "13:02", "—", "04:59 (parcial)"]],
+    },
+  }] }));
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const dom = new JSDOM(`<style>${styles}</style>${markup}`);
+  const clusters = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-card__cluster")];
+
+  assert.equal(clusters.length, 4);
+  assert.ok(clusters[0].classList.contains("chat-rhid-attendance-card__cluster--entry"));
+  assert.ok(clusters[1].classList.contains("chat-rhid-attendance-card__cluster--exit"));
+  assert.equal(clusters[0].querySelector("span")?.textContent, "Entrada 1");
+  assert.equal(clusters[0].querySelector("strong")?.textContent, "07:00");
+  assert.equal(clusters[1].querySelector("span")?.textContent, "Saída 1");
+  assert.equal(clusters[1].querySelector("strong")?.textContent, "11:59");
+  assert.ok(clusters[3].classList.contains("chat-rhid-attendance-card__cluster--empty"));
+  assert.match(styles, /\.chat-rhid-attendance-card__cluster\s*\{[^}]*font-size:\s*9px/s);
+  assert.match(styles, /\.chat-rhid-attendance-card__cluster--entry\s*\{[^}]*color:\s*#fff[^}]*background:/s);
+  assert.match(styles, /\.chat-rhid-attendance-card__cluster--exit\s*\{[^}]*color:\s*#fff[^}]*background:/s);
+  assert.match(styles, /\.chat-rhid-attendance-card__details\s*\{[^}]*gap:\s*14px/s);
   dom.window.close();
 });
 
@@ -2153,10 +2637,16 @@ test("menu inicial remove cabeçalho redundante e preserva as opções", () => {
   const message = dom.window.document.querySelector(".chat-message--assistant");
 
   assert.ok(message);
+  assert.ok(message.classList.contains("chat-message--initial-area-menu"), "o menu inicial tem uma classe de layout própria");
   assert.ok(message.querySelector(".chat-avatar"), "o avatar mantém a coluna original do balão no menu inicial");
   assert.equal(message.querySelector(".chat-bubble > strong"), null);
   assert.equal(message.querySelector(".chat-choice-card > p"), null);
   assert.match(message.textContent, /SUPRIMENTOS/);
+
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.chat-message--initial-area-menu\s*\{[^}]*position:\s*relative[^}]*justify-content:\s*center/);
+  assert.match(css, /\.chat-message\.chat-message--initial-area-menu \.chat-avatar\s*\{[^}]*position:\s*absolute[^}]*left:\s*0[^}]*bottom:\s*0/);
+  assert.match(css, /\.chat-message--initial-area-menu \.chat-bubble\s*\{[^}]*width:\s*min\(82%,\s*640px\)/);
 });
 
 test("menu principal não exibe APPS nem o acesso direto à galeria", () => {

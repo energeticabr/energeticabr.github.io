@@ -18,6 +18,7 @@ final class ShareViewController: UIViewController {
     private var stagingFailures: [String] = []
     private var isCancelled = false
     private var extensionCompleted = false
+    private let audioExtensions: Set<String> = ["aac", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "webm"]
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -132,17 +133,36 @@ final class ShareViewController: UIViewController {
         cancelButton.isEnabled = false
         failuresButton.isEnabled = false
         statusLabel.text = "Adicionando ao Energético…"
+        let audioItems = stagedItems.filter { item in
+            item.type.lowercased().hasPrefix("audio/")
+                || audioExtensions.contains(URL(fileURLWithPath: item.name).pathExtension.lowercased())
+        }
+        let uploadItems = stagedItems.filter { item in
+            !audioItems.contains(where: { $0.id == item.id })
+        }
+        // Audio must be transcribed inside the active Diário de Obras flow.
+        // Do not upload it blindly from the share extension, because this
+        // extension cannot know which question is open in Energético.
+        for item in audioItems {
+            try? inboxStore?.updateState(id: item.id, state: "needsAuthentication")
+        }
+        if uploadItems.isEmpty {
+            await finish(message: "Áudio recebido. Abra o Energético para transcrever no Diário de Obras.")
+            return
+        }
         let token = await acquireTokenSilently()
         guard let token else {
-            for item in stagedItems {
+            for item in uploadItems {
                 try? inboxStore?.updateState(id: item.id, state: "needsAuthentication")
             }
-            await finish(message: "Abra o Energético para entrar e concluir o envio.")
+            await finish(message: audioItems.isEmpty
+                ? "Abra o Energético para entrar e concluir o envio."
+                : "Os arquivos foram recebidos. Abra o Energético para concluir o envio e transcrever o áudio.")
             return
         }
 
         var uploaded = 0
-        for item in stagedItems {
+        for item in uploadItems {
             do {
                 try inboxStore?.updateState(id: item.id, state: "uploading")
                 let response = try await upload(item: item, token: token)
@@ -157,14 +177,18 @@ final class ShareViewController: UIViewController {
                 )
             }
         }
-        if uploaded == stagedItems.count {
+        if uploaded == uploadItems.count && audioItems.isEmpty {
             // O envio confirmado já deixou os arquivos persistidos na caixa
             // compartilhada. Feche a folha imediatamente, sem exigir outro
             // toque nem tentar abrir o aplicativo a partir da extensão.
             await finish(message: nil, closeImmediately: true)
+        } else if uploaded == uploadItems.count {
+            await finish(
+                message: "\(uploaded) de \(uploadItems.count) arquivos foram confirmados. O áudio foi recebido e será transcrito ao abrir o Energético."
+            )
         } else {
             await finish(
-                message: "\(uploaded) de \(stagedItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente."
+                message: "\(uploaded) de \(uploadItems.count) arquivos foram confirmados. Abra o aplicativo para tentar novamente; o áudio recebido será transcrito no Diário de Obras."
             )
         }
     }

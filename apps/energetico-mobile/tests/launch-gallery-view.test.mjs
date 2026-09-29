@@ -18,7 +18,11 @@ async function setup(t, overrides = {}) {
     calls.push({ operation, payload });
     return overrides.request ? overrides.request(operation, payload, options) : operation === 'snapshot' ? snapshot() : detail();
   };
-  const gallery = module.createLaunchGallery({ document, request, ...overrides, request });
+  const loadLaunchGroup = overrides.loadLaunchGroup || (async (groupId, { signal } = {}) => {
+    const result = await request('snapshot', { filters: { grouping: groupId }, page: 1, pageSize: 20 }, { signal });
+    return (result.rows || []).filter(item => String(item.fields?.AGRUPAR ?? '').trim() === String(groupId));
+  });
+  const gallery = module.createLaunchGallery({ document, request, ...overrides, loadLaunchGroup, request });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   return { dom, document, gallery, calls, root: () => document.querySelector('.lg-overlay') };
 }
@@ -62,7 +66,12 @@ function input(ctx, name, value, parent = ctx.root()) {
   field.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
   return field;
 }
-async function showDetail(ctx) { button(ctx.root(), 'Detalhes').click(); await settle(); }
+async function showDetail(ctx) {
+  const card = ctx.root().querySelector('.lg-record');
+  const expand = card?.querySelector('.lg-record-expand[aria-expanded="false"]');
+  if (expand) expand.click();
+  button(ctx.root(), 'Detalhes').click(); await settle();
+}
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
 test('filters start collapsed so records are visible; details and review scroll into view', async t => {
@@ -194,12 +203,14 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
   assert.ok(record, 'PowerApps-equivalent record');
   for (const value of ['3424', 'CORDA PARA PRUMO DE CENTRO', 'ALVENARIA E ESTRUTURAS',
     'PIRATININGA FERRAMENTAS LTDA', 'PEDIDO FINALIZADO', 'SHAREPOINT APP EM 20/09/2026 14:27',
-    '004 - EDIFÍCIO XAVANTE', '20/09/2026', 'SEM MODIFICAÇÕES APÓS CRIAÇÃO', 'R$ 2,85',
+    '004 - EDIFÍCIO XAVANTE', '20/09/2026', 'SEM MODIFICAÇÕES APÓS CRIAÇÃO',
     'CUSTO', 'PENDENTE DE APROVAÇÃO', '19/09/2026', '1 UN', 'AMAEL PF - CAIXA', '318',
     '2 anexos', 'SEM AVALIAÇÃO']) assert.ok(record.textContent.includes(value), value);
+  assert.match(record.textContent, /R\$\s*2,85/);
   assert.equal([...ctx.root().querySelectorAll('.lg-filter-grid .lg-label')]
     .some(label => label.textContent === 'Medição'), true);
   assert.match(ctx.root().querySelector('.lg-totals').textContent, /3\s+R\$\s*85,00/);
+  button(record, 'Ver mais informações').click();
   button(record, 'Detalhes').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
 });
@@ -259,6 +270,83 @@ test('launch card keeps a compact summary and reveals secondary fields without h
   assert.equal(expand.getAttribute('aria-expanded'), 'false');
 });
 
+test('launch cards keep a compact summary and reveal remaining fields only when expanded', async t => {
+  const item = row(3458);
+  const second = row(3459);
+  second.fields = { ...second.fields, 'DATA PGTO PREVISTO': '30/09/2026' };
+  item.fields = {
+    ...item.fields,
+    PRODUTO: 'PEDREIRO', FORNECEDOR: 'FELICIANO ROGÉRIO DA SILVA', AGRUPAR: 338,
+    'DATA PGTO EFETUADO': '25/09/2026', 'VALOR UNITÁRIO': 109, QUANTIDADE: 1, UN: 'DIÁRIA', UNIDADE: 'DIÁRIA',
+    FRETE: '0,00', 'VALOR TOTAL': 'R$ 109,00', FILIAL: '004 - EDIFÍCIO XAVANTE',
+    'ETAPA OBRA': 'ALVENARIA E ESTRUTURAS', 'DATA DE COMPRA': '28/09/2026',
+    'DATA PGTO PREVISTO': '29/09/2026', 'DATA DE RMS': '28/09/2026',
+    'FORMA DE PAGAMENTO': 'PIX', 'TIPO DE OPERAÇÃO': 'CUSTO', APROVAÇÃO: 'PENDENTE DE APROVAÇÃO',
+  };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item, second] }) : detail({ item }) });
+  await ctx.gallery.open();
+
+  const [card, secondCard] = ctx.root().querySelectorAll('.lg-record');
+  const summary = card.querySelector('.lg-record-summary');
+  const extra = card.querySelector('.lg-record-extra');
+  const secondExtra = secondCard.querySelector('.lg-record-extra');
+  const secondSummary = secondCard.querySelector('.lg-record-summary');
+  const toggle = button(card, 'Ver mais informações');
+  assert.ok(summary);
+  assert.ok(extra);
+  assert.equal(extra.hidden, true);
+  assert.match(secondSummary.textContent, /PREVISTO.*30\/09\/2026/);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(toggle.getAttribute('aria-controls'), extra.id);
+  assert.notEqual(extra.id, secondExtra.id);
+  for (const value of ['3458', 'PEDREIRO', 'FELICIANO ROGÉRIO DA SILVA', '338', '25/09/2026', '1 DIÁRIA']) {
+    assert.ok(summary.textContent.includes(value), value);
+  }
+  assert.match(summary.textContent, /R\$\s*109,00/);
+  assert.match(summary.textContent, /R\$\s*0,00/);
+  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
+    assert.doesNotMatch(summary.textContent, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.equal(card.querySelector('.lg-record-media').parentElement, card.querySelector('.lg-record-content').parentElement);
+
+  toggle.click();
+  assert.equal(extra.hidden, false);
+  assert.equal(secondExtra.hidden, true, 'expanding one launch must not expand another');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(toggle.textContent, 'Ver menos informações');
+  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
+    assert.ok(extra.textContent.includes(value), value);
+  }
+  button(card, 'Detalhes').click(); await settle();
+  assert.deepEqual(ctx.calls.at(-1), { operation: 'detail', payload: { id: 3458 } });
+
+  toggle.click();
+  assert.equal(extra.hidden, true);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+});
+
+test('supplier and AGRUPAR actions remain usable in the compact launch summary', async t => {
+  const item = row(3458);
+  item.fields = { ...item.fields, FORNECEDOR: 'Fornecedor A', AGRUPAR: 338 };
+  const ctx = await setup(t, {
+    loadLaunchGroup: async () => [item],
+    loadOrderSnapshot: async () => ({ rows: [{ id: 338, fields: { ID: 338, FORNECEDOR: 'Fornecedor A' } }] }),
+    request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item }),
+  });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.lg-record');
+  const extra = card.querySelector('.lg-record-extra');
+
+  card.querySelector('[data-cluster-kind="supplier"]').click(); await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, false);
+  assert.equal(extra.hidden, true);
+  button(ctx.root().querySelector('.lg-cluster-modal'), 'Fechar').click();
+  card.querySelector('[data-cluster-kind="order"]').click(); await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, false);
+  assert.equal(extra.hidden, true);
+});
+
 test('supplier cluster loads every matching launch page and summarizes the supplier', async t => {
   const first = row(3451); first.fields = { ...first.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 905,00' };
   const second = row(3450); second.fields = { ...second.fields, FORNECEDOR: 'Fornecedor A', 'VALOR TOTAL': 'R$ 181,00' };
@@ -305,8 +393,9 @@ for (const kind of ['supplier', 'order']) {
     const ctx = await setup(t, {
       clusterTimeoutMs: 15,
       loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {} }] }),
+      ...(kind === 'order' ? { loadLaunchGroup: () => pending.promise } : {}),
       request: async (operation, payload) => {
-        if (operation === 'snapshot' && (payload.pageSize === 100 || payload.filters?.supplier)) return pending.promise;
+        if (operation === 'snapshot' && payload.filters?.supplier) return pending.promise;
         return operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item });
       },
     });
@@ -367,13 +456,11 @@ test('order cluster aborts its sibling request when either data source fails', a
   let launchSignal;
   const ctx = await setup(t, {
     loadOrderSnapshot: async () => { throw new Error('SharePoint indisponível'); },
-    request: async (operation, payload, options) => {
-      if (operation === 'snapshot' && payload.pageSize === 100) {
-        launchSignal = options?.signal;
-        return pendingLaunches.promise;
-      }
-      return operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item });
+    loadLaunchGroup: (_id, { signal }) => {
+      launchSignal = signal;
+      return pendingLaunches.promise;
     },
+    request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item }),
   });
   await ctx.gallery.open();
   ctx.root().querySelector('[data-cluster-kind="order"]').click();
@@ -388,20 +475,17 @@ test('order cluster joins AGRUPAR to the SharePoint order and renders the order 
   const orderLaunch = row(3451);
   orderLaunch.fields = { ...orderLaunch.fields, AGRUPAR: '334', 'ID PEDIDO': 334, 'DATA DE COMPRA': '2026-09-27',
     'VALOR TOTAL': 'R$ 905,00', QUANTIDADE: 5, UNIDADE: 'DIÁRIA', FRETE: 'R$ 0,00' };
-  const otherLaunch = row(3450);
-  otherLaunch.fields = { ...otherLaunch.fields, AGRUPAR: '335', 'VALOR TOTAL': 'R$ 999,00' };
-  const orderPages = [];
   const ctx = await setup(t, {
     loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {
       FILIAL: '004 - EDIFÍCIO XAVANTE', FORNECEDOR: 'MAURO ANTONIO PEREIRA', FORMAPGTO: 'DINHEIRO',
       VALORTOTAL: 905, STATUS: 'PENDENTE AUDITORIA', OBS: 'Sem observação',
     } }] }),
+    loadLaunchGroup: async groupId => {
+      assert.equal(groupId, '334');
+      return [orderLaunch];
+    },
     request: async (operation, payload) => {
       if (operation !== 'snapshot') return detail({ item: orderLaunch });
-      if (payload.pageSize === 100) {
-        orderPages.push(payload.page);
-        return snapshot({ rows: payload.page === 1 ? [orderLaunch] : [otherLaunch], page: payload.page, pages: 2, count: 2 });
-      }
       return snapshot({ rows: [orderLaunch] });
     },
   });
@@ -411,7 +495,6 @@ test('order cluster joins AGRUPAR to the SharePoint order and renders the order 
 
   const modal = ctx.root().querySelector('.lg-cluster-modal');
   assert.equal(modal.hidden, false);
-  assert.deepEqual(orderPages, [1, 2]);
   assert.match(modal.textContent, /CABEÇALHO DO PEDIDO/);
   assert.match(modal.textContent, /MAURO ANTONIO PEREIRA/);
   assert.match(modal.textContent, /LANÇAMENTOS VINCULADOS AO PEDIDO 334/i);
@@ -421,36 +504,33 @@ test('order cluster joins AGRUPAR to the SharePoint order and renders the order 
   assert.match(modal.textContent, /Soma dos lançamentos:[\s\S]*905,00/i);
 });
 
-test('order cluster fetches the launch snapshot in bounded parallel pages before filtering AGRUPAR locally', async t => {
-  const item = row(3451); item.fields = { ...item.fields, AGRUPAR: '334' };
-  const requestedPages = [];
-  const pendingPages = new Map([2, 3, 4, 5, 6].map(page => [page, deferred()]));
+test('order cluster requests one order by ID and only the LANCAMENTOS group, never the whole launch gallery', async t => {
+  const item = row(3451);
+  item.fields = { ...item.fields, AGRUPAR: '334', 'ID PEDIDO': 334, 'DATA DE COMPRA': '2026-09-27',
+    'VALOR TOTAL': 'R$ 905,00', QUANTIDADE: 5, UNIDADE: 'DIÁRIA', FRETE: 'R$ 0,00' };
+  const orderIds = [], groupIds = [];
+  let fullGalleryReads = 0;
   const ctx = await setup(t, {
-    loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: {} }] }),
+    loadOrderSnapshot: async ({ id }) => {
+      orderIds.push(id);
+      return { rows: [{ id, fields: { FORNECEDOR: 'MAURO ANTONIO PEREIRA', VALORTOTAL: 905 } }] };
+    },
+    loadLaunchGroup: async id => { groupIds.push(id); return [item]; },
     request: async (operation, payload) => {
-      if (operation !== 'snapshot') return detail({ item });
-      if (payload.pageSize !== 100) return snapshot({ rows: [item] });
-      requestedPages.push(payload.page);
-      if (payload.page === 1) return snapshot({ rows: [item], page: 1, pages: 6, count: 6 });
-      return pendingPages.get(payload.page).promise;
+      if (operation === 'snapshot' && payload.pageSize === 100) fullGalleryReads += 1;
+      return operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item });
     },
   });
   await ctx.gallery.open();
   ctx.root().querySelector('[data-cluster-kind="order"]').click();
-  await settle();
-
-  try {
-    assert.deepEqual([...requestedPages], [1, 2, 3, 4, 5]);
-    for (const page of [2, 3, 4, 5]) pendingPages.get(page).resolve(snapshot({ rows: [], page, pages: 6, count: 6 }));
-    await settle();
-    assert.deepEqual([...requestedPages], [1, 2, 3, 4, 5, 6]);
-  } finally {
-    for (const [page, pending] of pendingPages) pending.resolve(snapshot({ rows: [], page, pages: 6, count: 6 }));
-  }
   await settle(); await settle();
 
   const modal = ctx.root().querySelector('.lg-cluster-modal');
-  assert.equal(modal.querySelectorAll('[data-launch-id]').length, 1);
+  assert.deepEqual(orderIds, ['334']);
+  assert.deepEqual(groupIds, ['334']);
+  assert.equal(fullGalleryReads, 0);
+  assert.match(modal.textContent, /CABEÇALHO DO PEDIDO/);
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3451']);
 });
 
 test('order reconciliation stays indeterminate when linked launch amounts are missing', async t => {
@@ -475,32 +555,28 @@ test('order reconciliation stays indeterminate when linked launch amounts are mi
 test('stale launch-page request cannot overwrite a newer cluster cache after gallery refresh', async t => {
   const stale = row(3451); stale.fields = { ...stale.fields, AGRUPAR: '334' };
   const fresh = row(3452); fresh.fields = { ...fresh.fields, AGRUPAR: '334' };
-  const oldPage = deferred(); let fullPageRequests = 0;
+  const staleGroup = deferred(); let groupRequests = 0;
   const ctx = await setup(t, {
     loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: { VALORTOTAL: 85 } }] }),
+    loadLaunchGroup: async () => {
+      groupRequests += 1;
+      return groupRequests === 1 ? staleGroup.promise : [fresh];
+    },
     request: async (operation, payload) => {
       if (operation !== 'snapshot') return detail({ item: fresh });
-      if (payload.pageSize !== 100) return snapshot({ rows: [fresh] });
-      fullPageRequests += 1;
-      return fullPageRequests === 1 ? oldPage.promise : snapshot({ rows: [fresh] });
+      return snapshot({ rows: [fresh] });
     },
   });
   await ctx.gallery.open();
   ctx.root().querySelector('[data-cluster-kind="order"]').click();
   await settle();
-  ctx.root().querySelector('details.lg-filters').open = true;
-  button(ctx.root(), 'Limpar filtros').click();
-  await settle();
-  let modal = ctx.root().querySelector('.lg-cluster-modal');
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
   button(modal, 'Fechar').click();
   ctx.root().querySelector('[data-cluster-kind="order"]').click();
   await settle(); await settle();
   assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3452']);
 
-  oldPage.resolve(snapshot({ rows: [stale] }));
-  await settle(); await settle();
-  button(modal, 'Fechar').click();
-  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  staleGroup.resolve([stale]);
   await settle(); await settle();
   assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3452']);
 });
@@ -562,6 +638,7 @@ test('missing order and unlinked AGRUPAR show a safe empty state; Escape closes 
   const unrelated = row(3450); unrelated.fields = { ...unrelated.fields, AGRUPAR: '335' };
   const ctx = await setup(t, {
     loadOrderSnapshot: async () => ({ rows: [] }),
+    loadLaunchGroup: async () => [],
     request: async (operation, payload) => {
       if (operation !== 'snapshot') return detail({ item });
       return payload.pageSize === 100 ? snapshot({ rows: [unrelated] }) : snapshot({ rows: [item] });
@@ -607,6 +684,7 @@ test('launch summary formats SharePoint dates as dd/mm/yyyy and resolves the cre
   assert.equal(values.get('ADICIONADO POR'), 'Bernardo Notini');
   assert.doesNotMatch(record.textContent, /2026-09-24T03:00:00Z|2026-09-25T00:43:17Z|1073741822/);
 
+  button(record, 'Ver mais informações').click();
   button(record, 'Detalhes').click(); await settle();
   const details = ctx.root().querySelector('.lg-data-table');
   const detailValues = new Map([...details.querySelectorAll('tr')].map(line => [
@@ -677,7 +755,8 @@ test('launch rows keep the stable pre-parity layout while keeping attachments op
   assert.match(record.querySelector('.lg-record-status').textContent, /PEDIDO FINALIZADO/i);
   assert.match(record.querySelector('.lg-record-badges').textContent, /PENDENTE DE APROVAÇÃO/i);
   assert.equal(record.querySelector('[data-lg-action="attachments"]'), null);
-  assert.ok(record.querySelector('.lg-record-content > .lg-button'), 'details stays as the single row action');
+  assert.ok(record.querySelector('.lg-record-expand'), 'the row exposes its expand action');
+  assert.ok(record.querySelector('.lg-record-extra > .lg-button'), 'record details remain accessible after expanding');
 });
 
 test('launch cards show a PDF marker on the left when any PDF attachment exists', async t => {
@@ -1265,10 +1344,21 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   assert.doesNotMatch(css, /\.lg-record-select\s*\{/);
   assert.match(css, /\.lg-record-media\s*\{[^}]*cursor:\s*pointer/s);
   assert.match(css, /\.lg-record-media\s*\{[^}]*background:\s*var\(--lg-sky\)/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*align-self:\s*stretch/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(css, /\.lg-record-content\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(css, /\.lg-record--with-media\s+\.lg-record-content\s*\{[^}]*grid-column:\s*2/s);
+  const baseContent = css.match(/\.lg-record-content\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.doesNotMatch(baseContent, /grid-column:\s*2/);
   assert.match(css, /\.lg-cluster-table-wrap\s*\{[^}]*overflow:\s*auto/s);
   assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
-  assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-summary-primary\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
-  assert.match(css, /\.lg-record-content\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(css, /\.lg-record-extra\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
+});
+
+test('Windows PWA entrypoint includes the launch gallery stylesheet', () => {
+  const entry = readFileSync(new URL('../src/web/main.js', import.meta.url), 'utf8');
+  assert.match(entry, /import\s+["']\.\.\/ui\/launch-gallery\.css["'];/);
 });
 
 test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {

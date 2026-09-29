@@ -135,6 +135,10 @@ function numericAmount(value) {
   const amount = Number(raw);
   return Number.isFinite(amount) ? amount : null;
 }
+function moneyFieldValue(value) {
+  const amount = numericAmount(value);
+  return amount == null ? value : money(amount);
+}
 
 function personDisplayName(value) {
   if (value == null) return '';
@@ -158,7 +162,7 @@ function personDisplayName(value) {
  * Nothing here owns the chat, the viewer, or the signature canvas.
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
-  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot,
+  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot, loadLaunchGroup,
   captureSignature, onClose, onHome, clusterTimeoutMs = 30_000 } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
@@ -168,8 +172,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let current = null, selectedId = null, editor = null, review = null, attachmentIndex = 0;
   let page = 1, pages = 0, needsDetailRefresh = false;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
-  let allLaunchRowsCache = null, allLaunchRowsRequest = null;
-  let allLaunchRowsGeneration = 0;
   const retryIds = new Map();
   const selectedUploads = new Map();
   const filterControls = new Map();
@@ -362,9 +364,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function loadSnapshot(data = applied) {
     if (!opened || destroyed) return;
-    allLaunchRowsGeneration += 1;
-    allLaunchRowsCache = null;
-    allLaunchRowsRequest = null;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
@@ -607,18 +606,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     return [...rowsById.values()];
   }
-  function fetchAllLaunchRows({ signal } = {}) {
-    if (allLaunchRowsCache) return Promise.resolve(allLaunchRowsCache);
-    if (allLaunchRowsRequest) return allLaunchRowsRequest;
-    const generation = allLaunchRowsGeneration;
-    let requestPromise;
-    requestPromise = fetchLaunchRows({}, { signal, parallelPages: 4 }).then(rows => {
-      if (generation === allLaunchRowsGeneration) allLaunchRowsCache = rows;
-      return rows;
-    }).finally(() => { if (allLaunchRowsRequest === requestPromise) allLaunchRowsRequest = null; });
-    allLaunchRowsRequest = requestPromise;
-    return requestPromise;
-  }
   function amountFor(item) {
     return numericAmount(field(item?.fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
   }
@@ -723,7 +710,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (clusterAbortController) {
       clusterAbortController.abort();
       clusterAbortController = null;
-      if (allLaunchRowsRequest) { allLaunchRowsGeneration += 1; allLaunchRowsRequest = null; }
     }
   }
   async function openCluster(kind, value) {
@@ -750,7 +736,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       controller.abort();
       clusterAbortController = null;
       clusterTimer = null;
-      if (allLaunchRowsRequest) { allLaunchRowsGeneration += 1; allLaunchRowsRequest = null; }
       clusterVersion += 1;
       clusterPanel.setAttribute('aria-busy', 'false');
       const retry = button('Tentar novamente', () => { void openCluster(kind, value); }, { locked: false });
@@ -771,11 +756,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       } else {
         if (!rawValue || !clusterKey(rawValue)) throw new Error('O valor de AGRUPAR não identifica um pedido válido.');
         if (typeof loadOrderSnapshot !== 'function') throw new Error('A consulta de pedidos do SharePoint não está disponível nesta sessão.');
-        const [orders, launchRows] = await Promise.all([loadOrderSnapshot({ signal }), fetchAllLaunchRows({ signal })]);
+        if (typeof loadLaunchGroup !== 'function') throw new Error('A consulta filtrada de LANCAMENTOS não está disponível nesta sessão.');
+        const [orders, launchRows] = await Promise.all([
+          loadOrderSnapshot({ id: rawValue, signal }),
+          loadLaunchGroup(rawValue, { signal }),
+        ]);
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
         const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
-        const linked = launchRows.filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
+        const linked = (Array.isArray(launchRows) ? launchRows : [])
+          .filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
         const content = [];
         if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
         if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
@@ -838,24 +828,48 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       identity.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
 
-    const main = element('div', 'lg-record-main');
+    const summary = element('section', 'lg-record-summary');
     const supplier = field(fields, 'FORNECEDOR');
+    const group = field(fields, 'AGRUPAR');
+    const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
+    const plannedDate = field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO');
+    const paymentDate = paidDate ?? plannedDate;
+    const paymentLabel = paidDate ? 'PAGAMENTO' : plannedDate ? 'PREVISTO' : 'PAGAMENTO';
+    const summaryFields = element('div', 'lg-record-summary-fields');
+    summaryFields.append(...[
+      clusterAction('FORNECEDOR', supplier, 'supplier'),
+      clusterAction('PEDIDO', group, 'order'),
+      summaryField(paymentLabel, paymentDate),
+    ].filter(Boolean));
+
+    const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
+    const values = [
+      ['VALOR UNITÁRIO', moneyFieldValue(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'))],
+      ['QUANTIDADE', quantityText],
+      ['FRETE', moneyFieldValue(field(fields, 'FRETE'))],
+      ['VALOR TOTAL', moneyFieldValue(totalValue)],
+    ];
+    for (const [name, value] of values) {
+      const entry = summaryField(name, value);
+      if (entry) finance.append(entry);
+    }
+    if (!summaryFields.childElementCount) summaryFields.hidden = true;
+    if (!finance.childElementCount) finance.hidden = true;
+
+    const main = element('div', 'lg-record-main');
     const branch = field(fields, 'FILIAL');
     const stage = field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA');
-    const group = field(fields, 'AGRUPAR');
-    const supplierEntry = clusterAction('FORNECEDOR', supplier, 'supplier');
-    const orderEntry = clusterAction('AGRUPAR', group, 'order');
-
-    const extraCommercial = element('section', 'lg-record-group lg-record-commercial lg-record-commercial-extra');
-    extraCommercial.append(...[summaryField('FILIAL', branch), summaryField('ETAPA', stage)].filter(Boolean));
-    if (!extraCommercial.childElementCount) extraCommercial.hidden = true;
+    const commercial = element('section', 'lg-record-group lg-record-commercial');
+    commercial.append(...[
+      summaryField('FILIAL', branch),
+      summaryField('ETAPA', stage),
+    ].filter(Boolean));
 
     const execution = element('section', 'lg-record-group lg-record-execution lg-record-dates');
     execution.append(element('h3', 'lg-record-section-title', '▦ Datas'));
     const dateEntries = [
       ['DATA DE COMPRA', field(fields, 'DATA DE COMPRA', 'DATA')],
       ['DATA PREVISTO PGTO', field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO')],
-      ['DATA DE PAGAMENTO', field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
       ['DATA DE RMS', field(fields, 'DATA DE RMS', 'DATA RMS')],
       ['DATA DE LIQUIDAÇÃO', field(fields, 'DATA DE LIQUIDAÇÃO', 'DATA LIQUIDAÇÃO')],
       ['CRIADO', field(fields, 'CRIADO', 'CREATED')],
@@ -865,22 +879,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const date = summaryField(name, value);
       if (date) execution.append(date);
     }
-    const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
-    const plannedDate = field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO');
-    const summaryPaymentDate = summaryField(paidDate ? 'PAGAMENTO' : 'PGTO PREVISTO', paidDate ?? plannedDate);
-
-    const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
-    const values = [
-      ['VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')],
-      ['QUANTIDADE', quantityText],
-      ['FRETE', field(fields, 'FRETE')],
-      ['VALOR TOTAL', totalValue],
-    ];
-    for (const [name, value] of values) {
-      const entry = summaryField(name, value);
-      if (entry) finance.append(entry);
-    }
-
     const meta = element('section', 'lg-record-group lg-record-meta');
     const metaValues = [
       ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
@@ -897,15 +895,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (execution.children.length <= 1) execution.hidden = true;
     if (!finance.childElementCount) finance.hidden = true;
     if (!meta.childElementCount) meta.hidden = true;
-
-    const summary = element('div', 'lg-record-summary');
-    const summaryPrimary = element('div', 'lg-record-summary-primary');
-    summaryPrimary.append(...[supplierEntry, orderEntry, summaryPaymentDate].filter(Boolean));
-    summary.append(summaryPrimary, finance);
-    main.append(summary);
-
-    const extra = element('div', 'lg-record-extra');
-    extra.append(extraCommercial, execution, meta);
+    main.append(commercial, execution, meta);
 
     const badges = element('div', 'lg-record-badges');
     const badgeValues = [
@@ -916,23 +906,26 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (value == null || display(value).trim() === '') continue;
       badges.append(element('span', `lg-record-badge ${className}`, display(value)));
     }
-    if (badges.childElementCount) extra.append(badges);
-    extra.hidden = true;
-    const disclosure = button('Ver mais informações', () => {
-      const expanded = extra.hidden;
-      extra.hidden = !expanded;
-      card.classList.toggle('lg-record--expanded', expanded);
-      disclosure.setAttribute('aria-expanded', String(expanded));
-      disclosure.textContent = expanded ? 'Ver menos informações' : 'Ver mais informações';
-    }, { locked: false });
-    disclosure.classList.add('lg-record-disclosure');
-    disclosure.setAttribute('aria-expanded', 'false');
-    disclosure.setAttribute('aria-controls', `lg-record-extra-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`);
-    extra.id = disclosure.getAttribute('aria-controls');
     const details = button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); });
     details.dataset.lgAction = 'details';
+    const extra = element('section', 'lg-record-extra');
+    extra.id = `lg-launch-extra-${String(item.id).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+    extra.hidden = true;
+    extra.append(main, badges, details);
+    const expand = button('Ver mais informações', () => {
+      const expanded = expand.getAttribute('aria-expanded') === 'true';
+      extra.hidden = expanded;
+      expand.setAttribute('aria-expanded', String(!expanded));
+      expand.textContent = expanded ? 'Ver mais informações' : 'Ver menos informações';
+    });
+    expand.classList.add('lg-record-expand');
+    expand.setAttribute('aria-expanded', 'false');
+    expand.setAttribute('aria-controls', extra.id);
     const body = element('div', 'lg-record-content');
-    body.append(identity, main, disclosure, extra, details);
+    summary.append(identity, summaryFields);
+    if (!finance.hidden) summary.append(finance);
+    summary.append(expand);
+    body.append(summary, extra);
     card.append(...(recordPreview ? [recordPreview] : []), body);
     return card;
   }

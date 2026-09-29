@@ -869,7 +869,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   async function listLists(siteKey, options = {}) {
     throwIfAborted(options.signal);
     if (listCache.has(siteKey)) return listCache.get(siteKey);
-    if (listRequests.has(siteKey)) return listRequests.get(siteKey);
+    const pending = listRequests.get(siteKey);
+    if (pending && pending.signal === options.signal) return pending.promise;
     const request = (async () => {
       const config = getSiteConfig(siteKey);
       const configuredTransport = siteTransport(config, "read");
@@ -903,13 +904,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       if (lists.length) listCache.set(siteKey, lists);
       return lists;
     })();
-    listRequests.set(siteKey, request);
+    const pendingRequest = { promise: request, signal: options.signal };
+    listRequests.set(siteKey, pendingRequest);
     try {
       return await request;
     } catch (error) {
       throw error;
     } finally {
-      if (listRequests.get(siteKey) === request) listRequests.delete(siteKey);
+      if (listRequests.get(siteKey) === pendingRequest) listRequests.delete(siteKey);
     }
   }
 
@@ -1403,7 +1405,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
       return canonicalRestItem(payload);
     }
     const site = await getSite(siteKey, options);
-    return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}${queryString(query)}`, { method: "GET" });
+    return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}${queryString(query)}`, {
+      method: "GET",
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
   }
 
   async function getPowerAppsGalleryFilterValues(siteKey, rawSource = {}, options = {}) {

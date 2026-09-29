@@ -1023,22 +1023,28 @@ test("Galeria Lançamentos abre localmente a partir do menu de Suprimentos", asy
   assert.equal(h.chatCalls.length, before, "abrir a galeria também deve permanecer local");
 });
 
-test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup AGRUPAR", async t => {
+test("Galeria Lançamentos fornece leituras pontuais autenticadas do pedido e dos lançamentos agrupados", async t => {
   let callbacks;
-  let reads = 0;
+  const reads = [];
   let tokenScopes;
-  let receivedSignal;
+  let orderSignal, groupSignal;
   const h = makeHarness({
     launchGalleryFactory: async options => {
       callbacks = options;
       return { async open() {}, destroy() {} };
     },
     ordersGalleryDataFactory: async ({ tokenProvider }) => ({
-      async loadSnapshot({ signal } = {}) {
-        receivedSignal = signal;
-        reads += 1;
+      async loadItem(id, { signal } = {}) {
+        reads.push(["item", id]);
+        orderSignal = signal;
         assert.equal(await tokenProvider(["Sites.Read.All"]), "sharepoint-token");
-        return { rows: [{ id: "334", fields: { FORNECEDOR: "Fornecedor A" } }] };
+        return { id, fields: { FORNECEDOR: "Fornecedor A" } };
+      },
+      async loadLaunchGroup(id, { signal } = {}) {
+        reads.push(["group", id]);
+        groupSignal = signal;
+        assert.equal(await tokenProvider(["Sites.Read.All"]), "sharepoint-token");
+        return [{ id: "3451", fields: { AGRUPAR: id } }];
       },
     }),
   });
@@ -1048,11 +1054,14 @@ test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup
   await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
 
   const controller = new AbortController();
-  const snapshot = await callbacks.loadOrderSnapshot({ signal: controller.signal });
-  assert.equal(reads, 1);
-  assert.equal(receivedSignal, controller.signal);
+  const snapshot = await callbacks.loadOrderSnapshot({ id: "334", signal: controller.signal });
+  const launches = await callbacks.loadLaunchGroup("334", { signal: controller.signal });
+  assert.deepEqual(reads, [["item", "334"], ["group", "334"]]);
+  assert.equal(orderSignal, controller.signal);
+  assert.equal(groupSignal, controller.signal);
   assert.deepEqual(tokenScopes, ["Sites.Read.All"]);
   assert.equal(snapshot.rows[0].id, "334");
+  assert.equal(launches[0].fields.AGRUPAR, "334");
 });
 
 test("Galeria Pedidos e popup AGRUPAR preservam o próprio retorno após consentimento SharePoint", async t => {
@@ -4766,6 +4775,80 @@ test("arquivos soltos no chat usam a mesma fila de envio dos anexos selecionados
     ["file", "arrastada.jpg"],
   ]);
   assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
+test("arquivo de áudio no Diário de Obras vira texto técnico e não é enviado como anexo", async t => {
+  const h = makeHarness();
+  const transcripts = [];
+  h.client.transcribeAudio = async file => {
+    transcripts.push(file.name);
+    return "Eu fiz a concretagem da laje grande. Eu conferi o nível.";
+  };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "DIGITE AS ATIVIDADES EXECUTADAS",
+    options: [],
+  }], { activeFlow: { id: "construction_task", title: "PREENCHER DIÁRIO DE OBRAS" } });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const audio = new File(["audio"], "atividade.m4a", { type: "audio/mp4" });
+
+  await h.view.emit("files-dropped", { files: [audio] });
+
+  assert.deepEqual(transcripts, ["atividade.m4a"]);
+  assert.equal(h.chatCalls.some(call => call[0] === "file"), false);
+  assert.equal(h.store.getState().draft, "Execução de concretagem da laje grande. Verificação de nível.");
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
+test("áudio recebido pelo compartilhamento no Diário de Obras vira texto técnico", async t => {
+  const h = makeHarness();
+  let resume;
+  const transcripts = [];
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  h.client.transcribeAudio = async file => {
+    transcripts.push(file.name);
+    return "Foi realizada a conferência da armação.";
+  };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "DIGITE AS ATIVIDADES EXECUTADAS",
+    options: [],
+  }], { activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const audio = new File(["audio"], "AUDIO-2026-09-28-17-50-14.m4a", { type: "audio/mp4" });
+  Object.defineProperty(audio, "sourceId", { value: "shared-audio-1" });
+  h.native.importSharedItems = async () => [audio];
+  await resume();
+
+  assert.deepEqual(transcripts, ["AUDIO-2026-09-28-17-50-14.m4a"]);
+  assert.equal(h.chatCalls.some(call => call[0] === "file"), false);
+  assert.equal(h.store.getState().draft, "Foi realizada a conferência da armação.");
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.deepEqual(h.discarded, ["shared-audio-1"]);
+});
+
+test("falha ao transcrever áudio preserva o arquivo pendente", async t => {
+  const h = makeHarness();
+  h.client.transcribeAudio = async () => { throw new Error("Serviço de transcrição indisponível"); };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "INFORME AS OBSERVAÇÕES",
+    options: [],
+  }], { activeFlow: { id: "construction_task", title: "PREENCHER DIÁRIO DE OBRAS" } });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const audio = new File(["audio"], "observacao.ogg", { type: "audio/ogg" });
+
+  const accepted = await h.view.emit("files-dropped", { files: [audio] });
+
+  assert.equal(accepted, false);
+  assert.equal(h.store.getState().pendingFiles.length, 1);
+  assert.equal(h.store.getState().pendingFiles[0].status, "failed");
+  assert.match(h.view.renders.at(-1)?.error || "", /indisponível/i);
+  assert.equal(h.chatCalls.some(call => call[0] === "file"), false);
 });
 
 test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async () => {

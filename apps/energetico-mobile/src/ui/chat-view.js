@@ -21,6 +21,28 @@ function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
 }
 
+function isStructuredVoicePrompt(message, visibleMessages, databaseFilter, activeFlow = null) {
+  if (databaseFilter || isActiveDateQuestion(visibleMessages) || isActiveDocumentIdQuestion(visibleMessages)) return true;
+  if (Array.isArray(message?.options) && message.options.length) {
+    const diaryFlow = isVoiceInputFlow(activeFlow);
+    const flowActions = new Set(["abandon_construction_diary", "navigation_back", "navigation_main_menu"]);
+    const hasAnswerChoices = message.options.some(option => {
+      const replyId = String(option?.reply || option?.id || "").trim().toLocaleLowerCase("pt-BR");
+      return !diaryFlow || !flowActions.has(replyId);
+    });
+    if (hasAnswerChoices) return true;
+  }
+  const question = String(message?.question || message?.prompt || "");
+  return /(?:quantidade|quantos|quantas|n[úu]mero|cpf|cnpj|data|dia|hora|hor[áa]rio|valor|telefone|whatsapp|e-?mail)/i.test(question);
+}
+
+function shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice) {
+  if (generatedSignatureChoice || !state?.activeFlow) return false;
+  if (isStructuredVoicePrompt(latestAssistantMessage, visibleMessages, databaseFilter, state.activeFlow)) return false;
+  return isVoiceInputFlow(state.activeFlow)
+    || Boolean(String(latestAssistantMessage?.question || latestAssistantMessage?.prompt || "").trim());
+}
+
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -924,6 +946,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
     ${navigation}
     <header class="chat-rhid-attendance-report__header">
       <div class="chat-rhid-attendance-report__identity"><span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2></div>
+      <div class="chat-rhid-attendance-report__header-actions">${refreshButton}${shareButton}</div>
       <div class="chat-rhid-attendance-report__updated" title="${escapeHtml(updateLabel)}"><span>${escapeHtml(updateHeading)}</span><strong>${escapeHtml(updateTime)}</strong></div>
       <div class="chat-rhid-attendance-report__date"><span>DATA DO RELATÓRIO</span><time datetime="${escapeHtml(date)}">${escapeHtml(dateLabel || "—")}</time></div>
     </header>
@@ -933,7 +956,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
       <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
       <div><strong class="chat-rhid-attendance-report__summary-value chat-rhid-attendance-report__summary-value--missing">${String(summary.withoutPunches).padStart(2, "0")}</strong><span>SEM MARCAÇÃO</span></div>
     </div>
-    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong><div class="chat-rhid-attendance-report__toolbar-actions">${refreshButton}${shareButton}</div></div>
+    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong></div>
     ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
       ${rows.map(row => {
         const noPunches = isRhidAttendanceRowWithoutPunches(row);
@@ -946,9 +969,13 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
           const exitLabel = String(headers[2 + index * 2] ?? `Saída ${index + 1}`);
           const entry = String(row[1 + index * 2] ?? "—");
           const exit = String(row[2 + index * 2] ?? "—");
-          const entryClass = /^\d{1,2}:\d{2}$/.test(entry.trim()) ? "chat-rhid-attendance-card__entry" : "";
-          const exitClass = /^\d{1,2}:\d{2}$/.test(exit.trim()) ? "chat-rhid-attendance-card__exit" : "";
-          return `<div class="chat-rhid-attendance-card__slot"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div>`;
+          const entryIsTime = /^\d{1,2}:\d{2}$/.test(entry.trim());
+          const exitIsTime = /^\d{1,2}:\d{2}$/.test(exit.trim());
+          const entryClass = entryIsTime ? "chat-rhid-attendance-card__entry" : "";
+          const exitClass = exitIsTime ? "chat-rhid-attendance-card__exit" : "";
+          const entryClusterClass = `chat-rhid-attendance-card__cluster ${entryIsTime ? "chat-rhid-attendance-card__cluster--entry" : "chat-rhid-attendance-card__cluster--empty"}`;
+          const exitClusterClass = `chat-rhid-attendance-card__cluster ${exitIsTime ? "chat-rhid-attendance-card__cluster--exit" : "chat-rhid-attendance-card__cluster--empty"}`;
+          return `<div class="chat-rhid-attendance-card__slot"><div class="${entryClusterClass}"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong></div><div class="${exitClusterClass}"><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div></div>`;
         }).join("");
         const totalText = String(total);
         const isPartial = /\(parcial\)/i.test(totalText);
@@ -1454,7 +1481,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2063,7 +2090,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const signaturePrompt = isSignaturePrompt(state);
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
-  const voiceInputVisible = isVoiceInputFlow(state.activeFlow) && !generatedSignatureChoice;
+  const voiceInputVisible = shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice);
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -2127,7 +2154,7 @@ export function commandFromTarget(target) {
   };
 }
 
-export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, demo = false } = {}) {
+export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
@@ -2142,7 +2169,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let composing = false;
   let voiceInput = null;
   let voiceInputHeld = false;
+  let voiceInputTapMode = false;
+  let voiceInputNormalizeAfterStop = false;
   let voiceInputPointerId = null;
+  let voiceInputSuppressClickUntil = 0;
+  let voiceInputIgnorePairedTouchUntil = 0;
+  let voiceInputIgnoredTouchContact = false;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2182,12 +2214,27 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let fileDropZone = null;
 
   function voiceInputEnabled(state = lastState) {
+    const messages = Array.isArray(state?.messages) ? state.messages : [];
+    const visibleMessages = messages;
+    const latestAssistantMessage = [...visibleMessages].reverse()
+      .find(message => message?.role !== "user" && (message?.type === "poll" || message?.type === "text"));
     return state?.sessionStatus === "authenticated"
-      && isVoiceInputFlow(state?.activeFlow)
-      && !isGeneratedDocumentSignatureChoice(state);
+      && shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilterForView(visibleMessages), isGeneratedDocumentSignatureChoice(state));
   }
 
-  function setVoiceInputButtonState({ active = false, error = "", enabled = voiceInputEnabled() } = {}) {
+  function normalizeVoiceDraft() {
+    if (!voiceInputEnabled()) return;
+    const draft = composerControls.draft?.value || "";
+    const technicalText = normalizeConstructionDiaryText(draft);
+    if (technicalText && technicalText !== draft) {
+      composerControls.draft.value = technicalText;
+      resizeDraft(composerControls.draft);
+      syncComposerInset();
+      emit({ type: "draft-changed", value: technicalText });
+    }
+  }
+
+  function setVoiceInputButtonState({ active = false, pending = false, error = "", enabled = voiceInputEnabled() } = {}) {
     const button = composerControls.voiceInput;
     const status = composerControls.voiceStatus;
     if (!button) return;
@@ -2195,13 +2242,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     button.disabled = composerBusy || !enabled;
     button.classList.toggle("voice-input-button--active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.setAttribute("aria-label", active ? "Soltar para parar a transcrição" : "Segurar para transcrever áudio");
-    button.title = active ? "Solte para parar a transcrição" : "Segure para falar e solte para parar";
+    button.setAttribute("aria-label", pending ? "Cancelar operação do microfone" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Soltar para parar a transcrição") : "Segurar para transcrever áudio");
+    button.title = pending ? "Toque para cancelar e tentar novamente" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Solte para parar a transcrição") : "Segure para falar e solte para parar";
     const icon = button.querySelector("[aria-hidden=\"true\"]");
     if (icon) icon.textContent = active ? "🔴" : "🎙️";
     if (status) {
-      status.hidden = !error && !active;
-      status.textContent = error || (active ? "Ouvindo… solte para parar." : "");
+      status.hidden = !error && !active && !pending;
+      status.textContent = error || (pending ? "Preparando ou transcrevendo o áudio… toque no microfone para cancelar." : active ? (voiceInputTapMode ? "Ouvindo… toque novamente para parar." : "Ouvindo… solte para parar.") : "");
     }
   }
 
@@ -2211,6 +2258,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput?.destroy();
       voiceInput = null;
       voiceInputHeld = false;
+      voiceInputTapMode = false;
+      voiceInputNormalizeAfterStop = false;
       voiceInputPointerId = null;
       setVoiceInputButtonState({ enabled: false });
       return;
@@ -2228,21 +2277,56 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           emit({ type: "draft-changed", value });
         },
         getRecognition: () => windowRef?.SpeechRecognition || windowRef?.webkitSpeechRecognition || null,
-        onStateChange: ({ active }) => setVoiceInputButtonState({ active }),
-        onError: error => setVoiceInputButtonState({ error }),
+        getRecorder: () => windowRef?.MediaRecorder || null,
+        getAudioStream: () => windowRef?.navigator?.mediaDevices?.getUserMedia?.call(windowRef.navigator.mediaDevices, { audio: true }),
+        transcribeAudio,
+        ensureAudioPermission: ensureMicrophonePermission,
+        onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
+        onError: error => {
+          voiceInputHeld = false;
+          voiceInputTapMode = false;
+          voiceInputPointerId = null;
+          const isIPhone = /iPhone|iPad|iPod/i.test(windowRef?.navigator?.userAgent || "");
+          const permissionDenied = /permiss[aã]o|permission|not.allowed|denied|microfone.*bloqueado/i.test(String(error || ""));
+          const message = isIPhone && permissionDenied
+            ? "Microfone desativado para o Energético. No iPhone, abra Ajustes > Apps > Energético > Microfone e permita o acesso; depois toque novamente no microfone."
+            : error;
+          setVoiceInputButtonState({ error: message });
+        },
+        onSessionEnd: () => {
+          if (!voiceInputNormalizeAfterStop) return;
+          voiceInputNormalizeAfterStop = false;
+          normalizeVoiceDraft();
+        },
       });
     }
-    setVoiceInputButtonState({ active: voiceInput.isActive(), enabled });
+    setVoiceInputButtonState({ active: voiceInput.isActive(), pending: voiceInput.isPending(), enabled });
   }
 
   function voiceInputButtonAt(event) {
     return event?.target?.closest?.('[data-role="voice-input"]') || null;
   }
 
+  function cancelPendingVoiceInput(event) {
+    if (!voiceInput?.isPending()) return false;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = false;
+    voiceInputPointerId = null;
+    voiceInputSuppressClickUntil = event?.type === "click" ? 0 : Date.now() + 750;
+    voiceInput.cancel();
+    return true;
+  }
+
   function startVoiceInput(event) {
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || !voiceInputEnabled()) return false;
+    if (voiceInputHeld) return false;
+    if (cancelPendingVoiceInput(event)) return true;
     event.preventDefault?.();
+    voiceInputNormalizeAfterStop = false;
+    if (!voiceInput?.isActive()) voiceInputTapMode = false;
     voiceInputHeld = true;
     voiceInputPointerId = event.pointerId ?? null;
     try { button.setPointerCapture?.(event.pointerId); } catch { /* opcional no WebView */ }
@@ -2256,38 +2340,79 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputPointerId = null;
+    // A quick tap can end while iOS is asking for access. Keep that session
+    // alive in tap-to-toggle mode, with an explicit stop cue once it starts.
+    if (!voiceInput?.isActive()) {
+      voiceInputTapMode = voiceInput?.isPending() || false;
+      return true;
+    }
+    voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = true;
     const stopped = voiceInput?.stop();
-    if (stopped && voiceInputEnabled()) {
-      const draft = composerControls.draft?.value || "";
-      const technicalText = normalizeConstructionDiaryText(draft);
-      if (technicalText && technicalText !== draft) {
-        composerControls.draft.value = technicalText;
-        resizeDraft(composerControls.draft);
-        syncComposerInset();
-        emit({ type: "draft-changed", value: technicalText });
-      }
+    if (stopped && typeof stopped.then === "function") {
+      stopped.then(() => {
+        if (!voiceInputNormalizeAfterStop) return;
+        voiceInputNormalizeAfterStop = false;
+        normalizeVoiceDraft();
+      }).catch(() => { voiceInputNormalizeAfterStop = false; });
+    } else if (!stopped) {
+      voiceInputNormalizeAfterStop = false;
     }
     return true;
   }
 
   function voicePointerDown(event) {
+    if (event?.type === "touchstart" && Date.now() <= voiceInputIgnorePairedTouchUntil) {
+      voiceInputIgnoredTouchContact = true;
+      return;
+    }
+    if (event?.type === "pointerdown" && voiceInputButtonAt(event)) {
+      // iOS may emit both pointer and touch events for one physical contact.
+      voiceInputIgnorePairedTouchUntil = Date.now() + 150;
+    }
+    if (voiceInputButtonAt(event)) voiceInputSuppressClickUntil = 0;
     startVoiceInput(event);
   }
 
   function voicePointerUp(event) {
+    if (event?.type === "touchend" && voiceInputIgnoredTouchContact) {
+      voiceInputIgnoredTouchContact = false;
+      return;
+    }
+    if (voiceInputHeld && voiceInputButtonAt(event)) {
+      voiceInputSuppressClickUntil = Date.now() + 750;
+    }
     stopVoiceInput(event);
+  }
+
+  function voicePointerCancel(event) {
+    if (event?.type === "touchcancel" && voiceInputIgnoredTouchContact) {
+      voiceInputIgnoredTouchContact = false;
+      return;
+    }
+    if (!voiceInputHeld) return;
+    if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = false;
+    voiceInputPointerId = null;
+    voiceInputSuppressClickUntil = Date.now() + 750;
+    voiceInput?.cancel();
   }
 
   function voiceKeyDown(event) {
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || (event.key !== " " && event.key !== "Enter") || event.repeat) return;
     event.preventDefault?.();
+    voiceInputSuppressClickUntil = 0;
     startVoiceInput(event);
   }
 
   function voiceKeyUp(event) {
     const button = voiceInputButtonAt(event);
     if (!button || (event.key !== " " && event.key !== "Enter")) return;
+    if (voiceInputHeld) voiceInputSuppressClickUntil = Date.now() + 750;
     stopVoiceInput(event);
   }
 
@@ -3104,6 +3229,27 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const voiceButton = event.target?.closest?.('[data-role="voice-input"]');
+    if (voiceButton) {
+      // Some iOS WebViews expose only click for a button inside the composer.
+      // Keep a tap fallback while ignoring the synthetic click that follows
+      // the real press/release path handled by pointer/touch events.
+      if (voiceInputSuppressClickUntil >= Date.now()) {
+        voiceInputSuppressClickUntil = 0;
+        event.preventDefault?.();
+        return;
+      }
+      event.preventDefault?.();
+      if (cancelPendingVoiceInput(event)) return;
+      if (!voiceInputHeld) {
+        startVoiceInput(event);
+        if (voiceInput?.isActive() || voiceInput?.isPending()) {
+          voiceInputTapMode = true;
+          setVoiceInputButtonState({ active: voiceInput.isActive(), pending: voiceInput.isPending() });
+        }
+      } else stopVoiceInput(event);
+      return;
+    }
     const pendingAttachmentClick = attachmentTrayClickSuppression;
     if (pendingAttachmentClick?.expiresAt < Date.now()) attachmentTrayClickSuppression = null;
     else if (pendingAttachmentClick && (Number(event?.detail) > 0 || event?.isTrusted === false)) {
@@ -4306,14 +4452,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointercancel", pointerUp);
   root.addEventListener("pointerdown", voicePointerDown, { passive: false });
   root.addEventListener("pointerup", voicePointerUp);
-  root.addEventListener("pointercancel", voicePointerUp);
+  root.addEventListener("pointercancel", voicePointerCancel);
   root.addEventListener("touchstart", touchStart, { passive: true });
   root.addEventListener("touchmove", touchMove, { passive: true });
   root.addEventListener("touchend", touchEnd);
   root.addEventListener("touchcancel", touchEnd);
   root.addEventListener("touchstart", voicePointerDown, { passive: false });
   root.addEventListener("touchend", voicePointerUp);
-  root.addEventListener("touchcancel", voicePointerUp);
+  root.addEventListener("touchcancel", voicePointerCancel);
   root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
@@ -4352,14 +4498,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointercancel", pointerUp);
       root.removeEventListener("pointerdown", voicePointerDown);
       root.removeEventListener("pointerup", voicePointerUp);
-      root.removeEventListener("pointercancel", voicePointerUp);
+      root.removeEventListener("pointercancel", voicePointerCancel);
       root.removeEventListener("touchstart", touchStart);
       root.removeEventListener("touchmove", touchMove);
       root.removeEventListener("touchend", touchEnd);
       root.removeEventListener("touchcancel", touchEnd);
       root.removeEventListener("touchstart", voicePointerDown);
       root.removeEventListener("touchend", voicePointerUp);
-      root.removeEventListener("touchcancel", voicePointerUp);
+      root.removeEventListener("touchcancel", voicePointerCancel);
       clearAttachmentTrayGestureListeners();
       attachmentTrayGesture = null;
       attachmentTrayClickSuppression = null;
@@ -4375,6 +4521,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput = null;
       voiceInputHeld = false;
       voiceInputPointerId = null;
+      voiceInputSuppressClickUntil = 0;
       composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
       fileDragDepth = 0;
       hideFileDropZone();
