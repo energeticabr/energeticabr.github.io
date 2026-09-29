@@ -135,6 +135,10 @@ function numericAmount(value) {
   const amount = Number(raw);
   return Number.isFinite(amount) ? amount : null;
 }
+function moneyFieldValue(value) {
+  const amount = numericAmount(value);
+  return amount == null ? value : money(amount);
+}
 
 function personDisplayName(value) {
   if (value == null) return '';
@@ -824,17 +828,41 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       identity.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
 
+    const summary = element('section', 'lg-record-summary');
+    const supplier = field(fields, 'FORNECEDOR');
+    const group = field(fields, 'AGRUPAR');
+    const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
+    const plannedDate = field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO');
+    const paymentDate = paidDate ?? plannedDate;
+    const paymentLabel = paidDate ? 'PAGAMENTO' : plannedDate ? 'PREVISTO' : 'PAGAMENTO';
+    const summaryFields = element('div', 'lg-record-summary-fields');
+    summaryFields.append(...[
+      clusterAction('FORNECEDOR', supplier, 'supplier'),
+      clusterAction('PEDIDO', group, 'order'),
+      summaryField(paymentLabel, paymentDate),
+    ].filter(Boolean));
+
+    const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
+    const values = [
+      ['VALOR UNITÁRIO', moneyFieldValue(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'))],
+      ['QUANTIDADE', quantityText],
+      ['FRETE', moneyFieldValue(field(fields, 'FRETE'))],
+      ['VALOR TOTAL', moneyFieldValue(totalValue)],
+    ];
+    for (const [name, value] of values) {
+      const entry = summaryField(name, value);
+      if (entry) finance.append(entry);
+    }
+    if (!summaryFields.childElementCount) summaryFields.hidden = true;
+    if (!finance.childElementCount) finance.hidden = true;
+
     const main = element('div', 'lg-record-main');
     const commercial = element('section', 'lg-record-group lg-record-commercial');
-    const supplier = field(fields, 'FORNECEDOR');
     const branch = field(fields, 'FILIAL');
     const stage = field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA');
-    const group = field(fields, 'AGRUPAR');
     commercial.append(...[
-      clusterAction('FORNECEDOR', supplier, 'supplier'),
       summaryField('FILIAL', branch),
       summaryField('ETAPA', stage),
-      clusterAction('AGRUPAR', group, 'order'),
     ].filter(Boolean));
 
     const execution = element('section', 'lg-record-group lg-record-execution lg-record-dates');
@@ -842,7 +870,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const dateEntries = [
       ['DATA DE COMPRA', field(fields, 'DATA DE COMPRA', 'DATA')],
       ['DATA PREVISTO PGTO', field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO')],
-      ['DATA DE PAGAMENTO', field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO')],
       ['DATA DE RMS', field(fields, 'DATA DE RMS', 'DATA RMS')],
       ['DATA DE LIQUIDAÇÃO', field(fields, 'DATA DE LIQUIDAÇÃO', 'DATA LIQUIDAÇÃO')],
       ['CRIADO', field(fields, 'CRIADO', 'CREATED')],
@@ -851,18 +878,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     for (const [name, value] of dateEntries) {
       const date = summaryField(name, value);
       if (date) execution.append(date);
-    }
-
-    const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
-    const values = [
-      ['VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')],
-      ['QUANTIDADE', quantityText],
-      ['FRETE', field(fields, 'FRETE')],
-      ['VALOR TOTAL', totalValue],
-    ];
-    for (const [name, value] of values) {
-      const entry = summaryField(name, value);
-      if (entry) finance.append(entry);
     }
 
     const meta = element('section', 'lg-record-group lg-record-meta');
@@ -882,7 +897,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!commercial.childElementCount) commercial.hidden = true;
     if (!finance.childElementCount) finance.hidden = true;
     if (!meta.childElementCount) meta.hidden = true;
-    main.append(commercial, execution, finance, meta);
+    main.append(commercial, execution, meta);
 
     const badges = element('div', 'lg-record-badges');
     const badgeValues = [
@@ -895,10 +910,24 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     const details = button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); });
     details.dataset.lgAction = 'details';
+    const extra = element('section', 'lg-record-extra');
+    extra.id = `lg-launch-extra-${String(item.id).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+    extra.hidden = true;
+    extra.append(main, badges, details);
+    const expand = button('Ver mais informações', () => {
+      const expanded = expand.getAttribute('aria-expanded') === 'true';
+      extra.hidden = expanded;
+      expand.setAttribute('aria-expanded', String(!expanded));
+      expand.textContent = expanded ? 'Ver mais informações' : 'Ver menos informações';
+    });
+    expand.classList.add('lg-record-expand');
+    expand.setAttribute('aria-expanded', 'false');
+    expand.setAttribute('aria-controls', extra.id);
     const body = element('div', 'lg-record-content');
-    body.append(identity, main);
-    body.append(badges);
-    body.append(details);
+    summary.append(identity, summaryFields);
+    if (!finance.hidden) summary.append(finance);
+    summary.append(expand);
+    body.append(summary, extra);
     card.append(...(recordPreview ? [recordPreview] : []), body);
     return card;
   }
