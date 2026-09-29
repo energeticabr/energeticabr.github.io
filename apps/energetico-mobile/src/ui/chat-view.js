@@ -2156,6 +2156,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let voiceInputNormalizeAfterStop = false;
   let voiceInputPointerId = null;
   let voiceInputSuppressClickUntil = 0;
+  let voiceInputIgnorePairedTouchUntil = 0;
+  let voiceInputIgnoredTouchContact = false;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2220,16 +2222,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const status = composerControls.voiceStatus;
     if (!button) return;
     button.hidden = !enabled;
-    button.disabled = composerBusy || !enabled || pending;
+    button.disabled = composerBusy || !enabled;
     button.classList.toggle("voice-input-button--active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.setAttribute("aria-label", active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Soltar para parar a transcrição") : "Segurar para transcrever áudio");
-    button.title = active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Solte para parar a transcrição") : "Segure para falar e solte para parar";
+    button.setAttribute("aria-label", pending ? "Cancelar operação do microfone" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Soltar para parar a transcrição") : "Segurar para transcrever áudio");
+    button.title = pending ? "Toque para cancelar e tentar novamente" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Solte para parar a transcrição") : "Segure para falar e solte para parar";
     const icon = button.querySelector("[aria-hidden=\"true\"]");
     if (icon) icon.textContent = active ? "🔴" : "🎙️";
     if (status) {
       status.hidden = !error && !active && !pending;
-      status.textContent = error || (pending ? "Preparando o microfone ou transcrevendo o áudio…" : active ? (voiceInputTapMode ? "Ouvindo… toque novamente para parar." : "Ouvindo… solte para parar.") : "");
+      status.textContent = error || (pending ? "Preparando ou transcrevendo o áudio… toque no microfone para cancelar." : active ? (voiceInputTapMode ? "Ouvindo… toque novamente para parar." : "Ouvindo… solte para parar.") : "");
     }
   }
 
@@ -2263,7 +2265,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         transcribeAudio,
         ensureAudioPermission: ensureMicrophonePermission,
         onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
-        onError: error => setVoiceInputButtonState({ error }),
+        onError: error => {
+          voiceInputHeld = false;
+          voiceInputTapMode = false;
+          voiceInputPointerId = null;
+          const isIPhone = /iPhone|iPad|iPod/i.test(windowRef?.navigator?.userAgent || "");
+          const permissionDenied = /permiss[aã]o|permission|not.allowed|denied|microfone.*bloqueado/i.test(String(error || ""));
+          const message = isIPhone && permissionDenied
+            ? "Microfone desativado para o Energético. No iPhone, abra Ajustes > Apps > Energético > Microfone e permita o acesso; depois toque novamente no microfone."
+            : error;
+          setVoiceInputButtonState({ error: message });
+        },
         onSessionEnd: () => {
           if (!voiceInputNormalizeAfterStop) return;
           voiceInputNormalizeAfterStop = false;
@@ -2278,9 +2290,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return event?.target?.closest?.('[data-role="voice-input"]') || null;
   }
 
+  function cancelPendingVoiceInput(event) {
+    if (!voiceInput?.isPending()) return false;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = false;
+    voiceInputPointerId = null;
+    voiceInputSuppressClickUntil = event?.type === "click" ? 0 : Date.now() + 750;
+    voiceInput.cancel();
+    return true;
+  }
+
   function startVoiceInput(event) {
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || !voiceInputEnabled()) return false;
+    if (voiceInputHeld) return false;
+    if (cancelPendingVoiceInput(event)) return true;
     event.preventDefault?.();
     voiceInputNormalizeAfterStop = false;
     if (!voiceInput?.isActive()) voiceInputTapMode = false;
@@ -2308,6 +2334,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const stopped = voiceInput?.stop();
     if (stopped && typeof stopped.then === "function") {
       stopped.then(() => {
+        if (!voiceInputNormalizeAfterStop) return;
         voiceInputNormalizeAfterStop = false;
         normalizeVoiceDraft();
       }).catch(() => { voiceInputNormalizeAfterStop = false; });
@@ -2318,11 +2345,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function voicePointerDown(event) {
+    if (event?.type === "touchstart" && Date.now() <= voiceInputIgnorePairedTouchUntil) {
+      voiceInputIgnoredTouchContact = true;
+      return;
+    }
+    if (event?.type === "pointerdown" && voiceInputButtonAt(event)) {
+      // iOS may emit both pointer and touch events for one physical contact.
+      voiceInputIgnorePairedTouchUntil = Date.now() + 150;
+    }
     if (voiceInputButtonAt(event)) voiceInputSuppressClickUntil = 0;
     startVoiceInput(event);
   }
 
   function voicePointerUp(event) {
+    if (event?.type === "touchend" && voiceInputIgnoredTouchContact) {
+      voiceInputIgnoredTouchContact = false;
+      return;
+    }
     if (voiceInputHeld && voiceInputButtonAt(event)) {
       voiceInputSuppressClickUntil = Date.now() + 750;
     }
@@ -2330,6 +2369,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function voicePointerCancel(event) {
+    if (event?.type === "touchcancel" && voiceInputIgnoredTouchContact) {
+      voiceInputIgnoredTouchContact = false;
+      return;
+    }
     if (!voiceInputHeld) return;
     if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return;
     event?.preventDefault?.();
@@ -3180,6 +3223,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         return;
       }
       event.preventDefault?.();
+      if (cancelPendingVoiceInput(event)) return;
       if (!voiceInputHeld) {
         startVoiceInput(event);
         if (voiceInput?.isActive() || voiceInput?.isPending()) {

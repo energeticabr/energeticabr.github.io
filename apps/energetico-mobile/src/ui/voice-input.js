@@ -152,6 +152,7 @@ export function createVoiceInputController({
     if (!current || current.completed) return current?.completion || Promise.resolve(false);
     current.completed = true;
     transcriptionPending = true;
+    const currentSessionId = sessionId;
     notify(false);
     const complete = async () => {
       const file = audioFileFromChunks(current.chunks, current.mimeType || current.recorder?.mimeType);
@@ -167,6 +168,7 @@ export function createVoiceInputController({
       }
       try {
         const transcript = cleanText(await transcribeAudio(file));
+        if (destroyed || sessionId !== currentSessionId || !transcriptionPending) return false;
         if (transcript) {
           setDraft(joinText(baseText, transcript));
         }
@@ -174,6 +176,7 @@ export function createVoiceInputController({
         notify(false);
         return Boolean(transcript);
       } catch (error) {
+        if (destroyed || sessionId !== currentSessionId || !transcriptionPending) return false;
         transcriptionPending = false;
         notify(false);
         onError(error?.message || "Não foi possível transcrever o áudio. Digite a resposta manualmente.");
@@ -351,6 +354,12 @@ export function createVoiceInputController({
     }
     if (capturePending) {
       capturePending = false;
+      sessionId += 1;
+      notify(false);
+      return true;
+    }
+    if (transcriptionPending) {
+      transcriptionPending = false;
       sessionId += 1;
       notify(false);
       return true;
