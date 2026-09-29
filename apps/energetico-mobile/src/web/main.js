@@ -16,6 +16,7 @@ import { createInstallView } from "./install-view.js";
 import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
 import "../styles.css";
+import "../ui/launch-gallery.css";
 import "../ui/orders-gallery.css";
 import "../ui/registration-gallery.css";
 import "./attachment-preview.css";

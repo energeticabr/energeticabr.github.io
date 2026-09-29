@@ -1321,6 +1321,11 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   assert.match(css, /\.lg-record-extra\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
 });
 
+test('Windows PWA entrypoint includes the launch gallery stylesheet', () => {
+  const entry = readFileSync(new URL('../src/web/main.js', import.meta.url), 'utf8');
+  assert.match(entry, /import\s+["']\.\.\/ui\/launch-gallery\.css["'];/);
+});
+
 test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {
   const uploads = [];
   const ctx = await setup(t, { upload: async (...args) => uploads.push(args) });
