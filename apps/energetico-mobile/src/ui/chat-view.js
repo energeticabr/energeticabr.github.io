@@ -5,14 +5,16 @@ import { signatureDocumentLayout as documentSignatureLayout } from "../web/signa
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
-import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate } from "../chat/rhid-attendance-table.js";
+import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
+import { createVoiceInputController } from "./voice-input.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
 const RELEASE_CLICK_COMMAND = Symbol("chat-release-click-command");
+const VOICE_INPUT_FLOW_ID = "construction_diary_fill";
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -683,6 +685,16 @@ function isAutomaticMainMenuMessage(message) {
   return /qual\s+area\s+voce\s+deseja\s+acessar/.test(question);
 }
 
+function isInitialAreaSelectionMenu(message) {
+  if (message?.type !== "poll") return false;
+  const heading = normalizedDateText(String(message?.question || message?.prompt || message?.text || "")
+    .split(/\r?\n/, 1)[0]
+    .replace(/[^\p{L}\p{N}\s]/gu, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+  return heading === "qual area voce deseja acessar";
+}
+
 function isSuppliesLaunchMenu(message) {
   if (message?.type !== "poll") return false;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -869,15 +881,22 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
-function rhidAttendanceTableMarkup(table, messageId) {
+function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
   const headers = table.headers;
   const rows = table.rows.filter(Array.isArray);
+  const refreshButton = `<button class="chat-rhid-attendance-table__refresh${rhidRefresh?.busy ? " chat-rhid-attendance-table__refresh--busy" : ""}" type="button" data-action="rhid-refresh" aria-label="Atualizar RHID e SharePoint" title="Consultar dados já transmitidos ao RHID e atualizar o SharePoint"${rhidRefresh?.busy ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 0 0-14.9-4M4 4v5h5M4 13a8 8 0 0 0 14.9 4M20 20v-5h-5"/></svg></button>`;
   const shareButton = rows.length && isValidRhidReportDate(table.reportDate) && messageId
     ? `<button class="chat-rhid-attendance-table__share" type="button" data-action="share-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Compartilhar relatório RHID em PDF">↗ Compartilhar PDF</button>`
     : "";
   const date = String(table.reportDate || "");
   const dateLabel = isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "";
+  const summary = summarizeRhidAttendance(rows);
+  const updateLabel = String(table.updateLabel || "").trim();
+  const updateTime = updateLabel.match(/\b(?:[01]\d|2[0-3]):[0-5]\d\b/)?.[0] || "—";
+  const updateHeading = /DADOS ATUALIZADOS NO RELÓGIO DE PONTO/i.test(updateLabel)
+    ? "DADOS ATUALIZADOS NO RELÓGIO DE PONTO" : "ÚLTIMA COLETA DO RHID";
+  const pairCount = Math.max(1, Math.floor((headers.length - 2) / 2));
   const navigation = dateLabel && messageId
     ? `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior"${table.navigationBusy === true ? " disabled" : ""}>←</button>
@@ -885,25 +904,43 @@ function rhidAttendanceTableMarkup(table, messageId) {
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia"${table.navigationBusy === true ? " disabled" : ""}>→</button>
     </nav>${table.navigationBusy === true ? `<p class="chat-rhid-attendance-table__status" role="status">Atualizando dados do RHID…</p>` : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
     : "";
-  return `<section class="chat-rhid-attendance-table" aria-label="Relatório de presenças RHID">
+  return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
-    <div class="chat-rhid-attendance-table__heading"><strong>${formatChatText(table.title || "📋 PRESENÇAS")}</strong>${shareButton}${table.updateLabel ? `<small class="chat-rhid-attendance-table__updated">${escapeHtml(table.updateLabel)}</small>` : ""}<small>Deslize para ver os horários →</small></div>
-    ${rows.length ? `<div class="chat-rhid-attendance-table__scroll" role="region" tabindex="0" aria-label="Tabela de presenças RHID">
-      <table><thead><tr>${headers.map(header => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map(row => {
+    <header class="chat-rhid-attendance-report__header">
+      <div class="chat-rhid-attendance-report__identity"><span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2></div>
+      <div class="chat-rhid-attendance-report__updated" title="${escapeHtml(updateLabel)}"><span>${escapeHtml(updateHeading)}</span><strong>${escapeHtml(updateTime)}</strong></div>
+      <div class="chat-rhid-attendance-report__date"><span>DATA DO RELATÓRIO</span><time datetime="${escapeHtml(date)}">${escapeHtml(dateLabel || "—")}</time></div>
+    </header>
+    ${updateLabel ? `<p class="chat-rhid-attendance-report__updated-detail">${escapeHtml(updateLabel)}</p>` : ""}
+    <div class="chat-rhid-attendance-report__summary" aria-label="Resumo do relatório RHID">
+      <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.collaborators).padStart(2, "0")}</strong><span>COLABORADORES</span></div>
+      <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
+      <div><strong class="chat-rhid-attendance-report__summary-value chat-rhid-attendance-report__summary-value--missing">${String(summary.withoutPunches).padStart(2, "0")}</strong><span>SEM MARCAÇÃO</span></div>
+    </div>
+    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong><div class="chat-rhid-attendance-report__toolbar-actions">${refreshButton}${shareButton}</div></div>
+    ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
+      ${rows.map(row => {
+        const noPunches = isRhidAttendanceRowWithoutPunches(row);
         const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
-        const rowClass = isRhidAttendanceRowWithoutPunches(row) ? "chat-rhid-attendance-table__row--no-punches"
-          : discrepant ? "chat-rhid-attendance-table__row--discrepant" : "";
-        return `<tr class="${rowClass}" style="--rhid-row-count:${Math.ceil((headers.length - 2) / 2) + 1}">${headers.map((header, index) => {
-          const value = row[index] ?? "—";
-          if (index === 0) return `<th scope="row">${escapeHtml(value)}</th>`;
-          const isPunch = /^\d{1,2}:\d{2}$/.test(String(value).trim());
-          const cellClass = index === headers.length - 1 ? "chat-rhid-attendance-table__total"
-            : isPunch && /^Entrada(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__entry"
-            : isPunch && /^Saída(?:\s|$)/i.test(header) ? "chat-rhid-attendance-table__exit" : "";
-          return `<td data-label="${escapeHtml(index === headers.length - 1 ? "Total" : header)}" aria-label="${escapeHtml(header)}: ${escapeHtml(value)}"${cellClass ? ` class="${cellClass}"` : ""}>${escapeHtml(value)}</td>`;
-        }).join("")}</tr>`;
-      }).join("")}</tbody></table>
+        const rowClass = noPunches ? "chat-rhid-attendance-card--no-punches" : discrepant ? "chat-rhid-attendance-card--discrepant" : "";
+        const name = row[0] ?? "—";
+        const total = row[row.length - 1] ?? "—";
+        const slots = Array.from({ length: pairCount }, (_, index) => {
+          const entryLabel = String(headers[1 + index * 2] ?? `Entrada ${index + 1}`);
+          const exitLabel = String(headers[2 + index * 2] ?? `Saída ${index + 1}`);
+          const entry = String(row[1 + index * 2] ?? "—");
+          const exit = String(row[2 + index * 2] ?? "—");
+          const entryClass = /^\d{1,2}:\d{2}$/.test(entry.trim()) ? "chat-rhid-attendance-card__entry" : "";
+          const exitClass = /^\d{1,2}:\d{2}$/.test(exit.trim()) ? "chat-rhid-attendance-card__exit" : "";
+          return `<div class="chat-rhid-attendance-card__slot"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div>`;
+        }).join("");
+        const totalText = String(total);
+        const isPartial = /\(parcial\)/i.test(totalText);
+        const displayTotal = totalText.replace(/\s*\(parcial\)/i, "").trim() || "—";
+        return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
+          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div><div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
+        </article>`;
+      }).join("")}
     </div>` : `<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença foi encontrada para esta data.</p>`}
   </section>`;
 }
@@ -1098,7 +1135,7 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
   return "<div class=\"chat-epi-product-select chat-choice-list\">" + rows + selectAll + finalize + "</div>";
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false) {
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null) {
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1185,6 +1222,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
+  const initialAreaMenu = isInitialAreaSelectionMenu(message);
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
@@ -1251,10 +1289,10 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
-    ${launchPaymentSummary || rhidAttendanceReport ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
-    ${rhidAttendanceTableMarkup(presenceTable, message.id)}
+    ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}
@@ -1358,7 +1396,7 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
@@ -1366,8 +1404,9 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const taskMenu = isDemandsTaskMenu(message);
     const hrGalleryMenu = isHrPayrollGalleryMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
+    const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || initialAreaMenu ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -1976,6 +2015,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const signaturePrompt = isSignaturePrompt(state);
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
+  const voiceInputVisible = state.activeFlow?.id === VOICE_INPUT_FLOW_ID && !generatedSignatureChoice;
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -1989,7 +2029,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll, rhidRefresh })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
@@ -2001,7 +2041,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
       <textarea id="chatDraft" data-role="draft"${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
-      <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
+      <div class="composer-submit-actions">
+        <button class="voice-input-button" type="button" data-role="voice-input"${voiceInputVisible ? "" : " hidden"} aria-label="Segurar para transcrever áudio" title="Segure para falar e solte para parar" aria-pressed="false"><span aria-hidden="true">🎙️</span><span class="sr-only">Segurar para transcrever áudio</span></button>
+        <span class="voice-input-status" data-role="voice-input-status" aria-live="polite" hidden></span>
+        <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
+      </div>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${pendingDocumentDelete ? pendingDocumentDeleteMarkup() : ""}
@@ -2042,9 +2086,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let lastState = null;
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
-  let composerControls = { shell: null, composer: null };
+  let composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
   let composerBusy = false;
   let composing = false;
+  let voiceInput = null;
+  let voiceInputHeld = false;
+  let voiceInputPointerId = null;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2082,6 +2129,106 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePlacementClosedKey = "";
   let fileDragDepth = 0;
   let fileDropZone = null;
+
+  function voiceInputEnabled(state = lastState) {
+    return state?.sessionStatus === "authenticated"
+      && state?.activeFlow?.id === VOICE_INPUT_FLOW_ID
+      && !isGeneratedDocumentSignatureChoice(state);
+  }
+
+  function setVoiceInputButtonState({ active = false, error = "", enabled = voiceInputEnabled() } = {}) {
+    const button = composerControls.voiceInput;
+    const status = composerControls.voiceStatus;
+    if (!button) return;
+    button.hidden = !enabled;
+    button.disabled = composerBusy || !enabled;
+    button.classList.toggle("voice-input-button--active", Boolean(active));
+    button.setAttribute("aria-pressed", String(Boolean(active)));
+    button.setAttribute("aria-label", active ? "Soltar para parar a transcrição" : "Segurar para transcrever áudio");
+    button.title = active ? "Solte para parar a transcrição" : "Segure para falar e solte para parar";
+    const icon = button.querySelector("[aria-hidden=\"true\"]");
+    if (icon) icon.textContent = active ? "🔴" : "🎙️";
+    if (status) {
+      status.hidden = !error && !active;
+      status.textContent = error || (active ? "Ouvindo… solte para parar." : "");
+    }
+  }
+
+  function setupVoiceInput(state) {
+    const enabled = voiceInputEnabled(state);
+    if (!enabled) {
+      voiceInput?.destroy();
+      voiceInput = null;
+      voiceInputHeld = false;
+      voiceInputPointerId = null;
+      setVoiceInputButtonState({ enabled: false });
+      return;
+    }
+    if (!voiceInput) {
+      const windowRef = root.ownerDocument?.defaultView || globalThis;
+      voiceInput = createVoiceInputController({
+        getDraft: () => composerControls.draft?.value || "",
+        setDraft: value => {
+          const draft = composerControls.draft;
+          if (!draft || draft.value === value) return;
+          draft.value = value;
+          resizeDraft(draft);
+          syncComposerInset();
+          emit({ type: "draft-changed", value });
+        },
+        getRecognition: () => windowRef?.SpeechRecognition || windowRef?.webkitSpeechRecognition || null,
+        onStateChange: ({ active }) => setVoiceInputButtonState({ active }),
+        onError: error => setVoiceInputButtonState({ error }),
+      });
+    }
+    setVoiceInputButtonState({ active: voiceInput.isActive(), enabled });
+  }
+
+  function voiceInputButtonAt(event) {
+    return event?.target?.closest?.('[data-role="voice-input"]') || null;
+  }
+
+  function startVoiceInput(event) {
+    const button = voiceInputButtonAt(event);
+    if (!button || button.disabled || !voiceInputEnabled()) return false;
+    event.preventDefault?.();
+    voiceInputHeld = true;
+    voiceInputPointerId = event.pointerId ?? null;
+    try { button.setPointerCapture?.(event.pointerId); } catch { /* opcional no WebView */ }
+    voiceInput?.start();
+    return true;
+  }
+
+  function stopVoiceInput(event) {
+    if (!voiceInputHeld) return false;
+    if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return false;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputPointerId = null;
+    voiceInput?.stop();
+    return true;
+  }
+
+  function voicePointerDown(event) {
+    startVoiceInput(event);
+  }
+
+  function voicePointerUp(event) {
+    stopVoiceInput(event);
+  }
+
+  function voiceKeyDown(event) {
+    const button = voiceInputButtonAt(event);
+    if (!button || button.disabled || (event.key !== " " && event.key !== "Enter") || event.repeat) return;
+    event.preventDefault?.();
+    startVoiceInput(event);
+  }
+
+  function voiceKeyUp(event) {
+    const button = voiceInputButtonAt(event);
+    if (!button || (event.key !== " " && event.key !== "Enter")) return;
+    stopVoiceInput(event);
+  }
 
   function isFileDrag(event) {
     return Array.from(event?.dataTransfer?.types || [])
@@ -2788,6 +2935,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       ));
       if (button && button.disabled !== disabled) button.disabled = disabled;
     }
+    setupVoiceInput(state);
   }
 
   function updateShell(markup, state, {
@@ -2814,7 +2962,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       composing = false;
       const nextShell = root.querySelector('.chat-shell');
       const nextComposer = nextShell?.querySelector('[data-chat-form]');
-      composerControls = { shell: nextShell, composer: nextComposer, draft: root.querySelector('[data-role="draft"]') };
+      composerControls = {
+        shell: nextShell,
+        composer: nextComposer,
+        draft: root.querySelector('[data-role="draft"]'),
+        voiceInput: root.querySelector('[data-role="voice-input"]'),
+        voiceStatus: root.querySelector('[data-role="voice-input-status"]'),
+      };
       for (const action of ["send-text", "capture-photo", "pick-files"]) {
         composerControls[action] = root.querySelector(`[data-action="${action}"]`);
       }
@@ -4057,15 +4211,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);
+  root.addEventListener("pointerdown", voicePointerDown, { passive: false });
+  root.addEventListener("pointerup", voicePointerUp);
+  root.addEventListener("pointercancel", voicePointerUp);
   root.addEventListener("touchstart", touchStart, { passive: true });
   root.addEventListener("touchmove", touchMove, { passive: true });
   root.addEventListener("touchend", touchEnd);
   root.addEventListener("touchcancel", touchEnd);
+  root.addEventListener("touchstart", voicePointerDown, { passive: false });
+  root.addEventListener("touchend", voicePointerUp);
+  root.addEventListener("touchcancel", voicePointerUp);
   root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
   root.addEventListener("compositionstart", compositionStart);
   root.addEventListener("compositionend", compositionEnd);
+  root.addEventListener("keydown", voiceKeyDown);
+  root.addEventListener("keyup", voiceKeyUp);
 
   return Object.freeze({
     render,
@@ -4095,10 +4257,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointermove", pointerMove);
       root.removeEventListener("pointerup", pointerUp);
       root.removeEventListener("pointercancel", pointerUp);
+      root.removeEventListener("pointerdown", voicePointerDown);
+      root.removeEventListener("pointerup", voicePointerUp);
+      root.removeEventListener("pointercancel", voicePointerUp);
       root.removeEventListener("touchstart", touchStart);
       root.removeEventListener("touchmove", touchMove);
       root.removeEventListener("touchend", touchEnd);
       root.removeEventListener("touchcancel", touchEnd);
+      root.removeEventListener("touchstart", voicePointerDown);
+      root.removeEventListener("touchend", voicePointerUp);
+      root.removeEventListener("touchcancel", voicePointerUp);
       clearAttachmentTrayGestureListeners();
       attachmentTrayGesture = null;
       attachmentTrayClickSuppression = null;
@@ -4108,7 +4276,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("submit", submit);
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
-      composerControls = { shell: null, composer: null };
+      root.removeEventListener("keydown", voiceKeyDown);
+      root.removeEventListener("keyup", voiceKeyUp);
+      voiceInput?.destroy();
+      voiceInput = null;
+      voiceInputHeld = false;
+      voiceInputPointerId = null;
+      composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
       fileDragDepth = 0;
       hideFileDropZone();
       composing = false;

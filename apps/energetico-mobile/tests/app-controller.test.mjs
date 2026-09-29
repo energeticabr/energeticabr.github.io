@@ -102,6 +102,140 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
 });
 
+test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao menu principal", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  const previousScreen = {
+    id: "hr-menu",
+    role: "assistant",
+    type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?",
+    options: [{ id: "rhid-report", reply: "rhid-report", label: "RELATÓRIO DE PRESENÇAS RHID" }],
+  };
+  const requested = [];
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([previousScreen]);
+  assert.equal(h.store.getState().messages.at(-1)?.question, previousScreen.question, "a tela RH deve estar ativa antes da consulta");
+
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  const initialReport = h.store.getState().messages.at(-1);
+  assert.equal(initialReport?.detail_table?.kind, "rhid_attendance");
+  await h.view.emit("rhid-attendance-report-navigate", { messageId: initialReport.id, value: "-1" });
+  assert.equal(h.store.getState().messages.at(-1)?.detail_table?.reportDate, "2026-09-27");
+  const callsBeforeReturn = h.chatCalls.length;
+
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+
+  assert.equal(h.chatCalls.length, callsBeforeReturn, "o retorno local não deve enviar navigation_back ao servidor");
+  assert.equal(h.store.getState().messages.length, 1);
+  assert.equal(h.store.getState().messages[0].question, previousScreen.question);
+  assert.deepEqual(requested, ["2026-09-28", "2026-09-27"]);
+});
+
+test("resposta tardia do RHID não substitui uma tela aberta durante a consulta", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  h.client.sendText = async () => ({
+    status: "processed",
+    messages: [{ type: "poll", question: "📦 OUTRA TELA", options: [] }],
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  await h.view.emit("select-reply", { replyId: "next-screen", label: "Abrir outra tela" });
+  assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
+
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
+});
+
+test("resposta tardia do RHID não restaura anexo removido enquanto carregava", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  h.client.deleteAttachment = async () => ({ status: "processed", messages: [], attachments: [] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+  h.store.syncAttachments([{
+    id: "remove-me", fileName: "remover.pdf", mediaUrl: "/api/portal-media/remove-me",
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  await h.view.emit("remove-attachment", { fileId: "remove-me" });
+  assert.deepEqual(h.store.getState().attachments, []);
+
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test("prévia carregada em segundo plano não cancela nem perde a origem do relatório RHID", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  let beginRequest;
+  let resolveReport;
+  const requestStarted = new Promise(resolve => { beginRequest = resolve; });
+  const reportResponse = new Promise(resolve => { resolveReport = resolve; });
+  h.client.getRhidAttendanceReport = () => {
+    beginRequest();
+    return reportResponse;
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS — QUAL FLUXO VOCÊ DESEJA INICIAR?", options: [],
+  }]);
+  h.store.syncAttachments([{
+    id: "file-preview", fileName: "relatorio.pdf", mediaUrl: "/api/portal-media/file-preview",
+  }]);
+
+  const reportRequest = h.view.emit("rhid-attendance-report-generate", { value: "2026-09-28" });
+  await requestStarted;
+  h.store.setMessagePreview("hr-menu", "blob:hr-menu-preview");
+  h.store.setAttachmentPreview("file-preview", "blob:file-preview");
+  resolveReport({ date: "2026-09-28", rows: [] });
+  await reportRequest;
+
+  const report = h.store.getState().messages.at(-1);
+  assert.equal(report?.detail_table?.kind, "rhid_attendance");
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "↩️ RETORNAR À PERGUNTA ANTERIOR" });
+  assert.equal(h.store.getState().messages[0].previewUrl, "blob:hr-menu-preview");
+  assert.equal(h.store.getState().attachments[0].previewUrl, "blob:file-preview");
+});
+
 test("setas do relatório consultam o dia adjacente e substituem o relatório no mesmo cartão", async t => {
   const h = makeHarness();
   const requested = [];
@@ -386,7 +520,9 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
       assert.notEqual(start, -1, `PDF compartilhado sem ${name}`);
       const nextNames = expectedRows.slice(index + 1).map(next => text.indexOf(next[0], start + name.length)).filter(position => position >= 0);
       const end = nextNames.length ? Math.min(...nextNames) : text.length;
-      const section = text.slice(start, end).replaceAll("ÚLTIMA COLETA DO RHID ÀS 18:19", "");
+      const section = text.slice(start, end)
+        .replaceAll("ÚLTIMA COLETA DO RHID ÀS 18:19", "")
+        .replaceAll(/\b18:19\b/g, "");
       const expectedTimes = row.slice(1, -1).filter(value => /^\d{2}:\d{2}$/.test(value));
       const totalTime = row.at(-1).match(/^(\d{2}:\d{2})/)?.[1];
       if (totalTime) expectedTimes.push(totalTime);
@@ -5177,6 +5313,76 @@ test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
   assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 2);
   await h.view.emit("complete-delegated-task", { taskId: "501" });
   assert.deepEqual(calls, ["501"]);
+  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 1);
+  h.controller.stop();
+});
+
+test("trata conclusão já gravada como sucesso quando a confirmação da VM é perdida", async () => {
+  const h = makeHarness();
+  let snapshotCalls = 0;
+  h.client.getDelegatedTasks = async () => {
+    snapshotCalls += 1;
+    return {
+      rows: snapshotCalls === 1
+        ? [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }]
+        : [],
+    };
+  };
+  h.client.completeDelegatedTask = async () => {
+    const error = new Error("A conexão foi interrompida antes da confirmação.");
+    error.code = "NETWORK_UNCERTAIN";
+    throw error;
+  };
+
+  await h.controller.start();
+  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
+
+  assert.equal(completed, true);
+  assert.equal(snapshotCalls, 2);
+  assert.deepEqual(h.view.renders.at(-1).delegatedTasks.rows, []);
+  assert.equal(h.view.renders.at(-1).error, null);
+  h.controller.stop();
+});
+
+test("não repete a escrita quando a confirmação chega sem a nova lista", async () => {
+  const h = makeHarness();
+  let snapshotCalls = 0;
+  h.client.getDelegatedTasks = async () => {
+    snapshotCalls += 1;
+    if (snapshotCalls > 1) throw new Error("A leitura da lista demorou.");
+    return { rows: [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }] };
+  };
+  h.client.completeDelegatedTask = async () => ({
+    status: "processed",
+    messages: [{ type: "text", text: "Tarefa concluída." }],
+  });
+
+  await h.controller.start();
+  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
+
+  assert.equal(completed, true);
+  assert.equal(snapshotCalls, 2);
+  assert.deepEqual(h.view.renders.at(-1).delegatedTasks.rows, []);
+  assert.equal(h.view.renders.at(-1).error, null);
+  h.controller.stop();
+});
+
+test("mantém o erro quando a tarefa continua pendente após a reconciliação", async () => {
+  const h = makeHarness();
+  h.client.getDelegatedTasks = async () => ({
+    rows: [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }],
+  });
+  h.client.completeDelegatedTask = async () => {
+    const error = new Error("A VM recusou a conclusão.");
+    error.status = 400;
+    throw error;
+  };
+
+  await h.controller.start();
+  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
+
+  assert.equal(completed, false);
+  assert.match(h.view.renders.at(-1).error, /VM recusou/);
   assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 1);
   h.controller.stop();
 });
