@@ -4768,6 +4768,51 @@ test("arquivos soltos no chat usam a mesma fila de envio dos anexos selecionados
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("arquivo de áudio no Diário de Obras vira texto técnico e não é enviado como anexo", async t => {
+  const h = makeHarness();
+  const transcripts = [];
+  h.client.transcribeAudio = async file => {
+    transcripts.push(file.name);
+    return "Eu fiz a concretagem da laje grande. Eu conferi o nível.";
+  };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "DIGITE AS ATIVIDADES EXECUTADAS",
+    options: [],
+  }], { activeFlow: { id: "construction_task", title: "PREENCHER DIÁRIO DE OBRAS" } });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const audio = new File(["audio"], "atividade.m4a", { type: "audio/mp4" });
+
+  await h.view.emit("files-dropped", { files: [audio] });
+
+  assert.deepEqual(transcripts, ["atividade.m4a"]);
+  assert.equal(h.chatCalls.some(call => call[0] === "file"), false);
+  assert.equal(h.store.getState().draft, "Execução de concretagem da laje grande. Verificação de nível.");
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
+test("falha ao transcrever áudio preserva o arquivo pendente", async t => {
+  const h = makeHarness();
+  h.client.transcribeAudio = async () => { throw new Error("Serviço de transcrição indisponível"); };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "INFORME AS OBSERVAÇÕES",
+    options: [],
+  }], { activeFlow: { id: "construction_task", title: "PREENCHER DIÁRIO DE OBRAS" } });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const audio = new File(["audio"], "observacao.ogg", { type: "audio/ogg" });
+
+  const accepted = await h.view.emit("files-dropped", { files: [audio] });
+
+  assert.equal(accepted, false);
+  assert.equal(h.store.getState().pendingFiles.length, 1);
+  assert.equal(h.store.getState().pendingFiles[0].status, "failed");
+  assert.match(h.view.renders.at(-1)?.error || "", /indisponível/i);
+  assert.equal(h.chatCalls.some(call => call[0] === "file"), false);
+});
+
 test("assinatura desenhada entra na fila de anexos e é enviada pela VM", async () => {
   const h = makeHarness();
   await h.controller.start();

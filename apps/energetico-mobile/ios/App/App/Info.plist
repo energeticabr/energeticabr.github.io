@@ -46,6 +46,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>O Energético usa a câmera para tirar fotos que você decidir anexar à conversa.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Energético usa o microfone para transcrever respostas e atividades que você decidir registrar.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>O Energético permite escolher fotos que você decidir enviar à conversa.</string>
 	<key>UIApplicationSceneManifest</key>

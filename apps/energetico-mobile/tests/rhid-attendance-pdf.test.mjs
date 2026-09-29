@@ -217,7 +217,7 @@ test("exibe por inteiro os dois rótulos reais do SharePoint no topo do A4", asy
   }
 });
 
-test("destaca entradas em verde, saídas em vermelho e total em negrito", async () => {
+test("mantém os horários dos clusters em negrito e branco", async () => {
   const table = buildRhidAttendanceTable([
     { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA SOUZA", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00" },
   ]);
@@ -237,14 +237,51 @@ test("destaca entradas em verde, saídas em vermelho e total em negrito", async 
       const value = operators.argsArray[index][0].map(glyph => glyph?.unicode ?? "").join("");
       colors.set(value, fill);
     }
-    for (const value of ["07:00", "13:00"]) {
-      const [red, green, blue] = colors.get(value).match(/[\da-f]{2}/gi).map(hex => parseInt(hex, 16));
-      assert.ok(green > red && green > blue, `${value} precisa estar em verde`);
+    for (const value of ["07:00", "12:00", "13:00", "17:00"]) {
+      const components = String(colors.get(value)).match(/[\da-f]{2}/gi)?.map(hex => parseInt(hex, 16)) || [];
+      assert.equal(components.length, 3);
+      assert.ok(components.every(component => component >= 248), `${value} precisa estar em branco`);
     }
-    for (const value of ["12:00", "17:00"]) {
-      const [red, green, blue] = colors.get(value).match(/[\da-f]{2}/gi).map(hex => parseInt(hex, 16));
-      assert.ok(red > green && red > blue, `${value} precisa estar em vermelho`);
+  } finally {
+    await loadingTask.destroy();
+  }
+});
+
+test("PDF usa clusters verdes e vermelhos com rótulos brancos próximos dos horários", async () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "ANA SOUZA", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00" },
+  ]);
+  const { loadingTask, pages } = await inspect(await buildPdf(table));
+  try {
+    const { page } = pages[0];
+    const operators = await page.getOperatorList();
+    const textColors = new Map();
+    const fillColors = [];
+    let fill = "";
+    for (let index = 0; index < operators.fnArray.length; index += 1) {
+      if (operators.fnArray[index] === OPS.setFillRGBColor) {
+        fill = operators.argsArray[index][0];
+        fillColors.push(fill);
+      }
+      if (operators.fnArray[index] !== OPS.showText) continue;
+      const value = operators.argsArray[index][0].map(glyph => glyph?.unicode ?? "").join("");
+      textColors.set(value, fill);
     }
+    const white = value => {
+      const components = String(textColors.get(value)).match(/[\da-f]{2}/gi)?.map(hex => parseInt(hex, 16)) || [];
+      return components.length === 3 && components.every(component => component >= 248);
+    };
+    for (const value of ["Entrada 1", "07:00", "Saída 1", "12:00"]) {
+      assert.equal(white(value), true, `${value} deve estar em branco no cluster`);
+    }
+    assert.ok(fillColors.some(value => {
+      const [red, green, blue] = String(value).match(/[\da-f]{2}/gi)?.map(hex => parseInt(hex, 16)) || [];
+      return green > red && green > blue && green >= 90;
+    }), "deve existir preenchimento verde para entradas");
+    assert.ok(fillColors.some(value => {
+      const [red, green, blue] = String(value).match(/[\da-f]{2}/gi)?.map(hex => parseInt(hex, 16)) || [];
+      return red > green && red > blue && red >= 120;
+    }), "deve existir preenchimento vermelho para saídas");
   } finally {
     await loadingTask.destroy();
   }

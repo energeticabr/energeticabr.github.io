@@ -35,8 +35,10 @@ function isPluginUnavailable(error) {
 function normalizeNativeError(error) {
   if (isCancellation(error)) return null;
   const code = String(error?.code || "").toLowerCase();
+  const name = String(error?.name || "").toLowerCase();
   const message = String(error?.message || "").toLowerCase();
-  if (code.includes("permission") || message.includes("denied") || message.includes("permiss")) {
+  if (["notallowederror", "permissiondeniederror", "securityerror"].includes(name)
+    || code.includes("permission") || message.includes("denied") || message.includes("permiss")) {
     return new NativePermissionError();
   }
   return error instanceof Error ? error : new Error("O iPhone não concluiu a operação.");
@@ -82,6 +84,7 @@ export function createNativePorts({
   share = Share,
   app = App,
   localNotifications = LocalNotifications,
+  navigatorRef = globalThis.navigator,
   fetchImpl = globalThis.fetch,
   FileCtor = globalThis.File,
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto)
@@ -142,6 +145,20 @@ export function createNativePorts({
     } catch (error) {
       const normalized = normalizeNativeError(error);
       if (!normalized) return [];
+      throw normalized;
+    }
+  }
+
+  async function requestMicrophonePermission() {
+    const getUserMedia = navigatorRef?.mediaDevices?.getUserMedia;
+    if (typeof getUserMedia !== "function") return true;
+    try {
+      const stream = await getUserMedia.call(navigatorRef.mediaDevices, { audio: true });
+      for (const track of stream?.getTracks?.() || []) track.stop?.();
+      return true;
+    } catch (error) {
+      const normalized = normalizeNativeError(error);
+      if (!normalized) return false;
       throw normalized;
     }
   }
@@ -394,6 +411,7 @@ export function createNativePorts({
       return () => listener.remove();
     },
     capturePhoto,
+    requestMicrophonePermission,
     pickPhotos,
     pickDocuments,
     importSharedItems,

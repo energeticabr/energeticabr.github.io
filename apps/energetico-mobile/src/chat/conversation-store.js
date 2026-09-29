@@ -547,6 +547,19 @@ export function createConversationStore({
     return true;
   }
 
+  function markFileError(fileId, error) {
+    const index = state.pendingFiles.findIndex(item => item.id === fileId);
+    if (index < 0) return false;
+    const detail = error?.message || "Não foi possível processar o arquivo.";
+    const pendingFiles = state.pendingFiles.map((item, itemIndex) => (
+      itemIndex === index
+        ? { ...item, status: "failed", error: detail, operationId: null }
+        : item
+    ));
+    publish({ ...state, pendingFiles, error: detail });
+    return true;
+  }
+
   // Se a VM não confirmar a coleção de anexos, desfazemos a confirmação
   // visual, retiramos o arquivo que falhou da bandeja e notificamos o usuário.
   function revertFileConfirmation(operation, error) {
@@ -641,6 +654,7 @@ export function createConversationStore({
     beginFile,
     confirmFile,
     failFile,
+    markFileError,
     revertFileConfirmation,
     ingestRemoteMessages,
     replaceCurrentResponse,

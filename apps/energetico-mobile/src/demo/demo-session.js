@@ -57,6 +57,7 @@ export function createDemoSession({ fetchImpl = globalThis.fetch, now = Date.now
 export function createDemoPorts(native) {
   return Object.freeze({
     capturePhoto: () => native.capturePhoto(),
+    requestMicrophonePermission: () => native.requestMicrophonePermission?.() ?? true,
     pickPhotos: () => typeof native.pickPhotos === "function" ? native.pickPhotos() : native.pickDocuments(),
     pickDocuments: () => native.pickDocuments(),
     exportMedia: (...args) => native.exportMedia(...args),

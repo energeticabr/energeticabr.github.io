@@ -21,6 +21,20 @@ function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
 }
 
+function isStructuredVoicePrompt(message, visibleMessages, databaseFilter) {
+  if (databaseFilter || isActiveDateQuestion(visibleMessages) || isActiveDocumentIdQuestion(visibleMessages)) return true;
+  if (Array.isArray(message?.options) && message.options.length) return true;
+  const question = String(message?.question || message?.prompt || "");
+  return /(?:quantidade|quantos|quantas|n[úu]mero|cpf|cnpj|data|dia|hora|hor[áa]rio|valor|telefone|whatsapp|e-?mail)/i.test(question);
+}
+
+function shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice) {
+  if (generatedSignatureChoice || !state?.activeFlow) return false;
+  if (isStructuredVoicePrompt(latestAssistantMessage, visibleMessages, databaseFilter)) return false;
+  return isVoiceInputFlow(state.activeFlow)
+    || Boolean(String(latestAssistantMessage?.question || latestAssistantMessage?.prompt || "").trim());
+}
+
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -924,6 +938,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
     ${navigation}
     <header class="chat-rhid-attendance-report__header">
       <div class="chat-rhid-attendance-report__identity"><span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2></div>
+      <div class="chat-rhid-attendance-report__header-actions">${refreshButton}${shareButton}</div>
       <div class="chat-rhid-attendance-report__updated" title="${escapeHtml(updateLabel)}"><span>${escapeHtml(updateHeading)}</span><strong>${escapeHtml(updateTime)}</strong></div>
       <div class="chat-rhid-attendance-report__date"><span>DATA DO RELATÓRIO</span><time datetime="${escapeHtml(date)}">${escapeHtml(dateLabel || "—")}</time></div>
     </header>
@@ -933,7 +948,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
       <div><strong class="chat-rhid-attendance-report__summary-value">${String(summary.withPunches).padStart(2, "0")}</strong><span>COM MARCAÇÃO</span></div>
       <div><strong class="chat-rhid-attendance-report__summary-value chat-rhid-attendance-report__summary-value--missing">${String(summary.withoutPunches).padStart(2, "0")}</strong><span>SEM MARCAÇÃO</span></div>
     </div>
-    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong><div class="chat-rhid-attendance-report__toolbar-actions">${refreshButton}${shareButton}</div></div>
+    <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong></div>
     ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
       ${rows.map(row => {
         const noPunches = isRhidAttendanceRowWithoutPunches(row);
@@ -946,9 +961,13 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
           const exitLabel = String(headers[2 + index * 2] ?? `Saída ${index + 1}`);
           const entry = String(row[1 + index * 2] ?? "—");
           const exit = String(row[2 + index * 2] ?? "—");
-          const entryClass = /^\d{1,2}:\d{2}$/.test(entry.trim()) ? "chat-rhid-attendance-card__entry" : "";
-          const exitClass = /^\d{1,2}:\d{2}$/.test(exit.trim()) ? "chat-rhid-attendance-card__exit" : "";
-          return `<div class="chat-rhid-attendance-card__slot"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div>`;
+          const entryIsTime = /^\d{1,2}:\d{2}$/.test(entry.trim());
+          const exitIsTime = /^\d{1,2}:\d{2}$/.test(exit.trim());
+          const entryClass = entryIsTime ? "chat-rhid-attendance-card__entry" : "";
+          const exitClass = exitIsTime ? "chat-rhid-attendance-card__exit" : "";
+          const entryClusterClass = `chat-rhid-attendance-card__cluster ${entryIsTime ? "chat-rhid-attendance-card__cluster--entry" : "chat-rhid-attendance-card__cluster--empty"}`;
+          const exitClusterClass = `chat-rhid-attendance-card__cluster ${exitIsTime ? "chat-rhid-attendance-card__cluster--exit" : "chat-rhid-attendance-card__cluster--empty"}`;
+          return `<div class="chat-rhid-attendance-card__slot"><div class="${entryClusterClass}"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong></div><div class="${exitClusterClass}"><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div></div>`;
         }).join("");
         const totalText = String(total);
         const isPartial = /\(parcial\)/i.test(totalText);
@@ -2054,7 +2073,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const signaturePrompt = isSignaturePrompt(state);
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
-  const voiceInputVisible = isVoiceInputFlow(state.activeFlow) && !generatedSignatureChoice;
+  const voiceInputVisible = shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice);
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -2118,7 +2137,7 @@ export function commandFromTarget(target) {
   };
 }
 
-export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, demo = false } = {}) {
+export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, demo = false } = {}) {
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
@@ -2134,6 +2153,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let voiceInput = null;
   let voiceInputHeld = false;
   let voiceInputPointerId = null;
+  let voicePermissionAttempted = false;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2173,17 +2193,20 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let fileDropZone = null;
 
   function voiceInputEnabled(state = lastState) {
+    const messages = Array.isArray(state?.messages) ? state.messages : [];
+    const visibleMessages = messages;
+    const latestAssistantMessage = [...visibleMessages].reverse()
+      .find(message => message?.role !== "user" && (message?.type === "poll" || message?.type === "text"));
     return state?.sessionStatus === "authenticated"
-      && isVoiceInputFlow(state?.activeFlow)
-      && !isGeneratedDocumentSignatureChoice(state);
+      && shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilterForView(visibleMessages), isGeneratedDocumentSignatureChoice(state));
   }
 
-  function setVoiceInputButtonState({ active = false, error = "", enabled = voiceInputEnabled() } = {}) {
+  function setVoiceInputButtonState({ active = false, pending = false, error = "", enabled = voiceInputEnabled() } = {}) {
     const button = composerControls.voiceInput;
     const status = composerControls.voiceStatus;
     if (!button) return;
     button.hidden = !enabled;
-    button.disabled = composerBusy || !enabled;
+    button.disabled = composerBusy || !enabled || pending;
     button.classList.toggle("voice-input-button--active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
     button.setAttribute("aria-label", active ? "Soltar para parar a transcrição" : "Segurar para transcrever áudio");
@@ -2191,8 +2214,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const icon = button.querySelector("[aria-hidden=\"true\"]");
     if (icon) icon.textContent = active ? "🔴" : "🎙️";
     if (status) {
-      status.hidden = !error && !active;
-      status.textContent = error || (active ? "Ouvindo… solte para parar." : "");
+      status.hidden = !error && !active && !pending;
+      status.textContent = error || (pending ? "Solicitando acesso ao microfone…" : active ? "Ouvindo… solte para parar." : "");
     }
   }
 
@@ -2203,6 +2226,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput = null;
       voiceInputHeld = false;
       voiceInputPointerId = null;
+      voicePermissionAttempted = false;
       setVoiceInputButtonState({ enabled: false });
       return;
     }
@@ -2219,8 +2243,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           emit({ type: "draft-changed", value });
         },
         getRecognition: () => windowRef?.SpeechRecognition || windowRef?.webkitSpeechRecognition || null,
-        onStateChange: ({ active }) => setVoiceInputButtonState({ active }),
+        ensureAudioPermission: ensureMicrophonePermission,
+        onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
         onError: error => setVoiceInputButtonState({ error }),
+      });
+    }
+    if (!voicePermissionAttempted && typeof ensureMicrophonePermission === "function") {
+      voicePermissionAttempted = true;
+      Promise.resolve().then(() => ensureMicrophonePermission()).catch(error => {
+        setVoiceInputButtonState({ error });
       });
     }
     setVoiceInputButtonState({ active: voiceInput.isActive(), enabled });

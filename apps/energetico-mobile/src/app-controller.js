@@ -1,6 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
+import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
@@ -8,6 +9,7 @@ import {
   latestPresenceValidationDate,
   scopePresenceResult,
 } from "./chat/presence-date-scope.js";
+import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -4452,7 +4454,28 @@ export function createAppController({
           await new Promise(resolve => idleWaiters.add(resolve));
         }
         if (stopped || !account || account !== queuedAccount) return false;
-        const uploaded = await uploadFile(id);
+        const pending = store.getState().pendingFiles.find(item => item.id === id);
+        let uploaded = false;
+        try {
+          if (pending && isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
+            if (typeof client.transcribeAudio !== "function") {
+              throw new Error("A transcrição de arquivos de áudio ainda não está disponível na VM.");
+            }
+            const transcript = audioTranscriptionText(await client.transcribeAudio(pending.file));
+            const draftParts = [store.getState().draft, transcript].filter(Boolean);
+            store.setDraft(normalizeConstructionDiaryText(draftParts.join("\n")));
+            store.discardFile(id);
+            uploaded = true;
+          } else {
+            uploaded = await uploadFile(id);
+          }
+        } catch (error) {
+          if (pending && isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
+            store.markFileError?.(id, error);
+          }
+          sessionError = errorMessage(error, "Não foi possível transcrever o arquivo de áudio.");
+          render();
+        }
         if (!uploaded) {
           allUploaded = false;
           const failure = store.getState().error || sessionError;
