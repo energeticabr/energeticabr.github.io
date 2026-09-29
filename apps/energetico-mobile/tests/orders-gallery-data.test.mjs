@@ -119,6 +119,156 @@ test("carrega a lista Screen10 autenticada, percorre páginas e normaliza os cam
   assert.equal(calls[1][4].signal, signal);
 });
 
+test("busca o cabeçalho NOTASPENDENTES diretamente pelo ID em vez de paginar a lista", async () => {
+  const calls = [];
+  const repository = {
+    async resolveList(...args) { calls.push(["resolveList", ...args]); return { status: "resolved", id: "list-notas" }; },
+    async getItem(...args) {
+      calls.push(["getItem", ...args]);
+      return { id: "338", fields: { FORNECEDOR: "EDGAR", VALORTOTAL: 905, STATUS: "PENDENTE AUDITORIA" } };
+    },
+    async getItemsPage(...args) { calls.push(["getItemsPage", ...args]); return { items: [], hasMore: false }; },
+  };
+  const data = createOrdersGalleryData({ repository });
+  const signal = new AbortController().signal;
+
+  assert.equal(typeof data.loadItem, "function");
+  const item = await data.loadItem("338", { signal });
+
+  assert.deepEqual(item, {
+    id: "338", fields: { FORNECEDOR: "EDGAR", VALORTOTAL: 905, STATUS: "PENDENTE AUDITORIA" }, hasAttachments: null,
+  });
+  assert.deepEqual(calls, [
+    ["resolveList", "personal", ["NOTASPENDENTES"], { signal }],
+    ["getItem", "personal", "list-notas", "338", "$expand=fields", { signal }],
+  ]);
+});
+
+test("pedido ausente retorna vazio na consulta pontual, mas outros erros SharePoint continuam visíveis", async () => {
+  const data = createOrdersGalleryData({ repository: {
+    async resolveList() { return { status: "resolved", id: "list-notas" }; },
+    async getItem(_site, _list, id) {
+      if (id === "338") throw Object.assign(new Error("Item ausente"), { status: 404 });
+      throw new Error("Falha de rede");
+    },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+  } });
+
+  assert.equal(await data.loadItem("338"), null);
+  await assert.rejects(data.loadItem("339"), /Falha de rede/);
+});
+
+test("filtra LANCAMENTOS por AGRUPAR no SharePoint e pagina somente as linhas correspondentes", async () => {
+  assert.equal(typeof galleryData.createLaunchClusterData, "function", "a leitura delegável de AGRUPAR precisa estar disponível");
+  const calls = [];
+  const signal = new AbortController().signal;
+  const pages = [
+    { items: [
+      { id: "3451", fields: { AGRUPAR: "338", FORNECEDOR: "EDGAR", "VALOR TOTAL": 905 } },
+      { id: "3450", fields: { AGRUPAR: "339", FORNECEDOR: "OUTRO" } },
+    ], nextLink: "launch-next", hasMore: true },
+    { items: [{ id: "3449", fields: { AGRUPAR: "338", FORNECEDOR: "EDGAR", "VALOR TOTAL": 100 } }], nextLink: "", hasMore: false },
+  ];
+  const repository = {
+    async resolveList(...args) { calls.push(["resolveList", ...args]); return { status: "resolved", id: "list-lancamentos" }; },
+    async getItemsPage(...args) { calls.push(["getItemsPage", ...args]); return pages.shift(); },
+  };
+  const data = galleryData.createLaunchClusterData({ repository });
+
+  const rows = await data.loadGroup("338", { signal });
+
+  assert.deepEqual(rows.map(row => row.id), ["3451", "3449"]);
+  assert.deepEqual(calls, [
+    ["resolveList", "personal", ["LANCAMENTOS"], { signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", signal }],
+  ]);
+});
+
+test("recusa valores de AGRUPAR que não são IDs numéricos antes de consultar o SharePoint", async () => {
+  assert.equal(typeof galleryData.createLaunchClusterData, "function", "a leitura delegável de AGRUPAR precisa estar disponível");
+  const calls = [];
+  const data = galleryData.createLaunchClusterData({ repository: {
+    async resolveList(...args) { calls.push(args); return { status: "resolved", id: "list-lancamentos" }; },
+    async getItemsPage(...args) { calls.push(args); return { items: [], hasMore: false }; },
+  } });
+
+  await assert.rejects(data.loadGroup("338' or ID ne 0"), /AGRUPAR|ID/i);
+  assert.deepEqual(calls, []);
+});
+
+test("reabrir popup após cancelar descoberta de LANCAMENTOS não reutiliza promessa abortada", async () => {
+  const firstController = new AbortController();
+  const secondController = new AbortController();
+  let discoveryStarted;
+  const started = new Promise(resolve => { discoveryStarted = resolve; });
+  let resolves = 0;
+  let pageReads = 0;
+  const data = galleryData.createLaunchClusterData({ repository: {
+    resolveList(_site, _aliases, { signal } = {}) {
+      resolves += 1;
+      if (resolves === 1) return new Promise((resolve, reject) => {
+        discoveryStarted();
+        signal.addEventListener("abort", () => reject(signal.reason || new DOMException("Cancelado", "AbortError")), { once: true });
+      });
+      return Promise.resolve({ status: "resolved", id: "list-lancamentos" });
+    },
+    async getItemsPage() {
+      pageReads += 1;
+      return { items: [{ id: "3451", fields: { AGRUPAR: "338" } }], hasMore: false };
+    },
+  } });
+
+  const first = data.loadGroup("338", { signal: firstController.signal });
+  await started;
+  firstController.abort();
+  const reopened = data.loadGroup("338", { signal: secondController.signal });
+
+  await assert.rejects(first, error => error.name === "AbortError");
+  assert.deepEqual((await reopened).map(item => item.id), ["3451"]);
+  assert.equal(resolves, 2);
+  assert.equal(pageReads, 1);
+});
+
+test("integra o popup ao Graph com busca pontual do pedido e filtro OData em AGRUPAR", async () => {
+  const scopes = [];
+  const urls = [];
+  const tokenProvider = async requested => { scopes.push(requested); return "sharepoint-token"; };
+  const fetchImpl = async url => {
+    const parsed = new URL(String(url));
+    urls.push(parsed);
+    if (parsed.pathname.includes("/sites/energeticaltda-my.sharepoint.com:")) {
+      return Response.json({ id: "site-personal" });
+    }
+    if (parsed.pathname.endsWith("/lists") && !parsed.pathname.includes("/items")) {
+      return Response.json({ value: [
+        { id: "list-notas", displayName: "NOTASPENDENTES", list: { template: "genericList" } },
+        { id: "list-lancamentos", displayName: "LANCAMENTOS", list: { template: "genericList" } },
+      ] });
+    }
+    if (parsed.pathname.endsWith("/lists/list-notas/items/338")) {
+      return Response.json({ id: "338", fields: { FORNECEDOR: "EDGAR", VALORTOTAL: 905 } });
+    }
+    if (parsed.pathname.endsWith("/lists/list-lancamentos/items")) {
+      assert.equal(parsed.searchParams.get("$filter"), "fields/AGRUPAR eq '338'");
+      assert.equal(parsed.searchParams.get("$top"), "100");
+      return Response.json({ value: [{ id: "3451", fields: { AGRUPAR: "338", FORNECEDOR: "EDGAR" } }] });
+    }
+    throw new Error(`URL Graph inesperada: ${parsed.pathname}${parsed.search}`);
+  };
+  const data = createOrdersGalleryData({ tokenProvider, fetchImpl });
+
+  const order = await data.loadItem("338");
+  const launches = await data.loadLaunchGroup("338");
+
+  assert.equal(order.id, "338");
+  assert.deepEqual(launches.map(item => item.id), ["3451"]);
+  assert.ok(scopes.length > 0);
+  assert.ok(scopes.every(requested => requested.includes("Sites.Read.All")));
+  assert.ok(urls.some(url => url.pathname.endsWith("/lists/list-notas/items/338")));
+  assert.ok(urls.some(url => url.searchParams.get("$filter") === "fields/AGRUPAR eq '338'"));
+});
+
 test("lista e baixa anexos do pedido usando a API SharePoint com o ID do item", async () => {
   const { repository, calls } = repositoryHarness();
   const gallery = createOrdersGalleryData({ repository });
