@@ -94,6 +94,25 @@ test("transcrição por pressão acumula finais e exibe parcial sem enviar", () 
   controller.destroy();
 });
 
+test("falha do serviço SpeechRecognition não é apresentada como permissão do microfone desativada", async () => {
+  FakeRecognition.instances = [];
+  const errors = [];
+  const controller = createVoiceInputController({
+    getRecognition: () => FakeRecognition,
+    ensureAudioPermission: async () => true,
+    onError: message => errors.push(message),
+  });
+
+  controller.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  FakeRecognition.instances[0].emitError("service-not-allowed");
+
+  assert.match(errors[0], /serviço de ditado/i);
+  assert.doesNotMatch(errors[0], /microfone.*bloqueado|autorize o microfone/i);
+  controller.destroy();
+});
+
 test("ausência da API de reconhecimento não quebra o compositor", () => {
   const errors = [];
   const controller = createVoiceInputController({
@@ -348,6 +367,35 @@ test("grava e transcreve quando o WebView não oferece SpeechRecognition", async
   assert.equal(capturedFile?.type, "audio/webm");
   assert.equal(capturedFile?.name, "energetico-voice-input.webm");
   assert.deepEqual(stoppedTracks, [true]);
+  controller.destroy();
+});
+
+test("prefere gravar e transcrever quando a plataforma pede o caminho de áudio", async () => {
+  FakeRecognition.instances = [];
+  FakeMediaRecorder.instances = [];
+  let draft = "";
+  let permissionChecks = 0;
+  const stream = { getTracks: () => [{ stop() {} }] };
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => FakeRecognition,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: async () => stream,
+    preferRecorder: true,
+    ensureAudioPermission: async () => { permissionChecks += 1; return true; },
+    transcribeAudio: async () => "Concretagem da laje concluída",
+  });
+
+  assert.equal(controller.start(), true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 0, "não deve escolher o reconhecimento nativo de fala");
+  assert.equal(FakeMediaRecorder.instances[0].started, 1, "deve capturar áudio para transcrição");
+  assert.equal(permissionChecks, 0, "a própria captura deve solicitar o acesso no gesto do usuário");
+
+  await controller.stop();
+  assert.equal(draft, "Concretagem da laje concluída");
   controller.destroy();
 });
 

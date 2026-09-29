@@ -596,6 +596,93 @@ test("WebView nativo grava no microfone somente após o toque e transcreve ao so
   dom.window.close();
 });
 
+test("iPhone usa captura de áudio e não confunde falha do ditado com permissão desativada", async () => {
+  class Recognition {
+    static starts = 0;
+    start() { Recognition.starts += 1; this.onstart?.(); }
+  }
+  class Recorder {
+    static instance = null;
+    constructor(stream) { Recorder.instance = this; this.stream = stream; }
+    start() { this.onstart?.(); }
+    stop() {
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", {
+    value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+  });
+  dom.window.SpeechRecognition = Recognition;
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    transcribeAudio: async () => "Execução de concretagem concluída",
+  });
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const draft = root.querySelector('[data-role="draft"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(Recorder.instance, "o toque deve iniciar captura de áudio no iPhone");
+  assert.equal(Recognition.starts, 0, "o ditado do WebView não deve ser usado no iPhone");
+
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(draft.value, "Execução de concretagem concluída.");
+  assert.doesNotMatch(root.querySelector('[data-role="voice-input-status"]').textContent, /Microfone desativado/i);
+  view.destroy();
+  dom.window.close();
+});
+
+test("iPadOS com user agent de desktop recebe orientação quando a captura é negada", async () => {
+  class Recognition { start() { this.onstart?.(); } }
+  class Recorder {
+    start() { this.onstart?.(); }
+    stop() { this.onstop?.(); }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", {
+    value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 Safari/605.1.15",
+  });
+  Object.defineProperty(dom.window.navigator, "platform", { value: "MacIntel" });
+  Object.defineProperty(dom.window.navigator, "maxTouchPoints", { value: 5 });
+  dom.window.SpeechRecognition = Recognition;
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => { throw new Error("Permission denied"); } },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "" });
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  root.querySelector('[data-role="voice-input"]').dispatchEvent(
+    new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /Ajustes.*Energético.*Microfone/i);
+  view.destroy();
+  dom.window.close();
+});
+
 test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Humanos", () => {
   const menu = {
     id: "hr-menu",

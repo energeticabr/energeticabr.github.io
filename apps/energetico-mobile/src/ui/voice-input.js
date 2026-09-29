@@ -16,7 +16,7 @@ function speechErrorMessage(error) {
   switch (String(error || "").toLowerCase()) {
     case "not-allowed":
     case "service-not-allowed":
-      return "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição.";
+      return "O serviço de ditado do dispositivo não está disponível agora. Tente novamente ou digite a resposta.";
     case "audio-capture":
       return "Não foi possível acessar o microfone neste dispositivo.";
     case "no-speech":
@@ -34,6 +34,7 @@ export function createVoiceInputController({
   getAudioStream = () => globalThis?.navigator?.mediaDevices?.getUserMedia?.call(globalThis.navigator.mediaDevices, { audio: true }),
   transcribeAudio,
   ensureAudioPermission,
+  preferRecorder = false,
   onStateChange = () => {},
   onError = () => {},
   onSessionEnd = () => {},
@@ -243,8 +244,8 @@ export function createVoiceInputController({
     if (destroyed || active || permissionPending || capturePending || transcriptionPending || recognitionStopping) return active;
     const Recognition = getRecognition?.();
     const Recorder = typeof getRecorder === "function" ? getRecorder() : null;
-    const useRecognition = typeof Recognition === "function";
-    const useRecorder = !useRecognition && typeof Recorder === "function";
+    const useRecorder = typeof Recorder === "function" && (preferRecorder || typeof Recognition !== "function");
+    const useRecognition = !useRecorder && typeof Recognition === "function";
     if (!useRecognition && !useRecorder) {
       onError("O reconhecimento de voz não está disponível neste navegador ou aplicativo.");
       notify(false);
