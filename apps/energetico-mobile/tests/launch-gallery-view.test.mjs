@@ -66,7 +66,12 @@ function input(ctx, name, value, parent = ctx.root()) {
   field.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
   return field;
 }
-async function showDetail(ctx) { button(ctx.root(), 'Detalhes').click(); await settle(); }
+async function showDetail(ctx) {
+  const card = ctx.root().querySelector('.lg-record');
+  const expand = card?.querySelector('.lg-record-expand[aria-expanded="false"]');
+  if (expand) expand.click();
+  button(ctx.root(), 'Detalhes').click(); await settle();
+}
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
 test('filters start collapsed so records are visible; details and review scroll into view', async t => {
@@ -198,12 +203,14 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
   assert.ok(record, 'PowerApps-equivalent record');
   for (const value of ['3424', 'CORDA PARA PRUMO DE CENTRO', 'ALVENARIA E ESTRUTURAS',
     'PIRATININGA FERRAMENTAS LTDA', 'PEDIDO FINALIZADO', 'SHAREPOINT APP EM 20/09/2026 14:27',
-    '004 - EDIFÍCIO XAVANTE', '20/09/2026', 'SEM MODIFICAÇÕES APÓS CRIAÇÃO', 'R$ 2,85',
+    '004 - EDIFÍCIO XAVANTE', '20/09/2026', 'SEM MODIFICAÇÕES APÓS CRIAÇÃO',
     'CUSTO', 'PENDENTE DE APROVAÇÃO', '19/09/2026', '1 UN', 'AMAEL PF - CAIXA', '318',
     '2 anexos', 'SEM AVALIAÇÃO']) assert.ok(record.textContent.includes(value), value);
+  assert.match(record.textContent, /R\$\s*2,85/);
   assert.equal([...ctx.root().querySelectorAll('.lg-filter-grid .lg-label')]
     .some(label => label.textContent === 'Medição'), true);
   assert.match(ctx.root().querySelector('.lg-totals').textContent, /3\s+R\$\s*85,00/);
+  button(record, 'Ver mais informações').click();
   button(record, 'Detalhes').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
 });
@@ -227,6 +234,83 @@ test('launch card presents AGRUPAR and supplier as cluster actions while preserv
   assert.ok(card.querySelector('.lg-record-dates'));
   assert.ok(card.querySelector('.lg-record-values'));
   assert.equal(card.querySelector('.lg-record-dates .lg-record-label')?.textContent, 'DATA DE COMPRA');
+});
+
+test('launch cards keep a compact summary and reveal remaining fields only when expanded', async t => {
+  const item = row(3458);
+  const second = row(3459);
+  second.fields = { ...second.fields, 'DATA PGTO PREVISTO': '30/09/2026' };
+  item.fields = {
+    ...item.fields,
+    PRODUTO: 'PEDREIRO', FORNECEDOR: 'FELICIANO ROGÉRIO DA SILVA', AGRUPAR: 338,
+    'DATA PGTO EFETUADO': '25/09/2026', 'VALOR UNITÁRIO': 109, QUANTIDADE: 1, UN: 'DIÁRIA', UNIDADE: 'DIÁRIA',
+    FRETE: '0,00', 'VALOR TOTAL': 'R$ 109,00', FILIAL: '004 - EDIFÍCIO XAVANTE',
+    'ETAPA OBRA': 'ALVENARIA E ESTRUTURAS', 'DATA DE COMPRA': '28/09/2026',
+    'DATA PGTO PREVISTO': '29/09/2026', 'DATA DE RMS': '28/09/2026',
+    'FORMA DE PAGAMENTO': 'PIX', 'TIPO DE OPERAÇÃO': 'CUSTO', APROVAÇÃO: 'PENDENTE DE APROVAÇÃO',
+  };
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item, second] }) : detail({ item }) });
+  await ctx.gallery.open();
+
+  const [card, secondCard] = ctx.root().querySelectorAll('.lg-record');
+  const summary = card.querySelector('.lg-record-summary');
+  const extra = card.querySelector('.lg-record-extra');
+  const secondExtra = secondCard.querySelector('.lg-record-extra');
+  const secondSummary = secondCard.querySelector('.lg-record-summary');
+  const toggle = button(card, 'Ver mais informações');
+  assert.ok(summary);
+  assert.ok(extra);
+  assert.equal(extra.hidden, true);
+  assert.match(secondSummary.textContent, /PREVISTO.*30\/09\/2026/);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(toggle.getAttribute('aria-controls'), extra.id);
+  assert.notEqual(extra.id, secondExtra.id);
+  for (const value of ['3458', 'PEDREIRO', 'FELICIANO ROGÉRIO DA SILVA', '338', '25/09/2026', '1 DIÁRIA']) {
+    assert.ok(summary.textContent.includes(value), value);
+  }
+  assert.match(summary.textContent, /R\$\s*109,00/);
+  assert.match(summary.textContent, /R\$\s*0,00/);
+  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
+    assert.doesNotMatch(summary.textContent, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.equal(card.querySelector('.lg-record-media').parentElement, card.querySelector('.lg-record-content').parentElement);
+
+  toggle.click();
+  assert.equal(extra.hidden, false);
+  assert.equal(secondExtra.hidden, true, 'expanding one launch must not expand another');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(toggle.textContent, 'Ver menos informações');
+  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
+    assert.ok(extra.textContent.includes(value), value);
+  }
+  button(card, 'Detalhes').click(); await settle();
+  assert.deepEqual(ctx.calls.at(-1), { operation: 'detail', payload: { id: 3458 } });
+
+  toggle.click();
+  assert.equal(extra.hidden, true);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+});
+
+test('supplier and AGRUPAR actions remain usable in the compact launch summary', async t => {
+  const item = row(3458);
+  item.fields = { ...item.fields, FORNECEDOR: 'Fornecedor A', AGRUPAR: 338 };
+  const ctx = await setup(t, {
+    loadLaunchGroup: async () => [item],
+    loadOrderSnapshot: async () => ({ rows: [{ id: 338, fields: { ID: 338, FORNECEDOR: 'Fornecedor A' } }] }),
+    request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item }),
+  });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.lg-record');
+  const extra = card.querySelector('.lg-record-extra');
+
+  card.querySelector('[data-cluster-kind="supplier"]').click(); await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, false);
+  assert.equal(extra.hidden, true);
+  button(ctx.root().querySelector('.lg-cluster-modal'), 'Fechar').click();
+  card.querySelector('[data-cluster-kind="order"]').click(); await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-cluster-modal').hidden, false);
+  assert.equal(extra.hidden, true);
 });
 
 test('supplier cluster loads every matching launch page and summarizes the supplier', async t => {
@@ -566,6 +650,7 @@ test('launch summary formats SharePoint dates as dd/mm/yyyy and resolves the cre
   assert.equal(values.get('ADICIONADO POR'), 'Bernardo Notini');
   assert.doesNotMatch(record.textContent, /2026-09-24T03:00:00Z|2026-09-25T00:43:17Z|1073741822/);
 
+  button(record, 'Ver mais informações').click();
   button(record, 'Detalhes').click(); await settle();
   const details = ctx.root().querySelector('.lg-data-table');
   const detailValues = new Map([...details.querySelectorAll('tr')].map(line => [
@@ -636,7 +721,8 @@ test('launch rows keep the stable pre-parity layout while keeping attachments op
   assert.match(record.querySelector('.lg-record-status').textContent, /PEDIDO FINALIZADO/i);
   assert.match(record.querySelector('.lg-record-badges').textContent, /PENDENTE DE APROVAÇÃO/i);
   assert.equal(record.querySelector('[data-lg-action="attachments"]'), null);
-  assert.ok(record.querySelector('.lg-record-content > .lg-button'), 'details stays as the single row action');
+  assert.ok(record.querySelector('.lg-record-expand'), 'the row exposes its expand action');
+  assert.ok(record.querySelector('.lg-record-extra > .lg-button'), 'record details remain accessible after expanding');
 });
 
 test('launch cards show a PDF marker on the left when any PDF attachment exists', async t => {
@@ -1223,10 +1309,16 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   assert.doesNotMatch(css, /\.lg-record-select\s*\{/);
   assert.match(css, /\.lg-record-media\s*\{[^}]*cursor:\s*pointer/s);
   assert.match(css, /\.lg-record-media\s*\{[^}]*background:\s*var\(--lg-sky\)/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*align-self:\s*stretch/s);
+  assert.match(css, /\.lg-record-media\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(css, /\.lg-record-content\s*\{[^}]*grid-row:\s*1/s);
+  assert.match(css, /\.lg-record--with-media\s+\.lg-record-content\s*\{[^}]*grid-column:\s*2/s);
+  const baseContent = css.match(/\.lg-record-content\s*\{([^}]*)\}/)?.[1] ?? '';
+  assert.doesNotMatch(baseContent, /grid-column:\s*2/);
   assert.match(css, /\.lg-cluster-table-wrap\s*\{[^}]*overflow:\s*auto/s);
   assert.match(css, /\.lg-record-badge[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*\.lg-record-main\s*\{[^}]*grid-template-columns:\s*1fr/s);
-  assert.match(css, /\.lg-record-content\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
+  assert.match(css, /\.lg-record-extra\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
 });
 
 test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {
