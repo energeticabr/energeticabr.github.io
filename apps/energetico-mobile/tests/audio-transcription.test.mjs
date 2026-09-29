@@ -49,3 +49,11 @@ test("não aceita resposta de transcrição sem texto", async () => {
 
   await assert.rejects(client.transcribeAudio({ name: "diario.wav", type: "audio/wav", size: 2 }), /texto transcrito/i);
 });
+
+test("falha de rede na transcrição mostra orientação em português", async () => {
+  const client = clientWith(async () => { throw new TypeError("Load failed"); });
+  await assert.rejects(
+    client.transcribeAudio({ name: "diario.m4a", type: "audio/mp4", size: 2 }),
+    error => /conexão.*transcri/i.test(error.message) && !/Load failed/.test(error.message),
+  );
+});

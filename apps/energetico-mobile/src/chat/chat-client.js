@@ -184,19 +184,27 @@ export function createChatClient({
   async function transcribeAudio(file) {
     const fileName = validateAttachment(file);
     const token = await acquireToken(tokenProvider);
-    const response = await fetchImpl(transcriptionUrl.href, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-        "Content-Type": String(file.type || "application/octet-stream"),
-        "X-Portal-File-Name": encodeURIComponent(fileName),
-        "X-Portal-Message-Id": newMessageId(),
-      },
-      body: file,
-      cache: "no-store",
-      credentials: "omit",
-    });
+    let response;
+    try {
+      response = await fetchImpl(transcriptionUrl.href, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": String(file.type || "application/octet-stream"),
+          "X-Portal-File-Name": encodeURIComponent(fileName),
+          "X-Portal-Message-Id": newMessageId(),
+        },
+        body: file,
+        cache: "no-store",
+        credentials: "omit",
+      });
+    } catch (error) {
+      if (error instanceof TypeError || ["NetworkError", "AbortError"].includes(error?.name)) {
+        throw new Error("Falha de conexão com o serviço de transcrição. Verifique a internet e tente enviar o áudio novamente.", { cause: error });
+      }
+      throw error;
+    }
     const result = await readJson(response);
     if (!response.ok) {
       const error = new Error(result?.error || `A transcrição respondeu com erro ${response.status}.`);
