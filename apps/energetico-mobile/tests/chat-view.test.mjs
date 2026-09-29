@@ -5282,6 +5282,73 @@ test("mostra o calendário em pergunta de data mesmo sem metadado da VM", () => 
   assert.match(markup, /aria-label="Selecionar data pelo calendário"/);
 });
 
+test("data paga ordena hoje antes de ontem e exibe a estrela sem alterar o texto enviado", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let selected;
+  view.on("select-reply", command => { selected = command; });
+  view.render(signedInState({
+    messages: [{
+      id: "effective-payment-date",
+      role: "assistant",
+      type: "poll",
+      question: "📅 QUAL É A DATA DE PAGAMENTO EFETUADO?",
+      options: [
+        { id: "blank", label: "⬜ EM BRANCO" },
+        { id: "yesterday", label: "🔴 📆 ONTEM" },
+        { id: "today", label: "📅 HOJE", recommendedDate: true },
+        { id: "tomorrow", label: "🔵 AMANHÃ" },
+        { id: "other", label: "👈 OUTRA DATA" },
+      ],
+    }],
+  }));
+
+  const buttons = [...root.querySelectorAll(".chat-message:last-of-type .chat-choice-button")];
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["blank", "today", "yesterday", "tomorrow", "other"]);
+  assert.match(buttons[1].textContent, /⭐/);
+  assert.equal(buttons[1].dataset.label, "📅 HOJE");
+  buttons[1].click();
+  assert.equal(selected.replyId, "today");
+  assert.equal(selected.label, "📅 HOJE");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("data prevista personalizada fica em primeiro com estrela mas envia somente a data", () => {
+  const dom = new JSDOM('<div id="app"></div>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let selected;
+  view.on("select-reply", command => { selected = command; });
+  view.render(signedInState({
+    messages: [{
+      id: "effective-payment-date-custom",
+      role: "assistant",
+      type: "poll",
+      question: "📅 QUAL É A DATA DE PAGAMENTO EFETUADO?",
+      options: [
+        { label: "31/12/2099", recommendedDate: true },
+        { id: "blank", label: "⬜ EM BRANCO" },
+        { id: "yesterday", label: "🔴 📆 ONTEM" },
+        { id: "today", label: "📅 HOJE" },
+      ],
+    }],
+  }));
+
+  const buttons = [...root.querySelectorAll(".chat-message:last-of-type .chat-choice-button")];
+  assert.equal(buttons[0].dataset.label, "31/12/2099");
+  assert.match(buttons[0].textContent, /⭐/);
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["", "blank", "today", "yesterday"]);
+  buttons[0].click();
+  assert.equal(selected.replyId, undefined);
+  assert.equal(selected.label, "31/12/2099");
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("formata automaticamente a data digitada na pergunta atual", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

@@ -5,6 +5,7 @@ import { signatureDocumentLayout as documentSignatureLayout } from "../web/signa
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
+import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
 import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
@@ -1194,7 +1195,10 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
-  const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
+  const options = orderEffectivePaymentDateOptions(
+    message,
+    allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option)),
+  );
   const isHrGalleryMenu = isHrPayrollGalleryMenu(message);
   const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
@@ -1253,7 +1257,12 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       };
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
-    return [pollButton(option, busy, { launchMenuButton: isLaunchMenu && isLaunchFlowOption(option) })];
+    return [pollButton(option, busy, {
+      launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
+      displayLabel: option?.recommendedDate === true
+        ? `⭐ ${String(option.label || option.title || option.id || "")}`
+        : null,
+    })];
   }).join("");
   const rawChangeTable = message.change_table || message.changeTable;
   const questionText = String(message.question || message.prompt || "");

@@ -1,6 +1,7 @@
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
+import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import {
@@ -3981,6 +3982,7 @@ export function createAppController({
         ...(replyId ? { replyId } : {}),
       }));
       remoteResponseReceived = true;
+      result = recommendEffectivePaymentDate(previousPoll, submissionText, replyId, result);
       result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
       if (replyId === PORTAL_MAIN_MENU_CONFIRM_ID && !hasSharePointDraftData(previousState, result)) {
         const draftExitPoll = [...(Array.isArray(result.messages) ? result.messages : [])]

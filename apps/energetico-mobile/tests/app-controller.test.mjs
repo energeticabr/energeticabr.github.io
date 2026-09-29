@@ -6443,6 +6443,76 @@ test("snapshot atrasado não sobrescreve anexos da resposta mais nova", async ()
   assert.deepEqual(harness.store.getState().attachments.map(item => item.id), ["new"]);
 });
 
+test("data prevista vira primeira opção recomendada na data efetivamente paga em lançamentos comuns e múltiplos", async t => {
+  const cases = [
+    { name: "lançamento comum", title: "EFETUAR LANÇAMENTO", answer: "31/12/2099", replyId: null, expectedId: "", expectedLabel: "31/12/2099" },
+    { name: "lançamento múltiplo", title: "LANÇAMENTO MÚLTIPLO", answer: "31/12/2099", replyId: null, expectedId: "", expectedLabel: "31/12/2099" },
+    { name: "hoje sem botão duplicado", title: "EFETUAR LANÇAMENTO", answer: "📅 HOJE", replyId: "today", expectedId: "today" },
+    { name: "ontem sem botão duplicado", title: "LANÇAMENTO MÚLTIPLO", answer: "🔴 📆 ONTEM", replyId: "yesterday", expectedId: "yesterday" },
+    { name: "data prevista em branco", title: "EFETUAR LANÇAMENTO", answer: "⬜ EM BRANCO", replyId: "blank", expectedId: null },
+  ];
+
+  for (const scenario of cases) await t.test(scenario.name, async tCase => {
+    const h = makeHarness({ historyMode: "current-step" });
+    tCase.after(() => h.controller.stop());
+    await h.controller.start();
+    const activeFlow = { id: "launch", title: scenario.title, contextId: "launch-date-step" };
+    h.store.ingestRemoteMessages([{
+      type: "poll",
+      question: "📅 QUAL É A DATA DE PAGAMENTO PREVISTO?",
+      options: [
+        { id: "blank", label: "⬜ EM BRANCO" },
+        { id: "yesterday", label: "🔴 📆 ONTEM" },
+        { id: "today", label: "📅 HOJE" },
+        { id: "tomorrow", label: "🔵 AMANHÃ" },
+        { id: "other", label: "👈 OUTRA DATA" },
+      ],
+    }], { activeFlow });
+    h.client.sendText = async payload => {
+      assert.equal(payload.text, scenario.answer);
+      if (scenario.replyId) assert.equal(payload.replyId, scenario.replyId);
+      else assert.equal(payload.replyId, undefined);
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{
+          type: "poll",
+          question: "📅 QUAL É A DATA DE PAGAMENTO EFETUADO?",
+          options: [
+            { id: "blank", label: "⬜ EM BRANCO" },
+            { id: "yesterday", label: "🔴 📆 ONTEM" },
+            { id: "today", label: "📅 HOJE" },
+            { id: "tomorrow", label: "🔵 AMANHÃ" },
+            { id: "other", label: "👈 OUTRA DATA" },
+          ],
+        }],
+      };
+    };
+
+    if (scenario.replyId) await h.view.emit("select-reply", { replyId: scenario.replyId, label: scenario.answer });
+    else {
+      h.store.setDraft(scenario.answer);
+      await h.view.emit("send-text");
+    }
+
+    const options = h.store.getState().messages.at(-1).options;
+    if (scenario.expectedId === null) {
+      assert.equal(options.some(option => option.recommendedDate === true), false);
+      assert.equal(options.length, 5);
+    } else {
+      const recommendation = options.find(option => option.recommendedDate === true);
+      assert.ok(recommendation);
+      assert.equal(String(recommendation.id || recommendation.reply || ""), scenario.expectedId);
+      if (scenario.expectedLabel) assert.equal(recommendation.label, scenario.expectedLabel);
+      if (scenario.expectedId) assert.equal(options.length, 5);
+      else {
+        assert.equal(options.length, 6);
+        assert.equal(options[0], recommendation);
+      }
+    }
+  });
+});
+
 test("mídia expirada renova snapshot sem reenviar resposta ao fluxo", async () => {
   const harness = makeHarness();
   await harness.controller.start();
