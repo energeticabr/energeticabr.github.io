@@ -55,7 +55,7 @@ test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalizaçã
       return {
         items: [{ id: "81", fields: {
           FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200,
-          QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12,
+          QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12, IDLANCAMENTO: 3456,
         } }],
         nextLink: "", hasMore: false,
       };
@@ -73,14 +73,14 @@ test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalizaçã
   assert.equal(next.page, 2);
   assert.deepEqual(payroll.rows, [{
     id: "81", FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200,
-    QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12,
+    QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12, IDLANCAMENTO: 3456,
   }]);
   assert.deepEqual(calls, [
     ["resolveList", "personal", ["IDFOLHA"]],
     ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 1, maxPages: 100 }],
     ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 2, maxPages: 100, cursor: "idfolha-next" }],
     ["resolveList", "personal", ["FOLHAPGTO"]],
-    ["getItemsPage", "personal", "list-FOLHAPGTO", "$select=id&$expand=fields($select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA)&$top=25", { pageNumber: 1, maxPages: 100 }],
+    ["getItemsPage", "personal", "list-FOLHAPGTO", "$select=id&$expand=fields($select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO)&$top=25", { pageNumber: 1, maxPages: 100 }],
   ]);
 });
 

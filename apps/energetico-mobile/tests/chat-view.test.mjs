@@ -2007,6 +2007,41 @@ test("opções sem ID numérico na seleção de folha ficam indisponíveis, não
   dom.window.close();
 });
 
+test("lançamentos de não empreiteiro aparecem desabilitados e não entram no envio da folha", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "launch-payroll-mixed-contractors",
+    role: "assistant",
+    type: "poll",
+    presentation: "launch_payroll_multi_select",
+    question: "SELECIONE OS LANÇAMENTOS QUE DESEJA INCLUIR NA FOLHA.",
+    options: [
+      { id: "choice:launch_payroll_entries:700", reply: "choice:launch_payroll_entries:700", label: "ID 700 — EMPREITEIRO" },
+      { id: "choice:launch_payroll_entries:701", reply: "choice:launch_payroll_entries:701", label: "ID 701 — FORNECEDOR COMUM — FORNECEDOR NÃO É EMPREITEIRO", disabled: true },
+    ],
+  }] }));
+
+  const eligible = root.querySelector('input[data-reply-id="700"]');
+  const ineligible = root.querySelector('input[data-reply-id="701"]');
+  assert.equal(ineligible.disabled, true);
+  assert.equal(
+    ineligible.closest("label").textContent.match(/FORNECEDOR NÃO É EMPREITEIRO/g)?.length,
+    1,
+  );
+  ineligible.click();
+  eligible.click();
+  root.querySelector('[data-action="launch-payroll-select-proceed"]').click();
+
+  assert.equal(ineligible.checked, false);
+  assert.deepEqual(replies, ["launch_payroll_selected:700"]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("resumo em lote colore presença presente e ausente por fornecedor", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "attendance-summary",
