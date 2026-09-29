@@ -8,11 +8,13 @@ import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
+import { createVoiceInputController } from "./voice-input.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
 const RELEASE_CLICK_COMMAND = Symbol("chat-release-click-command");
+const VOICE_INPUT_FLOW_ID = "construction_diary_fill";
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -1980,6 +1982,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const signaturePrompt = isSignaturePrompt(state);
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
+  const voiceInputVisible = state.activeFlow?.id === VOICE_INPUT_FLOW_ID && !generatedSignatureChoice;
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -2005,7 +2008,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
       <textarea id="chatDraft" data-role="draft"${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
-      <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
+      <div class="composer-submit-actions">
+        <button class="voice-input-button" type="button" data-role="voice-input"${voiceInputVisible ? "" : " hidden"} aria-label="Segurar para transcrever áudio" title="Segure para falar e solte para parar" aria-pressed="false"><span aria-hidden="true">🎙️</span><span class="sr-only">Segurar para transcrever áudio</span></button>
+        <span class="voice-input-status" data-role="voice-input-status" aria-live="polite" hidden></span>
+        <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
+      </div>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${pendingDocumentDelete ? pendingDocumentDeleteMarkup() : ""}
@@ -2046,9 +2053,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let lastState = null;
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
-  let composerControls = { shell: null, composer: null };
+  let composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
   let composerBusy = false;
   let composing = false;
+  let voiceInput = null;
+  let voiceInputHeld = false;
+  let voiceInputPointerId = null;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2086,6 +2096,106 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let signaturePlacementClosedKey = "";
   let fileDragDepth = 0;
   let fileDropZone = null;
+
+  function voiceInputEnabled(state = lastState) {
+    return state?.sessionStatus === "authenticated"
+      && state?.activeFlow?.id === VOICE_INPUT_FLOW_ID
+      && !isGeneratedDocumentSignatureChoice(state);
+  }
+
+  function setVoiceInputButtonState({ active = false, error = "", enabled = voiceInputEnabled() } = {}) {
+    const button = composerControls.voiceInput;
+    const status = composerControls.voiceStatus;
+    if (!button) return;
+    button.hidden = !enabled;
+    button.disabled = composerBusy || !enabled;
+    button.classList.toggle("voice-input-button--active", Boolean(active));
+    button.setAttribute("aria-pressed", String(Boolean(active)));
+    button.setAttribute("aria-label", active ? "Soltar para parar a transcrição" : "Segurar para transcrever áudio");
+    button.title = active ? "Solte para parar a transcrição" : "Segure para falar e solte para parar";
+    const icon = button.querySelector("[aria-hidden=\"true\"]");
+    if (icon) icon.textContent = active ? "🔴" : "🎙️";
+    if (status) {
+      status.hidden = !error && !active;
+      status.textContent = error || (active ? "Ouvindo… solte para parar." : "");
+    }
+  }
+
+  function setupVoiceInput(state) {
+    const enabled = voiceInputEnabled(state);
+    if (!enabled) {
+      voiceInput?.destroy();
+      voiceInput = null;
+      voiceInputHeld = false;
+      voiceInputPointerId = null;
+      setVoiceInputButtonState({ enabled: false });
+      return;
+    }
+    if (!voiceInput) {
+      const windowRef = root.ownerDocument?.defaultView || globalThis;
+      voiceInput = createVoiceInputController({
+        getDraft: () => composerControls.draft?.value || "",
+        setDraft: value => {
+          const draft = composerControls.draft;
+          if (!draft || draft.value === value) return;
+          draft.value = value;
+          resizeDraft(draft);
+          syncComposerInset();
+          emit({ type: "draft-changed", value });
+        },
+        getRecognition: () => windowRef?.SpeechRecognition || windowRef?.webkitSpeechRecognition || null,
+        onStateChange: ({ active }) => setVoiceInputButtonState({ active }),
+        onError: error => setVoiceInputButtonState({ error }),
+      });
+    }
+    setVoiceInputButtonState({ active: voiceInput.isActive(), enabled });
+  }
+
+  function voiceInputButtonAt(event) {
+    return event?.target?.closest?.('[data-role="voice-input"]') || null;
+  }
+
+  function startVoiceInput(event) {
+    const button = voiceInputButtonAt(event);
+    if (!button || button.disabled || !voiceInputEnabled()) return false;
+    event.preventDefault?.();
+    voiceInputHeld = true;
+    voiceInputPointerId = event.pointerId ?? null;
+    try { button.setPointerCapture?.(event.pointerId); } catch { /* opcional no WebView */ }
+    voiceInput?.start();
+    return true;
+  }
+
+  function stopVoiceInput(event) {
+    if (!voiceInputHeld) return false;
+    if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return false;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputPointerId = null;
+    voiceInput?.stop();
+    return true;
+  }
+
+  function voicePointerDown(event) {
+    startVoiceInput(event);
+  }
+
+  function voicePointerUp(event) {
+    stopVoiceInput(event);
+  }
+
+  function voiceKeyDown(event) {
+    const button = voiceInputButtonAt(event);
+    if (!button || button.disabled || (event.key !== " " && event.key !== "Enter") || event.repeat) return;
+    event.preventDefault?.();
+    startVoiceInput(event);
+  }
+
+  function voiceKeyUp(event) {
+    const button = voiceInputButtonAt(event);
+    if (!button || (event.key !== " " && event.key !== "Enter")) return;
+    stopVoiceInput(event);
+  }
 
   function isFileDrag(event) {
     return Array.from(event?.dataTransfer?.types || [])
@@ -2792,6 +2902,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       ));
       if (button && button.disabled !== disabled) button.disabled = disabled;
     }
+    setupVoiceInput(state);
   }
 
   function updateShell(markup, state, {
@@ -2818,7 +2929,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       composing = false;
       const nextShell = root.querySelector('.chat-shell');
       const nextComposer = nextShell?.querySelector('[data-chat-form]');
-      composerControls = { shell: nextShell, composer: nextComposer, draft: root.querySelector('[data-role="draft"]') };
+      composerControls = {
+        shell: nextShell,
+        composer: nextComposer,
+        draft: root.querySelector('[data-role="draft"]'),
+        voiceInput: root.querySelector('[data-role="voice-input"]'),
+        voiceStatus: root.querySelector('[data-role="voice-input-status"]'),
+      };
       for (const action of ["send-text", "capture-photo", "pick-files"]) {
         composerControls[action] = root.querySelector(`[data-action="${action}"]`);
       }
@@ -4061,15 +4178,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);
+  root.addEventListener("pointerdown", voicePointerDown, { passive: false });
+  root.addEventListener("pointerup", voicePointerUp);
+  root.addEventListener("pointercancel", voicePointerUp);
   root.addEventListener("touchstart", touchStart, { passive: true });
   root.addEventListener("touchmove", touchMove, { passive: true });
   root.addEventListener("touchend", touchEnd);
   root.addEventListener("touchcancel", touchEnd);
+  root.addEventListener("touchstart", voicePointerDown, { passive: false });
+  root.addEventListener("touchend", voicePointerUp);
+  root.addEventListener("touchcancel", voicePointerUp);
   root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
   root.addEventListener("compositionstart", compositionStart);
   root.addEventListener("compositionend", compositionEnd);
+  root.addEventListener("keydown", voiceKeyDown);
+  root.addEventListener("keyup", voiceKeyUp);
 
   return Object.freeze({
     render,
@@ -4099,10 +4224,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointermove", pointerMove);
       root.removeEventListener("pointerup", pointerUp);
       root.removeEventListener("pointercancel", pointerUp);
+      root.removeEventListener("pointerdown", voicePointerDown);
+      root.removeEventListener("pointerup", voicePointerUp);
+      root.removeEventListener("pointercancel", voicePointerUp);
       root.removeEventListener("touchstart", touchStart);
       root.removeEventListener("touchmove", touchMove);
       root.removeEventListener("touchend", touchEnd);
       root.removeEventListener("touchcancel", touchEnd);
+      root.removeEventListener("touchstart", voicePointerDown);
+      root.removeEventListener("touchend", voicePointerUp);
+      root.removeEventListener("touchcancel", voicePointerUp);
       clearAttachmentTrayGestureListeners();
       attachmentTrayGesture = null;
       attachmentTrayClickSuppression = null;
@@ -4112,7 +4243,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("submit", submit);
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
-      composerControls = { shell: null, composer: null };
+      root.removeEventListener("keydown", voiceKeyDown);
+      root.removeEventListener("keyup", voiceKeyUp);
+      voiceInput?.destroy();
+      voiceInput = null;
+      voiceInputHeld = false;
+      voiceInputPointerId = null;
+      composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
       fileDragDepth = 0;
       hideFileDropZone();
       composing = false;

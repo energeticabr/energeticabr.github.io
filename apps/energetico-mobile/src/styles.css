@@ -924,6 +924,11 @@ button { touch-action: manipulation; }
 .attachment-actions button { width: var(--control-height); min-height: var(--control-height); border: 0; border-radius: 12px; background: var(--surface); font-size: clamp(1.1rem, 2vw, 1.35rem); }
 .chat-composer textarea { resize: none; min-height: 76px; max-height: 176px; overflow-y: hidden; padding: 11px 13px; border: 1px solid #b7ccd2; border-radius: 15px; color: var(--text); background: var(--surface); line-height: 1.35; }
 .chat-composer textarea:focus { outline: 3px solid rgb(7 86 107 / 18%); border-color: var(--brand); }
+.composer-submit-actions { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; gap: 6px; min-width: 0; }
+.voice-input-button { display: grid; place-items: center; width: 100%; min-height: var(--control-height); padding: 0 10px; border: 1px solid #78aebc; border-radius: 14px; color: var(--brand-strong); background: #e9f7f8; font-size: clamp(1.2rem, 2.2vw, 1.55rem); line-height: 1; touch-action: none; user-select: none; -webkit-user-select: none; }
+.voice-input-button--active { color: #8d1c1c; border-color: #d66a6a; background: #ffe5e5; box-shadow: 0 0 0 3px rgb(214 106 106 / 18%); }
+.voice-input-button:focus-visible { outline: 3px solid rgb(7 86 107 / 28%); outline-offset: 2px; }
+.voice-input-status { position: absolute; right: 10px; bottom: calc(100% + 4px); max-width: min(60vw, 320px); padding: 5px 8px; border-radius: 8px; color: var(--brand-strong); background: var(--surface); box-shadow: 0 4px 14px rgb(4 45 60 / 16%); font-size: .76rem; line-height: 1.2; text-align: right; }
 .send-button { min-height: var(--control-height); padding-inline: var(--control-padding-inline); font-size: var(--control-font-size); }
 
 @media (min-width: 760px) {

@@ -68,6 +68,16 @@ test("a barra de digitação fica no fluxo do shell e não cria espaço vazio no
   assert.doesNotMatch(composer, /border-top:\s*1px/);
 });
 
+test("o botão de transcrição fica em coluna acima do botão Enviar", async () => {
+  const css = await readFile(stylesPath, "utf8");
+  const actions = css.match(/\.composer-submit-actions\s*\{[^}]*\}/)?.[0] || "";
+  const voice = css.match(/\.voice-input-button\s*\{[^}]*\}/)?.[0] || "";
+
+  assert.match(css, /\.composer-submit-actions\s*\{[^}]*display:\s*flex/);
+  assert.match(actions, /flex-direction:\s*column/);
+  assert.match(voice, /touch-action:\s*none/);
+});
+
 test("seletor de data fica centralizado com recuo igual dentro do pop-up", async () => {
   const css = await readFile(stylesPath, "utf8");
   const input = css.match(/\.chat-date-picker__input\s*\{[^}]*\}/)?.[0] || "";
