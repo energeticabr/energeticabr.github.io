@@ -75,8 +75,15 @@ test("microfone aparece acima de Enviar somente ao preencher diário de obras", 
   assert.ok(activeVoice < activeSend, "o microfone deve ficar antes/acima do envio");
   assert.match(activeMarkup, /Segurar para transcrever áudio/);
 
-  const inactiveMarkup = renderChatMarkup(signedInState({
+  const createMarkup = renderChatMarkup(signedInState({
     activeFlow: { id: "construction_diary_create", title: "COMEÇAR DIÁRIO DE OBRAS" },
+  }));
+  assert.match(createMarkup, /data-role="voice-input"/);
+  assert.doesNotMatch(createMarkup, /data-role="voice-input"[^>]*hidden/);
+  assert.ok(createMarkup.indexOf('data-role="voice-input"') < createMarkup.indexOf('data-action="send-text"'));
+
+  const inactiveMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_diary_other", title: "OUTRA ETAPA" },
   }));
   assert.match(inactiveMarkup, /data-role="voice-input"[^>]*hidden/);
 });
@@ -118,6 +125,44 @@ test("segurar e soltar o microfone controla a transcrição no diário de obras"
   assert.equal(Recognition.instance.stopped, 1);
   assert.equal(voice.classList.contains("voice-input-button--active"), false);
   assert.ok(changes.includes("Concretagem da laje"));
+  view.destroy();
+  dom.window.close();
+});
+
+test("ao soltar o microfone, transforma a transcrição em registro técnico", () => {
+  class Recognition {
+    static instance = null;
+
+    constructor() {
+      Recognition.instance = this;
+    }
+
+    start() { this.onstart?.(); }
+    stop() { this.onend?.(); }
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] });
+    }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const draft = root.querySelector('[data-role="draft"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  Recognition.instance.emit("Eu fiz a concretagem da laje. Nós usamos 10 sacos de cimento, né.");
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+
+  assert.equal(
+    draft.value,
+    "Execução de concretagem da laje. Utilização de 10 sacos de cimento."
+  );
+  assert.doesNotMatch(draft.value, /\b(eu|nós|meu|minha|nosso|nossa)\b/i);
   view.destroy();
   dom.window.close();
 });

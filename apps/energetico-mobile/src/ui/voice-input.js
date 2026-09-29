@@ -2,6 +2,8 @@ function cleanText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+export { normalizeConstructionDiaryText } from "./construction-diary-text.js";
+
 function joinText(...parts) {
   return parts.map(cleanText).filter(Boolean).join(" ").trim();
 }
