@@ -127,10 +127,112 @@ test("toque simples no microfone inicia e encerra a transcrição quando o WebVi
   voice.click();
   assert.equal(Recognition.instances.length, 1);
   assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
 
   voice.click();
   assert.equal(Recognition.instances[0].stopped, 1);
   assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("soltar durante a permissão não cancela o microfone no iPhone", async () => {
+  class Recognition {
+    static instance = null;
+    constructor() { Recognition.instance = this; this.stopped = 0; }
+    start() { this.onstart?.(); }
+    stop() { this.stopped += 1; this.onend?.(); }
+  }
+  let grantPermission;
+  const permission = new Promise(resolve => { grantPermission = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { ensureMicrophonePermission: () => permission });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  grantPermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.ok(Recognition.instance, "a captação deve iniciar após a permissão ser concedida");
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  assert.equal(Recognition.instance.stopped, 1, "outro toque deve encerrar a captação");
+  view.destroy();
+  dom.window.close();
+});
+
+test("cancelar gesto durante a permissão não inicia a captação depois", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  let grantPermission;
+  const permission = new Promise(resolve => { grantPermission = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { ensureMicrophonePermission: () => permission });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointercancel", { bubbles: true, cancelable: true }));
+  grantPermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(Recognition.instances.length, 0);
+  assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque no iPhone aguarda o gravador e mostra como parar depois", async () => {
+  class Recorder {
+    static instance = null;
+    constructor(stream) { this.stream = stream; this.stopped = 0; Recorder.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {
+      this.stopped += 1;
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+  let grantStream;
+  const pendingStream = new Promise(resolve => { grantStream = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: () => pendingStream },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "Concretagem concluída" });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  grantStream({ getTracks: () => [{ stop() {} }] });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.ok(Recorder.instance);
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recorder.instance.stopped, 1);
   view.destroy();
   dom.window.close();
 });
@@ -210,6 +312,33 @@ test("ao soltar o microfone, transforma a transcrição em registro técnico", (
     "Execução de concretagem da laje. Utilização de 10 sacos de cimento."
   );
   assert.doesNotMatch(draft.value, /\b(eu|nós|meu|minha|nosso|nossa)\b/i);
+  view.destroy();
+  dom.window.close();
+});
+
+test("última frase entregue após soltar também vira registro técnico", () => {
+  class Recognition {
+    static instance = null;
+    constructor() { Recognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] });
+    }
+  }
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  Recognition.instance.emit("Eu fiz a concretagem da laje");
+  Recognition.instance.onend?.();
+
+  assert.equal(root.querySelector('[data-role="draft"]').value, "Execução de concretagem da laje.");
   view.destroy();
   dom.window.close();
 });

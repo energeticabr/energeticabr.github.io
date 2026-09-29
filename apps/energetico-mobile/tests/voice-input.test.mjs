@@ -121,13 +121,197 @@ test("aguarda a permissão nativa antes de iniciar o reconhecimento", async () =
   });
 
   assert.equal(controller.start(), true);
+  assert.equal(controller.isPending(), true);
   assert.equal(FakeRecognition.instances.length, 0);
   resolvePermission(true);
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(FakeRecognition.instances.length, 1);
   assert.equal(FakeRecognition.instances[0].started, 1);
+  assert.equal(controller.isPending(), false);
   controller.stop();
+  controller.destroy();
+});
+
+test("cancelar enquanto o gravador aguarda o áudio não inicia gravação", async () => {
+  FakeMediaRecorder.instances = [];
+  let resolveStream;
+  let tracksStopped = 0;
+  const stream = { getTracks: () => [{ stop: () => { tracksStopped += 1; } }] };
+  const waitingStream = new Promise(resolve => { resolveStream = resolve; });
+  const controller = createVoiceInputController({
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: () => waitingStream,
+  });
+
+  controller.start();
+  assert.equal(controller.isPending(), true);
+  controller.cancel();
+  resolveStream(stream);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(FakeMediaRecorder.instances.length, 0);
+  assert.equal(tracksStopped, 1);
+  assert.equal(controller.isPending(), false);
+  controller.destroy();
+});
+
+test("resposta atrasada de captação cancelada não inicia a próxima gravação", async () => {
+  FakeMediaRecorder.instances = [];
+  const resolvers = [];
+  const stopped = [];
+  const controller = createVoiceInputController({
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: () => new Promise(resolve => { resolvers.push(resolve); }),
+  });
+
+  controller.start();
+  controller.cancel();
+  controller.start();
+  resolvers[0]({ getTracks: () => [{ stop: () => stopped.push("old") }] });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeMediaRecorder.instances.length, 0);
+  assert.deepEqual(stopped, ["old"]);
+
+  resolvers[1]({ getTracks: () => [{ stop: () => stopped.push("new") }] });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeMediaRecorder.instances.length, 1);
+  controller.destroy();
+});
+
+test("autorização atrasada cancelada não inicia reconhecimento da tentativa nova", async () => {
+  FakeRecognition.instances = [];
+  const resolvers = [];
+  const controller = createVoiceInputController({
+    getRecognition: () => FakeRecognition,
+    ensureAudioPermission: () => new Promise(resolve => { resolvers.push(resolve); }),
+  });
+
+  controller.start();
+  controller.cancel();
+  controller.start();
+  resolvers[0](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 0);
+
+  resolvers[1](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 1);
+  controller.destroy();
+});
+
+test("evento atrasado do reconhecimento cancelado não altera a nova tentativa", () => {
+  FakeRecognition.instances = [];
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => FakeRecognition,
+  });
+
+  controller.start();
+  const oldRecognition = FakeRecognition.instances[0];
+  controller.cancel();
+  controller.start();
+  oldRecognition.emitResult([result("Antigo", true)]);
+  oldRecognition.emitError("no-speech");
+  assert.equal(controller.isActive(), true);
+  assert.equal(draft, "");
+
+  FakeRecognition.instances[1].emitResult([result("Novo", true)]);
+  assert.equal(draft, "Novo");
+  controller.destroy();
+});
+
+test("resultado final entregue após soltar o microfone permanece no rascunho", () => {
+  class DelayedRecognition {
+    static instance = null;
+    constructor() { DelayedRecognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emitResult(results) { this.onresult?.({ resultIndex: 0, results }); }
+  }
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => DelayedRecognition,
+  });
+
+  controller.start();
+  const recognition = DelayedRecognition.instance;
+  controller.stop();
+  recognition.emitResult([result("Concretagem da laje", true)]);
+  recognition.onend?.();
+
+  assert.equal(draft, "Concretagem da laje");
+  controller.destroy();
+});
+
+test("não inicia nova captação antes do resultado final da anterior", () => {
+  class DelayedRecognition {
+    static instances = [];
+    constructor() { DelayedRecognition.instances.push(this); }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [result(text, true)] });
+    }
+  }
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => DelayedRecognition,
+  });
+
+  controller.start();
+  const first = DelayedRecognition.instances[0];
+  controller.stop();
+  assert.equal(controller.isPending(), true);
+  assert.equal(controller.start(), false);
+  first.emit("Concretagem da laje");
+  first.onend?.();
+  assert.equal(draft, "Concretagem da laje");
+  assert.equal(controller.isPending(), false);
+  assert.equal(controller.start(), true);
+  assert.equal(DelayedRecognition.instances.length, 2);
+  controller.destroy();
+});
+
+test("libera o microfone se o reconhecimento não informa o fim", () => {
+  class SilentRecognition {
+    static instance = null;
+    constructor() { SilentRecognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) { this.onresult?.({ resultIndex: 0, results: [result(text, true)] }); }
+  }
+  let expire;
+  let draft = "";
+  const controller = createVoiceInputController({
+    getRecognition: () => SilentRecognition,
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    scheduleStopFallback: callback => { expire = callback; return 1; },
+    clearStopFallback: () => {},
+  });
+
+  controller.start();
+  controller.stop();
+  assert.equal(controller.isPending(), true);
+  expire();
+  assert.equal(controller.isPending(), false);
+  SilentRecognition.instance.emit("fala atrasada");
+  assert.equal(draft, "");
+  assert.equal(controller.start(), true);
   controller.destroy();
 });
 

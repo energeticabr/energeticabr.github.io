@@ -36,6 +36,9 @@ export function createVoiceInputController({
   ensureAudioPermission,
   onStateChange = () => {},
   onError = () => {},
+  onSessionEnd = () => {},
+  scheduleStopFallback = (callback, delay) => setTimeout(callback, delay),
+  clearStopFallback = handle => clearTimeout(handle),
   language = "pt-BR",
 } = {}) {
   let recognition = null;
@@ -46,6 +49,8 @@ export function createVoiceInputController({
   let permissionPending = false;
   let capturePending = false;
   let transcriptionPending = false;
+  let recognitionStopping = false;
+  let stopFallbackHandle = null;
   let destroyed = false;
   let sessionId = 0;
   let baseText = "";
@@ -55,7 +60,7 @@ export function createVoiceInputController({
   function notify(nextActive = active) {
     onStateChange({
       active: Boolean(nextActive),
-      pending: Boolean(permissionPending || capturePending || transcriptionPending),
+      pending: Boolean(permissionPending || capturePending || transcriptionPending || recognitionStopping),
     });
   }
 
@@ -71,24 +76,29 @@ export function createVoiceInputController({
   }
 
   function finishSession({ reportError = "" } = {}) {
+    if (stopFallbackHandle != null) clearStopFallback(stopFallbackHandle);
+    stopFallbackHandle = null;
+    recognitionStopping = false;
     active = false;
     interimText = "";
     updateDraft(false);
+    sessionId += 1;
     notify(false);
+    onSessionEnd();
     if (reportError) onError(reportError);
   }
 
-  function bindRecognition(instance) {
+  function bindRecognition(instance, currentSessionId) {
     instance.lang = language;
     instance.continuous = true;
     instance.interimResults = true;
     instance.onstart = () => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       active = true;
       notify(true);
     };
     instance.onresult = event => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       const results = Array.from(event?.results || []);
       for (let index = Number(event?.resultIndex) || 0; index < results.length; index += 1) {
         const result = results[index];
@@ -102,11 +112,11 @@ export function createVoiceInputController({
       updateDraft(true);
     };
     instance.onerror = event => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       finishSession({ reportError: speechErrorMessage(event?.error) });
     };
     instance.onend = () => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       finishSession();
     };
   }
@@ -204,7 +214,7 @@ export function createVoiceInputController({
       currentRecorder.onerror = event => {
         if (destroyed || current.completed) return;
         capturePending = false;
-        sessionId = 0;
+        sessionId += 1;
         stopStream(stream);
         recorder = null;
         mediaStream = null;
@@ -227,7 +237,7 @@ export function createVoiceInputController({
   }
 
   function start() {
-    if (destroyed || active || permissionPending || capturePending || transcriptionPending) return active;
+    if (destroyed || active || permissionPending || capturePending || transcriptionPending || recognitionStopping) return active;
     const Recognition = getRecognition?.();
     const Recorder = typeof getRecorder === "function" ? getRecorder() : null;
     const useRecognition = typeof Recognition === "function";
@@ -244,7 +254,7 @@ export function createVoiceInputController({
     const beginRecognition = () => {
       try {
         recognition = new Recognition();
-        bindRecognition(recognition);
+        bindRecognition(recognition, currentSessionId);
         active = true;
         recognition.start();
         notify(true);
@@ -279,7 +289,7 @@ export function createVoiceInputController({
     permissionPending = true;
     notify(false);
     Promise.resolve(permissionResult).then(granted => {
-      if (!permissionPending || destroyed) return;
+      if (!permissionPending || destroyed || sessionId !== currentSessionId) return;
       permissionPending = false;
       if (granted === false) {
         finishSession({ reportError: "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
@@ -287,7 +297,7 @@ export function createVoiceInputController({
       }
       begin();
     }).catch(error => {
-      if (!permissionPending || destroyed) return;
+      if (!permissionPending || destroyed || sessionId !== currentSessionId) return;
       permissionPending = false;
       finishSession({ reportError: error?.message || "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
     });
@@ -297,31 +307,37 @@ export function createVoiceInputController({
   function stop() {
     if (permissionPending) {
       permissionPending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return false;
     }
     if (capturePending) {
       capturePending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return false;
     }
     if (recordingSession?.recorder && active) {
       const current = recordingSession;
       current.completion = new Promise(resolve => { current.resolve = resolve; });
-      sessionId = 0;
+      sessionId += 1;
       active = false;
       try { current.recorder.stop?.(); } catch { completeRecording(); }
       return current.completion;
     }
-    if (!recognition) return false;
+    if (!recognition || recognitionStopping) return false;
     const current = recognition;
-    sessionId = 0;
+    const currentSessionId = sessionId;
     active = false;
+    recognitionStopping = true;
     interimText = "";
     updateDraft(false);
     notify(false);
+    stopFallbackHandle = scheduleStopFallback(() => {
+      if (destroyed || sessionId !== currentSessionId || !recognitionStopping) return;
+      finishSession();
+    }, 2000);
+    stopFallbackHandle?.unref?.();
     try { current.stop?.(); } catch { /* o navegador pode já ter encerrado a sessão */ }
     return true;
   }
@@ -329,13 +345,19 @@ export function createVoiceInputController({
   function cancel() {
     if (permissionPending) {
       permissionPending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return false;
     }
+    if (capturePending) {
+      capturePending = false;
+      sessionId += 1;
+      notify(false);
+      return true;
+    }
     if (recordingSession?.recorder) {
       const current = recordingSession;
-      sessionId = 0;
+      sessionId += 1;
       active = false;
       capturePending = false;
       current.completed = true;
@@ -349,8 +371,11 @@ export function createVoiceInputController({
     }
     if (!recognition) return false;
     const current = recognition;
-    sessionId = 0;
+    sessionId += 1;
     active = false;
+    recognitionStopping = false;
+    if (stopFallbackHandle != null) clearStopFallback(stopFallbackHandle);
+    stopFallbackHandle = null;
     interimText = "";
     updateDraft(false);
     notify(false);
@@ -361,6 +386,8 @@ export function createVoiceInputController({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    if (stopFallbackHandle != null) clearStopFallback(stopFallbackHandle);
+    stopFallbackHandle = null;
     try { recognition?.abort?.(); } catch { /* noop */ }
     try { recorder?.stop?.(); } catch { /* noop */ }
     stopStream(mediaStream);
@@ -372,6 +399,7 @@ export function createVoiceInputController({
     permissionPending = false;
     capturePending = false;
     transcriptionPending = false;
+    recognitionStopping = false;
     sessionId = 0;
     interimText = "";
   }
@@ -382,5 +410,6 @@ export function createVoiceInputController({
     cancel,
     destroy,
     isActive: () => active,
+    isPending: () => permissionPending || capturePending || transcriptionPending || recognitionStopping,
   });
 }
