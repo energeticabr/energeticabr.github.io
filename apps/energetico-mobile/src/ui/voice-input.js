@@ -16,7 +16,7 @@ function speechErrorMessage(error) {
   switch (String(error || "").toLowerCase()) {
     case "not-allowed":
     case "service-not-allowed":
-      return "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição.";
+      return "O serviço de ditado do dispositivo não está disponível agora. Tente novamente ou digite a resposta.";
     case "audio-capture":
       return "Não foi possível acessar o microfone neste dispositivo.";
     case "no-speech":

@@ -94,6 +94,25 @@ test("transcrição por pressão acumula finais e exibe parcial sem enviar", () 
   controller.destroy();
 });
 
+test("falha do serviço SpeechRecognition não é apresentada como permissão do microfone desativada", async () => {
+  FakeRecognition.instances = [];
+  const errors = [];
+  const controller = createVoiceInputController({
+    getRecognition: () => FakeRecognition,
+    ensureAudioPermission: async () => true,
+    onError: message => errors.push(message),
+  });
+
+  controller.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  FakeRecognition.instances[0].emitError("service-not-allowed");
+
+  assert.match(errors[0], /serviço de ditado/i);
+  assert.doesNotMatch(errors[0], /microfone.*bloqueado|autorize o microfone/i);
+  controller.destroy();
+});
+
 test("ausência da API de reconhecimento não quebra o compositor", () => {
   const errors = [];
   const controller = createVoiceInputController({

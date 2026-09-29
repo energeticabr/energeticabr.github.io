@@ -647,6 +647,42 @@ test("iPhone usa captura de áudio e não confunde falha do ditado com permissã
   dom.window.close();
 });
 
+test("iPadOS com user agent de desktop recebe orientação quando a captura é negada", async () => {
+  class Recognition { start() { this.onstart?.(); } }
+  class Recorder {
+    start() { this.onstart?.(); }
+    stop() { this.onstop?.(); }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", {
+    value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 Safari/605.1.15",
+  });
+  Object.defineProperty(dom.window.navigator, "platform", { value: "MacIntel" });
+  Object.defineProperty(dom.window.navigator, "maxTouchPoints", { value: 5 });
+  dom.window.SpeechRecognition = Recognition;
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => { throw new Error("Permission denied"); } },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "" });
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  root.querySelector('[data-role="voice-input"]').dispatchEvent(
+    new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /Ajustes.*Energético.*Microfone/i);
+  view.destroy();
+  dom.window.close();
+});
+
 test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Humanos", () => {
   const menu = {
     id: "hr-menu",

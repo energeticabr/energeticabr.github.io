@@ -17,6 +17,11 @@ const TAP_MOVE_TOLERANCE_PX = 8;
 const RELEASE_CLICK_COMMAND = Symbol("chat-release-click-command");
 const VOICE_INPUT_FLOW_PATTERN = /^construction_diary_(?:create|fill)$/;
 
+function isIOSDevice(navigatorRef) {
+  return /iPhone|iPad|iPod/i.test(navigatorRef?.userAgent || "")
+    || (navigatorRef?.platform === "MacIntel" && Number(navigatorRef?.maxTouchPoints) > 1);
+}
+
 function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
 }
@@ -2258,9 +2263,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!voiceInput) {
       const windowRef = root.ownerDocument?.defaultView || globalThis;
       const navigatorRef = windowRef?.navigator;
-      const userAgent = navigatorRef?.userAgent || "";
-      const isIOSDevice = /iPhone|iPad|iPod/i.test(userAgent)
-        || (navigatorRef?.platform === "MacIntel" && Number(navigatorRef?.maxTouchPoints) > 1);
       voiceInput = createVoiceInputController({
         getDraft: () => composerControls.draft?.value || "",
         setDraft: value => {
@@ -2276,16 +2278,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         getAudioStream: () => windowRef?.navigator?.mediaDevices?.getUserMedia?.call(windowRef.navigator.mediaDevices, { audio: true }),
         transcribeAudio,
         ensureAudioPermission: ensureMicrophonePermission,
-        preferRecorder: isIOSDevice && typeof transcribeAudio === "function",
+        preferRecorder: isIOSDevice(navigatorRef) && typeof transcribeAudio === "function",
         onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
         onError: error => {
           voiceInputHeld = false;
           voiceInputTapMode = false;
           voiceInputPointerId = null;
-          const isIPhone = /iPhone|iPad|iPod/i.test(windowRef?.navigator?.userAgent || "");
+          const isIOS = isIOSDevice(windowRef?.navigator);
           const permissionDenied = /permiss[aã]o|permission|not.allowed|denied|microfone.*bloqueado/i.test(String(error || ""));
-          const message = isIPhone && permissionDenied
-            ? "Microfone desativado para o Energético. No iPhone, abra Ajustes > Apps > Energético > Microfone e permita o acesso; depois toque novamente no microfone."
+          const message = isIOS && permissionDenied
+            ? "O iOS não autorizou o Energético a usar o microfone. No iPhone ou iPad, abra Ajustes > Apps > Energético > Microfone e permita o acesso; depois toque novamente no microfone."
             : error;
           setVoiceInputButtonState({ error: message });
         },
