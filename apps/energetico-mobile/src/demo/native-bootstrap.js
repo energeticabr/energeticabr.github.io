@@ -36,6 +36,9 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     const viewOptions = {
       ensureMicrophonePermission: ports.requestMicrophonePermission,
     };
+    const client = createChatClient({ apiBaseUrl: demo ? DEMO_API_ORIGIN : config.apiBaseUrl,
+      apiPrefix: demo ? "/api/demo" : "/api", fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) });
+    viewOptions.transcribeAudio = file => client.transcribeAudio(file);
     if (demo) {
       viewOptions.demo = true;
       viewOptions.onSignOut = leaveDemo;
@@ -54,8 +57,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     } : ports;
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
       store: createConversationStore({ historyMode: "current-step" }),
-      client: createChatClient({ apiBaseUrl: demo ? DEMO_API_ORIGIN : config.apiBaseUrl,
-        apiPrefix: demo ? "/api/demo" : "/api", fetchImpl, tokenProvider: scopes => sessionAuth.getToken(scopes) }),
+      client,
     });
     return controller.start();
   }

@@ -31,6 +31,32 @@ class FakeRecognition {
   }
 }
 
+class FakeMediaRecorder {
+  static instances = [];
+
+  constructor(stream, options = {}) {
+    this.stream = stream;
+    this.options = options;
+    this.state = "inactive";
+    this.started = 0;
+    this.stopped = 0;
+    FakeMediaRecorder.instances.push(this);
+  }
+
+  start() {
+    this.started += 1;
+    this.state = "recording";
+    this.onstart?.();
+  }
+
+  stop() {
+    this.stopped += 1;
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+    this.onstop?.();
+  }
+}
+
 function result(transcript, isFinal) {
   return Object.assign([{ transcript }], { isFinal });
 }
@@ -102,5 +128,41 @@ test("aguarda a permissão nativa antes de iniciar o reconhecimento", async () =
   assert.equal(FakeRecognition.instances.length, 1);
   assert.equal(FakeRecognition.instances[0].started, 1);
   controller.stop();
+  controller.destroy();
+});
+
+test("grava e transcreve quando o WebView não oferece SpeechRecognition", async () => {
+  FakeMediaRecorder.instances = [];
+  let draft = "Atividade inicial";
+  let capturedFile = null;
+  const stoppedTracks = [];
+  const stream = { getTracks: () => [{ stop: () => stoppedTracks.push(true) }] };
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: async () => stream,
+    ensureAudioPermission: async () => true,
+    transcribeAudio: async file => {
+      capturedFile = file;
+      return "laje de transição executada";
+    },
+  });
+
+  assert.equal(controller.start(), true);
+  await Promise.resolve();
+  await Promise.resolve();
+  const recorder = FakeMediaRecorder.instances[0];
+  assert.equal(recorder.started, 1);
+  assert.equal(controller.isActive(), true);
+
+  await controller.stop();
+  assert.equal(recorder.stopped, 1);
+  assert.equal(controller.isActive(), false);
+  assert.equal(draft, "Atividade inicial laje de transição executada");
+  assert.equal(capturedFile?.type, "audio/webm");
+  assert.equal(capturedFile?.name, "energetico-voice-input.webm");
+  assert.deepEqual(stoppedTracks, [true]);
   controller.destroy();
 });
