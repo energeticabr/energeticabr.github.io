@@ -1023,22 +1023,28 @@ test("Galeria Lançamentos abre localmente a partir do menu de Suprimentos", asy
   assert.equal(h.chatCalls.length, before, "abrir a galeria também deve permanecer local");
 });
 
-test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup AGRUPAR", async t => {
+test("Galeria Lançamentos fornece leituras pontuais autenticadas do pedido e dos lançamentos agrupados", async t => {
   let callbacks;
-  let reads = 0;
+  const reads = [];
   let tokenScopes;
-  let receivedSignal;
+  let orderSignal, groupSignal;
   const h = makeHarness({
     launchGalleryFactory: async options => {
       callbacks = options;
       return { async open() {}, destroy() {} };
     },
     ordersGalleryDataFactory: async ({ tokenProvider }) => ({
-      async loadSnapshot({ signal } = {}) {
-        receivedSignal = signal;
-        reads += 1;
+      async loadItem(id, { signal } = {}) {
+        reads.push(["item", id]);
+        orderSignal = signal;
         assert.equal(await tokenProvider(["Sites.Read.All"]), "sharepoint-token");
-        return { rows: [{ id: "334", fields: { FORNECEDOR: "Fornecedor A" } }] };
+        return { id, fields: { FORNECEDOR: "Fornecedor A" } };
+      },
+      async loadLaunchGroup(id, { signal } = {}) {
+        reads.push(["group", id]);
+        groupSignal = signal;
+        assert.equal(await tokenProvider(["Sites.Read.All"]), "sharepoint-token");
+        return [{ id: "3451", fields: { AGRUPAR: id } }];
       },
     }),
   });
@@ -1048,11 +1054,14 @@ test("Galeria Lançamentos fornece a leitura autenticada de pedidos para o popup
   await h.view.emit("select-reply", { replyId: "action_launch_gallery", label: "GALERIA LANÇAMENTOS" });
 
   const controller = new AbortController();
-  const snapshot = await callbacks.loadOrderSnapshot({ signal: controller.signal });
-  assert.equal(reads, 1);
-  assert.equal(receivedSignal, controller.signal);
+  const snapshot = await callbacks.loadOrderSnapshot({ id: "334", signal: controller.signal });
+  const launches = await callbacks.loadLaunchGroup("334", { signal: controller.signal });
+  assert.deepEqual(reads, [["item", "334"], ["group", "334"]]);
+  assert.equal(orderSignal, controller.signal);
+  assert.equal(groupSignal, controller.signal);
   assert.deepEqual(tokenScopes, ["Sites.Read.All"]);
   assert.equal(snapshot.rows[0].id, "334");
+  assert.equal(launches[0].fields.AGRUPAR, "334");
 });
 
 test("Galeria Pedidos e popup AGRUPAR preservam o próprio retorno após consentimento SharePoint", async t => {

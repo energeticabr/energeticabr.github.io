@@ -401,6 +401,27 @@ test("resolveList e getColumns encaminham AbortSignal a cada leitura Graph", asy
   assert.equal(graph.calls.length, 3);
 });
 
+test("getItem Graph encaminha AbortSignal para cancelar a busca pontual por ID", async () => {
+  const controller = new AbortController();
+  const graph = createFakeGraph([
+    (_path, options) => {
+      assert.equal(options.signal, controller.signal);
+      return { id: "personal-site" };
+    },
+    (path, options) => {
+      assert.equal(options.signal, controller.signal);
+      assert.match(path, /\/lists\/list-notas\/items\/338\?/);
+      return { id: "338", fields: { FORNECEDOR: "EDGAR" } };
+    },
+  ]);
+  const repository = createSharePointRepository(graph, { personal: sites.personal });
+
+  const item = await repository.getItem("personal", "list-notas", "338", "$expand=fields", { signal: controller.signal });
+
+  assert.equal(item.id, "338");
+  assert.equal(graph.calls.length, 2);
+});
+
 test("cancelamento interrompe a descoberta antes de consultar listas", async () => {
   const controller = new AbortController();
   let discoveryStarted;
@@ -424,6 +445,33 @@ test("cancelamento interrompe a descoberta antes de consultar listas", async () 
 
   await assert.rejects(pending, error => error?.name === "AbortError");
   assert.equal(graph.calls.length, 1);
+});
+
+test("a descoberta de uma rota nova não herda o AbortSignal da consulta anterior", async () => {
+  const firstController = new AbortController();
+  const secondController = new AbortController();
+  let firstDiscoveryStarted;
+  const started = new Promise(resolve => { firstDiscoveryStarted = resolve; });
+  const graph = createFakeGraph([
+    { id: "company-site" },
+    (_path, options) => new Promise((_resolve, reject) => {
+      firstDiscoveryStarted();
+      options.signal.addEventListener("abort", () => reject(new DOMException("Cancelado", "AbortError")), { once: true });
+    }),
+    { value: [{ id: "tickets", displayName: "TICKETS CLIENTES", list: { template: "genericList" } }] },
+  ]);
+  const repository = createSharePointRepository(graph, { company: sites.company });
+
+  const first = repository.resolveList("company", ["TICKETS CLIENTES"], { signal: firstController.signal });
+  await started;
+  const reopened = repository.resolveList("company", ["TICKETS CLIENTES"], { signal: secondController.signal });
+  firstController.abort("popup fechado");
+
+  await assert.rejects(first, error => error?.name === "AbortError");
+  assert.deepEqual(await reopened, {
+    id: "tickets", displayName: "TICKETS CLIENTES", list: { template: "genericList" }, status: "resolved",
+  });
+  assert.equal(graph.calls.length, 3, "a nova abertura faz sua própria leitura, sem reutilizar a solicitação abortada");
 });
 
 test("o repositorio mantem somente metadados em cache e permite limpa-los no logout", async () => {
