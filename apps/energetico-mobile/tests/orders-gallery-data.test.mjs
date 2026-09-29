@@ -233,8 +233,8 @@ test("filtra LANCAMENTOS por AGRUPAR no SharePoint e pagina somente as linhas co
   assert.deepEqual(rows.map(row => row.id), ["3451", "3449"]);
   assert.deepEqual(calls, [
     ["resolveList", "personal", ["LANCAMENTOS"], { signal }],
-    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, signal }],
-    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
   ]);
 });
 
@@ -283,13 +283,15 @@ test("reabrir popup após cancelar descoberta de LANCAMENTOS não reutiliza prom
   assert.equal(pageReads, 1);
 });
 
-test("integra o popup ao Graph com busca pontual do pedido e filtro OData em AGRUPAR", async () => {
+test("integra o popup ao Graph e envia Prefer apenas no filtro OData não indexado de AGRUPAR", async () => {
   const scopes = [];
   const urls = [];
+  const requests = [];
   const tokenProvider = async requested => { scopes.push(requested); return "sharepoint-token"; };
-  const fetchImpl = async url => {
+  const fetchImpl = async (url, init = {}) => {
     const parsed = new URL(String(url));
     urls.push(parsed);
+    requests.push({ url: parsed, headers: init.headers || {} });
     if (parsed.pathname.includes("/sites/energeticaltda-my.sharepoint.com:")) {
       return Response.json({ id: "site-personal" });
     }
@@ -305,6 +307,7 @@ test("integra o popup ao Graph com busca pontual do pedido e filtro OData em AGR
     if (parsed.pathname.endsWith("/lists/list-lancamentos/items")) {
       assert.equal(parsed.searchParams.get("$filter"), "fields/AGRUPAR eq '338'");
       assert.equal(parsed.searchParams.get("$top"), "100");
+      assert.equal(init.headers?.Prefer, "HonorNonIndexedQueriesWarningMayFailRandomly");
       return Response.json({ value: [{ id: "3451", fields: { AGRUPAR: "338", FORNECEDOR: "EDGAR" } }] });
     }
     throw new Error(`URL Graph inesperada: ${parsed.pathname}${parsed.search}`);
@@ -320,6 +323,7 @@ test("integra o popup ao Graph com busca pontual do pedido e filtro OData em AGR
   assert.ok(scopes.every(requested => requested.includes("Sites.Read.All")));
   assert.ok(urls.some(url => url.pathname.endsWith("/lists/list-notas/items/338")));
   assert.ok(urls.some(url => url.searchParams.get("$filter") === "fields/AGRUPAR eq '338'"));
+  assert.equal(requests.find(request => request.url.pathname.endsWith("/lists/list-notas/items/338"))?.headers?.Prefer, undefined);
 });
 
 test("lista e baixa anexos do pedido usando a API SharePoint com o ID do item", async () => {

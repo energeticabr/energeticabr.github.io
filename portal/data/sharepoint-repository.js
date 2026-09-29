@@ -1030,7 +1030,11 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     const site = await getSite(siteKey, options);
     const cursor = validatedItemsNextLink(options.cursor, site.id, listId);
     const path = cursor || `/sites/${site.id}/lists/${encodeURIComponent(listId)}/items${queryString(query)}`;
-    const payload = await graph.request(path, { method: "GET", signal: options.signal });
+    const payload = await graph.request(path, {
+      method: "GET",
+      ...(options.headers ? { headers: options.headers } : {}),
+      signal: options.signal,
+    });
     const items = boundedGraphItems(payload, graphBatchLimit(query));
     const nextLink = validatedItemsNextLink(payload?.["@odata.nextLink"], site.id, listId);
     return Object.freeze({
