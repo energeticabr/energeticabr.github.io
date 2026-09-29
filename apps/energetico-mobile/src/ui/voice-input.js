@@ -37,6 +37,8 @@ export function createVoiceInputController({
   onStateChange = () => {},
   onError = () => {},
   onSessionEnd = () => {},
+  scheduleStopFallback = (callback, delay) => setTimeout(callback, delay),
+  clearStopFallback = handle => clearTimeout(handle),
   language = "pt-BR",
 } = {}) {
   let recognition = null;
@@ -47,6 +49,8 @@ export function createVoiceInputController({
   let permissionPending = false;
   let capturePending = false;
   let transcriptionPending = false;
+  let recognitionStopping = false;
+  let stopFallbackHandle = null;
   let destroyed = false;
   let sessionId = 0;
   let baseText = "";
@@ -56,7 +60,7 @@ export function createVoiceInputController({
   function notify(nextActive = active) {
     onStateChange({
       active: Boolean(nextActive),
-      pending: Boolean(permissionPending || capturePending || transcriptionPending),
+      pending: Boolean(permissionPending || capturePending || transcriptionPending || recognitionStopping),
     });
   }
 
@@ -72,9 +76,13 @@ export function createVoiceInputController({
   }
 
   function finishSession({ reportError = "" } = {}) {
+    if (stopFallbackHandle != null) clearStopFallback(stopFallbackHandle);
+    stopFallbackHandle = null;
+    recognitionStopping = false;
     active = false;
     interimText = "";
     updateDraft(false);
+    sessionId += 1;
     notify(false);
     onSessionEnd();
     if (reportError) onError(reportError);
@@ -229,7 +237,7 @@ export function createVoiceInputController({
   }
 
   function start() {
-    if (destroyed || active || permissionPending || capturePending || transcriptionPending) return active;
+    if (destroyed || active || permissionPending || capturePending || transcriptionPending || recognitionStopping) return active;
     const Recognition = getRecognition?.();
     const Recorder = typeof getRecorder === "function" ? getRecorder() : null;
     const useRecognition = typeof Recognition === "function";
@@ -317,12 +325,19 @@ export function createVoiceInputController({
       try { current.recorder.stop?.(); } catch { completeRecording(); }
       return current.completion;
     }
-    if (!recognition) return false;
+    if (!recognition || recognitionStopping) return false;
     const current = recognition;
+    const currentSessionId = sessionId;
     active = false;
+    recognitionStopping = true;
     interimText = "";
     updateDraft(false);
     notify(false);
+    stopFallbackHandle = scheduleStopFallback(() => {
+      if (destroyed || sessionId !== currentSessionId || !recognitionStopping) return;
+      finishSession();
+    }, 2000);
+    stopFallbackHandle?.unref?.();
     try { current.stop?.(); } catch { /* o navegador pode já ter encerrado a sessão */ }
     return true;
   }
@@ -358,6 +373,9 @@ export function createVoiceInputController({
     const current = recognition;
     sessionId += 1;
     active = false;
+    recognitionStopping = false;
+    if (stopFallbackHandle != null) clearStopFallback(stopFallbackHandle);
+    stopFallbackHandle = null;
     interimText = "";
     updateDraft(false);
     notify(false);
@@ -368,6 +386,8 @@ export function createVoiceInputController({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    if (stopFallbackHandle != null) clearStopFallback(stopFallbackHandle);
+    stopFallbackHandle = null;
     try { recognition?.abort?.(); } catch { /* noop */ }
     try { recorder?.stop?.(); } catch { /* noop */ }
     stopStream(mediaStream);
@@ -379,6 +399,7 @@ export function createVoiceInputController({
     permissionPending = false;
     capturePending = false;
     transcriptionPending = false;
+    recognitionStopping = false;
     sessionId = 0;
     interimText = "";
   }
@@ -389,6 +410,6 @@ export function createVoiceInputController({
     cancel,
     destroy,
     isActive: () => active,
-    isPending: () => permissionPending || capturePending || transcriptionPending,
+    isPending: () => permissionPending || capturePending || transcriptionPending || recognitionStopping,
   });
 }

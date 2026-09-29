@@ -255,6 +255,66 @@ test("resultado final entregue após soltar o microfone permanece no rascunho", 
   controller.destroy();
 });
 
+test("não inicia nova captação antes do resultado final da anterior", () => {
+  class DelayedRecognition {
+    static instances = [];
+    constructor() { DelayedRecognition.instances.push(this); }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [result(text, true)] });
+    }
+  }
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => DelayedRecognition,
+  });
+
+  controller.start();
+  const first = DelayedRecognition.instances[0];
+  controller.stop();
+  assert.equal(controller.isPending(), true);
+  assert.equal(controller.start(), false);
+  first.emit("Concretagem da laje");
+  first.onend?.();
+  assert.equal(draft, "Concretagem da laje");
+  assert.equal(controller.isPending(), false);
+  assert.equal(controller.start(), true);
+  assert.equal(DelayedRecognition.instances.length, 2);
+  controller.destroy();
+});
+
+test("libera o microfone se o reconhecimento não informa o fim", () => {
+  class SilentRecognition {
+    static instance = null;
+    constructor() { SilentRecognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) { this.onresult?.({ resultIndex: 0, results: [result(text, true)] }); }
+  }
+  let expire;
+  let draft = "";
+  const controller = createVoiceInputController({
+    getRecognition: () => SilentRecognition,
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    scheduleStopFallback: callback => { expire = callback; return 1; },
+    clearStopFallback: () => {},
+  });
+
+  controller.start();
+  controller.stop();
+  assert.equal(controller.isPending(), true);
+  expire();
+  assert.equal(controller.isPending(), false);
+  SilentRecognition.instance.emit("fala atrasada");
+  assert.equal(draft, "");
+  assert.equal(controller.start(), true);
+  controller.destroy();
+});
+
 test("grava e transcreve quando o WebView não oferece SpeechRecognition", async () => {
   FakeMediaRecorder.instances = [];
   let draft = "Atividade inicial";
