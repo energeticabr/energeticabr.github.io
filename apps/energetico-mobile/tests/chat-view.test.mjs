@@ -102,6 +102,39 @@ test("microfone aparece em perguntas de texto livre e fica oculto em campos estr
   assert.match(dateMarkup, /data-role="voice-input"[^>]*hidden/);
 });
 
+test("toque simples no microfone inicia e encerra a transcrição quando o WebView não entrega gesto de pressão", () => {
+  class Recognition {
+    static instances = [];
+
+    constructor() {
+      this.stopped = 0;
+      Recognition.instances.push(this);
+    }
+
+    start() { this.onstart?.(); }
+    stop() { this.stopped += 1; this.onend?.(); }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.click();
+  assert.equal(Recognition.instances.length, 1);
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+
+  voice.click();
+  assert.equal(Recognition.instances[0].stopped, 1);
+  assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  view.destroy();
+  dom.window.close();
+});
+
 test("segurar e soltar o microfone controla a transcrição no diário de obras", () => {
   class Recognition {
     static instance = null;

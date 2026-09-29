@@ -2153,6 +2153,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let voiceInput = null;
   let voiceInputHeld = false;
   let voiceInputPointerId = null;
+  let voiceInputSuppressClickUntil = 0;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2294,10 +2295,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function voicePointerDown(event) {
+    if (voiceInputButtonAt(event)) voiceInputSuppressClickUntil = 0;
     startVoiceInput(event);
   }
 
   function voicePointerUp(event) {
+    if (voiceInputHeld && voiceInputButtonAt(event)) {
+      voiceInputSuppressClickUntil = Date.now() + 750;
+    }
     stopVoiceInput(event);
   }
 
@@ -2305,12 +2310,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || (event.key !== " " && event.key !== "Enter") || event.repeat) return;
     event.preventDefault?.();
+    voiceInputSuppressClickUntil = 0;
     startVoiceInput(event);
   }
 
   function voiceKeyUp(event) {
     const button = voiceInputButtonAt(event);
     if (!button || (event.key !== " " && event.key !== "Enter")) return;
+    if (voiceInputHeld) voiceInputSuppressClickUntil = Date.now() + 750;
     stopVoiceInput(event);
   }
 
@@ -3127,6 +3134,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const voiceButton = event.target?.closest?.('[data-role="voice-input"]');
+    if (voiceButton) {
+      // Some iOS WebViews expose only click for a button inside the composer.
+      // Keep a tap fallback while ignoring the synthetic click that follows
+      // the real press/release path handled by pointer/touch events.
+      if (voiceInputSuppressClickUntil >= Date.now()) {
+        voiceInputSuppressClickUntil = 0;
+        event.preventDefault?.();
+        return;
+      }
+      event.preventDefault?.();
+      if (!voiceInputHeld) startVoiceInput(event);
+      else stopVoiceInput(event);
+      return;
+    }
     const pendingAttachmentClick = attachmentTrayClickSuppression;
     if (pendingAttachmentClick?.expiresAt < Date.now()) attachmentTrayClickSuppression = null;
     else if (pendingAttachmentClick && (Number(event?.detail) > 0 || event?.isTrusted === false)) {
@@ -4398,6 +4420,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput = null;
       voiceInputHeld = false;
       voiceInputPointerId = null;
+      voiceInputSuppressClickUntil = 0;
       composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
       fileDragDepth = 0;
       hideFileDropZone();
