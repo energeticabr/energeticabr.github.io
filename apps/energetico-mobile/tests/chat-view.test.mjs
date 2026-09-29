@@ -105,8 +105,8 @@ test("microfone aparece em perguntas de texto livre e fica oculto em campos estr
 test("microfone continua clicável no diário quando a única opção é abandonar o fluxo", () => {
   class Recognition {
     static instances = [];
-    constructor() { Recognition.instances.push(this); }
-    start() { this.onstart?.(); }
+    constructor() { this.started = 0; Recognition.instances.push(this); }
+    start() { this.started += 1; this.onstart?.(); }
     stop() { this.onend?.(); }
   }
 
@@ -129,6 +129,22 @@ test("microfone continua clicável no diário quando a única opção é abandon
   assert.equal(voice.disabled, false, "microfone deve estar habilitado durante a pergunta de texto");
   voice.click();
   assert.equal(Recognition.instances.length, 1, "o clique deve iniciar a transcrição");
+  assert.equal(Recognition.instances[0].started, 1, "o clique deve chamar start no reconhecimento de voz");
+
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+    messages: [{
+      role: "assistant",
+      type: "poll",
+      question: "QUAL ATIVIDADE FOI EXECUTADA?",
+      options: [
+        { reply: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" },
+        { reply: "activity_fundacao", label: "FUNDAÇÃO" },
+      ],
+    }],
+  }));
+  assert.equal(root.querySelector('[data-role="voice-input"]').hidden, true,
+    "a presença de uma resposta real junto à ação auxiliar mantém o microfone oculto");
 
   view.destroy();
   dom.window.close();
