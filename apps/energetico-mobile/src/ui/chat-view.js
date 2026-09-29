@@ -1140,7 +1140,7 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
   return "<div class=\"chat-epi-product-select chat-choice-list\">" + rows + selectAll + finalize + "</div>";
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null) {
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1225,6 +1225,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
   const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
+  const isLaunchPayrollMultiSelect = message?.presentation === "launch_payroll_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
   const initialAreaMenu = isInitialAreaSelectionMenu(message);
@@ -1293,6 +1294,26 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       : "";
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
+  const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
+    const selected = new Set(launchPayrollSelectedIds.map(String));
+    const records = [];
+    const controls = [];
+    for (const option of choiceOptions) {
+      const replyId = draftReplyId(option);
+      const match = String(replyId).match(/^(?:choice:launch_payroll_entries:)?(\d+)$/);
+      if (!match) {
+        controls.push(pollButton(option, busy || !launchPayrollCurrent));
+        continue;
+      }
+      const id = match[1];
+      const label = String(option.label || option.title || `Lançamento ${id}`);
+      records.push(`<label class="chat-launch-payroll-select__row"><input type="checkbox" data-action="launch-payroll-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !launchPayrollCurrent ? " disabled" : ""}><span>${formatChatText(label)}</span></label>`);
+    }
+    const proceedLabel = selected.size
+      ? `PROSSEGUIR COM ${selected.size} SELECIONADO${selected.size === 1 ? "" : "S"}`
+      : "PROSSEGUIR SEM FOLHA";
+    return `<div class="chat-launch-payroll-select">${records.join("")}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button>${controls.join("")}</div>`;
+  })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
@@ -1304,7 +1325,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
-    ${isAttendanceMultiSelect ? attendanceMarkup : isEpiProductSelection ? epiMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
+    ${isAttendanceMultiSelect ? attendanceMarkup : isLaunchPayrollMultiSelect ? launchPayrollMarkup : isEpiProductSelection ? epiMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
   </div>`;
 }
 
@@ -1401,7 +1422,7 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
@@ -1411,7 +1432,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || initialAreaMenu ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -1966,7 +1987,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], rhidAttendanceReport = null, rhidRefresh = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -2034,7 +2055,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll, rhidRefresh })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
@@ -2091,6 +2112,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let lastState = null;
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
+  const launchPayrollSelectedIds = new Set();
   let composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
   let composerBusy = false;
   let composing = false;
@@ -3100,7 +3122,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     // Checkbox activation can be forwarded from its <label> with the label's
     // coordinates. Let the native change event commit the resulting state.
-    if (event.target?.matches?.('input[data-action="attendance-select-toggle"], input[data-action="attendance-select-all"], input[data-action="epi-product-select-toggle"], input[data-action="epi-product-select-all"]')) return;
+    if (event.target?.matches?.('input[data-action="attendance-select-toggle"], input[data-action="attendance-select-all"], input[data-action="launch-payroll-select-toggle"], input[data-action="epi-product-select-toggle"], input[data-action="epi-product-select-all"]')) return;
     const attachmentSummary = event?.target?.closest?.(".chat-attachments > summary");
     if (attachmentSummary && !event.target.closest("[data-action]")) {
       // Toggle explicitly: the iOS WebView may suppress the native <summary>
@@ -3135,6 +3157,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (command.type === "attendance-select-proceed") {
       if (!attendanceSelectedIds.size) return;
       emit({ type: "select-reply", replyId: `attendance_batch:${[...attendanceSelectedIds].join(",")}`, label: `PROSSEGUIR (${attendanceSelectedIds.size})` });
+      return;
+    }
+    if (command.type === "launch-payroll-select-proceed") {
+      const selectedIds = [...launchPayrollSelectedIds];
+      emit({
+        type: "select-reply",
+        replyId: `launch_payroll_selected:${selectedIds.join(",")}`,
+        label: selectedIds.length ? `PROSSEGUIR (${selectedIds.length})` : "PROSSEGUIR SEM FOLHA",
+      });
       return;
     }
     if (command.type === "select-reply" && clickedAction?.closest?.(".chat-attendance-select__row") && attendanceSelectedIds.size) {
@@ -4021,6 +4052,18 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (checkbox?.matches?.('input[data-action="launch-payroll-select-toggle"]') && !checkbox.disabled) {
+      const id = String(checkbox.dataset.replyId || "");
+      if (!/^\d+$/.test(id)) return;
+      if (checkbox.checked) launchPayrollSelectedIds.add(id);
+      else launchPayrollSelectedIds.delete(id);
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+      }
+      return;
+    }
     if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;
     const id = String(checkbox.dataset.replyId || "");
     if (!/^\d+$/.test(id)) return;
@@ -4046,6 +4089,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function render(state) {
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
     if (newestPoll?.presentation !== "attendance_multi_select") attendanceSelectedIds.clear();
+    if (newestPoll?.presentation !== "launch_payroll_multi_select") launchPayrollSelectedIds.clear();
     if (onlyDraftChanged(state)) {
       syncComposer(state, true);
       lastState = state;
@@ -4120,6 +4164,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         placement?.key && signaturePlacementStampKey === placement.key && signaturePlacementStampBlob,
       ),
       attendanceSelectedIds: [...attendanceSelectedIds],
+      launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);
     const attachments = root.querySelector?.(".chat-attachments");

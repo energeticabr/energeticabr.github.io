@@ -1897,6 +1897,65 @@ test("tocar no nome do último fornecedor abre Rafael individualmente", () => {
   dom.window.close();
 });
 
+test("seleção de lançamentos para folha começa desmarcada e envia apenas os IDs marcados", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "launch-payroll-options",
+    role: "assistant",
+    type: "poll",
+    presentation: "launch_payroll_multi_select",
+    question: "SELECIONE OS LANÇAMENTOS QUE DESEJA INCLUIR NA FOLHA.",
+    options: [
+      { id: "choice:launch_payroll_entries:700", reply: "choice:launch_payroll_entries:700", label: "ID 700 — FORNECEDOR A — R$ 20,00" },
+      { id: "choice:launch_payroll_entries:701", reply: "choice:launch_payroll_entries:701", label: "ID 701 — FORNECEDOR A — R$ 60,00" },
+      { id: "choice:launch_payroll_entries:702", reply: "choice:launch_payroll_entries:702", label: "ID 702 — FORNECEDOR B — R$ 20,00" },
+    ],
+  }] }));
+
+  const rows = root.querySelectorAll('.chat-launch-payroll-select input[data-action="launch-payroll-select-toggle"]');
+  assert.equal(rows.length, 3);
+  assert.equal(root.querySelectorAll('.chat-launch-payroll-select input:checked').length, 0);
+  assert.equal(root.querySelector('[data-action="launch-payroll-select-proceed"]').disabled, false);
+  assert.ok(rows[0].compareDocumentPosition(rows[0].nextElementSibling) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+
+  root.querySelector('.chat-launch-payroll-select__row span').click();
+  root.querySelector('input[data-reply-id="702"]').click();
+  root.querySelector('[data-action="launch-payroll-select-proceed"]').click();
+
+  assert.deepEqual(replies, ["launch_payroll_selected:700,702"]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("permite prosseguir sem incluir lançamentos quando nenhum checkbox da folha for marcado", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  view.render(signedInState({ messages: [{
+    id: "launch-payroll-options",
+    role: "assistant",
+    type: "poll",
+    presentation: "launch_payroll_multi_select",
+    question: "SELECIONE OS LANÇAMENTOS QUE DESEJA INCLUIR NA FOLHA.",
+    options: [{ id: "choice:launch_payroll_entries:700", reply: "choice:launch_payroll_entries:700", label: "ID 700 — FORNECEDOR A — R$ 20,00" }],
+  }] }));
+
+  const proceed = root.querySelector('[data-action="launch-payroll-select-proceed"]');
+  assert.equal(proceed.disabled, false);
+  assert.match(proceed.textContent, /SEM FOLHA/i);
+  proceed.click();
+
+  assert.deepEqual(replies, ["launch_payroll_selected:"]);
+  view.destroy();
+  dom.window.close();
+});
+
 test("resumo em lote colore presença presente e ausente por fornecedor", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "attendance-summary",
@@ -2008,6 +2067,7 @@ test("menu inicial remove cabeçalho redundante e preserva as opções", () => {
   const message = dom.window.document.querySelector(".chat-message--assistant");
 
   assert.ok(message);
+  assert.ok(message.querySelector(".chat-avatar"), "o avatar mantém a coluna original do balão no menu inicial");
   assert.equal(message.querySelector(".chat-bubble > strong"), null);
   assert.equal(message.querySelector(".chat-choice-card > p"), null);
   assert.match(message.textContent, /SUPRIMENTOS/);

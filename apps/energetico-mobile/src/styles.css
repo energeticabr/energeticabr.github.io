@@ -624,6 +624,13 @@ button { touch-action: manipulation; }
 .chat-attendance-select__warning { margin: 0; padding: 10px 12px; border-radius: 10px; color: #8b1e18; background: #fff0ef; font-weight: 700; }
 .chat-attendance-select__proceed { width: 100%; min-height: var(--control-height); border: 1px solid #12634f; border-radius: 12px; color: #fff; background: #12634f; font-weight: 800; }
 .chat-attendance-select__proceed:disabled { cursor: not-allowed; opacity: .5; }
+.chat-launch-payroll-select { display: grid; gap: 8px; }
+.chat-launch-payroll-select__row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; }
+.chat-launch-payroll-select__row input { flex: 0 0 22px; width: 22px; height: 22px; margin: 1px 0 0; accent-color: #12634f; }
+.chat-launch-payroll-select__row span { min-width: 0; color: var(--ink); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.chat-launch-payroll-select__row:has(input:checked) { border-color: #35a871; background: #effaf3; }
+.chat-launch-payroll-select__proceed { width: 100%; min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); border: 1px solid #12634f; border-radius: 12px; color: #fff; background: #12634f; font-weight: 800; }
+.chat-launch-payroll-select__proceed:disabled { cursor: not-allowed; opacity: .5; }
 .chat-epi-product-select.chat-choice-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; }
 .chat-epi-product-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 10px; }
 .chat-epi-product-row__select { width: 22px; height: 22px; margin: 0; justify-self: center; accent-color: #12634f; cursor: pointer; }
