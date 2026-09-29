@@ -2156,6 +2156,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let voiceInputNormalizeAfterStop = false;
   let voiceInputPointerId = null;
   let voiceInputSuppressClickUntil = 0;
+  let voiceInputIgnorePairedTouchUntil = 0;
+  let voiceInputIgnoredTouchContact = false;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2295,7 +2297,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     voiceInputTapMode = false;
     voiceInputNormalizeAfterStop = false;
     voiceInputPointerId = null;
-    voiceInputSuppressClickUntil = Date.now() + 750;
+    voiceInputSuppressClickUntil = event?.type === "click" ? 0 : Date.now() + 750;
     voiceInput.cancel();
     return true;
   }
@@ -2343,11 +2345,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function voicePointerDown(event) {
+    if (event?.type === "touchstart" && Date.now() <= voiceInputIgnorePairedTouchUntil) {
+      voiceInputIgnoredTouchContact = true;
+      return;
+    }
+    if (event?.type === "pointerdown" && voiceInputButtonAt(event)) {
+      // iOS may emit both pointer and touch events for one physical contact.
+      voiceInputIgnorePairedTouchUntil = Date.now() + 150;
+    }
     if (voiceInputButtonAt(event)) voiceInputSuppressClickUntil = 0;
     startVoiceInput(event);
   }
 
   function voicePointerUp(event) {
+    if (event?.type === "touchend" && voiceInputIgnoredTouchContact) {
+      voiceInputIgnoredTouchContact = false;
+      return;
+    }
     if (voiceInputHeld && voiceInputButtonAt(event)) {
       voiceInputSuppressClickUntil = Date.now() + 750;
     }
@@ -2355,6 +2369,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function voicePointerCancel(event) {
+    if (event?.type === "touchcancel" && voiceInputIgnoredTouchContact) {
+      voiceInputIgnoredTouchContact = false;
+      return;
+    }
     if (!voiceInputHeld) return;
     if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return;
     event?.preventDefault?.();

@@ -200,6 +200,56 @@ test("microfone permanece selecionável enquanto espera permissão e outro toque
   dom.window.close();
 });
 
+test("eventos pointer e touch do mesmo toque não reiniciam microfone cancelado", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  const grants = [];
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => new Promise(resolve => { grants.push(resolve); }),
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+  const voice = root.querySelector('[data-role="voice-input"]');
+  for (let index = 0; index < 2; index += 1) {
+    for (const type of ["pointerdown", "touchstart", "pointerup", "touchend"]) {
+      voice.dispatchEvent(new dom.window.Event(type, { bubbles: true, cancelable: true }));
+    }
+  }
+  assert.equal(grants.length, 1, "o segundo toque deve cancelar, não pedir nova permissão");
+  assert.equal(voice.disabled, false);
+  grants[0](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recognition.instances.length, 0);
+  view.destroy();
+  dom.window.close();
+});
+
+test("modo de clique permite nova tentativa imediatamente após cancelar", async () => {
+  class Recognition { start() {} }
+  const grants = [];
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => new Promise(resolve => { grants.push(resolve); }),
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.click();
+  voice.click();
+  voice.click();
+  assert.equal(grants.length, 2);
+  assert.equal(voice.disabled, false);
+  view.destroy();
+  dom.window.close();
+});
+
 test("iPhone com microfone negado orienta ativar em Ajustes e permite tentar novamente", async () => {
   class Recognition { start() {} }
   const dom = new JSDOM('<main id="app"></main>');
