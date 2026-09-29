@@ -3590,13 +3590,27 @@ export function createAppController({
       try {
         if (!launchGallery) {
           const panel = await launchGalleryFactory({
-            loadOrderSnapshot: async ({ signal } = {}) => {
+            loadOrderSnapshot: async ({ id, signal } = {}) => {
               assertSession();
               const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
+              if (id != null) {
+                if (typeof data.loadItem !== "function") throw new Error("A consulta pontual do pedido no SharePoint não está disponível.");
+                const item = await data.loadItem(id, { signal });
+                assertSession();
+                return { listName: "NOTASPENDENTES", rows: item ? [item] : [] };
+              }
               if (typeof data.loadSnapshot !== "function") throw new Error("A consulta de pedidos do SharePoint não está disponível.");
               const snapshot = await data.loadSnapshot({ signal });
               assertSession();
               return snapshot;
+            },
+            loadLaunchGroup: async (groupId, { signal } = {}) => {
+              assertSession();
+              const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
+              if (typeof data.loadLaunchGroup !== "function") throw new Error("A consulta filtrada de LANCAMENTOS não está disponível.");
+              const rows = await data.loadLaunchGroup(groupId, { signal });
+              assertSession();
+              return rows;
             },
             request: async (operation, payload, options) => {
               assertSession();

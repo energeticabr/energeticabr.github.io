@@ -158,7 +158,7 @@ function personDisplayName(value) {
  * Nothing here owns the chat, the viewer, or the signature canvas.
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
-  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot,
+  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot, loadLaunchGroup,
   captureSignature, onClose, onHome, clusterTimeoutMs = 30_000 } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
@@ -168,8 +168,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let current = null, selectedId = null, editor = null, review = null, attachmentIndex = 0;
   let page = 1, pages = 0, needsDetailRefresh = false;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
-  let allLaunchRowsCache = null, allLaunchRowsRequest = null;
-  let allLaunchRowsGeneration = 0;
   const retryIds = new Map();
   const selectedUploads = new Map();
   const filterControls = new Map();
@@ -362,9 +360,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function loadSnapshot(data = applied) {
     if (!opened || destroyed) return;
-    allLaunchRowsGeneration += 1;
-    allLaunchRowsCache = null;
-    allLaunchRowsRequest = null;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
@@ -607,18 +602,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     return [...rowsById.values()];
   }
-  function fetchAllLaunchRows({ signal } = {}) {
-    if (allLaunchRowsCache) return Promise.resolve(allLaunchRowsCache);
-    if (allLaunchRowsRequest) return allLaunchRowsRequest;
-    const generation = allLaunchRowsGeneration;
-    let requestPromise;
-    requestPromise = fetchLaunchRows({}, { signal, parallelPages: 4 }).then(rows => {
-      if (generation === allLaunchRowsGeneration) allLaunchRowsCache = rows;
-      return rows;
-    }).finally(() => { if (allLaunchRowsRequest === requestPromise) allLaunchRowsRequest = null; });
-    allLaunchRowsRequest = requestPromise;
-    return requestPromise;
-  }
   function amountFor(item) {
     return numericAmount(field(item?.fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
   }
@@ -723,7 +706,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (clusterAbortController) {
       clusterAbortController.abort();
       clusterAbortController = null;
-      if (allLaunchRowsRequest) { allLaunchRowsGeneration += 1; allLaunchRowsRequest = null; }
     }
   }
   async function openCluster(kind, value) {
@@ -750,7 +732,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       controller.abort();
       clusterAbortController = null;
       clusterTimer = null;
-      if (allLaunchRowsRequest) { allLaunchRowsGeneration += 1; allLaunchRowsRequest = null; }
       clusterVersion += 1;
       clusterPanel.setAttribute('aria-busy', 'false');
       const retry = button('Tentar novamente', () => { void openCluster(kind, value); }, { locked: false });
@@ -771,11 +752,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       } else {
         if (!rawValue || !clusterKey(rawValue)) throw new Error('O valor de AGRUPAR não identifica um pedido válido.');
         if (typeof loadOrderSnapshot !== 'function') throw new Error('A consulta de pedidos do SharePoint não está disponível nesta sessão.');
-        const [orders, launchRows] = await Promise.all([loadOrderSnapshot({ signal }), fetchAllLaunchRows({ signal })]);
+        if (typeof loadLaunchGroup !== 'function') throw new Error('A consulta filtrada de LANCAMENTOS não está disponível nesta sessão.');
+        const [orders, launchRows] = await Promise.all([
+          loadOrderSnapshot({ id: rawValue, signal }),
+          loadLaunchGroup(rawValue, { signal }),
+        ]);
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
         const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
-        const linked = launchRows.filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
+        const linked = (Array.isArray(launchRows) ? launchRows : [])
+          .filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
         const content = [];
         if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
         if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));

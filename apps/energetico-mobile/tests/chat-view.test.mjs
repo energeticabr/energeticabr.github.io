@@ -2278,10 +2278,16 @@ test("menu inicial remove cabeçalho redundante e preserva as opções", () => {
   const message = dom.window.document.querySelector(".chat-message--assistant");
 
   assert.ok(message);
+  assert.ok(message.classList.contains("chat-message--initial-area-menu"), "o menu inicial tem uma classe de layout própria");
   assert.ok(message.querySelector(".chat-avatar"), "o avatar mantém a coluna original do balão no menu inicial");
   assert.equal(message.querySelector(".chat-bubble > strong"), null);
   assert.equal(message.querySelector(".chat-choice-card > p"), null);
   assert.match(message.textContent, /SUPRIMENTOS/);
+
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.chat-message--initial-area-menu\s*\{[^}]*position:\s*relative[^}]*justify-content:\s*center/);
+  assert.match(css, /\.chat-message\.chat-message--initial-area-menu \.chat-avatar\s*\{[^}]*position:\s*absolute[^}]*left:\s*0[^}]*bottom:\s*0/);
+  assert.match(css, /\.chat-message--initial-area-menu \.chat-bubble\s*\{[^}]*width:\s*min\(82%,\s*640px\)/);
 });
 
 test("menu principal não exibe APPS nem o acesso direto à galeria", () => {

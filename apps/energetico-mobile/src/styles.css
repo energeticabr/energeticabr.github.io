@@ -443,6 +443,9 @@ button { touch-action: manipulation; }
 
 .chat-message { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 16px; }
 .chat-message--user { flex-direction: row-reverse; }
+.chat-message--initial-area-menu { position: relative; justify-content: center; }
+.chat-message.chat-message--initial-area-menu .chat-avatar { position: absolute; left: 0; bottom: 0; }
+.chat-message.chat-message--initial-area-menu .chat-bubble { flex: 0 1 min(82%, 640px); width: min(82%, 640px); max-width: 640px; min-width: 0; }
 .chat-bubble {
   max-width: min(82%, 640px);
   padding: 12px 14px;
