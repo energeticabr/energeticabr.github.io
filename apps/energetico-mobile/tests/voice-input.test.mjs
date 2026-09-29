@@ -82,3 +82,25 @@ test("ausência da API de reconhecimento não quebra o compositor", () => {
   assert.match(errors[0], /não está disponível/i);
   controller.destroy();
 });
+
+test("aguarda a permissão nativa antes de iniciar o reconhecimento", async () => {
+  FakeRecognition.instances = [];
+  let resolvePermission;
+  const permission = new Promise(resolve => { resolvePermission = resolve; });
+  const controller = createVoiceInputController({
+    getDraft: () => "",
+    setDraft: () => {},
+    getRecognition: () => FakeRecognition,
+    ensureAudioPermission: () => permission,
+  });
+
+  assert.equal(controller.start(), true);
+  assert.equal(FakeRecognition.instances.length, 0);
+  resolvePermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 1);
+  assert.equal(FakeRecognition.instances[0].started, 1);
+  controller.stop();
+  controller.destroy();
+});

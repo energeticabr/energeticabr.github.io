@@ -93,6 +93,14 @@ export function createBrowserPorts({
     return validatedSelection({ accept: "image/*", capture: "environment", multiple: false });
   }
 
+  async function requestMicrophonePermission() {
+    const getUserMedia = navigatorRef?.mediaDevices?.getUserMedia;
+    if (typeof getUserMedia !== "function") return true;
+    const stream = await getUserMedia.call(navigatorRef.mediaDevices, { audio: true });
+    for (const track of stream?.getTracks?.() || []) track.stop?.();
+    return true;
+  }
+
   async function pickPhotos() {
     return validatedSelection({ accept: "image/*", multiple: true });
   }
@@ -130,6 +138,7 @@ export function createBrowserPorts({
 
   return Object.freeze({
     capturePhoto,
+    requestMicrophonePermission,
     pickPhotos,
     pickDocuments,
     importSharedItems: async () => [],

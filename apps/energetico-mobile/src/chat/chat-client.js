@@ -1,4 +1,5 @@
 import { validateAttachment } from "./file-policy.js";
+import { audioTranscriptionText } from "./audio-transcription.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -84,6 +85,7 @@ export function createChatClient({
   if (!["/api", "/api/demo"].includes(apiPrefix)) throw new TypeError("Prefixo de API inválido.");
   const chatUrl = new URL(`${apiPrefix}/portal-chat`, baseUrl);
   const uploadUrl = new URL(`${apiPrefix}/portal-upload`, baseUrl);
+  const transcriptionUrl = new URL(`${apiPrefix}/portal-transcribe`, baseUrl);
 
   async function request(url, options, read, readOnly = false, { retryTransient = false } = {}) {
     for (let attempt = 0; ; attempt++) {
@@ -177,6 +179,31 @@ export function createChatClient({
       cache: "no-store",
       credentials: "omit",
     }, response => parsePortalResponse(response, "O upload"), false, { retryTransient: true });
+  }
+
+  async function transcribeAudio(file) {
+    const fileName = validateAttachment(file);
+    const token = await acquireToken(tokenProvider);
+    const response = await fetchImpl(transcriptionUrl.href, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": String(file.type || "application/octet-stream"),
+        "X-Portal-File-Name": encodeURIComponent(fileName),
+        "X-Portal-Message-Id": newMessageId(),
+      },
+      body: file,
+      cache: "no-store",
+      credentials: "omit",
+    });
+    const result = await readJson(response);
+    if (!response.ok) {
+      const error = new Error(result?.error || `A transcrição respondeu com erro ${response.status}.`);
+      error.status = response.status;
+      throw error;
+    }
+    return audioTranscriptionText(result);
   }
 
   async function getAttachments() {
@@ -422,5 +449,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

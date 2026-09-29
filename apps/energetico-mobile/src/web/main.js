@@ -44,7 +44,10 @@ async function start() {
   }) : null;
   const ports = createBrowserPorts();
   const preview = createAttachmentPreview({ exportMedia: ports.exportMedia });
-  const view = createChatView(root, { onOpenSettings: installView ? () => installView.open() : undefined });
+  const view = createChatView(root, {
+    onOpenSettings: installView ? () => installView.open() : undefined,
+    ensureMicrophonePermission: ports.requestMicrophonePermission,
+  });
   view.on("sign-out", () => installView?.setReady(false));
   const controller = createAppController({
     auth,

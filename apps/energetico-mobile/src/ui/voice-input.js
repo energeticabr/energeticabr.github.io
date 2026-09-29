@@ -30,12 +30,14 @@ export function createVoiceInputController({
   getDraft = () => "",
   setDraft = () => {},
   getRecognition = () => resolveSpeechRecognition(globalThis),
+  ensureAudioPermission,
   onStateChange = () => {},
   onError = () => {},
   language = "pt-BR",
 } = {}) {
   let recognition = null;
   let active = false;
+  let permissionPending = false;
   let destroyed = false;
   let baseText = "";
   let finalResults = new Map();
@@ -98,7 +100,7 @@ export function createVoiceInputController({
   }
 
   function start() {
-    if (destroyed || active) return active;
+    if (destroyed || active || permissionPending) return active;
     const Recognition = getRecognition?.();
     if (typeof Recognition !== "function") {
       onError("O reconhecimento de voz não está disponível neste navegador ou aplicativo.");
@@ -108,21 +110,60 @@ export function createVoiceInputController({
     baseText = cleanText(getDraft?.());
     finalResults = new Map();
     interimText = "";
-    try {
-      recognition = new Recognition();
-      bindRecognition(recognition);
-      active = true;
-      recognition.start();
-      notify(true);
-      return true;
-    } catch {
-      recognition = null;
-      finishSession({ reportError: "Não foi possível iniciar o microfone. Digite a resposta manualmente." });
-      return false;
+    const beginRecognition = () => {
+      try {
+        recognition = new Recognition();
+        bindRecognition(recognition);
+        active = true;
+        recognition.start();
+        notify(true);
+        return true;
+      } catch {
+        recognition = null;
+        finishSession({ reportError: "Não foi possível iniciar o microfone. Digite a resposta manualmente." });
+        return false;
+      }
+    };
+    let permissionResult = true;
+    if (typeof ensureAudioPermission === "function") {
+      try {
+        permissionResult = ensureAudioPermission();
+      } catch (error) {
+        finishSession({ reportError: error?.message || "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
+        return false;
+      }
     }
+    if (!permissionResult || typeof permissionResult.then !== "function") {
+      if (permissionResult === false) {
+        finishSession({ reportError: "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
+        return false;
+      }
+      return beginRecognition();
+    }
+    permissionPending = true;
+    onStateChange({ active: false, pending: true });
+    Promise.resolve(permissionResult).then(granted => {
+      if (!permissionPending || destroyed) return;
+      permissionPending = false;
+      if (granted === false) {
+        finishSession({ reportError: "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
+        return;
+      }
+      beginRecognition();
+    }).catch(error => {
+      if (!permissionPending || destroyed) return;
+      permissionPending = false;
+      finishSession({ reportError: error?.message || "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
+    });
+    return true;
   }
 
   function stop() {
+    if (permissionPending) {
+      permissionPending = false;
+      onStateChange({ active: false, pending: false });
+      return false;
+    }
     if (!recognition) return false;
     const current = recognition;
     active = false;
@@ -134,6 +175,11 @@ export function createVoiceInputController({
   }
 
   function cancel() {
+    if (permissionPending) {
+      permissionPending = false;
+      onStateChange({ active: false, pending: false });
+      return false;
+    }
     if (!recognition) return false;
     const current = recognition;
     active = false;
@@ -150,6 +196,7 @@ export function createVoiceInputController({
     try { recognition?.abort?.(); } catch { /* noop */ }
     recognition = null;
     active = false;
+    permissionPending = false;
     interimText = "";
   }
 

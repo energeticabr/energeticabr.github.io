@@ -88,6 +88,20 @@ test("microfone aparece acima de Enviar somente ao preencher diário de obras", 
   assert.match(inactiveMarkup, /data-role="voice-input"[^>]*hidden/);
 });
 
+test("microfone aparece em perguntas de texto livre e fica oculto em campos estruturados", () => {
+  const textMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_task", title: "TAREFAS" },
+    messages: [{ role: "assistant", type: "poll", question: "INFORME AS OBSERVAÇÕES DA EXECUÇÃO", options: [] }],
+  }));
+  assert.match(textMarkup, /data-role="voice-input"(?![^>]*hidden)/);
+
+  const dateMarkup = renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_task", title: "TAREFAS" },
+    messages: [{ role: "assistant", type: "poll", question: "INFORME A DATA DA EXECUÇÃO", options: [] }],
+  }));
+  assert.match(dateMarkup, /data-role="voice-input"[^>]*hidden/);
+});
+
 test("segurar e soltar o microfone controla a transcrição no diário de obras", () => {
   class Recognition {
     static instance = null;
@@ -388,6 +402,33 @@ test("relatório RHID exibe a ressincronização no próprio cabeçalho", () => 
   assert.ok(refresh, "o relatório deve exibir o botão de ressincronização");
   assert.match(refresh.getAttribute("aria-label"), /atualizar.*rhid.*sharepoint/i);
   assert.match(refresh.className, /chat-rhid-attendance-table__refresh/);
+  dom.window.close();
+});
+
+test("relatório RHID posiciona ressincronização e PDF no topo, alinhados ao relatório diário", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-top-actions",
+    role: "assistant",
+    type: "poll",
+    question: "RELATÓRIO RHID",
+    options: [],
+    detail_table: {
+      kind: "rhid_attendance",
+      reportDate: "2026-09-25",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+      rows: [["ANA", "07:00", "12:00", "05:00"]],
+    },
+  }] }));
+  const dom = new JSDOM(markup);
+  const report = dom.window.document.querySelector(".chat-rhid-attendance-report");
+  const header = report.querySelector(".chat-rhid-attendance-report__header");
+  const actions = header.querySelector(".chat-rhid-attendance-report__header-actions");
+
+  assert.ok(actions, "as ações devem ficar no cabeçalho do relatório");
+  assert.ok(actions.querySelector('[data-action="rhid-refresh"]'));
+  assert.ok(actions.querySelector('[data-action="share-rhid-attendance-report"]'));
+  assert.equal(report.querySelector(".chat-rhid-attendance-report__toolbar-actions"), null);
+  assert.ok(header.textContent.indexOf("RELATÓRIO DIÁRIO") < header.textContent.indexOf("Compartilhar PDF"));
   dom.window.close();
 });
 
