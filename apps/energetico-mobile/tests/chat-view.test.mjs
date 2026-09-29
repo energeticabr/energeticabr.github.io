@@ -102,6 +102,54 @@ test("microfone aparece em perguntas de texto livre e fica oculto em campos estr
   assert.match(dateMarkup, /data-role="voice-input"[^>]*hidden/);
 });
 
+test("microfone continua clicável no diário quando a única opção é abandonar o fluxo", () => {
+  class Recognition {
+    static instances = [];
+    constructor() { this.started = 0; Recognition.instances.push(this); }
+    start() { this.started += 1; this.onstart?.(); }
+    stop() { this.onend?.(); }
+  }
+
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+    messages: [{
+      role: "assistant",
+      type: "poll",
+      question: "DIGITE AS ATIVIDADES EXECUTADAS",
+      options: [{ reply: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" }],
+    }],
+  }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  assert.equal(voice.hidden, false, "ação para abandonar não transforma a pergunta em campo estruturado");
+  assert.equal(voice.disabled, false, "microfone deve estar habilitado durante a pergunta de texto");
+  voice.click();
+  assert.equal(Recognition.instances.length, 1, "o clique deve iniciar a transcrição");
+  assert.equal(Recognition.instances[0].started, 1, "o clique deve chamar start no reconhecimento de voz");
+
+  view.render(signedInState({
+    activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
+    messages: [{
+      role: "assistant",
+      type: "poll",
+      question: "QUAL ATIVIDADE FOI EXECUTADA?",
+      options: [
+        { reply: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" },
+        { reply: "activity_fundacao", label: "FUNDAÇÃO" },
+      ],
+    }],
+  }));
+  assert.equal(root.querySelector('[data-role="voice-input"]').hidden, true,
+    "a presença de uma resposta real junto à ação auxiliar mantém o microfone oculto");
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("toque simples no microfone inicia e encerra a transcrição quando o WebView não entrega gesto de pressão", () => {
   class Recognition {
     static instances = [];
