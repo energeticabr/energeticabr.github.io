@@ -9,12 +9,17 @@ import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isVal
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { createVoiceInputController } from "./voice-input.js";
+import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
 const RELEASE_CLICK_COMMAND = Symbol("chat-release-click-command");
-const VOICE_INPUT_FLOW_ID = "construction_diary_fill";
+const VOICE_INPUT_FLOW_PATTERN = /^construction_diary_(?:create|fill)$/;
+
+function isVoiceInputFlow(flow) {
+  return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
+}
 
 function localDateIso(value = new Date()) {
   const year = value.getFullYear();
@@ -1982,7 +1987,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const signaturePrompt = isSignaturePrompt(state);
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
-  const voiceInputVisible = state.activeFlow?.id === VOICE_INPUT_FLOW_ID && !generatedSignatureChoice;
+  const voiceInputVisible = isVoiceInputFlow(state.activeFlow) && !generatedSignatureChoice;
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -2099,7 +2104,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function voiceInputEnabled(state = lastState) {
     return state?.sessionStatus === "authenticated"
-      && state?.activeFlow?.id === VOICE_INPUT_FLOW_ID
+      && isVoiceInputFlow(state?.activeFlow)
       && !isGeneratedDocumentSignatureChoice(state);
   }
 
@@ -2172,7 +2177,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputPointerId = null;
-    voiceInput?.stop();
+    const stopped = voiceInput?.stop();
+    if (stopped && voiceInputEnabled()) {
+      const draft = composerControls.draft?.value || "";
+      const technicalText = normalizeConstructionDiaryText(draft);
+      if (technicalText && technicalText !== draft) {
+        composerControls.draft.value = technicalText;
+        resizeDraft(composerControls.draft);
+        syncComposerInset();
+        emit({ type: "draft-changed", value: technicalText });
+      }
+    }
     return true;
   }
 
