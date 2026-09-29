@@ -2274,6 +2274,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputPointerId = null;
+    // A quick tap can end while iOS is still asking for microphone access.
+    // Let that pending request start the session; the next tap will stop it.
+    if (!voiceInput?.isActive()) return true;
     const stopped = voiceInput?.stop();
     const normalizeVoiceDraft = () => {
       if (!voiceInputEnabled()) return;

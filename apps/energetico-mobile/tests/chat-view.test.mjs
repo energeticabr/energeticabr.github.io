@@ -135,6 +135,37 @@ test("toque simples no microfone inicia e encerra a transcrição quando o WebVi
   dom.window.close();
 });
 
+test("soltar durante a permissão não cancela o microfone no iPhone", async () => {
+  class Recognition {
+    static instance = null;
+    constructor() { Recognition.instance = this; this.stopped = 0; }
+    start() { this.onstart?.(); }
+    stop() { this.stopped += 1; this.onend?.(); }
+  }
+  let grantPermission;
+  const permission = new Promise(resolve => { grantPermission = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { ensureMicrophonePermission: () => permission });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  grantPermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.ok(Recognition.instance, "a captação deve iniciar após a permissão ser concedida");
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  assert.equal(Recognition.instance.stopped, 1, "outro toque deve encerrar a captação");
+  view.destroy();
+  dom.window.close();
+});
+
 test("segurar e soltar o microfone controla a transcrição no diário de obras", () => {
   class Recognition {
     static instance = null;
