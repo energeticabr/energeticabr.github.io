@@ -34,6 +34,7 @@ export function createVoiceInputController({
   getAudioStream = () => globalThis?.navigator?.mediaDevices?.getUserMedia?.call(globalThis.navigator.mediaDevices, { audio: true }),
   transcribeAudio,
   ensureAudioPermission,
+  preferRecorder = false,
   onStateChange = () => {},
   onError = () => {},
   onSessionEnd = () => {},
@@ -243,8 +244,8 @@ export function createVoiceInputController({
     if (destroyed || active || permissionPending || capturePending || transcriptionPending || recognitionStopping) return active;
     const Recognition = getRecognition?.();
     const Recorder = typeof getRecorder === "function" ? getRecorder() : null;
-    const useRecognition = typeof Recognition === "function";
-    const useRecorder = !useRecognition && typeof Recorder === "function";
+    const useRecorder = typeof Recorder === "function" && (preferRecorder || typeof Recognition !== "function");
+    const useRecognition = !useRecorder && typeof Recognition === "function";
     if (!useRecognition && !useRecorder) {
       onError("O reconhecimento de voz não está disponível neste navegador ou aplicativo.");
       notify(false);

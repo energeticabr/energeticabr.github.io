@@ -2257,6 +2257,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (!voiceInput) {
       const windowRef = root.ownerDocument?.defaultView || globalThis;
+      const navigatorRef = windowRef?.navigator;
+      const userAgent = navigatorRef?.userAgent || "";
+      const isIOSDevice = /iPhone|iPad|iPod/i.test(userAgent)
+        || (navigatorRef?.platform === "MacIntel" && Number(navigatorRef?.maxTouchPoints) > 1);
       voiceInput = createVoiceInputController({
         getDraft: () => composerControls.draft?.value || "",
         setDraft: value => {
@@ -2272,6 +2276,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         getAudioStream: () => windowRef?.navigator?.mediaDevices?.getUserMedia?.call(windowRef.navigator.mediaDevices, { audio: true }),
         transcribeAudio,
         ensureAudioPermission: ensureMicrophonePermission,
+        preferRecorder: isIOSDevice && typeof transcribeAudio === "function",
         onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
         onError: error => {
           voiceInputHeld = false;

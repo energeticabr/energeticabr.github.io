@@ -351,6 +351,35 @@ test("grava e transcreve quando o WebView não oferece SpeechRecognition", async
   controller.destroy();
 });
 
+test("prefere gravar e transcrever quando a plataforma pede o caminho de áudio", async () => {
+  FakeRecognition.instances = [];
+  FakeMediaRecorder.instances = [];
+  let draft = "";
+  let permissionChecks = 0;
+  const stream = { getTracks: () => [{ stop() {} }] };
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => FakeRecognition,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: async () => stream,
+    preferRecorder: true,
+    ensureAudioPermission: async () => { permissionChecks += 1; return true; },
+    transcribeAudio: async () => "Concretagem da laje concluída",
+  });
+
+  assert.equal(controller.start(), true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 0, "não deve escolher o reconhecimento nativo de fala");
+  assert.equal(FakeMediaRecorder.instances[0].started, 1, "deve capturar áudio para transcrição");
+  assert.equal(permissionChecks, 0, "a própria captura deve solicitar o acesso no gesto do usuário");
+
+  await controller.stop();
+  assert.equal(draft, "Concretagem da laje concluída");
+  controller.destroy();
+});
+
 test("cancelar transcrição pendente libera botão e ignora resultado tardio", async () => {
   FakeMediaRecorder.instances = [];
   let finishTranscription;
