@@ -95,6 +95,59 @@ test("galeria de folha recusa lista e parâmetros fora da allowlist", async () =
   await assert.rejects(data.loadPage("FOLHAPGTO", { pageSize: 100 }), /página/i);
 });
 
+test("relatório da folha filtra no SharePoint pelo IDFOLHA e pagina todos os pagamentos", async () => {
+  const calls = [];
+  const repository = {
+    async resolveList(siteKey, aliases) {
+      calls.push(["resolveList", siteKey, aliases]);
+      return { status: "resolved", id: "list-FOLHAPGTO" };
+    },
+    async getItemsPage(siteKey, listId, query, options) {
+      calls.push(["getItemsPage", siteKey, listId, query, options]);
+      if (options.pageNumber === 1) return {
+        items: [{ id: "81", fields: {
+          FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200,
+          QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12, IDLANCAMENTO: 3456,
+        } }],
+        nextLink: "payroll-next", hasMore: true,
+      };
+      return {
+        items: [{ id: "82", fields: {
+          FORNECEDOR: "EDGAR", TIPOPGTO: "VALE REFEIÇÃO", VALORUNITARIO: 50,
+          QTD: 2, DATA: "2026-09-29T00:00:00Z", IDFOLHA: 12, IDLANCAMENTO: 3457,
+        } }],
+        nextLink: "", hasMore: false,
+      };
+    },
+  };
+  const data = galleryData.createHrPayrollGalleryData({ repository });
+
+  const rows = await data.loadPaymentsForPayrollId("12");
+
+  assert.deepEqual(rows.map(row => row.id), ["81", "82"]);
+  assert.deepEqual(rows.map(row => row.IDLANCAMENTO), [3456, 3457]);
+  const itemQueries = calls.filter(([operation]) => operation === "getItemsPage");
+  assert.equal(itemQueries.length, 2);
+  assert.match(itemQueries[0][3], /\$filter=fields\/IDFOLHA eq 12/);
+  assert.match(itemQueries[0][3], /fields\(\$select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO\)/);
+  assert.deepEqual(itemQueries.map(([, , , , options]) => options), [
+    { pageNumber: 1, maxPages: 100 },
+    { pageNumber: 2, maxPages: 100, cursor: "payroll-next" },
+  ]);
+  assert.ok(calls.every(([operation]) => ["resolveList", "getItemsPage"].includes(operation)));
+});
+
+test("relatório recusa IDFOLHA inválido antes de consultar o SharePoint", async () => {
+  let requests = 0;
+  const data = galleryData.createHrPayrollGalleryData({ repository: {
+    async resolveList() { requests += 1; return { status: "resolved", id: "list" }; },
+    async getItemsPage() { requests += 1; return { items: [], hasMore: false }; },
+  } });
+
+  await assert.rejects(data.loadPaymentsForPayrollId("12 or fields/IDFOLHA eq 3"), /IDFOLHA/i);
+  assert.equal(requests, 0);
+});
+
 test("carrega a lista Screen10 autenticada, percorre páginas e normaliza os campos dos pedidos", async () => {
   const { repository, calls } = repositoryHarness();
   const signal = new AbortController().signal;

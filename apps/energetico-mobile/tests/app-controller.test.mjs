@@ -904,6 +904,9 @@ test("galeria de folha usa leitura SharePoint Graph autenticada sem chamar rota 
       return { async loadPage(...args) {
         dataCalls.push(args);
         return { gallery: "IDFOLHA", page: 1, pageSize: 25, fields: [], rows: [{ id: "12", MESREFERENCIA: "09/2026" }], hasMore: false, nextCursor: null };
+      }, async loadPaymentsForPayrollId(id, options) {
+        dataCalls.push(["report", id, options.signal instanceof AbortSignal]);
+        return [{ id: "81", IDFOLHA: Number(id) }];
       } };
     },
     hrPayrollGalleryFactory: async options => {
@@ -917,9 +920,15 @@ test("galeria de folha usa leitura SharePoint Graph autenticada sem chamar rota 
 
   await h.view.emit("select-reply", { replyId: "action_hr_gallery_idfolha", label: "GALERIA IDFOLHA" });
   const result = await galleryOptions.request("IDFOLHA", 1, 25, null);
+  const reportRows = await galleryOptions.requestReport("12", { signal: new AbortController().signal });
 
-  assert.deepEqual(dataCalls, [["token", "token"], ["IDFOLHA", { page: 1, pageSize: 25, cursor: null }]]);
+  assert.deepEqual(dataCalls, [
+    ["token", "token"],
+    ["IDFOLHA", { page: 1, pageSize: 25, cursor: null }],
+    ["report", "12", true],
+  ]);
   assert.equal(result.rows[0].MESREFERENCIA, "09/2026");
+  assert.equal(reportRows[0].IDFOLHA, 12);
   assert.deepEqual(serverCalls, []);
 });
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
@@ -1156,7 +1165,10 @@ test("retoma a galeria de folha escolhida após o retorno de consentimento Micro
   ]) {
     let opened = "";
     const h = makeHarness({
-      hrPayrollGalleryDataFactory: async () => ({ async loadPage() { return { rows: [] }; } }),
+      hrPayrollGalleryDataFactory: async () => ({
+        async loadPage() { return { rows: [] }; },
+        async loadPaymentsForPayrollId() { return []; },
+      }),
       hrPayrollGalleryFactory: async options => ({ async open() { opened = options.gallery; }, destroy() {} }),
     });
     h.auth.consumePendingAction = () => action;
