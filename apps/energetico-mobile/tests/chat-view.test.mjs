@@ -168,6 +168,68 @@ test("soltar durante a permissão não cancela o microfone no iPhone", async () 
   dom.window.close();
 });
 
+test("microfone permanece selecionável enquanto espera permissão e outro toque cancela", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  const grants = [];
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => new Promise(resolve => { grants.push(resolve); }),
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  assert.equal(voice.disabled, false);
+  assert.match(voice.getAttribute("aria-label"), /cancelar/i);
+
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  grants[0](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recognition.instances.length, 0);
+  assert.equal(voice.disabled, false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("iPhone com microfone negado orienta ativar em Ajustes e permite tentar novamente", async () => {
+  class Recognition { start() {} }
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", { value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  let attempts = 0;
+  const view = createChatView(root, {
+    ensureMicrophonePermission: () => {
+      attempts += 1;
+      return Promise.reject(new Error("Permissão negada pelo iPhone."));
+    },
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.click();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /Ajustes.*Energético.*Microfone/i);
+  assert.equal(voice.disabled, false);
+  voice.click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(attempts, 2);
+  view.destroy();
+  dom.window.close();
+});
+
 test("cancelar gesto durante a permissão não inicia a captação depois", async () => {
   class Recognition {
     static instances = [];
@@ -233,6 +295,41 @@ test("toque no iPhone aguarda o gravador e mostra como parar depois", async () =
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(Recorder.instance.stopped, 1);
+  view.destroy();
+  dom.window.close();
+});
+
+test("captura pendente pode ser cancelada pelo botão sem iniciar gravação", async () => {
+  class Recorder {
+    static instances = [];
+    constructor() { Recorder.instances.push(this); }
+    start() {}
+  }
+  let grantStream;
+  let stoppedTracks = 0;
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: () => new Promise(resolve => { grantStream = resolve; }) },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  assert.equal(voice.disabled, false);
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  grantStream({ getTracks: () => [{ stop: () => { stoppedTracks += 1; } }] });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(Recorder.instances.length, 0);
+  assert.equal(stoppedTracks, 1);
+  assert.equal(voice.disabled, false);
   view.destroy();
   dom.window.close();
 });

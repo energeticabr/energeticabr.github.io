@@ -350,3 +350,30 @@ test("grava e transcreve quando o WebView não oferece SpeechRecognition", async
   assert.deepEqual(stoppedTracks, [true]);
   controller.destroy();
 });
+
+test("cancelar transcrição pendente libera botão e ignora resultado tardio", async () => {
+  FakeMediaRecorder.instances = [];
+  let finishTranscription;
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: async () => ({ getTracks: () => [{ stop() {} }] }),
+    transcribeAudio: () => new Promise(resolve => { finishTranscription = resolve; }),
+  });
+
+  controller.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  const stopped = controller.stop();
+  await Promise.resolve();
+  assert.equal(controller.isPending(), true);
+  controller.cancel();
+  assert.equal(controller.isPending(), false);
+  finishTranscription("Eu fiz a concretagem da laje");
+  await stopped;
+  assert.equal(draft, "");
+  controller.destroy();
+});
