@@ -34,11 +34,11 @@ test("galeria FOLHAPGTO mostra campos previstos e navega páginas sem editar", a
     gallery: "FOLHAPGTO",
     request: async (id, page, pageSize, cursor) => {
       requests.push([id, page, pageSize, cursor]);
-      return response(id, page, [{ id: "57", FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: "1200", QTD: "1", DATA: "25/09/2026", IDFOLHA: "12" }], page === 1);
+      return response(id, page, [{ id: "57", FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: "1200", QTD: "1", DATA: "25/09/2026", IDFOLHA: "12", IDLANCAMENTO: "3456" }], page === 1);
     },
   });
   await gallery.open();
-  for (const field of ["Fornecedor", "Tipo de pagamento", "Valor unitário", "Quantidade", "Data", "IDFOLHA"]) {
+  for (const field of ["Fornecedor", "Tipo de pagamento", "Valor unitário", "Quantidade", "Data", "IDFOLHA", "ID do lançamento"]) {
     assert.match(root.textContent, new RegExp(field));
   }
   root.querySelector('[data-action="next-page"]').click();

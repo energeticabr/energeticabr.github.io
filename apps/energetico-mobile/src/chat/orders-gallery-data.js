@@ -307,6 +307,7 @@ const HR_PAYROLL_GALLERIES = Object.freeze({
       ["QTD", ["QTD", "QUANTIDADE"]],
       ["DATA", ["DATA"]],
       ["IDFOLHA", ["IDFOLHA", "ID FOLHA"]],
+      ["IDLANCAMENTO", ["IDLANCAMENTO", "ID LANCAMENTO"]],
     ]),
   }),
 });

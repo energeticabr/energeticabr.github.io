@@ -9,6 +9,7 @@ const GALLERIES = {
       ["FORNECEDOR", "Fornecedor"], ["TIPOPGTO", "Tipo de pagamento"],
       ["VALORUNITARIO", "Valor unitário"], ["QTD", "Quantidade"],
       ["DATA", "Data"], ["IDFOLHA", "IDFOLHA"],
+      ["IDLANCAMENTO", "ID do lançamento"],
     ],
   },
 };
