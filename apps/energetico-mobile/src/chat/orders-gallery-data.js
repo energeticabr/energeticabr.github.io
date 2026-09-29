@@ -209,6 +209,114 @@ export function createRecurringExpensesGalleryData(options = {}) {
   });
 }
 
+const HR_PAYROLL_GALLERIES = Object.freeze({
+  IDFOLHA: Object.freeze({
+    listName: "IDFOLHA",
+    fields: Object.freeze([
+      ["MESREFERENCIA", ["MESREFERENCIA", "MES REFERENCIA"]],
+      ["FORNECEDOR", ["FORNECEDOR"]],
+    ]),
+  }),
+  FOLHAPGTO: Object.freeze({
+    listName: "FOLHAPGTO",
+    fields: Object.freeze([
+      ["FORNECEDOR", ["FORNECEDOR"]],
+      ["TIPOPGTO", ["TIPOPGTO", "TIPO PGTO", "TIPO PAGAMENTO"]],
+      ["VALORUNITARIO", ["VALORUNITARIO", "VALOR UNITARIO"]],
+      ["QTD", ["QTD", "QUANTIDADE"]],
+      ["DATA", ["DATA"]],
+      ["IDFOLHA", ["IDFOLHA", "ID FOLHA"]],
+    ]),
+  }),
+});
+
+const HR_PAYROLL_PAGE_SIZE_MAX = 50;
+const HR_PAYROLL_PAGE_COUNT_MAX = 100;
+
+function hrPayrollFieldValue(fields, aliases) {
+  const accepted = new Set(aliases.map(fieldKey));
+  const entry = Object.entries(fields || {}).find(([name, value]) => accepted.has(fieldKey(name)) && value != null);
+  return entry ? scalar(entry[1]) : undefined;
+}
+
+export function createHrPayrollGalleryData({
+  tokenProvider,
+  repository: suppliedRepository,
+  siteConfig = SHAREPOINT_SITES,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  let repository = suppliedRepository;
+  if (!repository) {
+    if (typeof tokenProvider !== "function") throw new TypeError("A consulta da folha requer a sessão Microsoft ativa.");
+    const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
+    repository = createSharePointRepository(graph, siteConfig);
+  }
+  if (typeof repository.resolveList !== "function" || typeof repository.getItemsPage !== "function") {
+    throw new TypeError("A galeria de folha requer um repositório SharePoint somente leitura.");
+  }
+
+  const listRequests = new Map();
+  async function resolveList(gallery) {
+    const config = HR_PAYROLL_GALLERIES[gallery];
+    if (!config) throw new RangeError("Galeria de folha inválida.");
+    if (!listRequests.has(gallery)) {
+      const request = Promise.resolve(repository.resolveList(SITE_KEY, [config.listName])).then(list => {
+        if (list?.status !== "resolved" || !list.id) {
+          throw new Error(`A lista ${config.listName} não está disponível nesta conta SharePoint.`);
+        }
+        return list;
+      }).catch(error => {
+        if (listRequests.get(gallery) === request) listRequests.delete(gallery);
+        throw error;
+      });
+      listRequests.set(gallery, request);
+    }
+    return listRequests.get(gallery);
+  }
+
+  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null } = {}) {
+    const config = HR_PAYROLL_GALLERIES[gallery];
+    if (!config) throw new RangeError("Galeria de folha inválida.");
+    if (!Number.isInteger(page) || page < 1 || page > HR_PAYROLL_PAGE_COUNT_MAX
+      || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > HR_PAYROLL_PAGE_SIZE_MAX
+      || (cursor !== null && (typeof cursor !== "string" || !cursor || cursor.length > 8192))) {
+      throw new RangeError("Página ou cursor da galeria de folha inválido.");
+    }
+    const list = await resolveList(gallery);
+    const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
+    const result = await repository.getItemsPage(
+      SITE_KEY,
+      list.id,
+      `$select=id&$expand=fields($select=${selectedFields})&$top=${pageSize}`,
+      { pageNumber: page, maxPages: HR_PAYROLL_PAGE_COUNT_MAX, ...(cursor ? { cursor } : {}) },
+    );
+    const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {
+      const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
+      const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+      for (const [key, aliases] of config.fields) {
+        const value = hrPayrollFieldValue(fields, aliases);
+        if (value !== undefined) row[key] = value;
+      }
+      return Object.freeze(row);
+    }).filter(row => row.id);
+    const nextCursor = result?.hasMore === true && typeof result?.nextLink === "string" && result.nextLink
+      ? result.nextLink
+      : null;
+    return Object.freeze({
+      gallery,
+      listName: config.listName,
+      page,
+      pageSize,
+      fields: Object.freeze(config.fields.map(([key]) => key)),
+      rows: Object.freeze(rows),
+      hasMore: Boolean(nextCursor),
+      nextCursor,
+    });
+  }
+
+  return Object.freeze({ loadPage });
+}
+
 export function createPendingProvisionAttachmentsData(options = {}) {
   const data = createSharePointListData({
     ...options,

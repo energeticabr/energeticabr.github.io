@@ -7,6 +7,7 @@ import "./styles.css";
 import "./ui/launch-gallery.css";
 import "./ui/orders-gallery.css";
 import "./ui/registration-gallery.css";
+import "./ui/hr-payroll-gallery.css";
 import "./demo/demo.css";
 import "./web/attachment-preview.css";
 

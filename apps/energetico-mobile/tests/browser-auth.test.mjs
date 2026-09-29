@@ -218,6 +218,43 @@ test("retoma a abertura da Galeria de Despesas Recorrentes após consentimento M
   assert.equal(values.size, 0);
 });
 
+test("preserva e retoma a galeria IDFOLHA e FOLHAPGTO após consentimento Microsoft", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto"]) {
+    const values = new Map();
+    const storage = {
+      getItem(key) { return values.get(key) ?? null; },
+      setItem(key, value) { values.set(key, value); },
+      removeItem(key) { values.delete(key); },
+    };
+    const firstAuth = createBrowserAuth({
+      storage, config,
+      client: {
+        async initialize() {},
+        async handleRedirectPromise() { return null; },
+        getAllAccounts() { return [account]; },
+        async acquireTokenRedirect() {},
+      },
+    });
+    await firstAuth.initialize();
+    await firstAuth.authorize(["Sites.Read.All"], { resumeAction: action });
+
+    const resumedAuth = createBrowserAuth({
+      storage, config,
+      client: {
+        async initialize() {},
+        async handleRedirectPromise() {
+          return { account, accessToken: "gallery-token", scopes: ["Sites.Read.All"] };
+        },
+        getAllAccounts() { return [account]; },
+      },
+    });
+    await resumedAuth.initialize();
+    assert.equal(resumedAuth.consumePendingAction(), action);
+    assert.equal(values.size, 0);
+  }
+});
+
 test("retoma o painel Power BI depois do consentimento delegado", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
   const values = new Map();

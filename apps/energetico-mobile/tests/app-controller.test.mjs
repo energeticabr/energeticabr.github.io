@@ -26,7 +26,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -64,7 +64,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -879,6 +879,49 @@ function configurePendingNoteWorkflow(h, { initial = "main", failAt = "", advanc
   return { calls, replies };
 }
 
+test("atalhos IDFOLHA e FOLHA PGTO abrem suas galerias sem responder ao fluxo RH", async t => {
+  const opened = [];
+  const h = makeHarness({ hrPayrollGalleryFactory: async options => ({
+    open() { opened.push(options.gallery); },
+    destroy() {},
+  }) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_idfolha", label: "GALERIA IDFOLHA" });
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_folhapgto", label: "GALERIA FOLHA PGTO" });
+  assert.deepEqual(opened, ["IDFOLHA", "FOLHAPGTO"]);
+  assert.equal(h.chatCalls.length, before);
+});
+
+test("galeria de folha usa leitura SharePoint Graph autenticada sem chamar rota inexistente do chat", async t => {
+  let galleryOptions;
+  const dataCalls = [];
+  const serverCalls = [];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async ({ tokenProvider }) => {
+      dataCalls.push(["token", await tokenProvider(["Sites.Read.All"])]);
+      return { async loadPage(...args) {
+        dataCalls.push(args);
+        return { gallery: "IDFOLHA", page: 1, pageSize: 25, fields: [], rows: [{ id: "12", MESREFERENCIA: "09/2026" }], hasMore: false, nextCursor: null };
+      } };
+    },
+    hrPayrollGalleryFactory: async options => {
+      galleryOptions = options;
+      return { open() {}, destroy() {} };
+    },
+  });
+  h.client.hrPayrollGalleryRequest = async (...args) => { serverCalls.push(args); throw new Error("rota backend ausente"); };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_idfolha", label: "GALERIA IDFOLHA" });
+  const result = await galleryOptions.request("IDFOLHA", 1, 25, null);
+
+  assert.deepEqual(dataCalls, [["token", "token"], ["IDFOLHA", { page: 1, pageSize: 25, cursor: null }]]);
+  assert.equal(result.rows[0].MESREFERENCIA, "09/2026");
+  assert.deepEqual(serverCalls, []);
+});
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
   let callbacks;
   let opens = 0;
@@ -1095,6 +1138,23 @@ test("retoma a Galeria Pedidos depois do retorno de consentimento Microsoft no n
   await h.controller.start();
 
   assert.equal(opens, 1);
+});
+
+test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
+  for (const [action, gallery] of [
+    ["action_hr_gallery_idfolha", "IDFOLHA"],
+    ["action_hr_gallery_folhapgto", "FOLHAPGTO"],
+  ]) {
+    let opened = "";
+    const h = makeHarness({
+      hrPayrollGalleryDataFactory: async () => ({ async loadPage() { return { rows: [] }; } }),
+      hrPayrollGalleryFactory: async options => ({ async open() { opened = options.gallery; }, destroy() {} }),
+    });
+    h.auth.consumePendingAction = () => action;
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.equal(opened, gallery);
+  }
 });
 
 test("Galeria Pedidos solicita consentimento interativo quando SharePoint exige outro escopo", async t => {

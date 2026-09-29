@@ -234,6 +234,24 @@ function assistantAvatar() {
   return `<span class="chat-avatar chat-avatar--assistant"><img src="${MASCOT_URL}" alt="Mascote Energético"></span>`;
 }
 
+function hrGalleryAction(option) {
+  const identifiers = [option?.id, option?.reply, option?.value].map(value => String(value || ""));
+  return identifiers.includes("action_hr_gallery_idfolha")
+    || identifiers.includes("action_hr_gallery_folhapgto");
+}
+
+function isHrPayrollGalleryMenu(message) {
+  return isHumanResourcesMenu(message);
+}
+
+function hrPayrollGalleryOptions(options) {
+  const definitions = [
+    { id: "action_hr_gallery_idfolha", reply: "action_hr_gallery_idfolha", label: "📚 GALERIA IDFOLHA" },
+    { id: "action_hr_gallery_folhapgto", reply: "action_hr_gallery_folhapgto", label: "💵 GALERIA FOLHA PGTO" },
+  ];
+  return definitions.map(definition => options.find(option => draftReplyId(option).trim().toLowerCase() === definition.id) || definition);
+}
+
 function userAvatar(account) {
   const name = String(account?.name || account?.username || "Usuário").trim();
   const parts = name.split(/\s+/).filter(Boolean);
@@ -734,6 +752,8 @@ const HUMAN_RESOURCES_ACTIONS = new Set([
   "action_validate_attendance",
   "action_link_attendance_payment",
   "action_hr_reports",
+  "action_hr_report",
+  "action_hr_registration",
 ]);
 
 function isHumanResourcesMenu(message) {
@@ -1132,6 +1152,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
   const options = allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option));
+  const isHrGalleryMenu = isHrPayrollGalleryMenu(message);
+  const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
   if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
@@ -1153,6 +1175,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery"))
       && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
       && (!isAuditMenu || replyId !== "action_documents_gallery")
+      && (!isHrGalleryMenu || !hrGalleryAction(option))
       && (!isTaskMenu || (replyId !== "action_tasks_gallery" && !groupedTaskAction));
   });
   const choiceOptions = taskCreateOption ? [taskCreateOption, ...regularOptions]
@@ -1225,8 +1248,17 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const documentsGallery = isAuditMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_documents_gallery")
     : null;
+  const galleryChoices = [...galleryOptions]
+    .sort((left, right) => {
+      const rank = option => draftReplyId(option).trim().toLowerCase() === "action_hr_gallery_idfolha" ? 0 : 1;
+      return rank(left) - rank(right);
+    })
+    .map(option => pollButton(option, busy, { galleryButton: true }))
+    .join("");
   const choicesMarkup = choices
-    ? isLaunchMenu
+    ? isHrGalleryMenu
+      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries"><div class="chat-choice-columns__flow"><div class="${choiceListClass}">${choices}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${galleryChoices}</aside></div>`
+      : isLaunchMenu
       ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, recurring: recurringExpensesGallery }, busy)
       : isRegistrationMenu
         ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
@@ -1261,7 +1293,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       : "";
     return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
-  return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}">
+  return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu ? "" : `<p${isLaunchMenu ? ' class="chat-supplies-heading"' : ""}>${isLaunchMenu ? "📦 SUPRIMENTOS" : formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
@@ -1375,10 +1407,11 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const registrationMenu = isSuppliesRegistrationMenu(message);
     const auditMenu = isAuditDocumentsMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
+    const hrGalleryMenu = isHrPayrollGalleryMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment || initialAreaMenu ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
