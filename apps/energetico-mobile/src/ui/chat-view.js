@@ -1335,19 +1335,28 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
     const selected = new Set(launchPayrollSelectedIds.map(String));
     const records = [];
-    let unavailableCount = 0;
+    let unavailableIdCount = 0;
+    let nonContractorCount = 0;
     for (const option of choiceOptions) {
       const id = launchPayrollEntryId(option);
       const label = String(option.label || option.title || (id ? `Lançamento ${id}` : "Lançamento indisponível"));
-      if (!id) {
-        unavailableCount += 1;
-        records.push(`<div class="chat-launch-payroll-select__row chat-launch-payroll-select__row--unavailable" aria-disabled="true"><input type="checkbox" aria-label="Lançamento indisponível para seleção" disabled><span>${formatChatText(label)}</span></div>`);
+      if (!id || option.disabled) {
+        if (id) nonContractorCount += 1;
+        else unavailableIdCount += 1;
+        const normalizedLabel = label.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase();
+        const reason = id ? "FORNECEDOR NÃO É EMPREITEIRO" : "ID INDISPONÍVEL";
+        const normalizedReason = reason.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase();
+        const suffix = normalizedLabel.includes(normalizedReason) ? "" : ` — ${reason}`;
+        records.push(`<label class="chat-launch-payroll-select__row chat-launch-payroll-select__row--unavailable"><input type="checkbox"${id ? ` data-reply-id="${escapeHtml(id)}"` : ""} aria-label="${escapeHtml(label + suffix)}" disabled><span>${formatChatText(label)}${escapeHtml(suffix)}</span></label>`);
         continue;
       }
       records.push(`<label class="chat-launch-payroll-select__row"><input type="checkbox" data-action="launch-payroll-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !launchPayrollCurrent ? " disabled" : ""}><span>${formatChatText(label)}</span></label>`);
     }
-    const unavailableWarning = unavailableCount
-      ? `<p class="chat-launch-payroll-select__warning" role="alert">${unavailableCount === 1 ? "Um lançamento está" : "Alguns lançamentos estão"} sem ID válido para seleção e não poderão ser enviados à folha.</p>`
+    const unavailableWarning = unavailableIdCount || nonContractorCount
+      ? `<p class="chat-launch-payroll-select__warning" role="alert">${[
+        unavailableIdCount ? `${unavailableIdCount} lançamento(s) sem ID válido não poderá(ão) ser enviado(s)` : "",
+        nonContractorCount ? `${nonContractorCount} lançamento(s) de fornecedor não empreiteiro não poderá(ão) ser enviado(s)` : "",
+      ].filter(Boolean).join(". ")} para a folha.</p>`
       : "";
     const proceedLabel = selected.size
       ? `PROSSEGUIR COM ${selected.size} SELECIONADO${selected.size === 1 ? "" : "S"}`
@@ -4255,7 +4264,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (nextLaunchPayrollPollKey !== launchPayrollSelectionPollKey) launchPayrollSelectedIds.clear();
     launchPayrollSelectionPollKey = nextLaunchPayrollPollKey;
     launchPayrollEligibleIds = new Set(isLaunchPayrollPoll
-      ? (Array.isArray(newestPoll.options) ? newestPoll.options : []).map(launchPayrollEntryId).filter(Boolean)
+      ? (Array.isArray(newestPoll.options) ? newestPoll.options : []).filter(option => !option.disabled).map(launchPayrollEntryId).filter(Boolean)
       : []);
     for (const id of launchPayrollSelectedIds) {
       if (!launchPayrollEligibleIds.has(id)) launchPayrollSelectedIds.delete(id);

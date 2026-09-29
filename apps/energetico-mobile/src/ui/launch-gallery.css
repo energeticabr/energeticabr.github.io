@@ -159,7 +159,7 @@
   box-shadow: 0 2px 8px #0b376410;
 }
 .lg-record:nth-child(even) { background: #fff; }
-.lg-record--with-media { grid-template-columns: 78px minmax(0, 1fr); }
+.lg-record--with-media { grid-template-columns: 78px minmax(0, 1fr); align-items: stretch; }
 .lg-record-media {
   appearance: none;
   -webkit-appearance: none;
@@ -172,6 +172,7 @@
   align-content: center;
   gap: 5px;
   min-height: 0;
+  height: auto;
   padding: 6px;
   border: 0;
   border-right: 1px solid var(--lg-line);
@@ -231,9 +232,7 @@
 .lg-status-pending { color: #965200; border-color: #e7bd72; background: #fff3db; }
 .lg-status-other { color: var(--lg-red); border-color: #e5b8ba; background: #fff0f0; }
 .lg-record-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
-  gap: 9px;
+  display: block;
   min-width: 0;
 }
 .lg-record-summary { display: grid; gap: 8px; min-width: 0; }
@@ -304,6 +303,17 @@
   background: var(--lg-navy);
   font-weight: 850;
 }
+.lg-record-content > .lg-record-disclosure {
+  min-height: 40px;
+  color: var(--lg-navy);
+  border-color: transparent;
+  border-top: 1px solid var(--lg-line);
+  background: #fff;
+  font-weight: 750;
+}
+.lg-record-content > .lg-record-disclosure::after { content: '⌄'; display: block; font-size: 1.25rem; line-height: 1; }
+.lg-record--expanded .lg-record-disclosure::after { content: '⌃'; }
+.lg-record-content > .lg-record-disclosure:hover:not(:disabled) { color: var(--lg-navy-strong); background: #f2f7fa; }
 
 .lg-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px 16px; margin: 0; }
 .lg-field-value { min-width: 0; }

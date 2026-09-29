@@ -857,9 +857,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!finance.childElementCount) finance.hidden = true;
 
     const main = element('div', 'lg-record-main');
-    const commercial = element('section', 'lg-record-group lg-record-commercial');
     const branch = field(fields, 'FILIAL');
     const stage = field(fields, 'ETAPA OBRA', 'ETAPA', 'ETAPA DA OBRA');
+    const commercial = element('section', 'lg-record-group lg-record-commercial');
     commercial.append(...[
       summaryField('FILIAL', branch),
       summaryField('ETAPA', stage),
@@ -879,7 +879,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const date = summaryField(name, value);
       if (date) execution.append(date);
     }
-
     const meta = element('section', 'lg-record-group lg-record-meta');
     const metaValues = [
       ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
@@ -894,7 +893,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (entry) meta.append(entry);
     }
     if (execution.children.length <= 1) execution.hidden = true;
-    if (!commercial.childElementCount) commercial.hidden = true;
     if (!finance.childElementCount) finance.hidden = true;
     if (!meta.childElementCount) meta.hidden = true;
     main.append(commercial, execution, meta);
