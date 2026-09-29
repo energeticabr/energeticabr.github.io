@@ -2153,6 +2153,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let voiceInput = null;
   let voiceInputHeld = false;
   let voiceInputTapMode = false;
+  let voiceInputNormalizeAfterStop = false;
   let voiceInputPointerId = null;
   let voiceInputSuppressClickUntil = 0;
   let signOutConfirmOpen = false;
@@ -2202,6 +2203,18 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilterForView(visibleMessages), isGeneratedDocumentSignatureChoice(state));
   }
 
+  function normalizeVoiceDraft() {
+    if (!voiceInputEnabled()) return;
+    const draft = composerControls.draft?.value || "";
+    const technicalText = normalizeConstructionDiaryText(draft);
+    if (technicalText && technicalText !== draft) {
+      composerControls.draft.value = technicalText;
+      resizeDraft(composerControls.draft);
+      syncComposerInset();
+      emit({ type: "draft-changed", value: technicalText });
+    }
+  }
+
   function setVoiceInputButtonState({ active = false, pending = false, error = "", enabled = voiceInputEnabled() } = {}) {
     const button = composerControls.voiceInput;
     const status = composerControls.voiceStatus;
@@ -2227,6 +2240,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput = null;
       voiceInputHeld = false;
       voiceInputTapMode = false;
+      voiceInputNormalizeAfterStop = false;
       voiceInputPointerId = null;
       setVoiceInputButtonState({ enabled: false });
       return;
@@ -2250,6 +2264,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         ensureAudioPermission: ensureMicrophonePermission,
         onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
         onError: error => setVoiceInputButtonState({ error }),
+        onSessionEnd: () => {
+          if (!voiceInputNormalizeAfterStop) return;
+          voiceInputNormalizeAfterStop = false;
+          normalizeVoiceDraft();
+        },
       });
     }
     setVoiceInputButtonState({ active: voiceInput.isActive(), pending: voiceInput.isPending(), enabled });
@@ -2263,6 +2282,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || !voiceInputEnabled()) return false;
     event.preventDefault?.();
+    voiceInputNormalizeAfterStop = false;
     if (!voiceInput?.isActive()) voiceInputTapMode = false;
     voiceInputHeld = true;
     voiceInputPointerId = event.pointerId ?? null;
@@ -2284,22 +2304,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return true;
     }
     voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = true;
     const stopped = voiceInput?.stop();
-    const normalizeVoiceDraft = () => {
-      if (!voiceInputEnabled()) return;
-      const draft = composerControls.draft?.value || "";
-      const technicalText = normalizeConstructionDiaryText(draft);
-      if (technicalText && technicalText !== draft) {
-        composerControls.draft.value = technicalText;
-        resizeDraft(composerControls.draft);
-        syncComposerInset();
-        emit({ type: "draft-changed", value: technicalText });
-      }
-    };
     if (stopped && typeof stopped.then === "function") {
-      stopped.then(normalizeVoiceDraft).catch(() => {});
-    } else if (stopped) {
-      normalizeVoiceDraft();
+      stopped.then(() => {
+        voiceInputNormalizeAfterStop = false;
+        normalizeVoiceDraft();
+      }).catch(() => { voiceInputNormalizeAfterStop = false; });
+    } else if (!stopped) {
+      voiceInputNormalizeAfterStop = false;
     }
     return true;
   }
@@ -2322,6 +2335,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = false;
     voiceInputPointerId = null;
     voiceInputSuppressClickUntil = Date.now() + 750;
     voiceInput?.cancel();

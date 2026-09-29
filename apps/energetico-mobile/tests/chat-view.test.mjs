@@ -316,6 +316,33 @@ test("ao soltar o microfone, transforma a transcrição em registro técnico", (
   dom.window.close();
 });
 
+test("última frase entregue após soltar também vira registro técnico", () => {
+  class Recognition {
+    static instance = null;
+    constructor() { Recognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emit(text) {
+      this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: text }], { isFinal: true })] });
+    }
+  }
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  Recognition.instance.emit("Eu fiz a concretagem da laje");
+  Recognition.instance.onend?.();
+
+  assert.equal(root.querySelector('[data-role="draft"]').value, "Execução de concretagem da laje.");
+  view.destroy();
+  dom.window.close();
+});
+
 test("WebView nativo grava no microfone somente após o toque e transcreve ao soltar", async () => {
   class Recorder {
     static instance = null;

@@ -230,6 +230,31 @@ test("evento atrasado do reconhecimento cancelado não altera a nova tentativa",
   controller.destroy();
 });
 
+test("resultado final entregue após soltar o microfone permanece no rascunho", () => {
+  class DelayedRecognition {
+    static instance = null;
+    constructor() { DelayedRecognition.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {}
+    emitResult(results) { this.onresult?.({ resultIndex: 0, results }); }
+  }
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => DelayedRecognition,
+  });
+
+  controller.start();
+  const recognition = DelayedRecognition.instance;
+  controller.stop();
+  recognition.emitResult([result("Concretagem da laje", true)]);
+  recognition.onend?.();
+
+  assert.equal(draft, "Concretagem da laje");
+  controller.destroy();
+});
+
 test("grava e transcreve quando o WebView não oferece SpeechRecognition", async () => {
   FakeMediaRecorder.instances = [];
   let draft = "Atividade inicial";

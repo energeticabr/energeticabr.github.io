@@ -36,6 +36,7 @@ export function createVoiceInputController({
   ensureAudioPermission,
   onStateChange = () => {},
   onError = () => {},
+  onSessionEnd = () => {},
   language = "pt-BR",
 } = {}) {
   let recognition = null;
@@ -75,6 +76,7 @@ export function createVoiceInputController({
     interimText = "";
     updateDraft(false);
     notify(false);
+    onSessionEnd();
     if (reportError) onError(reportError);
   }
 
@@ -317,7 +319,6 @@ export function createVoiceInputController({
     }
     if (!recognition) return false;
     const current = recognition;
-    sessionId += 1;
     active = false;
     interimText = "";
     updateDraft(false);
