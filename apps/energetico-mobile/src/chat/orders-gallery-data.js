@@ -13,6 +13,7 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
 const LAUNCH_GROUP_PAGE_SIZE = 100;
 const LAUNCH_GROUP_MAX_PAGES = 100;
+const LAUNCH_GROUP_PREFER = "HonorNonIndexedQueriesWarningMayFailRandomly";
 const KNOWN_FIELDS = Object.freeze([
   ["FILIAL", ["FILIAL"]],
   ["FORNECEDOR", ["FORNECEDOR"]],
@@ -240,7 +241,13 @@ export function createLaunchClusterData({
         siteKey,
         list.id,
         query,
-        { pageNumber, maxPages: LAUNCH_GROUP_MAX_PAGES, ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}) },
+        {
+          pageNumber,
+          maxPages: LAUNCH_GROUP_MAX_PAGES,
+          headers: { Prefer: LAUNCH_GROUP_PREFER },
+          ...(cursor ? { cursor } : {}),
+          ...(signal ? { signal } : {}),
+        },
       );
       for (const item of Array.isArray(page?.items) ? page.items : []) {
         const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
