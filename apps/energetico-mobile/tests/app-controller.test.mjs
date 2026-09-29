@@ -4801,6 +4801,35 @@ test("arquivo de áudio no Diário de Obras vira texto técnico e não é enviad
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+test("áudio recebido pelo compartilhamento no Diário de Obras vira texto técnico", async t => {
+  const h = makeHarness();
+  let resume;
+  const transcripts = [];
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  h.client.transcribeAudio = async file => {
+    transcripts.push(file.name);
+    return "Foi realizada a conferência da armação.";
+  };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "DIGITE AS ATIVIDADES EXECUTADAS",
+    options: [],
+  }], { activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const audio = new File(["audio"], "AUDIO-2026-09-28-17-50-14.m4a", { type: "audio/mp4" });
+  Object.defineProperty(audio, "sourceId", { value: "shared-audio-1" });
+  h.native.importSharedItems = async () => [audio];
+  await resume();
+
+  assert.deepEqual(transcripts, ["AUDIO-2026-09-28-17-50-14.m4a"]);
+  assert.equal(h.chatCalls.some(call => call[0] === "file"), false);
+  assert.equal(h.store.getState().draft, "Foi realizada a conferência da armação.");
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.deepEqual(h.discarded, ["shared-audio-1"]);
+});
+
 test("falha ao transcrever áudio preserva o arquivo pendente", async t => {
   const h = makeHarness();
   h.client.transcribeAudio = async () => { throw new Error("Serviço de transcrição indisponível"); };

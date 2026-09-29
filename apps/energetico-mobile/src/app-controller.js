@@ -4479,6 +4479,13 @@ export function createAppController({
             const draftParts = [store.getState().draft, transcript].filter(Boolean);
             store.setDraft(normalizeConstructionDiaryText(draftParts.join("\n")));
             store.discardFile(id);
+            if (pending.sourceId) {
+              try {
+                await native.discardSharedItem(pending.sourceId);
+              } catch (error) {
+                setSessionError(error, "O áudio foi transcrito, mas a cópia compartilhada não pôde ser limpa.");
+              }
+            }
             uploaded = true;
           } else {
             uploaded = await uploadFile(id);
