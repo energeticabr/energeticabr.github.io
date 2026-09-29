@@ -950,9 +950,13 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
           const exitLabel = String(headers[2 + index * 2] ?? `Saída ${index + 1}`);
           const entry = String(row[1 + index * 2] ?? "—");
           const exit = String(row[2 + index * 2] ?? "—");
-          const entryClass = /^\d{1,2}:\d{2}$/.test(entry.trim()) ? "chat-rhid-attendance-card__entry" : "";
-          const exitClass = /^\d{1,2}:\d{2}$/.test(exit.trim()) ? "chat-rhid-attendance-card__exit" : "";
-          return `<div class="chat-rhid-attendance-card__slot"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div>`;
+          const entryIsTime = /^\d{1,2}:\d{2}$/.test(entry.trim());
+          const exitIsTime = /^\d{1,2}:\d{2}$/.test(exit.trim());
+          const entryClass = entryIsTime ? "chat-rhid-attendance-card__entry" : "";
+          const exitClass = exitIsTime ? "chat-rhid-attendance-card__exit" : "";
+          const entryClusterClass = `chat-rhid-attendance-card__cluster ${entryIsTime ? "chat-rhid-attendance-card__cluster--entry" : "chat-rhid-attendance-card__cluster--empty"}`;
+          const exitClusterClass = `chat-rhid-attendance-card__cluster ${exitIsTime ? "chat-rhid-attendance-card__cluster--exit" : "chat-rhid-attendance-card__cluster--empty"}`;
+          return `<div class="chat-rhid-attendance-card__slot"><div class="${entryClusterClass}"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong></div><div class="${exitClusterClass}"><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div></div>`;
         }).join("");
         const totalText = String(total);
         const isPartial = /\(parcial\)/i.test(totalText);

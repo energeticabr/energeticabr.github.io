@@ -558,13 +558,16 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-card__person { min-width: 0; padding-bottom: 6px; border-bottom: 1px solid #e5e9ee; }
 .chat-rhid-attendance-card__person h3 { margin: 0; color: #173042; font-size: clamp(10.5px, 3.7vw, 13px); font-weight: 850; line-height: 1.15; letter-spacing: -.01em; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
 .chat-rhid-attendance-card__missing { display: inline-flex; margin-top: 6px; padding: 3px 8px; border-radius: 999px; color: #9a6519; background: #f6e3bd; font-size: 8px; font-weight: 850; }
-.chat-rhid-attendance-card__details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(92px, .3fr); align-items: stretch; gap: 8px; min-width: 0; }
-.chat-rhid-attendance-card__slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; }
-.chat-rhid-attendance-card__slot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; column-gap: 5px; row-gap: 2px; min-width: 0; }
-.chat-rhid-attendance-card__slot span { color: #718096; font-size: 8px; font-weight: 800; line-height: 1.15; }
-.chat-rhid-attendance-card__slot strong { color: #718096; font-size: 13px; font-weight: 850; line-height: 1.1; text-align: right; font-variant-numeric: tabular-nums; }
-.chat-rhid-attendance-card__slot .chat-rhid-attendance-card__entry { color: #16804b; }
-.chat-rhid-attendance-card__slot .chat-rhid-attendance-card__exit { color: #ad3041; }
+.chat-rhid-attendance-card__details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(92px, .3fr); align-items: stretch; gap: 14px; min-width: 0; }
+.chat-rhid-attendance-card__slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; padding-right: 3px; }
+.chat-rhid-attendance-card__slot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 6px; min-width: 0; }
+.chat-rhid-attendance-card__cluster { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 8px; border-radius: 8px; font-size: 9px; font-weight: 850; line-height: 1.1; text-align: center; white-space: nowrap; }
+.chat-rhid-attendance-card__cluster span { color: inherit; font-size: 9px; font-weight: 850; line-height: 1.1; }
+.chat-rhid-attendance-card__cluster strong { color: inherit; font-size: 13px; font-weight: 900; line-height: 1; text-align: right; font-variant-numeric: tabular-nums; }
+.chat-rhid-attendance-card__cluster--entry { color: #fff; background: #16804b; }
+.chat-rhid-attendance-card__cluster--exit { color: #fff; background: #ad3041; }
+.chat-rhid-attendance-card__cluster--empty { color: #718096; background: #edf1f3; }
+.chat-rhid-attendance-card__slot .chat-rhid-attendance-card__entry, .chat-rhid-attendance-card__slot .chat-rhid-attendance-card__exit { color: inherit; }
 .chat-rhid-attendance-card__total { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; padding: 8px 6px; border-radius: 10px; color: #173f6b; background: #edf3f9; text-align: center; }
 .chat-rhid-attendance-card__total span { color: #718096; font-size: 8px; font-weight: 800; line-height: 1.2; }
 .chat-rhid-attendance-card__total strong { margin-top: 3px; font-size: 20px; font-weight: 850; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -591,11 +594,13 @@ button { touch-action: manipulation; }
   .chat-rhid-attendance-report__summary span { font-size: 8px; }
   .chat-rhid-attendance-card { padding: 9px 8px; }
   .chat-rhid-attendance-card__main { gap: 7px; }
-  .chat-rhid-attendance-card__details { grid-template-columns: minmax(0, 1fr) minmax(76px, .32fr); gap: 6px; }
+  .chat-rhid-attendance-card__details { grid-template-columns: minmax(0, 1fr) minmax(76px, .32fr); gap: 10px; }
   .chat-rhid-attendance-card__person h3 { font-size: clamp(10px, 3.4vw, 12px); }
-  .chat-rhid-attendance-card__slots { gap: 5px; }
-  .chat-rhid-attendance-card__slot span { font-size: 7px; }
-  .chat-rhid-attendance-card__slot strong { font-size: 11px; }
+  .chat-rhid-attendance-card__slots { gap: 5px; padding-right: 2px; }
+  .chat-rhid-attendance-card__slot { gap: 4px; }
+  .chat-rhid-attendance-card__cluster { gap: 3px; padding: 6px 5px; font-size: 8px; }
+  .chat-rhid-attendance-card__cluster span { font-size: 8px; }
+  .chat-rhid-attendance-card__cluster strong { font-size: 12px; }
   .chat-rhid-attendance-card__total { padding: 7px 3px; }
   .chat-rhid-attendance-card__total strong { font-size: 16px; }
   .chat-rhid-attendance-card__total span { font-size: 7px; }

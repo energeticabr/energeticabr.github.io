@@ -534,6 +534,34 @@ test("relatório RHID distingue entradas e saídas preenchidas sem destacar hor�
   dom.window.close();
 });
 
+test("relatório RHID agrupa cada entrada e saída em clusters legíveis", () => {
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "rhid-clusters", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: {
+      kind: "rhid_attendance", reportDate: "2026-09-28",
+      headers: ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"],
+      rows: [["CLEITON CESAR NONATO", "07:00", "11:59", "13:02", "—", "04:59 (parcial)"]],
+    },
+  }] }));
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const dom = new JSDOM(`<style>${styles}</style>${markup}`);
+  const clusters = [...dom.window.document.querySelectorAll(".chat-rhid-attendance-card__cluster")];
+
+  assert.equal(clusters.length, 4);
+  assert.ok(clusters[0].classList.contains("chat-rhid-attendance-card__cluster--entry"));
+  assert.ok(clusters[1].classList.contains("chat-rhid-attendance-card__cluster--exit"));
+  assert.equal(clusters[0].querySelector("span")?.textContent, "Entrada 1");
+  assert.equal(clusters[0].querySelector("strong")?.textContent, "07:00");
+  assert.equal(clusters[1].querySelector("span")?.textContent, "Saída 1");
+  assert.equal(clusters[1].querySelector("strong")?.textContent, "11:59");
+  assert.ok(clusters[3].classList.contains("chat-rhid-attendance-card__cluster--empty"));
+  assert.match(styles, /\.chat-rhid-attendance-card__cluster\s*\{[^}]*font-size:\s*9px/s);
+  assert.match(styles, /\.chat-rhid-attendance-card__cluster--entry\s*\{[^}]*color:\s*#fff[^}]*background:/s);
+  assert.match(styles, /\.chat-rhid-attendance-card__cluster--exit\s*\{[^}]*color:\s*#fff[^}]*background:/s);
+  assert.match(styles, /\.chat-rhid-attendance-card__details\s*\{[^}]*gap:\s*14px/s);
+  dom.window.close();
+});
+
 test("relatório RHID preenche de vermelho claro só a linha discrepante após o fechamento", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-discrepancies", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 25/09/2026", options: [],
