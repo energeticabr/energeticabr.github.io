@@ -159,9 +159,79 @@ test("soltar durante a permissão não cancela o microfone no iPhone", async () 
 
   assert.ok(Recognition.instance, "a captação deve iniciar após a permissão ser concedida");
   assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
   voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
   voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
   assert.equal(Recognition.instance.stopped, 1, "outro toque deve encerrar a captação");
+  view.destroy();
+  dom.window.close();
+});
+
+test("cancelar gesto durante a permissão não inicia a captação depois", async () => {
+  class Recognition {
+    static instances = [];
+    constructor() { Recognition.instances.push(this); }
+    start() { this.onstart?.(); }
+  }
+  let grantPermission;
+  const permission = new Promise(resolve => { grantPermission = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.SpeechRecognition = Recognition;
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { ensureMicrophonePermission: () => permission });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("pointercancel", { bubbles: true, cancelable: true }));
+  grantPermission(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(Recognition.instances.length, 0);
+  assert.equal(voice.classList.contains("voice-input-button--active"), false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque no iPhone aguarda o gravador e mostra como parar depois", async () => {
+  class Recorder {
+    static instance = null;
+    constructor(stream) { this.stream = stream; this.stopped = 0; Recorder.instance = this; }
+    start() { this.onstart?.(); }
+    stop() {
+      this.stopped += 1;
+      this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+  let grantStream;
+  const pendingStream = new Promise(resolve => { grantStream = resolve; });
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: () => pendingStream },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "Concretagem concluída" });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  grantStream({ getTracks: () => [{ stop() {} }] });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.ok(Recorder.instance);
+  assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
+  voice.dispatchEvent(new dom.window.Event("touchstart", { bubbles: true, cancelable: true }));
+  voice.dispatchEvent(new dom.window.Event("touchend", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recorder.instance.stopped, 1);
   view.destroy();
   dom.window.close();
 });

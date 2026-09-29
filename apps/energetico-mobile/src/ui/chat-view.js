@@ -2152,6 +2152,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let composing = false;
   let voiceInput = null;
   let voiceInputHeld = false;
+  let voiceInputTapMode = false;
   let voiceInputPointerId = null;
   let voiceInputSuppressClickUntil = 0;
   let signOutConfirmOpen = false;
@@ -2209,13 +2210,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     button.disabled = composerBusy || !enabled || pending;
     button.classList.toggle("voice-input-button--active", Boolean(active));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.setAttribute("aria-label", active ? "Soltar para parar a transcrição" : "Segurar para transcrever áudio");
-    button.title = active ? "Solte para parar a transcrição" : "Segure para falar e solte para parar";
+    button.setAttribute("aria-label", active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Soltar para parar a transcrição") : "Segurar para transcrever áudio");
+    button.title = active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Solte para parar a transcrição") : "Segure para falar e solte para parar";
     const icon = button.querySelector("[aria-hidden=\"true\"]");
     if (icon) icon.textContent = active ? "🔴" : "🎙️";
     if (status) {
       status.hidden = !error && !active && !pending;
-      status.textContent = error || (pending ? "Preparando o microfone ou transcrevendo o áudio…" : active ? "Ouvindo… solte para parar." : "");
+      status.textContent = error || (pending ? "Preparando o microfone ou transcrevendo o áudio…" : active ? (voiceInputTapMode ? "Ouvindo… toque novamente para parar." : "Ouvindo… solte para parar.") : "");
     }
   }
 
@@ -2225,6 +2226,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInput?.destroy();
       voiceInput = null;
       voiceInputHeld = false;
+      voiceInputTapMode = false;
       voiceInputPointerId = null;
       setVoiceInputButtonState({ enabled: false });
       return;
@@ -2250,7 +2252,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         onError: error => setVoiceInputButtonState({ error }),
       });
     }
-    setVoiceInputButtonState({ active: voiceInput.isActive(), enabled });
+    setVoiceInputButtonState({ active: voiceInput.isActive(), pending: voiceInput.isPending(), enabled });
   }
 
   function voiceInputButtonAt(event) {
@@ -2261,6 +2263,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || !voiceInputEnabled()) return false;
     event.preventDefault?.();
+    if (!voiceInput?.isActive()) voiceInputTapMode = false;
     voiceInputHeld = true;
     voiceInputPointerId = event.pointerId ?? null;
     try { button.setPointerCapture?.(event.pointerId); } catch { /* opcional no WebView */ }
@@ -2274,9 +2277,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputPointerId = null;
-    // A quick tap can end while iOS is still asking for microphone access.
-    // Let that pending request start the session; the next tap will stop it.
-    if (!voiceInput?.isActive()) return true;
+    // A quick tap can end while iOS is asking for access. Keep that session
+    // alive in tap-to-toggle mode, with an explicit stop cue once it starts.
+    if (!voiceInput?.isActive()) {
+      voiceInputTapMode = voiceInput?.isPending() || false;
+      return true;
+    }
+    voiceInputTapMode = false;
     const stopped = voiceInput?.stop();
     const normalizeVoiceDraft = () => {
       if (!voiceInputEnabled()) return;
@@ -2307,6 +2314,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       voiceInputSuppressClickUntil = Date.now() + 750;
     }
     stopVoiceInput(event);
+  }
+
+  function voicePointerCancel(event) {
+    if (!voiceInputHeld) return;
+    if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputTapMode = false;
+    voiceInputPointerId = null;
+    voiceInputSuppressClickUntil = Date.now() + 750;
+    voiceInput?.cancel();
   }
 
   function voiceKeyDown(event) {
@@ -4354,14 +4372,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointercancel", pointerUp);
   root.addEventListener("pointerdown", voicePointerDown, { passive: false });
   root.addEventListener("pointerup", voicePointerUp);
-  root.addEventListener("pointercancel", voicePointerUp);
+  root.addEventListener("pointercancel", voicePointerCancel);
   root.addEventListener("touchstart", touchStart, { passive: true });
   root.addEventListener("touchmove", touchMove, { passive: true });
   root.addEventListener("touchend", touchEnd);
   root.addEventListener("touchcancel", touchEnd);
   root.addEventListener("touchstart", voicePointerDown, { passive: false });
   root.addEventListener("touchend", voicePointerUp);
-  root.addEventListener("touchcancel", voicePointerUp);
+  root.addEventListener("touchcancel", voicePointerCancel);
   root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("touchstart", prepareSignaturePadForFirstContact, { capture: true, passive: false });
   root.addEventListener("submit", submit);
@@ -4400,14 +4418,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointercancel", pointerUp);
       root.removeEventListener("pointerdown", voicePointerDown);
       root.removeEventListener("pointerup", voicePointerUp);
-      root.removeEventListener("pointercancel", voicePointerUp);
+      root.removeEventListener("pointercancel", voicePointerCancel);
       root.removeEventListener("touchstart", touchStart);
       root.removeEventListener("touchmove", touchMove);
       root.removeEventListener("touchend", touchEnd);
       root.removeEventListener("touchcancel", touchEnd);
       root.removeEventListener("touchstart", voicePointerDown);
       root.removeEventListener("touchend", voicePointerUp);
-      root.removeEventListener("touchcancel", voicePointerUp);
+      root.removeEventListener("touchcancel", voicePointerCancel);
       clearAttachmentTrayGestureListeners();
       attachmentTrayGesture = null;
       attachmentTrayClickSuppression = null;

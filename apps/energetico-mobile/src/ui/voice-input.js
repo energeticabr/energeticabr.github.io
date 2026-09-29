@@ -333,6 +333,12 @@ export function createVoiceInputController({
       notify(false);
       return false;
     }
+    if (capturePending) {
+      capturePending = false;
+      sessionId = 0;
+      notify(false);
+      return true;
+    }
     if (recordingSession?.recorder) {
       const current = recordingSession;
       sessionId = 0;
@@ -382,5 +388,6 @@ export function createVoiceInputController({
     cancel,
     destroy,
     isActive: () => active,
+    isPending: () => permissionPending || capturePending || transcriptionPending,
   });
 }

@@ -121,13 +121,40 @@ test("aguarda a permissão nativa antes de iniciar o reconhecimento", async () =
   });
 
   assert.equal(controller.start(), true);
+  assert.equal(controller.isPending(), true);
   assert.equal(FakeRecognition.instances.length, 0);
   resolvePermission(true);
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(FakeRecognition.instances.length, 1);
   assert.equal(FakeRecognition.instances[0].started, 1);
+  assert.equal(controller.isPending(), false);
   controller.stop();
+  controller.destroy();
+});
+
+test("cancelar enquanto o gravador aguarda o áudio não inicia gravação", async () => {
+  FakeMediaRecorder.instances = [];
+  let resolveStream;
+  let tracksStopped = 0;
+  const stream = { getTracks: () => [{ stop: () => { tracksStopped += 1; } }] };
+  const waitingStream = new Promise(resolve => { resolveStream = resolve; });
+  const controller = createVoiceInputController({
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: () => waitingStream,
+  });
+
+  controller.start();
+  assert.equal(controller.isPending(), true);
+  controller.cancel();
+  resolveStream(stream);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(FakeMediaRecorder.instances.length, 0);
+  assert.equal(tracksStopped, 1);
+  assert.equal(controller.isPending(), false);
   controller.destroy();
 });
 
