@@ -3166,8 +3166,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         return;
       }
       event.preventDefault?.();
-      if (!voiceInputHeld) startVoiceInput(event);
-      else stopVoiceInput(event);
+      if (!voiceInputHeld) {
+        startVoiceInput(event);
+        if (voiceInput?.isActive() || voiceInput?.isPending()) {
+          voiceInputTapMode = true;
+          setVoiceInputButtonState({ active: voiceInput.isActive(), pending: voiceInput.isPending() });
+        }
+      } else stopVoiceInput(event);
       return;
     }
     const pendingAttachmentClick = attachmentTrayClickSuppression;

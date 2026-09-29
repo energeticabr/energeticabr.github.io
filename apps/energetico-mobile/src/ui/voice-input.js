@@ -78,17 +78,17 @@ export function createVoiceInputController({
     if (reportError) onError(reportError);
   }
 
-  function bindRecognition(instance) {
+  function bindRecognition(instance, currentSessionId) {
     instance.lang = language;
     instance.continuous = true;
     instance.interimResults = true;
     instance.onstart = () => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       active = true;
       notify(true);
     };
     instance.onresult = event => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       const results = Array.from(event?.results || []);
       for (let index = Number(event?.resultIndex) || 0; index < results.length; index += 1) {
         const result = results[index];
@@ -102,11 +102,11 @@ export function createVoiceInputController({
       updateDraft(true);
     };
     instance.onerror = event => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       finishSession({ reportError: speechErrorMessage(event?.error) });
     };
     instance.onend = () => {
-      if (destroyed) return;
+      if (destroyed || sessionId !== currentSessionId) return;
       finishSession();
     };
   }
@@ -204,7 +204,7 @@ export function createVoiceInputController({
       currentRecorder.onerror = event => {
         if (destroyed || current.completed) return;
         capturePending = false;
-        sessionId = 0;
+        sessionId += 1;
         stopStream(stream);
         recorder = null;
         mediaStream = null;
@@ -244,7 +244,7 @@ export function createVoiceInputController({
     const beginRecognition = () => {
       try {
         recognition = new Recognition();
-        bindRecognition(recognition);
+        bindRecognition(recognition, currentSessionId);
         active = true;
         recognition.start();
         notify(true);
@@ -279,7 +279,7 @@ export function createVoiceInputController({
     permissionPending = true;
     notify(false);
     Promise.resolve(permissionResult).then(granted => {
-      if (!permissionPending || destroyed) return;
+      if (!permissionPending || destroyed || sessionId !== currentSessionId) return;
       permissionPending = false;
       if (granted === false) {
         finishSession({ reportError: "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
@@ -287,7 +287,7 @@ export function createVoiceInputController({
       }
       begin();
     }).catch(error => {
-      if (!permissionPending || destroyed) return;
+      if (!permissionPending || destroyed || sessionId !== currentSessionId) return;
       permissionPending = false;
       finishSession({ reportError: error?.message || "O acesso ao microfone foi bloqueado. Autorize o microfone para usar a transcrição." });
     });
@@ -297,27 +297,27 @@ export function createVoiceInputController({
   function stop() {
     if (permissionPending) {
       permissionPending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return false;
     }
     if (capturePending) {
       capturePending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return false;
     }
     if (recordingSession?.recorder && active) {
       const current = recordingSession;
       current.completion = new Promise(resolve => { current.resolve = resolve; });
-      sessionId = 0;
+      sessionId += 1;
       active = false;
       try { current.recorder.stop?.(); } catch { completeRecording(); }
       return current.completion;
     }
     if (!recognition) return false;
     const current = recognition;
-    sessionId = 0;
+    sessionId += 1;
     active = false;
     interimText = "";
     updateDraft(false);
@@ -329,19 +329,19 @@ export function createVoiceInputController({
   function cancel() {
     if (permissionPending) {
       permissionPending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return false;
     }
     if (capturePending) {
       capturePending = false;
-      sessionId = 0;
+      sessionId += 1;
       notify(false);
       return true;
     }
     if (recordingSession?.recorder) {
       const current = recordingSession;
-      sessionId = 0;
+      sessionId += 1;
       active = false;
       capturePending = false;
       current.completed = true;
@@ -355,7 +355,7 @@ export function createVoiceInputController({
     }
     if (!recognition) return false;
     const current = recognition;
-    sessionId = 0;
+    sessionId += 1;
     active = false;
     interimText = "";
     updateDraft(false);

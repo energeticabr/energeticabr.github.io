@@ -127,6 +127,7 @@ test("toque simples no microfone inicia e encerra a transcrição quando o WebVi
   voice.click();
   assert.equal(Recognition.instances.length, 1);
   assert.equal(voice.classList.contains("voice-input-button--active"), true);
+  assert.match(root.querySelector('[data-role="voice-input-status"]').textContent, /toque novamente para parar/i);
 
   voice.click();
   assert.equal(Recognition.instances[0].stopped, 1);

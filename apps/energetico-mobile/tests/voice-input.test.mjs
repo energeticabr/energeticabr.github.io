@@ -158,6 +158,78 @@ test("cancelar enquanto o gravador aguarda o áudio não inicia gravação", asy
   controller.destroy();
 });
 
+test("resposta atrasada de captação cancelada não inicia a próxima gravação", async () => {
+  FakeMediaRecorder.instances = [];
+  const resolvers = [];
+  const stopped = [];
+  const controller = createVoiceInputController({
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: () => new Promise(resolve => { resolvers.push(resolve); }),
+  });
+
+  controller.start();
+  controller.cancel();
+  controller.start();
+  resolvers[0]({ getTracks: () => [{ stop: () => stopped.push("old") }] });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeMediaRecorder.instances.length, 0);
+  assert.deepEqual(stopped, ["old"]);
+
+  resolvers[1]({ getTracks: () => [{ stop: () => stopped.push("new") }] });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeMediaRecorder.instances.length, 1);
+  controller.destroy();
+});
+
+test("autorização atrasada cancelada não inicia reconhecimento da tentativa nova", async () => {
+  FakeRecognition.instances = [];
+  const resolvers = [];
+  const controller = createVoiceInputController({
+    getRecognition: () => FakeRecognition,
+    ensureAudioPermission: () => new Promise(resolve => { resolvers.push(resolve); }),
+  });
+
+  controller.start();
+  controller.cancel();
+  controller.start();
+  resolvers[0](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 0);
+
+  resolvers[1](true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(FakeRecognition.instances.length, 1);
+  controller.destroy();
+});
+
+test("evento atrasado do reconhecimento cancelado não altera a nova tentativa", () => {
+  FakeRecognition.instances = [];
+  let draft = "";
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => FakeRecognition,
+  });
+
+  controller.start();
+  const oldRecognition = FakeRecognition.instances[0];
+  controller.cancel();
+  controller.start();
+  oldRecognition.emitResult([result("Antigo", true)]);
+  oldRecognition.emitError("no-speech");
+  assert.equal(controller.isActive(), true);
+  assert.equal(draft, "");
+
+  FakeRecognition.instances[1].emitResult([result("Novo", true)]);
+  assert.equal(draft, "Novo");
+  controller.destroy();
+});
+
 test("grava e transcreve quando o WebView não oferece SpeechRecognition", async () => {
   FakeMediaRecorder.instances = [];
   let draft = "Atividade inicial";
