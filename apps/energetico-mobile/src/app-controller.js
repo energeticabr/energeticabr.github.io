@@ -3544,7 +3544,10 @@ export function createAppController({
             tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
           });
           assertSession();
-          if (typeof data?.loadPage !== "function") throw new Error("A consulta das listas de folha do SharePoint não está disponível.");
+          if (typeof data?.loadPage !== "function"
+            || (gallery === "IDFOLHA" && typeof data?.loadPaymentsForPayrollId !== "function")) {
+            throw new Error("A consulta das listas de folha do SharePoint não está disponível.");
+          }
           hrPayrollGalleryData = data;
           let panel;
           panel = await hrPayrollGalleryFactory({
@@ -3555,6 +3558,14 @@ export function createAppController({
               assertSession();
               return result;
             },
+            requestReport: gallery === "IDFOLHA"
+              ? async (id, options = {}) => {
+                assertSession();
+                const rows = await hrPayrollGalleryData.loadPaymentsForPayrollId(id, options);
+                assertSession();
+                return rows;
+              }
+              : undefined,
             onClose: () => {
               if (hrPayrollGallery === panel) {
                 panel?.destroy?.();

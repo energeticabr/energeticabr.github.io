@@ -1,3 +1,6 @@
+import { createHrPayrollReport } from "./hr-payroll-report-view.js";
+import { createMascotReportButton } from "./report-action-button.js";
+
 const GALLERIES = {
   IDFOLHA: {
     title: "Galeria IDFOLHA",
@@ -28,7 +31,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, onClose } = {}) {
+  root: mountRootOption, gallery, request, requestReport, onClose } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -36,6 +39,9 @@ export function createHrPayrollGallery({ document: documentOption,
     throw new TypeError("Documento, galeria e consulta são obrigatórios.");
   }
   const doc = documentRef;
+  const payrollReport = gallery === "IDFOLHA" && typeof requestReport === "function"
+    ? createHrPayrollReport({ document: doc, root: mountRoot, request: requestReport })
+    : null;
   let opened = false;
   let destroyed = false;
   let busy = false;
@@ -87,6 +93,13 @@ export function createHrPayrollGallery({ document: documentOption,
       card.setAttribute("role", "listitem");
       const cardHeader = element("header", "hr-gallery-card-header");
       cardHeader.append(element("strong", "hr-gallery-id", `ID ${row.id || "—"}`));
+      if (payrollReport) {
+        cardHeader.append(createMascotReportButton(doc, {
+          label: `Consultar pagamentos da folha ID ${row.id || ""}`,
+          action: "open-payroll-report",
+          onActivate: () => { void payrollReport.open(row); },
+        }));
+      }
       const fields = element("dl", "hr-gallery-fields");
       for (const [key, label] of config.fields) {
         const pair = element("div", "hr-gallery-field");
@@ -173,6 +186,7 @@ export function createHrPayrollGallery({ document: documentOption,
       destroyed = true;
       opened = false;
       session += 1;
+      payrollReport?.destroy();
       root.remove();
     },
   });

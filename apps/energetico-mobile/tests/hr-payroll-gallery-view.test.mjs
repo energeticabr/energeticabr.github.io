@@ -111,3 +111,52 @@ test("galeria pode ser fechada enquanto aguarda a resposta do SharePoint", async
   gallery.destroy();
   dom.window.close();
 });
+
+test("IDFOLHA mostra o atalho de relatório à direita e abre a folha daquele cartão", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const reportRequests = [];
+  const gallery = createHrPayrollGallery({
+    root,
+    gallery: "IDFOLHA",
+    request: async () => response("IDFOLHA", 1, [{ id: "12", MESREFERENCIA: "09/2026", FORNECEDOR: "EDGAR" }]),
+    requestReport: async id => {
+      reportRequests.push(id);
+      return [{ id: "81", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200, QTD: 1, IDFOLHA: 12 }];
+    },
+  });
+
+  await gallery.open();
+  const cardHeader = root.querySelector(".hr-gallery-card-header");
+  const button = cardHeader.querySelector('[data-action="open-payroll-report"]');
+  assert.ok(button);
+  assert.equal(button.parentElement, cardHeader);
+  assert.equal(button.querySelector("img")?.alt, "");
+  button.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.deepEqual(reportRequests, ["12"]);
+  assert.match(root.textContent, /relatório da folha/i);
+  assert.match(root.textContent.replace(/\u00a0/g, " "), /R\$ 1\.200,00/);
+  root.querySelector('[data-action="close-hr-payroll-report"]').click();
+  assert.equal(root.querySelector(".hr-payroll-report-overlay").hidden, true);
+  assert.equal(root.querySelector(".hr-gallery-overlay").hidden, false);
+  gallery.destroy();
+  dom.window.close();
+});
+
+test("galeria FOLHAPGTO não ganha o botão de relatório de IDFOLHA", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const gallery = createHrPayrollGallery({
+    root,
+    gallery: "FOLHAPGTO",
+    request: async () => response("FOLHAPGTO", 1, [{ id: "81", TIPOPGTO: "SALÁRIO" }]),
+    requestReport: async () => [],
+  });
+
+  await gallery.open();
+  assert.equal(root.querySelector('[data-action="open-payroll-report"]'), null);
+  gallery.destroy();
+  dom.window.close();
+});

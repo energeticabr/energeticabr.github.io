@@ -396,7 +396,57 @@ export function createHrPayrollGalleryData({
     });
   }
 
-  return Object.freeze({ loadPage });
+  async function loadPaymentsForPayrollId(rawId, { signal } = {}) {
+    const raw = String(rawId ?? "").trim();
+    if (!/^\d{1,10}$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < 1) {
+      throw new RangeError("IDFOLHA inválido para consultar os pagamentos.");
+    }
+    const payrollId = Number(raw);
+    const gallery = "FOLHAPGTO";
+    const config = HR_PAYROLL_GALLERIES[gallery];
+    const list = await resolveList(gallery);
+    const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
+    const query = `$select=id&$expand=fields($select=${selectedFields})&$filter=fields/IDFOLHA eq ${payrollId}&$top=${HR_PAYROLL_PAGE_SIZE_MAX}`;
+    const rows = [];
+    let cursor = null;
+
+    for (let pageNumber = 1; pageNumber <= HR_PAYROLL_PAGE_COUNT_MAX; pageNumber += 1) {
+      if (signal?.aborted) throw signal.reason || new DOMException("A consulta da folha foi cancelada.", "AbortError");
+      const result = await repository.getItemsPage(
+        SITE_KEY,
+        list.id,
+        query,
+        {
+          pageNumber,
+          maxPages: HR_PAYROLL_PAGE_COUNT_MAX,
+          ...(cursor ? { cursor } : {}),
+          ...(signal ? { signal } : {}),
+        },
+      );
+      const items = Array.isArray(result?.items) ? result.items : [];
+      for (const item of items) {
+        const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
+        const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+        for (const [key, aliases] of config.fields) {
+          const value = hrPayrollFieldValue(fields, aliases);
+          if (value !== undefined) row[key] = value;
+        }
+        const linkedPayrollId = Number(String(row.IDFOLHA ?? "").trim());
+        if (row.id && Number.isSafeInteger(linkedPayrollId) && linkedPayrollId === payrollId) {
+          rows.push(Object.freeze(row));
+        }
+      }
+      if (result?.hasMore !== true) return Object.freeze(rows);
+      if (typeof result.nextLink !== "string" || !result.nextLink) {
+        throw new Error("A paginação dos pagamentos da folha não retornou o próximo cursor.");
+      }
+      cursor = result.nextLink;
+    }
+
+    throw new Error("A folha excedeu o limite seguro de páginas; o relatório não foi truncado.");
+  }
+
+  return Object.freeze({ loadPage, loadPaymentsForPayrollId });
 }
 
 export function createPendingProvisionAttachmentsData(options = {}) {
