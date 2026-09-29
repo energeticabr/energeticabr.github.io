@@ -77,10 +77,10 @@ test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalizaçã
   }]);
   assert.deepEqual(calls, [
     ["resolveList", "personal", ["IDFOLHA"]],
-    ["getItemsPage", "personal", "list-IDFOLHA", "$expand=fields&$top=25", { pageNumber: 1, maxPages: 500 }],
-    ["getItemsPage", "personal", "list-IDFOLHA", "$expand=fields&$top=25", { pageNumber: 2, maxPages: 500, cursor: "idfolha-next" }],
+    ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 1, maxPages: 100 }],
+    ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 2, maxPages: 100, cursor: "idfolha-next" }],
     ["resolveList", "personal", ["FOLHAPGTO"]],
-    ["getItemsPage", "personal", "list-FOLHAPGTO", "$expand=fields&$top=25", { pageNumber: 1, maxPages: 500 }],
+    ["getItemsPage", "personal", "list-FOLHAPGTO", "$select=id&$expand=fields($select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA)&$top=25", { pageNumber: 1, maxPages: 100 }],
   ]);
 });
 

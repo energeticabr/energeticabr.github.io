@@ -5508,6 +5508,8 @@ export function createAppController({
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
+    else if (pendingAction === "action_hr_gallery_idfolha") await openHrPayrollGallery("IDFOLHA");
+    else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
   }
 

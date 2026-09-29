@@ -231,7 +231,7 @@ const HR_PAYROLL_GALLERIES = Object.freeze({
 });
 
 const HR_PAYROLL_PAGE_SIZE_MAX = 50;
-const HR_PAYROLL_PAGE_COUNT_MAX = 500;
+const HR_PAYROLL_PAGE_COUNT_MAX = 100;
 
 function hrPayrollFieldValue(fields, aliases) {
   const accepted = new Set(aliases.map(fieldKey));
@@ -283,10 +283,11 @@ export function createHrPayrollGalleryData({
       throw new RangeError("Página ou cursor da galeria de folha inválido.");
     }
     const list = await resolveList(gallery);
+    const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
     const result = await repository.getItemsPage(
       SITE_KEY,
       list.id,
-      `$expand=fields&$top=${pageSize}`,
+      `$select=id&$expand=fields($select=${selectedFields})&$top=${pageSize}`,
       { pageNumber: page, maxPages: HR_PAYROLL_PAGE_COUNT_MAX, ...(cursor ? { cursor } : {}) },
     );
     const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {

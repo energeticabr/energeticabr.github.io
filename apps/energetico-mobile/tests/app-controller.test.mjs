@@ -1140,6 +1140,23 @@ test("retoma a Galeria Pedidos depois do retorno de consentimento Microsoft no n
   assert.equal(opens, 1);
 });
 
+test("retoma a galeria de folha escolhida após o retorno de consentimento Microsoft", async t => {
+  for (const [action, gallery] of [
+    ["action_hr_gallery_idfolha", "IDFOLHA"],
+    ["action_hr_gallery_folhapgto", "FOLHAPGTO"],
+  ]) {
+    let opened = "";
+    const h = makeHarness({
+      hrPayrollGalleryDataFactory: async () => ({ async loadPage() { return { rows: [] }; } }),
+      hrPayrollGalleryFactory: async options => ({ async open() { opened = options.gallery; }, destroy() {} }),
+    });
+    h.auth.consumePendingAction = () => action;
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.equal(opened, gallery);
+  }
+});
+
 test("Galeria Pedidos solicita consentimento interativo quando SharePoint exige outro escopo", async t => {
   let tokenProvider;
   const authorizationCalls = [];

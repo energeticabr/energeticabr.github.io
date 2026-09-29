@@ -131,7 +131,7 @@ export function createHrPayrollGallery({ document: documentOption,
         cards.replaceChildren();
         const retry = element("button", "hr-gallery-button hr-gallery-retry", "Tentar novamente");
         retry.type = "button";
-        retry.addEventListener("click", () => { void loadPage(page, pageCursors[page] || null); });
+        retry.addEventListener("click", () => { void loadPage(targetPage, cursor); });
         cards.append(retry);
       }
     } finally {

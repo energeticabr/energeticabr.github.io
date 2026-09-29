@@ -62,6 +62,36 @@ test("galeria apresenta estado de erro e permite fechar", async () => {
   dom.window.close();
 });
 
+test("retry mantém a página e o cursor que falharam ao avançar", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const requests = [];
+  let failSecondPage = true;
+  const gallery = createHrPayrollGallery({
+    root,
+    gallery: "IDFOLHA",
+    request: async (_gallery, page, _pageSize, cursor) => {
+      requests.push([page, cursor]);
+      if (page === 2 && failSecondPage) {
+        failSecondPage = false;
+        throw new Error("transient SharePoint failure");
+      }
+      return response("IDFOLHA", page, [{ id: String(page), MESREFERENCIA: "09/2026" }], page === 1);
+    },
+  });
+  await gallery.open();
+  root.querySelector('[data-action="next-page"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  root.querySelector(".hr-gallery-retry").click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.deepEqual(requests, [[1, null], [2, "opaque-next-page"], [2, "opaque-next-page"]]);
+  assert.match(root.textContent, /Página 2/);
+  assert.doesNotMatch(root.textContent, /Tentar novamente/);
+  gallery.destroy();
+  dom.window.close();
+});
+
 test("galeria pode ser fechada enquanto aguarda a resposta do SharePoint", async () => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
