@@ -149,6 +149,28 @@ test("inclui o relatório RHID depois de Contrato somente no menu de Recursos Hu
   assert.doesNotMatch(unrelated, /action_rhid_attendance_report/);
 });
 
+test("menu RH mostra galerias IDFOLHA e FOLHA PGTO sem depender de opções do backend", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "hr-menu",
+      role: "assistant",
+      type: "poll",
+      question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "action_create_supplier_attendance", reply: "action_create_supplier_attendance", label: "➕ CRIAR PRESENÇA DE FORNECEDOR" },
+        { id: "action_contract", reply: "action_contract", label: "📑 CONTRATO" },
+      ],
+    }],
+  }));
+  const article = markup.match(/<article class="chat-message chat-message--assistant[^]*?<\/article>/)?.[0] || "";
+
+  assert.match(article, /chat-choice-columns--hr-galleries/);
+  assert.match(article, /data-reply-id="action_hr_gallery_idfolha"[^>]*>[^]*?GALERIA IDFOLHA/);
+  assert.match(article, /data-reply-id="action_hr_gallery_folhapgto"[^>]*>[^]*?GALERIA FOLHA PGTO/);
+  assert.ok(article.indexOf("CONTRATO") < article.indexOf("GALERIA IDFOLHA"));
+  assert.ok(article.indexOf("GALERIA IDFOLHA") < article.indexOf("GALERIA FOLHA PGTO"));
+});
+
 test("atalho RHID substitui Ver resumo somente no menu de Recursos Humanos e usa a data de hoje", () => {
   const menu = {
     id: "hr-menu", role: "assistant", type: "poll",
@@ -783,7 +805,31 @@ test("exibe data e quantidade quando a data da última validação não tem pend
   assert.match(markup, /VER OUTRAS DATAS/);
 });
 
-test("lista de provisões oferece fechar com X e configurar lembrete pela engrenagem", () => {
+test("menu de RH reserva a coluna direita para galerias e remove apenas o avatar lateral", () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{
+      id: "hr-menu",
+      role: "assistant",
+      type: "poll",
+      question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
+      options: [
+        { id: "action_hr_registration", label: "🗂️ EFETUAR CADASTROS", reply: "action_hr_registration" },
+        { id: "action_hr_report", label: "📊 OBTER DADOS", reply: "action_hr_report" },
+        { id: "action_hr_gallery_idfolha", label: "📚 GALERIA IDFOLHA", reply: "action_hr_gallery_idfolha" },
+        { id: "action_hr_gallery_folhapgto", label: "💵 GALERIA FOLHA PGTO", reply: "action_hr_gallery_folhapgto" },
+      ],
+    }],
+  }));
+  const article = markup.match(/<article class="chat-message chat-message--assistant[^]*?<\/article>/)?.[0] || "";
+  assert.match(article, /chat-choice-card--hr-galleries/);
+  assert.match(article, /chat-choice-columns--hr-galleries/);
+  assert.match(article, /chat-choice-columns__flow/);
+  assert.match(article, /chat-choice-columns__galleries/);
+  assert.doesNotMatch(article, /alt="Mascote Energético"/);
+  assert.ok(article.indexOf("EFETUAR CADASTROS") < article.indexOf("GALERIA IDFOLHA"));
+});
+
+test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {
       due: true,
