@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 import {
   attachLatestTestFlightBuild,
   chooseInternalGroup,
@@ -10,7 +11,7 @@ import {
 const read = relative => readFile(new URL(relative, import.meta.url), "utf8")
   .then(value => value.replace(/\r\n/g, "\n"));
 
-test("workflow separa validação gratuita da distribuição manual", async () => {
+test("workflow mantém validação gratuita antes da distribuição TestFlight", async () => {
   const workflow = await read("../../../.github/workflows/energetico-ios.yml");
   const testflightJob = workflow.match(/\n  testflight:\n([\s\S]*?)\n  testflight-attach-existing:/)?.[1] || "";
 
@@ -20,14 +21,39 @@ test("workflow separa validação gratuita da distribuição manual", async () =
   assert.match(workflow, /CODE_SIGNING_ALLOWED=NO/);
   assert.match(workflow, /PlugIns\/ShareExtension\.appex/);
   assert.ok(testflightJob, "job TestFlight ausente");
-  assert.match(testflightJob, /if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.distribute == true \}\}/);
-  assert.doesNotMatch(testflightJob, /github\.event_name == 'push'/);
+  assert.match(testflightJob, /needs:\s*\n\s*- web-tests\s*\n\s*- ios-simulator/);
+  assert.match(testflightJob, /environment: app-store-connect/);
   assert.match(workflow, /sync_testflight_testers:[\s\S]*type: boolean/);
   assert.match(workflow, /testflight_allowed_emails:[\s\S]*bernardonotini@energeticabr\.com/);
   const testerJob = workflow.match(/\n  testflight-testers:\n([\s\S]*)$/)?.[1] || "";
   assert.match(testerJob, /if: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.sync_testflight_testers == true \}\}/);
   assert.match(testerJob, /node scripts\/manage-testflight-testers\.mjs/);
   assert.match(workflow, /Validar credenciais Apple preexistentes/);
+});
+
+test("TestFlight distribui main validada e respeita os controles manuais", async () => {
+  const workflow = await read("../../../.github/workflows/energetico-ios.yml");
+  const job = workflow.match(/\n  testflight:\n([\s\S]*?)\n  testflight-attach-existing:/)?.[1] || "";
+  const condition = job.match(/^    if: \$\{\{ (.*) \}\}$/m)?.[1];
+  assert.ok(condition, "condição de distribuição ausente");
+  for (const [event_name, ref, inputs, expected] of [
+    ["push", "refs/heads/main", {}, true],
+    ["push", "refs/heads/feat/energetico-ios-chat", {}, false],
+    ["pull_request", "refs/pull/185/merge", { distribute: true }, false],
+    ["workflow_dispatch", "refs/heads/main", { distribute: true }, true],
+    ["workflow_dispatch", "refs/heads/main", { distribute: false }, false],
+    ["workflow_dispatch", "refs/heads/main", { submit_app_store: true, distribute: false }, false],
+    ["schedule", "refs/heads/main", {}, false],
+  ]) {
+    const actual = Boolean(runInNewContext(condition, { github: { event_name, ref }, inputs }, { timeout: 100 }));
+    assert.equal(actual, expected, `${event_name} ${ref}: ${JSON.stringify(inputs)}`);
+  }
+  const review = workflow.match(/\n  app-store-review:\n([\s\S]*?)\n  web-tests:/)?.[1] || "";
+  const reviewCondition = review.match(/^    if: \$\{\{ (.*) \}\}$/m)?.[1];
+  assert.ok(reviewCondition, "condição de revisão App Store ausente");
+  assert.equal(Boolean(runInNewContext(reviewCondition, {
+    github: { event_name: "push" }, inputs: {},
+  }, { timeout: 100 })), false);
 });
 
 test("pacote documenta o limite sem gastos e a aceitação no iPhone", async () => {
