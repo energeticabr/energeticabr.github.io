@@ -44,6 +44,73 @@ test('atividades começam em 1 e o índice vazio não pode ser enviado', t => {
   assert.equal(ctx.events.some(event => event.type === 'send-text'), false);
 });
 
+const occurrencesQuestion = '💬 ⚠️ HOUVE OCORRÊNCIAS OU IMPREVISTOS? SE NÃO HOUVE, SELECIONE NADA APONTADO. CASO CONTRÁRIO, DIGITE O QUE OCORREU.\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
+function occurrencesMessages() {
+  return [{ id: 'diary-occurrences', role: 'assistant', type: 'poll', question: occurrencesQuestion,
+    options: [
+      { id: 'choice:ocorrencias:1', reply: '1', label: '1 - ✅ NADA APONTADO' },
+      { id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' },
+    ],
+  }];
+}
+
+test('ocorrências começam em 1 e continuam com Enter e quebra de linha do celular', t => {
+  const ctx = setup(t, { messages: occurrencesMessages() });
+  assert.equal(ctx.draft.value, '1. ');
+  assert.equal(ctx.draft.selectionStart, 3);
+  assert.equal(ctx.root.querySelector('[data-action="send-text"]').disabled, true);
+  ctx.input('Chuva interrompeu a concretagem');
+  ctx.enter();
+  ctx.input(ctx.draft.value + 'Atraso na entrega de cimento');
+  ctx.enter('insertParagraph');
+  assert.equal(ctx.draft.value, '1. Chuva interrompeu a concretagem\n2. Atraso na entrega de cimento\n3. ');
+  assert.equal(ctx.events.some(event => event.type === 'send-text'), false);
+});
+
+test('ocorrências mantêm Nada apontado enviando a opção da VM sem índices de texto', t => {
+  const ctx = setup(t, { messages: occurrencesMessages() });
+  ctx.view.on('select-reply', event => ctx.events.push(event));
+  assert.equal(ctx.draft.value, '1. ');
+  const option = ctx.root.querySelector('[data-reply-id="choice:ocorrencias:1"]');
+  assert.ok(option);
+  option.click();
+  assert.equal(ctx.events.at(-1).type, 'select-reply');
+  assert.equal(ctx.events.at(-1).replyId, 'choice:ocorrencias:1');
+  assert.equal(ctx.events.some(event => event.type === 'send-text'), false);
+});
+
+test('colar e enviar ocorrências renumera os itens e remove o índice vazio', t => {
+  const ctx = setup(t, { messages: occurrencesMessages() });
+  ctx.input('7. Chuva intensa\n9. Atraso de 1.5 h\n10. ', 'insertFromPaste');
+  assert.equal(ctx.draft.value, '1. Chuva intensa\n2. Atraso de 1.5 h\n3. ');
+  ctx.root.querySelector('[data-chat-form]').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(ctx.state.draft, '1. Chuva intensa\n2. Atraso de 1.5 h');
+  assert.equal(ctx.events.at(-1).type, 'send-text');
+});
+
+test('ocorrências deixam de numerar ao avançar para outra pergunta', t => {
+  const ctx = setup(t, { messages: occurrencesMessages() });
+  assert.equal(ctx.draft.value, '1. ');
+  ctx.state.messages = [{ role: 'assistant', type: 'poll', question: 'ENVIE UMA FOTO OU UM PDF.',
+    options: [{ id: 'attachment_upload_continue', label: 'ENVIAR ANEXO' }],
+  }];
+  ctx.view.render(ctx.state);
+  ctx.input('Primeira linha\nSegunda linha');
+  assert.equal(ctx.root.querySelector('[data-role="draft"]').value, 'Primeira linha\nSegunda linha');
+});
+
+test('ocorrências em outro fluxo ou em pergunta com escolhas estruturadas mantêm texto livre', t => {
+  for (const overrides of [
+    { activeFlow: { id: 'task' }, messages: occurrencesMessages() },
+    { messages: [{ ...occurrencesMessages()[0], options: [{ id: 'severity', label: 'ESCOLHA A GRAVIDADE' }] }] },
+  ]) {
+    const ctx = setup(t, overrides);
+    assert.equal(ctx.draft.value, '');
+    ctx.input('Linha um\nLinha dois');
+    assert.equal(ctx.draft.value, 'Linha um\nLinha dois');
+  }
+});
+
 test('apagar todo o texto reinicia em 1 com o cursor após o índice', t => {
   const ctx = setup(t, { draft: '1. Concretagem\n2. Cura' });
   ctx.input('', 'deleteContentBackward', 0);
