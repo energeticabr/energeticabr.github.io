@@ -1,3 +1,4 @@
+import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
@@ -24,25 +25,6 @@ const FIELD_ALIASES = Object.freeze({
   paymentForm: ["FORMAPGTO", "FORMA PGTO", "FORMA DE PAGAMENTO"], invoice: ["NOTAFISCAL", "NOTA FISCAL"],
   paymentDate: ["DATAPGTOEFETUADO", "DATA PGTO EFETUADO"], created: ["CRIADO", "CREATED"],
   modified: ["MODIFICADO", "MODIFIED"],
-});
-const EDIT_FIELDS = Object.freeze([
-  ["FILIAL", "FILIAL", "text"],
-  ["FORNECEDOR", "FORNECEDOR", "text"],
-  ["FORMAPGTO", "FORMA DE PAGAMENTO", "text"],
-  ["NOTAFISCAL", "NOTA FISCAL", "select"],
-  ["OBS", "OBSERVAÇÃO", "textarea"],
-  ["OBSFISCAL", "OBS FISCAL", "textarea"],
-  ["CONSTACNO", "CONSTA CNO", "select"],
-  ["REGIMEAPURACAO", "REGIME DE APURAÇÃO", "text"],
-  ["VALORTOTAL", "VALOR TOTAL", "number"],
-  ["VALORRETIDO", "VALOR RETIDO", "number"],
-  ["DATAPGTOEFETUADO", "DATA DE PAGAMENTO", "date"],
-  ["STATUS", "STATUS", "select"],
-]);
-const EDIT_OPTIONS = Object.freeze({
-  NOTAFISCAL: ["PENDENTE", "SUBMETIDO", "SUBMISSÃO DISPENSADA"],
-  CONSTACNO: ["SIM", "DISPENSADO", "NÃO"],
-  STATUS: ["PENDENTE AUDITORIA", "APROVADO"],
 });
 
 function key(value) {
@@ -99,7 +81,6 @@ export function createOrdersGallery({
   openMediaCollection,
   onClose,
   onHome,
-  confirmDelete,
 } = {}) {
   if (!documentRef?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Documento e serviço de pedidos são obrigatórios.");
@@ -126,7 +107,6 @@ export function createOrdersGallery({
   let sortValue = "id-desc";
   let controller = null;
   let detailsSession = 0;
-  let mutationLoading = false;
 
   const root = el("section", "og-overlay");
   root.hidden = true;
@@ -197,6 +177,16 @@ export function createOrdersGallery({
   content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root,
+    loadEditor: (id, options) => data.loadEditor(id, options),
+    saveEditor: (context, fields) => data.saveEditor(context, fields),
+    deleteItem: (id, options) => data.deleteItem(id, options),
+    onChanged: () => {
+      detail.hidden = true; detail.replaceChildren();
+      return loadSnapshot();
+    },
+  });
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
     onChange: updateAttachmentCount,
@@ -212,12 +202,12 @@ export function createOrdersGallery({
   }
 
   function updateBusy() {
-    const busy = opened && (listLoading || attachmentLoading || mutationLoading);
+    const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
+      if (button.closest(".gallery-record-dialog")) continue;
       if (button === closeButton || button === homeButton) continue;
       if (button.dataset.baseDisabled !== undefined) button.disabled = busy || button.dataset.baseDisabled === "true";
-      if (mutationLoading && button.dataset.baseDisabled === undefined) button.disabled = true;
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
@@ -340,15 +330,11 @@ export function createOrdersGallery({
     mascot.addEventListener("click", () => openDetails(row));
     const details = el("button", "og-button og-button--detail", "Detalhes"); details.type = "button"; details.addEventListener("click", () => openDetails(row));
     details.dataset.action = "details";
-    const edit = el("button", "og-button og-button--edit", "Editar");
-    edit.type = "button";
-    edit.dataset.action = "edit";
-    edit.addEventListener("click", () => openEditor(row));
-    const remove = el("button", "og-button og-button--danger", "Excluir");
-    remove.type = "button";
-    remove.dataset.action = "delete";
-    remove.addEventListener("click", () => { void deleteOrder(row); });
-    actions.append(mascot, details, edit, remove);
+    const recordControls = recordActions.render(row);
+    for (const action of ['edit', 'delete']) {
+      recordControls.querySelector(`[data-gallery-action="${action}"]`).dataset.action = action;
+    }
+    actions.append(mascot, details);
     main.append(heading, status, cardFields, actions);
     if (hasAttachmentControl) {
       const attachments = el("button", "og-button og-card-attachment-rail");
@@ -360,7 +346,8 @@ export function createOrdersGallery({
       attachments.addEventListener("click", () => openAttachments(row));
       card.append(attachments);
     }
-    card.append(main);
+    card.classList.add('gallery-record-card');
+    card.append(main, recordControls);
     return card;
   }
 
@@ -439,142 +426,6 @@ export function createOrdersGallery({
     detail.focus({ preventScroll: true });
   }
 
-  function editorValue(row, name) {
-    const aliases = name === "FORMAPGTO" ? FIELD_ALIASES.paymentForm
-      : name === "DATAPGTOEFETUADO" ? FIELD_ALIASES.paymentDate
-        : name === "VALORTOTAL" ? FIELD_ALIASES.total
-            : name === "NOTAFISCAL" ? FIELD_ALIASES.invoice
-              : name === "OBSFISCAL" ? ["OBSFISCAL", "OBS FISCAL"]
-            : [name];
-    return text(field(row.fields || {}, aliases));
-  }
-
-  function editorInputValue(name, value) {
-    if (name === "DATAPGTOEFETUADO") {
-      const match = String(value || "").match(/^(\d{4}-\d{2}-\d{2})/);
-      return match?.[1] || "";
-    }
-    if (name === "VALORTOTAL") {
-      const raw = String(value || "").replace(/[^\d,.-]/g, "");
-      const normalizedAmount = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
-      const amount = Number(normalizedAmount);
-      return Number.isFinite(amount) ? String(amount) : "";
-    }
-    return value;
-  }
-
-  function openEditor(row) {
-    const currentDetailsSession = ++detailsSession;
-    const heading = el("header", "og-detail-heading");
-    heading.append(el("h2", "", `Editar pedido #${row.id}`));
-    const close = el("button", "og-button", "Cancelar edição");
-    close.type = "button";
-    close.addEventListener("click", () => {
-      if (currentDetailsSession !== detailsSession) return;
-      detail.hidden = true;
-      detail.replaceChildren();
-    });
-    heading.append(close);
-    const editor = el("div", "og-editor");
-    const form = el("form", "og-editor-form");
-    form.noValidate = true;
-    for (const [name, label, type] of EDIT_FIELDS) {
-      const wrapper = el("label", "og-editor-field");
-      wrapper.append(el("span", "og-label", label));
-      const control = el(type === "textarea" ? "textarea" : type === "select" ? "select" : "input", "og-input");
-      control.name = name;
-      if (type === "select") {
-        const currentValue = editorInputValue(name, editorValue(row, name));
-        const options = [...new Set([currentValue, ...(EDIT_OPTIONS[name] || [])].filter(value => value !== ""))];
-        const blank = el("option", "", "Selecione"); blank.value = ""; control.append(blank);
-        for (const optionValue of options) {
-          const option = el("option", "", optionValue); option.value = optionValue; control.append(option);
-        }
-        control.value = currentValue;
-      } else {
-        if (type !== "textarea") control.type = type;
-        control.value = editorInputValue(name, editorValue(row, name));
-      }
-      if (type === "number") control.step = "0.01";
-      wrapper.append(control);
-      form.append(wrapper);
-    }
-    const actions = el("div", "og-actions");
-    const save = el("button", "og-button og-button--primary", "Salvar alterações");
-    save.type = "submit";
-    actions.append(save);
-    form.append(actions);
-    form.addEventListener("submit", event => {
-      event.preventDefault();
-      void saveEditor(row, form);
-    });
-    editor.append(form);
-    detail.replaceChildren(heading, editor);
-    detail.hidden = false;
-    detail.focus({ preventScroll: true });
-  }
-
-  function editorFields(form) {
-    return Object.fromEntries(EDIT_FIELDS.map(([name]) => {
-      const control = form.elements.namedItem(name);
-      const raw = String(control?.value || "").trim();
-      if (name === "VALORTOTAL") {
-        const normalizedAmount = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
-        return [name, raw ? Number(normalizedAmount) : ""];
-      }
-      return [name, raw];
-    }));
-  }
-
-  async function saveEditor(row, form) {
-    if (mutationLoading) return;
-    if (typeof data.updateItem !== "function") {
-      showNotice("A edição segura dos pedidos não está disponível.", true);
-      return;
-    }
-    mutationLoading = true;
-    showNotice("Salvando alterações…");
-    updateBusy();
-    try {
-      await data.updateItem(row.id, editorFields(form));
-      await loadSnapshot({ retry: true });
-      if (!opened || destroyed) return;
-      detail.hidden = true;
-      detail.replaceChildren();
-      showNotice("Pedido atualizado com sucesso.");
-    } catch (error) {
-      if (opened && !destroyed) showNotice(safeFailure(error, `Não foi possível editar o pedido #${row.id}`), true);
-    } finally {
-      mutationLoading = false;
-      if (opened && !destroyed) updateBusy();
-    }
-  }
-
-  async function deleteOrder(row) {
-    if (mutationLoading) return;
-    const confirmed = typeof confirmDelete === "function"
-      ? await confirmDelete(row)
-      : globalThis.confirm?.(`Excluir definitivamente o pedido #${row.id}?`);
-    if (!confirmed) return;
-    if (typeof data.deleteItem !== "function") {
-      showNotice("A exclusão segura dos pedidos não está disponível.", true);
-      return;
-    }
-    mutationLoading = true;
-    showNotice("Excluindo pedido…");
-    updateBusy();
-    try {
-      await data.deleteItem(row.id);
-      await loadSnapshot({ retry: true });
-      if (opened && !destroyed) showNotice("Pedido excluído com sucesso.");
-    } catch (error) {
-      if (opened && !destroyed) showNotice(safeFailure(error, `Não foi possível excluir o pedido #${row.id}`), true);
-    } finally {
-      mutationLoading = false;
-      if (opened && !destroyed) updateBusy();
-    }
-  }
-
   async function openAttachments(row) {
     if (attachmentLoading || !opened || destroyed) return;
     const currentSession = session;
@@ -622,6 +473,7 @@ export function createOrdersGallery({
   }
   function close() {
     if (!opened) return;
+    recordActions.close();
     autoFilters.cancelPending();
     opened = false;
     session += 1;
@@ -635,7 +487,7 @@ export function createOrdersGallery({
   }
   function destroy() {
     if (destroyed) return;
-    autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove();
+    recordActions.destroy(); autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove();
   }
 
   return Object.freeze({ open, close, destroy, reload: () => loadSnapshot({ retry: true }) });

@@ -1,3 +1,4 @@
+import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
 import { createMascotReportButton } from "./report-action-button.js";
 
@@ -31,7 +32,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, onClose } = {}) {
+  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, onClose } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -85,6 +86,10 @@ export function createHrPayrollGallery({ document: documentOption,
   pagination.append(previous, pageLabel, next);
   content.append(status, cards, pagination);
   root.append(header, content);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root, loadEditor, saveEditor, deleteItem,
+    onChanged: () => loadPage(page, pageCursors[page] || null),
+  });
 
   function drawRows(rows) {
     cards.replaceChildren();
@@ -106,7 +111,10 @@ export function createHrPayrollGallery({ document: documentOption,
         pair.append(element("dt", "", label), element("dd", "", displayValue(key, row[key])));
         fields.append(pair);
       }
-      card.append(cardHeader, fields);
+      const recordMain = element('div', 'gallery-record-main');
+      recordMain.append(cardHeader, fields);
+      card.classList.add('gallery-record-card');
+      card.append(recordMain, recordActions.render(row));
       cards.append(card);
     }
     if (!rows.length) status.textContent = "Nenhum registro encontrado nesta página.";
@@ -158,6 +166,7 @@ export function createHrPayrollGallery({ document: documentOption,
 
   function closeGallery() {
     if (!opened || destroyed) return;
+    recordActions.close();
     opened = false;
     session += 1;
     busy = false;
@@ -183,6 +192,7 @@ export function createHrPayrollGallery({ document: documentOption,
     },
     close: closeGallery,
     destroy() {
+      recordActions.destroy();
       destroyed = true;
       opened = false;
       session += 1;

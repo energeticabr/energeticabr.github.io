@@ -3650,6 +3650,24 @@ export function createAppController({
           let panel;
           panel = await hrPayrollGalleryFactory({
             gallery,
+            loadEditor: async (id, options = {}) => {
+              assertSession();
+              const result = await data.loadEditor(gallery, id, options);
+              assertSession();
+              return result;
+            },
+            saveEditor: async (context, fields) => {
+              assertSession();
+              const result = await data.saveEditor(context, fields);
+              assertSession();
+              return result;
+            },
+            deleteItem: async (id, options = {}) => {
+              assertSession();
+              const result = await data.deleteItem(gallery, id, options);
+              assertSession();
+              return result;
+            },
             request: async (selectedGallery, page, pageSize, cursor) => {
               assertSession();
               const result = await hrPayrollGalleryData.loadPage(selectedGallery, { page, pageSize, cursor });

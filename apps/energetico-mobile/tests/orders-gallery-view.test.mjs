@@ -128,47 +128,38 @@ test("the Screen10 mascot opens the selected order details", async t => {
   assert.match(ctx.root().querySelector(".og-detail").textContent, /Pedido #320/);
 });
 
-test("editing an order submits the Screen10 fields and reloads the gallery", async t => {
+test("editing an order opens proven closed fields and saves through the versioned editor", async t => {
   const ctx = await setup(t, {
     data: {
-      async updateItem(id, fields) {
-        ctx?.calls?.push(["updateItem", id, fields]);
+      async loadEditor(id) {
+        return { entity: { id: 'notas-pendentes', title: 'Pedido' },
+          item: { id, eTag: '"v1"', fields: { FORNECEDOR: 'COFER', OBS: 'Original' } },
+          columns: [
+            { name: 'FORNECEDOR', label: 'Fornecedor', control: 'select', editable: true, choices: ['COFER', 'RAFAEL'] },
+            { name: 'OBS', label: 'Observação', control: 'textarea', editable: true, uppercase: false },
+          ], contract: { hasForm: true } };
       },
+      async saveEditor(context, fields) { ctx.calls.push(['saveEditor', context.item.id, fields]); },
     },
   });
   await ctx.gallery.open();
   ctx.root().querySelector('.og-card[data-item-id="320"] [data-action="edit"]').click();
-
-  const editor = ctx.root().querySelector(".og-editor");
-  assert.ok(editor);
-  assert.equal(editor.querySelector('[name="FORNECEDOR"]').value, "COFER");
-  editor.querySelector('[name="OBS"]').value = "Atualizado pelo teste";
-  editor.querySelector("form").requestSubmit();
-  await settle();
-
-  const mutation = ctx.calls.find(([name]) => name === "updateItem");
-  assert.deepEqual(mutation, ["updateItem", "320", {
-    FILIAL: "004 - EDIFÍCIO XAVANTE",
-    FORNECEDOR: "COFER",
-    FORMAPGTO: "ENERGÉTICA - CAIXA",
-    NOTAFISCAL: "NF-55",
-    OBS: "Atualizado pelo teste",
-    OBSFISCAL: "",
-    CONSTACNO: "",
-    REGIMEAPURACAO: "",
-    VALORTOTAL: 765.6,
-    VALORRETIDO: "",
-    DATAPGTOEFETUADO: "2026-09-22",
-    STATUS: "PAGO",
+  for (let attempt = 0; attempt < 20 && !ctx.root().querySelector('[data-dynamic-form]'); attempt++) await settle();
+  const form = ctx.root().querySelector('[data-dynamic-form]');
+  assert.ok(form, 'editor uses the proven PowerApps-aware form renderer');
+  assert.equal(form.querySelector('[name="FORNECEDOR"]').tagName, 'SELECT');
+  form.querySelector('[name="OBS"]').value = 'Atualizado pelo teste';
+  form.requestSubmit();
+  await settle(); await settle();
+  assert.deepEqual(ctx.calls.find(([name]) => name === 'saveEditor'), ['saveEditor', '320', {
+    FORNECEDOR: 'COFER', OBS: 'ATUALIZADO PELO TESTE',
   }]);
-  assert.match(ctx.root().textContent, /Pedido atualizado com sucesso/);
 });
 
 test("deleting an order requires confirmation and removes it after SharePoint confirms", async t => {
   let currentRows = [{ id: "320", hasAttachments: false, fields: { ID: "320", FORNECEDOR: "COFER" } }];
   const ctx = await setup(t, {
     rows: currentRows,
-    confirmDelete: () => true,
     data: {
       async loadSnapshot() { return { rows: currentRows }; },
       async deleteItem(id) { ctx?.calls?.push(["deleteItem", id]); currentRows = []; },
@@ -177,17 +168,24 @@ test("deleting an order requires confirmation and removes it after SharePoint co
   await ctx.gallery.open();
   ctx.root().querySelector('[data-action="delete"]').click();
   await settle();
+  const popup = ctx.root().querySelector('.gallery-record-dialog');
+  assert.ok(popup, 'delete confirmation opens before writing');
+  assert.equal(ctx.calls.some(([name]) => name === 'deleteItem'), false);
+  [...popup.querySelectorAll('button')].find(button => button.textContent === 'Sim').click();
+  await settle(); await settle();
 
   assert.deepEqual(ctx.calls.find(([name]) => name === "deleteItem"), ["deleteItem", "320"]);
   assert.match(ctx.root().querySelector(".og-list-status").textContent, /Nenhum pedido encontrado/);
-  assert.match(ctx.root().textContent, /Pedido excluído com sucesso/);
 });
 
 test("cancelling an order deletion does not call SharePoint", async t => {
-  const ctx = await setup(t, { confirmDelete: () => false, data: { async deleteItem() { throw new Error("não deveria chamar"); } } });
+  const ctx = await setup(t, { data: { async deleteItem() { throw new Error("não deveria chamar"); } } });
   await ctx.gallery.open();
   ctx.root().querySelector('[data-action="delete"]').click();
   await settle();
+  const popup = ctx.root().querySelector('.gallery-record-dialog');
+  assert.ok(popup);
+  [...popup.querySelectorAll('button')].find(button => button.textContent === 'Não').click();
 
   assert.equal(ctx.calls.some(([name]) => name === "deleteItem"), false);
   assert.ok(ctx.root().querySelector('.og-card[data-item-id="320"]'));

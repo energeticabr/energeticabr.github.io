@@ -237,7 +237,7 @@ test("falha ao atualizar mantém aviso de erro e reinicia paginação", async ()
   next.click();
   assert.match(doc.querySelector(".rg-pagination span").textContent, /Página 2/);
   fails = true;
-  doc.querySelector(".rg-toolbar button").click();
+  doc.querySelector('[data-action="registration-refresh"]').click();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(doc.querySelector(".rg-feedback").textContent, /Não foi possível carregar/);
   assert.match(doc.querySelector(".rg-pagination span").textContent, /Página 1 de 1/);
@@ -265,7 +265,7 @@ test("galeria mantém Tab dentro do diálogo e cabeçalho visível na rolagem", 
   first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   assert.equal(doc.activeElement, filterSummary, 'o painel de filtros deve continuar acessível por teclado');
   filterSummary.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-  assert.equal(doc.activeElement, next, 'controles escondidos dentro do painel recolhido não entram na navegação por Tab');
+  assert.equal(doc.activeElement, dialog.querySelector('[data-gallery-action="edit"]'), 'Tab sai do filtro recolhido para as ações visíveis do primeiro item');
   const last = dialog.querySelector('.rg-pagination button:last-child');
   last.focus();
   last.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));

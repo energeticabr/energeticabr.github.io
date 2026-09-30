@@ -1,0 +1,136 @@
+.gallery-record-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.gallery-record-card.og-card,
+.gallery-record-card.lg-record,
+.gallery-record-card.rg-row,
+.gallery-record-card.hr-gallery-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  column-gap: 12px;
+}
+.gallery-record-card.og-card--with-attachments { grid-template-columns: minmax(52px, 76px) minmax(0, 1fr) 44px; }
+.gallery-record-card.lg-record--with-media { grid-template-columns: 78px minmax(0, 1fr) 44px; }
+.gallery-record-card > .gallery-record-actions {
+  grid-column: -2 / -1;
+  grid-row: 1;
+  flex-direction: column;
+  align-self: start;
+}
+.gallery-record-main { min-width: 0; }
+@media (max-width: 480px) {
+  .gallery-record-card.og-card,
+  .gallery-record-card.lg-record,
+  .gallery-record-card.rg-row,
+  .gallery-record-card.hr-gallery-card { column-gap: 8px; }
+  .gallery-record-card.lg-record--with-media { grid-template-columns: 52px minmax(0, 1fr) 44px; }
+  .gallery-record-card.og-card--with-attachments { grid-template-columns: 52px minmax(0, 1fr) 44px; }
+}
+
+.gallery-record-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.gallery-record-action svg { width: 24px; height: 24px; }
+.gallery-record-action--edit { color: #1565c0; background: #eaf3ff; }
+.gallery-record-action--delete { color: #fff; background: #d32f2f; }
+.gallery-record-action:disabled { opacity: .55; cursor: wait; }
+.gallery-record-action:focus-visible,
+.gallery-record-dialog button:focus-visible,
+.gallery-record-dialog select:focus-visible { outline: 3px solid #1565c0; outline-offset: 3px; }
+
+.gallery-record-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: rgb(15 23 42 / 60%);
+}
+
+.gallery-record-dialog {
+  box-sizing: border-box;
+  width: min(100%, 520px);
+  max-height: 100%;
+  overflow: auto;
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 24%);
+}
+
+.gallery-record-dialog--edit { width: min(100%, 920px); }
+.gallery-record-dialog-title { margin: 0 0 20px; font-size: 1.2rem; line-height: 1.4; }
+.gallery-record-dialog-error { color: #a61b1b; background: #fff0f0; padding: 12px; border-radius: 8px; }
+.gallery-record-dialog-buttons { display: flex; justify-content: flex-end; gap: 12px; }
+.gallery-record-dialog-button {
+  min-height: 44px;
+  min-width: 72px;
+  padding: 10px 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  cursor: pointer;
+}
+.gallery-record-dialog-button--danger { border-color: #d32f2f; background: #d32f2f; color: #fff; }
+.gallery-record-dialog button:disabled { opacity: .55; cursor: wait; }
+.gallery-record-form-variant { display: grid; gap: 8px; margin-bottom: 16px; }
+.gallery-record-form-variant select { min-height: 44px; padding: 8px; font: inherit; }
+.gallery-record-dialog-body > .gallery-record-dialog-button + .gallery-record-dialog-button { margin-left: 12px; }
+
+.gallery-record-dialog .dynamic-form-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin-bottom: 18px; }
+.gallery-record-dialog .dynamic-form-heading h2 { margin: 0; font-size: 1.15rem; }
+.gallery-record-dialog .page-eyebrow { margin: 0 0 6px; color: #526672; font-size: .85rem; }
+.gallery-record-dialog .dynamic-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.gallery-record-dialog .dynamic-field { display: grid; align-content: start; gap: 6px; min-width: 0; font-weight: 600; }
+.gallery-record-dialog .dynamic-field input,
+.gallery-record-dialog .dynamic-field select,
+.gallery-record-dialog .dynamic-field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid #aec2ca; border-radius: 8px; background: #fff; color: #172033; font: inherit; }
+.gallery-record-dialog .dynamic-field input[type="checkbox"] { width: 24px; min-height: 24px; }
+.gallery-record-dialog .dynamic-field textarea { min-height: 110px; resize: vertical; }
+.gallery-record-dialog .dynamic-field small,
+.gallery-record-dialog .dynamic-relationship-status { color: #526672; font-size: .85rem; font-weight: 400; }
+.gallery-record-dialog .dynamic-form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #cbd5e1; }
+.gallery-record-dialog .dynamic-form button { min-height: 44px; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #172033; font: inherit; cursor: pointer; }
+.gallery-record-dialog .dynamic-form .button-primary { background: #1565c0; border-color: #1565c0; color: #fff; }
+.gallery-record-dialog .dynamic-form-errors { color: #a61b1b; }
+.gallery-record-dialog .dynamic-field[data-combobox-field] > select { display: none; }
+.gallery-record-dialog [data-combobox-root],
+.gallery-record-dialog .searchable-select,
+.gallery-record-dialog .dynamic-relationship-searchable { position: relative; display: block; min-width: 0; }
+.gallery-record-dialog .searchable-select-options,
+.gallery-record-dialog .dynamic-relationship-options { position: relative; z-index: 1; display: grid; max-height: 240px; margin: 4px 0 0; padding: 4px; overflow-y: auto; border: 1px solid #aec2ca; border-radius: 8px; background: #fff; list-style: none; }
+.gallery-record-dialog [role="option"] { padding: 12px; border-radius: 6px; cursor: pointer; }
+.gallery-record-dialog [role="option"]:hover,
+.gallery-record-dialog [role="option"][aria-selected="true"] { background: #eaf3ff; }
+.gallery-record-dialog .searchable-select-selected,
+.gallery-record-dialog .dynamic-selected-items { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; padding: 0; list-style: none; }
+.gallery-record-dialog .searchable-select-chip,
+.gallery-record-dialog .dynamic-selected-items li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: #eaf3ff; }
+.gallery-record-dialog [hidden] { display: none !important; }
+
+@media (max-width: 600px) {
+  .gallery-record-dialog { padding: 18px; }
+  .gallery-record-dialog .dynamic-form-grid { grid-template-columns: minmax(0, 1fr); }
+}

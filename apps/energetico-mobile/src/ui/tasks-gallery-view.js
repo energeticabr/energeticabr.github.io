@@ -1,3 +1,4 @@
+import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
@@ -157,6 +158,16 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const detail = el("section", "og-detail tg-detail"); detail.hidden = true; detail.tabIndex = -1;
   detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes da tarefa");
   content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root,
+    loadEditor: (id, options) => data.loadEditor(id, options),
+    saveEditor: (context, fields) => data.saveEditor(context, fields),
+    deleteItem: (id, options) => data.deleteItem(id, options),
+    onChanged: () => {
+      detail.hidden = true; detail.replaceChildren();
+      return loadSnapshot();
+    },
+  });
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
     onChange: updateAttachmentCount,
@@ -176,6 +187,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
+      if (button.closest(".gallery-record-dialog")) continue;
       if (button === closeButton || button === homeButton) continue;
       button.disabled = busy || button.dataset.baseDisabled === "true";
     }
@@ -287,7 +299,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
         el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachmentButton.addEventListener("click", () => openAttachments(row)); card.append(attachmentButton);
     }
-    card.append(main); return card;
+    card.classList.add('gallery-record-card');
+    card.append(main, recordActions.render(row)); return card;
   }
 
   function renderList() {
@@ -368,11 +381,12 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
   function close() {
     if (!opened) return;
+    recordActions.close();
     autoFilters.cancelPending();
     opened = false; session += 1; controller?.abort(); controller = null; listLoading = false; attachmentLoading = false;
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
+  function destroy() { if (destroyed) return; recordActions.destroy(); autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }
