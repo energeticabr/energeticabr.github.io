@@ -596,6 +596,164 @@ test("WebView nativo grava no microfone somente após o toque e transcreve ao so
   dom.window.close();
 });
 
+test("Android usa captura pausável e medidor de áudio quando a transcrição está disponível", async () => {
+  class Recognition {
+    static starts = 0;
+    start() { Recognition.starts += 1; }
+  }
+  class Recorder {
+    static instance = null;
+    constructor() { Recorder.instance = this; this.state = "inactive"; }
+    start() { this.state = "recording"; }
+    stop() { this.state = "inactive"; this.ondataavailable?.({ data: new Blob(["audio"]) }); this.onstop?.(); }
+  }
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", { value: "Mozilla/5.0 (Linux; Android 15)" });
+  dom.window.SpeechRecognition = Recognition;
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "Equipe executou a atividade." });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  voice.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recognition.starts, 0, "deve capturar o áudio para exibir waveform e permitir pausa no Android");
+  assert.equal(Recorder.instance.state, "recording");
+  assert.equal(root.querySelector('[data-role="voice-recording-panel"]').hidden, false);
+  voice.dispatchEvent(new dom.window.Event("pointerup", { bubbles: true, cancelable: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(root.querySelector('[data-role="draft"]').value, "Equipe executou a atividade.");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("gesto touch no iPhone trava a gravação mesmo sem eventos Pointer", async () => {
+  class Recorder {
+    static instance = null;
+    constructor() { Recorder.instance = this; this.state = "inactive"; this.stopped = 0; }
+    start() { this.state = "recording"; }
+    stop() { this.stopped += 1; this.state = "inactive"; this.ondataavailable?.({ data: new Blob(["audio"]) }); this.onstop?.(); }
+  }
+  const dom = new JSDOM('<main id="app"></main>');
+  Object.defineProperty(dom.window.navigator, "userAgent", { value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)" });
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) },
+  });
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root, { transcribeAudio: async () => "Execução registrada." });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const touch = (type, y) => {
+    const point = { identifier: 5, clientX: 80, clientY: y };
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      touches: { value: type === "touchend" ? [] : [point] },
+      changedTouches: { value: [point] },
+    });
+    voice.dispatchEvent(event);
+  };
+
+  touch("touchstart", 220);
+  await Promise.resolve();
+  await Promise.resolve();
+  touch("touchmove", 140);
+  touch("touchend", 140);
+  assert.equal(Recorder.instance.stopped, 0);
+  assert.match(root.querySelector('[data-role="voice-recording-status"]').textContent, /travada|mãos livres/i);
+  root.querySelector('[data-action="voice-finish"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(root.querySelector('[data-role="draft"]').value, "Execução registrada.");
+
+  view.destroy();
+  dom.window.close();
+});
+
+test("deslizar para cima trava a gravação e os controles pausam, retomam, descartam e transcrevem", async () => {
+  class Recorder {
+    static instance = null;
+    constructor() { Recorder.instance = this; this.state = "inactive"; this.stopped = 0; }
+    start() { this.state = "recording"; this.onstart?.(); }
+    pause() { this.state = "paused"; this.onpause?.(); }
+    resume() { this.state = "recording"; this.onresume?.(); }
+    requestData() { this.ondataavailable?.({ data: new Blob(["amostra"], { type: "audio/webm" }) }); }
+    stop() {
+      this.stopped += 1;
+      this.state = "inactive";
+      this.ondataavailable?.({ data: new Blob(["fala"], { type: "audio/webm" }) });
+      this.onstop?.();
+    }
+  }
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.MediaRecorder = Recorder;
+  Object.defineProperty(dom.window.navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) },
+  });
+  const root = dom.window.document.querySelector("#app");
+  let transcriptions = 0;
+  const view = createChatView(root, {
+    transcribeAudio: async () => { transcriptions += 1; return "Execução de concretagem concluída"; },
+  });
+  view.render(signedInState({ activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" } }));
+
+  const voice = root.querySelector('[data-role="voice-input"]');
+  const recordingPanel = root.querySelector('[data-role="voice-recording-panel"]');
+  assert.equal(recordingPanel.parentElement, root.querySelector('[data-chat-form]'), "o painel deve ocupar a grade toda do compositor, não a coluna estreita do botão Enviar");
+  const pointer = (type, y) => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+      pointerId: { value: 17 },
+      pointerType: { value: "touch" },
+      clientY: { value: y },
+    });
+    return event;
+  };
+  voice.dispatchEvent(pointer("pointerdown", 220));
+  await Promise.resolve();
+  await Promise.resolve();
+  voice.dispatchEvent(pointer("pointermove", 140));
+  assert.match(root.querySelector('[data-role="voice-recording-status"]').textContent, /travada|mãos livres/i);
+
+  voice.dispatchEvent(pointer("pointerup", 140));
+  assert.equal(Recorder.instance.stopped, 0, "soltar após deslizar para cima deve manter a gravação ativa");
+  assert.equal(root.querySelector('[data-role="voice-recording-panel"]').hidden, false);
+
+  root.querySelector('[data-action="voice-pause"]').click();
+  assert.equal(Recorder.instance.state, "paused");
+  assert.equal(root.querySelector('[data-action="voice-resume"]').hidden, false);
+  root.querySelector('[data-action="voice-resume"]').click();
+  assert.equal(Recorder.instance.state, "recording");
+  root.querySelector('[data-action="voice-finish"]').click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(Recorder.instance.stopped, 1);
+  assert.equal(transcriptions, 1);
+  assert.equal(root.querySelector('[data-role="draft"]').value, "Execução de concretagem concluída.");
+
+  voice.dispatchEvent(pointer("pointerdown", 220));
+  await Promise.resolve();
+  await Promise.resolve();
+  voice.dispatchEvent(pointer("pointermove", 140));
+  voice.dispatchEvent(pointer("pointerup", 140));
+  root.querySelector('[data-action="voice-discard"]').click();
+  assert.equal(transcriptions, 1, "descartar não deve enviar o áudio para transcrição");
+  assert.equal(root.querySelector('[data-role="voice-recording-panel"]').hidden, true);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("iPhone usa captura de áudio e não confunde falha do ditado com permissão desativada", async () => {
   class Recognition {
     static starts = 0;

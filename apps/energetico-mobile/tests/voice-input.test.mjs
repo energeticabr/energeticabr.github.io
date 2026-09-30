@@ -156,11 +156,19 @@ test("cancelar enquanto o gravador aguarda o áudio não inicia gravação", asy
   FakeMediaRecorder.instances = [];
   let resolveStream;
   let tracksStopped = 0;
+  class FakeAudioContext {
+    constructor() { FakeAudioContext.instances.push(this); }
+    createAnalyser() { return { disconnect() {} }; }
+    resume() { return Promise.resolve(); }
+    close() { this.closed = true; return Promise.resolve(); }
+  }
+  FakeAudioContext.instances = [];
   const stream = { getTracks: () => [{ stop: () => { tracksStopped += 1; } }] };
   const waitingStream = new Promise(resolve => { resolveStream = resolve; });
   const controller = createVoiceInputController({
     getRecognition: () => null,
     getRecorder: () => FakeMediaRecorder,
+    getAudioContext: () => FakeAudioContext,
     getAudioStream: () => waitingStream,
   });
 
@@ -173,6 +181,7 @@ test("cancelar enquanto o gravador aguarda o áudio não inicia gravação", asy
 
   assert.equal(FakeMediaRecorder.instances.length, 0);
   assert.equal(tracksStopped, 1);
+  assert.equal(FakeAudioContext.instances[0].closed, true, "o contexto do medidor deve ser fechado ao cancelar a permissão");
   assert.equal(controller.isPending(), false);
   controller.destroy();
 });
@@ -396,6 +405,95 @@ test("prefere gravar e transcrever quando a plataforma pede o caminho de áudio"
 
   await controller.stop();
   assert.equal(draft, "Concretagem da laje concluída");
+  controller.destroy();
+});
+
+test("gravação pausável pode ser pré-escutada, retomada e transcrita na mesma sessão", async () => {
+  class PausableRecorder extends FakeMediaRecorder {
+    pause() { this.state = "paused"; this.paused = (this.paused || 0) + 1; }
+    resume() { this.state = "recording"; this.resumed = (this.resumed || 0) + 1; }
+    requestData() {
+      this.ondataavailable?.({ data: new Blob(["preview"], { type: "audio/webm" }) });
+    }
+  }
+  let draft = "Registro anterior";
+  let capturedFile = null;
+  const states = [];
+  const controller = createVoiceInputController({
+    getDraft: () => draft,
+    setDraft: value => { draft = value; },
+    getRecognition: () => null,
+    getRecorder: () => PausableRecorder,
+    getAudioStream: async () => ({ getTracks: () => [{ stop() {} }] }),
+    preferRecorder: true,
+    transcribeAudio: async file => { capturedFile = file; return "Concretagem concluída"; },
+    onStateChange: state => states.push(state),
+  });
+
+  controller.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(controller.pause(), true);
+  assert.equal(controller.isPaused(), true);
+  assert.equal(controller.isActive(), false);
+  assert.equal(PausableRecorder.instances.at(-1).paused, 1);
+  const preview = await controller.getPreviewBlob();
+  assert.equal(preview.type, "audio/webm");
+  assert.ok(preview.size > 0);
+
+  assert.equal(controller.resume(), true);
+  assert.equal(controller.isPaused(), false);
+  assert.equal(controller.isActive(), true);
+  assert.equal(PausableRecorder.instances.at(-1).resumed, 1);
+  await controller.stop();
+
+  assert.equal(draft, "Registro anterior Concretagem concluída");
+  assert.equal(capturedFile?.name, "energetico-voice-input.webm");
+  assert.ok(states.some(state => state.paused === true));
+  controller.destroy();
+});
+
+test("medidor de áudio publica nível real enquanto o gravador está ativo", async () => {
+  let pulse = null;
+  const states = [];
+  class FakeAudioContext {
+    constructor() { this.closed = false; }
+    createMediaStreamSource() {
+      return { connect: analyser => { this.connected = analyser; }, disconnect() {} };
+    }
+    createAnalyser() {
+      return {
+        fftSize: 32,
+        getByteTimeDomainData(values) {
+          values.fill(128);
+          values[0] = 255;
+          values[1] = 0;
+        },
+        disconnect() {},
+      };
+    }
+    resume() { return Promise.resolve(); }
+    close() { this.closed = true; return Promise.resolve(); }
+  }
+  const controller = createVoiceInputController({
+    getRecognition: () => null,
+    getRecorder: () => FakeMediaRecorder,
+    getAudioStream: async () => ({ getTracks: () => [{ stop() {} }] }),
+    getAudioContext: () => FakeAudioContext,
+    scheduleMeterPulse: callback => { pulse = callback; return 1; },
+    clearMeterPulse: () => { pulse = null; },
+    onStateChange: state => states.push(state),
+  });
+
+  controller.start();
+  await Promise.resolve();
+  await Promise.resolve();
+  pulse();
+  assert.equal(states.at(-1).recording, true);
+  assert.equal(states.at(-1).meterAvailable, true);
+  assert.ok(states.at(-1).level > 0.2, "o nível deve reagir às amostras do stream");
+  await controller.stop();
+  assert.equal(pulse, null);
   controller.destroy();
 });
 
