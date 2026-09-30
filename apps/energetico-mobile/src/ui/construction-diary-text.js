@@ -1,3 +1,5 @@
+import { diaryActivityContent, numberDiaryActivityDraft } from "./construction-diary-items.js";
+
 const GREETING_PATTERN = /^(?:bom\s+dia|boa\s+tarde|boa\s+noite)\s*[,;:.!-]?\s*/i;
 const INFORMAL_ENDING_PATTERN = /(?:^|,\s*|\s+)(?:né|ne|certo|tá bom|ta bom|ok)\s*[.!?]*$/i;
 
@@ -33,14 +35,21 @@ function normalizeClause(value) {
   return clause ? `${clause.charAt(0).toUpperCase()}${clause.slice(1)}` : "";
 }
 
-export function normalizeConstructionDiaryText(value) {
-  const source = String(value ?? "").replace(/\r\n?/g, "\n").trim();
-  if (!source) return "";
-
+function normalizePlainText(source) {
   const clauses = source
     .split(/\n+|(?<=[.!?])\s+/u)
     .map(normalizeClause)
     .filter(Boolean);
 
   return clauses.map(clause => `${clause}.`).join(" ").trim();
+}
+
+export function normalizeConstructionDiaryText(value) {
+  const source = String(value ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!source) return "";
+  if (/^[\t ]*\d+\.(?:[\t ]|$)/m.test(source)) {
+    const lines = source.split("\n").map(line => normalizePlainText(diaryActivityContent(line)));
+    return numberDiaryActivityDraft(lines.join("\n")).value;
+  }
+  return normalizePlainText(source);
 }
