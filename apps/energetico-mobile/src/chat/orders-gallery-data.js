@@ -116,10 +116,12 @@ function normalizeItem(item) {
   const hasAttachments = embeddedCount > 0 || truthy(attachmentValue) || item?.hasAttachments === true
     ? true
     : attachmentPresenceKnown ? false : null;
+  const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
   return Object.freeze({
     id,
     fields: Object.freeze(fields),
     hasAttachments,
+    ...(eTag ? { eTag } : {}),
   });
 }
 
@@ -517,7 +519,7 @@ function createSharePointListData({
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
       if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
       const page = await repository.getItemsPage(
-        SITE_KEY,
+        siteKey,
         list.id,
         `$expand=fields&$top=${PAGE_SIZE}`,
         { pageNumber, maxPages: MAX_PAGES, ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}) },
@@ -552,6 +554,33 @@ function createSharePointListData({
     const row = normalizeItem(item);
     if (!row || row.id !== id) throw new OrdersGalleryDataError("orders_item_invalid", "O SharePoint não devolveu o pedido solicitado.");
     return row;
+  }
+
+  async function currentItemForMutation(rawId) {
+    const id = itemId(rawId);
+    const list = await resolveList();
+    if (typeof repository.getItem !== "function") throw new Error("A alteração segura do pedido não está disponível.");
+    const item = await repository.getItem(siteKey, list.id, id, "$expand=fields");
+    const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
+    if (!eTag || eTag === "*") throw new Error("Recarregue o pedido antes de alterar; a versão atual não foi identificada.");
+    return { id, list, eTag };
+  }
+
+  async function updateItem(rawId, fields = {}) {
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+      throw new TypeError("Os campos do pedido precisam ser um objeto.");
+    }
+    const { id, list, eTag } = await currentItemForMutation(rawId);
+    if (typeof repository.updateItem !== "function") throw new Error("A edição segura do pedido não está disponível.");
+    const updated = await repository.updateItem(siteKey, list.id, id, fields, { eTag });
+    return normalizeItem(updated || { id, fields });
+  }
+
+  async function deleteItem(rawId) {
+    const { id, list, eTag } = await currentItemForMutation(rawId);
+    if (typeof repository.deleteItem !== "function") throw new Error("A exclusão segura do pedido não está disponível.");
+    await repository.deleteItem(siteKey, list.id, id, { eTag });
+    return true;
   }
 
   async function listAttachments(rawId, { refresh = false } = {}) {
@@ -626,5 +655,5 @@ function createSharePointListData({
     return result;
   }
 
-  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateDueDate });
+  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem, deleteItem, updateDueDate });
 }
