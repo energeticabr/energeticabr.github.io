@@ -67,7 +67,6 @@
 .og-error { color: #8e1f25; border-color: #d59da0 !important; background: #fff0f0 !important; }
 .og-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr)); align-items: start; gap: 12px; }
 .og-card { min-width: 0; border-radius: 5px; padding: 14px; }
-.og-card:nth-child(even) { background: #e6f0f7; }
 .og-card--with-attachments { display: grid; grid-template-columns: minmax(68px, 82px) minmax(0, 1fr); align-items: stretch; gap: 12px; }
 .og-card-main { min-width: 0; }
 .og-card-attachment-rail { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 100%; padding: 12px 6px; border-radius: 0; background: #e6f0f7; }
@@ -123,7 +122,7 @@
 .pg-sort-field .og-label { white-space: nowrap; color: #52687d; font-size: .9rem; font-weight: 600; }
 .pg-sort-field .og-input { min-height: 42px; }
 .pg-cards { grid-template-columns: minmax(0, 1fr); }
-.pg-card { border-left: 4px solid #0d3767; border-radius: 10px; background: #fff !important; }
+.pg-card { border-left: 4px solid #0d3767; border-radius: 10px; background: #fff; }
 .pg-card--attachments { border-left-color: #39875c; }
 .pg-card-main { padding: 3px 2px 4px 0; }
 .pg-card-heading { align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid #d9e4eb; }

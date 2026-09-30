@@ -1,3 +1,6 @@
+.gallery-record-card { background: #fff; }
+.gallery-record-card:nth-child(even) { background: #d2e5f2; }
+
 .gallery-record-actions {
   display: flex;
   align-items: center;
