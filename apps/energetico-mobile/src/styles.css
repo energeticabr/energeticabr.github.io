@@ -726,7 +726,6 @@ button { touch-action: manipulation; }
 .chat-choice-list { display: grid; width: min(100%, 1120px); margin-inline: auto; gap: clamp(8px, 1vw, 14px); }
 .chat-message--launch-menu { gap: 0; }
 .chat-message--launch-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
-.chat-message--launch-menu .chat-supplies-heading { margin: 2px 0 12px; color: var(--text); font-size: clamp(1.3rem, 3vw, 1.8rem); font-weight: 800; line-height: 1.2; }
 .chat-choice-columns--launch-menu { --supplies-gap: clamp(7px, 1vw, 10px); --supplies-gallery-height: max(54px, var(--control-height)); display: grid; gap: var(--supplies-gap); }
 .chat-supplies-pair, .chat-supplies-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--supplies-gap); }
 .chat-supplies-pair { min-height: calc(2 * var(--supplies-gallery-height) + var(--supplies-gap)); }
