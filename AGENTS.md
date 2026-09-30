@@ -23,3 +23,23 @@ alcance. Nunca atualize a impressão digital para ocultar a divergência: não h
 comando de agente para atualizar a trava. O CI compara as impressões digitais
 com a revisão-base e rejeita qualquer alteração protegida, incidental ou
 automatizada.
+
+## Publicação após alterações no aplicativo
+
+O usuário autorizou publicar cada alteração validada no aplicativo nos dois
+canais: TestFlight e teste interno da Google Play. Essa autorização permanece
+válida para tarefas futuras; não é necessário pedir confirmação novamente.
+
+Após executar as verificações apropriadas, envie o código ao GitHub e acione os
+fluxos existentes para a mesma revisão:
+
+- `.github/workflows/energetico-ios.yml`: `distribute=true`.
+- `.github/workflows/energetico-android.yml`: `build_play_aab=true` e
+  `publish_play=true` (faixa `internal`). Evite duplicar a publicação caso o
+  envio à branch `main` já tenha iniciado esse fluxo automaticamente.
+
+Acompanhe os resultados e confirme o envio em cada plataforma separadamente.
+Só informe que uma publicação foi concluída quando houver evidência do envio
+da revisão correta. Se faltar acesso, credencial ou aprovação exigida pela
+plataforma, informe o bloqueio e a ação necessária. Não publique em produção
+na Google Play nem envie à revisão da App Store sem uma instrução específica.

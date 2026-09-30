@@ -8,7 +8,7 @@ const FILTERS = [
 ];
 const SORTS = ['MAIOR ID', 'MAIOR DATA', 'MAIOR DATA PGTO PREVISTO', 'MAIOR DATA PGTO EFETUADO',
   'CRIADO MAIS RECENTE', 'CRIADO MAIS ANTIGO', 'MODIFICADO MAIS RECENTE', 'MODIFICADO MAIS ANTIGO'];
-const TOTALS = [['committed', 'Empenhado'], ['liquidated', 'Liquidado'], ['pending', 'Pendente'], ['paid', 'Pago'], ['total', 'Total']];
+const TOTALS = [['paid', 'Pago']];
 const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const display = value => {
   if (value == null) return '';

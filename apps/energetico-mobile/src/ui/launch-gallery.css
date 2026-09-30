@@ -132,7 +132,7 @@
 
 .lg-totals {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 1px;
   margin-block: 10px;
   border: 1px solid var(--lg-navy);
@@ -385,7 +385,6 @@
   .lg-header .lg-button { padding-inline: 9px; font-size: .85rem; }
   .lg-content { padding-inline: max(8px, env(safe-area-inset-left)); }
   .lg-filter-form, .lg-detail { padding: 12px; }
-  .lg-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-total-total { grid-column: 1 / -1; }
   .lg-record { grid-template-columns: 1fr; padding: 9px; }
   .lg-record-main { grid-template-columns: 1fr; }

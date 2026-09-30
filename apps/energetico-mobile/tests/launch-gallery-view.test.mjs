@@ -142,9 +142,10 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
     sort: sorts[7], page: 1, pageSize: 20,
   } });
   assert.equal(ctx.root().querySelector('[name="sort"]').options.length, 8);
-  const totals = ctx.root().querySelector('.lg-totals').textContent;
-  for (const label of ['Empenhado', 'Liquidado', 'Pendente', 'Pago', 'Total']) assert.ok(totals.includes(label));
-  assert.match(totals, /135,00/);
+  const totals = ctx.root().querySelector('.lg-totals');
+  assert.deepEqual([...totals.querySelectorAll('dt')].map(node => node.textContent), ['Pago']);
+  assert.equal(totals.querySelectorAll('.lg-total').length, 1);
+  assert.match(totals.querySelector('.lg-total-money').textContent, /R\$\s*10,00/);
   button(ctx.root(), 'Próxima página').click(); await settle();
   assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').at(-1).payload.page, 2);
   button(ctx.root(), 'Página anterior').click(); await settle();
@@ -209,7 +210,7 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
   assert.match(record.textContent, /R\$\s*2,85/);
   assert.equal([...ctx.root().querySelectorAll('.lg-filter-grid .lg-label')]
     .some(label => label.textContent === 'Medição'), true);
-  assert.match(ctx.root().querySelector('.lg-totals').textContent, /3\s+R\$\s*85,00/);
+  assert.match(ctx.root().querySelector('.lg-totals').textContent, /4\s+R\$\s*10,00/);
   button(record, 'Ver mais informações').click();
   button(record, 'Detalhes').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
