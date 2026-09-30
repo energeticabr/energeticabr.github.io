@@ -6,6 +6,7 @@ import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize }
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
+import { attachmentFinishOption, isDiaryAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
@@ -624,10 +625,13 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "" } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
+  if (finishAttachments) {
+    return `<button class="chat-choice-button chat-choice-button--finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos"${disabled ? " disabled" : ""}>✅ FINALIZAR</button>`;
+  }
   if (deleteButton) {
     const title = option?.deleteTitle || draftTitle(option);
     const noun = option?.deleteFor === "document" ? "documento" : "rascunho";
@@ -1201,7 +1205,23 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     draft,
     databaseFilterMessage === message,
   );
-  const allOptions = orderMeasurementUnitOptions(message, filteredOptions);
+  let allOptions = orderMeasurementUnitOptions(message, filteredOptions);
+  let finishOption = null;
+  if (isDiaryAttachmentPrompt(message, activeFlow)) {
+    const serverFinishOption = attachmentFinishOption(message);
+    const serverFinishReplyId = serverFinishOption ? draftReplyId(serverFinishOption) : null;
+    finishOption = serverFinishOption || { id: "local_attachment_finish", label: "✅ FINALIZAR" };
+    let inserted = false;
+    allOptions = allOptions.flatMap(option => {
+      if (draftReplyId(option) === "abandon_construction_diary" || draftReplyId(option) === serverFinishReplyId) {
+        if (inserted) return [];
+        inserted = true;
+        return [finishOption];
+      }
+      return [option];
+    });
+    if (!inserted) allOptions.push(finishOption);
+  }
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
@@ -1268,6 +1288,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
     return [pollButton(option, busy, {
+      finishAttachments: option === finishOption,
       launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
       displayLabel: option?.recommendedDate === true
         ? `⭐ ${String(option.label || option.title || option.id || "")}`
@@ -1461,10 +1482,11 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const title = String(state.activeFlow?.title || state.completionNavigation?.title || fallbackTitle || "Fluxo em andamento");
   const back = homeOnly ? "" : `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
-  const finish = !homeOnly && asksToFinishFlow(messages)
-    ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
-    : "";
   const latestAssistantMessage = [...messages].reverse().find(message => message?.role !== "user");
+  const finishDisabled = busy || attachmentFinishOption(latestAssistantMessage)?.disabled === true;
+  const finish = !homeOnly && (asksToFinishFlow(messages) || isDiaryAttachmentPrompt(latestAssistantMessage, state.activeFlow))
+    ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${finishDisabled ? " disabled" : ""}>FINALIZAR</button>`
+    : "";
   const quickRhid = isHumanResourcesMenu(latestAssistantMessage);
   const attendanceTable = latestAssistantMessage?.detail_table || latestAssistantMessage?.detailTable;
   const canChangeRhidReportDate = latestAssistantMessage?.type === "poll"

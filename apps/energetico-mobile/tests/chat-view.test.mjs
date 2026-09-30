@@ -5937,6 +5937,64 @@ test("mantém a faixa de navegação em telas internas sem enquete", () => {
   assert.match(markup, /data-reply-id="navigation_main_menu"[^>]*>🏠</);
 });
 
+test("diário troca abandonar por finalizar na etapa de anexos e mantém o atalho superior", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_diary_fill" },
+    attachments: Array.from({ length: 4 }, (_, index) => ({
+      id: `photo-${index}`, fileName: `foto-${index}.jpg`, mimeType: "image/jpeg",
+      mediaUrl: `/api/portal-media/photo-${index}`,
+    })),
+    messages: [{ id: "diary-attachments", role: "assistant", type: "poll",
+      question: "ENVIE UMA FOTO OU UM PDF. AS FOTOS SERÃO ORGANIZADAS NO PDF FINAL.",
+      options: [
+        { id: "attachment_upload_continue", label: "ENVIAR ANEXO" },
+        { id: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" },
+      ],
+    }],
+  })));
+  assert.equal(dom.window.document.querySelectorAll('[data-action="finish-flow"]').length, 2);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="abandon_construction_diary"]'), null);
+  assert.match(dom.window.document.querySelector('.chat-choice-list').textContent, /ENVIAR ANEXO.*FINALIZAR/s);
+  assert.match(dom.window.document.body.textContent, /Anexos \(4\)/);
+  dom.window.close();
+});
+
+test("diário preserva abandonar na pergunta de atividades e desativa os dois finalizar durante envio", () => {
+  const state = signedInState({ activeFlow: { id: "construction_diary_fill" },
+    messages: [{ role: "assistant", type: "poll", question: "DIGITE AS ATIVIDADES EXECUTADAS:",
+      options: [{ id: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" }],
+    }],
+  });
+  assert.match(renderChatMarkup(state), /data-reply-id="abandon_construction_diary"/);
+  assert.doesNotMatch(renderChatMarkup(state), /data-action="finish-flow"/);
+  state.messages[0].options.unshift({ id: "attachment_upload_continue", label: "ENVIAR ANEXO" });
+  state.messages[0].question = "ENVIE UMA FOTO OU UM PDF.";
+  state.activeText = { id: "sending" };
+  const dom = new JSDOM(renderChatMarkup(state));
+  const buttons = [...dom.window.document.querySelectorAll('[data-action="finish-flow"]')];
+  assert.equal(buttons.length, 2);
+  assert.equal(buttons.every(button => button.disabled), true);
+  dom.window.close();
+});
+
+test("diário não duplica finalizar quando a VM já oferece essa opção", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    activeFlow: { id: "construction_diary_create" },
+    messages: [{ role: "assistant", type: "poll", question: "ENVIE UMA FOTO OU UM PDF.",
+      options: [
+        { id: "attachment_upload_continue", label: "ENVIAR ANEXO" },
+        { id: "server-finish", reply: "server-finish", label: "✅ FINALIZAR" },
+        { id: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" },
+      ],
+    }],
+  })));
+  assert.equal(dom.window.document.querySelectorAll('.chat-choice-list [data-action="finish-flow"]').length, 1);
+  assert.equal(dom.window.document.querySelectorAll('.chat-choice-list button').length, 2);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="server-finish"]'), null);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="abandon_construction_diary"]'), null);
+  dom.window.close();
+});
+
 test("mostra finalizar anexos somente quando a VM pede o comando", () => {
   const finishMarkup = renderChatMarkup(signedInState({
     activeFlow: { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" },
