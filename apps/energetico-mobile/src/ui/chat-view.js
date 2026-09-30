@@ -2130,8 +2130,19 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
       <textarea id="chatDraft" data-role="draft"${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
+      <section class="voice-recording-panel" data-role="voice-recording-panel" aria-label="Gravação de voz" hidden>
+        <div class="voice-recording-panel__heading"><span class="voice-recording-live-dot" aria-hidden="true"></span><strong data-role="voice-recording-status" aria-live="polite">Preparando microfone…</strong><time data-role="voice-recording-time">00:00</time></div>
+        <div class="voice-waveform" data-role="voice-waveform" role="img" aria-label="Nível de áudio recebido">${Array.from({ length: 20 }, () => '<i aria-hidden="true"></i>').join("")}</div>
+        <audio class="voice-recording-preview" data-role="voice-recording-preview" controls preload="metadata" aria-label="Pré-escuta da gravação" hidden></audio>
+        <div class="voice-recording-panel__actions">
+          <button type="button" data-action="voice-pause" aria-label="Pausar gravação">Ⅱ Pausar</button>
+          <button type="button" data-action="voice-resume" aria-label="Retomar gravação" hidden>▶ Retomar</button>
+          <button type="button" data-action="voice-discard" aria-label="Descartar gravação">🗑️ Descartar</button>
+          <button type="button" data-action="voice-finish" aria-label="Transcrever gravação">✓ Transcrever</button>
+        </div>
+      </section>
       <div class="composer-submit-actions">
-        <button class="voice-input-button" type="button" data-role="voice-input"${voiceInputVisible ? "" : " hidden"} aria-label="Segurar para transcrever áudio" title="Segure para falar e solte para parar" aria-pressed="false"><span aria-hidden="true">🎙️</span><span class="sr-only">Segurar para transcrever áudio</span></button>
+        <button class="voice-input-button" type="button" data-role="voice-input"${voiceInputVisible ? "" : " hidden"} aria-label="Segurar para transcrever áudio" title="Segure para falar; deslize para cima para travar" aria-pressed="false"><span aria-hidden="true">🎙️</span><span class="sr-only">Segurar para transcrever áudio</span></button>
         <span class="voice-input-status" data-role="voice-input-status" aria-live="polite" hidden></span>
         <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
       </div>
@@ -2178,17 +2189,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const launchPayrollSelectedIds = new Set();
   let launchPayrollSelectionPollKey = "";
   let launchPayrollEligibleIds = new Set();
-  let composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
+  let composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null, voicePanel: null, voiceRecordingStatus: null, voiceRecordingTime: null, voiceWaveform: null, voicePreview: null };
   let composerBusy = false;
   let composing = false;
   let voiceInput = null;
   let voiceInputHeld = false;
   let voiceInputTapMode = false;
+  let voiceInputLocked = false;
+  let voiceInputGestureOrigin = null;
   let voiceInputNormalizeAfterStop = false;
   let voiceInputPointerId = null;
   let voiceInputSuppressClickUntil = 0;
   let voiceInputIgnorePairedTouchUntil = 0;
   let voiceInputIgnoredTouchContact = false;
+  let voicePreviewObjectUrl = "";
+  let voicePreviewPending = false;
   let signOutConfirmOpen = false;
   let pendingDocumentDelete = null;
   let attachmentSourceOpen = false;
@@ -2248,22 +2263,115 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
   }
 
-  function setVoiceInputButtonState({ active = false, pending = false, error = "", enabled = voiceInputEnabled() } = {}) {
+  function formatVoiceDuration(elapsedMs) {
+    const totalSeconds = Math.max(0, Math.floor(Number(elapsedMs || 0) / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return hours ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}` : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function clearVoicePreview() {
+    const audio = composerControls.voicePreview;
+    const wasVisible = Boolean(audio && !audio.hidden);
+    if (audio) {
+      if (voicePreviewObjectUrl || audio.getAttribute("src")) {
+        try { audio.pause?.(); } catch { /* noop */ }
+      }
+      audio.removeAttribute("src");
+      audio.hidden = true;
+    }
+    if (voicePreviewObjectUrl) {
+      const URLApi = root.ownerDocument?.defaultView?.URL || globalThis.URL;
+      try { URLApi?.revokeObjectURL?.(voicePreviewObjectUrl); } catch { /* best effort */ }
+      voicePreviewObjectUrl = "";
+    }
+    voicePreviewPending = false;
+    if (wasVisible) syncComposerInset();
+  }
+
+  function prepareVoicePreview(paused, audioCapture) {
+    const audio = composerControls.voicePreview;
+    if (!paused || !audioCapture) {
+      if (voicePreviewObjectUrl || voicePreviewPending) clearVoicePreview();
+      return;
+    }
+    if (!audio || voicePreviewObjectUrl || voicePreviewPending || typeof voiceInput?.getPreviewBlob !== "function") return;
+    voicePreviewPending = true;
+    voiceInput.getPreviewBlob().then(blob => {
+      voicePreviewPending = false;
+      if (!voiceInput?.isPaused() || !blob?.size) return;
+      const URLApi = root.ownerDocument?.defaultView?.URL || globalThis.URL;
+      if (typeof URLApi?.createObjectURL !== "function") return;
+      voicePreviewObjectUrl = URLApi.createObjectURL(blob);
+      audio.src = voicePreviewObjectUrl;
+      audio.hidden = false;
+      audio.load?.();
+      syncComposerInset();
+    }).catch(() => { voicePreviewPending = false; });
+  }
+
+  function setVoiceInputButtonState({
+    active = false,
+    pending = false,
+    error = "",
+    enabled = voiceInputEnabled(),
+    audioCapture = false,
+    recording = false,
+    paused = false,
+    elapsedMs = 0,
+    level = 0,
+    meterAvailable = false,
+  } = {}) {
     const button = composerControls.voiceInput;
     const status = composerControls.voiceStatus;
     if (!button) return;
+    const panel = composerControls.voicePanel;
+    const panelWasHidden = Boolean(panel?.hidden);
     button.hidden = !enabled;
     button.disabled = composerBusy || !enabled;
-    button.classList.toggle("voice-input-button--active", Boolean(active));
+    button.classList.toggle("voice-input-button--active", Boolean(active || paused));
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.setAttribute("aria-label", pending ? "Cancelar operação do microfone" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Soltar para parar a transcrição") : "Segurar para transcrever áudio");
-    button.title = pending ? "Toque para cancelar e tentar novamente" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Solte para parar a transcrição") : "Segure para falar e solte para parar";
+    const buttonLabel = pending ? "Cancelar operação do microfone" : voiceInputLocked ? "Gravação travada; use os controles de áudio" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Soltar para parar a transcrição") : paused ? "Gravação pausada; use os controles de áudio" : "Segurar para transcrever áudio";
+    button.setAttribute("aria-label", buttonLabel);
+    button.title = pending ? "Toque para cancelar ou use Descartar" : voiceInputLocked ? "Gravação travada — você pode soltar o botão" : active ? (voiceInputTapMode ? "Toque novamente para parar a transcrição" : "Solte para parar; deslize para cima para travar") : paused ? "Use os controles para retomar ou transcrever" : "Segure para falar; deslize para cima para travar";
     const icon = button.querySelector("[aria-hidden=\"true\"]");
-    if (icon) icon.textContent = active ? "🔴" : "🎙️";
+    if (icon) icon.textContent = active || paused ? "🔴" : "🎙️";
+    const showPanel = Boolean(audioCapture && (recording || paused || pending));
+    if (panel) panel.hidden = !showPanel;
     if (status) {
-      status.hidden = !error && !active && !pending;
-      status.textContent = error || (pending ? "Preparando ou transcrevendo o áudio… toque no microfone para cancelar." : active ? (voiceInputTapMode ? "Ouvindo… toque novamente para parar." : "Ouvindo… solte para parar.") : "");
+      status.hidden = !error && (!active || audioCapture) && (!pending || audioCapture);
+      status.textContent = error || (pending ? "Preparando ou transcrevendo o áudio… toque no microfone para cancelar." : active ? (voiceInputLocked ? "Gravação travada — você pode soltar o botão." : voiceInputTapMode ? "Ouvindo… toque novamente para parar." : "Ouvindo… solte para parar ou deslize para cima para travar.") : "");
     }
+    if (showPanel) {
+      const recordingStatus = composerControls.voiceRecordingStatus;
+      const time = composerControls.voiceRecordingTime;
+      const pauseButton = composerControls.composer?.querySelector('[data-action="voice-pause"]');
+      const resumeButton = composerControls.composer?.querySelector('[data-action="voice-resume"]');
+      const finishButton = composerControls.composer?.querySelector('[data-action="voice-finish"]');
+      const discardButton = composerControls.composer?.querySelector('[data-action="voice-discard"]');
+      if (recordingStatus) recordingStatus.textContent = pending && !recording && !paused
+        ? "Transcrevendo áudio…"
+        : paused ? "Pausada — pré-escute ou retome" : voiceInputLocked ? "Gravação travada — mãos livres" : "Fale; deslize ↑ para travar ou ← para cancelar";
+      if (time) time.textContent = formatVoiceDuration(elapsedMs);
+      if (pauseButton) pauseButton.hidden = !recording;
+      if (resumeButton) resumeButton.hidden = !paused;
+      if (finishButton) finishButton.hidden = !(recording || paused);
+      if (discardButton) discardButton.hidden = !(recording || paused || pending);
+      const waveform = composerControls.voiceWaveform;
+      if (waveform) {
+        waveform.setAttribute("aria-label", meterAvailable ? `Nível de áudio recebido: ${Math.round(Math.max(0, Math.min(1, level)) * 100)} por cento` : "Gravação de áudio em andamento");
+        const bars = [...waveform.children];
+        bars.forEach((bar, index) => {
+          const profile = 0.2 + ((index * 7) % 11) / 14;
+          const amplitude = meterAvailable ? Math.min(1, Math.max(0.06, Number(level) * profile * 2.2)) : 0.12;
+          bar.style.height = `${5 + amplitude * 28}px`;
+          bar.classList.toggle("voice-waveform__bar--live", Boolean(recording && meterAvailable && level > 0.05));
+        });
+      }
+    }
+    prepareVoicePreview(paused, audioCapture);
+    if (panel && panelWasHidden !== panel.hidden) syncComposerInset();
   }
 
   function setupVoiceInput(state) {
@@ -2271,8 +2379,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!enabled) {
       voiceInput?.destroy();
       voiceInput = null;
+      clearVoicePreview();
       voiceInputHeld = false;
       voiceInputTapMode = false;
+      voiceInputLocked = false;
+      voiceInputGestureOrigin = null;
       voiceInputNormalizeAfterStop = false;
       voiceInputPointerId = null;
       setVoiceInputButtonState({ enabled: false });
@@ -2294,14 +2405,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         getRecognition: () => windowRef?.SpeechRecognition || windowRef?.webkitSpeechRecognition || null,
         getRecorder: () => windowRef?.MediaRecorder || null,
         getAudioStream: () => windowRef?.navigator?.mediaDevices?.getUserMedia?.call(windowRef.navigator.mediaDevices, { audio: true }),
+        getAudioContext: () => windowRef?.AudioContext || windowRef?.webkitAudioContext || null,
         transcribeAudio,
         ensureAudioPermission: ensureMicrophonePermission,
-        preferRecorder: isIOSDevice(navigatorRef) && typeof transcribeAudio === "function",
-        onStateChange: ({ active, pending }) => setVoiceInputButtonState({ active, pending }),
+        preferRecorder: typeof transcribeAudio === "function"
+          && typeof navigatorRef?.mediaDevices?.getUserMedia === "function",
+        onStateChange: stateChange => setVoiceInputButtonState(stateChange),
         onError: error => {
           voiceInputHeld = false;
           voiceInputTapMode = false;
+          voiceInputLocked = false;
+          voiceInputGestureOrigin = null;
           voiceInputPointerId = null;
+          clearVoicePreview();
           const isIOS = isIOSDevice(windowRef?.navigator);
           const permissionDenied = /permiss[aã]o|permission|not.allowed|denied|microfone.*bloqueado/i.test(String(error || ""));
           const message = isIOS && permissionDenied
@@ -2310,13 +2426,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           setVoiceInputButtonState({ error: message });
         },
         onSessionEnd: () => {
+          voiceInputHeld = false;
+          voiceInputTapMode = false;
+          voiceInputLocked = false;
+          voiceInputGestureOrigin = null;
+          voiceInputPointerId = null;
+          if (voiceInput) setVoiceInputButtonState({ ...voiceInput.getState() });
           if (!voiceInputNormalizeAfterStop) return;
           voiceInputNormalizeAfterStop = false;
           normalizeVoiceDraft();
         },
       });
     }
-    setVoiceInputButtonState({ active: voiceInput.isActive(), pending: voiceInput.isPending(), enabled });
+    setVoiceInputButtonState({ ...voiceInput.getState(), enabled });
   }
 
   function voiceInputButtonAt(event) {
@@ -2328,9 +2450,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputTapMode = false;
+    voiceInputLocked = false;
+    voiceInputGestureOrigin = null;
     voiceInputNormalizeAfterStop = false;
     voiceInputPointerId = null;
     voiceInputSuppressClickUntil = event?.type === "click" ? 0 : Date.now() + 750;
+    clearVoicePreview();
     voiceInput.cancel();
     return true;
   }
@@ -2339,15 +2464,66 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const button = voiceInputButtonAt(event);
     if (!button || button.disabled || !voiceInputEnabled()) return false;
     if (voiceInputHeld) return false;
+    if (voiceInputLocked) return false;
     if (cancelPendingVoiceInput(event)) return true;
     event.preventDefault?.();
     voiceInputNormalizeAfterStop = false;
     if (!voiceInput?.isActive()) voiceInputTapMode = false;
     voiceInputHeld = true;
     voiceInputPointerId = event.pointerId ?? null;
+    const point = voiceInputEventPoint(event);
+    voiceInputGestureOrigin = point;
+    voiceInputLocked = false;
     try { button.setPointerCapture?.(event.pointerId); } catch { /* opcional no WebView */ }
     voiceInput?.start();
     return true;
+  }
+
+  function voiceInputEventPoint(event) {
+    const touch = /^touch/i.test(String(event?.type || ""))
+      ? event?.changedTouches?.[0] || event?.touches?.[0]
+      : null;
+    const source = touch || event;
+    const x = Number(source?.clientX);
+    const y = Number(source?.clientY);
+    return Number.isFinite(y) ? { x: Number.isFinite(x) ? x : 0, y } : null;
+  }
+
+  function finishVoiceInput(event) {
+    if (!voiceInput || (!voiceInput.isActive() && !voiceInput.isPaused() && !voiceInput.isPending())) return false;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputLocked = false;
+    voiceInputGestureOrigin = null;
+    voiceInputPointerId = null;
+    voiceInputTapMode = false;
+    voiceInputNormalizeAfterStop = true;
+    const stopped = voiceInput.stop();
+    if (stopped && typeof stopped.then === "function") {
+      stopped.then(() => {
+        if (!voiceInputNormalizeAfterStop) return;
+        voiceInputNormalizeAfterStop = false;
+        normalizeVoiceDraft();
+      }).catch(() => { voiceInputNormalizeAfterStop = false; });
+    } else if (!stopped && !voiceInput.isPending()) {
+      voiceInputNormalizeAfterStop = false;
+    }
+    return true;
+  }
+
+  function discardVoiceInput(event) {
+    if (!voiceInput) return false;
+    event?.preventDefault?.();
+    voiceInputHeld = false;
+    voiceInputLocked = false;
+    voiceInputGestureOrigin = null;
+    voiceInputNormalizeAfterStop = false;
+    voiceInputTapMode = false;
+    voiceInputPointerId = null;
+    clearVoicePreview();
+    const discarded = voiceInput.cancel();
+    setVoiceInputButtonState({ ...voiceInput.getState() });
+    return discarded;
   }
 
   function stopVoiceInput(event) {
@@ -2356,25 +2532,65 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputPointerId = null;
-    // A quick tap can end while iOS is asking for access. Keep that session
-    // alive in tap-to-toggle mode, with an explicit stop cue once it starts.
-    if (!voiceInput?.isActive()) {
-      voiceInputTapMode = voiceInput?.isPending() || false;
+    voiceInputGestureOrigin = null;
+    if (voiceInputLocked) {
+      setVoiceInputButtonState({ ...voiceInput.getState() });
       return true;
     }
-    voiceInputTapMode = false;
-    voiceInputNormalizeAfterStop = true;
-    const stopped = voiceInput?.stop();
-    if (stopped && typeof stopped.then === "function") {
-      stopped.then(() => {
-        if (!voiceInputNormalizeAfterStop) return;
-        voiceInputNormalizeAfterStop = false;
-        normalizeVoiceDraft();
-      }).catch(() => { voiceInputNormalizeAfterStop = false; });
-    } else if (!stopped) {
-      voiceInputNormalizeAfterStop = false;
+    // Permission prompts and getUserMedia can outlive a quick tap. Keep the
+    // session alive and switch to explicit tap-to-stop mode once capture starts.
+    if (!voiceInput?.isActive() && voiceInput?.isPending()) {
+      voiceInputTapMode = true;
+      setVoiceInputButtonState({ ...voiceInput.getState() });
+      return true;
     }
-    return true;
+    return finishVoiceInput(event);
+  }
+
+  function voicePointerMove(event) {
+    if (!voiceInputHeld || voiceInputLocked || !voiceInputGestureOrigin) return;
+    if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return;
+    const point = voiceInputEventPoint(event);
+    if (!point) return;
+    const deltaX = point.x - voiceInputGestureOrigin.x;
+    const deltaY = point.y - voiceInputGestureOrigin.y;
+    if (deltaX <= -80 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      event.preventDefault?.();
+      cancelVoiceInputFromGesture();
+      return;
+    }
+    if (deltaY <= -64 && Math.abs(deltaY) > Math.abs(deltaX) * 1.15) {
+      event.preventDefault?.();
+      voiceInputLocked = true;
+      voiceInputTapMode = false;
+      setVoiceInputButtonState({ ...voiceInput.getState() });
+    }
+  }
+
+  function voiceTouchMove(event) {
+    if (!voiceInputHeld) return;
+    voicePointerMove(event);
+  }
+
+  function toggleVoiceInputPause(event) {
+    event?.preventDefault?.();
+    if (voiceInput?.isPaused()) {
+      voiceInput.resume();
+      return;
+    }
+    voiceInput?.pause();
+  }
+
+  function cancelVoiceInputFromGesture() {
+    if (!voiceInputHeld) return;
+    voiceInputHeld = false;
+    voiceInputLocked = false;
+    voiceInputGestureOrigin = null;
+    voiceInputNormalizeAfterStop = false;
+    voiceInputPointerId = null;
+    voiceInputSuppressClickUntil = Date.now() + 750;
+    clearVoicePreview();
+    voiceInput?.cancel();
   }
 
   function voicePointerDown(event) {
@@ -2393,6 +2609,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function voicePointerUp(event) {
     if (event?.type === "touchend" && voiceInputIgnoredTouchContact) {
       voiceInputIgnoredTouchContact = false;
+      if (voiceInputHeld) stopVoiceInput(event);
       return;
     }
     if (voiceInputHeld && voiceInputButtonAt(event)) {
@@ -2404,13 +2621,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function voicePointerCancel(event) {
     if (event?.type === "touchcancel" && voiceInputIgnoredTouchContact) {
       voiceInputIgnoredTouchContact = false;
-      return;
+      if (!voiceInputHeld) return;
     }
     if (!voiceInputHeld) return;
     if (voiceInputPointerId != null && event?.pointerId != null && voiceInputPointerId !== event.pointerId) return;
     event?.preventDefault?.();
     voiceInputHeld = false;
     voiceInputTapMode = false;
+    voiceInputLocked = false;
+    voiceInputGestureOrigin = null;
     voiceInputNormalizeAfterStop = false;
     voiceInputPointerId = null;
     voiceInputSuppressClickUntil = Date.now() + 750;
@@ -3170,6 +3389,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         draft: root.querySelector('[data-role="draft"]'),
         voiceInput: root.querySelector('[data-role="voice-input"]'),
         voiceStatus: root.querySelector('[data-role="voice-input-status"]'),
+        voicePanel: root.querySelector('[data-role="voice-recording-panel"]'),
+        voiceRecordingStatus: root.querySelector('[data-role="voice-recording-status"]'),
+        voiceRecordingTime: root.querySelector('[data-role="voice-recording-time"]'),
+        voiceWaveform: root.querySelector('[data-role="voice-waveform"]'),
+        voicePreview: root.querySelector('[data-role="voice-recording-preview"]'),
       };
       for (const action of ["send-text", "capture-photo", "pick-files"]) {
         composerControls[action] = root.querySelector(`[data-action="${action}"]`);
@@ -3245,6 +3469,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function click(event) {
+    const voiceAction = event.target?.closest?.('[data-action^="voice-"]')?.getAttribute?.("data-action");
+    if (voiceAction) {
+      if (voiceAction === "voice-pause" || voiceAction === "voice-resume") toggleVoiceInputPause(event);
+      else if (voiceAction === "voice-discard") discardVoiceInput(event);
+      else if (voiceAction === "voice-finish") finishVoiceInput(event);
+      return;
+    }
     const voiceButton = event.target?.closest?.('[data-role="voice-input"]');
     if (voiceButton) {
       // Some iOS WebViews expose only click for a button inside the composer.
@@ -3256,6 +3487,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         return;
       }
       event.preventDefault?.();
+      if (voiceInputLocked) {
+        finishVoiceInput(event);
+        return;
+      }
       if (cancelPendingVoiceInput(event)) return;
       if (!voiceInputHeld) {
         startVoiceInput(event);
@@ -4467,6 +4702,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("pointerup", pointerUp);
   root.addEventListener("pointercancel", pointerUp);
   root.addEventListener("pointerdown", voicePointerDown, { passive: false });
+  root.addEventListener("pointermove", voicePointerMove, { passive: false });
   root.addEventListener("pointerup", voicePointerUp);
   root.addEventListener("pointercancel", voicePointerCancel);
   root.addEventListener("touchstart", touchStart, { passive: true });
@@ -4474,6 +4710,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("touchend", touchEnd);
   root.addEventListener("touchcancel", touchEnd);
   root.addEventListener("touchstart", voicePointerDown, { passive: false });
+  root.addEventListener("touchmove", voiceTouchMove, { passive: false });
   root.addEventListener("touchend", voicePointerUp);
   root.addEventListener("touchcancel", voicePointerCancel);
   root.addEventListener("pointerdown", prepareSignaturePadForFirstContact, { capture: true, passive: false });
@@ -4513,6 +4750,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("pointerup", pointerUp);
       root.removeEventListener("pointercancel", pointerUp);
       root.removeEventListener("pointerdown", voicePointerDown);
+      root.removeEventListener("pointermove", voicePointerMove);
       root.removeEventListener("pointerup", voicePointerUp);
       root.removeEventListener("pointercancel", voicePointerCancel);
       root.removeEventListener("touchstart", touchStart);
@@ -4520,6 +4758,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("touchend", touchEnd);
       root.removeEventListener("touchcancel", touchEnd);
       root.removeEventListener("touchstart", voicePointerDown);
+      root.removeEventListener("touchmove", voiceTouchMove);
       root.removeEventListener("touchend", voicePointerUp);
       root.removeEventListener("touchcancel", voicePointerCancel);
       clearAttachmentTrayGestureListeners();
@@ -4535,10 +4774,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("keyup", voiceKeyUp);
       voiceInput?.destroy();
       voiceInput = null;
+      clearVoicePreview();
       voiceInputHeld = false;
+      voiceInputLocked = false;
+      voiceInputGestureOrigin = null;
       voiceInputPointerId = null;
       voiceInputSuppressClickUntil = 0;
-      composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null };
+      composerControls = { shell: null, composer: null, draft: null, voiceInput: null, voiceStatus: null, voicePanel: null, voiceRecordingStatus: null, voiceRecordingTime: null, voiceWaveform: null, voicePreview: null };
       fileDragDepth = 0;
       hideFileDropZone();
       composing = false;

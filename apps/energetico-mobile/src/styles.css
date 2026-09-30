@@ -957,6 +957,23 @@ button { touch-action: manipulation; }
 .chat-composer textarea { resize: none; min-height: 76px; max-height: 176px; overflow-y: hidden; padding: 11px 13px; border: 1px solid #b7ccd2; border-radius: 15px; color: var(--text); background: var(--surface); line-height: 1.35; }
 .chat-composer textarea:focus { outline: 3px solid rgb(7 86 107 / 18%); border-color: var(--brand); }
 .composer-submit-actions { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; gap: 6px; min-width: 0; }
+.voice-recording-panel { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; width: 100%; padding: 11px 13px; border: 1px solid #c8d8dd; border-radius: 16px; color: var(--text); background: var(--surface); box-shadow: 0 3px 12px rgb(4 45 60 / 8%); }
+.voice-recording-panel[hidden] { display: none; }
+.voice-recording-panel__heading { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: .9rem; }
+.voice-recording-panel__heading strong { flex: 1 1 auto; min-width: 0; }
+.voice-recording-panel__heading time { flex: 0 0 auto; font-variant-numeric: tabular-nums; font-weight: 750; color: var(--brand-strong); }
+.voice-recording-live-dot { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%; background: #d33939; box-shadow: 0 0 0 0 rgb(211 57 57 / 40%); animation: voice-recording-pulse 1.3s ease-out infinite; }
+@keyframes voice-recording-pulse { 70% { box-shadow: 0 0 0 7px rgb(211 57 57 / 0%); } 100% { box-shadow: 0 0 0 0 rgb(211 57 57 / 0%); } }
+.voice-waveform { display: flex; align-items: center; justify-content: center; gap: clamp(2px, 1vw, 5px); height: 42px; overflow: hidden; color: #087653; }
+.voice-waveform i { width: 4px; height: 5px; flex: 1 1 4px; max-width: 8px; border-radius: 999px; background: currentColor; opacity: .65; transition: height 90ms linear, opacity 90ms linear; }
+.voice-waveform i.voice-waveform__bar--live { opacity: 1; }
+.voice-recording-preview { width: 100%; min-height: 40px; }
+.voice-recording-preview[hidden] { display: none; }
+.voice-recording-panel__actions { display: flex; align-items: stretch; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.voice-recording-panel__actions button { min-width: 92px; min-height: 42px; padding: 7px 10px; border: 1px solid #a9c1c8; border-radius: 11px; color: var(--brand-strong); background: #f4f8f9; font: inherit; font-size: .86rem; font-weight: 700; touch-action: manipulation; }
+.voice-recording-panel__actions button[data-action="voice-finish"] { border-color: #087653; color: #fff; background: #087653; }
+.voice-recording-panel__actions button[data-action="voice-discard"] { color: #9d2929; }
+.voice-recording-panel__actions button:focus-visible { outline: 3px solid rgb(7 86 107 / 25%); outline-offset: 2px; }
 .voice-input-button { display: grid; place-items: center; width: 100%; min-height: var(--control-height); padding: 0 10px; border: 1px solid #78aebc; border-radius: 14px; color: var(--brand-strong); background: #e9f7f8; font-size: clamp(1.2rem, 2.2vw, 1.55rem); line-height: 1; touch-action: none; user-select: none; -webkit-user-select: none; }
 .voice-input-button--active { color: #8d1c1c; border-color: #d66a6a; background: #ffe5e5; box-shadow: 0 0 0 3px rgb(214 106 106 / 18%); }
 .voice-input-button:focus-visible { outline: 3px solid rgb(7 86 107 / 28%); outline-offset: 2px; }
