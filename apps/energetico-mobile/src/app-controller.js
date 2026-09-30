@@ -3371,6 +3371,7 @@ export function createAppController({
         resetConversation: ingestedResult.resetConversation === true,
         attachments: ingestedResult.attachments,
       });
+      recoveryUncertain = false;
       rememberCurrentAssistantPoll(ingestedResult, ingestedResult.messages);
       hydrateMediaPreviews();
       // A retomada pode devolver a pergunta atual sem a coleção de anexos
@@ -3964,6 +3965,7 @@ export function createAppController({
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
     let epiAdvanceError = null;
+    let paymentProvisionAutoReplyError = null;
     let remoteResponseReceived = false;
     try {
       if (editingSignature) {
@@ -4015,11 +4017,30 @@ export function createAppController({
         result.activeFlow || previousState.activeFlow,
       );
       if (blankPaymentFormOption) {
-        result = preparePresenceResult(await client.sendText({
-          replyId: blankPaymentFormOption.replyId,
-          omitText: true,
-        }));
-        result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
+        const paymentFormResult = result;
+        try {
+          result = preparePresenceResult(await client.sendText({
+            replyId: blankPaymentFormOption.replyId,
+            omitText: true,
+          }));
+          result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
+        } catch (error) {
+          paymentProvisionAutoReplyError = error;
+          result = paymentFormResult;
+          if (error?.code === "NETWORK_UNCERTAIN") {
+            const paymentFormPoll = latestAssistantPoll(paymentFormResult.messages);
+            result = {
+              ...paymentFormResult,
+              messages: paymentFormResult.messages.map(message => message === paymentFormPoll
+                ? {
+                  ...message,
+                  question: `${message.question || message.prompt || message.text || "FORMA DE PAGAMENTO"}\nToque em Retomar conversa para sincronizar antes de continuar.`,
+                  options: [],
+                }
+                : message),
+            };
+          }
+        }
       }
       const quantityResult = result;
       const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
@@ -4204,8 +4225,14 @@ export function createAppController({
         }
         hydrateMediaPreviews();
         reconcileSavedFlow(effectiveResult, previousState);
-        recoveryUncertain = false;
+        recoveryUncertain = paymentProvisionAutoReplyError?.code === "NETWORK_UNCERTAIN";
         recoveryPreview = null;
+        if (paymentProvisionAutoReplyError) {
+          sessionError = paymentProvisionAutoReplyError.code === "NETWORK_UNCERTAIN"
+            ? "Não foi possível confirmar se a seleção vazia foi registrada. Toque em Retomar conversa para sincronizar antes de continuar."
+            : errorMessage(paymentProvisionAutoReplyError,
+              "A provisão foi criada, mas não foi possível selecionar automaticamente a forma de pagamento vazia. Selecione a opção vazia para continuar.");
+        }
         persistRecovery();
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
