@@ -29,13 +29,24 @@ function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
 }
 
-function isDiaryActivitiesPrompt(state) {
+function isDiaryNumberedTextPrompt(state) {
   if (!isVoiceInputFlow(state?.activeFlow)) return false;
   const message = [...(state.messages || [])].reverse()
     .find(item => item?.role !== "user" && (item?.type === "poll" || item?.type === "text"));
   const question = String(message?.question || message?.prompt || message?.text || "");
-  return /atividades\s+executadas/i.test(question)
-    && !isStructuredVoicePrompt(message, state.messages || [], databaseFilterForView(state.messages || []), state.activeFlow);
+  const occurrences = /ocorr[eê]ncias?\s+(?:ou|e)\s+imprevistos?/i.test(question);
+  if (!occurrences && !/atividades\s+executadas/i.test(question)) return false;
+  // Nada apontado is an alternative to the free-text occurrences list.
+  // Other answer choices still mark the question as structured input.
+  const textPrompt = occurrences ? {
+    ...message,
+    options: (message?.options || []).filter(option => {
+      const label = String(option?.label || option?.title || "")
+        .replace(/^[^a-zA-ZÀ-ÿ]+/, "").trim();
+      return !/^nada\s+apontado$/i.test(label);
+    }),
+  } : message;
+  return !isStructuredVoicePrompt(textPrompt, state.messages || [], databaseFilterForView(state.messages || []), state.activeFlow);
 }
 
 function isStructuredVoicePrompt(message, visibleMessages, databaseFilter, activeFlow = null) {
@@ -2137,7 +2148,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
   const voiceInputVisible = shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice);
-  const diaryActivitiesInput = isDiaryActivitiesPrompt(state);
+  const diaryActivitiesInput = isDiaryNumberedTextPrompt(state);
   const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
 
   return `<section class="chat-shell">
@@ -3351,7 +3362,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
-    const diaryActivitiesInput = isDiaryActivitiesPrompt(state);
+    const diaryActivitiesInput = isDiaryNumberedTextPrompt(state);
     const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
     if (!composing && draft && draft.value !== draftValue) draft.value = draftValue;
     if (!composing && draft && diaryActivitiesInput && !state.draft) draft.setSelectionRange?.(draftValue.length, draftValue.length);
