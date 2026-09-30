@@ -13,7 +13,7 @@ async function setup(t, overrides = {}) {
   const calls = [];
   const rows = overrides.rows || [
     { id: "319", hasAttachments: true, fields: { ID: "319", FILIAL: "004 - EDIFÍCIO XAVANTE", FORNECEDOR: "IMPERMATEX", FORMAPGTO: "CAIXA", VALORTOTAL: 650, STATUS: "PENDENTE AUDITORIA", "NOTA FISCAL": "PENDENTE", OBS: "Pedido <img src=x onerror=alert(1)>", Criado: "2026-09-20T02:00:00Z", Modificado: "2026-09-21T17:00:00Z" } },
-    { id: "320", hasAttachments: false, fields: { ID: "320", FILIAL: "004 - EDIFÍCIO XAVANTE", FORNECEDOR: "COFER", FORMAPGTO: "ENERGÉTICA - CAIXA", VALORTOTAL: 765.6, STATUS: "PAGO", "NOTA FISCAL": "NF-55", Criado: "2026-09-21T17:12:00Z", "Criado por": "Bernardo Notini", Modificado: "2026-09-21T17:12:00Z", "Modificado por": "Bernardo Notini" } },
+    { id: "320", hasAttachments: false, fields: { ID: "320", FILIAL: "004 - EDIFÍCIO XAVANTE", FORNECEDOR: "COFER", FORMAPGTO: "ENERGÉTICA - CAIXA", VALORTOTAL: 765.6, STATUS: "PAGO", "NOTA FISCAL": "NF-55", DATAPGTOEFETUADO: "2026-09-22T12:00:00Z", Criado: "2026-09-21T17:12:00Z", "Criado por": "Bernardo Notini", Modificado: "2026-09-21T17:12:00Z", "Modificado por": "Bernardo Notini" } },
     { id: "318", hasAttachments: true, fields: { ID: "318", FILIAL: "001 - CENTRAL", FORNECEDOR: "RAFAEL", FORMAPGTO: "CAIXA", VALORTOTAL: 100, STATUS: "PENDENTE", "NOTA FISCAL": "NF-10", Criado: "2026-09-19T10:00:00Z", Modificado: "2026-09-20T10:00:00Z" } },
   ];
   const data = {
@@ -22,7 +22,8 @@ async function setup(t, overrides = {}) {
     async downloadAttachment(id, fileName) { calls.push(["downloadAttachment", id, fileName]); return new Blob([fileName], { type: fileName.endsWith(".pdf") ? "application/pdf" : "image/jpeg" }); },
     ...overrides.data,
   };
-  const gallery = module.createOrdersGallery({ document, data, ...overrides });
+  const { data: dataOverrides = {}, ...galleryOverrides } = overrides;
+  const gallery = module.createOrdersGallery({ document, data: { ...data, ...dataOverrides }, ...galleryOverrides });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   return { dom, document, gallery, data, calls, root: () => document.querySelector(".og-overlay") };
 }
@@ -41,7 +42,7 @@ function setInput(ctx, name, value) {
   field.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
 }
 
-test("orders gallery opens read-only, sorts by descending ID and offers Screen10 filters and page sizes", async t => {
+test("orders gallery mirrors Screen10 actions, sorting, filters and page sizes", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();
   assert.equal(ctx.root().getAttribute("role"), "dialog");
@@ -54,7 +55,9 @@ test("orders gallery opens read-only, sorts by descending ID and offers Screen10
   assert.deepEqual([...ctx.root().querySelector('[name="pageSize"]').options].map(option => option.value), ["10", "20", "50", "100"]);
   assert.match(ctx.root().querySelector(".og-metrics").textContent, /3/);
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
-  assert.equal(ctx.root().querySelectorAll('[data-action="edit"], [data-action="delete"]').length, 0);
+  assert.equal(ctx.root().querySelectorAll('[data-action="edit"]').length, 3);
+  assert.equal(ctx.root().querySelectorAll('[data-action="delete"]').length, 3);
+  assert.equal(ctx.root().querySelectorAll('[data-action="mascot-details"] img').length, 3);
 });
 
 test("Screen10 filters refine rows and page navigation applies selected page size", async t => {
@@ -94,7 +97,7 @@ test("Screen10 dates render as dd/mm/yyyy and untrusted SharePoint values stay t
   assert.ok(cardPairs.some(([label, value]) => label === "MODIFICADO POR" && value === "Bernardo Notini"));
   assert.doesNotMatch(ctx.root().querySelector(".og-cards").textContent, /2026-09-20T02:00:00Z/);
   assert.match(ctx.root().querySelector(".og-cards").textContent, /<img src=x onerror=alert\(1\)>/);
-  assert.equal(ctx.root().querySelector(".og-cards img, .og-cards [onerror]"), null);
+  assert.equal(ctx.root().querySelector(".og-cards [onerror]"), null);
 });
 
 test("details open in a modal table with Screen10 fields and safely formatted values", async t => {
@@ -109,6 +112,85 @@ test("details open in a modal table with Screen10 fields and safely formatted va
   assert.doesNotMatch(panel.innerHTML, /<img|onerror=/i);
   button(panel, "Fechar detalhes").click();
   assert.equal(panel.hidden, true);
+});
+
+test("the Screen10 mascot opens the selected order details", async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+
+  const mascot = ctx.root().querySelector('.og-card[data-item-id="320"] [data-action="mascot-details"]');
+  assert.ok(mascot);
+  assert.equal(mascot.getAttribute("aria-label"), "Abrir detalhes do pedido #320");
+  assert.match(mascot.querySelector("img").src, /mascote\.png$/);
+  mascot.click();
+
+  assert.equal(ctx.root().querySelector(".og-detail").hidden, false);
+  assert.match(ctx.root().querySelector(".og-detail").textContent, /Pedido #320/);
+});
+
+test("editing an order submits the Screen10 fields and reloads the gallery", async t => {
+  const ctx = await setup(t, {
+    data: {
+      async updateItem(id, fields) {
+        ctx?.calls?.push(["updateItem", id, fields]);
+      },
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('.og-card[data-item-id="320"] [data-action="edit"]').click();
+
+  const editor = ctx.root().querySelector(".og-editor");
+  assert.ok(editor);
+  assert.equal(editor.querySelector('[name="FORNECEDOR"]').value, "COFER");
+  editor.querySelector('[name="OBS"]').value = "Atualizado pelo teste";
+  editor.querySelector("form").requestSubmit();
+  await settle();
+
+  const mutation = ctx.calls.find(([name]) => name === "updateItem");
+  assert.deepEqual(mutation, ["updateItem", "320", {
+    FILIAL: "004 - EDIFÍCIO XAVANTE",
+    FORNECEDOR: "COFER",
+    FORMAPGTO: "ENERGÉTICA - CAIXA",
+    NOTAFISCAL: "NF-55",
+    OBS: "Atualizado pelo teste",
+    OBSFISCAL: "",
+    CONSTACNO: "",
+    REGIMEAPURACAO: "",
+    VALORTOTAL: 765.6,
+    VALORRETIDO: "",
+    DATAPGTOEFETUADO: "2026-09-22",
+    STATUS: "PAGO",
+  }]);
+  assert.match(ctx.root().textContent, /Pedido atualizado com sucesso/);
+});
+
+test("deleting an order requires confirmation and removes it after SharePoint confirms", async t => {
+  let currentRows = [{ id: "320", hasAttachments: false, fields: { ID: "320", FORNECEDOR: "COFER" } }];
+  const ctx = await setup(t, {
+    rows: currentRows,
+    confirmDelete: () => true,
+    data: {
+      async loadSnapshot() { return { rows: currentRows }; },
+      async deleteItem(id) { ctx?.calls?.push(["deleteItem", id]); currentRows = []; },
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-action="delete"]').click();
+  await settle();
+
+  assert.deepEqual(ctx.calls.find(([name]) => name === "deleteItem"), ["deleteItem", "320"]);
+  assert.match(ctx.root().querySelector(".og-list-status").textContent, /Nenhum pedido encontrado/);
+  assert.match(ctx.root().textContent, /Pedido excluído com sucesso/);
+});
+
+test("cancelling an order deletion does not call SharePoint", async t => {
+  const ctx = await setup(t, { confirmDelete: () => false, data: { async deleteItem() { throw new Error("não deveria chamar"); } } });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-action="delete"]').click();
+  await settle();
+
+  assert.equal(ctx.calls.some(([name]) => name === "deleteItem"), false);
+  assert.ok(ctx.root().querySelector('.og-card[data-item-id="320"]'));
 });
 
 test("SharePoint attachments open as a navigable collection in the shared viewer", async t => {

@@ -197,6 +197,72 @@ test("busca o cabeçalho NOTASPENDENTES diretamente pelo ID em vez de paginar a 
   ]);
 });
 
+test("edita um pedido usando o ETag atual e devolve o item atualizado", async () => {
+  const calls = [];
+  const repository = {
+    async resolveList(...args) { calls.push(["resolveList", ...args]); return { status: "resolved", id: "list-notas" }; },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+    async getItem(...args) {
+      calls.push(["getItem", ...args]);
+      return { id: "320", eTag: '"320,4"', fields: { FORNECEDOR: "COFER" } };
+    },
+    async updateItem(...args) {
+      calls.push(["updateItem", ...args]);
+      return { id: "320", eTag: '"320,5"', fields: { FORNECEDOR: "NOVO FORNECEDOR" } };
+    },
+  };
+  const data = createOrdersGalleryData({ repository });
+
+  const updated = await data.updateItem("320", { FORNECEDOR: "NOVO FORNECEDOR" });
+
+  assert.deepEqual(updated, { id: "320", eTag: '"320,5"', fields: { FORNECEDOR: "NOVO FORNECEDOR" }, hasAttachments: null });
+  assert.deepEqual(calls.slice(0, 3), [
+    ["resolveList", "personal", ["NOTASPENDENTES"], {}],
+    ["getItem", "personal", "list-notas", "320", "$expand=fields"],
+    ["updateItem", "personal", "list-notas", "320", { FORNECEDOR: "NOVO FORNECEDOR" }, { eTag: '"320,4"' }],
+  ]);
+  assert.equal(calls[2][5].eTag, '"320,4"');
+});
+
+test("exclui um pedido usando o ETag atual", async () => {
+  const calls = [];
+  const repository = {
+    async resolveList() { return { status: "resolved", id: "list-notas" }; },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+    async getItem(...args) {
+      calls.push(["getItem", ...args]);
+      return { id: "320", eTag: '"320,7"', fields: { FORNECEDOR: "COFER" } };
+    },
+    async deleteItem(...args) { calls.push(["deleteItem", ...args]); return undefined; },
+  };
+  const data = createOrdersGalleryData({ repository });
+
+  await data.deleteItem("320");
+
+  assert.deepEqual(calls[1].slice(0, 4), ["deleteItem", "personal", "list-notas", "320"]);
+  assert.equal(calls[1][4].eTag, '"320,7"');
+});
+
+test("muta pedidos no siteKey configurado, não no site padrão", async () => {
+  const calls = [];
+  const repository = {
+    async resolveList(...args) { calls.push(["resolveList", ...args]); return { status: "resolved", id: "list-notas" }; },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+    async getItem(...args) { calls.push(["getItem", ...args]); return { id: "320", eTag: '"320,8"', fields: {} }; },
+    async updateItem(...args) { calls.push(["updateItem", ...args]); return { id: "320", eTag: '"320,9"', fields: {} }; },
+    async deleteItem(...args) { calls.push(["deleteItem", ...args]); },
+  };
+  const data = createOrdersGalleryData({ repository, siteKey: "shared" });
+
+  await data.updateItem("320", { STATUS: "APROVADO" });
+  await data.deleteItem("320");
+
+  assert.equal(calls[0][1], "shared");
+  assert.equal(calls[1][1], "shared");
+  assert.equal(calls[2][1], "shared");
+  assert.equal(calls[3][1], "shared");
+});
+
 test("pedido ausente retorna vazio na consulta pontual, mas outros erros SharePoint continuam visíveis", async () => {
   const data = createOrdersGalleryData({ repository: {
     async resolveList() { return { status: "resolved", id: "list-notas" }; },

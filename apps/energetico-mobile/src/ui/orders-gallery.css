@@ -85,6 +85,17 @@
 .og-card-field dd { margin: 0; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
 .og-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .og-card-actions > .og-button--detail { flex: 1 1 140px; }
+.og-mascot-button { display: grid; flex: 0 0 48px; width: 48px; min-height: 44px; place-items: center; padding: 4px; border-color: #a9c5d1; background: #edf7fa; }
+.og-mascot-button img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.og-mascot-button:hover:not(:disabled) { background: #dceef4; }
+.og-button--edit { color: #0d3767; border-color: #6d91af; }
+.og-button--danger { color: #8e1f25; border-color: #c87c82; background: #fff5f5; }
+.og-button--danger:hover:not(:disabled) { background: #fde8e9; }
+.og-editor { width: min(100%, 920px); margin-inline: auto; padding: 14px; border: 1px solid #b8cbd9; border-radius: 10px; background: #fff; }
+.og-editor-form { display: grid; gap: 12px; }
+.og-editor-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.og-editor-field textarea { min-height: 88px; resize: vertical; }
+.og-editor-field .og-input { width: 100%; }
 .og-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding-block: 18px; }
 .og-page-label { text-align: center; font-size: .88rem; }
 .og-detail {
