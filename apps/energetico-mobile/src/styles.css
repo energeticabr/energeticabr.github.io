@@ -238,6 +238,42 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provisions__hours { display: flex; align-items: center; gap: 7px; color: var(--muted); font-weight: 700; }
 .chat-pending-provisions__hours input { width: 140px; min-height: 52px; padding: 8px 10px; border: 1px solid #a9c5ce; border-radius: 10px; color: var(--text); background: white; font: inherit; }
 .chat-pending-provisions__hours input:focus { outline: 3px solid rgb(7 86 107 / 18%); border-color: var(--brand); }
+.chat-pending-provisions--payments { padding: clamp(14px, 3vw, 24px); }
+.chat-pending-provisions--payments .chat-pending-provisions__header { gap: 12px; margin-bottom: 16px; }
+.chat-pending-provisions--payments .chat-date-picker__close { border-radius: 50%; background: #ffe5e5; color: #b42318; }
+.chat-pending-provisions__title { flex: 1; min-width: 0; }
+.chat-pending-provisions--payments .chat-pending-provisions__title h2 { margin: 0; color: #083f50; font-size: clamp(1.08rem, 3.4vw, 1.7rem); line-height: 1.12; }
+.chat-pending-provisions--payments .chat-pending-provisions__title p { margin: 6px 0 0; color: var(--muted); font-size: .95rem; line-height: 1.3; }
+.chat-pending-provisions--payments .chat-pending-provisions__list { gap: 18px; }
+.chat-pending-provision--payment { --due-color: #4b6470; --due-background: #f2f6f8; --due-border: #d6e1e6; gap: 0; padding: 0; border: 0; border-radius: 0; background: white; }
+.chat-pending-provision--urgent { --due-color: #b90009; --due-background: #fff0f1; --due-border: #f3bac1; }
+.chat-pending-provision--upcoming { --due-color: #b45309; --due-background: #fff5e8; --due-border: #f4c286; }
+.chat-pending-provision__amounts { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: center; gap: 12px; margin-bottom: 10px; padding: 16px 12px; border: 1px solid var(--due-border); border-radius: 12px; background: var(--due-background); color: var(--due-color); }
+.chat-pending-provision__due { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.chat-pending-provision__due > div, .chat-pending-provision__total { display: grid; gap: 3px; min-width: 0; }
+.chat-pending-provision__amounts span:not(.chat-pending-provision__icon) { color: var(--muted); font-weight: 650; }
+.chat-pending-provision__amounts strong { font-size: clamp(1.18rem, 4.5vw, 2.3rem); line-height: 1.2; overflow-wrap: anywhere; }
+.chat-pending-provision__total { align-self: stretch; align-content: center; padding-left: 14px; border-left: 1px solid var(--due-border); }
+.chat-pending-provision__timing { justify-self: start; margin-top: 4px; padding: 3px 10px; border-radius: 20px; background: var(--due-border); font-size: .72rem; font-weight: 850; }
+.chat-pending-provision__icon { flex: 0 0 44px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; color: #315a6b; background: #eaf1f5; }
+.chat-pending-provision__icon svg { width: 27px; height: 27px; }
+.chat-pending-provision__due .chat-pending-provision__icon { color: var(--due-color); background: var(--due-border); border-radius: 50%; }
+.chat-pending-provision__supplier { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; background: #f0f7fc; }
+.chat-pending-provision__field { display: grid; gap: 3px; min-width: 0; }
+.chat-pending-provision__field span { color: var(--muted); font-size: .9rem; }
+.chat-pending-provision__field strong { color: #123f50; font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; }
+.chat-pending-provision__detail { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.chat-pending-provision__detail + .chat-pending-provision__detail { border-top: 1px solid #dce5eb; }
+@media (max-width: 500px) {
+  .chat-pending-provisions--payments .chat-pending-provisions__header { gap: 8px; }
+  .chat-pending-provision__due { gap: 6px; }
+  .chat-pending-provision__due .chat-pending-provision__icon { flex-basis: 30px; width: 30px; height: 30px; }
+  .chat-pending-provision__due .chat-pending-provision__icon svg { width: 21px; height: 21px; }
+  .chat-pending-provision__amounts { gap: 6px; padding: 12px 8px; }
+  .chat-pending-provision__total { padding-left: 8px; }
+  .chat-pending-provision__supplier { grid-template-columns: 44px minmax(0, 1fr); }
+  .chat-pending-provision__supplier .chat-pending-provision__actions { grid-column: 2; }
+}
 .chat-date-picker-trigger-wrap { display: flex; justify-content: center; margin: 12px 0 14px; }
 .chat-date-picker-trigger { display: grid; place-items: center; width: clamp(54px, 6vw, 68px); height: clamp(54px, 6vw, 68px); padding: 0; border: 1px solid #16765f; border-radius: 50%; color: #12634f; background: #e7f5f0; font-size: clamp(1.55rem, 2.5vw, 2rem); line-height: 1; box-shadow: 0 2px 6px rgb(6 48 63 / 12%); }
 .chat-date-picker-trigger:hover { background: #d7eee6; }

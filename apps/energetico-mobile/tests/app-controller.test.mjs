@@ -64,7 +64,10 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
     async discardSharedItem(id) { discarded.push(id); },
     async exportMedia(blob, name) { exported.push([blob.size, name]); },
   };
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
+  const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
+    loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+  }));
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -3610,6 +3613,121 @@ test("etapa inesperada não some com popup nem vira erro genérico de data", asy
   assert.equal(h.view.renders.at(-1).pendingNotes?.rows[0].id, "13");
   assert.doesNotMatch(h.view.renders.at(-1).error, /data de pagamento previsto/i);
   assert.match(h.view.renders.at(-1).error, /Efetuar Lançamento|action_launch|submenu/i);
+});
+
+test("abre o popup com próximos vencimentos mesmo sem provisões vencidas", async t => {
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    loadUpcomingPayments: async () => [{ id: "306", dueDate: "2026-10-01", supplier: "COFER" }],
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+  }) });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: false, rows: [] });
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions?.due, true);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions?.rows.map(row => row.id), ["306"]);
+});
+
+test("combina os vencimentos por ID preservando os dados da VM e mantém vencidos quando a consulta futura falha", async t => {
+  let fail = false;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    loadUpcomingPayments: async () => { if (fail) throw new Error("offline"); return [{ id: "306", supplier: "REPETIDO" }, { id: "307", supplier: "FUTURO" }]; },
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+  }) });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "ORIGINAL" }] });
+  await h.controller.start();
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.supplier), ["ORIGINAL", "FUTURO"]);
+  await h.view.emit("sign-out");
+  fail = true;
+  await h.view.emit("sign-in");
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.supplier), ["ORIGINAL"]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.upcomingUnavailable, true);
+});
+
+test("mantém o vencimento editado nos próximos dois dias e remove somente a partir do terceiro", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T15:00:00Z") });
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(), updateDueDate: async () => {},
+  }) });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [
+    { id: "306", dueDate: "2026-09-30" }, { id: "307", dueDate: "2026-09-30" },
+  ] });
+  await h.controller.start();
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
+  await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "02/10/2026" });
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["306", "307"]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].dueDate, "02/10/2026");
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
+  await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "03/10/2026" });
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.id), ["307"]);
+});
+
+test("editor de vencimento não troca o dia brasileiro pelo prefixo UTC", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", dueDate: "2026-10-02T01:00:00Z" }] });
+  await h.controller.start();
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
+  assert.equal(h.view.renders.at(-1).pendingProvisionDateEditValue, "01/10/2026");
+});
+
+test("consulta futura sem resposta não impede exibir os vencidos depois de oito segundos", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let markReadStarted;
+  const readStarted = new Promise(resolve => { markReadStarted = resolve; });
+  let signal;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    loadUpcomingPayments: async options => { signal = options.signal; markReadStarted(); return new Promise(() => {}); },
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+  }) });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306" }] });
+  const start = h.controller.start();
+  await readStarted;
+  t.mock.timers.tick(8_000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisions?.rows[0].id, "306");
+  assert.equal(h.view.renders.at(-1).pendingProvisions?.upcomingUnavailable, true);
+  assert.equal(signal.aborted, true);
+  await start;
+});
+
+test("retomar após meia-noite atualiza o popup aberto sem reabrir lembretes nem repetir a consulta", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-01T02:59:00Z") });
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  let resume, reads = 0;
+  h.native.onResume = async callback => { resume = callback; return () => {}; };
+  h.client.getPendingProvisionSnapshot = async () => { reads++; return { due: true, rows: [{ id: "306", dueDate: "2026-10-01" }] }; };
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.today, "2026-09-30");
+  t.mock.timers.setTime(new Date("2026-10-01T03:01:00Z").getTime());
+  await resume();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.today, "2026-10-01");
+  assert.equal(reads, 1);
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, false);
+});
+
+test("atualização da cor após meia-noite preserva consultas de anexos em andamento", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-01T02:59:00Z") });
+  let resolveAttachments;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => new Promise(resolve => { resolveAttachments = resolve; }),
+    downloadAttachment: async () => new Blob(),
+  }) });
+  t.after(() => h.controller.stop());
+  let resume;
+  h.native.onResume = async callback => { resume = callback; return () => {}; };
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", dueDate: "2026-10-01" }] });
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionAttachments["306"].status, "loading");
+  t.mock.timers.setTime(new Date("2026-10-01T03:01:00Z").getTime());
+  await resume();
+  resolveAttachments([{ fileName: "test.pdf" }]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionAttachments["306"].status, "available");
 });
 
 test("edita somente o vencimento da provisão escolhida e remove da lista quando passa a vencer no futuro", async t => {

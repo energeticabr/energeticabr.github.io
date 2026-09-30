@@ -324,7 +324,7 @@ export function createNativePorts({
     }
   }
 
-  async function scheduleProvisionReminder({ title = "Energético", body = "Há provisões de pagamento vencidas ou com vencimento hoje.", delayMs = 7_200_000 } = {}) {
+  async function scheduleProvisionReminder({ title = "Energético", body = "Há provisões de pagamento vencidas ou com vencimento em até 2 dias.", delayMs = 7_200_000 } = {}) {
     if (typeof localNotifications?.schedule !== "function") return false;
     try {
       const checked = typeof localNotifications.checkPermissions === "function"

@@ -1627,6 +1627,81 @@ test("menu de RH reserva a coluna direita para galerias e remove apenas o avatar
   assert.ok(article.indexOf("EFETUAR CADASTROS") < article.indexOf("GALERIA IDFOLHA"));
 });
 
+test("popup de vencimentos apresenta data e valor destacados e os dados em linhas separadas", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T15:00:00Z") });
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
+    due: true, today: "2026-09-30", rows: [{ id: "306", supplier: "TRANSPIO TRANSPORTES SERVICOS E LOCACOES LTDA",
+      dueDate: "2026-09-30T03:00:00Z", total: 150, product: "MOVIMENTAÇÃO DE TERRA",
+      branch: "004 - EDIFÍCIO XAVANTE", property: "TODOS" }],
+  } })));
+  const doc = dom.window.document;
+  const payment = doc.querySelector('[data-payment-id="306"][role="listitem"]');
+  assert.equal(payment.querySelector('[data-field="dueDate"] strong')?.textContent, "30/09/2026");
+  assert.equal(payment.querySelector('[data-field="total"] strong')?.textContent.replace(/\s/g, " "), "R$ 150,00");
+  assert.equal(payment.querySelector('.chat-pending-provision__timing')?.textContent, "VENCE HOJE");
+  for (const [field, value] of [["supplier", "TRANSPIO"], ["product", "MOVIMENTAÇÃO DE TERRA"], ["branch", "XAVANTE"], ["property", "TODOS"]]) {
+    assert.ok(payment.querySelector(`[data-field="${field}"]`)?.textContent.includes(value));
+  }
+  assert.equal(payment.querySelector('[data-field="supplier"] [data-action="edit-pending-provision-due-date"]')?.dataset.paymentId, "306");
+  assert.equal(payment.querySelector('[data-field="supplier"] [data-action="settle-pending-provision"]')?.dataset.paymentId, "306");
+  dom.window.close();
+});
+
+test("vencimentos usam vermelho até hoje e laranja apenas nos próximos dois dias do calendário brasileiro", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T15:00:00Z") });
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
+    due: true, today: "2026-09-30", rows: [
+      { id: "1", dueDate: "2026-09-29T03:00:00Z", total: 0 },
+      { id: "2", dueDate: "30/09/2026" },
+      { id: "3", dueDate: "2026-10-01T03:00:00Z" },
+      { id: "4", dueDate: "2026-10-02" },
+      { id: "5", dueDate: "2026-10-03" },
+      { id: "6", dueDate: "31/09/2026" },
+      { id: "7", dueDate: "2026-10-01T01:00:00Z" },
+    ],
+  } })));
+  const payments = [...dom.window.document.querySelectorAll('[role="listitem"][data-payment-id]')];
+  assert.deepEqual(payments.filter(row => row.classList.contains("chat-pending-provision--urgent")).map(row => row.dataset.paymentId), ["1", "2", "7"]);
+  assert.deepEqual(payments.filter(row => row.classList.contains("chat-pending-provision--upcoming")).map(row => row.dataset.paymentId), ["3", "4"]);
+  assert.match(payments[2].textContent, /VENCE AMANHÃ/);
+  assert.match(payments[3].textContent, /VENCE EM 2 DIAS/);
+  assert.equal(payments[0].querySelector('[data-field="total"] strong')?.textContent.replace(/\s/g, " "), "R$ 0,00");
+  dom.window.close();
+});
+
+test("vencimento laranja passa a vermelho ao renderizar depois da meia-noite brasileira", t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-01T02:59:00Z") });
+  const state = signedInState({ pendingProvisions: { due: true, today: "2026-09-30", rows: [{ id: "306", dueDate: "2026-10-01" }] } });
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(state);
+  assert.ok(root.querySelector('.chat-pending-provision--upcoming'));
+  t.mock.timers.setTime(new Date("2026-10-01T03:01:00Z").getTime());
+  view.render(state);
+  assert.ok(root.querySelector('.chat-pending-provision--urgent'));
+  assert.match(root.querySelector('.chat-pending-provision__timing').textContent, /VENCE HOJE/);
+  view.destroy();
+  dom.window.close();
+});
+
+test("avisa quando os próximos vencimentos não puderam ser consultados sem esconder os vencidos", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
+    due: true, upcomingUnavailable: true, rows: [{ id: "306", supplier: "COFER", dueDate: "30/09/2026" }],
+  } })));
+  assert.match(dom.window.document.querySelector('[data-pending-provisions-dialog] [role="status"]')?.textContent || "", /Não foi possível consultar os próximos vencimentos/);
+  assert.ok(dom.window.document.querySelector('[role="listitem"][data-payment-id="306"]'));
+  dom.window.close();
+});
+
+test("edição preenche o mesmo dia brasileiro exibido no cartão para timestamps antes das 03h UTC", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
+    due: true, rows: [{ id: "306", dueDate: "2026-10-02T01:00:00Z" }],
+  }, pendingProvisionDateEditPaymentId: "306" })));
+  assert.equal(dom.window.document.querySelector('[data-role="pending-provision-due-date"]').value, "01/10/2026");
+  dom.window.close();
+});
+
 test("abre a lista de provisões vencidas com X e opções de lembrete", () => {
   const markup = renderChatMarkup(signedInState({
     pendingProvisions: {

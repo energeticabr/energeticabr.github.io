@@ -4,6 +4,50 @@ import * as galleryData from "../src/chat/orders-gallery-data.js";
 
 const { createOrdersGalleryData, createPendingProvisionAttachmentsData, OrdersGalleryDataError } = galleryData;
 
+test("consulta os próximos dois vencimentos no SharePoint sem incluir pagamentos efetuados e pagina o resultado", async () => {
+  const queries = [];
+  const repository = {
+    async resolveList() { return { status: "resolved", id: "provisoes" }; },
+    async getColumns() { return [{ name: "DATA_x0020_PREVISTO_x0020_PGTO", displayName: "DATA PREVISTO PGTO" }]; },
+    async getItemsPage(site, list, query, options) {
+      queries.push({ site, list, query, options });
+      return options.cursor ? { items: [
+        { id: "4", fields: { "DATA PREVISTO PGTO": "2026-10-02", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": "1.200,50", QTD: 2, FORNECEDOR: { LookupValue: "COFER" }, DESCRICAOPGTO: "CIMENTO", FILIAL: "XAVANTE", IMOVEL: "TODOS" } },
+        { id: "5", fields: { "DATA PREVISTO PGTO": "2026-10-03", STATUS: "PAGAMENTO PREVISTO" } },
+      ], hasMore: false } : { items: [
+        { id: "1", fields: { "DATA PREVISTO PGTO": "2026-10-01T03:00:00Z", STATUS: "PAGAMENTO PREVISTO" } },
+        { id: "2", fields: { "DATA PREVISTO PGTO": "2026-10-01", STATUS: "PAGO" } },
+        { id: "3", fields: { "DATA PREVISTO PGTO": "2026-10-01", STATUS: "PAGAMENTO PREVISTO", "DATA PGTO EFETUADO": "2026-09-30" } },
+        { id: "6", fields: { "DATA PREVISTO PGTO": "2026-10-01", STATUS: "PAGAMENTO PREVISTO", PGTOAGENDADO: "PAGO" } },
+      ], hasMore: true, nextLink: "next" };
+    },
+  };
+  const data = createPendingProvisionAttachmentsData({ repository });
+  assert.equal(typeof data.loadUpcomingPayments, "function");
+  const rows = await data.loadUpcomingPayments({ now: new Date("2026-10-01T01:00:00Z") });
+  assert.deepEqual(rows.map(row => row.id), ["1", "4"]);
+  assert.deepEqual(rows[1], { id: "4", dueDate: "2026-10-02", total: 2401, supplier: "COFER", product: "CIMENTO", branch: "XAVANTE", property: "TODOS" });
+  assert.equal(queries.length, 2);
+  assert.match(queries[0].query, /fields\/DATA_x0020_PREVISTO_x0020_PGTO ge '2026-10-01T00:00:00Z'/);
+  assert.match(queries[0].query, /lt '2026-10-03T03:00:00Z'/);
+  assert.equal(queries[1].options.cursor, "next");
+});
+
+test("consulta de vencimentos próximos recusa paginação incompleta e coluna ambígua", async () => {
+  const repository = {
+    async resolveList() { return { status: "resolved", id: "provisoes" }; },
+    async getColumns() { return [{ name: "DATAPREVISTOPGTO", displayName: "DATA PREVISTO PGTO" }]; },
+    async getItemsPage() { return { items: [], hasMore: true }; },
+  };
+  const data = createPendingProvisionAttachmentsData({ repository });
+  assert.equal(typeof data.loadUpcomingPayments, "function");
+  await assert.rejects(data.loadUpcomingPayments(), /pagina|cursor/i);
+  repository.getColumns = async () => [
+    { name: "DATA1", displayName: "DATA PREVISTO PGTO" }, { name: "DATA2", displayName: "DATA PREVISTO PGTO" },
+  ];
+  await assert.rejects(data.loadUpcomingPayments(), /coluna/i);
+});
+
 function repositoryHarness(overrides = {}) {
   const calls = [];
   const pages = [

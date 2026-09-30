@@ -2,6 +2,7 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createSharePointAttachmentTransport, validateAttachment } from "../../../../portal/data/attachments.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
+import { provisionDateKey, provisionDayOffset, provisionDueState, provisionNumericValue } from "./pending-provision-dates.js";
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -467,6 +468,7 @@ export function createPendingProvisionAttachmentsData(options = {}) {
     listMissingCode: options.listMissingCode || "pending_provision_list_missing",
   });
   return Object.freeze({
+    loadUpcomingPayments: data.loadUpcomingPayments,
     listAttachments: data.listAttachments,
     downloadAttachment: data.downloadAttachment,
     uploadAttachment: data.uploadAttachment,
@@ -655,5 +657,53 @@ function createSharePointListData({
     return result;
   }
 
-  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem, deleteItem, updateDueDate });
+  async function loadUpcomingPayments({ now = new Date(), signal } = {}) {
+    const today = provisionDateKey(now);
+    if (!today) throw new RangeError("A data de referência dos vencimentos não é válida.");
+    const list = await resolveList(signal);
+    if (typeof repository.getColumns !== "function") throw new Error("Os metadados do vencimento não estão disponíveis.");
+    const columns = await repository.getColumns(siteKey, list.id, signal ? { signal } : {});
+    const dueColumns = [...new Set((Array.isArray(columns) ? columns : [])
+      .filter(column => [column?.name, column?.displayName].some(name => ["DATAPREVISTOPGTO", "DATAPGTOPREVISTO"].includes(fieldKey(name))))
+      .map(column => String(column.name || "")))];
+    if (dueColumns.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(dueColumns[0])) {
+      throw new Error("Não foi possível identificar com segurança a coluna DATA PREVISTO PGTO.");
+    }
+    const dateField = dueColumns[0];
+    const query = `$expand=fields&$top=${PAGE_SIZE}&$filter=fields/${dateField} ge '${provisionDayOffset(today, 1)}T00:00:00Z' and fields/${dateField} lt '${provisionDayOffset(today, 3)}T03:00:00Z'`;
+    const rows = new Map();
+    let cursor = "";
+    for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
+      if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
+      const page = await repository.getItemsPage(siteKey, list.id, query, {
+        pageNumber, maxPages: MAX_PAGES, headers: { Prefer: LAUNCH_GROUP_PREFER },
+        ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}),
+      });
+      for (const item of Array.isArray(page?.items) ? page.items : []) {
+        const row = normalizeItem(item);
+        if (!row) continue;
+        const fields = row.fields;
+        const dueDate = scalar(fieldValue(fields, [dateField, "DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
+        if (provisionDueState(dueDate, today).kind !== "upcoming"
+          || fieldKey(scalar(fieldValue(fields, ["STATUS"]))) !== "PAGAMENTOPREVISTO"
+          || fieldValue(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"])
+          || fieldKey(scalar(fieldValue(fields, ["PGTOAGENDADO"]))) === "PAGO") continue;
+        const amount = provisionNumericValue(scalar(fieldValue(fields, ["VALOR TOTAL", "VALORTOTAL"])));
+        const quantity = provisionNumericValue(scalar(fieldValue(fields, ["QTD", "QUANTIDADE"])));
+        rows.set(row.id, Object.freeze({
+          id: row.id, dueDate,
+          total: Number.isFinite(amount) ? amount * (Number.isFinite(quantity) ? quantity : 1) : "",
+          supplier: scalar(fieldValue(fields, ["FORNECEDOR"])),
+          product: scalar(fieldValue(fields, ["DESCRICAOPGTO", "PRODUTO", "DESCRIÇÃO PGTO"])),
+          branch: scalar(fieldValue(fields, ["FILIAL"])), property: scalar(fieldValue(fields, ["IMOVEL", "IMÓVEL"])),
+        }));
+      }
+      if (page?.hasMore !== true) return Object.freeze([...rows.values()].sort((a, b) => provisionDateKey(a.dueDate).localeCompare(provisionDateKey(b.dueDate)) || Number(a.id) - Number(b.id)));
+      if (!page.nextLink) throw new Error("A paginação dos vencimentos não retornou o próximo cursor.");
+      cursor = page.nextLink;
+    }
+    throw new Error("Os vencimentos excederam o limite seguro de páginas; a consulta não foi truncada.");
+  }
+
+  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem, deleteItem, updateDueDate, loadUpcomingPayments });
 }
