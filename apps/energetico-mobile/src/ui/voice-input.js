@@ -1,5 +1,5 @@
 function cleanText(value) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
+  return String(value ?? "").replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ").trim();
 }
 
 export { normalizeConstructionDiaryText } from "./construction-diary-text.js";

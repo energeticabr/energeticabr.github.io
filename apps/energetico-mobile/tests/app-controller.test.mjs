@@ -3128,6 +3128,131 @@ test("finalizar anexos envia o comando literal para avançar a pergunta", async 
   h.controller.stop();
 });
 
+test("finalizar diário usa a opção atual da VM e preserva os quatro anexos até a junção", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "construction_diary_fill", title: "DIÁRIO DE OBRAS" };
+  const attachments = Array.from({ length: 4 }, (_, index) => ({
+    id: `photo-${index}`, fileName: `foto-${index}.jpg`, mimeType: "image/jpeg",
+    mediaUrl: `/api/portal-media/photo-${index}`,
+  }));
+  h.store.ingestRemoteMessages([{ type: "poll", question: "ENVIE UMA FOTO OU UM PDF.", options: [
+    { id: "attachment_upload_continue", label: "ENVIAR ANEXO" },
+    { id: "finish-id", reply: "server-finish", label: "✅ FINALIZAR" },
+  ] }], { activeFlow });
+  h.store.syncAttachments(attachments);
+  h.client.getAttachments = async () => attachments;
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    return { status: "processed", activeFlow, attachments, messages: [{
+      type: "poll", question: "COMO DESEJA ORGANIZAR OS ANEXOS?",
+      options: [{ id: "merge-photos", label: "JUNTAR FOTOS" }],
+    }] };
+  };
+  await h.view.emit("finish-flow");
+  assert.deepEqual(calls, [{ text: "✅ FINALIZAR", replyId: "server-finish" }]);
+  assert.equal(h.store.getState().attachments.length, 4);
+  assert.equal(h.store.getState().messages.at(-1).question, "COMO DESEJA ORGANIZAR OS ANEXOS?");
+});
+
+test("finalizar diário informa quando a VM não avançou e mantém os anexos", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "construction_diary_fill", title: "DIÁRIO DE OBRAS" };
+  const poll = { type: "poll", question: "ENVIE UMA FOTO OU UM PDF.", options: [
+    { id: "attachment_upload_continue", label: "ENVIAR ANEXO" },
+    { id: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" },
+  ] };
+  const attachments = [{ id: "photo", fileName: "foto.jpg", mediaUrl: "/api/portal-media/photo" }];
+  h.store.ingestRemoteMessages([poll], { activeFlow });
+  h.store.syncAttachments(attachments);
+  h.client.getAttachments = async () => attachments;
+  h.client.sendText = async () => ({ status: "processed", activeFlow, attachments, messages: [poll] });
+  await h.view.emit("finish-flow");
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(h.view.renders.at(-1).error, /VM.*não avançou.*anexos.*preservados/i);
+});
+
+test("finalizar aceita os quatro anexos quando a VM renova IDs após outra pergunta", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "construction_diary_fill", title: "DIÁRIO DE OBRAS" };
+  const old = Array.from({ length: 4 }, (_, index) => ({ id: `old-${index}`,
+    fileName: `foto-${index}.jpg`, mimeType: "image/jpeg", size: 100 + index,
+    mediaUrl: `/api/portal-media/old-${index}`,
+  }));
+  const current = old.map((attachment, index) => ({ ...attachment, id: `new-${index}`,
+    mediaUrl: `/api/portal-media/new-${index}`,
+  }));
+  h.store.ingestRemoteMessages([{ type: "poll", question: "ENVIE UMA FOTO OU UM PDF.",
+    options: [{ id: "attachment_upload_continue", label: "ENVIAR ANEXO" }],
+  }], { activeFlow });
+  h.store.syncAttachments(old);
+  h.client.getAttachments = async () => current;
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload);
+    return { status: "processed", activeFlow, attachments: current, messages: [{
+      type: "poll", question: "COMO DESEJA COMPRIMIR OS ARQUIVOS?", options: [],
+    }] };
+  };
+  await h.view.emit("finish-flow");
+  assert.deepEqual(calls, [{ text: "FINALIZAR" }]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), current.map(item => item.id));
+  assert.equal(h.view.renders.at(-1).error, null);
+});
+
+for (const ambiguous of [false, true]) {
+  test(`finalizar não aceita anexo ${ambiguous ? "ambíguo" : "ausente"} após renovação de IDs`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const original = { id: "old", fileName: "foto.jpg", mimeType: "image/jpeg", size: 100,
+      mediaUrl: "/api/portal-media/old" };
+    h.store.syncAttachments([original]);
+    h.client.getAttachments = async () => ambiguous ? ["new-1", "new-2"].map(id => ({
+      ...original, id, mediaUrl: `/api/portal-media/${id}`,
+    })) : [{ ...original, id: "new", fileName: "outra.jpg", mediaUrl: "/api/portal-media/new" }];
+    const count = h.chatCalls.length;
+    assert.equal(await h.view.emit("finish-flow"), false);
+    assert.equal(h.chatCalls.length, count);
+    assert.equal(h.store.getState().attachments[0].id, "old");
+    assert.match(h.view.renders.at(-1).error, /não confirmou todos os anexos/i);
+  });
+}
+
+test("dois cliques em finalizar durante conferência dos anexos enviam uma única finalização", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const attachment = { id: "photo", fileName: "foto.jpg", mediaUrl: "/api/portal-media/photo" };
+  h.store.syncAttachments([attachment]);
+  const snapshot = deferred();
+  h.client.getAttachments = () => snapshot.promise;
+  const first = h.view.emit("finish-flow");
+  const second = h.view.emit("finish-flow");
+  snapshot.resolve([attachment]);
+  await Promise.all([first, second]);
+  assert.equal(h.chatCalls.filter(([kind, payload]) => kind === "text" && payload.text === "FINALIZAR").length, 1);
+});
+
+test("finalizar respeita opção desativada pela VM", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: "poll", question: "ENVIE UMA FOTO OU UM PDF.", options: [
+    { id: "attachment_upload_continue", label: "ENVIAR ANEXO" },
+    { id: "server-finish", label: "FINALIZAR", disabled: true },
+  ] }], { activeFlow: { id: "construction_diary_fill", title: "DIÁRIO DE OBRAS" } });
+  const before = h.chatCalls.length;
+  assert.equal(await h.view.emit("finish-flow"), false);
+  assert.equal(h.chatCalls.length, before);
+});
+
 test("fluxo ativo agenda lembrete nativo ao sair do aplicativo", async () => {
   const h = makeHarness();
   let onBackground;

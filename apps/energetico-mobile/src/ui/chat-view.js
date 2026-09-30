@@ -6,11 +6,13 @@ import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize }
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
+import { attachmentFinishOption, isDiaryAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
+import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
@@ -25,6 +27,15 @@ function isIOSDevice(navigatorRef) {
 
 function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
+}
+
+function isDiaryActivitiesPrompt(state) {
+  if (!isVoiceInputFlow(state?.activeFlow)) return false;
+  const message = [...(state.messages || [])].reverse()
+    .find(item => item?.role !== "user" && (item?.type === "poll" || item?.type === "text"));
+  const question = String(message?.question || message?.prompt || message?.text || "");
+  return /atividades\s+executadas/i.test(question)
+    && !isStructuredVoicePrompt(message, state.messages || [], databaseFilterForView(state.messages || []), state.activeFlow);
 }
 
 function isStructuredVoicePrompt(message, visibleMessages, databaseFilter, activeFlow = null) {
@@ -614,10 +625,13 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "" } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
+  if (finishAttachments) {
+    return `<button class="chat-choice-button chat-choice-button--finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos"${disabled ? " disabled" : ""}>✅ FINALIZAR</button>`;
+  }
   if (deleteButton) {
     const title = option?.deleteTitle || draftTitle(option);
     const noun = option?.deleteFor === "document" ? "documento" : "rascunho";
@@ -1191,7 +1205,23 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     draft,
     databaseFilterMessage === message,
   );
-  const allOptions = orderMeasurementUnitOptions(message, filteredOptions);
+  let allOptions = orderMeasurementUnitOptions(message, filteredOptions);
+  let finishOption = null;
+  if (isDiaryAttachmentPrompt(message, activeFlow)) {
+    const serverFinishOption = attachmentFinishOption(message);
+    const serverFinishReplyId = serverFinishOption ? draftReplyId(serverFinishOption) : null;
+    finishOption = serverFinishOption || { id: "local_attachment_finish", label: "✅ FINALIZAR" };
+    let inserted = false;
+    allOptions = allOptions.flatMap(option => {
+      if (draftReplyId(option) === "abandon_construction_diary" || draftReplyId(option) === serverFinishReplyId) {
+        if (inserted) return [];
+        inserted = true;
+        return [finishOption];
+      }
+      return [option];
+    });
+    if (!inserted) allOptions.push(finishOption);
+  }
   const auditRows = allOptions.map(auditLogRow).filter(Boolean);
   // Navigation is rendered in the fixed flow bar so forms keep only the
   // choices for their current question.
@@ -1258,6 +1288,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
     return [pollButton(option, busy, {
+      finishAttachments: option === finishOption,
       launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
       displayLabel: option?.recommendedDate === true
         ? `⭐ ${String(option.label || option.title || option.id || "")}`
@@ -1451,10 +1482,11 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const title = String(state.activeFlow?.title || state.completionNavigation?.title || fallbackTitle || "Fluxo em andamento");
   const back = homeOnly ? "" : `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_back" data-label="↩️ RETORNAR À PERGUNTA ANTERIOR" aria-label="Retornar à pergunta anterior" title="Retornar à pergunta anterior"${busy ? " disabled" : ""}>↩️</button>`;
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
-  const finish = !homeOnly && asksToFinishFlow(messages)
-    ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${busy ? " disabled" : ""}>FINALIZAR</button>`
-    : "";
   const latestAssistantMessage = [...messages].reverse().find(message => message?.role !== "user");
+  const finishDisabled = busy || attachmentFinishOption(latestAssistantMessage)?.disabled === true;
+  const finish = !homeOnly && (asksToFinishFlow(messages) || isDiaryAttachmentPrompt(latestAssistantMessage, state.activeFlow))
+    ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${finishDisabled ? " disabled" : ""}>FINALIZAR</button>`
+    : "";
   const quickRhid = isHumanResourcesMenu(latestAssistantMessage);
   const attendanceTable = latestAssistantMessage?.detail_table || latestAssistantMessage?.detailTable;
   const canChangeRhidReportDate = latestAssistantMessage?.type === "poll"
@@ -2105,6 +2137,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const generatedSignatureChoice = isGeneratedDocumentSignatureChoice(state);
   const placement = signaturePlacement || state.signaturePlacement || null;
   const voiceInputVisible = shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice);
+  const diaryActivitiesInput = isDiaryActivitiesPrompt(state);
+  const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
 
   return `<section class="chat-shell">
     <header class="chat-header">
@@ -2129,7 +2163,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft"${state.recoveryUncertain ? " disabled" : ""}${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${diaryActivitiesInput ? ' data-diary-activities-input="true"' : ""}${state.recoveryUncertain ? " disabled" : ""}${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(draftValue)}</textarea>
       <section class="voice-recording-panel" data-role="voice-recording-panel" aria-label="Gravação de voz" hidden>
         <div class="voice-recording-panel__heading"><span class="voice-recording-live-dot" aria-hidden="true"></span><strong data-role="voice-recording-status" aria-live="polite">Preparando microfone…</strong><time data-role="voice-recording-time">00:00</time></div>
         <div class="voice-waveform" data-role="voice-waveform" role="img" aria-label="Nível de áudio recebido">${Array.from({ length: 20 }, () => '<i aria-hidden="true"></i>').join("")}</div>
@@ -2144,7 +2178,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       <div class="composer-submit-actions">
         <button class="voice-input-button" type="button" data-role="voice-input"${voiceInputVisible ? "" : " hidden"} aria-label="Segurar para transcrever áudio" title="Segure para falar; deslize para cima para travar" aria-pressed="false"><span aria-hidden="true">🎙️</span><span class="sr-only">Segurar para transcrever áudio</span></button>
         <span class="voice-input-status" data-role="voice-input-status" aria-live="polite" hidden></span>
-        <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !String(state.draft || "").trim() ? " disabled" : ""}>Enviar</button>
+        <button class="send-button" type="submit" data-action="send-text" aria-label="Enviar mensagem"${busy || pendingAttachment || !(diaryActivitiesInput ? diaryActivitiesForSubmission(state.draft) : String(state.draft || "").trim()) ? " disabled" : ""}>Enviar</button>
       </div>
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
@@ -2396,6 +2430,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         getDraft: () => composerControls.draft?.value || "",
         setDraft: value => {
           const draft = composerControls.draft;
+          if (draft?.dataset?.diaryActivitiesInput === "true") value = numberDiaryActivityDraft(value).value;
           if (!draft || draft.value === value) return;
           draft.value = value;
           resizeDraft(draft);
@@ -3316,8 +3351,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
-    if (!composing && draft && draft.value !== (state.draft || "")) draft.value = state.draft || "";
+    const diaryActivitiesInput = isDiaryActivitiesPrompt(state);
+    const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
+    if (!composing && draft && draft.value !== draftValue) draft.value = draftValue;
+    if (!composing && draft && diaryActivitiesInput && !state.draft) draft.setSelectionRange?.(draftValue.length, draftValue.length);
     if (draft) {
+      if (diaryActivitiesInput) draft.dataset.diaryActivitiesInput = "true";
+      else delete draft.dataset.diaryActivitiesInput;
       const databaseFilter = databaseFilterForView(state.messages || []);
       const dateInput = !databaseFilter
         && !state.activeText
@@ -3353,7 +3393,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];
       const disabled = composerBusy || (action === "send-text" && (
-        (state.pendingFiles || []).length > 0 || !String(state.draft || "").trim()
+        (state.pendingFiles || []).length > 0 || !(diaryActivitiesInput ? diaryActivitiesForSubmission(state.draft) : String(state.draft || "").trim())
       ));
       if (button && button.disabled !== disabled) button.disabled = disabled;
     }
@@ -3906,6 +3946,31 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     pendingDocumentSeparatorDeletion = null;
     const draft = event.target;
     const inputType = String(event.inputType || "");
+    if (draft?.dataset?.diaryActivitiesInput === "true" && /^delete/i.test(inputType)) {
+      const value = String(draft.value || "");
+      const start = draft.selectionStart, end = draft.selectionEnd;
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const prefix = value.slice(lineStart).match(/^\d+\.[\t ]*/)?.[0] || "";
+      const prefixEnd = lineStart + prefix.length;
+      if (prefix && start === end && inputType === "deleteContentBackward"
+        && lineStart > 0 && start <= prefixEnd) {
+        event.preventDefault?.();
+        const previous = value.slice(0, lineStart - 1), following = value.slice(prefixEnd);
+        const separator = previous && following && !/[\s]$/.test(previous) && !/^\s/.test(following) ? " " : "";
+        const formatted = numberDiaryActivityDraft(previous + separator + following, previous.length + separator.length);
+        draft.value = formatted.value;
+        draft.setSelectionRange?.(formatted.selectionStart, formatted.selectionEnd);
+        input(event);
+        return;
+      }
+      const deletedPosition = inputType === "deleteContentBackward" ? start - 1 : start;
+      if (prefix && (start === end
+        ? deletedPosition >= lineStart && deletedPosition < prefixEnd
+        : start >= lineStart && end <= prefixEnd)) {
+        event.preventDefault?.();
+        return;
+      }
+    }
     if (draft?.dataset?.documentIdInput === "true" && /^delete/i.test(inputType)) {
       const value = String(draft.value || "");
       const start = Number.isFinite(draft.selectionStart) ? draft.selectionStart : 0;
@@ -3937,6 +4002,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function input(event) {
     if (event.target?.dataset?.role === "draft") {
+      if (!composing && !event.isComposing && event.target.dataset.diaryActivitiesInput === "true") {
+        const formatted = numberDiaryActivityDraft(event.target.value, event.target.selectionStart, event.target.selectionEnd);
+        if (formatted.value !== event.target.value) {
+          event.target.value = formatted.value;
+          event.target.setSelectionRange?.(formatted.selectionStart, formatted.selectionEnd);
+        }
+      }
       if (event.target.dataset.dateInput === "true") {
         const separatorDeletion = pendingDateSeparatorDeletion?.target === event.target
           ? pendingDateSeparatorDeletion
@@ -4430,6 +4502,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function submit(event) {
     if (!event.target?.matches?.("[data-chat-form]")) return;
     event.preventDefault?.();
+    if (composerControls.draft?.dataset?.diaryActivitiesInput === "true") {
+      const value = diaryActivitiesForSubmission(composerControls.draft.value);
+      if (!value) return;
+      emit({ type: "draft-changed", value });
+    }
     emit({ type: "send-text" });
   }
 
