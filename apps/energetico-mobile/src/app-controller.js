@@ -1987,6 +1987,19 @@ export function createAppController({
       || /PROVISAO.{0,25}PAGAMENTO.{0,60}ADICIONAR.{0,30}ANEXOS?/.test(context);
   }
 
+  function paymentProvisionBlankFormOption(result, activeFlow) {
+    if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "payment_provision") return null;
+    const poll = latestAssistantPoll(result?.messages);
+    if (!/\bFORMA DE PAGAMENTO\b/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text))) return null;
+    const options = (Array.isArray(poll?.options) ? poll.options : []).filter(option =>
+      /\bEM BRANCO\b/.test(normalizedSettlementText([option?.label, option?.title, option?.text].filter(Boolean).join(" "))));
+    if (options.length !== 1) return null;
+    const replyId = [options[0]?.reply, options[0]?.replyId, options[0]?.id]
+      .map(value => String(value || "").trim())
+      .find(Boolean);
+    return replyId ? { replyId } : null;
+  }
+
   function isDraftExitConfirmation(poll) {
     const options = Array.isArray(poll?.options) ? poll.options : [];
     return options.some(option => /^portal_draft_exit_(?:save|discard)$/i.test(String(option?.reply || option?.id || "").trim()))
@@ -3996,6 +4009,17 @@ export function createAppController({
           }));
           result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
         }
+      }
+      const blankPaymentFormOption = paymentProvisionBlankFormOption(
+        result,
+        result.activeFlow || previousState.activeFlow,
+      );
+      if (blankPaymentFormOption) {
+        result = preparePresenceResult(await client.sendText({
+          replyId: blankPaymentFormOption.replyId,
+          omitText: true,
+        }));
+        result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
       }
       const quantityResult = result;
       const retryingLastCheckboxQuantity = epiFinalizeQuantityRetry
