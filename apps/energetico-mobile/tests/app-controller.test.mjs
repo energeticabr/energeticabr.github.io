@@ -1952,6 +1952,193 @@ test("opção CPF/CNPJ EPI em branco não publica balão com o rótulo", async t
   assert.equal(h.store.getState().messages.some(message => message.role === "user" && message.text === ""), false);
 });
 
+test("criação de provisão responde forma de pagamento vazia em silêncio e não mostra EM BRANCO", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  const activeFlow = { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" };
+  const blankReplyId = "payment_provision_form_blank";
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL FLUXO DESEJA INICIAR?",
+    options: [{ id: "create_payment_provision", reply: "create_payment_provision", label: "CRIAR UMA PROVISÃO DE PAGAMENTO" }],
+  }]);
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "create_payment_provision") return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL É A FORMA DE PAGAMENTO?",
+        options: [{ id: blankReplyId, reply: blankReplyId, label: "0 - ⬜ EM BRANCO" }],
+      }],
+    };
+    assert.equal(payload.replyId, blankReplyId);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{ type: "poll", question: "QUAL É A DATA PREVISTA?", options: [] }],
+    };
+  };
+
+  await h.view.emit("select-reply", {
+    replyId: "create_payment_provision",
+    label: "CRIAR UMA PROVISÃO DE PAGAMENTO",
+  });
+
+  assert.deepEqual(h.chatCalls, [
+    ["text", { text: "CRIAR UMA PROVISÃO DE PAGAMENTO", replyId: "create_payment_provision" }],
+    ["text", { replyId: blankReplyId, omitText: true }],
+  ]);
+  const messages = h.store.getState().messages;
+  assert.equal(messages.some(message => /QUAL É A FORMA DE PAGAMENTO/i.test(message.question || "")), false);
+  assert.equal(messages.some(message => message.role === "user" && /EM BRANCO/i.test(message.text || "")), false);
+  assert.equal(messages.at(-1)?.question, "QUAL É A DATA PREVISTA?");
+});
+
+test("falha ao selecionar forma vazia exige sincronização e retoma a seleção sem texto", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  const activeFlow = { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" };
+  const blankReplyId = "payment_provision_form_blank";
+  let blankAttempts = 0;
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL FLUXO DESEJA INICIAR?",
+    options: [{ id: "create_payment_provision", reply: "create_payment_provision", label: "CRIAR UMA PROVISÃO DE PAGAMENTO" }],
+  }]);
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "create_payment_provision") return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL É A FORMA DE PAGAMENTO?",
+        options: [{ id: blankReplyId, reply: blankReplyId, label: "0 - ⬜ EM BRANCO" }],
+      }],
+    };
+    if (payload.replyId === blankReplyId) {
+      blankAttempts += 1;
+      if (blankAttempts === 1) {
+        throw Object.assign(new Error("resposta automática sem confirmação"), { code: "NETWORK_UNCERTAIN" });
+      }
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{ type: "poll", question: "QUAL É A DATA PREVISTA?", options: [] }],
+      };
+    }
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL É A FORMA DE PAGAMENTO?",
+        options: [{ id: blankReplyId, reply: blankReplyId, label: "0 - ⬜ EM BRANCO" }],
+      }],
+    };
+    assert.equal(payload.replyId, blankReplyId);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{ type: "poll", question: "QUAL É A DATA PREVISTA?", options: [] }],
+    };
+  };
+
+  await h.view.emit("select-reply", {
+    replyId: "create_payment_provision",
+    label: "CRIAR UMA PROVISÃO DE PAGAMENTO",
+  });
+
+  assert.equal(h.store.getState().activeFlow.id, "payment_provision");
+  assert.equal(h.store.getState().messages.at(-1)?.type, "text");
+  assert.doesNotMatch(h.store.getState().messages.at(-1)?.text || "", /FORMA DE PAGAMENTO|EM BRANCO/i);
+  assert.equal(h.view.renders.at(-1).recoveryUncertain, true);
+  assert.match(h.view.renders.at(-1).error, /Retomar conversa/i);
+  await h.view.emit("draft-changed", { value: "EM BRANCO" });
+  await h.view.emit("send-text");
+  assert.equal(h.chatCalls.length, 2, "o compositor não deve enviar antes da sincronização");
+  await h.view.emit("retry-session");
+
+  assert.deepEqual(h.chatCalls.map(([, payload]) => payload.replyId), [
+    "create_payment_provision", blankReplyId, "input_continue", blankReplyId,
+  ]);
+  assert.equal(h.chatCalls.at(-1)[1].omitText, true);
+  assert.equal(h.view.renders.at(-1).error, null);
+  assert.equal(h.view.renders.at(-1).recoveryUncertain, false);
+  assert.equal(h.store.getState().activeFlow.id, "payment_provision");
+  assert.equal(h.store.getState().messages.at(-1)?.question, "QUAL É A DATA PREVISTA?");
+});
+
+test("retomar não repete a forma vazia quando a VM já avançou", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" };
+  const blankReplyId = "payment_provision_form_blank";
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL FLUXO DESEJA INICIAR?",
+    options: [{ id: "create_payment_provision", reply: "create_payment_provision", label: "CRIAR UMA PROVISÃO DE PAGAMENTO" }],
+  }]);
+  h.chatCalls.length = 0;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "create_payment_provision") return {
+      status: "processed", activeFlow,
+      messages: [{ type: "poll", question: "QUAL É A FORMA DE PAGAMENTO?", options: [
+        { id: blankReplyId, reply: blankReplyId, label: "0 - ⬜ EM BRANCO" },
+      ] }],
+    };
+    if (payload.replyId === blankReplyId) throw Object.assign(new Error("gateway sem confirmação"), { status: 502 });
+    assert.equal(payload.replyId, "input_continue");
+    return { status: "processed", activeFlow, messages: [{ type: "poll", question: "QUAL É A DATA PREVISTA?", options: [] }] };
+  };
+
+  await h.view.emit("select-reply", { replyId: "create_payment_provision", label: "CRIAR UMA PROVISÃO DE PAGAMENTO" });
+  await h.view.emit("retry-session");
+
+  assert.deepEqual(h.chatCalls.map(([, payload]) => payload.replyId), [
+    "create_payment_provision", blankReplyId, "input_continue",
+  ]);
+  assert.equal(h.store.getState().messages.at(-1)?.question, "QUAL É A DATA PREVISTA?");
+});
+
+test("não autoenvia a opção vazia de forma de pagamento fora da criação de provisão", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  const activeFlow = { id: "launch", title: "EFETUAR LANÇAMENTO" };
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL FLUXO DESEJA INICIAR?",
+    options: [{ id: "create_launch", reply: "create_launch", label: "EFETUAR LANÇAMENTO" }],
+  }]);
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL É A FORMA DE PAGAMENTO?",
+        options: [{ id: "launch_blank", reply: "launch_blank", label: "0 - ⬜ EM BRANCO" }],
+      }],
+    };
+  };
+
+  await h.view.emit("select-reply", { replyId: "create_launch", label: "EFETUAR LANÇAMENTO" });
+
+  assert.deepEqual(h.chatCalls, [["text", { text: "EFETUAR LANÇAMENTO", replyId: "create_launch" }]]);
+  assert.equal(h.store.getState().messages.at(-1)?.question, "QUAL É A FORMA DE PAGAMENTO?");
+});
+
 test("selecionar todos os EPI marca e desmarca o lote sem alterar a quantidade personalizada", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());

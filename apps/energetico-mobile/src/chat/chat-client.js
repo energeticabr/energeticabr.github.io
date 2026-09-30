@@ -137,12 +137,12 @@ export function createChatClient({
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`
   );
 
-  async function sendText({ text = "", replyId } = {}) {
+  async function sendText({ text = "", replyId, omitText = false } = {}) {
     const token = await acquireToken(tokenProvider);
     const blankEpiReply = EMPTY_EPI_REPLY_IDS.has(String(replyId || ""));
     const payload = {
       messageId: newMessageId(),
-      ...(!blankEpiReply ? { text: String(text || "").trim() } : {}),
+      ...(!(blankEpiReply || omitText) ? { text: String(text || "").trim() } : {}),
       ...(replyId ? { replyId: String(replyId) } : {}),
     };
     return request(chatUrl.href, {

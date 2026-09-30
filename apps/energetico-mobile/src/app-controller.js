@@ -1987,6 +1987,30 @@ export function createAppController({
       || /PROVISAO.{0,25}PAGAMENTO.{0,60}ADICIONAR.{0,30}ANEXOS?/.test(context);
   }
 
+  function paymentProvisionBlankFormOption(result, activeFlow) {
+    if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "payment_provision") return null;
+    const poll = latestAssistantPoll(result?.messages);
+    if (!/\bFORMA DE PAGAMENTO\b/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text))) return null;
+    const options = (Array.isArray(poll?.options) ? poll.options : []).filter(option =>
+      /\bEM BRANCO\b/.test(normalizedSettlementText([option?.label, option?.title, option?.text].filter(Boolean).join(" "))));
+    if (options.length !== 1) return null;
+    const replyId = [options[0]?.reply, options[0]?.replyId, options[0]?.id]
+      .map(value => String(value || "").trim())
+      .find(Boolean);
+    return replyId ? { replyId } : null;
+  }
+
+  function paymentProvisionSyncNotice(result) {
+    const poll = latestAssistantPoll(result?.messages);
+    if (!poll) return result;
+    return {
+      ...result,
+      messages: result.messages.map(message => message === poll
+        ? { type: "text", text: "Aguardando sincronização com a VM. Toque em Retomar conversa para continuar." }
+        : message),
+    };
+  }
+
   function isDraftExitConfirmation(poll) {
     const options = Array.isArray(poll?.options) ? poll.options : [];
     return options.some(option => /^portal_draft_exit_(?:save|discard)$/i.test(String(option?.reply || option?.id || "").trim()))
@@ -2968,10 +2992,11 @@ export function createAppController({
     }, delaySeconds * 1000);
   }
 
-  function flowBusy() {
+  function flowBusy({ allowUncertainRecovery = false } = {}) {
     const state = store.getState();
     return resuming || attachmentActionBusy || responseTransitionTimer !== null
-      || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending");
+      || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending")
+      || (!allowUncertainRecovery && recoveryUncertain);
   }
 
   function cancelDatabaseFilter({ resetLast = false } = {}) {
@@ -3134,6 +3159,7 @@ export function createAppController({
       recoveryReferenceCount: (recoveryReference ? 1 : 0) + olderReferences.length,
       recoveryWarning,
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
+      recoveryUncertain,
       pendingProvisions: pendingProvisionSnapshot,
       pendingNotes: pendingNotesSnapshot,
       pendingNoteLaunchOrderId,
@@ -3315,7 +3341,7 @@ export function createAppController({
   }
 
   async function continueConversation() {
-    if (!account || stopped || flowBusy()) return false;
+    if (!account || stopped || flowBusy({ allowUncertainRecovery: true })) return false;
     cancelResponseTransition();
     currentAssistantPollSnapshot = null;
     cancelCompletionMenu();
@@ -3326,7 +3352,23 @@ export function createAppController({
     render();
     try {
       attachmentRevision += 1;
-      const result = preparePresenceResult(await client.sendText({ text: "", replyId: "input_continue" }));
+      let paymentProvisionAutoReplyError = null;
+      let result = preparePresenceResult(await client.sendText({ text: "", replyId: "input_continue" }));
+      const blankPaymentFormOption = paymentProvisionBlankFormOption(
+        result,
+        result.activeFlow || store.getState().activeFlow,
+      );
+      if (blankPaymentFormOption) {
+        try {
+          result = preparePresenceResult(await client.sendText({
+            replyId: blankPaymentFormOption.replyId,
+            omitText: true,
+          }));
+        } catch (error) {
+          paymentProvisionAutoReplyError = error;
+          result = paymentProvisionSyncNotice(result);
+        }
+      }
       if (account !== conversationAccount || stopped) return false;
       // Some resume responses identify the current menu only by its stage and
       // accidentally echo the previous flow metadata. Treat that response as
@@ -3358,6 +3400,10 @@ export function createAppController({
         resetConversation: ingestedResult.resetConversation === true,
         attachments: ingestedResult.attachments,
       });
+      recoveryUncertain = Boolean(paymentProvisionAutoReplyError);
+      if (paymentProvisionAutoReplyError) {
+        sessionError = "Não foi possível confirmar o avanço automático da provisão. Toque em Retomar conversa para sincronizar antes de continuar.";
+      }
       rememberCurrentAssistantPoll(ingestedResult, ingestedResult.messages);
       hydrateMediaPreviews();
       // A retomada pode devolver a pergunta atual sem a coleção de anexos
@@ -3378,10 +3424,11 @@ export function createAppController({
         }
       }
       reconcileRecovery(resumeDraftRevision, ingestedResult);
+      persistRecovery();
       if (attachmentReminderDetails()) scheduleAttachmentReminder();
       else cancelAttachmentReminder();
       scheduleCompletionMenu(result);
-      return true;
+      return !paymentProvisionAutoReplyError;
     } catch (error) {
       if (!stopped && account === conversationAccount) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
       return false;
@@ -3951,6 +3998,7 @@ export function createAppController({
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
     let operation;
     let epiAdvanceError = null;
+    let paymentProvisionAutoReplyError = null;
     let remoteResponseReceived = false;
     try {
       if (editingSignature) {
@@ -3995,6 +4043,23 @@ export function createAppController({
             replyId: String(discard.reply || discard.id),
           }));
           result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
+        }
+      }
+      const blankPaymentFormOption = paymentProvisionBlankFormOption(
+        result,
+        result.activeFlow || previousState.activeFlow,
+      );
+      if (blankPaymentFormOption) {
+        const paymentFormResult = result;
+        try {
+          result = preparePresenceResult(await client.sendText({
+            replyId: blankPaymentFormOption.replyId,
+            omitText: true,
+          }));
+          result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
+        } catch (error) {
+          paymentProvisionAutoReplyError = error;
+          result = paymentProvisionSyncNotice(paymentFormResult);
         }
       }
       const quantityResult = result;
@@ -4180,8 +4245,11 @@ export function createAppController({
         }
         hydrateMediaPreviews();
         reconcileSavedFlow(effectiveResult, previousState);
-        recoveryUncertain = false;
+        recoveryUncertain = Boolean(paymentProvisionAutoReplyError);
         recoveryPreview = null;
+        if (paymentProvisionAutoReplyError) {
+          sessionError = "Não foi possível confirmar o avanço automático da provisão. Toque em Retomar conversa para sincronizar antes de continuar.";
+        }
         persistRecovery();
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
@@ -5239,7 +5307,12 @@ export function createAppController({
   }
 
   function bindCommands() {
-    bind("draft-changed", command => { draftEditRevision += 1; cancelCompletionMenu(); store.setDraft(command.value); });
+    bind("draft-changed", command => {
+      if (recoveryUncertain) return;
+      draftEditRevision += 1;
+      cancelCompletionMenu();
+      store.setDraft(command.value);
+    });
     bind("database-filter-changed", scheduleDatabaseFilter);
     bind("epi-product-selection-changed", updateEpiProductSelection);
     bind("epi-product-select-all", updateEpiProductSelectionBatch);

@@ -318,6 +318,21 @@ test("seleção em branco do pedido EPI envia somente o replyId, sem texto", asy
   });
 });
 
+test("opção vazia enviada silenciosamente omite o texto sem depender do rótulo", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+
+  await client.sendText({ replyId: "payment_provision_form_blank", omitText: true });
+
+  assert.deepEqual(JSON.parse(request.body), {
+    messageId: "message-id",
+    replyId: "payment_provision_form_blank",
+  });
+});
+
 test("CPF/CNPJ EPI em branco não envia rótulo nem texto ao backend", async () => {
   let request;
   const client = clientWith(async (url, options) => {

@@ -2097,7 +2097,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
     .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-  const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.responseTransitionPending)
+  const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
     || pendingFiles.some(item => item.status === "sending");
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
@@ -2120,7 +2120,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${renderRecovery(state)}
       ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
+    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
@@ -2129,7 +2129,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft"${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
+      <textarea id="chatDraft" data-role="draft"${state.recoveryUncertain ? " disabled" : ""}${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(state.draft || "")}</textarea>
       <section class="voice-recording-panel" data-role="voice-recording-panel" aria-label="Gravação de voz" hidden>
         <div class="voice-recording-panel__heading"><span class="voice-recording-live-dot" aria-hidden="true"></span><strong data-role="voice-recording-status" aria-live="polite">Preparando microfone…</strong><time data-role="voice-recording-time">00:00</time></div>
         <div class="voice-waveform" data-role="voice-waveform" role="img" aria-label="Nível de áudio recebido">${Array.from({ length: 20 }, () => '<i aria-hidden="true"></i>').join("")}</div>
@@ -3347,7 +3347,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (!documentIdInput) delete draft.dataset.documentIdInput;
       draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
     }
-    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked)
+    if (draft) draft.disabled = state.recoveryUncertain === true;
+    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain)
       || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];

@@ -64,6 +64,30 @@ test("renderiza conversa acessível com câmera, anexo e compositor", () => {
     "o clipe deve ficar acima da câmera na coluna de anexos");
 });
 
+test("bloqueia o compositor enquanto a conversa precisa ser sincronizada com a VM", () => {
+  const markup = renderChatMarkup(signedInState({ recoveryUncertain: true, draft: "EM BRANCO" }));
+
+  assert.match(markup, /<textarea[^>]*disabled/);
+  assert.match(markup, /data-action="send-text"[^>]*disabled/);
+  assert.match(markup, /Aguardando sincronização com a VM/);
+});
+
+test("desativa e reativa os campos do compositor conforme a sincronização", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+
+  view.render(signedInState({ recoveryUncertain: true, draft: "EM BRANCO" }));
+  assert.equal(root.querySelector('[data-role="draft"]').disabled, true);
+  assert.equal(root.querySelector('[data-action="send-text"]').disabled, true);
+  view.render(signedInState());
+  assert.equal(root.querySelector('[data-role="draft"]').disabled, false);
+  assert.equal(root.querySelector('[data-action="send-text"]').disabled, true);
+
+  view.destroy();
+  dom.window.close();
+});
+
 test("microfone aparece acima de Enviar somente ao preencher diário de obras", () => {
   const activeMarkup = renderChatMarkup(signedInState({
     activeFlow: { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRAS" },
