@@ -3259,7 +3259,8 @@ test("visita em obra aparece apenas no submenu Lançamentos, abaixo do anexo a p
   const suppliesDom = new JSDOM(suppliesMarkup);
   const suppliesDoc = suppliesDom.window.document;
   assert.equal(suppliesDoc.querySelector('[data-reply-id="action_construction_visit"]'), null);
-  assert.equal(suppliesDoc.querySelector(".chat-supplies-heading").textContent, "📦 SUPRIMENTOS");
+  assert.equal(suppliesDoc.querySelector(".chat-supplies-heading"), null);
+  assert.equal(suppliesDoc.querySelector(".chat-message--launch-menu .chat-bubble > strong"), null);
   assert.doesNotMatch(suppliesDoc.querySelector(".chat-message--launch-menu .chat-choice-card").textContent, /QUAL FLUXO VOCÊ DESEJA INICIAR/);
   const supplyPairs = [...suppliesDoc.querySelectorAll(".chat-supplies-pair")];
   assert.deepEqual(supplyPairs.map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
