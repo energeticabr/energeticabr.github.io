@@ -2,6 +2,7 @@ import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
+import { attachmentFinishOption, isDiaryAttachmentPrompt } from "./chat/attachment-finish.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isValidRhidReportDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import {
@@ -638,6 +639,7 @@ export function createAppController({
   let account = null;
   let attachmentTransferPending = false;
   let attachmentTransferCompleted = false;
+  let finishingFlow = false;
   // Render an actionable login immediately. Session restoration is silent and
   // must never leave the first screen disabled while a native bridge responds.
   let sessionStatus = "signed-out";
@@ -3088,8 +3090,24 @@ export function createAppController({
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const remote = await client.getAttachments();
         if (!Array.isArray(remote)) throw new Error("A VM não devolveu a confirmação dos anexos.");
-        const remoteIds = new Set(remote.filter(item => item?.id && item?.mediaUrl).map(item => String(item.id)));
-        const missing = current.filter(item => item?.id && !remoteIds.has(String(item.id)));
+        const available = remote.filter(item => item?.id && item?.mediaUrl);
+        const remoteIds = new Set(available.map(item => String(item.id)));
+        const retained = current.filter(item => item?.id && remoteIds.has(String(item.id)));
+        const unmatched = current.filter(item => item?.id && !remoteIds.has(String(item.id)));
+        const usedIds = new Set(retained.map(item => String(item.id)));
+        const sameFile = (left, right) => Boolean(left?.fileName)
+          && left.fileName === right.fileName && left.mimeType === right.mimeType
+          && Number(left.size) === Number(right.size)
+          && (left.existing === true) === (right.existing === true)
+          && (left.readOnly === true) === (right.readOnly === true);
+        const missing = unmatched.filter(item => {
+          // The VM changes public IDs with the flow revision. Accept a renewed
+          // ID only for an unambiguous file confirmed by the current snapshot.
+          const matches = available.filter(candidate => !usedIds.has(String(candidate.id)) && sameFile(item, candidate));
+          if (matches.length !== 1 || unmatched.filter(candidate => sameFile(item, candidate)).length !== 1) return true;
+          usedIds.add(String(matches[0].id));
+          return false;
+        });
         if (!missing.length) {
           // Atualiza URLs/metadados somente depois de confirmar a coleção
           // inteira. Uma resposta transitória vazia não pode apagar a galeria
@@ -5412,9 +5430,28 @@ export function createAppController({
       return sendText(command.label, command.replyId);
     });
     bind("show-summary", () => sendText("resumo", "flow_summary"));
-    bind("finish-flow", () => {
-      if (flowBusy()) return false;
-      return sendText("FINALIZAR");
+    bind("finish-flow", async () => {
+      if (flowBusy() || finishingFlow) return false;
+      const state = store.getState();
+      const poll = latestAssistantPoll(state.messages);
+      const diaryAttachments = isDiaryAttachmentPrompt(poll, state.activeFlow);
+      const finishOption = diaryAttachments ? attachmentFinishOption(poll) : null;
+      if (finishOption?.disabled === true) return false;
+      finishingFlow = true;
+      try {
+        const sent = await sendText(
+          finishOption ? String(finishOption.label || finishOption.title || "FINALIZAR") : "FINALIZAR",
+          finishOption ? String(finishOption.reply || finishOption.replyId || finishOption.id) : undefined,
+        );
+        const next = store.getState();
+        if (sent && diaryAttachments && isDiaryAttachmentPrompt(latestAssistantPoll(next.messages), next.activeFlow)) {
+          setSessionError(new Error("A VM não avançou para a junção dos anexos. Os anexos foram preservados; retome a conversa antes de tentar novamente."));
+          return false;
+        }
+        return sent;
+      } finally {
+        finishingFlow = false;
+      }
     });
     bind("edit-launch-line", command => sendText(command.label, command.replyId));
     bind("delete-launch-line", command => {
