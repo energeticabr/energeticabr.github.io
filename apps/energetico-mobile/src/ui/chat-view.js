@@ -14,6 +14,7 @@ import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
+import { provisionDateKey, provisionDueState, provisionNumericValue } from "../chat/pending-provision-dates.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
@@ -1657,12 +1658,25 @@ function pendingProvisionValue(value) {
   return raw;
 }
 
+function pendingProvisionIcon(name) {
+  const paths = {
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 4h2m4 0h2m-8 3h2"/>',
+    supplier: '<path d="M4 21V7h8v14m0-18h8v18M2 21h20M7 10h2m-2 4h2m-2 4h2m6-11h2m-2 4h2m-2 4h2"/>',
+    product: '<path d="m3 7 9-5 9 5v10l-9 5-9-5V7Zm0 0 9 5 9-5m-9 5v10"/>',
+    branch: '<path d="M12 22s8-9 8-14a8 8 0 0 0-16 0c0 5 8 14 8 14Z"/><circle cx="12" cy="8" r="2"/>',
+    property: '<path d="m2 11 10-9 10 9M5 9v12h5v-7h4v7h5V9"/>',
+  };
+  return `<span class="chat-pending-provision__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</svg></span>`;
+}
+
+function pendingProvisionAmount(value) {
+  const amount = provisionNumericValue(value);
+  return Number.isFinite(amount) ? amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
+}
+
 function pendingProvisionDateInputValue(value) {
-  const raw = String(value || "").trim();
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-  const local = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
+  const key = provisionDateKey(value);
+  return key ? `${key.slice(8, 10)}/${key.slice(5, 7)}/${key.slice(0, 4)}` : "";
 }
 
 function pendingNotesMarkup(snapshot, launchingOrderId = "", error = "") {
@@ -1742,16 +1756,17 @@ function pendingProvisionsMarkup(
     </div>`;
   }
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
-    <div class="chat-confirmation chat-pending-provisions" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
+    <div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       <div class="chat-date-picker__header chat-pending-provisions__header">
         <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" data-immediate-action="true" aria-label="Fechar avisos de provisões pendentes" title="Fechar avisos">×</button>
         <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
-        <h2 id="pending-provisions-title">💳 Provisões de pagamento pendentes</h2>
+        <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Vencidas ou com vencimento em até 2 dias (${rows.length}).</p></div>
       </div>
-      <p>Vencidas ou com vencimento hoje (${rows.length}).</p>
-      <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou que vencem hoje">
+      ${snapshot.upcomingUnavailable ? '<p class="chat-pending-provision__error" role="status">Não foi possível consultar os próximos vencimentos. Os itens abaixo são os confirmados.</p>' : ""}
+      <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou com vencimento em até 2 dias">
         ${rows.map(row => {
           const paymentId = String(row.id ?? "").trim();
+          const timing = provisionDueState(row.dueDate);
           const attachmentState = attachmentsByPayment?.[paymentId] || { status: "loading", items: [] };
           const uploadState = uploadsByPayment?.[paymentId] || { items: [], busy: false, error: "" };
           const expanded = expandedPaymentId === paymentId && attachmentState.status === "available";
@@ -1774,7 +1789,14 @@ function pendingProvisionsMarkup(
               return `<li class="chat-pending-provision-attachment"><button class="chat-pending-provision-attachment__open" type="button" data-action="open-pending-provision-attachment" data-payment-id="${escapeHtml(paymentId)}" data-file-name="${escapeHtml(fileName)}" aria-label="Abrir ${escapeHtml(fileName)}"><span class="chat-pending-provision-attachment__type" aria-hidden="true">${isPdf ? "📄" : "📎"}</span><span class="chat-pending-provision-attachment__details"><strong>${escapeHtml(fileName)}</strong><small>${escapeHtml(formatBytes(item.size))} · Toque para abrir</small></span></button><button class="chat-pending-provision-attachment__share" type="button" data-action="share-pending-provision-attachment" data-payment-id="${escapeHtml(paymentId)}" data-file-name="${escapeHtml(fileName)}" aria-label="Encaminhar ${escapeHtml(fileName)}" title="Encaminhar anexo">${shareAttachmentIcon}</button></li>`;
             }).join("")}<li class="chat-pending-provision-attachment chat-pending-provision-attachment--add"><button class="chat-pending-provision-attachment__add" type="button" data-action="pick-pending-provision-attachments" data-payment-id="${escapeHtml(paymentId)}"${uploadState.busy ? " disabled" : ""}>📎 Adicionar mais anexos</button></li></ul>${uploadQueue}`
             : "";
-          return `<article class="chat-pending-provision" role="listitem" data-payment-id="${escapeHtml(paymentId)}"><div class="chat-pending-provision__heading"><div class="chat-pending-provision__summary"><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong><span>Vencimento: ${escapeHtml(pendingProvisionValue(row.dueDate))}</span><span>${escapeHtml(pendingProvisionValue(row.product || "Produto não informado"))} · ${escapeHtml(pendingProvisionValue(row.total || "Valor não informado"))}</span>${row.branch || row.property ? `<small>${escapeHtml([row.branch, row.property].filter(Boolean).join(" · "))}</small>` : ""}</div><div class="chat-pending-provision__actions">${edit}${check}${arrow}</div></div>${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
+          return `<article class="chat-pending-provision chat-pending-provision--payment chat-pending-provision--${timing.kind}" role="listitem" data-payment-id="${escapeHtml(paymentId)}">
+            <div class="chat-pending-provision__amounts">
+              <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
+              <div class="chat-pending-provision__total" data-field="total"><span>Valor</span><strong>${escapeHtml(pendingProvisionAmount(row.total))}</strong></div>
+            </div>
+            <div class="chat-pending-provision__supplier" data-field="supplier">${pendingProvisionIcon("supplier")}<div class="chat-pending-provision__field"><span>Fornecedor</span><strong>${escapeHtml(row.supplier || "Fornecedor não informado")}</strong></div><div class="chat-pending-provision__actions">${edit}${check}${arrow}</div></div>
+            ${[["product", "Produto", row.product], ["branch", "Filial", row.branch], ["property", "Imóvel", row.property]].map(([name, label, value]) => `<div class="chat-pending-provision__detail" data-field="${name}">${pendingProvisionIcon(name)}<div class="chat-pending-provision__field"><span>${label}</span><strong>${escapeHtml(pendingProvisionValue(value))}</strong></div></div>`).join("")}
+            ${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
         }).join("")}
       </div>
     </div>
@@ -2229,6 +2251,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const handlers = new Map();
   let messageKey = "";
   let lastState = null;
+  let pendingProvisionRenderDay = "";
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
   const launchPayrollSelectedIds = new Set();
@@ -3337,6 +3360,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function onlyDraftChanged(state) {
+    if (state.pendingProvisions && pendingProvisionRenderDay !== provisionDateKey()) return false;
     // Searchable polls use the draft as their local query. Rebuild their
     // options as the user types; otherwise only the composer changes.
     if (lastState
@@ -4709,6 +4733,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     syncComposerInset();
     messageKey = nextMessageKey;
     lastState = state;
+    pendingProvisionRenderDay = state.pendingProvisions ? provisionDateKey() : "";
     if (fileDragDepth > 0) showFileDropZone();
     if (signOutConfirmOpen) {
       root.querySelector('[data-action="cancel-sign-out"]')?.focus?.();

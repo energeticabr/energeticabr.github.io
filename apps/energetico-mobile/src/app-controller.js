@@ -12,6 +12,7 @@ import {
   scopePresenceResult,
 } from "./chat/presence-date-scope.js";
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
+import { provisionDateKey, provisionDayOffset } from "./chat/pending-provision-dates.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -462,11 +463,8 @@ function localDateIso(value = new Date()) {
 }
 
 function pendingProvisionDateInputValue(value) {
-  const raw = String(value || "").trim();
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-  const local = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  return local ? `${local[1]}/${local[2]}/${local[3]}` : "";
+  const key = provisionDateKey(value);
+  return key ? `${key.slice(8, 10)}/${key.slice(5, 7)}/${key.slice(0, 4)}` : "";
 }
 
 function pendingProvisionDateIso(value) {
@@ -1460,7 +1458,7 @@ export function createAppController({
     }, delayMs);
     const details = {
       title: FLOW_REMINDER_TITLE,
-      body: "Há provisões de pagamento vencidas ou com vencimento hoje.",
+      body: "Há provisões de pagamento vencidas ou com vencimento em até 2 dias.",
       delayMs,
     };
     const schedule = native.scheduleProvisionReminder?.(details);
@@ -1469,15 +1467,49 @@ export function createAppController({
 
   async function refreshPendingProvisionSnapshot() {
     if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
-    if (pendingProvisionReminderOpen || pendingProvisionSnapshot) return true;
+    if (pendingProvisionReminderOpen || pendingProvisionSnapshot) {
+      const today = provisionDateKey();
+      if (pendingProvisionSnapshot && pendingProvisionSnapshot.today !== today) {
+        pendingProvisionSnapshot.today = today;
+        render();
+      }
+      return true;
+    }
     if (pendingProvisionSessionDismissed) return false;
     if (pendingProvisionRequest) return pendingProvisionRequest;
     const snapshotAccount = account;
     const snapshotRevision = sessionRevision;
     pendingProvisionRequest = Promise.resolve().then(async () => {
       try {
-        const snapshot = await client.getPendingProvisionSnapshot();
+        const original = await client.getPendingProvisionSnapshot();
         if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
+        if (pendingProvisionReminderSuppressed()) return false;
+        let upcoming = [];
+        let upcomingUnavailable = false;
+        try {
+          const data = await getPendingProvisionAttachmentsData(snapshotAccount, snapshotRevision);
+          if (typeof data.loadUpcomingPayments === "function") {
+            const readController = new AbortController();
+            let timer;
+            const timeout = new Promise((_, reject) => {
+              timer = setTimeout(() => {
+                readController.abort();
+                reject(new Error("A consulta dos próximos vencimentos excedeu o tempo limite."));
+              }, 8_000);
+            });
+            try { upcoming = await Promise.race([data.loadUpcomingPayments({ signal: readController.signal }), timeout]); }
+            finally { clearTimeout(timer); }
+          }
+        } catch { upcomingUnavailable = true; }
+        if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision || pendingProvisionReminderSuppressed()) return false;
+        const rowsById = new Map();
+        for (const row of [...(Array.isArray(original?.rows) ? original.rows : []), ...upcoming]) {
+          const id = String(row?.id ?? "").trim();
+          // Preserve legacy snapshots without IDs, but do not duplicate actionable payments.
+          if (!id || !rowsById.has(id)) rowsById.set(id || Symbol(), row);
+        }
+        const rows = [...rowsById.values()];
+        const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable };
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
         if (!due) {
           cancelScheduledPendingProvisionReminder();
@@ -2410,7 +2442,7 @@ export function createAppController({
 
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
         if (String(row?.id ?? "").trim() !== id) return [row];
-        if (date > localDateIso()) return [];
+        if (date > provisionDayOffset(new Date(), 2)) return [];
         return [{ ...row, dueDate: `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
       });
       pendingProvisionDateEditPaymentId = "";
