@@ -158,7 +158,6 @@
   background: #fff;
   box-shadow: 0 2px 8px #0b376410;
 }
-.lg-record:nth-child(even) { background: #fff; }
 .lg-record--with-media { grid-template-columns: 78px minmax(0, 1fr); align-items: stretch; }
 .lg-record-media {
   appearance: none;
