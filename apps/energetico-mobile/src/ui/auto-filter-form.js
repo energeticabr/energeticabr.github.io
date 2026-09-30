@@ -1,3 +1,5 @@
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+
 const FILTER_CONTROL = 'input:not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea';
 
 export function bindAutoFilterForm(form, apply, { debounceMs = 180 } = {}) {
@@ -8,6 +10,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180 } = {}) {
   const view = form.ownerDocument?.defaultView || globalThis;
   const delay = Number.isFinite(Number(debounceMs)) ? Math.max(0, Number(debounceMs)) : 180;
   let timer = null;
+  const searchableSelects = bindSearchableFilterSelects(form);
 
   function values() {
     return JSON.stringify([...form.elements]
@@ -19,6 +22,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180 } = {}) {
   let lastAppliedValues = values();
 
   function cancelPending() {
+    searchableSelects.close();
     if (timer !== null) view.clearTimeout(timer);
     timer = null;
   }
@@ -26,12 +30,14 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180 } = {}) {
   function sync() {
     cancelPending();
     lastAppliedValues = values();
+    searchableSelects.sync();
   }
 
   function applyNow() {
     cancelPending();
     lastAppliedValues = values();
     apply();
+    searchableSelects.sync();
   }
 
   function applyIfChanged() {
@@ -40,16 +46,17 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180 } = {}) {
     if (nextValues === lastAppliedValues) return;
     lastAppliedValues = nextValues;
     apply();
+    searchableSelects.sync();
   }
 
   function onInput(event) {
-    if (!event.target?.matches?.(FILTER_CONTROL) || !form.contains(event.target)) return;
+    if (event.target?.dataset?.filterOptionSearch === 'true' || !event.target?.matches?.(FILTER_CONTROL) || !form.contains(event.target)) return;
     cancelPending();
     timer = view.setTimeout(applyIfChanged, delay);
   }
 
   function onChange(event) {
-    if (!event.target?.matches?.(FILTER_CONTROL) || !form.contains(event.target)) return;
+    if (event.target?.dataset?.filterOptionSearch === 'true' || !event.target?.matches?.(FILTER_CONTROL) || !form.contains(event.target)) return;
     applyIfChanged();
   }
 
@@ -68,6 +75,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180 } = {}) {
     sync,
     destroy() {
       cancelPending();
+      searchableSelects.destroy();
       form.removeEventListener('input', onInput);
       form.removeEventListener('change', onChange);
       form.removeEventListener('submit', onSubmit);

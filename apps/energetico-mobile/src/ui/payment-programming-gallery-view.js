@@ -1,3 +1,5 @@
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
@@ -260,6 +262,17 @@ export function createPaymentProgrammingGallery({
   content.append(filterDisclosure, notice, listToolbar, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const searchableSort = bindSearchableFilterSelects(listToolbar);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root,
+    loadEditor: (id, options) => data.loadEditor(id, options),
+    saveEditor: (context, fields) => data.saveEditor(context, fields),
+    deleteItem: (id, options) => data.deleteItem(id, options),
+    onChanged: () => {
+      detail.hidden = true; detail.replaceChildren();
+      return loadSnapshot();
+    },
+  });
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
     onChange: updateAttachmentCount,
@@ -288,6 +301,7 @@ export function createPaymentProgrammingGallery({
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
+      if (button.closest(".gallery-record-dialog")) continue;
       if (button !== closeButton && button !== homeButton) button.disabled = Boolean(busy);
     }
     previous.disabled = listLoading || page <= 1;
@@ -427,7 +441,8 @@ export function createPaymentProgrammingGallery({
         el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       card.append(attachmentRail);
     }
-    card.append(main);
+    card.classList.add('gallery-record-card');
+    card.append(main, recordActions.render(row));
     return card;
   }
 
@@ -528,6 +543,7 @@ export function createPaymentProgrammingGallery({
     sortValue = "due-asc";
     pageSize = 10;
     autoFilters.apply();
+    searchableSort.sync();
   });
   refreshButton.addEventListener("click", () => { void loadSnapshot(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
@@ -548,6 +564,8 @@ export function createPaymentProgrammingGallery({
 
   function close() {
     if (!opened) return;
+    recordActions.close();
+    searchableSort.close();
     autoFilters.cancelPending();
     opened = false;
     session += 1;
@@ -565,7 +583,7 @@ export function createPaymentProgrammingGallery({
 
   function destroy() {
     if (destroyed) return;
-    autoFilters.destroy();
+    recordActions.destroy(); searchableSort.destroy(); autoFilters.destroy();
     close();
     destroyed = true;
     attachmentCounts.destroy();

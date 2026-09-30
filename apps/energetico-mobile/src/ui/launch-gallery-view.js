@@ -1,3 +1,4 @@
+import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 
@@ -175,6 +176,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const retryIds = new Map();
   const selectedUploads = new Map();
   const filterControls = new Map();
+  const recordItems = new Map();
 
   function element(tag, className, text) {
     const node = doc.createElement(tag);
@@ -332,6 +334,40 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   content.append(filterDisclosure, totals, notice, listStatus, cards, pagination);
   root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root,
+    onEdit: async row => {
+      if (!opened || destroyed || !canChangeDetail()) return;
+      const epoch = session, version = detailVersion + 1;
+      await loadDetail(row.id);
+      if (!active(epoch) || detailVersion !== version || !current || String(current.item.id) !== String(row.id)) return;
+      beginEditor('update');
+      if (editor?.form) {
+        reveal(editor.form);
+        focus(editor.controls.find(({ control }) => !control.disabled)?.control);
+      }
+    },
+    deleteItem: async id => {
+      if (busy || editor || review) throw new Error('Conclua ou cancele a edição aberta antes de deletar.');
+      const item = recordItems.get(String(id));
+      if (!item) throw new Error('Atualize a galeria antes de deletar este item.');
+      let expectedModified = item.expectedModified ?? field(item.fields, 'Modified', 'Modificado');
+      if (!expectedModified) {
+        const detail = await request('detail', { id });
+        if (String(detail?.item?.id) !== String(id)) throw new Error('O registro solicitado não foi identificado.');
+        expectedModified = detail.item.expectedModified ?? field(detail.item.fields, 'Modified', 'Modificado');
+      }
+      if (!expectedModified) throw new Error('A versão atual do registro não foi identificada. Atualize a galeria.');
+      return request('delete', { id, confirm: true, expectedModified });
+    },
+    onChanged: async ({ id }) => {
+      if (String(selectedId) === String(id)) {
+        ++detailVersion; current = null; selectedId = null;
+        panel.hidden = true; panel.replaceChildren(); needsDetailRefresh = false;
+      }
+      await loadSnapshot(applied);
+    },
+  });
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: async item => {
       const result = await request('detail', { id: item.id });
@@ -387,6 +423,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (control?.tagName === 'SELECT' && Array.isArray(options)) setOptions(control, options, 'Todos');
       }
       if (result.sortOptions?.length) setOptions(sort, result.sortOptions);
+      recordItems.clear();
       cards.replaceChildren(...result.rows.map(renderCard));
       void attachmentCounts.request(result.rows.filter(item => recordMedia(item)));
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
@@ -807,6 +844,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (opened && !destroyed) focus(returnTo?.isConnected ? returnTo : root.querySelector('.lg-cluster-trigger'));
   }
   function renderCard(item) {
+    recordItems.set(String(item.id), item);
     const fields = item.fields ?? {};
     const product = field(fields, 'PRODUTO') ?? 'Lançamento';
     const quantity = field(fields, 'QUANTIDADE');
@@ -926,7 +964,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!finance.hidden) summary.append(finance);
     summary.append(expand);
     body.append(summary, extra);
-    card.append(...(recordPreview ? [recordPreview] : []), body);
+    card.classList.add('gallery-record-card');
+    card.append(...(recordPreview ? [recordPreview] : []), body, recordActions.render(item));
     return card;
   }
   function canChangeDetail() {
@@ -1243,6 +1282,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function close() {
     if (!opened || destroyed) return;
+    recordActions.close();
     autoFilters.cancelPending();
     cancelClusterLoad();
     opened = false; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
@@ -1256,6 +1296,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    recordActions.destroy(); recordItems.clear();
     autoFilters.destroy();
     attachmentCounts.destroy();
     cancelClusterLoad();

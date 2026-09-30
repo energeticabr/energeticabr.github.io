@@ -1377,3 +1377,36 @@ test('pending file selection survives a successful edit and its asynchronous det
   button(ctx.root(), 'Confirmar envio').click(); await settle();
   assert.equal(uploads[0][1], file);
 });
+
+test('late pencil detail response cannot open an editor after the gallery is closed and reopened', async t => {
+  const pending = deferred();
+  let detailCount = 0;
+  const item = { ...row(), hasAttachments: false };
+  const ctx = await setup(t, { request: async operation => {
+    if (operation === 'snapshot') return snapshot({ rows: [item] });
+    if (operation === 'detail' && ++detailCount === 2) return pending.promise;
+    return detail({ item });
+  } });
+  await ctx.gallery.open();
+  await showDetail(ctx);
+  ctx.root().querySelector('[data-gallery-action="edit"]').click();
+  await settle();
+  ctx.gallery.close();
+  await ctx.gallery.open();
+  assert.equal(ctx.root().querySelector('.lg-editor'), null);
+  pending.resolve(detail());
+  await settle();
+  assert.equal(ctx.root().querySelector('.lg-editor'), null, 'old pencil action cannot edit a new gallery session');
+});
+
+test('pencil brings the launch editing form into view', async t => {
+  const ctx = await setup(t);
+  const scrolled = [];
+  ctx.dom.window.HTMLElement.prototype.scrollIntoView = function () { scrolled.push(this); };
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-gallery-action="edit"]').click();
+  await settle();
+  const form = ctx.root().querySelector('.lg-editor');
+  assert.ok(form);
+  assert.ok(scrolled.includes(form), 'pencil exposes the form beyond the long details table');
+});

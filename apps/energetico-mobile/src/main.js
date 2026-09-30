@@ -5,9 +5,11 @@ import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
 import "./styles.css";
 import "./ui/launch-gallery.css";
+import "./ui/searchable-filter-selects.css";
 import "./ui/orders-gallery.css";
 import "./ui/registration-gallery.css";
 import "./ui/hr-payroll-gallery.css";
+import "./ui/gallery-record-actions.css";
 import "./demo/demo.css";
 import "./web/attachment-preview.css";
 

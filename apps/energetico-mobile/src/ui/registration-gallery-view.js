@@ -1,3 +1,5 @@
+import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS } from "../chat/registration-gallery-data.js";
 
 const PAGE_SIZE = 20;
@@ -111,6 +113,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
   const refresh = el("button", "rg-button", "Atualizar");
   refresh.type = "button";
+  refresh.dataset.action = "registration-refresh";
   toolbar.prepend(searchLabel);
   toolbar.append(refresh);
   filterDisclosure.append(toolbar);
@@ -125,6 +128,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   pagination.append(previous, pageText, next);
   root.append(header, filterDisclosure, feedback, list, pagination);
   doc.body.append(root);
+  const searchableFilters = bindSearchableFilterSelects(toolbar);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root,
+    loadEditor: (id, options) => data.loadEditor(id, options),
+    saveEditor: (context, fields) => data.saveEditor(context, fields),
+    deleteItem: (id, options) => data.deleteItem(id, options),
+    onChanged: load,
+  });
 
   let rows = [];
   let page = 1;
@@ -353,6 +364,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         }
         card.append(details);
       }
+      const recordMain = el('div', 'gallery-record-main');
+      recordMain.append(...card.childNodes);
+      card.classList.add('gallery-record-card');
+      card.append(recordMain, recordActions.render(row));
       list.append(card);
     }
     feedback.textContent = loadFailed
@@ -433,6 +448,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    recordActions.close();
+    searchableFilters.close();
     root.hidden = true;
     request += 1;
     attachmentRequest += 1;
@@ -463,6 +480,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { destroyed = true; request += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

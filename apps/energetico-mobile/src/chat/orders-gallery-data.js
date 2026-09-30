@@ -385,6 +385,8 @@ export function createHrPayrollGalleryData({
     const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {
       const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
       const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+      const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
+      if (eTag && eTag !== "*") row.eTag = eTag;
       for (const [key, aliases] of config.fields) {
         const value = hrPayrollFieldValue(fields, aliases);
         if (value !== undefined) row[key] = value;
@@ -437,6 +439,8 @@ export function createHrPayrollGalleryData({
       for (const item of items) {
         const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
         const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+        const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
+        if (eTag && eTag !== "*") row.eTag = eTag;
         for (const [key, aliases] of config.fields) {
           const value = hrPayrollFieldValue(fields, aliases);
           if (value !== undefined) row[key] = value;
@@ -456,7 +460,30 @@ export function createHrPayrollGalleryData({
     throw new Error("A folha excedeu o limite seguro de páginas; o relatório não foi truncado.");
   }
 
-  return Object.freeze({ loadPage, loadPaymentsForPayrollId });
+  const editors = new Map();
+  function editor(gallery) {
+    const config = HR_PAYROLL_GALLERIES[gallery];
+    if (!config) throw new RangeError("Galeria de folha inválida.");
+    if (!editors.has(gallery)) {
+      editors.set(gallery, import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
+        createGalleryRecordData({ repository, siteKey: SITE_KEY, listName: config.listName,
+          listAliases: [config.listName], metadataOnly: true, resolveList: () => resolveList(gallery) })));
+    }
+    return editors.get(gallery);
+  }
+  const editorContexts = new WeakMap();
+  async function loadEditor(gallery, id, options) {
+    const service = await editor(gallery), context = await service.loadEditor(id, options);
+    editorContexts.set(context, service);
+    return context;
+  }
+  async function saveEditor(context, fields) {
+    const service = context && editorContexts.get(context);
+    if (!service) throw new Error("O contexto de edição não pertence a esta galeria de folha.");
+    return service.saveEditor(context, fields);
+  }
+  return Object.freeze({ loadPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
+    deleteItem: async (gallery, id, options) => (await editor(gallery)).deleteItem(id, options) });
 }
 
 export function createPendingProvisionAttachmentsData(options = {}) {
@@ -578,12 +605,14 @@ function createSharePointListData({
     return normalizeItem(updated || { id, fields });
   }
 
-  async function deleteItem(rawId) {
-    const { id, list, eTag } = await currentItemForMutation(rawId);
-    if (typeof repository.deleteItem !== "function") throw new Error("A exclusão segura do pedido não está disponível.");
-    await repository.deleteItem(siteKey, list.id, id, { eTag });
-    return true;
+  let editorDataPromise;
+  function editorData() {
+    return editorDataPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
+      createGalleryRecordData({ repository, siteKey, listAliases, listName, resolveList }));
   }
+  const loadEditor = async (id, options) => (await editorData()).loadEditor(id, options);
+  const saveEditor = async (context, fields) => (await editorData()).saveEditor(context, fields);
+  const deleteItem = async (id, options) => (await editorData()).deleteItem(id, options);
 
   async function listAttachments(rawId, { refresh = false } = {}) {
     const id = itemId(rawId);
@@ -705,5 +734,6 @@ function createSharePointListData({
     throw new Error("Os vencimentos excederam o limite seguro de páginas; a consulta não foi truncada.");
   }
 
-  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem, deleteItem, updateDueDate, loadUpcomingPayments });
+  return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem,
+    loadEditor, saveEditor, deleteItem, updateDueDate, loadUpcomingPayments });
 }

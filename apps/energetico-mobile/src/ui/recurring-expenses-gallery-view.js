@@ -1,3 +1,4 @@
+import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 
@@ -230,6 +231,16 @@ export function createRecurringExpensesGallery({
   content.append(filterDisclosure, notice, listStatus, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const recordActions = createGalleryRecordActions({
+    document: doc, host: root,
+    loadEditor: (id, options) => data.loadEditor(id, options),
+    saveEditor: (context, fields) => data.saveEditor(context, fields),
+    deleteItem: (id, options) => data.deleteItem(id, options),
+    onChanged: () => {
+      detail.hidden = true; detail.replaceChildren();
+      return loadSnapshot();
+    },
+  });
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
     onChange: updateAttachmentCount,
@@ -249,6 +260,7 @@ export function createRecurringExpensesGallery({
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
+      if (button.closest(".gallery-record-dialog")) continue;
       if (button !== closeButton && button !== homeButton) button.disabled = Boolean(busy);
     }
     previous.disabled = listLoading || page <= 1;
@@ -396,7 +408,8 @@ export function createRecurringExpensesGallery({
       attachmentButton.addEventListener("click", () => openAttachments(row));
       card.append(attachmentButton);
     }
-    card.append(main);
+    card.classList.add('gallery-record-card');
+    card.append(main, recordActions.render(row));
     return card;
   }
 
@@ -526,6 +539,7 @@ export function createRecurringExpensesGallery({
 
   function close() {
     if (!opened) return;
+    recordActions.close();
     autoFilters.cancelPending();
     opened = false;
     session += 1;
@@ -542,7 +556,7 @@ export function createRecurringExpensesGallery({
 
   function destroy() {
     if (destroyed) return;
-    autoFilters.destroy();
+    recordActions.destroy(); autoFilters.destroy();
     close();
     destroyed = true;
     attachmentCounts.destroy();
