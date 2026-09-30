@@ -1998,13 +1998,14 @@ test("criação de provisão responde forma de pagamento vazia em silêncio e n�
   assert.equal(messages.at(-1)?.question, "QUAL É A DATA PREVISTA?");
 });
 
-test("falha incerta ao selecionar forma vazia preserva a provisão e permite retomar sem recriá-la", async t => {
+test("falha ao selecionar forma vazia exige sincronização e retoma a seleção sem texto", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
   await h.controller.start();
   h.chatCalls.length = 0;
   const activeFlow = { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" };
   const blankReplyId = "payment_provision_form_blank";
+  let blankAttempts = 0;
   h.store.ingestRemoteMessages([{
     type: "poll",
     question: "QUAL FLUXO DESEJA INICIAR?",
@@ -2022,9 +2023,26 @@ test("falha incerta ao selecionar forma vazia preserva a provisão e permite ret
       }],
     };
     if (payload.replyId === blankReplyId) {
-      throw Object.assign(new Error("resposta automática sem confirmação"), { code: "NETWORK_UNCERTAIN" });
+      blankAttempts += 1;
+      if (blankAttempts === 1) {
+        throw Object.assign(new Error("resposta automática sem confirmação"), { code: "NETWORK_UNCERTAIN" });
+      }
+      return {
+        status: "processed",
+        activeFlow,
+        messages: [{ type: "poll", question: "QUAL É A DATA PREVISTA?", options: [] }],
+      };
     }
-    assert.equal(payload.replyId, "input_continue");
+    if (payload.replyId === "input_continue") return {
+      status: "processed",
+      activeFlow,
+      messages: [{
+        type: "poll",
+        question: "QUAL É A FORMA DE PAGAMENTO?",
+        options: [{ id: blankReplyId, reply: blankReplyId, label: "0 - ⬜ EM BRANCO" }],
+      }],
+    };
+    assert.equal(payload.replyId, blankReplyId);
     return {
       status: "processed",
       activeFlow,
@@ -2038,16 +2056,56 @@ test("falha incerta ao selecionar forma vazia preserva a provisão e permite ret
   });
 
   assert.equal(h.store.getState().activeFlow.id, "payment_provision");
-  assert.match(h.store.getState().messages.at(-1)?.question || "", /^QUAL É A FORMA DE PAGAMENTO\?/);
-  assert.deepEqual(h.store.getState().messages.at(-1)?.options, []);
+  assert.equal(h.store.getState().messages.at(-1)?.type, "text");
+  assert.doesNotMatch(h.store.getState().messages.at(-1)?.text || "", /FORMA DE PAGAMENTO|EM BRANCO/i);
+  assert.equal(h.view.renders.at(-1).recoveryUncertain, true);
   assert.match(h.view.renders.at(-1).error, /Retomar conversa/i);
+  await h.view.emit("draft-changed", { value: "EM BRANCO" });
+  await h.view.emit("send-text");
+  assert.equal(h.chatCalls.length, 2, "o compositor não deve enviar antes da sincronização");
+  await h.view.emit("retry-session");
+
+  assert.deepEqual(h.chatCalls.map(([, payload]) => payload.replyId), [
+    "create_payment_provision", blankReplyId, "input_continue", blankReplyId,
+  ]);
+  assert.equal(h.chatCalls.at(-1)[1].omitText, true);
+  assert.equal(h.view.renders.at(-1).error, null);
+  assert.equal(h.view.renders.at(-1).recoveryUncertain, false);
+  assert.equal(h.store.getState().activeFlow.id, "payment_provision");
+  assert.equal(h.store.getState().messages.at(-1)?.question, "QUAL É A DATA PREVISTA?");
+});
+
+test("retomar não repete a forma vazia quando a VM já avançou", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" };
+  const blankReplyId = "payment_provision_form_blank";
+  h.store.ingestRemoteMessages([{
+    type: "poll",
+    question: "QUAL FLUXO DESEJA INICIAR?",
+    options: [{ id: "create_payment_provision", reply: "create_payment_provision", label: "CRIAR UMA PROVISÃO DE PAGAMENTO" }],
+  }]);
+  h.chatCalls.length = 0;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    if (payload.replyId === "create_payment_provision") return {
+      status: "processed", activeFlow,
+      messages: [{ type: "poll", question: "QUAL É A FORMA DE PAGAMENTO?", options: [
+        { id: blankReplyId, reply: blankReplyId, label: "0 - ⬜ EM BRANCO" },
+      ] }],
+    };
+    if (payload.replyId === blankReplyId) throw Object.assign(new Error("gateway sem confirmação"), { status: 502 });
+    assert.equal(payload.replyId, "input_continue");
+    return { status: "processed", activeFlow, messages: [{ type: "poll", question: "QUAL É A DATA PREVISTA?", options: [] }] };
+  };
+
+  await h.view.emit("select-reply", { replyId: "create_payment_provision", label: "CRIAR UMA PROVISÃO DE PAGAMENTO" });
   await h.view.emit("retry-session");
 
   assert.deepEqual(h.chatCalls.map(([, payload]) => payload.replyId), [
     "create_payment_provision", blankReplyId, "input_continue",
   ]);
-  assert.equal(h.view.renders.at(-1).error, null);
-  assert.equal(h.store.getState().activeFlow.id, "payment_provision");
   assert.equal(h.store.getState().messages.at(-1)?.question, "QUAL É A DATA PREVISTA?");
 });
 
