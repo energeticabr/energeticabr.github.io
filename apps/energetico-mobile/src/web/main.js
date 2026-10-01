@@ -3,6 +3,7 @@ import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridg
 
 import { APP_CONFIG } from "../config.js";
 import { createAppController } from "../app-controller.js";
+import { createPendingConstructionDiaryData } from "../chat/pending-construction-diary-data.js";
 import { createChatClient } from "../chat/chat-client.js";
 import { createConversationStore } from "../chat/conversation-store.js";
 import { createChatView } from "../ui/chat-view.js";
@@ -62,6 +63,7 @@ async function start() {
     view,
     native: { ...ports, previewMedia: preview.open, previewMediaCollection: preview.openCollection, closePreview: preview.close },
     client,
+    pendingConstructionDiaryDataFactory: createPendingConstructionDiaryData,
   });
   // Bind before the first network await: iOS may hide/kill the page while resuming.
   let stopAttachmentSync = () => {};

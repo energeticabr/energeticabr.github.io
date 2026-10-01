@@ -615,6 +615,7 @@ export function createAppController({
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
+  pendingConstructionDiaryDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
   databaseFilterDebounceMs = 300,
@@ -841,6 +842,10 @@ export function createAppController({
   let pendingProvisionSnapshot = null;
   let pendingNotesSnapshot = null;
   let pendingNotesSessionDismissed = false;
+  let pendingConstructionDiarySnapshot = null;
+  let pendingConstructionDiarySessionDismissed = false;
+  let pendingConstructionDiaryRequest = null;
+  let pendingConstructionDiaryData = null;
   let pendingNoteLaunchOrderId = "";
   let pendingNoteLaunchFailed = false;
   let pendingNoteLaunchNeedsResync = false;
@@ -1426,7 +1431,85 @@ export function createAppController({
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
-    await Promise.all([refreshPendingProvisionSnapshot(), refreshDelegatedTasksSnapshot()]);
+    await Promise.all([
+      refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries),
+      refreshDelegatedTasksSnapshot(),
+    ]);
+    return true;
+  }
+
+  function pendingConstructionDiaryTime() {
+    const hour = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23",
+    }).format(new Date());
+    return Number(hour) >= 15;
+  }
+
+  async function refreshPendingConstructionDiaries() {
+    if (!account || stopped || pendingConstructionDiarySessionDismissed
+      || typeof pendingConstructionDiaryDataFactory !== "function") return false;
+    if (!pendingConstructionDiaryTime()) {
+      pendingConstructionDiarySnapshot = null;
+      render();
+      return false;
+    }
+    if (pendingConstructionDiaryRequest) return pendingConstructionDiaryRequest;
+    const targetAccount = account, targetRevision = sessionRevision;
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision;
+    const request = Promise.resolve().then(async () => {
+      const controller = new AbortController();
+      try {
+        if (!pendingConstructionDiaryData) {
+          const data = await pendingConstructionDiaryDataFactory({ tokenProvider: async scopes => {
+            if (!current()) throw new Error("A sessão dos diários foi encerrada.");
+            let token;
+            try { token = await auth.getToken(scopes); }
+            catch (error) {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              if (!pendingProvisionSharePointAuthorization) {
+                const authorization = Promise.resolve(auth.authorize(scopes)).finally(() => {
+                  if (pendingProvisionSharePointAuthorization === authorization) pendingProvisionSharePointAuthorization = null;
+                });
+                pendingProvisionSharePointAuthorization = authorization;
+              }
+              await pendingProvisionSharePointAuthorization;
+              if (!current()) throw new Error("A sessão dos diários foi encerrada.");
+              token = await auth.getToken(scopes);
+            }
+            if (!current()) throw new Error("A sessão dos diários foi encerrada.");
+            return token;
+          } });
+          if (!current()) return false;
+          pendingConstructionDiaryData = data;
+        }
+        const snapshot = await withTimeout(pendingConstructionDiaryData.loadSnapshot({ signal: controller.signal }),
+          8_000, "A consulta dos diários pendentes excedeu o tempo limite.");
+        if (!current() || pendingConstructionDiarySessionDismissed) return false;
+        const rows = (Array.isArray(snapshot?.rows) ? snapshot.rows : []).filter(row => (
+          String(row?.status || "").trim().toUpperCase() === "PENDENTE"
+        ));
+        pendingConstructionDiarySnapshot = rows.length && pendingConstructionDiaryTime()
+          ? { ...snapshot, rows, count: rows.length } : null;
+        render();
+        return Boolean(pendingConstructionDiarySnapshot);
+      } catch {
+        // A read-only reminder must not block the chat or show stale records.
+        if (current()) { pendingConstructionDiarySnapshot = null; render(); }
+        return false;
+      } finally {
+        controller.abort();
+        if (pendingConstructionDiaryRequest === request) pendingConstructionDiaryRequest = null;
+      }
+    });
+    pendingConstructionDiaryRequest = request;
+    return request;
+  }
+
+  function dismissPendingConstructionDiaries() {
+    if (!pendingConstructionDiarySnapshot || pendingProvisionSnapshot) return false;
+    pendingConstructionDiarySessionDismissed = true;
+    pendingConstructionDiarySnapshot = null;
+    render();
     return true;
   }
 
@@ -3212,6 +3295,8 @@ export function createAppController({
       recoveryUncertain,
       pendingProvisions: pendingProvisionSnapshot,
       pendingNotes: pendingNotesSnapshot,
+      pendingConstructionDiaries: pendingProvisionSnapshot || !pendingConstructionDiaryTime()
+        ? null : pendingConstructionDiarySnapshot,
       pendingNoteLaunchOrderId,
       pendingNoteLaunchFailed,
       pendingProvisionReminderOpen,
@@ -4757,12 +4842,17 @@ export function createAppController({
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
       pendingNotesSessionDismissed = false;
+      pendingConstructionDiarySnapshot = null;
+      pendingConstructionDiarySessionDismissed = false;
+      pendingConstructionDiaryRequest = null;
+      pendingConstructionDiaryData = null;
       clearPendingProvisionAttachmentState({ clearData: true });
       pendingProvisionSharePointAuthorization = null;
       openRecovery();
       render();
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
       await refreshDelegatedTasksSnapshot();
       // A shared file may have arrived before the user authenticated. Read
@@ -4828,6 +4918,10 @@ export function createAppController({
     pendingProvisionSnapshot = null;
     pendingNotesSnapshot = null;
     pendingNotesSessionDismissed = false;
+    pendingConstructionDiarySnapshot = null;
+    pendingConstructionDiarySessionDismissed = false;
+    pendingConstructionDiaryRequest = null;
+    pendingConstructionDiaryData = null;
     pendingNoteLaunchOrderId = "";
     pendingNoteLaunchFailed = false;
     pendingNoteLaunchNeedsResync = false;
@@ -5606,6 +5700,7 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
+    bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
     bind("launch-pending-note", command => launchPendingNote(command.orderId));
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
@@ -5699,6 +5794,10 @@ export function createAppController({
     sessionStatus = account ? "authenticated" : "signed-out";
     pendingProvisionSessionDismissed = false;
     pendingNotesSessionDismissed = false;
+    pendingConstructionDiarySnapshot = null;
+    pendingConstructionDiarySessionDismissed = false;
+    pendingConstructionDiaryRequest = null;
+    pendingConstructionDiaryData = null;
     clearPendingProvisionAttachmentState({ clearData: true });
     pendingProvisionSharePointAuthorization = null;
     openRecovery();
@@ -5707,6 +5806,7 @@ export function createAppController({
     if (account) {
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
       await refreshDelegatedTasksSnapshot();
       const sharedFileIds = await sharedFileIdsPromise;

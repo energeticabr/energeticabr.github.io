@@ -26,7 +26,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -67,7 +67,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -7031,4 +7031,227 @@ test("sair fecha prévia e impede snapshot antigo de restaurar anexos privados",
   await refresh;
   assert.equal(closed, true);
   assert.deepEqual(harness.store.getState().attachments, []);
+});
+
+function pendingDiaryHarness(t, rows = [{ id: "17", status: "PENDENTE", date: "2026-09-30", branch: "Obra A", responsible: "Bernardo" }]) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T18:00:00Z") });
+  let reads = 0;
+  const data = { async loadSnapshot() { reads++; return { rows }; } };
+  const h = makeHarness({ pendingConstructionDiaryDataFactory: async () => data });
+  t.after(() => h.controller.stop());
+  return { ...h, data, reads: () => reads };
+}
+
+test("lembra diários pendentes a partir das 15h de Brasília sem provisões", async t => {
+  const h = pendingDiaryHarness(t);
+  await h.controller.start();
+  assert.equal(h.reads(), 1);
+  assert.deepEqual(h.view.renders.at(-1).pendingConstructionDiaries.rows.map(row => row.id), ["17"]);
+});
+
+test("não consulta diários antes das 15h e consulta ao voltar ao app depois desse horário", async t => {
+  const h = pendingDiaryHarness(t);
+  t.mock.timers.setTime(new Date("2026-09-30T17:59:59Z").getTime());
+  await h.controller.start();
+  assert.equal(h.reads(), 0);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  t.mock.timers.setTime(new Date("2026-09-30T18:00:00Z").getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.reads(), 1);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("não abre o lembrete de diários sem registros pendentes", async t => {
+  const h = pendingDiaryHarness(t, []);
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
+
+test("diários aguardam o X do popup de provisões", async t => {
+  const h = pendingDiaryHarness(t);
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "Fornecedor A" }] });
+  await h.controller.start();
+  assert.ok(h.view.renders.at(-1).pendingProvisions);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  assert.equal(h.reads(), 1);
+  await h.view.emit("dismiss-pending-provisions");
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("diários aguardam a escolha do adiamento de provisões sem sobrepor a configuração", async t => {
+  const h = pendingDiaryHarness(t);
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306" }] });
+  await h.controller.start();
+  await h.view.emit("close-pending-provisions");
+  assert.equal(h.view.renders.at(-1).pendingProvisionReminderOpen, true);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  await h.view.emit("cancel-pending-provisions-reminder");
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  await h.view.emit("close-pending-provisions");
+  await h.view.emit("pending-provisions-reminder-choice", { value: "2h" });
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("fechar diários mantém o chat e não repete o aviso na mesma sessão", async t => {
+  const h = pendingDiaryHarness(t);
+  await h.controller.start();
+  assert.equal(await h.view.emit("dismiss-pending-construction-diaries"), true);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  await h.controller.handleForeground();
+  assert.equal(h.reads(), 1);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
+
+test("resposta de diários da sessão anterior não reaparece após sair", async t => {
+  const h = pendingDiaryHarness(t);
+  await h.controller.start();
+  let resolveRead;
+  h.data.loadSnapshot = () => new Promise(resolve => { resolveRead = resolve; });
+  const refresh = h.controller.handleForeground();
+  for (let i = 0; i < 20 && !resolveRead; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof resolveRead, "function");
+  await h.view.emit("sign-out");
+  resolveRead({ rows: [{ id: "999", status: "PENDENTE" }] });
+  await refresh;
+  assert.equal(h.view.renders.at(-1).sessionStatus, "signed-out");
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
+
+test("falha de consulta dos diários preserva o chat e pode ser tentada ao retornar", async t => {
+  const h = pendingDiaryHarness(t);
+  h.data.loadSnapshot = async () => { throw new Error("rede indisponível"); };
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  assert.equal(h.view.renders.at(-1).error, null);
+  h.data.loadSnapshot = async () => ({ rows: [{ id: "17", status: "PENDENTE" }] });
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("lembrete de diários ao retornar não aguarda a consulta de tarefas delegadas", async t => {
+  const h = pendingDiaryHarness(t);
+  t.mock.timers.setTime(new Date("2026-09-30T17:00:00Z").getTime());
+  await h.controller.start();
+  let resolveTasks;
+  h.client.getDelegatedTasks = () => new Promise(resolve => { resolveTasks = resolve; });
+  t.mock.timers.setTime(new Date("2026-09-30T18:00:00Z").getTime());
+  const foreground = h.controller.handleForeground();
+  t.after(() => resolveTasks?.({ rows: [] }));
+  for (let i = 0; i < 20 && !h.view.renders.at(-1).pendingConstructionDiaries; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof resolveTasks, "function");
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries?.rows.length, 1);
+  resolveTasks({ rows: [] });
+  await foreground;
+});
+
+test("retorno ao app remove o aviso quando os diários deixam de estar pendentes", async t => {
+  const h = pendingDiaryHarness(t);
+  await h.controller.start();
+  h.data.loadSnapshot = async () => ({ rows: [{ id: "17", status: "POSTADO" }] });
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
+
+test("resposta antiga de diários não substitui a lista do novo login", async t => {
+  const h = pendingDiaryHarness(t);
+  await h.controller.start();
+  let resolveOld;
+  h.data.loadSnapshot = () => new Promise(resolve => { resolveOld = resolve; });
+  const refresh = h.controller.handleForeground();
+  for (let i = 0; i < 20 && !resolveOld; i++) await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("sign-out");
+  h.data.loadSnapshot = async () => ({ rows: [{ id: "27", status: "PENDENTE" }] });
+  await h.view.emit("sign-in");
+  resolveOld({ rows: [{ id: "999", status: "PENDENTE" }] });
+  await refresh;
+  assert.equal(h.view.renders.at(-1).account.homeAccountId, "a2");
+  assert.deepEqual(h.view.renders.at(-1).pendingConstructionDiaries.rows.map(row => row.id), ["27"]);
+});
+
+test("retornos simultâneos consultam os diários uma única vez", async t => {
+  const h = pendingDiaryHarness(t);
+  await h.controller.start();
+  let resolveRead, reads = 0;
+  h.data.loadSnapshot = () => { reads++; return new Promise(resolve => { resolveRead = resolve; }); };
+  const first = h.controller.handleForeground(), second = h.controller.handleForeground();
+  for (let i = 0; i < 20 && !resolveRead; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads, 1);
+  resolveRead({ rows: [{ id: "17", status: "PENDENTE" }] });
+  await Promise.all([first, second]);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("consulta de diários obtém o consentimento SharePoint e tenta o token novamente", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T18:00:00Z") });
+  let tokens = 0, consents = 0;
+  const h = makeHarness({ pendingConstructionDiaryDataFactory: async ({ tokenProvider }) => ({
+    async loadSnapshot() {
+      assert.equal(await tokenProvider(["Sites.Read.All"]), "graph-token");
+      return { rows: [{ id: "17", status: "PENDENTE" }] };
+    },
+  }) });
+  h.auth.getToken = async scopes => {
+    assert.deepEqual(scopes, ["Sites.Read.All"]);
+    if (++tokens === 1) throw Object.assign(new Error("consentimento necessário"), { code: "AUTH_REQUIRED" });
+    return "graph-token";
+  };
+  h.auth.authorize = async () => { consents++; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(consents, 1);
+  assert.equal(tokens, 2);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("consentimento dos diários é compartilhado com provisões ao retomar o app", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T18:00:00Z") });
+  let needConsent = false, consents = 0, resolveConsent;
+  const h = makeHarness({
+    pendingConstructionDiaryDataFactory: async ({ tokenProvider }) => ({ loadSnapshot: async () => {
+      await tokenProvider(["Sites.Read.All"]); return { rows: [{ id: "17", status: "PENDENTE" }] };
+    } }),
+    pendingProvisionAttachmentsDataFactory: async ({ tokenProvider }) => ({
+      listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+      loadUpcomingPayments: async () => { await tokenProvider(["Sites.Read.All"]); return []; },
+    }),
+  });
+  h.auth.getToken = async () => {
+    if (needConsent) throw Object.assign(new Error("consentimento necessário"), { code: "AUTH_REQUIRED" });
+    return "graph-token";
+  };
+  const consent = new Promise(resolve => { resolveConsent = resolve; });
+  h.auth.authorize = async () => { consents++; await consent; };
+  t.after(() => { needConsent = false; resolveConsent(); h.controller.stop(); });
+  await h.controller.start();
+  needConsent = true;
+  const first = h.controller.handleForeground();
+  for (let i = 0; i < 20 && !consents; i++) await new Promise(resolve => setImmediate(resolve));
+  h.client.getPendingProvisionSnapshot = async () => ({ due: false, rows: [] });
+  const second = h.controller.handleForeground();
+  for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(consents, 1);
+  needConsent = false; resolveConsent();
+  await Promise.all([first, second]);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
+});
+
+test("consulta de diários lenta é cancelada e pode ser refeita sem bloquear o chat", async t => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: new Date("2026-09-30T18:00:00Z") });
+  let signal;
+  const data = { loadSnapshot: options => { signal = options.signal; return new Promise(() => {}); } };
+  const h = makeHarness({ pendingConstructionDiaryDataFactory: async () => data });
+  t.after(() => h.controller.stop());
+  const start = h.controller.start();
+  for (let i = 0; i < 20 && !signal; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(signal);
+  t.mock.timers.tick(8_000);
+  await start;
+  assert.equal(signal.aborted, true);
+  assert.equal(h.view.renders.at(-1).sessionStatus, "authenticated");
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  data.loadSnapshot = async () => ({ rows: [{ id: "17", status: "PENDENTE" }] });
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
 });
