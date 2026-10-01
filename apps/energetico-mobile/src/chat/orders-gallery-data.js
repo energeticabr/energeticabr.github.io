@@ -323,6 +323,7 @@ const HR_PAYROLL_GALLERIES = Object.freeze({
 });
 
 const HR_PAYROLL_PAGE_SIZE_MAX = 50;
+const HR_PAYROLL_REPORT_PAGE_SIZE = 100;
 const HR_PAYROLL_PAGE_COUNT_MAX = 100;
 
 function hrPayrollFieldValue(fields, aliases) {
@@ -418,7 +419,7 @@ export function createHrPayrollGalleryData({
     const config = HR_PAYROLL_GALLERIES[gallery];
     const list = await resolveList(gallery);
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
-    const query = `$select=id&$expand=fields($select=${selectedFields})&$filter=fields/IDFOLHA eq ${payrollId}&$top=${HR_PAYROLL_PAGE_SIZE_MAX}`;
+    const query = `$select=id&$expand=fields($select=${selectedFields})&$top=${HR_PAYROLL_REPORT_PAGE_SIZE}`;
     const rows = [];
     let cursor = null;
 
