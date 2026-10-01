@@ -139,7 +139,7 @@ test("galeria de folha recusa lista e parâmetros fora da allowlist", async () =
   await assert.rejects(data.loadPage("FOLHAPGTO", { pageSize: 100 }), /página/i);
 });
 
-test("relatório da folha filtra no SharePoint pelo IDFOLHA e pagina todos os pagamentos", async () => {
+test("relatório da folha percorre páginas e vincula somente o IDFOLHA escolhido sem filtro não indexado", async () => {
   const calls = [];
   const repository = {
     async resolveList(siteKey, aliases) {
@@ -148,8 +148,13 @@ test("relatório da folha filtra no SharePoint pelo IDFOLHA e pagina todos os pa
     },
     async getItemsPage(siteKey, listId, query, options) {
       calls.push(["getItemsPage", siteKey, listId, query, options]);
+      if (query.includes("$filter")) throw Object.assign(
+        new Error("Field 'IDFOLHA' cannot be referenced in filter as it is not indexed."), { status: 400 });
       if (options.pageNumber === 1) return {
-        items: [{ id: "81", fields: {
+        items: [{ id: "80", fields: {
+          FORNECEDOR: "OUTRO", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 900,
+          QTD: 1, DATA: "2026-09-27T00:00:00Z", IDFOLHA: 13, IDLANCAMENTO: 3455,
+        } }, { id: "81", fields: {
           FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 1200,
           QTD: 1, DATA: "2026-09-28T00:00:00Z", IDFOLHA: 12, IDLANCAMENTO: 3456,
         } }],
@@ -159,6 +164,9 @@ test("relatório da folha filtra no SharePoint pelo IDFOLHA e pagina todos os pa
         items: [{ id: "82", fields: {
           FORNECEDOR: "EDGAR", TIPOPGTO: "VALE REFEIÇÃO", VALORUNITARIO: 50,
           QTD: 2, DATA: "2026-09-29T00:00:00Z", IDFOLHA: 12, IDLANCAMENTO: 3457,
+        } }, { id: "83", fields: {
+          FORNECEDOR: "OUTRO", TIPOPGTO: "VALE REFEIÇÃO", VALORUNITARIO: 25,
+          QTD: 1, DATA: "2026-09-29T00:00:00Z", IDFOLHA: 13, IDLANCAMENTO: 3458,
         } }],
         nextLink: "", hasMore: false,
       };
@@ -171,14 +179,40 @@ test("relatório da folha filtra no SharePoint pelo IDFOLHA e pagina todos os pa
   assert.deepEqual(rows.map(row => row.id), ["81", "82"]);
   assert.deepEqual(rows.map(row => row.IDLANCAMENTO), [3456, 3457]);
   const itemQueries = calls.filter(([operation]) => operation === "getItemsPage");
-  assert.equal(itemQueries.length, 2);
+  assert.equal(itemQueries.length, 3);
   assert.match(itemQueries[0][3], /\$filter=fields\/IDFOLHA eq 12/);
-  assert.match(itemQueries[0][3], /fields\(\$select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO\)/);
-  assert.deepEqual(itemQueries.map(([, , , , options]) => options), [
+  assert.equal(itemQueries[0][4].headers?.Prefer, "HonorNonIndexedQueriesWarningMayFailRandomly");
+  assert.doesNotMatch(itemQueries[1][3], /\$filter/);
+  assert.match(itemQueries[1][3], /\$top=100/);
+  assert.match(itemQueries[1][3], /fields\(\$select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO\)/);
+  assert.deepEqual(itemQueries.slice(1).map(([, , , , options]) => options), [
     { pageNumber: 1, maxPages: 100 },
     { pageNumber: 2, maxPages: 100, cursor: "payroll-next" },
   ]);
   assert.ok(calls.every(([operation]) => ["resolveList", "getItemsPage"].includes(operation)));
+});
+
+test("relatório usa consulta filtrada quando disponível sem percorrer uma lista grande", async () => {
+  const calls = [];
+  const data = galleryData.createHrPayrollGalleryData({ repository: {
+    async resolveList() { return { status: "resolved", id: "list-FOLHAPGTO" }; },
+    async getItemsPage(_site, _list, query, options) {
+      calls.push({ query, options });
+      if (!query.includes("$filter=fields/IDFOLHA eq 3")) {
+        throw new Error("A varredura completa excederia o limite da lista.");
+      }
+      return { items: [{ id: "81", fields: {
+        IDFOLHA: 3, FORNECEDOR: "EDGAR", TIPOPGTO: "SALÁRIO",
+        VALORUNITARIO: 1200, QTD: 1, DATA: "2026-09-28T00:00:00Z", IDLANCAMENTO: 3456,
+      } }], hasMore: false };
+    },
+  } });
+
+  const rows = await data.loadPaymentsForPayrollId("3");
+
+  assert.deepEqual(rows.map(row => row.id), ["81"]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].options.headers?.Prefer, "HonorNonIndexedQueriesWarningMayFailRandomly");
 });
 
 test("relatório recusa IDFOLHA inválido antes de consultar o SharePoint", async () => {
