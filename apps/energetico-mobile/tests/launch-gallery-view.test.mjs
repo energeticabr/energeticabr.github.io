@@ -163,6 +163,19 @@ test('invalid calendar dates cannot reach the update request', async t => {
   assert.equal(mutations(ctx).length, 0);
 });
 
+test('numeric mobile date entry inserts separators before review', async t => {
+  const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({editFields: [
+    {name: 'DATA', label: 'Data', type: 'date', required: true},
+  ]})});
+  await ctx.gallery.open(); await showDetail(ctx);
+  const date = input(ctx, 'DATA', '18102026');
+  assert.equal(date.inputMode, 'numeric');
+  assert.equal(date.value, '18/10/2026');
+  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(mutations(ctx).at(-1).payload.fields.DATA, '2026-10-18');
+});
+
 test('body overlay survives chat rerenders; close/home/destroy preserve lifecycle and focus', async t => {
   let closed = 0, home = 0;
   const ctx = await setup(t, { onClose: () => closed++, onHome: () => home++ });

@@ -134,6 +134,11 @@ function formatEditorDate(value) {
   return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : formatGalleryDate('DATA', raw) ?? raw;
 }
 
+function maskEditorDate(value) {
+  const digits = String(value ?? '').replace(/\D/g, '').slice(0, 8);
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join('/');
+}
+
 function clusterKey(value) {
   if (Array.isArray(value)) return clusterKey(value[0]);
   if (value && typeof value === 'object') {
@@ -1075,6 +1080,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         control.value = type === 'date' && value ? formatEditorDate(value) : display(value);
       }
       const invalidate = () => { control.setCustomValidity(''); clearReview(); notify(''); };
+      if (type === 'date') control.addEventListener('input', () => { control.value = maskEditorDate(control.value); });
       control.addEventListener('input', invalidate);
       control.addEventListener('change', () => { invalidate(); void refreshDependencies(definition, control); });
       controls.push({ definition, control, initial: isCheck ? control.checked : control.value });

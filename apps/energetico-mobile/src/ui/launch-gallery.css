@@ -365,6 +365,7 @@
 .lg-data-table td { white-space: pre-wrap; }
 .lg-detail-modal .lg-actions, .lg-detail-modal .lg-editor, .lg-detail-modal .lg-attachments, .lg-detail-modal .lg-signature, .lg-detail-modal .lg-review { width: min(100%, 920px); }
 .lg-detail-modal .lg-attachments, .lg-detail-modal .lg-signature { padding: 18px 0 0; }
+.lg-detail-modal .lg-editor-grid > .lg-attachments { margin-top: 0; padding: 14px; border-top: 1px solid var(--lg-line); }
 .lg-editor, .lg-attachments, .lg-signature { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--lg-line); }
 .lg-detail-modal:not(.lg-cluster-modal) .lg-detail-header { background: var(--lg-navy); border-left: 6px solid var(--lg-red); }
 .lg-editor { margin-top: 0; padding: 16px; border: 1px solid #d9e2e9; border-radius: 12px; background: #fff; }
