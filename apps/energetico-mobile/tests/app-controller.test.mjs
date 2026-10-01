@@ -489,13 +489,13 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
   const report = h.store.getState().messages.at(-1);
   assert.equal(report.detail_table.rows.length, 9, "a tela e o PDF devem partir das mesmas nove pessoas");
   const expectedRows = [
-    ["BERNARDO NOTINI MOREIRA BAHIA", "12:31", "—", "—", "—", "— (parcial)"],
+    ["BERNARDO NOTINI MOREIRA BAHIA", "—", "—", "12:31", "—", "— (parcial)"],
     ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"],
-    ["EDGAR NELSON DA SILVA", "06:55", "12:00", "—", "—", "05:05"],
+    ["EDGAR NELSON DA SILVA", "06:55", "12:00", "—", "—", "05:05 (parcial)"],
     ["FELICIANO ROGERIO DA SILVA", "06:54", "12:04", "13:00", "16:01", "08:11"],
     ["HELISON ROSA LUIS", "07:01", "12:05", "13:01", "—", "05:04 (parcial)"],
     ["JOSE GERALDO DOS SANTOS", "07:00", "12:04", "12:56", "16:04", "08:12"],
-    ["LUIZ BERNARDO DOS SANTOS", "06:54", "12:10", "16:00", "—", "05:16 (parcial)"],
+    ["LUIZ BERNARDO DOS SANTOS", "06:54", "12:10", "—", "16:00", "05:16 (parcial)"],
     ["MAURICIO HONORATO DE SOUZA", "06:53", "12:01", "12:59", "15:52", "08:01"],
     ["MAURO ANTONIO PEREIRA", "06:57", "12:00", "13:03", "16:01", "08:01"],
   ];
@@ -562,11 +562,12 @@ test("relatório RHID reúne batidas da mesma pessoa, ordena horários e sinaliz
   await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
 
   const table = h.store.getState().messages.at(-1).detail_table;
-  assert.deepEqual(table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Entrada 3", "Saída 3", "Total de horas/dia"]);
+  assert.deepEqual(table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual(table.rows, [
-    ["ANA", "07:00", "12:00", "13:00", "17:00", "18:00", "19:00", "10:00"],
-    ["BRUNO", "06:55", "12:00", "13:00", "—", "—", "—", "05:05 (parcial)"],
+    ["ANA", "07:00", "12:00", "13:00", "—", "05:00 (parcial)"],
+    ["BRUNO", "06:55", "12:00", "13:00", "—", "05:05 (parcial)"],
   ]);
+  assert.deepEqual(table.people[0].slots.exit2.rhidCandidates, ["17:00", "18:00", "19:00"]);
 });
 
 test("galerias de cadastro e documentos abrem localmente, reutilizam a tela e são destruídas no encerramento", async t => {

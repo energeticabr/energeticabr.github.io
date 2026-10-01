@@ -106,16 +106,37 @@ function punchTimes(value) {
     .map(match => match[1].slice(0, 5).padStart(5, "0")));
 }
 
-function totalFromPunches(times) {
+const RHID_SLOTS = [
+  ["entry1", "Entrada 1"], ["exit1", "Saída 1"],
+  ["entry2", "Entrada 2"], ["exit2", "Saída 2"],
+];
+
+export function classifyRhidPunch(value) {
+  const text = String(value ?? "").trim();
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text)) return null;
+  const minutes = Number(text.slice(0, 2)) * 60 + Number(text.slice(3));
+  if (minutes >= 5 * 60 && minutes <= 8 * 60) return "entry1";
+  if (minutes >= 11 * 60 && minutes < 12 * 60 + 30) return "exit1";
+  if (minutes >= 12 * 60 + 30 && minutes <= 13 * 60 + 30) return "entry2";
+  if (minutes >= 15 * 60 + 30) return "exit2";
+  return null;
+}
+
+function totalFromSlots(times) {
   let minutes = 0;
-  for (let index = 0; index + 1 < times.length; index += 2) {
+  let completed = 0;
+  for (let index = 0; index < 4; index += 2) {
+    if (!times[index] || !times[index + 1]) continue;
     const [entryHours, entryMinutes] = times[index].split(":").map(Number);
     const [exitHours, exitMinutes] = times[index + 1].split(":").map(Number);
-    minutes += (exitHours * 60 + exitMinutes) - (entryHours * 60 + entryMinutes);
+    const interval = (exitHours * 60 + exitMinutes) - (entryHours * 60 + entryMinutes);
+    if (interval < 0) return "— (parcial)";
+    minutes += interval;
+    completed += 1;
   }
-  if (times.length < 2) return "— (parcial)";
+  if (!completed) return "— (parcial)";
   const total = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-  return times.length % 2 ? `${total} (parcial)` : total;
+  return times.every(Boolean) ? total : `${total} (parcial)`;
 }
 
 function timestampInSaoPaulo(value) {
@@ -152,29 +173,65 @@ export function buildRhidAttendanceTable(rows = []) {
     const key = rhidId ? `rhid:${rhidId}` : name ? `name:${normalizedName}` : `id:${id}`;
     if (!name && !id) continue;
     const times = punchTimes(row.BATIDAS_RHID);
-    if (!people.has(key)) people.set(key, { name: name || `ID ${id}`, times: new Set(), inactive: false });
+    if (!people.has(key)) people.set(key, {
+      personKey: rhidId ? `rhid:${rhidId}` : id ? `id:${id}` : "",
+      name: name || `ID ${id}`, times: new Set(), inactive: false, adjustments: {},
+    });
     const person = people.get(key);
     if (String(row.STATUS_RHID ?? "").trim().toUpperCase() === "INATIVO") person.inactive = true;
     for (const time of times) person.times.add(time);
+    const adjustments = row.ADMIN_AJUSTES;
+    if (adjustments && typeof adjustments === "object") {
+      for (const [slot] of RHID_SLOTS) {
+        const adjustment = adjustments[slot];
+        if (adjustment && typeof adjustment === "object" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(adjustment.time || ""))) {
+          const previous = person.adjustments[slot];
+          if (!previous || String(previous.adjustedAt || "") <= String(adjustment.adjustedAt || "")) {
+            person.adjustments[slot] = adjustment;
+          }
+        }
+      }
+    }
   }
 
   const persons = [...people.values()]
     .map(person => ({ ...person, punches: [...person.times].sort() }))
-    .filter(person => person.punches.length || !person.inactive)
-    .sort((left, right) => Number(Boolean(right.punches.length)) - Number(Boolean(left.punches.length))
+    .filter(person => person.punches.length || Object.keys(person.adjustments).length || !person.inactive)
+    .sort((left, right) => Number(Boolean(right.punches.length || Object.keys(right.adjustments).length)) - Number(Boolean(left.punches.length || Object.keys(left.adjustments).length))
       || left.name.localeCompare(right.name, "pt-BR", { sensitivity: "base" }));
-  const pairs = Math.max(2, Math.ceil(Math.max(0, ...persons.map(person => person.punches.length)) / 2));
-  const headers = ["Nome"];
-  for (let index = 1; index <= pairs; index += 1) headers.push(`Entrada ${index}`, `Saída ${index}`);
-  headers.push("Total de horas/dia");
+  const headers = ["Nome", ...RHID_SLOTS.map(([, label]) => label), "Total de horas/dia"];
+  const details = persons.map(person => {
+    const candidates = Object.fromEntries(RHID_SLOTS.map(([slot]) => [slot, []]));
+    const outside = [];
+    for (const time of person.punches) {
+      const slot = classifyRhidPunch(time);
+      if (slot) candidates[slot].push(time);
+      else outside.push(time);
+    }
+    const issues = [];
+    const slots = {};
+    for (const [slot, label] of RHID_SLOTS) {
+      const rhidCandidates = candidates[slot];
+      const rhid = rhidCandidates.length === 1 ? rhidCandidates[0] : null;
+      if (rhidCandidates.length > 1) issues.push(`Batidas duplicadas em ${label}: ${rhidCandidates.join(", ")}`);
+      const adjustment = person.adjustments[slot] || null;
+      slots[slot] = {
+        rhid, rhidCandidates, effective: adjustment?.time || rhid || null,
+        source: adjustment ? rhidCandidates.length ? "corrected" : "added" : rhid ? "rhid" : "empty",
+        adjustment,
+      };
+    }
+    for (const time of outside) issues.push(`Batida fora das faixas: ${time}`);
+    return { personKey: person.personKey, name: person.name, rawPunches: person.punches, slots, issues };
+  });
 
   return {
     kind: "rhid_attendance",
     headers,
-    rows: persons.map(person => [
-      person.name,
-      ...Array.from({ length: pairs * 2 }, (_, index) => person.punches[index] || "—"),
-      totalFromPunches(person.punches),
-    ]),
+    people: details,
+    rows: details.map(person => {
+      const times = RHID_SLOTS.map(([slot]) => person.slots[slot].effective);
+      return [person.name, ...times.map(time => time || "—"), totalFromSlots(times)];
+    }),
   };
 }
