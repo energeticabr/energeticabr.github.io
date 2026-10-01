@@ -228,8 +228,11 @@ export function buildRhidAttendanceTable(rows = []) {
     const slots = {};
     for (const [slot, label] of RHID_SLOTS) {
       const rhidCandidates = candidates[slot];
-      const rhid = rhidCandidates.length === 1 ? rhidCandidates[0] : null;
-      if (rhidCandidates.length > 1) issues.push(`Batidas duplicadas em ${label}: ${rhidCandidates.join(", ")}`);
+      const closePair = rhidCandidates.length === 2
+        && (Number(rhidCandidates[1].slice(0, 2)) * 60 + Number(rhidCandidates[1].slice(3)))
+          - (Number(rhidCandidates[0].slice(0, 2)) * 60 + Number(rhidCandidates[0].slice(3))) < 5;
+      const rhid = rhidCandidates.length === 1 ? rhidCandidates[0] : closePair ? rhidCandidates[1] : null;
+      if (rhidCandidates.length > 1 && !closePair) issues.push(`Batidas duplicadas em ${label}: ${rhidCandidates.join(", ")}`);
       const adjustment = person.adjustments[slot] || null;
       slots[slot] = {
         rhid, rhidCandidates, effective: adjustment?.time || rhid || null,
