@@ -765,6 +765,40 @@ test('contingência limita detalhes individuais de grupos grandes e marca restan
   assert.match(modal.textContent, /Valores conferem/);
 });
 
+test('lote adicional que não responde libera o popup e pode ser repetido sem aceitar resposta tardia', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const ids = Array.from({ length: 9 }, (_, index) => String(3479 - index));
+  const delayed = deferred(); let attempts = 0;
+  const ctx = await setup(t, {
+    clusterTimeoutMs: 20,
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 9 } }] }),
+    loadLaunchGroup: async () => ids.map(id => ({ id, fields: { AGRUPAR: '348' } })),
+    request: async (operation, payload) => {
+      if (operation === 'detail') {
+        if (String(payload.id) === '3471' && attempts++ === 0) return delayed.promise;
+        return detail({ item: { id: String(payload.id), fields: {
+          AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', 'VALOR TOTAL': 1,
+        } } });
+      }
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  button(modal, 'Carregar próximos lançamentos').click();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(modal.getAttribute('aria-busy'), 'false');
+  assert.match(modal.textContent, /demorou mais|tempo limite/i);
+  button(modal, 'Carregar próximos lançamentos').click();
+  await settle(); await settle();
+  assert.match(modal.textContent, /Valores conferem/);
+  delayed.resolve(detail({ item: { id: '3471', fields: { AGRUPAR: '999', 'VALOR TOTAL': 999 } } }));
+  await settle();
+  assert.match(modal.textContent, /Valores conferem/);
+});
+
 test('falha de um detalhe preserva os outros lançamentos e mantém a conciliação incompleta', async t => {
   const first = row(3479);
   first.fields.AGRUPAR = '348';

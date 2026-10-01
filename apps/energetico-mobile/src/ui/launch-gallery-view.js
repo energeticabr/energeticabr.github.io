@@ -806,13 +806,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
             .filter(name => field(item.fields, name) != null).length < 3);
         const failedIds = [];
         let sparseCursor = 0;
+        let loadMoreError = '';
         const current = () => active(epoch) && version === clusterVersion && !clusterPanel.hidden;
-        async function hydrateNext(batchSignal) {
+        async function hydrateNext(batchSignal, isLive = current) {
           const fallback = sparse.slice(sparseCursor, sparseCursor + MAX_SPARSE_ORDER_DETAILS);
           for (let offset = 0; offset < fallback.length; offset += 4) {
             const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }) =>
               request('detail', { id: item.id }, { signal: batchSignal })));
-            if (!current()) return;
+            if (!isLive()) return;
             batch.forEach((result, index) => {
               const expectedId = String(fallback[offset + index].item.id);
               const item = result.status === 'fulfilled' ? result.value?.item : null;
@@ -824,16 +825,31 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
               }
             });
           }
-          if (current()) sparseCursor += fallback.length;
+          if (isLive()) sparseCursor += fallback.length;
         }
         async function loadMore() {
           if (!current() || clusterPanel.getAttribute('aria-busy') === 'true') return;
           const nextController = new AbortController();
           clusterAbortController = nextController;
           clusterPanel.setAttribute('aria-busy', 'true');
-          clusterTimer = setTimeout(() => nextController.abort(), timeout);
+          let timedOut = false;
+          const timeoutMarker = Symbol('load-more-timeout');
+          const deadline = new Promise(resolve => {
+            clusterTimer = setTimeout(() => {
+              timedOut = true;
+              nextController.abort();
+              resolve(timeoutMarker);
+            }, timeout);
+          });
           try {
-            await hydrateNext(nextController.signal);
+            const outcome = await Promise.race([
+              hydrateNext(nextController.signal, () => current() && !timedOut), deadline,
+            ]);
+            loadMoreError = outcome === timeoutMarker
+              ? 'A consulta dos próximos lançamentos demorou mais que o esperado. Tente novamente.' : '';
+            if (current()) renderOrderPanel();
+          } catch (error) {
+            loadMoreError = failure(error, 'Não foi possível carregar os próximos lançamentos');
             if (current()) renderOrderPanel();
           } finally {
             if (clusterAbortController === nextController) {
@@ -847,6 +863,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         function renderOrderPanel() {
           const pendingIds = sparse.slice(sparseCursor).map(({ item }) => String(item.id));
           const content = [];
+          if (loadMoreError) content.push(element('p', 'lg-error', loadMoreError));
           if (failedIds.length) content.push(element('p', 'lg-error', failedIds.length === 1
             ? `O lançamento ${failedIds[0]} não pôde ser carregado. O total permanece incompleto; reabra o pedido para tentar novamente.`
             : `Os lançamentos ${failedIds.join(', ')} não puderam ser carregados. O total permanece incompleto; reabra o pedido para tentar novamente.`));
