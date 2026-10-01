@@ -329,6 +329,21 @@ export function createChatClient({
     return report;
   }
 
+  async function startRhidPendingValidation({ date, personKey, presenceId } = {}) {
+    if (!validIsoDate(date)) throw new Error("Selecione uma data válida para validar presença.");
+    if (!/^(?:rhid|id):[^\s:]+$/.test(String(personKey || ""))) throw new Error("Colaborador RHID inválido.");
+    if (!/^[1-9]\d*$/.test(String(presenceId || ""))) throw new Error("ID de presença inválido.");
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_pending_validation_start", date, personKey, presenceId: String(presenceId) }),
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "A validação de presença", { allowRecovery: true }));
+    if (!Array.isArray(result?.messages) || !result.messages.length) throw new Error("A VM não abriu a validação de presença.");
+    return result;
+  }
+
   async function getRhidAttendanceMonth(selectedMonth) {
     const month = String(selectedMonth || "").trim();
     if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) throw new Error("Selecione um mês válido para o calendário RHID.");
@@ -494,5 +509,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, startRhidPendingValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }

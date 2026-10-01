@@ -1214,6 +1214,24 @@ test("relatório RHID exibe cartões diários com colunas de batidas e total", (
   dom.window.close();
 });
 
+test("somente colaborador com presença pendente recebe botão de validação ao lado do nome", () => {
+  const detail = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00", pendingPresenceIds: ["21"] },
+    { ID_PESSOA_RHID: "10", NOME_COLABORADOR: "BIA", BATIDAS_RHID: "", pendingPresenceIds: [] },
+  ]);
+  const markup = renderChatMarkup(signedInState({ messages: [{
+    id: "report-pending", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: { ...detail, reportDate: "2026-09-25" },
+  }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll('[data-action="rhid-presence-validate-open"]')];
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].closest(".chat-rhid-attendance-card__person")?.querySelector("h3")?.textContent, "ANA");
+  assert.equal(buttons[0].textContent.trim(), "VALIDAR PRESENÇA");
+  assert.equal(commandFromTarget(buttons[0]).personKey, "rhid:9");
+  dom.window.close();
+});
+
 test("relatório RHID segue o layout diário com indicadores e cartões individuais", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-daily-layout", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],

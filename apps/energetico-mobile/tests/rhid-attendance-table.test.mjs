@@ -124,6 +124,16 @@ test("marca discrepância por batidas incompletas ou carga semanal abaixo do mí
   assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "—", "—"), "2026-09-26", afterClose), false);
 });
 
+test("associa IDs pendentes ao colaborador sem misturar registros de outra pessoa", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00", pendingPresenceIds: ["21", "22"] },
+    { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "12:00", pendingPresenceIds: ["21"] },
+    { ID_PESSOA_RHID: "10", NOME_COLABORADOR: "BIA", BATIDAS_RHID: "", pendingPresenceIds: [] },
+  ]);
+  assert.deepEqual(table.people[0].pendingPresenceIds, ["21", "22"]);
+  assert.deepEqual(table.people[1].pendingPresenceIds, []);
+});
+
 test("classifica as batidas nas quatro faixas sem confundir a fronteira de 12:30", () => {
   assert.equal(rhid.classifyRhidPunch("05:00"), "entry1");
   assert.equal(rhid.classifyRhidPunch("08:00"), "entry1");

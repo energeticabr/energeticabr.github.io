@@ -670,6 +670,7 @@ export function createAppController({
   let attachmentRevision = 0;
   let snapshotPending = null;
   const rhidAttendanceReportRequests = new Map();
+  const rhidPendingValidationRequests = new Set();
   let rhidAttendanceReportPreviousSnapshot = null;
   let rhidAttendanceReportNavigationRevision = 0;
   let rhidRefreshRequest = null;
@@ -1945,6 +1946,52 @@ export function createAppController({
     if (!id || message?.type !== "poll" || table?.kind !== "rhid_attendance" || table.navigationBusy === true) return false;
     const day = shiftRhidReportDate(table.reportDate, Number(value));
     return day ? generateRhidAttendanceReport(day, { replaceMessageId: id }) : false;
+  }
+
+  async function startRhidPendingValidation({ messageId, personKey, value } = {}) {
+    const state = store.getState();
+    const report = state.messages.find(item => String(item?.id || "") === String(messageId || ""));
+    const table = report?.detail_table || report?.detailTable;
+    const person = table?.people?.find(item => item.personKey === personKey);
+    const presenceId = String(value || "");
+    if (!account || stopped || flowBusy() || rhidPendingValidationRequests.size || state.activeFlow?.id === "attendance_validation"
+      || typeof client.startRhidPendingValidation !== "function"
+      || report?.type !== "poll" || table?.kind !== "rhid_attendance"
+      || !isValidRhidReportDate(table.reportDate) || !person?.pendingPresenceIds?.includes(presenceId)) return false;
+    if (state.attachments?.length) {
+      setSessionError(new Error("Conclua ou retire os anexos pendentes antes de abrir a validação de presença."));
+      return false;
+    }
+    const requestKey = `${messageId}:${personKey}:${presenceId}`;
+    if (rhidPendingValidationRequests.has(requestKey)) return false;
+    rhidPendingValidationRequests.add(requestKey);
+    const targetAccount = account, targetRevision = sessionRevision;
+    try {
+      const remote = await client.startRhidPendingValidation({
+        date: table.reportDate, personKey, presenceId,
+      });
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      const current = store.getState();
+      if (!sameRecordsExceptPreview(current.messages, state.messages)
+        || !sameRecordsExceptPreview(current.attachments, state.attachments)
+        || current.activeFlow !== state.activeFlow) {
+        setSessionError(new Error("A validação foi aberta na VM, mas a tela mudou. Toque em Retomar conversa para sincronizar."));
+        return false;
+      }
+      lastPresenceValidationDate = table.reportDate;
+      const result = preparePresenceResult(remote);
+      sessionError = null;
+      store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false });
+      rememberCurrentAssistantPoll(result, result.messages);
+      hydrateMediaPreviews();
+      return true;
+    } catch (error) {
+      if (!stopped && account === targetAccount && sessionRevision === targetRevision)
+        setSessionError(error, "Não foi possível abrir a validação desta presença.");
+      return false;
+    } finally {
+      rhidPendingValidationRequests.delete(requestKey);
+    }
   }
 
   async function loadRhidAttendanceMonth({ value } = {}) {
@@ -5840,6 +5887,7 @@ export function createAppController({
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
     bind("rhid-refresh", refreshRhidAttendance);
     bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
+    bind("rhid-presence-validate-open", startRhidPendingValidation);
     bind("rhid-attendance-month-load", loadRhidAttendanceMonth);
     bind("rhid-attendance-adjust-save", saveRhidAttendanceAdjustment);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));

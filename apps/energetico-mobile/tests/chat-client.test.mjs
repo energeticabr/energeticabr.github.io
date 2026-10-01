@@ -157,6 +157,21 @@ test("consulta o relatório RHID do dia selecionado com a sessão Microsoft", as
   assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_report", date: "2026-09-25" });
 });
 
+test("abre validação RHID vinculada ao ID pendente usando sessão autenticada", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [{ type: "poll", question: "PRESENÇA?", options: [] }] });
+  });
+  const result = await client.startRhidPendingValidation({ date: "2026-09-25", personKey: "rhid:9", presenceId: "21" });
+  assert.equal(result.messages[0].question, "PRESENÇA?");
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(request.body), {
+    action: "rhid_pending_validation_start", date: "2026-09-25", personKey: "rhid:9", presenceId: "21",
+  });
+  await assert.rejects(client.startRhidPendingValidation({ date: "2026-09-25", personKey: "rhid:9", presenceId: "0" }), /presença inválido/i);
+});
+
 test("consulta resumo mensal RHID autenticado sem baixar relatórios diários", async () => {
   let request;
   const client = clientWith(async (url, options) => {
