@@ -631,7 +631,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return [...rowsById.values()];
   }
   function amountFor(item) {
-    return numericAmount(field(item?.fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
+    const fields = item?.fields;
+    const explicit = numericAmount(field(fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
+    if (explicit != null) return explicit;
+    const quantity = numericAmount(field(fields, 'QUANTIDADE', 'QTD'));
+    const unitPrice = numericAmount(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'));
+    const freight = numericAmount(field(fields, 'FRETE'));
+    return quantity == null || unitPrice == null || freight == null ? null : quantity * unitPrice + freight;
   }
   function summarizeLaunchAmounts(rows) {
     let total = 0, missing = 0;
@@ -790,21 +796,30 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
         const linkedIds = (Array.isArray(launchRows) ? launchRows : [])
           .filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
-        const linked = [];
-        for (let offset = 0; offset < linkedIds.length; offset += 4) {
-          const batch = await Promise.all(linkedIds.slice(offset, offset + 4).map(item =>
+        const linked = [...linkedIds];
+        const sparse = linkedIds.map((item, index) => ({ item, index })).filter(({ item }) =>
+          !['DATA', 'FORNECEDOR', 'PRODUTO', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE']
+            .some(name => field(item.fields, name) != null));
+        const failedIds = [];
+        for (let offset = 0; offset < sparse.length; offset += 4) {
+          const batch = await Promise.allSettled(sparse.slice(offset, offset + 4).map(({ item }) =>
             request('detail', { id: item.id }, { signal })));
           if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
-          batch.forEach((detail, index) => {
-            const expectedId = String(linkedIds[offset + index].id);
-            if (String(detail?.item?.id) !== expectedId
-              || clusterKey(field(detail.item.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
-              throw new Error(`O lançamento ${expectedId} mudou de pedido ou não foi devolvido. Atualize e tente novamente.`);
+          batch.forEach((result, index) => {
+            const expectedId = String(sparse[offset + index].item.id);
+            const item = result.status === 'fulfilled' ? result.value?.item : null;
+            if (String(item?.id) !== expectedId
+              || clusterKey(field(item?.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
+              failedIds.push(expectedId);
+            } else {
+              linked[sparse[offset + index].index] = item;
             }
-            linked.push(detail.item);
           });
         }
         const content = [];
+        if (failedIds.length) content.push(element('p', 'lg-error', failedIds.length === 1
+          ? `O lançamento ${failedIds[0]} não pôde ser carregado. O total permanece incompleto; reabra o pedido para tentar novamente.`
+          : `Os lançamentos ${failedIds.join(', ')} não puderam ser carregados. O total permanece incompleto; reabra o pedido para tentar novamente.`));
         if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
         if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
         if (order) {

@@ -15,6 +15,13 @@ const MAX_PAGES = 100;
 const LAUNCH_GROUP_PAGE_SIZE = 100;
 const LAUNCH_GROUP_MAX_PAGES = 100;
 const LAUNCH_GROUP_PREFER = "HonorNonIndexedQueriesWarningMayFailRandomly";
+// Internal names confirmed for LANCAMENTOS; the report renders their display labels.
+const LAUNCH_GROUP_FIELDS = Object.freeze([
+  ["DATA", "field_2"], ["FORNECEDOR", "field_5"], ["PRODUTO", "field_7"],
+  ["QUANTIDADE", "field_8"], ["VALOR UNITÁRIO", "field_9"], ["FRETE", "field_10"],
+  ["CONTA", "field_14"], ["CONCLUÍDO", "field_19"],
+]);
+const LAUNCH_GROUP_SELECT = ["AGRUPAR", "UN", ...LAUNCH_GROUP_FIELDS.map(([, internal]) => internal)].join(",");
 const KNOWN_FIELDS = Object.freeze([
   ["FILIAL", ["FILIAL"]],
   ["FORNECEDOR", ["FORNECEDOR"]],
@@ -236,7 +243,7 @@ export function createLaunchClusterData({
     if (!/^\d{1,15}$/.test(groupId)) throw new RangeError("O valor de AGRUPAR deve ser um ID numérico válido.");
     const list = await resolveList(signal);
     const rowsById = new Map();
-    const query = `$select=id&$expand=fields&$filter=fields/AGRUPAR eq '${groupId}'&$top=${LAUNCH_GROUP_PAGE_SIZE}`;
+    const query = `$select=id&$expand=fields($select=${LAUNCH_GROUP_SELECT})&$filter=fields/AGRUPAR eq '${groupId}'&$top=${LAUNCH_GROUP_PAGE_SIZE}`;
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= LAUNCH_GROUP_MAX_PAGES; pageNumber += 1) {
       if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
@@ -256,7 +263,13 @@ export function createLaunchClusterData({
         const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
         if (String(scalar(fieldValue(fields, ["AGRUPAR"])) ?? "").trim() !== groupId) continue;
         const id = String(item?.id ?? fieldValue(fields, ["ID"]) ?? "").trim();
-        if (id) rowsById.set(id, Object.freeze({ ...item, id, fields }));
+        if (id) {
+          const namedFields = { ...fields };
+          for (const [label, internal] of LAUNCH_GROUP_FIELDS) {
+            if (fieldValue(namedFields, [label]) == null && fields[internal] != null) namedFields[label] = fields[internal];
+          }
+          rowsById.set(id, Object.freeze({ ...item, id, fields: Object.freeze(namedFields) }));
+        }
       }
       if (!page?.hasMore || !page?.nextLink) {
         const rows = [...rowsById.values()].sort((left, right) => Number(right.id) - Number(left.id));

@@ -657,10 +657,74 @@ test('pedido agrupado completa os dados de cada lançamento quando a busca por A
   assert.match(modal.textContent, /Valores conferem/);
 });
 
+test('pedido usa campos completos do SharePoint sem abrir detalhes individuais e calcula o total', async t => {
+  const card = row(3479);
+  card.fields.AGRUPAR = '348';
+  card.hasAttachments = false;
+  const linked = [
+    { id: '3479', fields: { AGRUPAR: '348', DATA: '2026-09-30', FORNECEDOR: 'JOSÉ GERALDO',
+      CONTA: 'DINHEIRO', PRODUTO: 'PEDREIRO', QUANTIDADE: 2, 'VALOR UNITÁRIO': 250,
+      FRETE: 0, UN: 'DIÁRIA', 'CONCLUÍDO': 'PEDIDO EMPENHADO' } },
+    { id: '3478', fields: { AGRUPAR: '348', DATA: '2026-09-29', FORNECEDOR: 'JOSÉ GERALDO',
+      CONTA: 'DINHEIRO', PRODUTO: 'PEDREIRO', QUANTIDADE: 2, 'VALOR UNITÁRIO': 293,
+      FRETE: 0, UN: 'DIÁRIA', 'CONCLUÍDO': 'PEDIDO EMPENHADO' } },
+  ];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 1086 } }] }),
+    loadLaunchGroup: async () => linked,
+    request: async operation => {
+      if (operation === 'detail') throw new Error('Não deve consultar detalhes individuais');
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  const rows = [...modal.querySelectorAll('[data-launch-id]')];
+  assert.deepEqual(rows.map(node => node.dataset.launchId), ['3479', '3478']);
+  assert.match(rows[0].textContent, /JOSÉ GERALDO/);
+  assert.match(rows[0].textContent, /R\$\s*500,00/);
+  assert.match(modal.textContent, /Valores conferem/);
+  assert.match(modal.textContent, /R\$\s*1\.086,00/);
+});
+
+test('falha de um detalhe preserva os outros lançamentos e mantém a conciliação incompleta', async t => {
+  const first = row(3479);
+  first.fields.AGRUPAR = '348';
+  first.fields['VALOR TOTAL'] = 500;
+  first.total = 500;
+  first.hasAttachments = false;
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 1086 } }] }),
+    loadLaunchGroup: async () => [
+      { id: '3479', fields: { AGRUPAR: '348' } },
+      { id: '3478', fields: { AGRUPAR: '348' } },
+    ],
+    request: async (operation, payload) => {
+      if (operation === 'detail' && String(payload.id) === '3479') return detail({ item: first });
+      if (operation === 'detail') throw new Error('Falha na consulta do lançamento 3478');
+      return snapshot({ rows: [first] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3479', '3478']);
+  assert.match(modal.textContent, /lançamento 3478 não pôde ser carregado/i);
+  assert.match(modal.textContent, /R\$\s*500,00/);
+  assert.match(modal.textContent, /1 lançamento\(s\) sem valor total/i);
+  assert.doesNotMatch(modal.textContent, /Valores conferem/i);
+});
+
 test('order reconciliation stays indeterminate when linked launch amounts are missing', async t => {
   const item = row(3451);
   item.total = undefined;
   item.fields = { ...item.fields, AGRUPAR: '334' };
+  delete item.fields['VALOR UNITÁRIO'];
   const ctx = await setup(t, {
     loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: { VALORTOTAL: 0 } }] }),
     request: async (operation, payload) => operation !== 'snapshot' ? detail({ item })
