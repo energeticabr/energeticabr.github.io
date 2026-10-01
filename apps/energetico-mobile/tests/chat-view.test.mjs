@@ -1216,6 +1216,23 @@ test("relatório RHID exibe cartões diários com colunas de batidas e total", (
   dom.window.close();
 });
 
+test("lacuna RHID abre com horário sugerido para confirmação, inclusive sexta-feira", () => {
+  for (const [reportDate, expected] of [["2026-09-28", "17:00"], ["2026-09-25", "16:00"]]) {
+    const dom = new JSDOM('<main id="app"></main>');
+    const root = dom.window.document.querySelector("#app");
+    const view = createChatView(root);
+    const table = buildRhidAttendanceTable([{ Id: 90, ID_PESSOA_RHID: "90", NOME_COLABORADOR: "ANA",
+      BATIDAS_RHID: "07:00; 12:00; 13:00" }]);
+    view.render(signedInState({ messages: [{ id: "rhid-blank", role: "assistant", type: "poll", question: "RELATÓRIO RHID",
+      options: [], detail_table: { ...table, reportDate } }] }));
+    root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit2"]').click();
+    assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, expected);
+    assert.match(root.querySelector('[data-rhid-adjustment-dialog]').textContent, /Ajustado:\s*não informado/);
+    view.destroy();
+    dom.window.close();
+  }
+});
+
 test("somente colaborador com presença pendente recebe botão de validação ao lado do nome", () => {
   const detail = buildRhidAttendanceTable([
     { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00", pendingPresenceIds: ["21"] },

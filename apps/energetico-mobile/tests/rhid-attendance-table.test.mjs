@@ -3,7 +3,28 @@ import assert from "node:assert/strict";
 
 import * as rhid from "../src/chat/rhid-attendance-table.js";
 
-const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, shiftRhidReportDate } = rhid;
+const { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, shiftRhidReportDate, suggestedRhidAdjustmentTime } = rhid;
+
+test("sugere horários apenas para dias úteis e diferencia a saída de sexta-feira", () => {
+  assert.equal(suggestedRhidAdjustmentTime("entry1", "2026-09-29"), "07:00");
+  assert.equal(suggestedRhidAdjustmentTime("exit1", "2026-09-29"), "12:00");
+  assert.equal(suggestedRhidAdjustmentTime("entry2", "2026-09-29"), "13:00");
+  assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-09-28"), "17:00");
+  assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-10-02"), "16:00");
+  assert.equal(suggestedRhidAdjustmentTime("exit2", "2026-10-03"), "");
+  assert.equal(suggestedRhidAdjustmentTime("entry1", "2026-02-30"), "");
+});
+
+test("horários azuis confirmados entram no total; lacunas cinzas continuam parciais", () => {
+  const table = buildRhidAttendanceTable([{ Id: 8, ID_PESSOA_RHID: "8", NOME_COLABORADOR: "BERNARDO",
+    BATIDAS_RHID: "12:00; 13:00; 17:00",
+    ADMIN_AJUSTES: { entry1: { time: "07:00", reason: "Conferido" } } }]);
+  assert.deepEqual(table.rows[0], ["BERNARDO", "07:00", "12:00", "13:00", "17:00", "09:00"]);
+  assert.equal(table.people[0].slots.entry1.source, "added");
+  const partial = buildRhidAttendanceTable([{ Id: 9, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "12:00; 13:00; 17:00" }]);
+  assert.equal(partial.people[0].slots.entry1.source, "empty");
+  assert.match(partial.rows[0][5], /parcial/i);
+});
 
 test("navegação do relatório RHID avança e retorna um dia inclusive nas viradas do calendário", () => {
   assert.equal(shiftRhidReportDate("2026-10-01", -1), "2026-09-30");

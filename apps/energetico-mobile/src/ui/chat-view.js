@@ -7,7 +7,7 @@ import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/data
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt } from "../chat/attachment-finish.js";
-import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
+import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -1925,11 +1925,11 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
 
 function rhidAttendanceAdjustmentMarkup(adjustment) {
   if (!adjustment) return "";
-  const { personName, label, rhid, effective, previous, busy, error } = adjustment;
+  const { personName, label, rhid, effective, currentEffective, previous, busy, error } = adjustment;
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog>
     <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title">
       <h2 id="rhid-adjustment-title">Corrigir ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
-      <div class="chat-rhid-adjustment__history"><p>RHID: <strong>${escapeHtml(rhid || "não registrado")}</strong></p><p>Ajustado: <strong>${escapeHtml(effective || "não informado")}</strong></p>
+      <div class="chat-rhid-adjustment__history"><p>RHID: <strong>${escapeHtml(rhid || "não registrado")}</strong></p><p>Ajustado: <strong>${escapeHtml(currentEffective || "não informado")}</strong></p>
       ${previous ? `<p>Último ajuste: ${escapeHtml(previous.reason || "—")} · ${escapeHtml(previous.actorName || "administrador")}</p>` : ""}</div>
       <label for="rhid-adjustment-time">Horário corrigido</label><input id="rhid-adjustment-time" type="time" data-role="rhid-adjustment-time" value="${escapeHtml(effective || "")}"${busy ? " disabled" : ""}>
       <label for="rhid-adjustment-reason">Justificativa obrigatória</label><textarea id="rhid-adjustment-reason" data-role="rhid-adjustment-reason" rows="3" maxlength="500" placeholder="Explique por que este horário foi incluído ou alterado"${busy ? " disabled" : ""}></textarea>
@@ -3845,7 +3845,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceAdjustment = {
         messageId: command.messageId, personKey: command.personKey, slot: command.slot,
         personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
-        effective: slot.effective || "", previous: slot.adjustment || null, busy: false, error: "",
+        effective: slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null, busy: false, error: "",
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
