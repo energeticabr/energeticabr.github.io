@@ -22,7 +22,10 @@
 .gallery-record-card.og-card--with-attachments { grid-template-columns: minmax(52px, 76px) minmax(0, 1fr) 44px; }
 .gallery-record-card.lg-record { grid-template-columns: minmax(0, 1fr) 96px; }
 .gallery-record-card.lg-record--with-media { grid-template-columns: 78px minmax(0, 1fr) 96px; }
-.gallery-record-card.lg-record > .gallery-record-actions { flex-direction: row; }
+.gallery-record-card.lg-record > .lg-record-content { grid-column: 1 / -1; }
+.gallery-record-card.lg-record--with-media > .lg-record-content { grid-column: 2 / -1; }
+.gallery-record-card.lg-record .lg-record-heading { padding-right: 108px; }
+.gallery-record-card.lg-record > .gallery-record-actions { flex-direction: row; z-index: 1; }
 .gallery-record-card > .gallery-record-actions {
   grid-column: -2 / -1;
   grid-row: 1;
