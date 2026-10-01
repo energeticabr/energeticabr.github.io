@@ -2294,44 +2294,8 @@ export function createAppController({
 
   function isDraftExitConfirmation(poll) {
     const options = Array.isArray(poll?.options) ? poll.options : [];
-    return options.some(option => /^portal_draft_exit_(?:save|discard)$/i.test(String(option?.reply || option?.id || "").trim()))
-      || /RASCUNHO.*MENU PRINCIPAL/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
-  }
-
-  function hasSharePointValue(value) {
-    if (value == null) return false;
-    if (typeof value === "string") {
-      const normalized = value.trim().toLocaleLowerCase("pt-BR");
-      return Boolean(normalized) && !["-", "em branco", "none", "null", "undefined"].includes(normalized);
-    }
-    if (typeof value === "number" || typeof value === "boolean") return true;
-    if (Array.isArray(value)) return value.some(hasSharePointValue);
-    if (typeof value === "object") return Object.values(value).some(hasSharePointValue);
-    return false;
-  }
-
-  function flowHasSharePointData(activeFlow) {
-    if (!activeFlow || typeof activeFlow !== "object") return false;
-    if (Array.isArray(activeFlow.rows) && activeFlow.rows.some(row => hasSharePointValue(row?.value))) return true;
-    if (activeFlow.launches?.lines?.length > 0 || activeFlow.measurementLines?.lines?.length > 0) return true;
-    if (activeFlow.epiDelivery?.items?.length > 0) return true;
-    const placement = activeFlow.documentSigningPlacement;
-    if (hasSharePointValue(placement?.signature)) return true;
-    if (placement?.selection && typeof placement.selection === "object"
-      && Object.keys(placement.selection).length > 0) return true;
-    return false;
-  }
-
-  function hasSharePointDraftData(state, response) {
-    const attachments = [
-      ...(Array.isArray(state?.attachments) ? state.attachments : []),
-      ...(Array.isArray(response?.attachments) ? response.attachments : []),
-    ];
-    return flowHasSharePointData(state?.activeFlow)
-      || flowHasSharePointData(response?.activeFlow)
-      // A filter string is only a local query, not a value submitted to SharePoint.
-      || attachments.some(attachment => attachment?.readOnly !== true)
-      || (Array.isArray(state?.pendingFiles) && state.pendingFiles.length > 0);
+    return options.some(option => /^portal_draft_exit_(?:save|discard|cancel)$/i.test(String(option?.reply || option?.id || "").trim()))
+      || /ABANDONAR.*FLUXO/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
   }
 
   function scheduledPaymentOption(poll, paymentId) {
@@ -2464,12 +2428,13 @@ export function createAppController({
           : { reply: PORTAL_MAIN_MENU_CONFIRM_ID, label: "" }, "a saída do fluxo anterior")) return false;
         poll = currentAssistantPoll();
         if (isDraftExitConfirmation(poll)) {
-          if (!await advance(pendingNoteOption(poll, "portal_draft_exit_discard"), "a saída sem salvar do fluxo anterior")) return false;
-          poll = currentAssistantPoll();
+          dismissPendingNotes();
+          setSessionError(new Error("Confirme na conversa se deseja abandonar o fluxo atual. Os dados pendentes serão perdidos; depois, abra novamente a nota pendente."));
+          return false;
         }
         if (pendingNoteOption(poll, "diary_partial_save_no")) {
-          if (!await advance(pendingNoteOption(poll, "diary_partial_save_no"), "a saída do diário sem postar")) return false;
-          poll = currentAssistantPoll();
+          setSessionError(new Error("Confirme na conversa se deseja abandonar o diário atual antes de abrir a nota pendente."));
+          return false;
         }
         if (!isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
           setSessionError(new Error("A VM não confirmou a saída do fluxo anterior. O popup permanece aberto."));
@@ -2574,20 +2539,13 @@ export function createAppController({
         if (!returned) return null;
         poll = currentAssistantPoll();
         if (isDraftExitConfirmation(poll)) {
-          const discard = pendingNoteOption(poll, "portal_draft_exit_discard");
-          if (!discard || !await sendSettlementReply(
-            String(discard.label || discard.title || "ELIMINAR RASCUNHO FORMULÁRIO"),
-            String(discard.reply || discard.id), targetAccount, targetRevision,
-          )) return null;
-          poll = currentAssistantPoll();
+          setSessionError(new Error("Confirme na conversa se deseja abandonar o fluxo atual. Os dados pendentes serão perdidos; depois, solicite a baixa novamente."));
+          return null;
         }
         const diaryExit = pendingNoteOption(poll, "diary_partial_save_no");
         if (diaryExit) {
-          if (!await sendSettlementReply(
-            String(diaryExit.label || diaryExit.title || "SAIR SEM POSTAR AGORA"),
-            String(diaryExit.reply || diaryExit.id), targetAccount, targetRevision,
-          )) return null;
-          poll = currentAssistantPoll();
+          setSessionError(new Error("Confirme na conversa se deseja abandonar o diário atual antes de solicitar a baixa novamente."));
+          return null;
         }
         if (!isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
           setSessionError(new Error("A VM não confirmou a saída do fluxo anterior. A baixa não foi iniciada."));
@@ -4350,19 +4308,6 @@ export function createAppController({
       remoteResponseReceived = true;
       result = recommendEffectivePaymentDate(previousPoll, submissionText, replyId, result);
       result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
-      if (replyId === PORTAL_MAIN_MENU_CONFIRM_ID && !hasSharePointDraftData(previousState, result)) {
-        const draftExitPoll = [...(Array.isArray(result.messages) ? result.messages : [])]
-          .reverse()
-          .find(message => message?.type === "poll" && isDraftExitConfirmation(message));
-        const discard = pendingNoteOption(draftExitPoll, "portal_draft_exit_discard");
-        if (discard) {
-          result = preparePresenceResult(await client.sendText({
-            text: String(discard.label || discard.title || "SAIR SEM SALVAR"),
-            replyId: String(discard.reply || discard.id),
-          }));
-          result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
-        }
-      }
       const blankPaymentFormOption = paymentProvisionBlankFormOption(
         result,
         result.activeFlow || previousState.activeFlow,
@@ -4476,9 +4421,12 @@ export function createAppController({
       const transferPromptCancelled = transferPromptWasActive
         && !transferConfirmedInResponse
         && !hasAttachmentTransferPrompt(result.messages);
-      const preserveTransferredAttachments = attachmentTransferPending
-        && previousState.attachments.length > 0
-        && (transferConfirmedInResponse || attachmentTransferCompleted);
+      const preserveTransferredAttachments = (
+        (attachmentTransferPending && previousState.attachments.length > 0
+          && (transferConfirmedInResponse || attachmentTransferCompleted))
+        || (result.started_new_flow_with_inactivity_attachment === true
+          && Array.isArray(result.attachments) && result.attachments.length > 0)
+      );
       const enteredNextTransferredFlow = attachmentTransferPending
         && attachmentTransferCompleted
         && !menuResult

@@ -1777,6 +1777,37 @@ test("cancelar a transferência permite que uma saída normal limpe os anexos", 
   assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(/);
 });
 
+test("novo fluxo após inatividade preserva o anexo recém-enviado só depois da confirmação", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const attachment = { id: "new-inactive-photo", fileName: "nova-foto.jpg", mimeType: "image/jpeg", size: 512,
+    mediaUrl: "/api/portal-media/new-inactive-photo" };
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA", contextId: "inactive-task" };
+  h.store.ingestRemoteMessages([{ type: "poll", question: "USAR ANEXO NO FLUXO ATUAL?", options: [
+    { id: "inactivity_attachment_new_flow", label: "USAR EM UM NOVO FLUXO" },
+  ] }], { activeFlow });
+  h.store.syncAttachments([attachment]);
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "inactivity_attachment_new_flow") return { status: "processed", activeFlow,
+      attachments: [attachment], messages: [{ type: "poll", question: "TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?",
+        options: [{ id: "portal_draft_exit_discard", label: "SIM, ABANDONAR" },
+          { id: "portal_draft_exit_cancel", label: "NÃO, CONTINUAR" }] }] };
+    return { status: "processed", resetConversation: true, returned_to_main_menu: true,
+      started_new_flow_with_inactivity_attachment: true, activeFlow: null, attachments: [attachment],
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }] };
+  };
+  await h.view.emit("select-reply", { replyId: "inactivity_attachment_new_flow", label: "USAR EM UM NOVO FLUXO" });
+  assert.deepEqual(calls, ["inactivity_attachment_new_flow"]);
+  assert.equal(h.store.getState().attachments.length, 1);
+  await h.view.emit("select-reply", { replyId: "portal_draft_exit_discard", label: "SIM, ABANDONAR" });
+  assert.deepEqual(calls, ["inactivity_attachment_new_flow", "portal_draft_exit_discard"]);
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+});
+
 test("quando a data validada não tem pendências mostra resumo e permite ver outras datas", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());
@@ -3463,28 +3494,24 @@ test("lápis não confunde Efetuar Lançamento de Gastos Pessoais com o submenu 
   assert.equal(calls.includes("action_personal_expense_launch"), false);
 });
 
-test("lápis abandona Assinar documentos antes de iniciar lançamento da nota pendente", async t => {
+test("lápis exige confirmação humana antes de sair de Assinar documentos", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, { initial: "document" });
   t.after(() => h.controller.stop());
   await h.controller.start();
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
-    h.view.renders.at(-1).error);
-  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard",
-    "group_supplies", "action_supply_launches", "action_launch", "choice:pedido_lancamento:2",
-    "choice:tipo_lancamento:2", "choice:pedido_existente_lancamento:13"]);
-  assert.match(h.store.getState().messages.at(-1).question, /DATA DE PAGAMENTO PREVISTO/);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).error, /Confirme na conversa/);
 });
 
-test("lápis abandona diário de obras sem o deixar pausado antes do novo fluxo", async t => {
+test("lápis não abandona diário de obras automaticamente", async t => {
   const h = makeHarness();
   const { calls } = configurePendingNoteWorkflow(h, { initial: "diary" });
   t.after(() => h.controller.stop());
   await h.controller.start();
-  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), true,
-    h.view.renders.at(-1).error);
-  assert.deepEqual(calls, ["input_continue", "abandon_construction_diary", "diary_partial_save_no",
-    ...pendingNoteWorkflowScreens().replies]);
+  assert.equal(await h.view.emit("launch-pending-note", { orderId: "13" }), false);
+  assert.deepEqual(calls, ["input_continue", "abandon_construction_diary"]);
+  assert.match(h.view.renders.at(-1).error, /Confirme na conversa/);
 });
 
 test("falha em cada transição preserva popup e erro real; retry retoma a etapa da VM", async t => {
@@ -4142,7 +4169,7 @@ test("o check também navega para Pendências quando a tela atual é o menu de D
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
-test("o check abandona o fluxo anterior antes de iniciar a baixa no popup", async t => {
+test("o check aguarda confirmação humana antes de iniciar a baixa no popup", async t => {
   const h = makeHarness();
   const calls = [];
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
@@ -4192,10 +4219,9 @@ test("o check abandona o fluxo anterior antes de iniciar a baixa no popup", asyn
   t.after(() => h.controller.stop());
   await h.controller.start();
 
-  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
-  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard", "group_pending", "pending_payment_settlement", "306"]);
-  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD COMO 10/i);
-  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).error, /Confirme na conversa/);
 });
 
 test("o check em um fluxo de anexos retoma a baixa quando a VM libera o menu sem rascunho", async t => {
@@ -4319,8 +4345,8 @@ test("o check não inicia baixa quando a VM não conclui a saída do formulário
   await h.controller.start();
 
   assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard"]);
-  assert.match(h.view.renders.at(-1).error, /não confirmou a saída do fluxo anterior/i);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
+  assert.match(h.view.renders.at(-1).error, /Confirme na conversa/);
   assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
 });
 
@@ -5052,7 +5078,7 @@ test('resumo sem fluxo ou indisponível preserva a pergunta e informa o motivo',
   assert.match(h.view.renders.at(-1).error, /nenhum fluxo/);
 });
 
-test('menu do portal sai direto sem rascunho quando só há campos vazios e texto de filtro', async () => {
+test('menu do portal preserva confirmação mesmo quando só há campos vazios e texto de filtro', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = {
     id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-empty',
@@ -5083,11 +5109,10 @@ test('menu do portal sai direto sem rascunho quando só há campos vazios e text
 
   await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
 
-  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu', 'portal_draft_exit_discard']);
-  assert.equal(h.store.getState().activeFlow, null);
-  assert.deepEqual(h.store.getState().attachments, []);
-  assert.match(h.store.getState().messages.at(-1).question, /QUAL ÁREA VOCÊ DESEJA ACESSAR/);
-  assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Deseja deixar como rascunho/);
+  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu']);
+  assert.equal(h.store.getState().activeFlow?.id, 'task');
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(h.store.getState().messages.at(-1).question, /Deseja deixar como rascunho/);
 });
 
 test('menu do portal mantém a opção de rascunho quando o fluxo tem dado preenchido', async () => {

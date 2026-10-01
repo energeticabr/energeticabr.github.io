@@ -6258,7 +6258,7 @@ test("compacta linhas de contrato com cabeçalhos abreviados, números centraliz
   assert.equal(panel.querySelectorAll(".chat-measurement-number")[0].className, "chat-measurement-number");
 });
 
-test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", () => {
+test("oculta opções legadas de rascunho enviadas por uma VM antiga", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
       id: "draft-menu",
@@ -6272,13 +6272,36 @@ test("mostra a lixeira para excluir cada rascunho sem confundir com retomar", ()
     }],
   }));
 
-  assert.match(markup, /data-reply-id="draft_resume:abc"/);
-  assert.match(markup, /data-reply-id="draft_delete:abc"/);
-  assert.match(markup, /class="chat-draft-option"/);
-  assert.match(markup, /class="chat-draft-delete"/);
-  assert.match(markup, /aria-label="Excluir rascunho: EFETUAR LANÇAMENTO"/);
-  assert.doesNotMatch(markup, /🗑️ EXCLUIR • EFETUAR LANÇAMENTO/);
-  assert.equal((markup.match(/data-reply-id="draft_resume:abc"/g) || []).length, 1);
+  assert.doesNotMatch(markup, /data-reply-id="draft_resume:abc"/);
+  assert.doesNotMatch(markup, /data-reply-id="draft_delete:abc"/);
+});
+
+test("pendências não exibe rascunhos antigos e confirmação de abandono mantém as duas escolhas", () => {
+  const pending = renderChatMarkup(signedInState({ messages: [{
+    id: "pending-menu", role: "assistant", type: "poll", question: "PENDÊNCIAS",
+    options: [{ id: "draft_menu", label: "📝 RASCUNHOS AGUARDANDO (1)" },
+      { id: "pending_payment_provisions", label: "PROVISÕES" }],
+  }] }));
+  assert.doesNotMatch(pending, /data-reply-id="draft_menu"/);
+  assert.match(pending, /data-reply-id="pending_payment_provisions"/);
+
+  const confirmation = renderChatMarkup(signedInState({ messages: [{
+    id: "abandon", role: "assistant", type: "poll",
+    question: "TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO? TODOS OS REGISTROS PENDENTES SERÃO PERDIDOS.",
+    options: [{ id: "portal_draft_exit_discard", label: "SIM, ABANDONAR" },
+      { id: "portal_draft_exit_cancel", label: "NÃO, CONTINUAR" }],
+  }] }));
+  assert.match(confirmation, /data-reply-id="portal_draft_exit_discard"/);
+  assert.match(confirmation, /data-reply-id="portal_draft_exit_cancel"/);
+  assert.doesNotMatch(confirmation, /CRIAR RASCUNHO/);
+
+  const transfer = renderChatMarkup(signedInState({ messages: [{
+    id: "transfer", role: "assistant", type: "poll", question: "TRANSFERIR ANEXOS?",
+    options: [{ id: "portal_transfer_draft_discard", label: "SIM, TRANSFERIR" },
+      { id: "portal_transfer_cancel", label: "NÃO, CONTINUAR" }],
+  }] }));
+  assert.match(transfer, /data-reply-id="portal_transfer_draft_discard"/);
+  assert.match(transfer, /data-reply-id="portal_transfer_cancel"/);
 });
 
 test("não mostra salvar rascunho dentro das perguntas do fluxo", () => {

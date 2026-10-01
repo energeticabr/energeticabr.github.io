@@ -393,6 +393,11 @@ function isInlineDraftSaveOption(option) {
   const reply = String(option?.reply || option?.id || "").trim().toLowerCase();
   const label = String(option?.label || option?.title || "");
   return reply === "save_draft_main_menu"
+    || reply === "draft_menu"
+    || reply === "portal_draft_exit_save"
+    || reply === "portal_transfer_draft_save"
+    || reply.startsWith("draft_resume:")
+    || reply.startsWith("draft_delete:")
     || /salvar\s+rascunho\s+e\s+retornar\s+ao\s+menu\s+(inicial|principal)/i.test(label);
 }
 
@@ -2153,19 +2158,19 @@ function renderRecovery(state) {
     `<div><dt>${escapeHtml(row.label)}</dt><dd>${escapeHtml(row.value)}</dd></div>`).join("");
   const pending = reference?.pendingNames?.length ? reference.pendingNames : preview?.pendingNames || [];
   return `<details class="chat-recovery"${checking || reference ? " open" : ""}>
-    <summary>${checking ? "Prévia salva neste aparelho" : reference ? "Rascunho da conversa anterior" : "Seu fluxo foi recuperado"}</summary>
+    <summary>${checking ? "Prévia salva neste aparelho" : reference ? "Prévia da conversa anterior" : "Seu fluxo foi recuperado"}</summary>
     ${state.recoveryReferenceCount > 1 ? `<p>${state.recoveryReferenceCount} textos anteriores preservados. Recupere ou dispense este para acessar o próximo.</p>` : ""}
     ${preview?.activeFlow ? `<strong>${escapeHtml(preview.activeFlow.title)}</strong>` : ""}
     ${checking ? `<p>Conferindo o ponto atual com a VM. Nada será reenviado automaticamente.</p>` : ""}
     ${rowMarkup ? `<dl>${rowMarkup}</dl>` : ""}
     ${checking && preview?.question ? `<p><strong>Última pergunta</strong><br>${formatChatText(preview.question)}</p>` : ""}
-    ${checking && preview?.draft ? `<p><strong>Rascunho salvo</strong><br>${escapeHtml(preview.draft)}</p>` : ""}
+    ${checking && preview?.draft ? `<p><strong>Texto digitado</strong><br>${escapeHtml(preview.draft)}</p>` : ""}
     ${reference?.draft ? `<p><strong>Texto anterior — ${escapeHtml(reference.activeFlow?.title || "conversa")}</strong><br>${escapeHtml(reference.draft)}</p>
       <p>${reference.uncertain ? "Havia um envio em andamento. Confira a resposta atual da VM antes de enviar novamente." : "Este texto não foi colocado na resposta atual para evitar misturar etapas."}</p>
-      <button type="button" data-action="recover-draft"${checking || state.draft || state.activeText || state.resuming ? " disabled" : ""}>Usar rascunho no campo</button>
-      ${state.draft ? `<small>O campo já contém texto. Esvazie-o para recuperar o rascunho anterior.</small>` : ""}` : ""}
+      <button type="button" data-action="recover-draft"${checking || state.draft || state.activeText || state.resuming ? " disabled" : ""}>Usar texto no campo</button>
+      ${state.draft ? `<small>O campo já contém texto. Esvazie-o para recuperar o texto anterior.</small>` : ""}` : ""}
     ${pending.length ? `<p>Arquivos que ainda estavam pendentes: ${pending.map(escapeHtml).join(", ")}. Confira os anexos do fluxo; selecione novamente apenas os que não chegaram à VM.</p>` : ""}
-    ${!checking ? `<button type="button" data-action="dismiss-recovery">Dispensar prévia${reference?.draft ? " e rascunho anterior" : ""}</button>` : ""}
+    ${!checking ? `<button type="button" data-action="dismiss-recovery">Dispensar prévia${reference?.draft ? " e texto anterior" : ""}</button>` : ""}
   </details>`;
 }
 
