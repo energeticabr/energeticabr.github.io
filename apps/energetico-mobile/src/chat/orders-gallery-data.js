@@ -419,46 +419,56 @@ export function createHrPayrollGalleryData({
     const config = HR_PAYROLL_GALLERIES[gallery];
     const list = await resolveList(gallery);
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
-    const query = `$select=id&$expand=fields($select=${selectedFields})&$top=${HR_PAYROLL_REPORT_PAGE_SIZE}`;
-    const rows = [];
-    let cursor = null;
+    const baseQuery = `$select=id&$expand=fields($select=${selectedFields})&$top=${HR_PAYROLL_REPORT_PAGE_SIZE}`;
 
-    for (let pageNumber = 1; pageNumber <= HR_PAYROLL_PAGE_COUNT_MAX; pageNumber += 1) {
-      if (signal?.aborted) throw signal.reason || new DOMException("A consulta da folha foi cancelada.", "AbortError");
-      const result = await repository.getItemsPage(
-        SITE_KEY,
-        list.id,
-        query,
-        {
-          pageNumber,
-          maxPages: HR_PAYROLL_PAGE_COUNT_MAX,
-          ...(cursor ? { cursor } : {}),
-          ...(signal ? { signal } : {}),
-        },
-      );
-      const items = Array.isArray(result?.items) ? result.items : [];
-      for (const item of items) {
-        const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
-        const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
-        const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
-        if (eTag && eTag !== "*") row.eTag = eTag;
-        for (const [key, aliases] of config.fields) {
-          const value = hrPayrollFieldValue(fields, aliases);
-          if (value !== undefined) row[key] = value;
+    async function readPayments(query, headers) {
+      const rows = [];
+      let cursor = null;
+      for (let pageNumber = 1; pageNumber <= HR_PAYROLL_PAGE_COUNT_MAX; pageNumber += 1) {
+        if (signal?.aborted) throw signal.reason || new DOMException("A consulta da folha foi cancelada.", "AbortError");
+        const result = await repository.getItemsPage(
+          SITE_KEY,
+          list.id,
+          query,
+          {
+            pageNumber,
+            maxPages: HR_PAYROLL_PAGE_COUNT_MAX,
+            ...(cursor ? { cursor } : {}),
+            ...(headers ? { headers } : {}),
+            ...(signal ? { signal } : {}),
+          },
+        );
+        const items = Array.isArray(result?.items) ? result.items : [];
+        for (const item of items) {
+          const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
+          const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+          const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
+          if (eTag && eTag !== "*") row.eTag = eTag;
+          for (const [key, aliases] of config.fields) {
+            const value = hrPayrollFieldValue(fields, aliases);
+            if (value !== undefined) row[key] = value;
+          }
+          const linkedPayrollId = Number(String(row.IDFOLHA ?? "").trim());
+          if (row.id && Number.isSafeInteger(linkedPayrollId) && linkedPayrollId === payrollId) {
+            rows.push(Object.freeze(row));
+          }
         }
-        const linkedPayrollId = Number(String(row.IDFOLHA ?? "").trim());
-        if (row.id && Number.isSafeInteger(linkedPayrollId) && linkedPayrollId === payrollId) {
-          rows.push(Object.freeze(row));
+        if (result?.hasMore !== true) return Object.freeze(rows);
+        if (typeof result.nextLink !== "string" || !result.nextLink) {
+          throw new Error("A paginação dos pagamentos da folha não retornou o próximo cursor.");
         }
+        cursor = result.nextLink;
       }
-      if (result?.hasMore !== true) return Object.freeze(rows);
-      if (typeof result.nextLink !== "string" || !result.nextLink) {
-        throw new Error("A paginação dos pagamentos da folha não retornou o próximo cursor.");
-      }
-      cursor = result.nextLink;
+      throw new Error("A folha excedeu o limite seguro de páginas; o relatório não foi truncado.");
     }
 
-    throw new Error("A folha excedeu o limite seguro de páginas; o relatório não foi truncado.");
+    try {
+      return await readPayments(`${baseQuery}&$filter=fields/IDFOLHA eq ${payrollId}`,
+        { Prefer: LAUNCH_GROUP_PREFER });
+    } catch (error) {
+      if (error?.status !== 400 || signal?.aborted) throw error;
+      return readPayments(baseQuery);
+    }
   }
 
   const editors = new Map();
