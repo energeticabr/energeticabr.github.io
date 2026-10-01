@@ -1301,6 +1301,13 @@ test('mobile edit styles keep two form columns and pencil/X side by side', () =>
   assert.match(actions, /\.gallery-record-card\.lg-record\s*>\s*\.gallery-record-actions\s*\{\s*flex-direction:\s*row/);
 });
 
+test('mobile launch attachment rail has room for the clip and both labels', () => {
+  const actions = readFileSync(new URL('../src/ui/gallery-record-actions.css', import.meta.url), 'utf8');
+  const mobileRules = actions.match(/@media\s*\(max-width:\s*480px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+  const railWidth = Number(mobileRules.match(/\.gallery-record-card\.lg-record--with-media\s*\{\s*grid-template-columns:\s*(\d+)px/)?.[1]);
+  assert.ok(railWidth >= 68, `attachment rail is only ${railWidth}px wide on phones`);
+});
+
 test('Windows PWA entrypoint includes the launch gallery stylesheet', () => {
   const entry = readFileSync(new URL('../src/web/main.js', import.meta.url), 'utf8');
   assert.match(entry, /import\s+["']\.\.\/ui\/launch-gallery\.css["'];/);
