@@ -59,6 +59,38 @@ test('typing matches accents and case without changing the value or applying gal
   assert.equal(new ctx.FormData(ctx.form).get('product'), 'steel');
 });
 
+test('a tap on another option survives search blur and applies the new filter', t => {
+  const ctx = fixture(t, { auto: true });
+  ctx.trigger().click();
+  ctx.options().find(option => option.textContent === 'Aço estrutural').click();
+  assert.equal(ctx.select.value, 'steel');
+
+  ctx.trigger().click();
+  const next = ctx.options().find(option => option.textContent === 'Concreto');
+  next.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  ctx.search().dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+  assert.equal(ctx.popup().hidden, false, 'blur during the option tap must not dismiss the picker');
+  ctx.document.querySelector('details').dispatchEvent(new ctx.Event('scroll'));
+  assert.equal(ctx.popup().hidden, false, 'ancestor movement during the tap must not dismiss the picker');
+  next.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+  next.click();
+
+  assert.equal(ctx.select.value, 'concrete');
+  assert.equal(ctx.applies(), 2);
+  assert.equal(ctx.popup().hidden, true);
+});
+
+test('releasing a dragged option outside the list restores normal popup dismissal', async t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  ctx.options()[1].dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  ctx.popup().dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+  await settle();
+  ctx.document.querySelector('details').dispatchEvent(new ctx.Event('scroll'));
+  assert.equal(ctx.popup().hidden, true);
+  assert.equal(ctx.select.value, '', 'dragging away did not choose the option');
+});
+
 test('unknown search is never submitted as a filter and no-results Enter does nothing', t => {
   const ctx = fixture(t);
   ctx.trigger().click(); ctx.type('missing'); ctx.key('Enter');
