@@ -970,7 +970,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
   const navigation = dateLabel && messageId
     ? `<nav class="chat-rhid-date-navigation" aria-label="Navegação por data do relatório RHID">
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior"${table.navigationBusy === true ? " disabled" : ""}>←</button>
-      <time class="chat-rhid-date-navigation__date" datetime="${escapeHtml(date)}">${dateLabel}</time>
+      <button class="chat-rhid-date-navigation__date" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Escolher data do relatório RHID" title="Abrir calendário"${table.navigationBusy === true ? " disabled" : ""}><time datetime="${escapeHtml(date)}">${dateLabel}</time></button>
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia"${table.navigationBusy === true ? " disabled" : ""}>→</button>
     </nav>${table.navigationBusy === true ? `<p class="chat-rhid-attendance-table__status" role="status">Atualizando dados do RHID…</p>` : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
     : "";
@@ -1869,7 +1869,30 @@ function datePickerMarkup(value = "") {
   </div>`;
 }
 
-function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "" } = {}) {
+function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth = false) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const monthName = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(monthStart);
+  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(monthStart);
+  const firstWeekday = monthStart.getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const today = saoPauloDateIso();
+  const known = new Set(presentDates);
+  const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const days = Array.from({ length: firstWeekday }, () => '<span aria-hidden="true"></span>');
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const iso = `${month}-${String(day).padStart(2, "0")}`;
+    const status = knownMonth && iso <= today ? (known.has(iso) ? "present" : "absent") : "unknown";
+    days.push(`<button type="button" class="chat-rhid-calendar__day chat-rhid-calendar__day--${status}${iso === selectedDate ? " chat-rhid-calendar__day--selected" : ""}" data-action="rhid-calendar-select-day" data-role="rhid-calendar-day" data-value="${iso}" aria-label="${day} de ${monthName}${status === "present" ? ", com presença" : status === "absent" ? ", sem presença" : ""}" aria-pressed="${iso === selectedDate}">${day}</button>`);
+  }
+  return `<div class="chat-rhid-calendar" aria-label="Calendário de presenças RHID">
+    <div class="chat-rhid-calendar__heading"><button type="button" data-action="rhid-calendar-change-month" data-value="-1" aria-label="Mês anterior">←</button><strong>${escapeHtml(monthLabel)}</strong><button type="button" data-action="rhid-calendar-change-month" data-value="1" aria-label="Próximo mês">→</button></div>
+    <div class="chat-rhid-calendar__grid">${weekdays.map(label => `<span class="chat-rhid-calendar__weekday">${label}</span>`).join("")}${days.join("")}</div>
+    <p class="chat-rhid-calendar__legend"><span class="chat-rhid-calendar__legend-present">Com presença</span><span class="chat-rhid-calendar__legend-absent">Sem presença</span></p>
+  </div>`;
+}
+
+function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", month = "", monthLoading = false, monthKnown = false, monthPresentDates = [] } = {}) {
   if (!open) return "";
   const changingExistingReport = Boolean(messageId);
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-rhid-attendance-report" data-rhid-attendance-report-dialog>
@@ -1879,7 +1902,9 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
       <p>${changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
-      <label for="rhidAttendanceReportDate">Data</label>
+      ${rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown)}
+      ${monthLoading ? '<p role="status">Consultando presenças deste mês…</p>' : ""}
+      <label for="rhidAttendanceReportDate">Outra data</label>
       <input class="chat-date-picker__input" id="rhidAttendanceReportDate" type="date" data-role="rhid-attendance-report-date" value="${escapeHtml(date || saoPauloDateIso())}" aria-label="Data do relatório"${busy ? " disabled" : ""}>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
@@ -2337,6 +2362,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
   let rhidAttendanceReportError = "";
+  let rhidAttendanceMonth = "";
+  let rhidAttendanceMonthLoading = false;
+  let rhidAttendanceMonthKnown = false;
+  let rhidAttendanceMonthPresentDates = [];
   let rhidAttendanceAdjustment = null;
   let rhidRefresh = { busy: false, message: "", error: false };
   let pendingDateSeparatorDeletion = null;
@@ -3858,16 +3887,33 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         return;
       }
       rhidAttendanceReportDate = currentTable?.reportDate || saoPauloDateIso();
+      rhidAttendanceMonth = rhidAttendanceReportDate.slice(0, 7);
+      rhidAttendanceMonthLoading = true;
+      rhidAttendanceMonthKnown = false;
+      rhidAttendanceMonthPresentDates = [];
       rhidAttendanceReportBusy = false;
       rhidAttendanceReportError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
-      if (rhidAttendanceReportMessageId) {
-        globalThis.setTimeout?.(() => {
-          const input = root.querySelector('[data-role="rhid-attendance-report-date"]');
-          input?.focus?.();
-          try { input?.showPicker?.(); } catch { /* the native calendar picker is optional */ }
-        }, 0);
-      }
+      emit({ type: "rhid-attendance-month-load", value: rhidAttendanceMonth });
+      return;
+    }
+    if (command.type === "rhid-calendar-change-month") {
+      if (!rhidAttendanceReportOpen || rhidAttendanceReportBusy) return;
+      const [year, month] = rhidAttendanceMonth.split("-").map(Number);
+      const next = new Date(Date.UTC(year, month - 1 + Number(command.value), 1));
+      rhidAttendanceMonth = next.toISOString().slice(0, 7);
+      rhidAttendanceMonthLoading = true;
+      rhidAttendanceMonthKnown = false;
+      rhidAttendanceMonthPresentDates = [];
+      rhidAttendanceReportError = "";
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      emit({ type: "rhid-attendance-month-load", value: rhidAttendanceMonth });
+      return;
+    }
+    if (command.type === "rhid-calendar-select-day") {
+      if (!rhidAttendanceReportOpen || rhidAttendanceReportBusy || !isValidRhidReportDate(command.value)) return;
+      rhidAttendanceReportDate = command.value;
+      if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
     }
     if (command.type === "rhid-attendance-report-today") {
@@ -3884,6 +3930,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportDate = "";
       rhidAttendanceReportMessageId = "";
       rhidAttendanceReportError = "";
+      rhidAttendanceMonthLoading = false;
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
     }
@@ -4803,6 +4850,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         messageId: rhidAttendanceReportMessageId,
         busy: rhidAttendanceReportBusy,
         error: rhidAttendanceReportError,
+        month: rhidAttendanceMonth,
+        monthLoading: rhidAttendanceMonthLoading,
+        monthKnown: rhidAttendanceMonthKnown,
+        monthPresentDates: rhidAttendanceMonthPresentDates,
       },
       rhidAttendanceAdjustment,
       rhidRefresh,
@@ -4888,6 +4939,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
+  function setRhidAttendanceMonthStatus({ month, presentDates = [], error = "" } = {}) {
+    if (!rhidAttendanceReportOpen || month !== rhidAttendanceMonth) return false;
+    rhidAttendanceMonthLoading = false;
+    rhidAttendanceMonthKnown = !error;
+    rhidAttendanceMonthPresentDates = Array.isArray(presentDates) ? presentDates : [];
+    rhidAttendanceReportError = String(error || "");
+    if (lastState) { const state = lastState; lastState = null; render(state); }
+    return true;
+  }
+
   function setRhidAttendanceAdjustmentStatus({ busy = false, error = "" } = {}) {
     if (!rhidAttendanceAdjustment) return false;
     rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, busy: Boolean(busy), error: String(error || "") };
@@ -4958,6 +5019,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     render,
     openPowerBiDashboard,
     setRhidAttendanceReportStatus,
+    setRhidAttendanceMonthStatus,
     setRhidAttendanceAdjustmentStatus,
     closeRhidAttendanceAdjustment,
     setRhidRefreshStatus,

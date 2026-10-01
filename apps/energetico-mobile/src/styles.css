@@ -535,7 +535,23 @@ button { touch-action: manipulation; }
 .chat-rhid-date-navigation__button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 0; border: 1px solid #0c5f4d; border-radius: 9px; color: #0c5f4d; background: #f4faf8; font: inherit; font-size: 24px; font-weight: 800; line-height: 1; cursor: pointer; }
 .chat-rhid-date-navigation__button:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
 .chat-rhid-date-navigation__button:disabled { opacity: .55; cursor: wait; }
-.chat-rhid-date-navigation__date { min-width: 0; color: #173042; font-size: 15px; font-weight: 850; text-align: center; font-variant-numeric: tabular-nums; }
+.chat-rhid-date-navigation__date { min-width: 0; min-height: 44px; border: 1px solid #bed6d0; border-radius: 9px; color: #173042; background: #f4faf8; font: inherit; font-size: 15px; font-weight: 850; text-align: center; font-variant-numeric: tabular-nums; cursor: pointer; }
+.chat-rhid-date-navigation__date:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.chat-rhid-date-navigation__date:disabled { opacity: .55; cursor: wait; }
+.chat-rhid-calendar { margin: 12px 0; padding: 10px; border: 1px solid #bed6d0; border-radius: 10px; background: #fff; }
+.chat-rhid-calendar__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; color: #173042; text-transform: capitalize; }
+.chat-rhid-calendar__heading button { min-width: 40px; min-height: 40px; border: 1px solid #0c5f4d; border-radius: 8px; color: #0c5f4d; background: #f4faf8; font: inherit; cursor: pointer; }
+.chat-rhid-calendar__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
+.chat-rhid-calendar__weekday { padding: 5px 0; color: #496372; font-size: 11px; font-weight: 800; }
+.chat-rhid-calendar__day { min-width: 0; min-height: 39px; padding: 0; border: 1px solid transparent; border-radius: 7px; color: #173042; background: #f1f4f6; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+.chat-rhid-calendar__day--present { background: #d6f3df; border-color: #9bd5ac; }
+.chat-rhid-calendar__day--absent { background: #fbe0e0; border-color: #eeb9b9; }
+.chat-rhid-calendar__day--selected { outline: 3px solid #0c5f4d; outline-offset: -3px; }
+.chat-rhid-calendar__day:focus-visible, .chat-rhid-calendar__heading button:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.chat-rhid-calendar__legend { display: flex; gap: 14px; margin: 10px 0 0; color: #496372; font-size: 11px; font-weight: 700; }
+.chat-rhid-calendar__legend span::before { display: inline-block; width: 11px; height: 11px; margin-right: 5px; border-radius: 3px; content: ""; vertical-align: -1px; }
+.chat-rhid-calendar__legend-present::before { background: #d6f3df; border: 1px solid #9bd5ac; }
+.chat-rhid-calendar__legend-absent::before { background: #fbe0e0; border: 1px solid #eeb9b9; }
 .chat-rhid-attendance-table__heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 9px 12px; color: #0c5f4d; background: #e7f5f0; font-size: 13px; }
 .chat-rhid-attendance-table__heading small { font-size: 10px; font-weight: 700; }
 .chat-rhid-attendance-table__share { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; margin-left: auto; padding: 6px 10px; border: 1px solid #0c5f4d; border-radius: 8px; color: #0c5f4d; background: #fff; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
