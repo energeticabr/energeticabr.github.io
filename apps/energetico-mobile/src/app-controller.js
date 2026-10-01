@@ -2852,12 +2852,11 @@ export function createAppController({
   function togglePendingProvisionAttachments(paymentId) {
     if (!pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
     const id = String(paymentId || "").trim();
+    if (!id || !pendingProvisionSnapshot.rows?.some(row => String(row.id ?? "").trim() === id)) return false;
     const entry = pendingProvisionAttachmentStates.get(id);
-    if (!entry) return false;
-    if (entry.status === "error") return retryPendingProvisionAttachments(id);
-    if (entry.status !== "available" || !entry.items?.length) return false;
     pendingProvisionExpandedPaymentId = pendingProvisionExpandedPaymentId === id ? "" : id;
     render();
+    if (pendingProvisionExpandedPaymentId === id && entry?.status === "error") retryPendingProvisionAttachments(id);
     return true;
   }
 

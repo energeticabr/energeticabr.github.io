@@ -7443,3 +7443,17 @@ test('nova tentativa ressincroniza seleção recebida pela VM após NETWORK_UNCE
   assert.deepEqual(h.chatCalls.slice(callsBefore).map(([, p]) => p.replyId), ['input_continue']);
   assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
 });
+
+test('seta da provisão expande e recolhe a filial quando não existem anexos', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', branch: 'Obra A' }] });
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionAttachments['306'].status, 'empty');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '306');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '999' }), false);
+});
