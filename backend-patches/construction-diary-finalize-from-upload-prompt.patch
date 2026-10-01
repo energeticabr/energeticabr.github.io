@@ -1,0 +1,61 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -18244,5 +18244,9 @@
+         if state["stage"] == "diary_collecting_evidence":
+             self._mark_processed(state, event["message_id"])
++            if self._is_construction_diary_flow(state) and command in {
++                "diary_finish", "finalizar anexos", "finalizar",
++            }:
++                return self._finish_diary_evidence(state, etag)
+             self._send_diary_attachment_upload_prompt(state)
+             self._save(state, etag)
+             return {
+diff --git a/tests/test_workflow.py b/tests/test_workflow.py
+--- a/tests/test_workflow.py
++++ b/tests/test_workflow.py
+@@ -2896,6 +2896,44 @@ class WorkflowTests(unittest.TestCase):
+         self.assertNotIn("ADICIONAR MAIS FOTOS", action_titles)
+         self.assertNotIn("TÍTULO", action_titles)
+ 
++    def test_construction_diary_finish_from_upload_prompt_consolidates_existing_photos(self):
++        self.reply("OPA")
++        state, etag = next(iter(self.state.values.values()))
++        state = copy.deepcopy(state)
++        photo = self.media.stage(
++            event(
++                "diary-collected-photo",
++                "attachment",
++                original_filename="obra.jpg",
++                mime_type="image/jpeg",
++                content=b"photo",
++            ),
++            state["batch_id"],
++            state["key"],
++        )
++        state.update({
++            "flow": "construction_diary_fill",
++            "stage": "diary_collecting_evidence",
++            "fields": {},
++            "options": [],
++            "attachments": [photo],
++            "diary_evidence_pages": [{
++                "title": "",
++                "message_ids": ["diary-collected-photo"],
++            }],
++            "diary_current_page_index": 0,
++        })
++        self.state.save(state["key"], state, etag)
++
++        result = self.reply("FINALIZAR")
++
++        self.assertNotEqual(result["status"], "waiting_for_diary_evidence")
++        self.assertEqual(len(self.diary_evidence_builder.consolidate_calls), 1)
++        self.assertEqual(
++            self.diary_evidence_builder.consolidate_calls[0]["pages"][0]["message_ids"],
++            ["diary-collected-photo"],
++        )
++
+     def test_diary_finish_requests_reupload_when_staged_media_is_missing(self):
+         available = self.media.stage(
+             event(
