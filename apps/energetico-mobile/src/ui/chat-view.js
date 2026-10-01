@@ -1925,14 +1925,14 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
 
 function rhidAttendanceAdjustmentMarkup(adjustment) {
   if (!adjustment) return "";
-  const { personName, label, rhid, effective, currentEffective, previous, busy, error } = adjustment;
+  const { personName, label, rhid, effective, currentEffective, previous, reason, busy, error } = adjustment;
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog>
     <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title">
       <h2 id="rhid-adjustment-title">Corrigir ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
       <div class="chat-rhid-adjustment__history"><p>RHID: <strong>${escapeHtml(rhid || "não registrado")}</strong></p><p>Ajustado: <strong>${escapeHtml(currentEffective || "não informado")}</strong></p>
       ${previous ? `<p>Último ajuste: ${escapeHtml(previous.reason || "—")} · ${escapeHtml(previous.actorName || "administrador")}</p>` : ""}</div>
       <label for="rhid-adjustment-time">Horário corrigido</label><input id="rhid-adjustment-time" type="time" data-role="rhid-adjustment-time" value="${escapeHtml(effective || "")}"${busy ? " disabled" : ""}>
-      <label for="rhid-adjustment-reason">Justificativa obrigatória</label><textarea id="rhid-adjustment-reason" data-role="rhid-adjustment-reason" rows="3" maxlength="500" placeholder="Explique por que este horário foi incluído ou alterado"${busy ? " disabled" : ""}></textarea>
+      <label for="rhid-adjustment-reason">Justificativa obrigatória</label><textarea id="rhid-adjustment-reason" data-role="rhid-adjustment-reason" rows="3" maxlength="500" placeholder="Explique por que este horário foi incluído ou alterado"${busy ? " disabled" : ""}>${escapeHtml(reason || "")}</textarea>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions"><button class="chat-confirmation__cancel" type="button" data-action="rhid-attendance-adjust-cancel"${busy ? " disabled" : ""}>Cancelar</button><button class="chat-confirmation__confirm" type="button" data-action="rhid-attendance-adjust-save"${busy ? " disabled" : ""}>${busy ? "Salvando…" : "Salvar horário"}</button></div>
     </div>
@@ -3845,7 +3845,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceAdjustment = {
         messageId: command.messageId, personKey: command.personKey, slot: command.slot,
         personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
-        effective: slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null, busy: false, error: "",
+        effective: slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
+        reason: !slot.rhid && !slot.rhidCandidates?.length ? "NÃO APONTADO" : "", busy: false, error: "",
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
