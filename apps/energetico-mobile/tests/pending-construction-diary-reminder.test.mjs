@@ -46,3 +46,21 @@ test('popup não aparece vazio e trata os nomes dos registros como texto', t => 
   assert.equal(dialog.querySelector('script, img'), null);
   assert.match(dialog.textContent, /<script>erro<\/script>/);
 });
+
+test('ícone de preencher identifica o ID do cartão e emite o comando correspondente', t => {
+  const { root, view } = setup(t);
+  let command;
+  view.on('fill-pending-construction-diary', value => { command = value; });
+  const button = root.querySelector('[data-action="fill-pending-construction-diary"]');
+  assert.ok(button);
+  assert.equal(button.getAttribute('aria-label'), 'Preencher diário de obra de ID 17');
+  button.click();
+  assert.equal(command.diaryId, '17');
+});
+
+test('preenchimento em andamento bloqueia cliques repetidos e mostra erro dentro do popup', t => {
+  const { root } = setup(t, { pendingConstructionDiaryFillingId: '17', pendingConstructionDiaryError: 'A VM não confirmou o ID 17.' });
+  assert.equal(root.querySelector('[data-action="fill-pending-construction-diary"]').disabled, true);
+  assert.equal(root.querySelector('[data-action="dismiss-pending-construction-diaries"]').disabled, true);
+  assert.match(root.querySelector('[role="alert"]').textContent, /ID 17/);
+});

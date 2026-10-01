@@ -1137,3 +1137,9 @@ button { touch-action: manipulation; }
   .powerbi-dashboard__hint { max-width: 1600px; width: 100%; margin-inline: auto; }
   .powerbi-dashboard__frame-wrap { max-width: 1600px; width: 100%; margin-inline: auto; }
 }
+
+.chat-pending-construction-diary__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.chat-pending-construction-diary__fill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid #bad3e6; border-radius: 10px; background: #fff; color: #135580; font: inherit; font-weight: 600; cursor: pointer; }
+.chat-pending-construction-diary__fill svg { width: 20px; height: 20px; flex-shrink: 0; }
+.chat-pending-construction-diary__fill:disabled { opacity: .55; cursor: default; }
+.chat-pending-construction-diary__error { color: #a32424; }

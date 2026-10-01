@@ -7255,3 +7255,191 @@ test("consulta de diários lenta é cancelada e pode ser refeita sem bloquear o 
   await h.controller.handleForeground();
   assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
 });
+
+function diaryPopupConversation(h, { selectedId = '17', failSelection = false, picker = false } = {}) {
+  const menu = (reply, question = 'MENU PRINCIPAL', flow = null) => ({ status: 'processed', activeFlow: flow,
+    messages: [{ type: 'poll', question, options: [{ id: reply, reply, label: reply }] }] });
+  const selector = () => ({ status: 'processed', activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRA', contextId: 'diary-picker', rows: [] },
+    messages: [{ type: 'poll', question: '🏗️ QUAL DIÁRIO DE OBRA PENDENTE DESEJA PREENCHER?',
+      options: [{ id: 'choice:diario_obra_pendente:17', reply: 'choice:diario_obra_pendente:17', label: '17 - Obra A' }] }] });
+  let current = picker ? selector() : menu('group_construction_stage');
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    if (payload.replyId === 'input_continue') return current;
+    if (payload.replyId === 'group_construction_stage') current = menu('action_construction_diary_section', 'ETAPA OBRA', { id: 'menu:choosing_action' });
+    else if (payload.replyId === 'action_construction_diary_section') current = menu('action_fill_construction_diary', 'QUAL OPERAÇÃO DE DIÁRIO DE OBRAS?', { id: 'menu:choosing_subaction' });
+    else if (payload.replyId === 'action_fill_construction_diary') current = selector();
+    else if (payload.replyId === 'choice:diario_obra_pendente:17' || payload.text === '29') {
+      if (failSelection) throw new Error('Servidor indisponível');
+      current = { status: 'processed', activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRA', contextId: 'diary-selected',
+        rows: [{ label: 'ID', value: selectedId }] },
+        messages: [{ type: 'poll', question: 'QUAL É O TIPO DO DIÁRIO DE OBRA?', options: [] }] };
+    } else throw new Error(`Resposta inesperada: ${JSON.stringify(payload)}`);
+    return current;
+  };
+}
+
+test('ícone do lembrete inicia o diário daquele ID pela seleção completa da VM', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), true);
+  assert.deepEqual(h.chatCalls.map(([, p]) => p.replyId), ['input_continue', 'group_construction_stage',
+    'action_construction_diary_section', 'action_fill_construction_diary', 'choice:diario_obra_pendente:17']);
+  assert.equal(h.store.getState().activeFlow.rows.find(r => r.label === 'ID').value, '17');
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
+
+test('seleciona por ID diário pendente fora da página visível sem escolher o primeiro item', async t => {
+  const h = pendingDiaryHarness(t, [{ id: '29', status: 'PENDENTE' }]);
+  diaryPopupConversation(h, { selectedId: '29' });
+  await h.controller.start();
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '29' }), true);
+  assert.deepEqual(h.chatCalls.at(-1), ['text', { text: '29' }]);
+});
+
+test('não fecha o lembrete quando a VM abre um ID diferente do diário tocado', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h, { selectedId: '19' });
+  await h.controller.start();
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.ok(h.view.renders.at(-1).pendingConstructionDiaries);
+  assert.match(h.view.renders.at(-1).pendingConstructionDiaryError, /17/);
+});
+
+test('falha na seleção mantém o popup e permite tentar novamente pelo estado atual', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h, { failSelection: true });
+  await h.controller.start();
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.ok(h.view.renders.at(-1).pendingConstructionDiaries);
+  diaryPopupConversation(h, { picker: true });
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), true);
+});
+
+test('não envia comandos para diário que não pertence ao lembrete', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '99' }), false);
+  assert.deepEqual(h.chatCalls, []);
+
+});
+
+test('ícone não descarta outro formulário nem anexos para abrir um diário', async t => {
+  const h = pendingDiaryHarness(t);
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    return { status: 'processed', activeFlow: { id: 'launch', contextId: 'another-form', rows: [] },
+      messages: [{ type: 'poll', question: 'QUAL É A DATA?', options: [] }] };
+  };
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.deepEqual(h.chatCalls.map(([, p]) => p.replyId), ['input_continue']);
+  assert.ok(h.view.renders.at(-1).pendingConstructionDiaries);
+  assert.match(h.view.renders.at(-1).pendingConstructionDiaryError, /formulário/i);
+});
+
+test('duplo toque envia a seleção uma vez e impede fechar durante a abertura do diário', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  h.chatCalls.length = 0;
+  const original = h.client.sendText;
+  let release;
+  h.client.sendText = async payload => {
+    if (payload.replyId === 'input_continue') await new Promise(resolve => { release = resolve; });
+    return original(payload);
+  };
+  const filling = h.view.emit('fill-pending-construction-diary', { diaryId: '17' });
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.equal(await h.view.emit('dismiss-pending-construction-diaries'), false);
+  release();
+  assert.equal(await filling, true);
+  assert.equal(h.chatCalls.filter(([, p]) => p.replyId === 'choice:diario_obra_pendente:17').length, 1);
+});
+
+test('resposta atrasada após logout não abre o diário nem restaura seu lembrete', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  const original = h.client.sendText;
+  let release;
+  h.client.sendText = async payload => {
+    if (payload.replyId === 'input_continue') await new Promise(resolve => { release = resolve; });
+    return original(payload);
+  };
+  h.chatCalls.length = 0;
+  const filling = h.view.emit('fill-pending-construction-diary', { diaryId: '17' });
+  await h.view.emit('sign-out');
+  release();
+  assert.equal(await filling, false);
+  assert.deepEqual(h.chatCalls.map(([, p]) => p.replyId), ['input_continue']);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaryFillingId, '');
+});
+
+
+test('não inicia um diário enquanto o popup de provisões estiver aberto', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306' }] });
+  await h.controller.start();
+  assert.ok(h.view.renders.at(-1).pendingProvisions);
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.deepEqual(h.chatCalls, []);
+});
+
+test('não perde texto ainda não enviado ao tocar no ícone do diário', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  h.store.setDraft('Anotação ainda não enviada');
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.equal(h.store.getState().draft, 'Anotação ainda não enviada');
+  assert.deepEqual(h.chatCalls, []);
+  assert.match(h.view.renders.at(-1).pendingConstructionDiaryError, /não enviado/);
+});
+
+test('retoma o mesmo diário confirmado pelo campo ID sem selecioná-lo novamente', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    return { status: 'processed', activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRA',
+      contextId: 'already-selected-diary-17', rows: [{ label: 'ID', value: '17' }] },
+      messages: [{ type: 'poll', question: 'INDIQUE AS ATIVIDADES EXECUTADAS', options: [] }] };
+  };
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), true);
+  assert.deepEqual(h.chatCalls.map(([, p]) => p.replyId), ['input_continue']);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
+
+test('nova tentativa ressincroniza seleção recebida pela VM após NETWORK_UNCERTAIN', async t => {
+  const h = pendingDiaryHarness(t);
+  diaryPopupConversation(h);
+  await h.controller.start();
+  const original = h.client.sendText;
+  let lost = true;
+  h.client.sendText = async payload => {
+    const result = await original(payload);
+    if (lost && payload.replyId === 'choice:diario_obra_pendente:17') {
+      lost = false;
+      const error = new Error('Resposta interrompida'); error.code = 'NETWORK_UNCERTAIN'; throw error;
+    }
+    return result;
+  };
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), false);
+  assert.ok(h.view.renders.at(-1).pendingConstructionDiaries);
+  const callsBefore = h.chatCalls.length;
+  assert.equal(await h.view.emit('fill-pending-construction-diary', { diaryId: '17' }), true);
+  assert.deepEqual(h.chatCalls.slice(callsBefore).map(([, p]) => p.replyId), ['input_continue']);
+  assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
+});
