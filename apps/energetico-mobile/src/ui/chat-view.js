@@ -4031,7 +4031,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function input(event) {
     if (event.target?.dataset?.role === "draft") {
       if (!composing && !event.isComposing && event.target.dataset.diaryActivitiesInput === "true") {
-        const formatted = numberDiaryActivityDraft(event.target.value, event.target.selectionStart, event.target.selectionEnd);
+        const formatted = numberDiaryActivityDraft(event.target.value, event.target.selectionStart, event.target.selectionEnd, {
+          terminatePreviousLine: event.inputType === "insertLineBreak" || event.inputType === "insertParagraph",
+        });
         if (formatted.value !== event.target.value) {
           event.target.value = formatted.value;
           event.target.setSelectionRange?.(formatted.selectionStart, formatted.selectionEnd);
