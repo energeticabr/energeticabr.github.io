@@ -600,6 +600,7 @@ export function createAppController({
   native,
   recovery,
   mediaLoadTimeoutMs = 30_000,
+  rhidReportTimeoutMs = 30_000,
   authTimeoutMs,
   authSignInTimeoutMs,
   signPdfAttachment = defaultSignPdfAttachment,
@@ -1863,7 +1864,11 @@ export function createAppController({
     let request;
     request = Promise.resolve().then(async () => {
       try {
-        const report = await client.getRhidAttendanceReport(day);
+        const report = await withTimeout(
+          client.getRhidAttendanceReport(day),
+          rhidReportTimeoutMs,
+          "A consulta RHID demorou demais. Tente novamente.",
+        );
         if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
         const current = store.getState();
         if (!replaceMessageId && (
@@ -1873,7 +1878,10 @@ export function createAppController({
           || current.activeText
           || current.activeFlow !== reportOriginSnapshot.activeFlow
           || current.completionNavigation !== reportOriginSnapshot.completionNavigation
-        )) return false;
+        )) {
+          view.closeRhidAttendanceReport?.();
+          return false;
+        }
         const reportDay = isValidRhidReportDate(report.date) ? report.date : day;
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];

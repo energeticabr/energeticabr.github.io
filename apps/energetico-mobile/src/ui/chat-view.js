@@ -1945,7 +1945,7 @@ function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth =
 }
 
 function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", month = "", monthLoading = false, monthKnown = false, monthPresentDates = [] } = {}) {
-  if (!open) return "";
+  if (!open || busy) return "";
   const changingExistingReport = Boolean(messageId);
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-rhid-attendance-report" data-rhid-attendance-report-dialog>
     <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
@@ -2291,7 +2291,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
-    || pendingFiles.some(item => item.status === "sending");
+    || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true;
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
   const signaturePrompt = isSignaturePrompt(state);
@@ -2315,7 +2315,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       ${renderRecovery(state)}
       ${transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
+    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
@@ -3562,7 +3562,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
     }
     if (draft) draft.disabled = state.recoveryUncertain === true;
-    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain)
+    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain || rhidAttendanceReportBusy)
       || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];
@@ -4746,6 +4746,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   function submit(event) {
     if (!event.target?.matches?.("[data-chat-form]")) return;
     event.preventDefault?.();
+    if (composerBusy) return;
     if (composerControls.draft?.dataset?.diaryActivitiesInput === "true") {
       const value = diaryActivitiesForSubmission(composerControls.draft.value);
       if (!value) return;

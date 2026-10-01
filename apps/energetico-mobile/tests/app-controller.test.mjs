@@ -26,7 +26,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -67,7 +67,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -103,6 +103,25 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.deepEqual(report.detail_table.headers, ["Nome", "Entrada 1", "Saída 1", "Entrada 2", "Saída 2", "Total de horas/dia"]);
   assert.deepEqual(report.detail_table.rows, [["Pessoa A", "07:01", "12:00", "13:00", "17:02", "09:01"]]);
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
+});
+
+test("consulta RHID sem resposta termina a espera e informa o erro", async t => {
+  const h = makeHarness({ rhidReportTimeoutMs: 15 });
+  const statuses = [];
+  h.view.setRhidAttendanceReportStatus = status => statuses.push(status);
+  h.client.getRhidAttendanceReport = () => new Promise(() => {});
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+
+  const result = await Promise.race([
+    h.view.emit("rhid-attendance-report-generate", { value: "2026-10-01" }),
+    new Promise(resolve => setTimeout(() => resolve("still-pending"), 120)),
+  ]);
+
+  assert.equal(result, false);
+  assert.equal(statuses.at(-1)?.busy, false);
+  assert.match(statuses.at(-1)?.error || "", /demorou demais/i);
+  assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
 });
 
 test("botão de presença abre diretamente o fluxo do ID pendente da pessoa e data exibidas", async t => {
@@ -195,6 +214,8 @@ test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao 
 
 test("resposta tardia do RHID não substitui uma tela aberta durante a consulta", async t => {
   const h = makeHarness({ historyMode: "current-step" });
+  let closedReportDialog = 0;
+  h.view.closeRhidAttendanceReport = () => { closedReportDialog += 1; };
   let beginRequest;
   let resolveReport;
   const requestStarted = new Promise(resolve => { beginRequest = resolve; });
@@ -224,6 +245,7 @@ test("resposta tardia do RHID não substitui uma tela aberta durante a consulta"
 
   assert.equal(h.store.getState().messages.at(-1)?.question, "📦 OUTRA TELA");
   assert.equal(h.store.getState().messages.some(message => message?.detail_table?.kind === "rhid_attendance"), false);
+  assert.equal(closedReportDialog, 1, "a consulta descartada não deixa a janela RHID presa em estado ocupado");
 });
 
 test("resposta tardia do RHID não restaura anexo removido enquanto carregava", async t => {

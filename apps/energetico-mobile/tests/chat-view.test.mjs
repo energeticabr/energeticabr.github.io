@@ -999,7 +999,9 @@ test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", 
   root.querySelector(`[data-role="rhid-calendar-day"][data-value="${selectedMonth}-15"]`).click();
   root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
   assert.deepEqual(requests, [`${selectedMonth}-15`]);
-  assert.ok(root.querySelector('[data-rhid-attendance-report-dialog]'), "o popup aguarda a resposta do servidor");
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null, "o calendário sai da tela durante a consulta");
+  assert.equal(root.querySelector('.chat-confirmation-backdrop'), null, "nenhuma camada escura permanece sem conteúdo");
+  assert.match(root.querySelector('.chat-progress')?.textContent || "", /Consultando relatório RHID/);
   view.destroy();
   dom.window.close();
 });
@@ -1263,7 +1265,7 @@ test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar",
   dom.window.close();
 });
 
-test("gerar relatório RHID não volta o foco ao calendário durante a consulta", () => {
+test("gerar relatório RHID libera o modal durante a consulta e restaura o foco após erro", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -1282,7 +1284,8 @@ test("gerar relatório RHID não volta o foco ao calendário durante a consulta"
     false,
     "a atualização não deve focar novamente um dia pequeno e deslocar a janela no celular",
   );
-  assert.ok(dom.window.document.activeElement.closest('[data-rhid-attendance-report-dialog]'), "o foco permanece na janela durante a consulta");
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null, "a janela sai durante a consulta");
+  assert.match(root.querySelector('.chat-progress')?.textContent || "", /Consultando relatório RHID/);
 
   view.setRhidAttendanceReportStatus({ busy: false, error: "Não foi possível consultar o relatório." });
   assert.ok(dom.window.document.activeElement.closest('[data-rhid-attendance-report-dialog]'), "o foco permanece na janela após erro");
@@ -1292,6 +1295,53 @@ test("gerar relatório RHID não volta o foco ao calendário durante a consulta"
   assert.match(root.querySelector('[data-rhid-attendance-report-dialog] [role="alert"]').textContent, /Não foi possível consultar/);
   assert.ok(dom.window.document.activeElement.closest('[data-rhid-attendance-report-dialog]'), "a resposta mensal tardia não tira o foco da janela");
   assert.equal(dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'), false);
+  view.destroy();
+  dom.window.close();
+});
+
+test("consulta RHID em andamento não deixa uma camada escura sem conteúdo no iPhone", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ messages: [{ id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS", options: [
+      { id: "rhid", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" },
+    ] }], pendingProvisions: { due: true, rows: [
+    { id: "306", supplier: "LOCAMÁQUINAS", dueDate: "2026-10-02", total: 140 },
+  ] } }));
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null,
+    "a camada escura do calendário sai enquanto a consulta aguarda a VM");
+  assert.equal(root.querySelector('[data-pending-provisions-dialog]'), null);
+  assert.match(root.querySelector('.chat-progress')?.textContent || "", /Consultando relatório RHID/i);
+
+  view.setRhidAttendanceReportStatus({ busy: false, error: "A consulta demorou demais. Tente novamente." });
+  assert.match(root.querySelector('[data-rhid-attendance-report-dialog] [role="alert"]')?.textContent || "", /demorou demais/);
+  view.destroy();
+  dom.window.close();
+});
+
+test("consulta RHID impede envio de outra resposta enquanto o resultado carrega", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  let sent = 0;
+  view.on("send-text", () => { sent += 1; });
+  view.render(signedInState({ draft: "outra resposta", messages: [{ id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS", options: [
+      { id: "rhid", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" },
+    ] }] }));
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+
+  assert.equal(root.querySelector('[data-action="send-text"]').disabled, true);
+  assert.equal(root.querySelector('[data-action="pick-files"]').disabled, true);
+  root.querySelector('[data-chat-form]').dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+  assert.equal(sent, 0, "o envio pelo teclado também espera o relatório");
   view.destroy();
   dom.window.close();
 });
