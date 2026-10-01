@@ -1914,8 +1914,6 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
       <p>${changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
       ${rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown)}
       ${monthLoading ? '<p role="status">Consultando presenças deste mês…</p>' : ""}
-      <label for="rhidAttendanceReportDate">Outra data</label>
-      <input class="chat-date-picker__input" id="rhidAttendanceReportDate" type="date" data-role="rhid-attendance-report-date" value="${escapeHtml(date || saoPauloDateIso())}" aria-label="Data do relatório"${busy ? " disabled" : ""}>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
@@ -3946,7 +3944,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "generate-rhid-attendance-report") {
       if (rhidAttendanceReportBusy) return;
-      const selectedDate = String(root.querySelector('[data-role="rhid-attendance-report-date"]')?.value || rhidAttendanceReportDate || "").trim();
+      const selectedDate = String(rhidAttendanceReportDate || "").trim();
       const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? new Date(`${selectedDate}T00:00:00Z`) : null;
       if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== selectedDate) {
         rhidAttendanceReportError = "Selecione uma data válida.";
@@ -4708,10 +4706,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function change(event) {
     const checkbox = event.target;
-    if (checkbox?.dataset?.role === "rhid-attendance-report-date") {
-      rhidAttendanceReportDate = checkbox.value;
-      return;
-    }
     if (checkbox?.matches?.('input[data-action="epi-product-select-all"]') && !checkbox.disabled) {
       const productIds = [...checkbox.closest(".chat-epi-product-select").querySelectorAll('input[data-action="epi-product-select-toggle"]')]
         .filter(input => !input.disabled)
@@ -4911,7 +4905,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
     if (rhidAttendanceReportOpen) {
-      root.querySelector('[data-role="rhid-attendance-report-date"]')?.focus?.();
+      (root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]')
+        || root.querySelector('[data-action="cancel-rhid-attendance-report"]'))?.focus?.();
     }
     // SIGNATURE_GESTURE_LOCK_START: signature-pad-mount
     if (signaturePadOpen) setupSignaturePad();
