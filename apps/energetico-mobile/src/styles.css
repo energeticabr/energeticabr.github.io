@@ -259,6 +259,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__field span { color: var(--muted); font-size: .9rem; }
 .chat-pending-provision__field strong { color: #123f50; font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; }
 .chat-pending-provision__detail { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.chat-pending-provision__detail[hidden] { display: none; }
 .chat-pending-provision__detail + .chat-pending-provision__detail { border-top: 1px solid #dce5eb; }
 @media (max-width: 500px) {
   .chat-pending-provisions--payments .chat-pending-provisions__header { gap: 8px; }
