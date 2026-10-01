@@ -6294,6 +6294,14 @@ test("pendências não exibe rascunhos antigos e confirmação de abandono mant�
   assert.match(confirmation, /data-reply-id="portal_draft_exit_discard"/);
   assert.match(confirmation, /data-reply-id="portal_draft_exit_cancel"/);
   assert.doesNotMatch(confirmation, /CRIAR RASCUNHO/);
+
+  const transfer = renderChatMarkup(signedInState({ messages: [{
+    id: "transfer", role: "assistant", type: "poll", question: "TRANSFERIR ANEXOS?",
+    options: [{ id: "portal_transfer_draft_discard", label: "SIM, TRANSFERIR" },
+      { id: "portal_transfer_cancel", label: "NÃO, CONTINUAR" }],
+  }] }));
+  assert.match(transfer, /data-reply-id="portal_transfer_draft_discard"/);
+  assert.match(transfer, /data-reply-id="portal_transfer_cancel"/);
 });
 
 test("não mostra salvar rascunho dentro das perguntas do fluxo", () => {
