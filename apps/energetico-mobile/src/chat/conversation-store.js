@@ -160,6 +160,7 @@ export function createConversationStore({
 
   function nextAttachments(result = {}, uploadedItem) {
     if (result.status === "construction_diary_abandoned") return [];
+    if (result.results?.some(item => item?.status === "awaiting_next_construction_diary")) return [];
     const activeFlow = Object.hasOwn(result, "activeFlow") ? result.activeFlow : state.activeFlow;
     const switchedToRegistration = Boolean(
       state.activeFlow?.id

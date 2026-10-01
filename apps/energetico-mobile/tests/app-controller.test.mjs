@@ -3179,6 +3179,39 @@ test("finalizar diário informa quando a VM não avançou e mantém os anexos", 
   assert.match(h.view.renders.at(-1).error, /VM.*não avançou.*anexos.*preservados/i);
 });
 
+test("diário preenchido limpa o PDF antigo antes de selecionar outro diário", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "construction_diary_fill", title: "PREENCHER DIÁRIO DE OBRA" };
+  const oldPdf = { id: "diary-202-pdf", fileName: "DIARIO-DE-OBRA-202-FOTOS.pdf",
+    mimeType: "application/pdf", mediaUrl: "/api/portal-media/diary-202-pdf" };
+  h.store.ingestRemoteMessages([{ type: "poll", question: "CONFIRME O DIÁRIO DE OBRAS", options: [] }], { activeFlow });
+  h.store.syncAttachments([oldPdf]);
+  let remoteAttachments = [oldPdf];
+  h.client.getAttachments = async () => remoteAttachments;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(["text", payload]);
+    remoteAttachments = [];
+    return { status: "processed", activeFlow, attachments: [], results: [{
+      status: "awaiting_next_construction_diary", sharepoint_item_id: 202,
+    }], messages: [
+      { type: "text", text: "DIÁRIO DE OBRA PREENCHIDO: ID 202" },
+      { type: "poll", question: "DESEJA PREENCHER MAIS ALGUM?", options: [{ id: "205", label: "205" }] },
+    ] };
+  };
+
+  h.store.setDraft("CONFIRMAR");
+  assert.equal(await h.view.emit("send-text"), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(await h.view.emit("select-reply", { label: "205", replyId: "205" }), true);
+  assert.deepEqual(h.chatCalls.slice(-2), [
+    ["text", { text: "CONFIRMAR" }],
+    ["text", { text: "205", replyId: "205" }],
+  ]);
+  assert.equal(h.view.renders.at(-1).error, null);
+});
+
 test("finalizar aceita os quatro anexos quando a VM renova IDs após outra pergunta", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());
