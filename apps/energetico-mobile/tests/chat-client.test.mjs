@@ -157,6 +157,21 @@ test("consulta o relatório RHID do dia selecionado com a sessão Microsoft", as
   assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_report", date: "2026-09-25" });
 });
 
+test("salva ajuste RHID autenticado com horário e justificativa e recusa justificativa vazia", async () => {
+  const requests = [];
+  const client = clientWith(async (url, options) => {
+    requests.push({ url, ...options });
+    return jsonResponse({ status: "processed", messages: [], attendanceAdjustment: { id: 7, time: "17:00" } });
+  });
+  const payload = { date: "2026-09-25", personKey: "rhid:23", slot: "exit2", time: "17:00", reason: "Batida conferida" };
+  const result = await client.saveRhidAttendanceAdjustment(payload);
+  assert.equal(result.time, "17:00");
+  assert.equal(requests[0].headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(requests[0].body), { action: "rhid_attendance_adjust", ...payload });
+  await assert.rejects(client.saveRhidAttendanceAdjustment({ ...payload, reason: "  " }), /justificativa/i);
+  assert.equal(requests.length, 1);
+});
+
 test("atualização RHID usa a sessão Microsoft e exige conclusão do fluxo", async () => {
   const requests = [];
   const client = clientWith(async (url, options) => {

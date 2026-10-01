@@ -169,12 +169,16 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     drawCentered(text, x + width / 2, yValue + 1, bold, 6.5, badgeText);
   }
 
-  function drawCard(row, name, rowFill, slots, total, isPartial) {
+  function drawCard(row, name, rowFill, slots, total, isPartial, detail = null) {
     const nameLines = wrapText(name, bold, 10.5, INNER_WIDTH - 32);
     const nameLineHeight = 12;
     const slotRows = Math.max(1, Math.ceil(slots.length / 4));
     const detailsHeight = Math.max(45, slotRows * 29 + 4);
-    const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight);
+    const rawLines = detail?.issues?.length
+      ? wrapLiteralText(`Batidas RHID: ${(detail.rawPunches || []).join(", ")}`, regular, 7, INNER_WIDTH - 32)
+      : [];
+    const auditHeight = rawLines.length ? 8 + rawLines.length * 10 : 0;
+    const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight + auditHeight);
     ensureSpace(cardHeight + 4);
     const cardTop = y;
     page.drawRectangle({
@@ -216,6 +220,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     const displayTotal = total.replace(/\s*\(parcial\)/i, "").trim() || "—";
     drawCentered(displayTotal, totalX + 45, detailsTop - 23, bold, 15, navy);
     if (isPartial) drawBadge("PARCIAL", totalX + 22, detailsTop - 39, 46);
+    rawLines.forEach((line, index) => drawText(line, contentX, detailsTop - detailsHeight - 10 - index * 10, regular, 7, muted));
     y = cardTop - cardHeight - 4;
   }
 
@@ -223,12 +228,13 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
   if (table.rows.length === 0) {
     drawText("Nenhuma presença encontrada", MARGIN, y, bold, 12, ink);
   } else {
-    const orderedRows = [...table.rows].sort((left, right) => Number(isRhidAttendanceRowWithoutPunches(left)) - Number(isRhidAttendanceRowWithoutPunches(right)));
-    for (const row of orderedRows) {
+    const orderedRows = table.rows.map((row, index) => ({ row, detail: table.people?.[index] || null }))
+      .sort((left, right) => Number(isRhidAttendanceRowWithoutPunches(left.row)) - Number(isRhidAttendanceRowWithoutPunches(right.row)));
+    for (const { row, detail } of orderedRows) {
       const name = String(row[0] ?? "");
       const isMissing = isRhidAttendanceRowWithoutPunches(row);
       const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
-      const rowFill = isMissing ? noPunchFill : discrepant ? discrepancyFill : null;
+      const rowFill = isMissing ? noPunchFill : discrepant || detail?.issues?.length ? discrepancyFill : null;
       const slots = [];
       for (let index = 0; index < pairCount; index += 1) {
         slots.push({ label: String(table.headers[1 + index * 2] ?? `Entrada ${index + 1}`), value: String(row[1 + index * 2] ?? "—"), kind: "entry" });
@@ -241,7 +247,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
         const isLastChunk = offset + slotsPerCard >= slots.length;
         const cardName = offset === 0 ? name : `${name} (continuação)`;
         drawCard(row, cardName, rowFill, slotChunk, isLastChunk ? total : "—",
-          isLastChunk && (total.includes("parcial") || isMissing));
+          isLastChunk && (total.includes("parcial") || isMissing), isLastChunk ? detail : null);
       }
     }
   }

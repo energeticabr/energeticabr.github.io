@@ -7,7 +7,7 @@ import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/data
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt } from "../chat/attachment-finish.js";
-import { isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
+import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -990,10 +990,11 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
     </div>
     <div class="chat-rhid-attendance-report__toolbar"><strong>📋 PRESENÇAS</strong></div>
     ${rows.length ? `<div class="chat-rhid-attendance-report__cards" role="list" aria-label="Cartões de presenças RHID">
-      ${rows.map(row => {
+      ${rows.map((row, rowIndex) => {
+        const person = table.people?.[rowIndex];
         const noPunches = isRhidAttendanceRowWithoutPunches(row);
         const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
-        const rowClass = noPunches ? "chat-rhid-attendance-card--no-punches" : discrepant ? "chat-rhid-attendance-card--discrepant" : "";
+        const rowClass = noPunches ? "chat-rhid-attendance-card--no-punches" : discrepant || person?.issues?.length ? "chat-rhid-attendance-card--discrepant" : "";
         const name = row[0] ?? "—";
         const total = row[row.length - 1] ?? "—";
         const slots = Array.from({ length: pairCount }, (_, index) => {
@@ -1005,15 +1006,25 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
           const exitIsTime = /^\d{1,2}:\d{2}$/.test(exit.trim());
           const entryClass = entryIsTime ? "chat-rhid-attendance-card__entry" : "";
           const exitClass = exitIsTime ? "chat-rhid-attendance-card__exit" : "";
-          const entryClusterClass = `chat-rhid-attendance-card__cluster ${entryIsTime ? "chat-rhid-attendance-card__cluster--entry" : "chat-rhid-attendance-card__cluster--empty"}`;
-          const exitClusterClass = `chat-rhid-attendance-card__cluster ${exitIsTime ? "chat-rhid-attendance-card__cluster--exit" : "chat-rhid-attendance-card__cluster--empty"}`;
-          return `<div class="chat-rhid-attendance-card__slot"><div class="${entryClusterClass}"><span>${escapeHtml(entryLabel)}</span><strong class="${entryClass}">${escapeHtml(entry)}</strong></div><div class="${exitClusterClass}"><span>${escapeHtml(exitLabel)}</span><strong class="${exitClass}">${escapeHtml(exit)}</strong></div></div>`;
+          const editable = person?.personKey && messageId && isRhidAttendanceDayFinalized(table.reportDate)
+            && (discrepant || person.issues?.length || Object.values(person.slots || {}).some(item => !item.effective || item.adjustment));
+          const cluster = (slot, label, value, valueClass, isTime) => {
+            const source = person?.slots?.[slot]?.source;
+            const tone = source === "added" ? "added" : source === "corrected" ? "corrected" : isTime ? slot.startsWith("entry") ? "entry" : "exit" : "empty";
+            const className = `chat-rhid-attendance-card__cluster chat-rhid-attendance-card__cluster--${tone}`;
+            const content = `<span>${escapeHtml(label)}</span><strong class="${valueClass}">${escapeHtml(value)}</strong>`;
+            return editable
+              ? `<button class="${className}" type="button" data-action="rhid-attendance-adjust-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-slot="${slot}" aria-label="Editar ${escapeHtml(label)} de ${escapeHtml(name)}: ${escapeHtml(value)}">${content}</button>`
+              : `<div class="${className}">${content}</div>`;
+          };
+          return `<div class="chat-rhid-attendance-card__slot">${cluster(`entry${index + 1}`, entryLabel, entry, entryClass, entryIsTime)}${cluster(`exit${index + 1}`, exitLabel, exit, exitClass, exitIsTime)}</div>`;
         }).join("");
         const totalText = String(total);
         const isPartial = /\(parcial\)/i.test(totalText);
         const displayTotal = totalText.replace(/\s*\(parcial\)/i, "").trim() || "—";
         return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
           <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div><div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
+          ${person?.issues?.length ? `<ul class="chat-rhid-attendance-card__issues" aria-label="Inconsistências">${person.issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : ""}
         </article>`;
       }).join("")}
     </div>` : `<p class="chat-rhid-attendance-table__empty" role="status">Nenhuma presença foi encontrada para esta data.</p>`}
@@ -1879,6 +1890,22 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
   </div>`;
 }
 
+function rhidAttendanceAdjustmentMarkup(adjustment) {
+  if (!adjustment) return "";
+  const { personName, label, rhid, effective, previous, busy, error } = adjustment;
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog>
+    <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title">
+      <h2 id="rhid-adjustment-title">Corrigir ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
+      <div class="chat-rhid-adjustment__history"><p>RHID: <strong>${escapeHtml(rhid || "não registrado")}</strong></p><p>Ajustado: <strong>${escapeHtml(effective || "não informado")}</strong></p>
+      ${previous ? `<p>Último ajuste: ${escapeHtml(previous.reason || "—")} · ${escapeHtml(previous.actorName || "administrador")}</p>` : ""}</div>
+      <label for="rhid-adjustment-time">Horário corrigido</label><input id="rhid-adjustment-time" type="time" data-role="rhid-adjustment-time" value="${escapeHtml(effective || "")}"${busy ? " disabled" : ""}>
+      <label for="rhid-adjustment-reason">Justificativa obrigatória</label><textarea id="rhid-adjustment-reason" data-role="rhid-adjustment-reason" rows="3" maxlength="500" placeholder="Explique por que este horário foi incluído ou alterado"${busy ? " disabled" : ""}></textarea>
+      ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
+      <div class="chat-confirmation__actions"><button class="chat-confirmation__cancel" type="button" data-action="rhid-attendance-adjust-cancel"${busy ? " disabled" : ""}>Cancelar</button><button class="chat-confirmation__confirm" type="button" data-action="rhid-attendance-adjust-save"${busy ? " disabled" : ""}>${busy ? "Salvando…" : "Salvar horário"}</button></div>
+    </div>
+  </div>`;
+}
+
 function isSignaturePrompt(state = {}) {
   if (String(state.activeFlow?.id || "").trim().toLowerCase() !== "document_signing") return false;
   const messages = Array.isArray(state.messages) ? state.messages : [];
@@ -2138,7 +2165,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidRefresh = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -2248,6 +2275,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${state.pendingProvisions ? "" : pendingConstructionDiariesMarkup(state.pendingConstructionDiaries, state.pendingConstructionDiaryFillingId, state.pendingConstructionDiaryError, state.busy)}
     ${state.pendingProvisions || state.pendingConstructionDiaries ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "")}
     ${rhidAttendanceReportMarkup(rhidAttendanceReport || {})}
+    ${rhidAttendanceAdjustmentMarkup(rhidAttendanceAdjustment)}
   </section>`;
 }
 
@@ -2261,6 +2289,8 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.label ? { label: actionTarget.dataset.label } : {}),
     ...(actionTarget.dataset.fileId ? { fileId: actionTarget.dataset.fileId } : {}),
     ...(actionTarget.dataset.messageId ? { messageId: actionTarget.dataset.messageId } : {}),
+    ...(actionTarget.dataset.personKey ? { personKey: actionTarget.dataset.personKey } : {}),
+    ...(actionTarget.dataset.slot ? { slot: actionTarget.dataset.slot } : {}),
     ...(actionTarget.dataset.taskId ? { taskId: actionTarget.dataset.taskId } : {}),
     ...(actionTarget.dataset.paymentId ? { paymentId: actionTarget.dataset.paymentId } : {}),
     ...(actionTarget.dataset.orderId ? { orderId: actionTarget.dataset.orderId } : {}),
@@ -2307,6 +2337,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
   let rhidAttendanceReportError = "";
+  let rhidAttendanceAdjustment = null;
   let rhidRefresh = { busy: false, message: "", error: false };
   let pendingDateSeparatorDeletion = null;
   let pendingDocumentSeparatorDeletion = null;
@@ -3766,6 +3797,52 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "rhid-attendance-adjust-open") {
+      const message = lastState?.messages?.find(item => String(item?.id || "") === String(command.messageId || ""));
+      const table = message?.detail_table || message?.detailTable;
+      const person = table?.people?.find(item => item.personKey === command.personKey);
+      const slot = person?.slots?.[command.slot];
+      if (!person || !slot || !isRhidAttendanceDayFinalized(table.reportDate)) return;
+      const label = { entry1: "Entrada 1", exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
+      if (!label) return;
+      rhidAttendanceAdjustment = {
+        messageId: command.messageId, personKey: command.personKey, slot: command.slot,
+        personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
+        effective: slot.effective || "", previous: slot.adjustment || null, busy: false, error: "",
+      };
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "rhid-attendance-adjust-cancel") {
+      if (rhidAttendanceAdjustment?.busy) return;
+      rhidAttendanceAdjustment = null;
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === "rhid-attendance-adjust-save") {
+      if (!rhidAttendanceAdjustment || rhidAttendanceAdjustment.busy) return;
+      const time = String(root.querySelector('[data-role="rhid-adjustment-time"]')?.value || "").trim();
+      const reason = String(root.querySelector('[data-role="rhid-adjustment-reason"]')?.value || "").trim();
+      const error = !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time) ? "Informe um horário válido."
+        : !reason ? "Informe a justificativa para alterar o horário." : "";
+      if (error) {
+        const dialog = root.querySelector('[data-rhid-adjustment-dialog]');
+        let banner = dialog?.querySelector('[role="alert"]');
+        if (!banner && dialog) {
+          banner = root.ownerDocument.createElement("p");
+          banner.className = "error-banner";
+          banner.setAttribute("role", "alert");
+          dialog.querySelector('.chat-confirmation__actions')?.before(banner);
+        }
+        if (banner) banner.textContent = error;
+        return;
+      }
+      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, busy: true, error: "" };
+      const { messageId, personKey, slot } = rhidAttendanceAdjustment;
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason });
+      return;
+    }
     if (command.type === "open-rhid-attendance-report") {
       if (rhidAttendanceReportOpen) return;
       rhidAttendanceReportMessageId = String(command.messageId || "").trim();
@@ -4727,6 +4804,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         busy: rhidAttendanceReportBusy,
         error: rhidAttendanceReportError,
       },
+      rhidAttendanceAdjustment,
       rhidRefresh,
       signaturePad: signaturePadOpen,
       signaturePadError,
@@ -4810,6 +4888,20 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
+  function setRhidAttendanceAdjustmentStatus({ busy = false, error = "" } = {}) {
+    if (!rhidAttendanceAdjustment) return false;
+    rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, busy: Boolean(busy), error: String(error || "") };
+    if (lastState) { const state = lastState; lastState = null; render(state); }
+    return true;
+  }
+
+  function closeRhidAttendanceAdjustment() {
+    if (!rhidAttendanceAdjustment) return false;
+    rhidAttendanceAdjustment = null;
+    if (lastState) { const state = lastState; lastState = null; render(state); }
+    return true;
+  }
+
   function setRhidRefreshStatus({ busy = false, message = "", error = false } = {}) {
     rhidRefresh = { busy: Boolean(busy), message: String(message || ""), error: Boolean(error) };
     if (lastState) { const state = lastState; lastState = null; render(state); }
@@ -4866,6 +4958,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     render,
     openPowerBiDashboard,
     setRhidAttendanceReportStatus,
+    setRhidAttendanceAdjustmentStatus,
+    closeRhidAttendanceAdjustment,
     setRhidRefreshStatus,
     closeRhidAttendanceReport,
     on(type, handler) {

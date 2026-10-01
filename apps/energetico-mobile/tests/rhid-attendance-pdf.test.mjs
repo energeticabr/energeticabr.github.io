@@ -31,7 +31,7 @@ async function inspect(blob) {
   return { pdf, loadingTask, pages };
 }
 
-test("gera PDF vertical com metadados literais e todos os horários da tabela RHID", async () => {
+test("gera PDF vertical com horários efetivos e preserva batidas RHID incongruentes", async () => {
   const table = buildRhidAttendanceTable([
     { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "JOÃO DA SILVA", BATIDAS_RHID: "07:02; 12:11; 13:09; 17:42; 18:01; 19:05" },
   ]);
@@ -45,7 +45,7 @@ test("gera PDF vertical com metadados literais e todos os horários da tabela RH
     const text = items.map(item => item.str).join(" ");
     assert.ok(text.includes("27/09/2026"));
     assert.ok(items.some(item => item.str === updateLabel), "updateLabel deve aparecer literalmente, sem prefixo ou horário inventado");
-    for (const value of ["JOÃO DA SILVA", "07:02", "12:11", "13:09", "17:42", "18:01", "19:05", "10:46"]) {
+    for (const value of ["JOÃO DA SILVA", "07:02", "12:11", "13:09", "17:42", "18:01", "19:05", "05:09"]) {
       assert.ok(text.includes(value), `PDF sem ${value}`);
     }
     for (const item of items) {

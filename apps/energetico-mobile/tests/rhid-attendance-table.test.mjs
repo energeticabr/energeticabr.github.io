@@ -19,7 +19,7 @@ test("relatório omite PIS não localizado sem perder colaboradores identificado
     { ID_PESSOA_RHID: "004681366651", NOME_COLABORADOR: "pis nao localizado", BATIDAS_RHID: "06:59" },
   ]);
 
-  assert.deepEqual(table.rows, [["ANA SOUZA", "07:00", "12:00", "—", "—", "05:00"]]);
+  assert.deepEqual(table.rows, [["ANA SOUZA", "07:00", "12:00", "—", "—", "05:00 (parcial)"]]);
 });
 
 test("inclui cadastrados sem batidas ao final e omite cadastro NÃO APAGAR", () => {
@@ -122,4 +122,69 @@ test("marca discrepância por batidas incompletas ou carga semanal abaixo do mí
   assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "13:00", "25:99"), "2026-09-25", afterClose), true);
   assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "—", "—"), "2026-09-25", new Date("2026-09-25T20:14:59Z")), false);
   assert.equal(isRhidAttendanceRowDiscrepant(row("07:00", "12:00", "—", "—"), "2026-09-26", afterClose), false);
+});
+
+test("classifica as batidas nas quatro faixas sem confundir a fronteira de 12:30", () => {
+  assert.equal(rhid.classifyRhidPunch("05:00"), "entry1");
+  assert.equal(rhid.classifyRhidPunch("08:00"), "entry1");
+  assert.equal(rhid.classifyRhidPunch("11:00"), "exit1");
+  assert.equal(rhid.classifyRhidPunch("12:29"), "exit1");
+  assert.equal(rhid.classifyRhidPunch("12:30"), "entry2");
+  assert.equal(rhid.classifyRhidPunch("13:30"), "entry2");
+  assert.equal(rhid.classifyRhidPunch("15:30"), "exit2");
+  assert.equal(rhid.classifyRhidPunch("22:00"), "exit2");
+  assert.equal(rhid.classifyRhidPunch("10:59"), null);
+  assert.equal(rhid.classifyRhidPunch("14:30"), null);
+});
+
+test("não desloca a última saída para o horário de almoço quando falta uma batida", () => {
+  const table = buildRhidAttendanceTable([{
+    Id: 71, ID_PESSOA_RHID: "r-71", NOME_COLABORADOR: "ANA",
+    BATIDAS_RHID: "06:57; 11:58; 17:03",
+  }]);
+  assert.deepEqual(table.rows[0], ["ANA", "06:57", "11:58", "—", "17:03", "05:01 (parcial)"]);
+  assert.equal(table.people[0].personKey, "rhid:r-71");
+  assert.deepEqual(table.people[0].rawPunches, ["06:57", "11:58", "17:03"]);
+});
+
+test("marca batidas fora das faixas e duplicadas sem ocultar o dado bruto", () => {
+  const table = buildRhidAttendanceTable([{
+    Id: 72, ID_PESSOA_RHID: "r-72", NOME_COLABORADOR: "BIA",
+    BATIDAS_RHID: "06:58; 07:02; 12:01; 13:00; 14:00; 16:55",
+  }]);
+  assert.deepEqual(table.rows[0].slice(1, 5), ["—", "12:01", "13:00", "16:55"]);
+  assert.deepEqual(table.people[0].slots.entry1.rhidCandidates, ["06:58", "07:02"]);
+  assert.deepEqual(table.people[0].issues, ["Batidas duplicadas em Entrada 1: 06:58, 07:02", "Batida fora das faixas: 14:00"]);
+});
+
+test("não une homônimos sem ID RHID e preserva batida repetida ou inválida como incongruência", () => {
+  const table = buildRhidAttendanceTable([
+    { Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 07:00; 12:00; 13:00; 17:00; 24:99" },
+    { Id: 2, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:01; 12:01; 13:01; 17:01" },
+  ]);
+  assert.equal(table.people.length, 2);
+  assert.deepEqual(table.people.map(person => person.personKey), ["id:1", "id:2"]);
+  assert.match(table.people[0].issues.join(" "), /duplicadas/i);
+  assert.match(table.people[0].issues.join(" "), /24:99/);
+});
+
+test("ajuste que inverte a sequência do almoço permanece inconsistente", () => {
+  const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00",
+    ADMIN_AJUSTES: { entry2: { time: "11:00", reason: "erro" } } }]);
+  assert.match(table.people[0].issues.join(" "), /ordem/i);
+  assert.match(table.rows[0][5], /parcial/i);
+});
+
+test("ajustes mudam o total efetivo mas preservam o RHID e a auditoria", () => {
+  const table = buildRhidAttendanceTable([{
+    Id: 73, ID_PESSOA_RHID: "r-73", NOME_COLABORADOR: "EDGAR",
+    BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03",
+    ADMIN_AJUSTES: {
+      exit2: { time: "17:00", reason: "Correção conferida", actorName: "Bernardo", adjustedAt: "2026-10-01T03:00:00Z" },
+    },
+  }]);
+  assert.deepEqual(table.rows[0], ["EDGAR", "07:01", "11:59", "13:00", "17:00", "08:58"]);
+  assert.equal(table.people[0].slots.exit2.rhid, "17:03");
+  assert.equal(table.people[0].slots.exit2.source, "corrected");
+  assert.equal(table.people[0].slots.exit2.adjustment.reason, "Correção conferida");
 });
