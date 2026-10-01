@@ -1296,6 +1296,44 @@ test("gerar relatório RHID não volta o foco ao calendário durante a consulta"
   dom.window.close();
 });
 
+test("gerar relatório RHID não revela aviso de provisões nem deixa o menu anterior no lugar do relatório", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const menu = { id: "hr-menu", role: "assistant", type: "poll", question: "👥 RECURSOS HUMANOS",
+    options: [{ id: "rhid", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" }] };
+  const pendingProvisions = { due: true, today: "2026-10-01", rows: [{
+    id: "306", supplier: "LOCAMÁQUINAS", dueDate: "2026-10-02", total: 140,
+  }] };
+  const state = signedInState({ messages: [menu], pendingProvisions });
+  view.render(state);
+  assert.ok(root.querySelector("[data-pending-provisions-dialog]"), "o lembrete permanece disponível na tela anterior");
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  assert.ok(root.querySelector("[data-rhid-attendance-report-dialog]"));
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null,
+    "o lembrete não pode disputar a tela com o calendário RHID");
+
+  const table = buildRhidAttendanceTable([{ ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA",
+    BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00" }]);
+  const report = { id: "rhid-report", role: "assistant", type: "poll", question: "📊 RELATÓRIO DE PRESENÇAS RHID — 01/10/2026",
+    options: [], detail_table: { ...table, reportDate: "2026-10-01" } };
+  view.render({ ...state, messages: [menu, report] });
+  view.closeRhidAttendanceReport();
+
+  assert.ok(root.querySelector(".chat-transcript .chat-rhid-attendance-report"), "o relatório fica visível ao concluir a consulta");
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null,
+    "o lembrete não deve cobrir o relatório gerado");
+  assert.equal(root.querySelector('.chat-transcript [data-reply-id="action_rhid_attendance_report"]'), null,
+    "o menu anterior não deve ocupar a área do relatório");
+
+  view.render(state);
+  assert.ok(root.querySelector("[data-pending-provisions-dialog]"),
+    "o lembrete volta a ficar disponível ao sair do relatório sem perder o pagamento");
+  view.destroy();
+  dom.window.close();
+});
+
 test("batidas RHID duplicadas não recebem justificativa de ponto não apontado", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
