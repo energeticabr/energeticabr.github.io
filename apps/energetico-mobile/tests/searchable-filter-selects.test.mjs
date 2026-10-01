@@ -80,6 +80,17 @@ test('a tap on another option survives search blur and applies the new filter', 
   assert.equal(ctx.popup().hidden, true);
 });
 
+test('releasing a dragged option outside the list restores normal popup dismissal', async t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  ctx.options()[1].dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  ctx.popup().dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+  await settle();
+  ctx.document.querySelector('details').dispatchEvent(new ctx.Event('scroll'));
+  assert.equal(ctx.popup().hidden, true);
+  assert.equal(ctx.select.value, '', 'dragging away did not choose the option');
+});
+
 test('unknown search is never submitted as a filter and no-results Enter does nothing', t => {
   const ctx = fixture(t);
   ctx.trigger().click(); ctx.type('missing'); ctx.key('Enter');

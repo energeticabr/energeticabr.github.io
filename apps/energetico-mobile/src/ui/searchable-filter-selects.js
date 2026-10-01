@@ -177,6 +177,7 @@ function createPicker(select, closeOthers) {
     selectionReset = null;
   }
   function onOptionPointerUp() {
+    if (!selectingOption) return;
     selectionReset = view.setTimeout(() => { selectingOption = false; selectionReset = null; }, 0);
   }
   function onOptionPointerCancel() {
@@ -199,8 +200,8 @@ function createPicker(select, closeOthers) {
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
   wrapper.addEventListener('keydown', onKey); wrapper.addEventListener('focusout', onFocusOut);
   list.addEventListener('pointerdown', onOptionPointerDown);
-  list.addEventListener('pointerup', onOptionPointerUp);
-  list.addEventListener('pointercancel', onOptionPointerCancel);
+  doc.addEventListener('pointerup', onOptionPointerUp);
+  doc.addEventListener('pointercancel', onOptionPointerCancel);
   select.addEventListener('change', sync); select.form?.addEventListener('reset', onReset);
   doc.addEventListener('pointerdown', onOutside); doc.addEventListener('click', onOutside);
   doc.addEventListener('scroll', onAncestorScroll, true);
@@ -221,8 +222,8 @@ function createPicker(select, closeOthers) {
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
       list.removeEventListener('pointerdown', onOptionPointerDown);
-      list.removeEventListener('pointerup', onOptionPointerUp);
-      list.removeEventListener('pointercancel', onOptionPointerCancel);
+      doc.removeEventListener('pointerup', onOptionPointerUp);
+      doc.removeEventListener('pointercancel', onOptionPointerCancel);
       select.removeEventListener('change', sync); select.form?.removeEventListener('reset', onReset);
       doc.removeEventListener('pointerdown', onOutside); doc.removeEventListener('click', onOutside);
       doc.removeEventListener('scroll', onAncestorScroll, true); view.removeEventListener('resize', positionPopup);

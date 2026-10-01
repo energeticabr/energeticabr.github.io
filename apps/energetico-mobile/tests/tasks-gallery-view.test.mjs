@@ -116,6 +116,7 @@ test("toques em opções de ordenação e status aplicam os filtros da galeria",
     option.dispatchEvent(new ctx.dom.window.MouseEvent("pointerdown", { bubbles: true }));
     picker.querySelector(".sfs-search").dispatchEvent(new ctx.dom.window.FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
     assert.equal(picker.querySelector(".sfs-popup").hidden, false, `${name} remains open until the tap selects an option`);
+    option.dispatchEvent(new ctx.dom.window.MouseEvent("pointerup", { bubbles: true }));
     option.click();
     if (name === "sort") assert.deepEqual(ids(), ["200", "100"], "new sort order is applied to the records");
   }
