@@ -65,22 +65,6 @@ for (const [kind, create, selector, options = {}] of cases) {
     const remove = card.querySelector('[data-gallery-action="delete"]');
     assert.ok(pencil, 'record has pencil edit action');
     assert.match(pencil.getAttribute('aria-label'), /3479/);
-    if (kind === 'launches') {
-      assert.equal(remove, null, 'launch card exposes only its pencil');
-      pencil.click(); await settle();
-      const editor = ctx.document.querySelector('.lg-detail');
-      const action = label => [...editor.querySelectorAll('button')].find(button => button.textContent === label && !button.closest('[hidden]'));
-      assert.ok(editor.querySelector('.lg-editor'));
-      action('Excluir lançamento').click();
-      assert.equal(ctx.calls.some(([operation]) => operation === 'delete'), false);
-      action('Cancelar confirmação').click();
-      assert.ok(ctx.document.querySelector(selector), 'cancel retains record');
-      action('Excluir lançamento').click();
-      action('Confirmar exclusão').click(); await settle(); await settle();
-      assert.deepEqual(ctx.calls.filter(([operation]) => operation === 'delete'), [['delete', '3479']]);
-      assert.equal(ctx.document.querySelector(selector), null);
-      return;
-    }
     assert.ok(remove, 'record has red X delete action');
     assert.match(remove.getAttribute('aria-label'), /3479/);
 

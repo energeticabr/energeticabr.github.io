@@ -118,6 +118,27 @@ function formatGalleryDate(name, value) {
   }).format(instant);
 }
 
+function parseEditorDate(value) {
+  const match = String(value ?? '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1
+    || date.getUTCDate() !== Number(day)) return null;
+  return `${year}-${month}-${day}`;
+}
+
+function formatEditorDate(value) {
+  const raw = display(value).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : formatGalleryDate('DATA', raw) ?? raw;
+}
+
+function maskEditorDate(value) {
+  const digits = String(value ?? '').replace(/\D/g, '').slice(0, 8);
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join('/');
+}
+
 function clusterKey(value) {
   if (Array.isArray(value)) return clusterKey(value[0]);
   if (value && typeof value === 'object') {
@@ -171,11 +192,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let opened = false, destroyed = false, suspended = false, busy = false;
   let session = 0, listVersion = 0, detailVersion = 0;
   let listLoading = false, detailLoading = false, returnFocus;
-  let current = null, selectedId = null, editor = null, review = null, attachmentIndex = 0;
+  let current = null, selectedId = null, editor = null, review = null;
   let page = 1, pages = 0, needsDetailRefresh = false;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
   const retryIds = new Map();
-  const selectedUploads = new Map();
   const filterControls = new Map();
   const recordItems = new Map();
 
@@ -323,7 +343,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
   const recordActions = createGalleryRecordActions({
-    document: doc, host: root, actions: ['edit'],
+    document: doc, host: root, actions: ['edit', 'delete'],
     onEdit: async row => {
       if (!opened || destroyed || editor || !canChangeDetail()) return;
       notify('');
@@ -981,17 +1001,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     close.classList.add('lg-detail-close');
     const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(title, close);
     panel.replaceChildren(detailHeader);
-    const actions = element('div', 'lg-actions');
-    actions.append(button('Excluir lançamento', () => {
-        if (!canChangeDetail()) return;
-        showReview('Excluir lançamento', [`Excluir definitivamente o lançamento #${item.id}?`], 'Confirmar exclusão',
-          'delete', { id: item.id, confirm: true, expectedModified: modified() });
-      }, { danger: true }),
-      button('Provisionar pagamento', () => beginEditor('payment')),
-      button('Aplicar medição', () => beginEditor('measurement'), { disabled: !current.measurementFields?.length }));
-    panel.append(actions, renderAttachments(), renderSignature(), reviewHost);
+    panel.append(reviewHost);
     if (current.editFields?.length) beginEditor('update', { fromRender: true });
-    else panel.insertBefore(element('p', 'lg-error', 'Os campos de edição deste lançamento não estão disponíveis.'), actions);
+    else panel.insertBefore(element('p', 'lg-error', 'Os campos de edição deste lançamento não estão disponíveis.'), reviewHost);
     updateBusy();
   }
   function modified() { return current.item.expectedModified ?? current.item.fields.Modified ?? current.item.fields.Modificado; }
@@ -1045,6 +1057,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     form.append(element('h3', 'lg-section-title', operation === 'payment' ? 'Provisionar pagamento' : operation === 'measurement' ? 'Aplicar medição' : 'Editar lançamento'));
     const grid = element('div', 'lg-editor-grid');
+    let attachmentPlaced = false;
     for (const definition of definitions) {
       const type = String(definition.type ?? 'text').toLowerCase();
       const isCheck = ['boolean', 'checkbox', 'bool'].includes(type);
@@ -1053,8 +1066,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       control.name = definition.name; control.required = Boolean(definition.required); control.dataset.lgLock = 'true';
       if (control.tagName === 'INPUT') {
         control.type = isCheck ? 'checkbox' : ['number', 'decimal', 'currency', 'integer'].includes(type) ? 'number'
-          : ['date', 'email', 'tel', 'url', 'datetime-local'].includes(type) ? type : 'text';
+          : ['email', 'tel', 'url', 'datetime-local'].includes(type) ? type : 'text';
         if (control.type === 'number') control.step = type === 'integer' ? '1' : 'any';
+        if (type === 'date') { control.inputMode = 'numeric'; control.placeholder = 'dd/mm/aaaa'; }
       }
       if (control.tagName === 'SELECT') setOptions(control, definition.options ?? [], 'Selecione');
       // Edits round-trip raw values, including existing HTML descriptions.
@@ -1063,18 +1077,29 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (isCheck) control.checked = value === true || value === 1 || value === 'true';
       else {
         if (control.tagName === 'SELECT' && value != null && ![...control.options].some(opt => opt.value === display(value))) control.append(option(value));
-        control.value = control.type === 'date' ? display(value).slice(0, 10) : display(value);
+        control.value = type === 'date' && value ? formatEditorDate(value) : display(value);
       }
-      const invalidate = () => { clearReview(); notify(''); };
+      const invalidate = () => { control.setCustomValidity(''); clearReview(); notify(''); };
+      if (type === 'date') control.addEventListener('input', () => { control.value = maskEditorDate(control.value); });
       control.addEventListener('input', invalidate);
       control.addEventListener('change', () => { invalidate(); void refreshDependencies(definition, control); });
       controls.push({ definition, control, initial: isCheck ? control.checked : control.value });
-      grid.append(label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control));
+      const field = label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control);
+      if (control.tagName === 'TEXTAREA' || ['FILIAL', 'FORNECEDOR', 'PRODUTO'].includes(definition.name)) field.classList.add('lg-field-wide');
+      grid.append(field);
+      if (operation === 'update' && definition.name === 'UN') {
+        grid.append(renderAttachments()); attachmentPlaced = true;
+      }
     }
-    const actions = element('div', 'lg-actions');
-    actions.append(button('Revisar alterações', () => reviewEditor()), button('Cancelar edição', dismissDetail));
+    if (operation === 'update' && !attachmentPlaced) grid.append(renderAttachments());
+    const actions = element('div', 'lg-actions lg-editor-actions');
+    const cancel = button('Cancelar edição', dismissDetail, { danger: true });
+    cancel.classList.add('lg-editor-cancel');
+    const reviewButton = button('Revisar alterações', () => reviewEditor());
+    reviewButton.classList.add('lg-editor-review');
+    actions.append(cancel, reviewButton);
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
-    panel.insertBefore(form, panel.children[1] ?? reviewHost);
+    panel.insertBefore(form, reviewHost);
     editor = { operation, form, controls, schemaState, pickers: bindSearchableFilterSelects(form) };
     focus(form.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? form);
   }
@@ -1084,11 +1109,22 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!editor.form.reportValidity()) return;
     const fields = {}, lines = [];
     for (const { definition, control, initial } of editor.controls) {
-      const value = control.type === 'checkbox' ? control.checked : control.type === 'number' && control.value !== '' ? Number(control.value) : control.value;
+      const type = String(definition.type ?? '').toLowerCase();
+      let value = control.type === 'checkbox' ? control.checked : control.type === 'number' && control.value !== '' ? Number(control.value) : control.value;
+      if (type === 'date' && control.value.trim()) {
+        value = parseEditorDate(control.value);
+        if (!value) {
+          control.setCustomValidity('Informe uma data válida no formato dd/mm/aaaa.');
+          control.reportValidity();
+          notify('Informe uma data válida no formato dd/mm/aaaa.', true);
+          return;
+        }
+        control.setCustomValidity('');
+      }
       const unchanged = control.type === 'checkbox' ? value === initial : String(control.value) === String(initial);
       if (editor.operation === 'update' && unchanged) continue;
       fields[definition.name] = value;
-      lines.push(`${definition.label ?? definition.name}: ${control.tagName === 'SELECT' ? control.selectedOptions[0]?.textContent ?? '' : fieldText(definition.name, value)}`);
+      lines.push(`${definition.label ?? definition.name}: ${control.tagName === 'SELECT' ? control.selectedOptions[0]?.textContent ?? '' : type === 'date' ? control.value : fieldText(definition.name, value)}`);
     }
     const operation = editor.operation;
     if (operation === 'update' && !Object.keys(fields).length) {
@@ -1128,12 +1164,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       } else await request(pending.operation, pending.payload);
       if (destroyed) return;
       if (pending.key) retryIds.delete(pending.key);
-      if (pending.operation === 'attachment_add' && selectedUploads.get(pending.payload.id) === pending.file) selectedUploads.delete(pending.payload.id);
       clearReview(); clearEditor();
       notify('Operação concluída.');
       needsDetailRefresh = true;
       if (pending.operation === 'delete') {
-        selectedUploads.delete(pending.payload.id);
         ++detailVersion; current = null; selectedId = null; panel.hidden = true; panel.replaceChildren(); needsDetailRefresh = false;
       }
       if (opened) {
@@ -1145,64 +1179,22 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function renderAttachments() {
     const section = element('section', 'lg-attachments');
-    const id = current.item.id;
     const attachments = current.attachments ?? [];
-    attachmentIndex = Math.min(attachmentIndex, Math.max(0, attachments.length - 1));
     section.append(element('h3', 'lg-section-title', 'Anexos'));
-    const name = element('p', 'lg-file-name');
-    const nav = element('div', 'lg-actions');
-    const prev = button('Anexo anterior', () => { attachmentIndex--; renderSelection(); });
-    const nextAttachment = button('Próximo anexo', () => { attachmentIndex++; renderSelection(); });
-    const open = button('Abrir / salvar anexo', () => viewAttachment(attachments[attachmentIndex].fileName), { disabled: !attachments.length || !openMedia });
-    const remove = button('Remover anexo', () => {
-      if (!canChangeDetail()) return;
-      const fileName = attachments[attachmentIndex].fileName;
-      showReview('Remover anexo', [`Remover ${fileName} do lançamento #${current.item.id}?`], 'Confirmar remoção', 'attachment_delete',
-        { id: current.item.id, fileName, confirm: true, expectedModified: modified() });
-    }, { disabled: !attachments.length, danger: true });
-    function renderSelection() {
-      name.textContent = attachments.length ? `${attachmentIndex + 1} de ${attachments.length} · ${attachments[attachmentIndex].fileName}` : 'Nenhum anexo neste lançamento.';
-      prev.dataset.lgDisabled = String(attachmentIndex <= 0);
-      nextAttachment.dataset.lgDisabled = String(attachmentIndex >= attachments.length - 1);
-      updateBusy();
+    if (!attachments.length) {
+      section.append(element('p', 'lg-hint', 'Nenhum anexo neste lançamento.'));
+      return section;
     }
-    nav.append(prev, nextAttachment, open, remove);
-    const file = element('input', 'lg-input'); file.type = 'file'; file.dataset.lgLock = 'true';
-    file.disabled = !upload; file.dataset.lgDisabled = String(!upload);
-    const selection = element('p', 'lg-hint');
-    function showSelection() {
-      selection.textContent = selectedUploads.has(id) ? `Arquivo selecionado: ${selectedUploads.get(id).name}` : 'Nenhum arquivo selecionado.';
+    const tray = element('div', 'lg-attachment-tray');
+    for (const attachment of attachments) {
+      const fileName = attachmentFileName(attachment);
+      if (!fileName) continue;
+      const open = button(`📎 ${fileName}`, () => viewAttachment(fileName), { disabled: !openMedia });
+      open.classList.add('lg-attachment-item');
+      open.setAttribute('aria-label', `Abrir anexo ${fileName}`);
+      tray.append(open);
     }
-    file.addEventListener('change', () => {
-      if (file.files?.[0]) selectedUploads.set(id, file.files[0]);
-      if (review?.operation === 'attachment_add') clearReview();
-      showSelection();
-    });
-    showSelection();
-    section.append(name, nav, label('Novo anexo', file), selection, button('Adicionar anexo', () => {
-      if (!canChangeDetail()) return;
-      const selected = selectedUploads.get(id);
-      if (!selected) { notify('Selecione um arquivo para adicionar.', true); return; }
-      showReview('Adicionar anexo', [`Enviar ${selected.name} para o lançamento #${current.item.id}?`], 'Confirmar envio', 'attachment_add', { id: current.item.id, expectedModified: modified() }, selected);
-    }, { disabled: !upload }), button('Limpar arquivo selecionado', () => {
-      selectedUploads.delete(id); file.value = ''; showSelection();
-      if (review?.operation === 'attachment_add') clearReview();
-    }, { disabled: !upload }));
-    renderSelection(); return section;
-  }
-  function renderSignature() {
-    const section = element('section', 'lg-signature');
-    let signature = current.item.fields.ASSINATURA;
-    try { if (typeof signature === 'string' && signature.startsWith('"')) signature = JSON.parse(signature); } catch { signature = ''; }
-    section.append(element('h3', 'lg-section-title', 'Assinatura'),
-      element('p', 'lg-hint', current.item.fields.ASSINATURA ? 'Assinatura registrada. Uma nova assinatura substituirá a atual.' : 'Sem assinatura registrada.'));
-    // SharePoint stores PowerApps JSON(data:image). Never request an arbitrary URL.
-    if (typeof signature === 'string' && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/i.test(signature) && signature.length <= 8_000_000) {
-      const preview = element('img', 'lg-signature-preview');
-      preview.alt = 'Assinatura registrada no lançamento'; preview.src = signature;
-      section.append(preview);
-    }
-    section.append(button('Desenhar assinatura', capture, { disabled: !captureSignature || !upload }));
+    section.append(tray);
     return section;
   }
   async function external(work) {
@@ -1226,17 +1218,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function viewAttachment(fileName) {
     viewRecordAttachment(current.item.id, fileName);
-  }
-  function capture() {
-    if (!canChangeDetail()) return;
-    const id = current.item.id;
-    external(async epoch => {
-      suspended = true; root.hidden = true;
-      const file = await captureSignature();
-      if (!active(epoch) || !file) return;
-      suspended = false; root.hidden = false;
-      showReview('Assinatura capturada', [`Salvar ${file.name} no lançamento #${id}?`], 'Confirmar assinatura', 'signature', { id, expectedModified: modified() }, file);
-    });
   }
   function onKeyDown(event) {
     if (!opened || suspended || event.defaultPrevented) return;
@@ -1282,7 +1263,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     attachmentCounts.destroy();
     cancelClusterLoad();
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
-    retryIds.clear(); selectedUploads.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
+    retryIds.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   }
   return { open, close, destroy };

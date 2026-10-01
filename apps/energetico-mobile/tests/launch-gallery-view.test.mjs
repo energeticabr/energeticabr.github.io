@@ -85,7 +85,7 @@ test('the launch pencil opens a searchable editing form without a separate detai
   }) });
   await ctx.gallery.open();
   const card = ctx.root().querySelector('.lg-record');
-  assert.equal(card.querySelector('[data-gallery-action="delete"]'), null);
+  assert.ok(card.querySelector('[data-gallery-action="delete"]'), 'red X next to pencil');
   assert.equal([...card.querySelectorAll('button')].some(control => control.textContent.trim() === 'Detalhes'), false);
   card.querySelector('[data-gallery-action="edit"]').click(); await settle();
   const editor = ctx.root().querySelector('.lg-detail .lg-editor');
@@ -114,20 +114,66 @@ test('filters start collapsed so records are visible; details and review scroll 
   assert.equal(filters.querySelector('summary').textContent, 'Filtros e ordenação');
   await showDetail(ctx);
   assert.ok(scrolled.includes(ctx.root().querySelector('.lg-detail')));
-  button(ctx.root(), 'Excluir lançamento').click();
+  input(ctx, 'QUANTIDADE', '3');
+  button(ctx.root(), 'Revisar alterações').click();
   assert.ok(scrolled.includes(ctx.root().querySelector('.lg-review')));
 });
 
-test('existing signature is previewed only as a safe embedded raster image', async t => {
+test('edit modal shows compact dates and attachments below UN, but no unrelated operations or signature', async t => {
   const png = 'data:image/png;base64,iVBORw0KGgo=';
-  let value = JSON.stringify(png);
-  const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({item: {...row(), fields: {...row().fields, ASSINATURA: value}}})});
+  const item = {...row(), fields: {...row().fields, ASSINATURA: JSON.stringify(png), 'DATA PGTO PREVISTO': '2026-09-25T00:00:00Z'}};
+  const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({item, editFields: [
+    {name: 'DATA', label: 'Data', type: 'date'},
+    {name: 'DATA PGTO PREVISTO', label: 'Data pgto previsto', type: 'date'},
+    {name: 'UN', label: 'UN', type: 'text'},
+    {name: 'QUANTIDADE', label: 'Quantidade', type: 'number'},
+  ]})});
   await ctx.gallery.open(); await showDetail(ctx);
-  assert.equal(ctx.root().querySelector('.lg-signature img')?.getAttribute('src'), png);
-  button(ctx.root(), 'Fechar edição').click();
-  value = 'https://untrusted.example/signature.png';
-  await showDetail(ctx);
-  assert.equal(ctx.root().querySelector('.lg-signature img'), null);
+  const form = ctx.root().querySelector('.lg-editor');
+  assert.equal(form.querySelector('[name="DATA"]').value, '17/09/2026');
+  assert.equal(form.querySelector('[name="DATA PGTO PREVISTO"]').value, '25/09/2026');
+  const unit = form.querySelector('[name="UN"]').closest('.lg-field');
+  assert.equal(unit.nextElementSibling, form.querySelector('.lg-attachments'));
+  assert.equal(form.querySelector('.lg-attachments'), ctx.root().querySelector('.lg-attachments'));
+  assert.equal(ctx.root().querySelector('.lg-signature'), null);
+  for (const text of ['Excluir lançamento', 'Provisionar pagamento', 'Aplicar medição', 'Desenhar assinatura',
+    'Adicionar anexo', 'Limpar arquivo selecionado', 'Remover anexo']) {
+    assert.equal([...ctx.root().querySelectorAll('.lg-detail button')].some(node => node.textContent === text), false);
+  }
+  assert.equal(form.querySelector('input[type="file"]'), null);
+  const buttons = [...form.querySelectorAll('.lg-editor-actions > button')];
+  assert.deepEqual(buttons.map(node => node.textContent), ['Cancelar edição', 'Revisar alterações']);
+  input(ctx, 'DATA', '18/09/2026');
+  button(ctx.root(), 'Revisar alterações').click();
+  assert.deepEqual(ctx.root().querySelector('.lg-review')?.hidden, false);
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /18\/09\/2026/);
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(mutations(ctx).at(-1).payload.fields.DATA, '2026-09-18');
+});
+
+test('invalid calendar dates cannot reach the update request', async t => {
+  const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({editFields: [
+    {name: 'DATA', label: 'Data', type: 'date', required: true},
+  ]})});
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'DATA', '31/02/2026');
+  button(ctx.root(), 'Revisar alterações').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /data válida/);
+  assert.equal(mutations(ctx).length, 0);
+});
+
+test('numeric mobile date entry inserts separators before review', async t => {
+  const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({editFields: [
+    {name: 'DATA', label: 'Data', type: 'date', required: true},
+  ]})});
+  await ctx.gallery.open(); await showDetail(ctx);
+  const date = input(ctx, 'DATA', '18102026');
+  assert.equal(date.inputMode, 'numeric');
+  assert.equal(date.value, '18/10/2026');
+  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(mutations(ctx).at(-1).payload.fields.DATA, '2026-10-18');
 });
 
 test('body overlay survives chat rerenders; close/home/destroy preserve lifecycle and focus', async t => {
@@ -1098,144 +1144,32 @@ test('changing a reviewed input invalidates confirmation; closing and reopening 
 
 test('delete requires explicit confirmation and carries raw Modificado fallback', async t => {
   const item = row(); delete item.fields.Modified; item.fields.Modificado = 'raw-version';
-  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot() : op === 'detail' ? detail({ item }) : {} });
-  await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Excluir lançamento').click();
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot({rows: [item]}) : op === 'detail' ? detail({ item }) : {} });
+  await ctx.gallery.open();
+  const remove = ctx.root().querySelector('.lg-record [data-gallery-action="delete"]');
+  remove.click();
   assert.equal(mutations(ctx).length, 0);
-  button(ctx.root(), 'Cancelar confirmação').click();
+  assert.match(ctx.root().querySelector('.gallery-record-dialog').textContent, /Tem certeza que deseja deletar o item de ID 17/);
+  button(ctx.root(), 'Não').click();
   assert.equal(mutations(ctx).length, 0);
-  button(ctx.root(), 'Excluir lançamento').click(); button(ctx.root(), 'Confirmar exclusão').click(); await settle();
+  remove.click(); button(ctx.root(), 'Sim').click(); await settle();
   assert.deepEqual(mutations(ctx), [{ operation: 'delete', payload: { id: 17, confirm: true, expectedModified: 'raw-version' } }]);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
 });
 
-test('payment and measurement validate dynamic fields, require review and reuse UUID after ambiguous failure', async t => {
-  const seen = new Set();
-  const ctx = await setup(t, { request: async (op, payload) => {
-    if (op === 'snapshot') return snapshot(); if (op === 'detail') return detail();
-    if (!seen.has(op)) { seen.add(op); throw new Error('Resposta perdida'); }
-    return { ok: true };
-  } });
-  await ctx.gallery.open(); await showDetail(ctx);
-  for (const operation of ['payment', 'measurement']) {
-    button(ctx.root(), operation === 'payment' ? 'Provisionar pagamento' : 'Aplicar medição').click();
-    if (operation === 'payment') input(ctx, 'date', '2026-10-02');
-    else { input(ctx, 'DATA', '2026-09-19'); input(ctx, 'QUANTIDADE', '0'); input(ctx, 'CONFERIDO', true); }
-    button(ctx.root(), 'Revisar alterações').click();
-    const before = mutations(ctx).length;
-    button(ctx.root(), 'Confirmar alterações').click(); await settle();
-    assert.equal(mutations(ctx).length, before + 1);
-    const first = mutations(ctx).at(-1).payload;
-    assert.match(first.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    assert.equal(first.confirm, true);
-    assert.equal(first.expectedModified, row().fields.Modified);
-    button(ctx.root(), 'Confirmar alterações').click(); await settle();
-    assert.deepEqual(mutations(ctx).at(-1).payload, first);
-    if (operation === 'payment') assert.equal(first.date, '2026-10-02');
-    else assert.deepEqual(first.fields, { DATA: '2026-09-19', QUANTIDADE: 0, CONFERIDO: true });
-  }
-});
-
-test('measurement retry keeps requestId after refreshing a changed launch version', async t => {
-  let version = '2026-09-18T12:34:56Z';
-  const attempts = [];
-  const ctx = await setup(t, { request: async (operation, payload) => {
-    if (operation === 'snapshot') return snapshot();
-    if (operation === 'detail') return detail({item: {...row(), expectedModified: version, fields: {...row().fields, Modified: version}}});
-    if (operation === 'measurement') { attempts.push(payload); throw new Error('Vínculo pendente'); }
-    return {ok: true};
-  }});
-  await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Aplicar medição').click();
-  input(ctx, 'DATA', '2026-09-19'); input(ctx, 'QUANTIDADE', '1');
-  button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
-  button(ctx.root(), 'Cancelar confirmação').click(); button(ctx.root(), 'Cancelar edição').click();
-  version = '2026-09-19T13:00:00Z';
-  await showDetail(ctx);
-  button(ctx.root(), 'Aplicar medição').click();
-  input(ctx, 'DATA', '2026-09-19'); input(ctx, 'QUANTIDADE', '1');
-  button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
-  assert.equal(attempts.length, 2);
-  assert.equal(attempts[0].requestId, attempts[1].requestId);
-  assert.notEqual(attempts[0].expectedModified, attempts[1].expectedModified);
-});
-
-test('selecting a measurement contract refreshes dependent demonstrative options', async t => {
-  const fields = [
-    {name: 'NUMEROCONTRATO', label: 'Contrato', type: 'choice', required: true,
-      options: [{value: '7', label: '7 - Fornecedor A'}, {value: '9', label: '9 - Fornecedor B'}]},
-    {name: 'DEMONSTRATIVOETAPA', label: 'Descrição etapa', type: 'choice',
-      options: [{value: '8', label: '8 - Fundação'}]},
-  ];
-  const ctx = await setup(t, {request: async (operation, payload) => {
-    if (operation === 'snapshot') return snapshot();
-    if (operation === 'detail') return detail({measurementFields: fields});
-    if (operation === 'schema') return {fields: [fields[0], {...fields[1], options: [{value: '10', label: '10 - Alvenaria'}]}]};
-    return {ok: true};
-  }});
-  await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Aplicar medição').click();
-  input(ctx, 'DEMONSTRATIVOETAPA', '8');
-  input(ctx, 'NUMEROCONTRATO', '9'); await settle();
-  assert.deepEqual(ctx.calls.find(call => call.operation === 'schema'), {operation: 'schema', payload: {
-    id: 17, scope: 'measurement', fields: {NUMEROCONTRATO: '9'},
-  }});
-  const demonstrative = ctx.root().querySelector('[name="DEMONSTRATIVOETAPA"]');
-  assert.deepEqual([...demonstrative.options].map(option => option.value), ['', '10']);
-  assert.equal(demonstrative.value, '');
-});
-
-test('attachments navigate names and use existing viewer, hiding overlay until viewer settles', async t => {
+test('attachment tray opens the chosen file without leaving the editing form', async t => {
   const viewer = deferred(); const opened = [];
   const ctx = await setup(t, { request: async (op, payload) => op === 'snapshot' ? snapshot() : op === 'detail' ? detail() :
     { mediaUrl: 'https://example.test/two', fileName: payload.fileName, mimeType: 'image/png' },
   openMedia: descriptor => { opened.push(descriptor); return viewer.promise; } });
   await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Próximo anexo').click();
-  assert.match(ctx.root().querySelector('.lg-attachments').textContent, /dois.png/);
-  button(ctx.root(), 'Abrir / salvar anexo').click(); await settle();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 um.pdf', '📎 dois.png']);
+  button(ctx.root(), '📎 dois.png').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), { operation: 'attachment', payload: { id: 17, fileName: 'dois.png' } });
   assert.deepEqual(opened, [{ mediaUrl: 'https://example.test/two', fileName: 'dois.png', mimeType: 'image/png' }]);
   assert.equal(ctx.root().hidden, true);
   viewer.resolve(); await settle();
   assert.equal(ctx.root().hidden, false);
-  button(ctx.root(), 'Anexo anterior').click();
-  assert.match(ctx.root().querySelector('.lg-attachments').textContent, /um.pdf/);
-});
-
-test('attachment add/remove and captured signature use explicit confirmations and upload contracts', async t => {
-  const uploads = [], capture = deferred();
-  const ctx = await setup(t, { upload: async (...args) => { uploads.push(args); }, captureSignature: () => capture.promise });
-  await ctx.gallery.open(); await showDetail(ctx);
-  const file = new ctx.dom.window.File(['x'], 'novo.pdf', { type: 'application/pdf' });
-  const fileInput = ctx.root().querySelector('input[type=file]');
-  Object.defineProperty(fileInput, 'files', { value: [file] });
-  fileInput.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
-  button(ctx.root(), 'Adicionar anexo').click();
-  assert.equal(uploads.length, 0);
-  button(ctx.root(), 'Confirmar envio').click(); await settle();
-  assert.deepEqual(uploads[0], [17, file, { operation: 'attachment_add', confirm: true, expectedModified: row().fields.Modified }]);
-  button(ctx.root(), 'Remover anexo').click();
-  button(ctx.root(), 'Confirmar remoção').click(); await settle();
-  assert.deepEqual(mutations(ctx).at(-1), { operation: 'attachment_delete', payload: { id: 17, fileName: 'um.pdf', confirm: true, expectedModified: row().fields.Modified } });
-  button(ctx.root(), 'Desenhar assinatura').click(); await settle();
-  assert.equal(ctx.root().hidden, true);
-  const signature = new ctx.dom.window.File(['png'], 'assinatura.png', { type: 'image/png' });
-  capture.resolve(signature); await settle();
-  assert.equal(ctx.root().hidden, false);
-  assert.equal(ctx.root().querySelector('canvas'), null);
-  button(ctx.root(), 'Confirmar assinatura').click(); await settle();
-  assert.deepEqual(uploads[1], [17, signature, { operation: 'signature', confirm: true, expectedModified: row().fields.Modified }]);
-});
-
-test('closing during signature capture never uploads or restores a closed gallery', async t => {
-  const capture = deferred(); let uploads = 0;
-  const ctx = await setup(t, { captureSignature: () => capture.promise, upload: async () => uploads++ });
-  await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Desenhar assinatura').click(); await settle();
-  ctx.gallery.close(); capture.resolve(new ctx.dom.window.File(['png'], 's.png')); await settle();
-  assert.equal(ctx.root().hidden, true);
-  assert.equal(uploads, 0);
 });
 
 test('stale detail responses are discarded and failed detail can be retried', async t => {
@@ -1262,7 +1196,6 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, 2);
   assert.match(ctx.root().querySelector('[role=alert]').textContent, /data final/);
   await showDetail(ctx);
-  button(ctx.root(), 'Aplicar medição').click();
   button(ctx.root(), 'Revisar alterações').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
   const form = ctx.root().querySelector('.lg-editor');
@@ -1274,33 +1207,16 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   assert.equal(mutations(ctx).length, 0);
 });
 
-test('cancelled and rejected signature capture restore the overlay without sending any file', async t => {
-  let count = 0, uploads = 0;
-  const ctx = await setup(t, { captureSignature: async () => {
-    if (!count++) return null;
-    throw new Error('Captura indisponível');
-  }, upload: async () => uploads++ });
-  await ctx.gallery.open(); await showDetail(ctx);
-  for (let i = 0; i < 2; i++) {
-    button(ctx.root(), 'Desenhar assinatura').click(); await settle();
-    assert.equal(ctx.root().hidden, false);
-    assert.equal(button(ctx.root(), 'Desenhar assinatura').disabled, false);
-    assert.equal(ctx.root().getAttribute('aria-busy'), 'false');
-  }
-  assert.match(ctx.root().querySelector('[role=alert]').textContent, /Captura indisponível/);
-  assert.equal(uploads, 0);
-});
-
 test('viewer returning after loading restores gallery while its top-layer dialog remains open', async t => {
   let modal;
   const ctx = await setup(t, { openMedia: async () => {
     modal = ctx.document.createElement('dialog'); modal.setAttribute('open', ''); ctx.document.body.append(modal);
   } });
   await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Abrir / salvar anexo').click(); await settle();
+  button(ctx.root(), '📎 um.pdf').click(); await settle();
   assert.equal(ctx.root().hidden, false);
   assert.equal(modal.hasAttribute('open'), true);
-  assert.equal(button(ctx.root(), 'Abrir / salvar anexo').disabled, false);
+  assert.equal(button(ctx.root(), '📎 um.pdf').disabled, false);
   assert.equal(ctx.root().getAttribute('aria-busy'), 'false');
 });
 
@@ -1313,7 +1229,7 @@ test('attachment read and viewer failures leave actionable errors with a usable 
   }, openMedia: async () => { throw new Error('Viewer indisponível'); } });
   await ctx.gallery.open(); await showDetail(ctx);
   for (const message of ['Arquivo expirado', 'Viewer indisponível']) {
-    button(ctx.root(), 'Abrir / salvar anexo').click(); await settle();
+    button(ctx.root(), '📎 um.pdf').click(); await settle();
     assert.equal(ctx.root().hidden, false);
     assert.equal(ctx.root().getAttribute('aria-busy'), 'false');
     assert.ok(ctx.root().querySelector('[role=alert]').textContent.includes(message));
@@ -1375,25 +1291,20 @@ test('gallery stylesheet keeps the stable row grid and reflows every record on m
   assert.match(css, /\.lg-record-extra\s*>\s*\.lg-button\s*\{[^}]*min-height:\s*44px/s);
 });
 
+test('mobile edit styles keep two form columns and pencil/X side by side', () => {
+  const css = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  const actions = readFileSync(new URL('../src/ui/gallery-record-actions.css', import.meta.url), 'utf8');
+  assert.match(css, /@media\s*\(max-width:\s*720px\)[\s\S]*?\.lg-editor-grid\s*\{\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /\.lg-editor-actions\s*\{[^}]*grid-template-columns:\s*repeat\(2/);
+  assert.match(css, /\.lg-editor-actions\s*>\s*\.lg-editor-cancel\s*\{[^}]*background:\s*#b91c24/);
+  assert.match(css, /\.lg-editor-actions\s*>\s*\.lg-editor-review\s*\{[^}]*background:\s*#167044/);
+  assert.match(actions, /\.gallery-record-card\.lg-record\s*>\s*\.gallery-record-actions\s*\{\s*flex-direction:\s*row/);
+});
+
 test('Windows PWA entrypoint includes the launch gallery stylesheet', () => {
   const entry = readFileSync(new URL('../src/web/main.js', import.meta.url), 'utf8');
   assert.match(entry, /import\s+["']\.\.\/ui\/launch-gallery\.css["'];/);
-});
-
-test('pending file selection survives a successful edit and its asynchronous detail refresh', async t => {
-  const uploads = [];
-  const ctx = await setup(t, { upload: async (...args) => uploads.push(args) });
-  await ctx.gallery.open(); await showDetail(ctx);
-  const file = new ctx.dom.window.File(['doc'], 'ainda-nao-enviado.pdf');
-  const inputFile = ctx.root().querySelector('input[type=file]');
-  Object.defineProperty(inputFile, 'files', { value: [file] });
-  inputFile.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
-  input(ctx, 'QUANTIDADE', '8');
-  button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
-  button(ctx.root(), 'Adicionar anexo').click();
-  assert.equal(ctx.root().querySelector('.lg-review').hidden, false, 'the selected file must not be silently discarded by refresh');
-  button(ctx.root(), 'Confirmar envio').click(); await settle();
-  assert.equal(uploads[0][1], file);
+  assert.match(entry, /import\s+["']\.\.\/ui\/gallery-record-actions\.css["'];/);
 });
 
 test('late pencil response cannot overwrite an editor reopened in a new gallery session', async t => {
