@@ -105,6 +105,37 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
 });
 
+test("ajuste RHID salva justificativa e atualiza somente o relatório selecionado", async t => {
+  const h = makeHarness();
+  const rows = [{ ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR", BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03" }];
+  let reportCalls = 0;
+  h.client.getRhidAttendanceReport = async date => {
+    reportCalls += 1;
+    return { date, rows: rows.map(row => ({ ...row, ...(reportCalls > 1 ? { ADMIN_AJUSTES: {
+      exit2: { time: "17:00", reason: "Conferência", actorName: "Bernardo" },
+    } } : {}) })) };
+  };
+  const saves = [];
+  h.client.saveRhidAttendanceAdjustment = async payload => { saves.push(payload); return { id: 1 }; };
+  let closed = 0;
+  h.view.closeRhidAttendanceAdjustment = () => { closed += 1; };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const message = h.store.getState().messages.at(-1);
+  const result = await h.view.emit("rhid-attendance-adjust-save", {
+    messageId: message.id, personKey: "rhid:23", slot: "exit2", time: "17:00", reason: "Conferência",
+  });
+  assert.equal(result, true);
+  assert.deepEqual(saves, [{ date: "2026-09-25", personKey: "rhid:23", slot: "exit2", time: "17:00", reason: "Conferência" }]);
+  assert.equal(reportCalls, 2);
+  assert.equal(closed, 1);
+  const current = h.store.getState().messages.at(-1);
+  assert.equal(current.id, message.id);
+  assert.equal(current.detail_table.people[0].slots.exit2.rhid, "17:03");
+  assert.equal(current.detail_table.people[0].slots.exit2.effective, "17:00");
+});
+
 test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao menu principal", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   const previousScreen = {

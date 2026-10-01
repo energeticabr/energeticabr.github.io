@@ -122,6 +122,13 @@ export function classifyRhidPunch(value) {
   return null;
 }
 
+function malformedPunchTimes(value) {
+  return punchText(value).flatMap(text => [...text.replace(/[+-](?:[01]?\d|2[0-3]):[0-5]\d\b/g, "")
+    .matchAll(/(?:^|[^\d])(\d{1,2}:\d{2})(?!\d)/g)]
+    .map(match => match[1])
+    .filter(time => !/^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(time)));
+}
+
 function totalFromSlots(times) {
   let minutes = 0;
   let completed = 0;
@@ -170,16 +177,22 @@ export function buildRhidAttendanceTable(rows = []) {
     const id = rhidId || String(row.Id ?? "").trim();
     const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ").trim();
     if (/^PIS NAO LOCALIZADO\b/.test(normalizedName) || /\bNAO APAGAR\b/.test(normalizedName)) continue;
-    const key = rhidId ? `rhid:${rhidId}` : name ? `name:${normalizedName}` : `id:${id}`;
+    const key = rhidId ? `rhid:${rhidId}` : id ? `id:${id}` : `name:${normalizedName}`;
     if (!name && !id) continue;
     const times = punchTimes(row.BATIDAS_RHID);
     if (!people.has(key)) people.set(key, {
       personKey: rhidId ? `rhid:${rhidId}` : id ? `id:${id}` : "",
-      name: name || `ID ${id}`, times: new Set(), inactive: false, adjustments: {},
+      name: name || `ID ${id}`, times: new Set(), duplicates: [], malformed: [], inactive: false, adjustments: {},
     });
     const person = people.get(key);
     if (String(row.STATUS_RHID ?? "").trim().toUpperCase() === "INATIVO") person.inactive = true;
-    for (const time of times) person.times.add(time);
+    const rowTimes = new Set();
+    for (const time of times) {
+      if (rowTimes.has(time)) person.duplicates.push(time);
+      rowTimes.add(time);
+      person.times.add(time);
+    }
+    person.malformed.push(...malformedPunchTimes(row.BATIDAS_RHID));
     const adjustments = row.ADMIN_AJUSTES;
     if (adjustments && typeof adjustments === "object") {
       for (const [slot] of RHID_SLOTS) {
@@ -222,6 +235,10 @@ export function buildRhidAttendanceTable(rows = []) {
       };
     }
     for (const time of outside) issues.push(`Batida fora das faixas: ${time}`);
+    for (const time of person.duplicates) issues.push(`Batidas duplicadas no RHID: ${time}`);
+    for (const time of person.malformed) issues.push(`Batida inválida do RHID: ${time}`);
+    const ordered = RHID_SLOTS.map(([slot]) => slots[slot].effective).filter(Boolean);
+    if (ordered.some((time, index) => index > 0 && time <= ordered[index - 1])) issues.push("Horários fora de ordem cronológica");
     return { personKey: person.personKey, name: person.name, rawPunches: person.punches, slots, issues };
   });
 
@@ -231,7 +248,7 @@ export function buildRhidAttendanceTable(rows = []) {
     people: details,
     rows: details.map(person => {
       const times = RHID_SLOTS.map(([slot]) => person.slots[slot].effective);
-      return [person.name, ...times.map(time => time || "—"), totalFromSlots(times)];
+      return [person.name, ...times.map(time => time || "—"), person.issues.some(issue => issue.includes("ordem cronológica")) ? "— (parcial)" : totalFromSlots(times)];
     }),
   };
 }

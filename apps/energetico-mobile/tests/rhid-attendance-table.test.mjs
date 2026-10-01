@@ -157,6 +157,24 @@ test("marca batidas fora das faixas e duplicadas sem ocultar o dado bruto", () =
   assert.deepEqual(table.people[0].issues, ["Batidas duplicadas em Entrada 1: 06:58, 07:02", "Batida fora das faixas: 14:00"]);
 });
 
+test("não une homônimos sem ID RHID e preserva batida repetida ou inválida como incongruência", () => {
+  const table = buildRhidAttendanceTable([
+    { Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 07:00; 12:00; 13:00; 17:00; 24:99" },
+    { Id: 2, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:01; 12:01; 13:01; 17:01" },
+  ]);
+  assert.equal(table.people.length, 2);
+  assert.deepEqual(table.people.map(person => person.personKey), ["id:1", "id:2"]);
+  assert.match(table.people[0].issues.join(" "), /duplicadas/i);
+  assert.match(table.people[0].issues.join(" "), /24:99/);
+});
+
+test("ajuste que inverte a sequência do almoço permanece inconsistente", () => {
+  const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00",
+    ADMIN_AJUSTES: { entry2: { time: "11:00", reason: "erro" } } }]);
+  assert.match(table.people[0].issues.join(" "), /ordem/i);
+  assert.match(table.rows[0][5], /parcial/i);
+});
+
 test("ajustes mudam o total efetivo mas preservam o RHID e a auditoria", () => {
   const table = buildRhidAttendanceTable([{
     Id: 73, ID_PESSOA_RHID: "r-73", NOME_COLABORADOR: "EDGAR",

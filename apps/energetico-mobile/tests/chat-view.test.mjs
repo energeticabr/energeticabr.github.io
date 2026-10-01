@@ -10,6 +10,7 @@ import {
   signaturePointFromEvent,
 } from "../src/ui/chat-view.js";
 import { createPowerBiDashboardView, POWERBI_REPORT_ID } from "../src/ui/powerbi-dashboard-view.js";
+import { buildRhidAttendanceTable } from "../src/chat/rhid-attendance-table.js";
 import { JSDOM } from "jsdom";
 
 function signedInState(overrides = {}) {
@@ -1063,6 +1064,65 @@ test("relatório RHID oferece compartilhar PDF da própria mensagem", () => {
   assert.ok(button, "a tabela deve expor a ação de compartilhar o PDF");
   assert.equal(button.dataset.messageId, "rhid-share-25", "a ação deve identificar exatamente o relatório clicado");
   assert.match(button.getAttribute("aria-label"), /PDF/i);
+  dom.window.close();
+});
+
+test("fim do dia oferece preencher célula vazia e distingue inclusões e correções pelas cores", () => {
+  const table = buildRhidAttendanceTable([
+    { Id: 81, ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR", BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03",
+      ADMIN_AJUSTES: { exit2: { time: "17:00", reason: "Relógio conferido", actorName: "Bernardo", adjustedAt: "2026-10-01T03:00:00Z" } } },
+    { Id: 82, ID_PESSOA_RHID: "24", NOME_COLABORADOR: "CLEITON", BATIDAS_RHID: "06:57; 11:57",
+      ADMIN_AJUSTES: {
+        exit1: { time: "12:00", reason: "Ajuste manual", actorName: "Bernardo", adjustedAt: "2026-10-01T03:00:00Z" },
+        entry2: { time: "13:01", reason: "Esquecimento", actorName: "Bernardo", adjustedAt: "2026-10-01T03:00:00Z" },
+      } },
+  ]);
+  const markup = renderChatMarkup(signedInState({ messages: [{ id: "rhid-edit", role: "assistant", type: "poll",
+    question: "RELATÓRIO RHID", options: [], detail_table: { ...table, reportDate: "2026-09-25" } }] }));
+  const dom = new JSDOM(markup);
+  const buttons = [...dom.window.document.querySelectorAll('[data-action="rhid-attendance-adjust-open"]')];
+  assert.ok(buttons.some(button => button.dataset.personKey === "rhid:24" && button.dataset.slot === "exit2"), "a saída não batida deve ser selecionável");
+  assert.match(buttons.find(button => button.dataset.personKey === "rhid:23" && button.dataset.slot === "exit2")?.className || "", /--corrected/);
+  assert.match(buttons.find(button => button.dataset.personKey === "rhid:24" && button.dataset.slot === "exit1")?.className || "", /--corrected/);
+  assert.match(buttons.find(button => button.dataset.personKey === "rhid:24" && button.dataset.slot === "entry2")?.className || "", /--added/);
+  assert.ok(dom.window.document.querySelector(".chat-rhid-attendance-card--discrepant"));
+  dom.window.close();
+});
+
+test("dia RHID completo sem incongruência não oferece edição", () => {
+  const table = buildRhidAttendanceTable([{ Id: 81, ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR",
+    BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03" }]);
+  const markup = renderChatMarkup(signedInState({ messages: [{ id: "rhid-sound", role: "assistant", type: "poll",
+    question: "RELATÓRIO RHID", options: [], detail_table: { ...table, reportDate: "2026-09-25" } }] }));
+  assert.doesNotMatch(markup, /data-action="rhid-attendance-adjust-open"/);
+});
+
+test("tocar em horário corrigido mostra RHID e ajuste e exige motivo para salvar novamente", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const submitted = [];
+  view.on("rhid-attendance-adjust-save", event => submitted.push(event));
+  const table = buildRhidAttendanceTable([{ Id: 81, ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR",
+    BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03", ADMIN_AJUSTES: {
+      exit2: { time: "17:00", reason: "Relógio conferido", actorName: "Bernardo", adjustedAt: "2026-10-01T03:00:00Z" },
+    } }]);
+  view.render(signedInState({ messages: [{ id: "rhid-edit", role: "assistant", type: "poll", question: "RELATÓRIO RHID",
+    options: [], detail_table: { ...table, reportDate: "2026-09-25" } }] }));
+  root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit2"]').click();
+  const dialog = root.querySelector("[data-rhid-adjustment-dialog]");
+  assert.ok(dialog);
+  assert.match(dialog.textContent, /RHID.*17:03/s);
+  assert.match(dialog.textContent, /Ajustado.*17:00/s);
+  assert.match(dialog.textContent, /Relógio conferido/);
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  assert.equal(submitted.length, 0);
+  assert.match(root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]')?.textContent || "", /justificativa/i);
+  root.querySelector('[data-role="rhid-adjustment-reason"]').value = "Correção revisada";
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  assert.deepEqual(submitted, [{ type: "rhid-attendance-adjust-save", messageId: "rhid-edit", personKey: "rhid:23", slot: "exit2",
+    time: "17:00", reason: "Correção revisada" }]);
+  view.destroy();
   dom.window.close();
 });
 

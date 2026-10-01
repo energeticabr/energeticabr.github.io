@@ -601,6 +601,16 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-card__cluster--entry { color: #fff; background: #16804b; }
 .chat-rhid-attendance-card__cluster--exit { color: #fff; background: #ad3041; }
 .chat-rhid-attendance-card__cluster--empty { color: #718096; background: #edf1f3; }
+.chat-rhid-attendance-card__cluster--added { color: #133e57; background: #b9e4f6; }
+.chat-rhid-attendance-card__cluster--corrected { color: #58390a; background: #f5bb65; }
+button.chat-rhid-attendance-card__cluster { border: 0; cursor: pointer; font: inherit; }
+button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #155786; outline-offset: 2px; }
+.chat-rhid-adjustment { max-width: 440px; width: min(92vw, 440px); }
+.chat-rhid-adjustment__history { padding: 8px 12px; margin: 12px 0; border-radius: 8px; background: #eef5f8; }
+.chat-rhid-adjustment__history p { margin: 5px 0; }
+.chat-rhid-adjustment label { display: block; margin-top: 12px; font-weight: 750; }
+.chat-rhid-adjustment input, .chat-rhid-adjustment textarea { box-sizing: border-box; width: 100%; margin-top: 5px; padding: 10px; border: 1px solid #8ba5b4; border-radius: 6px; font: inherit; }
+.chat-rhid-attendance-card__issues { margin: 8px 0 0; padding: 8px 8px 8px 26px; border-radius: 7px; color: #7c3e09; background: #fff0d7; font-size: 11px; font-weight: 700; }
 .chat-rhid-attendance-card__slot .chat-rhid-attendance-card__entry, .chat-rhid-attendance-card__slot .chat-rhid-attendance-card__exit { color: inherit; }
 .chat-rhid-attendance-card__total { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; padding: 8px 6px; border-radius: 10px; color: #173f6b; background: #edf3f9; text-align: center; }
 .chat-rhid-attendance-card__total span { color: #718096; font-size: 8px; font-weight: 800; line-height: 1.2; }

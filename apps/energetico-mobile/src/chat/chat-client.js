@@ -329,6 +329,26 @@ export function createChatClient({
     return report;
   }
 
+  async function saveRhidAttendanceAdjustment({ date, personKey, slot, time, reason } = {}) {
+    if (!validIsoDate(date)) throw new Error("Selecione uma data válida para o ajuste RHID.");
+    if (!/^(?:rhid|id):[^\s:]+$/.test(String(personKey || ""))) throw new Error("Colaborador RHID inválido.");
+    if (!["entry1", "exit1", "entry2", "exit2"].includes(slot)) throw new Error("Campo de ponto inválido.");
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || ""))) throw new Error("Informe o horário em HH:MM.");
+    if (!String(reason || "").trim()) throw new Error("Informe a justificativa do ajuste.");
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_attendance_adjust", date, personKey, slot, time, reason: String(reason).trim() }),
+      cache: "no-store",
+      credentials: "omit",
+    }, response => parsePortalResponse(response, "O ajuste de ponto RHID"));
+    if (!result?.attendanceAdjustment || result.attendanceAdjustment.time !== time) {
+      throw new Error("A VM não confirmou o ajuste de ponto RHID.");
+    }
+    return result.attendanceAdjustment;
+  }
+
   async function refreshRhidAttendance() {
     const token = await acquireToken(tokenProvider);
     const result = await request(chatUrl.href, {
@@ -457,5 +477,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }
