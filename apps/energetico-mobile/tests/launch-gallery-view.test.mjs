@@ -1522,6 +1522,34 @@ test('mobile edit styles keep two form columns and pencil/X side by side', () =>
   assert.match(actions, /\.gallery-record-card\.lg-record\s*>\s*\.gallery-record-actions\s*\{\s*flex-direction:\s*row/);
 });
 
+test('launch summary and its blue divider span the action column without covering the edit controls', async t => {
+  const withMedia = await setup(t);
+  await withMedia.gallery.open();
+  const css = [
+    '../src/ui/launch-gallery.css',
+    '../src/ui/gallery-record-actions.css',
+  ].map(path => readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
+  const style = withMedia.document.createElement('style');
+  style.textContent = css;
+  withMedia.document.head.append(style);
+  const card = withMedia.root().querySelector('.lg-record--with-media');
+  const content = card.querySelector('.lg-record-content');
+  const heading = card.querySelector('.lg-record-heading');
+  const actions = card.querySelector('.gallery-record-actions');
+  assert.equal(withMedia.dom.window.getComputedStyle(content).gridColumn, '2 / -1');
+  assert.ok(parseFloat(withMedia.dom.window.getComputedStyle(heading).paddingRight) >= 108);
+  assert.equal(withMedia.dom.window.getComputedStyle(actions).gridColumn, '-2 / -1');
+
+  const withoutMedia = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [{ ...row(18), hasAttachments: false }] }) : detail() });
+  await withoutMedia.gallery.open();
+  const plainStyle = withoutMedia.document.createElement('style');
+  plainStyle.textContent = css;
+  withoutMedia.document.head.append(plainStyle);
+  const plainContent = withoutMedia.root().querySelector('.lg-record-content');
+  assert.equal(withoutMedia.dom.window.getComputedStyle(plainContent).gridColumn, '1 / -1');
+});
+
 test('mobile launch attachment rail has room for the clip and both labels', () => {
   const actions = readFileSync(new URL('../src/ui/gallery-record-actions.css', import.meta.url), 'utf8');
   const mobileRules = actions.match(/@media\s*\(max-width:\s*480px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
