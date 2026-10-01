@@ -1508,6 +1508,10 @@ function flowNavigation(messages) {
 }
 
 function isRhidAttendanceReportMessage(message) {
+  if (message?.type !== "poll") return false;
+  const table = message?.detail_table || message?.detailTable;
+  if (table?.kind === "rhid_attendance") return true;
+  if (table?.kind !== "presence") return false;
   const heading = normalizedDateText([
     message?.question,
     message?.prompt,
@@ -2276,7 +2280,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const latestAssistantMessage = [...visibleMessages].reverse()
     .find(message => message?.role !== "user" && (message?.type === "poll" || message?.type === "text"));
   const rhidAttendanceReportPage = isRhidAttendanceReportMessage(latestAssistantMessage);
-  const transcriptMessages = rhidAttendanceReportPage ? [latestAssistantMessage] : visibleMessages;
+  const transcriptMessages = rhidAttendanceReportPage
+    ? visibleMessages.slice(visibleMessages.lastIndexOf(latestAssistantMessage)) : visibleMessages;
   const showPendingReminders = !rhidAttendanceReport?.open && !rhidAttendanceReportPage;
   const completedCreation = state.completionNavigation?.homeOnly === true;
   const showFlowStatus = Boolean(state.activeFlow || inferredIntermediateFlow || completedCreation || rhidAttendanceReportPage);

@@ -1334,6 +1334,34 @@ test("gerar relatório RHID não revela aviso de provisões nem deixa o menu ant
   dom.window.close();
 });
 
+test("relatório RHID estruturado continua visível com título alternativo e mensagem posterior", () => {
+  const menu = { id: "hr-menu", role: "assistant", type: "poll", question: "👥 RECURSOS HUMANOS", options: [] };
+  const report = { id: "rhid-short-title", role: "assistant", type: "poll", question: "RELATÓRIO RHID", options: [],
+    detail_table: { ...buildRhidAttendanceTable([{ ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA",
+      BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00" }]), reportDate: "2026-10-01" } };
+  const reply = { id: "reply-after-report", role: "user", type: "text", text: "Conferido" };
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    messages: [menu, report, reply],
+    pendingProvisions: { due: true, rows: [{ id: "306", dueDate: "2026-10-02" }] },
+  })));
+  const transcript = dom.window.document.querySelector(".chat-transcript");
+  assert.ok(transcript.querySelector(".chat-rhid-attendance-report"));
+  assert.match(transcript.textContent, /Conferido/, "a resposta posterior ao relatório continua visível");
+  assert.doesNotMatch(transcript.textContent, /RECURSOS HUMANOS/, "o menu anterior não toma o lugar do relatório");
+  assert.equal(dom.window.document.querySelector("[data-pending-provisions-dialog]"), null);
+  dom.window.close();
+});
+
+test("menção textual ao relatório RHID não transforma outra tela em relatório", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    messages: [{ id: "note", role: "assistant", type: "text", text: "Você pode abrir o relatório de presenças RHID pelo menu." }],
+    pendingProvisions: { due: true, rows: [{ id: "306", dueDate: "2026-10-02" }] },
+  })));
+  assert.ok(dom.window.document.querySelector("[data-pending-provisions-dialog]"));
+  assert.equal(dom.window.document.querySelector(".chat-rhid-attendance-report"), null);
+  dom.window.close();
+});
+
 test("batidas RHID duplicadas não recebem justificativa de ponto não apontado", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
