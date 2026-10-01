@@ -63,7 +63,7 @@ test('ocorrências começam em 1 e continuam com Enter e quebra de linha do celu
   ctx.enter();
   ctx.input(ctx.draft.value + 'Atraso na entrega de cimento');
   ctx.enter('insertParagraph');
-  assert.equal(ctx.draft.value, '1. Chuva interrompeu a concretagem\n2. Atraso na entrega de cimento\n3. ');
+  assert.equal(ctx.draft.value, '1. Chuva interrompeu a concretagem;\n2. Atraso na entrega de cimento;\n3. ');
   assert.equal(ctx.events.some(event => event.type === 'send-text'), false);
 });
 
@@ -124,12 +124,12 @@ test('Enter e quebra de linha do celular continuam 2, 3 e 4 sem enviar', t => {
   ctx.input('Concretagem de vigas e pilares');
   assert.equal(ctx.draft.value, '1. Concretagem de vigas e pilares');
   ctx.enter();
-  assert.equal(ctx.draft.value, '1. Concretagem de vigas e pilares\n2. ');
+  assert.equal(ctx.draft.value, '1. Concretagem de vigas e pilares;\n2. ');
   ctx.input(ctx.draft.value + 'Instalação de formas');
   ctx.enter('insertParagraph');
   ctx.input(ctx.draft.value + 'Cura do concreto');
   ctx.enter();
-  assert.equal(ctx.draft.value, '1. Concretagem de vigas e pilares\n2. Instalação de formas\n3. Cura do concreto\n4. ');
+  assert.equal(ctx.draft.value, '1. Concretagem de vigas e pilares;\n2. Instalação de formas;\n3. Cura do concreto;\n4. ');
   assert.equal(ctx.draft.selectionStart, ctx.draft.value.length);
   assert.equal(ctx.events.some(event => event.type === 'send-text'), false);
 });
@@ -183,8 +183,8 @@ test('inserir e excluir um item no meio mantém sequência e posição do cursor
   const ctx = setup(t, { draft: '1. Concretagem\n2. Cura' });
   ctx.draft.setSelectionRange('1. Concretagem'.length, '1. Concretagem'.length);
   ctx.enter();
-  assert.equal(ctx.draft.value, '1. Concretagem\n2. \n3. Cura');
-  assert.equal(ctx.draft.selectionStart, '1. Concretagem\n2. '.length);
+  assert.equal(ctx.draft.value, '1. Concretagem;\n2. \n3. Cura');
+  assert.equal(ctx.draft.selectionStart, '1. Concretagem;\n2. '.length);
   ctx.input('1. Concretagem\n3. Cura', 'deleteContentBackward', '1. Concretagem\n'.length);
   assert.equal(ctx.draft.value, '1. Concretagem\n2. Cura');
 });
@@ -222,4 +222,30 @@ test('ditado complementa o item atual sem achatar a lista ou separar o índice d
   Recognition.instance.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: 'Eu fiz a concretagem de 1.5 m³.' }], { isFinal: true })] });
   voice.dispatchEvent(new ctx.dom.window.Event('pointerup', { bubbles: true, cancelable: true }));
   assert.equal(ctx.draft.value, '1. Inspeção das formas.\n2. Execução de concretagem de 1.5 m³.');
+});
+test('quebra de linha mantém ponto e vírgula único e índices vazios nas duas etapas', t => {
+  for (const overrides of [{}, { messages: occurrencesMessages() }]) {
+    const ctx = setup(t, overrides);
+    ctx.input('1. Registro concluído;   ');
+    ctx.enter();
+    assert.equal(ctx.draft.value, '1. Registro concluído;\n2. ');
+    ctx.enter('insertParagraph');
+    assert.equal(ctx.draft.value, '1. Registro concluído;\n2. \n3. ');
+    assert.equal(ctx.draft.selectionStart, ctx.draft.value.length);
+    assert.equal(ctx.draft.selectionEnd, ctx.draft.value.length);
+    ctx.root.querySelector('[data-chat-form]').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(ctx.state.draft, '1. Registro concluído;');
+    assert.equal(ctx.events.at(-1).type, 'send-text');
+  }
+});
+
+test('quebra de linha no meio do texto acrescenta ponto e vírgula sem perder o restante', t => {
+  const ctx = setup(t);
+  ctx.input('1. Concretagem Cura');
+  ctx.draft.setSelectionRange('1. Concretagem'.length, '1. Concretagem'.length);
+  ctx.enter();
+  assert.equal(ctx.draft.value, '1. Concretagem;\n2. Cura');
+  assert.equal(ctx.draft.selectionStart, '1. Concretagem;\n2. '.length);
+  ctx.input(ctx.draft.value.slice(0, ctx.draft.selectionStart) + 'Continuação ' + ctx.draft.value.slice(ctx.draft.selectionStart));
+  assert.equal(ctx.draft.value, '1. Concretagem;\n2. Continuação Cura');
 });
