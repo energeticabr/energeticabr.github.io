@@ -182,9 +182,12 @@ export function buildRhidAttendanceTable(rows = []) {
     const times = punchTimes(row.BATIDAS_RHID);
     if (!people.has(key)) people.set(key, {
       personKey: rhidId ? `rhid:${rhidId}` : id ? `id:${id}` : "",
-      name: name || `ID ${id}`, times: new Set(), duplicates: [], malformed: [], inactive: false, adjustments: {},
+      name: name || `ID ${id}`, times: new Set(), duplicates: [], malformed: [], inactive: false, adjustments: {}, pendingPresenceIds: new Set(),
     });
     const person = people.get(key);
+    for (const pendingId of Array.isArray(row.pendingPresenceIds) ? row.pendingPresenceIds : []) {
+      if (/^[1-9]\d*$/.test(String(pendingId))) person.pendingPresenceIds.add(String(pendingId));
+    }
     if (String(row.STATUS_RHID ?? "").trim().toUpperCase() === "INATIVO") person.inactive = true;
     const rowTimes = new Set();
     for (const time of times) {
@@ -239,7 +242,8 @@ export function buildRhidAttendanceTable(rows = []) {
     for (const time of person.malformed) issues.push(`Batida inválida do RHID: ${time}`);
     const ordered = RHID_SLOTS.map(([slot]) => slots[slot].effective).filter(Boolean);
     if (ordered.some((time, index) => index > 0 && time <= ordered[index - 1])) issues.push("Horários fora de ordem cronológica");
-    return { personKey: person.personKey, name: person.name, rawPunches: person.punches, slots, issues };
+    return { personKey: person.personKey, name: person.name, rawPunches: person.punches,
+      pendingPresenceIds: [...person.pendingPresenceIds], slots, issues };
   });
 
   return {

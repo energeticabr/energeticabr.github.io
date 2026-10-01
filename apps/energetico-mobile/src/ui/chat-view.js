@@ -956,7 +956,7 @@ function presenceDetailTableMarkup(table) {
   return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
 }
 
-function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
+function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeFlow = null) {
   if (table?.kind !== "rhid_attendance" || !Array.isArray(table.headers) || !Array.isArray(table.rows)) return "";
   const headers = table.headers;
   const rows = table.rows.filter(Array.isArray);
@@ -1027,8 +1027,12 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null) {
         const totalText = String(total);
         const isPartial = /\(parcial\)/i.test(totalText);
         const displayTotal = totalText.replace(/\s*\(parcial\)/i, "").trim() || "—";
+        const pendingId = person?.pendingPresenceIds?.find(id => /^[1-9]\d*$/.test(String(id)));
+        const validateButton = pendingId && person?.personKey && messageId && isValidRhidReportDate(table.reportDate)
+          ? `<button class="chat-rhid-attendance-card__validate" type="button" data-action="rhid-presence-validate-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-value="${escapeHtml(pendingId)}" aria-label="Validar presença de ${escapeHtml(name)} em ${escapeHtml(dateLabel)}" title="ID de presença ${escapeHtml(pendingId)}"${activeFlow?.id === "attendance_validation" ? " disabled" : ""}>VALIDAR PRESENÇA</button>`
+          : "";
         return `<article class="chat-rhid-attendance-card ${rowClass}" role="listitem">
-          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div><div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
+          <div class="chat-rhid-attendance-card__main"><div class="chat-rhid-attendance-card__person"><h3>${escapeHtml(name)}</h3>${validateButton}${noPunches ? `<span class="chat-rhid-attendance-card__missing">SEM MARCAÇÃO</span>` : ""}</div><div class="chat-rhid-attendance-card__details"><div class="chat-rhid-attendance-card__slots">${slots}</div><div class="chat-rhid-attendance-card__total"><span>TOTAL DE HORAS/DIA</span><strong>${escapeHtml(displayTotal)}</strong>${isPartial ? `<small>PARCIAL</small>` : ""}</div></div></div>
           ${person?.issues?.length ? `<ul class="chat-rhid-attendance-card__issues" aria-label="Inconsistências">${person.issues.map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : ""}
         </article>`;
       }).join("")}
@@ -1440,7 +1444,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu ? "" : `<p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
-    ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh)}
+    ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh, activeFlow)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}
     ${presenceDateSummaryMarkup(message.presenceDateSummary)}

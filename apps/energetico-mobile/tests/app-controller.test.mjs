@@ -105,6 +105,29 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
 });
 
+test("botão de presença abre diretamente o fluxo do ID pendente da pessoa e data exibidas", async t => {
+  const h = makeHarness();
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [
+    { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "2026-09-25 07:00", pendingPresenceIds: ["21"] },
+  ] });
+  const requests = [];
+  h.client.startRhidPendingValidation = async payload => {
+    requests.push(payload);
+    return { status: "processed", messages: [{ type: "poll", question: "VALIDAR ANA?", options: [] }], activeFlow: { id: "attendance_validation", title: "VALIDAR PRESENÇAS" }, attachments: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  const report = h.store.getState().messages.at(-1);
+  const result = await h.view.emit("rhid-presence-validate-open", {
+    messageId: report.id, personKey: "rhid:9", value: "21",
+  });
+  assert.equal(result, true);
+  assert.deepEqual(requests, [{ date: "2026-09-25", personKey: "rhid:9", presenceId: "21" }]);
+  assert.equal(h.store.getState().messages.at(-1).question, "VALIDAR ANA?");
+  assert.equal(h.store.getState().activeFlow?.id, "attendance_validation");
+});
+
 test("ajuste RHID salva justificativa e atualiza somente o relatório selecionado", async t => {
   const h = makeHarness();
   const rows = [{ ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR", BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03" }];
