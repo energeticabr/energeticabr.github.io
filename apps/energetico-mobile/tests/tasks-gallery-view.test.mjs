@@ -98,6 +98,33 @@ test("G7 oferece EM ATENDIMENTO mesmo quando nenhum registro tem esse status", a
   assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
 });
 
+test("toques em opções de ordenação e status aplicam os filtros da galeria", async t => {
+  const ctx = await setup(t, { rows: [
+    { id: "100", fields: { TAREFA: "Primeira", STATUS: "ATIVIDADE CRIADA", field_7: "2026-10-01T03:00:00Z" } },
+    { id: "200", fields: { TAREFA: "Segunda", STATUS: "EM ATENDIMENTO", field_7: "2026-10-03T03:00:00Z" } },
+  ] });
+  await ctx.gallery.open();
+  const ids = () => [...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId);
+  assert.deepEqual(ids(), ["100", "200"]);
+
+  for (const [name, label] of [["sort", "ID (maior primeiro)"], ["status", "EM ATENDIMENTO"]]) {
+    const native = ctx.root().querySelector(`[name="${name}"]`);
+    const picker = native.nextElementSibling;
+    picker.querySelector(".sfs-trigger").click();
+    const option = [...picker.querySelectorAll(".sfs-option")].find(item => item.textContent === label);
+    assert.ok(option, `${name} option exists`);
+    option.dispatchEvent(new ctx.dom.window.MouseEvent("pointerdown", { bubbles: true }));
+    picker.querySelector(".sfs-search").dispatchEvent(new ctx.dom.window.FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+    assert.equal(picker.querySelector(".sfs-popup").hidden, false, `${name} remains open until the tap selects an option`);
+    option.click();
+    if (name === "sort") assert.deepEqual(ids(), ["200", "100"], "new sort order is applied to the records");
+  }
+
+  assert.deepEqual(ids(), ["200"]);
+  assert.equal(ctx.root().querySelector('[name="sort"]').value, "id-desc");
+  assert.equal(ctx.root().querySelector('[name="status"]').value, "EM ATENDIMENTO");
+});
+
 test("detalhes mostram os campos completos em tabela e anexos abrem no visualizador compartilhado", async t => {
   const opened = [];
   const ctx = await setup(t, { openMediaCollection: async items => opened.push(items) });

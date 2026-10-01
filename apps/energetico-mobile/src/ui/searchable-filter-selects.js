@@ -49,6 +49,8 @@ function createPicker(select, closeOthers) {
   let active = -1;
   let destroyed = false;
   let observedViewport = null;
+  let selectingOption = false;
+  let selectionReset = null;
 
   function disabled(option) {
     return select.matches(':disabled') || option.disabled || option.parentElement?.tagName === 'OPTGROUP' && option.parentElement.disabled;
@@ -101,6 +103,9 @@ function createPicker(select, closeOthers) {
     positionPopup();
   }
   function close({ focus = false } = {}) {
+    selectingOption = false;
+    if (selectionReset !== null) view.clearTimeout(selectionReset);
+    selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
     trigger.setAttribute('aria-expanded', 'false'); search.setAttribute('aria-expanded', 'false');
     search.value = ''; highlight(-1);
@@ -166,10 +171,23 @@ function createPicker(select, closeOthers) {
     }
   }
   function onOutside(event) { if (!wrapper.contains(event.target)) close(); }
-  function onAncestorScroll(event) {
-    if (event.target === doc || event.target?.contains?.(wrapper) && !wrapper.contains(event.target)) close();
+  function onOptionPointerDown(event) {
+    selectingOption = Boolean(event.target.closest?.('.sfs-option') && list.contains(event.target));
+    if (selectionReset !== null) view.clearTimeout(selectionReset);
+    selectionReset = null;
   }
-  function onFocusOut(event) { if (!wrapper.contains(event.relatedTarget)) close(); }
+  function onOptionPointerUp() {
+    selectionReset = view.setTimeout(() => { selectingOption = false; selectionReset = null; }, 0);
+  }
+  function onOptionPointerCancel() {
+    selectingOption = false;
+    if (selectionReset !== null) view.clearTimeout(selectionReset);
+    selectionReset = null;
+  }
+  function onAncestorScroll(event) {
+    if (!selectingOption && (event.target === doc || event.target?.contains?.(wrapper) && !wrapper.contains(event.target))) close();
+  }
+  function onFocusOut(event) { if (!selectingOption && !wrapper.contains(event.relatedTarget)) close(); }
   function onReset() { view.queueMicrotask(() => { if (!destroyed) { close(); sync(); } }); }
   function closeIfHidden() {
     if (wrapper.closest('[hidden], [aria-hidden="true"], details:not([open])')) close();
@@ -180,6 +198,9 @@ function createPicker(select, closeOthers) {
   trigger.addEventListener('keydown', onTriggerKey);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
   wrapper.addEventListener('keydown', onKey); wrapper.addEventListener('focusout', onFocusOut);
+  list.addEventListener('pointerdown', onOptionPointerDown);
+  list.addEventListener('pointerup', onOptionPointerUp);
+  list.addEventListener('pointercancel', onOptionPointerCancel);
   select.addEventListener('change', sync); select.form?.addEventListener('reset', onReset);
   doc.addEventListener('pointerdown', onOutside); doc.addEventListener('click', onOutside);
   doc.addEventListener('scroll', onAncestorScroll, true);
@@ -195,9 +216,13 @@ function createPicker(select, closeOthers) {
     destroy() {
       if (destroyed) return;
       destroyed = true; optionObserver.disconnect(); visibilityObserver.disconnect();
+      if (selectionReset !== null) view.clearTimeout(selectionReset);
       trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('keydown', onTriggerKey);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
+      list.removeEventListener('pointerdown', onOptionPointerDown);
+      list.removeEventListener('pointerup', onOptionPointerUp);
+      list.removeEventListener('pointercancel', onOptionPointerCancel);
       select.removeEventListener('change', sync); select.form?.removeEventListener('reset', onReset);
       doc.removeEventListener('pointerdown', onOutside); doc.removeEventListener('click', onOutside);
       doc.removeEventListener('scroll', onAncestorScroll, true); view.removeEventListener('resize', positionPopup);
