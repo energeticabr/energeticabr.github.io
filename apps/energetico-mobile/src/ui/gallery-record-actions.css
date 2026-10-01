@@ -35,7 +35,7 @@
   .gallery-record-card.lg-record,
   .gallery-record-card.rg-row,
   .gallery-record-card.hr-gallery-card { column-gap: 8px; }
-  .gallery-record-card.lg-record--with-media { grid-template-columns: 52px minmax(0, 1fr) 96px; }
+  .gallery-record-card.lg-record--with-media { grid-template-columns: 68px minmax(0, 1fr) 96px; }
   .gallery-record-card.og-card--with-attachments { grid-template-columns: 52px minmax(0, 1fr) 44px; }
 }
 
