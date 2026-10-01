@@ -1,6 +1,7 @@
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
@@ -243,19 +244,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const raw = field(fields, 'ADICIONADO POR', 'CRIADO POR', 'CREATED BY', 'AUTHOR');
     return raw != null && /^\s*\d+\s*$/.test(String(raw)) ? 'Usuário não identificado' : personDisplayName(raw);
   }
-  function displayFields(item) {
-    const fields = { ...(item?.fields ?? {}) };
-    const creator = creatorName(item);
-    const creatorKeys = new Set(['ADICIONADOPOR', 'CRIADOPOR', 'CREATEDBY', 'AUTHOR']);
-    let hasCreatorField = false;
-    for (const name of Object.keys(fields)) {
-      if (!creatorKeys.has(key(name))) continue;
-      fields[name] = creator;
-      hasCreatorField = true;
-    }
-    if (!hasCreatorField && creator) fields['ADICIONADO POR'] = creator;
-    return fields;
-  }
   function notify(text, error = false) {
     notice.textContent = text;
     notice.hidden = !text;
@@ -324,7 +312,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const pageLabel = element('span', 'lg-page-label');
   pagination.append(previous, pageLabel, next);
   const panel = element('section', 'lg-detail lg-detail-modal'); panel.hidden = true; panel.tabIndex = -1;
-  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Detalhes do lançamento');
+  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Editar lançamento');
   const clusterPanel = element('section', 'lg-detail lg-detail-modal lg-cluster-modal'); clusterPanel.hidden = true; clusterPanel.tabIndex = -1;
   clusterPanel.setAttribute('role', 'dialog'); clusterPanel.setAttribute('aria-modal', 'true');
   clusterPanel.setAttribute('aria-label', 'Detalhes do agrupamento');
@@ -335,17 +323,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
   const recordActions = createGalleryRecordActions({
-    document: doc, host: root,
+    document: doc, host: root, actions: ['edit'],
     onEdit: async row => {
-      if (!opened || destroyed || !canChangeDetail()) return;
+      if (!opened || destroyed || editor || !canChangeDetail()) return;
+      notify('');
       const epoch = session, version = detailVersion + 1;
       await loadDetail(row.id);
       if (!active(epoch) || detailVersion !== version || !current || String(current.item.id) !== String(row.id)) return;
-      beginEditor('update');
-      if (editor?.form) {
-        reveal(editor.form);
-        focus(editor.controls.find(({ control }) => !control.disabled)?.control);
-      }
+      reveal(editor?.form ?? panel);
+      focus(editor?.form?.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? panel);
     },
     deleteItem: async id => {
       if (busy || editor || review) throw new Error('Conclua ou cancele a edição aberta antes de deletar.');
@@ -458,14 +444,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (date) return date;
     return display(value) || '—';
   }
-  function fieldList(fields) {
-    const list = element('dl', 'lg-fields');
-    for (const [name, value] of Object.entries(fields ?? {})) {
-      const pair = element('div', 'lg-field-value');
-      pair.append(element('dt', '', name), element('dd', '', fieldText(name, value))); list.append(pair);
-    }
-    return list;
-  }
   function renderRecordMedia(item) {
     const media = recordMedia(item);
     if (!media) return null;
@@ -570,17 +548,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       else if (typeof openMedia === 'function') await openMedia({ ...attachments[0], ...descriptors[0] });
       else throw new Error('Visualizador de anexos indisponível');
     });
-  }
-  function fieldTable(fields) {
-    const table = element('table', 'lg-data-table');
-    const body = element('tbody');
-    for (const [name, value] of Object.entries(fields ?? {})) {
-      const row = element('tr');
-      row.append(element('th', '', name), element('td', '', fieldText(name, value)));
-      body.append(row);
-    }
-    table.append(body);
-    return table;
   }
   function clusterAction(labelText, value, kind) {
     if (value == null || display(value).trim() === '') return summaryField(labelText, value);
@@ -944,12 +911,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (value == null || display(value).trim() === '') continue;
       badges.append(element('span', `lg-record-badge ${className}`, display(value)));
     }
-    const details = button('Detalhes', () => { if (canChangeDetail()) loadDetail(item.id); });
-    details.dataset.lgAction = 'details';
     const extra = element('section', 'lg-record-extra');
     extra.id = `lg-launch-extra-${String(item.id).replace(/[^A-Za-z0-9_-]/g, '-')}`;
     extra.hidden = true;
-    extra.append(main, badges, details);
+    extra.append(main, badges);
     const expand = button('Ver mais informações', () => {
       const expanded = expand.getAttribute('aria-expanded') === 'true';
       extra.hidden = expanded;
@@ -970,7 +935,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function canChangeDetail() {
     if (busy) return false;
-    if (editor || review) { notify('Conclua ou cancele a edição/confirmação aberta antes de trocar de lançamento.', true); return false; }
+    if (review || editor?.controls.some(({ control, initial }) => (control.type === 'checkbox' ? control.checked : control.value) !== initial)) {
+      notify('Conclua ou cancele a edição/confirmação aberta antes de trocar de lançamento.', true); return false;
+    }
     return true;
   }
   async function loadDetail(id) {
@@ -978,39 +945,44 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     selectedId = id;
     const version = ++detailVersion, epoch = session;
     detailLoading = true; panel.hidden = false;
-    panel.replaceChildren(element('p', 'lg-hint', `Carregando detalhes de #${id}…`)); updateBusy();
+    panel.replaceChildren(element('p', 'lg-hint', `Carregando edição de #${id}…`)); updateBusy();
     try {
       const result = await request('detail', { id });
       if (!active(epoch) || version !== detailVersion) return;
-      if (!result?.item?.fields) throw new Error('Resposta de detalhes inválida');
+      if (!result?.item?.fields) throw new Error('Resposta de edição inválida');
       current = result; needsDetailRefresh = false;
-      renderDetail(); reveal(panel); focus(panel.querySelector('.lg-detail-close') ?? panel);
+      renderDetail(); reveal(panel); focus(editor?.form?.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? panel);
     } catch (error) {
       if (!active(epoch) || version !== detailVersion) return;
       current = null;
       panel.replaceChildren(element('p', 'lg-error', failure(error, `Erro ao abrir #${id}`)),
-        button('Tentar novamente', () => loadDetail(id)), button('Fechar detalhes', dismissDetail));
+        button('Tentar novamente', () => loadDetail(id)), button('Fechar edição', dismissDetail));
     } finally {
       if (active(epoch) && version === detailVersion) { detailLoading = false; updateBusy(); }
     }
   }
   function dismissDetail() {
-    if (!canChangeDetail()) return;
+    if (busy) return;
+    clearReview(); clearEditor();
     ++detailVersion; detailLoading = false; current = null; selectedId = null;
     panel.hidden = true; panel.replaceChildren(); updateBusy();
   }
+  function clearEditor() {
+    editor?.pickers?.destroy();
+    editor?.form?.remove();
+    editor = null;
+  }
   function clearReview() { review = null; reviewHost.hidden = true; reviewHost.replaceChildren(); }
   function renderDetail() {
-    clearReview(); editor = null;
+    clearReview(); clearEditor();
     const item = current.item;
     const title = element('h2', 'lg-section-title', `Lançamento #${item.id}`);
-    const close = button('Fechar detalhes', dismissDetail, { locked: false });
+    const close = button('Fechar edição', dismissDetail, { locked: false });
     close.classList.add('lg-detail-close');
     const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(title, close);
-    panel.replaceChildren(detailHeader, fieldTable(displayFields(item)));
+    panel.replaceChildren(detailHeader);
     const actions = element('div', 'lg-actions');
-    actions.append(button('Editar', () => beginEditor('update'), { disabled: !current.editFields?.length }),
-      button('Excluir lançamento', () => {
+    actions.append(button('Excluir lançamento', () => {
         if (!canChangeDetail()) return;
         showReview('Excluir lançamento', [`Excluir definitivamente o lançamento #${item.id}?`], 'Confirmar exclusão',
           'delete', { id: item.id, confirm: true, expectedModified: modified() });
@@ -1018,6 +990,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       button('Provisionar pagamento', () => beginEditor('payment')),
       button('Aplicar medição', () => beginEditor('measurement'), { disabled: !current.measurementFields?.length }));
     panel.append(actions, renderAttachments(), renderSignature(), reviewHost);
+    if (current.editFields?.length) beginEditor('update', { fromRender: true });
+    else panel.insertBefore(element('p', 'lg-error', 'Os campos de edição deste lançamento não estão disponíveis.'), actions);
     updateBusy();
   }
   function modified() { return current.item.expectedModified ?? current.item.fields.Modified ?? current.item.fields.Modificado; }
@@ -1030,9 +1004,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-  function beginEditor(operation) {
-    if (!canChangeDetail()) return;
-    notify('');
+  function beginEditor(operation, { fromRender = false } = {}) {
+    if ((busy && !fromRender) || review) return;
+    if (editor) {
+      if (editor.controls.some(({ control, initial }) => (control.type === 'checkbox' ? control.checked : control.value) !== initial)) {
+        notify('Reveja ou cancele as alterações antes de iniciar outra operação.', true); return;
+      }
+      clearEditor();
+    }
+    if (!fromRender) notify('');
     const definitions = operation === 'payment' ? [{ name: 'date', label: 'Data prevista do pagamento', type: 'date', required: true }]
       : operation === 'measurement' ? current.measurementFields : current.editFields;
     const form = element('form', 'lg-editor');
@@ -1068,7 +1048,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     for (const definition of definitions) {
       const type = String(definition.type ?? 'text').toLowerCase();
       const isCheck = ['boolean', 'checkbox', 'bool'].includes(type);
-      const control = element(definition.options?.length || type === 'select' ? 'select' : ['textarea', 'multiline', 'html'].includes(type) ? 'textarea' : 'input', 'lg-input');
+      const control = element(definition.options?.length || ['select', 'choice', 'lookup', 'enum'].includes(type)
+        ? 'select' : ['textarea', 'multiline', 'html'].includes(type) ? 'textarea' : 'input', 'lg-input');
       control.name = definition.name; control.required = Boolean(definition.required); control.dataset.lgLock = 'true';
       if (control.tagName === 'INPUT') {
         control.type = isCheck ? 'checkbox' : ['number', 'decimal', 'currency', 'integer'].includes(type) ? 'number'
@@ -1091,11 +1072,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       grid.append(label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control));
     }
     const actions = element('div', 'lg-actions');
-    actions.append(button('Revisar alterações', () => reviewEditor()), button('Cancelar edição', () => {
-      clearReview(); form.remove(); editor = null; notify('Edição cancelada.');
-    }));
+    actions.append(button('Revisar alterações', () => reviewEditor()), button('Cancelar edição', dismissDetail));
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
-    editor = { operation, form, controls, schemaState }; panel.insertBefore(form, reviewHost); focus(controls[0]?.control);
+    panel.insertBefore(form, panel.children[1] ?? reviewHost);
+    editor = { operation, form, controls, schemaState, pickers: bindSearchableFilterSelects(form) };
+    focus(form.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? form);
   }
   function reviewEditor() {
     if (!editor || busy) return;
@@ -1148,7 +1129,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (destroyed) return;
       if (pending.key) retryIds.delete(pending.key);
       if (pending.operation === 'attachment_add' && selectedUploads.get(pending.payload.id) === pending.file) selectedUploads.delete(pending.payload.id);
-      clearReview(); editor?.form.remove(); editor = null;
+      clearReview(); clearEditor();
       notify('Operação concluída.');
       needsDetailRefresh = true;
       if (pending.operation === 'delete') {

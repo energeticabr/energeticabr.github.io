@@ -3,7 +3,8 @@ let dialogSequence = 0;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
-export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit } = {}) {
+export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit,
+  actions = ["edit", "delete"] } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
   let epoch = 0;
@@ -277,7 +278,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   return Object.freeze({
     render(row) {
       const wrapper = element("div", "gallery-record-actions");
-      for (const action of ["edit", "delete"]) {
+      for (const action of actions) {
         const control = button(undefined, "data-gallery-action", action, () => {
           if (action === "edit") void edit(row, control);
           else openDelete(row, control);

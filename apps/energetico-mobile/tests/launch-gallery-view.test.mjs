@@ -68,11 +68,40 @@ function input(ctx, name, value, parent = ctx.root()) {
 }
 async function showDetail(ctx) {
   const card = ctx.root().querySelector('.lg-record');
-  const expand = card?.querySelector('.lg-record-expand[aria-expanded="false"]');
-  if (expand) expand.click();
-  button(ctx.root(), 'Detalhes').click(); await settle();
+  assert.ok(card?.querySelector('[data-gallery-action="edit"]'), 'launch pencil');
+  card.querySelector('[data-gallery-action="edit"]').click(); await settle();
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
+
+test('the launch pencil opens a searchable editing form without a separate details action', async t => {
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot() : detail({
+    editFields: [
+      { name: 'FORNECEDOR', label: 'Fornecedor', type: 'select', options: [
+        { value: 'Fornecedor A', label: 'Fornecedor A' },
+        { value: 'Fornecedor B', label: 'Fornecedor B' },
+      ] },
+      { name: 'QUANTIDADE', label: 'Quantidade', type: 'number' },
+    ],
+  }) });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.lg-record');
+  assert.equal(card.querySelector('[data-gallery-action="delete"]'), null);
+  assert.equal([...card.querySelectorAll('button')].some(control => control.textContent.trim() === 'Detalhes'), false);
+  card.querySelector('[data-gallery-action="edit"]').click(); await settle();
+  const editor = ctx.root().querySelector('.lg-detail .lg-editor');
+  assert.ok(editor, 'the pencil opens the edit form directly');
+  assert.equal(ctx.root().querySelector('.lg-detail .lg-data-table'), null);
+  assert.equal(editor.querySelector('[name="QUANTIDADE"]').type, 'number');
+  const supplier = editor.querySelector('[name="FORNECEDOR"]');
+  assert.equal(supplier.tagName, 'SELECT');
+  editor.querySelector('.sfs-trigger').click();
+  const search = editor.querySelector('.sfs-search');
+  search.value = 'fornecedor b';
+  search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Fornecedor B']);
+  editor.querySelector('.sfs-option').click();
+  assert.equal(supplier.value, 'Fornecedor B');
+});
 
 test('filters start collapsed so records are visible; details and review scroll into view', async t => {
   const ctx = await setup(t);
@@ -95,7 +124,7 @@ test('existing signature is previewed only as a safe embedded raster image', asy
   const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({item: {...row(), fields: {...row().fields, ASSINATURA: value}}})});
   await ctx.gallery.open(); await showDetail(ctx);
   assert.equal(ctx.root().querySelector('.lg-signature img')?.getAttribute('src'), png);
-  button(ctx.root(), 'Fechar detalhes').click();
+  button(ctx.root(), 'Fechar edição').click();
   value = 'https://untrusted.example/signature.png';
   await showDetail(ctx);
   assert.equal(ctx.root().querySelector('.lg-signature img'), null);
@@ -212,7 +241,7 @@ test('summary reproduces the PowerApps launch row with tolerant aliases and keep
     .some(label => label.textContent === 'Medição'), true);
   assert.match(ctx.root().querySelector('.lg-totals').textContent, /4\s+R\$\s*10,00/);
   button(record, 'Ver mais informações').click();
-  button(record, 'Detalhes').click(); await settle();
+  record.querySelector('[data-gallery-action="edit"]').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), {operation: 'detail', payload: {id: 3424}});
 });
 
@@ -319,7 +348,7 @@ test('launch cards keep a compact summary and reveal remaining fields only when 
   for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
     assert.ok(extra.textContent.includes(value), value);
   }
-  button(card, 'Detalhes').click(); await settle();
+  card.querySelector('[data-gallery-action="edit"]').click(); await settle();
   assert.deepEqual(ctx.calls.at(-1), { operation: 'detail', payload: { id: 3458 } });
 
   toggle.click();
@@ -686,16 +715,9 @@ test('launch summary formats SharePoint dates as dd/mm/yyyy and resolves the cre
   assert.doesNotMatch(record.textContent, /2026-09-24T03:00:00Z|2026-09-25T00:43:17Z|1073741822/);
 
   button(record, 'Ver mais informações').click();
-  button(record, 'Detalhes').click(); await settle();
-  const details = ctx.root().querySelector('.lg-data-table');
-  const detailValues = new Map([...details.querySelectorAll('tr')].map(line => [
-    line.querySelector('th').textContent,
-    line.querySelector('td').textContent,
-  ]));
-  assert.equal(detailValues.get('DATA DE COMPRA'), '24/09/2026');
-  assert.equal(detailValues.get('MODIFICAÇÕES'), '24/09/2026');
-  assert.equal(detailValues.get('ADICIONADO POR'), 'Bernardo Notini');
-  assert.doesNotMatch(details.textContent, /1073741822|2026-09-25T00:43:17Z/);
+  record.querySelector('[data-gallery-action="edit"]').click(); await settle();
+  assert.ok(ctx.root().querySelector('.lg-editor'), 'the edit form replaces the read-only detail table');
+  assert.equal(ctx.root().querySelector('.lg-data-table'), null);
 });
 
 test('launch creator lookup ids are never presented as person names when SharePoint omits the expanded identity', async t => {
@@ -757,7 +779,7 @@ test('launch rows keep the stable pre-parity layout while keeping attachments op
   assert.match(record.querySelector('.lg-record-badges').textContent, /PENDENTE DE APROVAÇÃO/i);
   assert.equal(record.querySelector('[data-lg-action="attachments"]'), null);
   assert.ok(record.querySelector('.lg-record-expand'), 'the row exposes its expand action');
-  assert.ok(record.querySelector('.lg-record-extra > .lg-button'), 'record details remain accessible after expanding');
+  assert.ok(record.querySelector('[data-gallery-action="edit"]'), 'the pencil opens the edit form');
 });
 
 test('launch cards show a PDF marker on the left when any PDF attachment exists', async t => {
@@ -1001,29 +1023,27 @@ test('snapshot failure is actionable, retry clears busy and empty results are ex
   assert.equal(button(ctx.root(), 'Próxima página').disabled, true);
 });
 
-test('details render human fields and readable HTML without executable or resource elements', async t => {
+test('the editor shows raw existing values without injecting description markup', async t => {
   const ctx = await setup(t);
   await ctx.gallery.open(); await showDetail(ctx);
   const panel = ctx.root().querySelector('.lg-detail');
-  assert.match(panel.textContent, /Primeira & segunda\s+Linha 2/);
-  assert.doesNotMatch(panel.textContent, /unsafe\(\)|<p>/);
-  assert.equal(panel.querySelector('script, img, iframe, svg'), null);
-  for (const label of ['FORNECEDOR', 'FILIAL', 'QUANTIDADE', 'UN', 'VALOR UNITÁRIO', 'FRETE', 'CONCLUÍDO']) assert.ok(panel.textContent.includes(label));
+  assert.equal(panel.querySelector('[name="DESCRIÇÃO"]').value, row().fields.DESCRIÇÃO);
+  assert.equal(panel.querySelector('script, iframe'), null);
+  assert.ok(panel.querySelector('[name="QUANTIDADE"]'));
+  assert.equal(panel.querySelector('table.lg-data-table'), null);
   assert.equal([...ctx.root().querySelectorAll('button')].some(b => /aprovar/i.test(b.textContent)), false);
 });
 
-test('details open as an over-gallery table and format every displayed date as dd/mm/yyyy', async t => {
+test('the pencil opens the over-gallery editing form and closes back to the gallery', async t => {
   const ctx = await setup(t);
   await ctx.gallery.open(); await showDetail(ctx);
   const panel = ctx.root().querySelector('.lg-detail');
   assert.equal(panel.getAttribute('role'), 'dialog');
   assert.equal(panel.getAttribute('aria-modal'), 'true');
   assert.ok(panel.classList.contains('lg-detail-modal'));
-  assert.ok(panel.querySelector('table.lg-data-table'));
-  assert.match(panel.textContent, /17\/09\/2026/);
-  assert.match(panel.textContent, /18\/09\/2026/);
-  assert.doesNotMatch(panel.textContent, /2026-09-17|2026-09-18T12:34:56Z/);
-  button(panel, 'Fechar detalhes').click();
+  assert.ok(panel.querySelector('form.lg-editor'));
+  assert.equal(panel.querySelector('table.lg-data-table'), null);
+  button(panel, 'Fechar edição').click();
   assert.equal(panel.hidden, true);
   assert.equal(ctx.root().hidden, false);
 });
@@ -1045,7 +1065,6 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
     return { ok: true };
   } });
   await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Editar').click();
   const field = input(ctx, 'QUANTIDADE', '3.75', ctx.root().querySelector('.lg-editor'));
   input(ctx, 'id', '17'); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor [name="QUANTIDADE"]'), field);
@@ -1064,12 +1083,12 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   assert.match(ctx.root().textContent, /Conflito/);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(mutations(ctx).length, 2);
-  assert.equal(ctx.root().querySelector('.lg-editor'), null);
+  assert.ok(ctx.root().querySelector('.lg-editor'), 'the updated launch returns to its edit form');
 });
 
 test('changing a reviewed input invalidates confirmation; closing and reopening never saves or loses the form', async t => {
   const ctx = await setup(t); await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Editar').click(); input(ctx, 'QUANTIDADE', '4');
+  input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'Revisar alterações').click(); input(ctx, 'QUANTIDADE', '5');
   assert.equal(ctx.root().querySelector('.lg-review')?.hidden ?? true, true);
   ctx.gallery.close(); await ctx.gallery.open();
@@ -1131,7 +1150,6 @@ test('measurement retry keeps requestId after refreshing a changed launch versio
   input(ctx, 'DATA', '2026-09-19'); input(ctx, 'QUANTIDADE', '1');
   button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
   button(ctx.root(), 'Cancelar confirmação').click(); button(ctx.root(), 'Cancelar edição').click();
-  button(ctx.root(), 'Fechar detalhes').click();
   version = '2026-09-19T13:00:00Z';
   await showDetail(ctx);
   button(ctx.root(), 'Aplicar medição').click();
@@ -1226,7 +1244,7 @@ test('stale detail responses are discarded and failed detail can be retried', as
     ? snapshot({ rows: [{ ...row(17), hasAttachments: false }, { ...row(18), hasAttachments: false }] })
     : ++count === 1 ? one.promise : count === 2 ? two.promise : detail({ item: row(18) }) });
   await ctx.gallery.open();
-  const buttons = [...ctx.root().querySelectorAll('[data-lg-action="details"]')];
+  const buttons = [...ctx.root().querySelectorAll('[data-gallery-action="edit"]')];
   buttons[0].click(); buttons[1].click();
   two.reject(new Error('Falha ao abrir')); await settle();
   one.resolve(detail()); await settle();
@@ -1249,7 +1267,7 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
   const form = ctx.root().querySelector('.lg-editor');
   input(ctx, 'QUANTIDADE', '12', form);
-  button(ctx.root(), 'Detalhes').click(); await settle();
+  ctx.root().querySelector('[data-gallery-action="edit"]').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), form);
   assert.equal(form.querySelector('[name="QUANTIDADE"]').value, '12');
   assert.equal(ctx.calls.filter(c => c.operation === 'detail').length, 1);
@@ -1310,13 +1328,13 @@ test('a confirmed mutation is never resent when its detail refresh fails', async
     return { ok: true };
   } });
   await ctx.gallery.open(); await showDetail(ctx);
-  button(ctx.root(), 'Editar').click(); input(ctx, 'QUANTIDADE', '4');
+  input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), null);
   assert.match(ctx.root().querySelector('.lg-detail').textContent, /Falha na atualização/);
   button(ctx.root().querySelector('.lg-detail'), 'Tentar novamente').click(); await settle();
   assert.equal(mutations(ctx).length, 1);
-  assert.equal(button(ctx.root(), 'Editar').disabled, false);
+  assert.ok(ctx.root().querySelector('.lg-editor'));
 });
 
 test('gallery stylesheet keeps tools/signature above it and hidden overlays out of hit testing', async t => {
@@ -1370,7 +1388,7 @@ test('pending file selection survives a successful edit and its asynchronous det
   const inputFile = ctx.root().querySelector('input[type=file]');
   Object.defineProperty(inputFile, 'files', { value: [file] });
   inputFile.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
-  button(ctx.root(), 'Editar').click(); input(ctx, 'QUANTIDADE', '8');
+  input(ctx, 'QUANTIDADE', '8');
   button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
   button(ctx.root(), 'Adicionar anexo').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false, 'the selected file must not be silently discarded by refresh');
@@ -1378,25 +1396,24 @@ test('pending file selection survives a successful edit and its asynchronous det
   assert.equal(uploads[0][1], file);
 });
 
-test('late pencil detail response cannot open an editor after the gallery is closed and reopened', async t => {
+test('late pencil response cannot overwrite an editor reopened in a new gallery session', async t => {
   const pending = deferred();
   let detailCount = 0;
   const item = { ...row(), hasAttachments: false };
   const ctx = await setup(t, { request: async operation => {
     if (operation === 'snapshot') return snapshot({ rows: [item] });
-    if (operation === 'detail' && ++detailCount === 2) return pending.promise;
+    if (operation === 'detail' && ++detailCount === 1) return pending.promise;
     return detail({ item });
   } });
   await ctx.gallery.open();
-  await showDetail(ctx);
   ctx.root().querySelector('[data-gallery-action="edit"]').click();
   await settle();
   ctx.gallery.close();
   await ctx.gallery.open();
-  assert.equal(ctx.root().querySelector('.lg-editor'), null);
-  pending.resolve(detail());
+  assert.ok(ctx.root().querySelector('.lg-editor'));
+  pending.resolve(detail({ item: { ...row(99), hasAttachments: false } }));
   await settle();
-  assert.equal(ctx.root().querySelector('.lg-editor'), null, 'old pencil action cannot edit a new gallery session');
+  assert.match(ctx.root().querySelector('.lg-detail-header').textContent, /#17/);
 });
 
 test('pencil brings the launch editing form into view', async t => {
