@@ -1117,6 +1117,7 @@ test("tocar em horário corrigido mostra RHID e ajuste e exige motivo para salva
   assert.match(dialog.textContent, /RHID.*17:03/s);
   assert.match(dialog.textContent, /Ajustado.*17:00/s);
   assert.match(dialog.textContent, /Relógio conferido/);
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "");
   root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
   assert.equal(submitted.length, 0);
   assert.match(root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]')?.textContent || "", /justificativa/i);
@@ -1221,16 +1222,59 @@ test("lacuna RHID abre com horário sugerido para confirmação, inclusive sexta
     const dom = new JSDOM('<main id="app"></main>');
     const root = dom.window.document.querySelector("#app");
     const view = createChatView(root);
+    const submitted = [];
+    view.on("rhid-attendance-adjust-save", event => submitted.push(event));
     const table = buildRhidAttendanceTable([{ Id: 90, ID_PESSOA_RHID: "90", NOME_COLABORADOR: "ANA",
       BATIDAS_RHID: "07:00; 12:00; 13:00" }]);
     view.render(signedInState({ messages: [{ id: "rhid-blank", role: "assistant", type: "poll", question: "RELATÓRIO RHID",
       options: [], detail_table: { ...table, reportDate } }] }));
     root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit2"]').click();
     assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, expected);
+    assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "NÃO APONTADO");
     assert.match(root.querySelector('[data-rhid-adjustment-dialog]').textContent, /Ajustado:\s*não informado/);
+    root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+    assert.deepEqual(submitted, [{ type: "rhid-attendance-adjust-save", messageId: "rhid-blank",
+      personKey: "rhid:90", slot: "exit2", time: expected, reason: "NÃO APONTADO" }]);
     view.destroy();
     dom.window.close();
   }
+});
+
+test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const submitted = [];
+  view.on("rhid-attendance-adjust-save", event => submitted.push(event));
+  const table = buildRhidAttendanceTable([{ Id: 90, ID_PESSOA_RHID: "90", NOME_COLABORADOR: "ANA",
+    BATIDAS_RHID: "07:00; 12:00; 13:00", ADMIN_AJUSTES: {
+      exit2: { time: "17:00", reason: "Registro anterior", actorName: "Bernardo", adjustedAt: "2026-10-01T03:00:00Z" },
+    } }]);
+  view.render(signedInState({ messages: [{ id: "rhid-blank-adjusted", role: "assistant", type: "poll",
+    question: "RELATÓRIO RHID", options: [], detail_table: { ...table, reportDate: "2026-09-28" } }] }));
+  root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit2"]').click();
+  const reason = root.querySelector('[data-role="rhid-adjustment-reason"]');
+  assert.equal(reason.value, "NÃO APONTADO");
+  reason.value = "Ajuste conferido com o colaborador";
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  assert.deepEqual(submitted, [{ type: "rhid-attendance-adjust-save", messageId: "rhid-blank-adjusted",
+    personKey: "rhid:90", slot: "exit2", time: "17:00", reason: "Ajuste conferido com o colaborador" }]);
+  view.destroy();
+  dom.window.close();
+});
+
+test("batidas RHID duplicadas não recebem justificativa de ponto não apontado", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const table = buildRhidAttendanceTable([{ Id: 91, ID_PESSOA_RHID: "91", NOME_COLABORADOR: "BIA",
+    BATIDAS_RHID: "07:00; 12:00; 13:00; 16:00; 16:10" }]);
+  view.render(signedInState({ messages: [{ id: "rhid-duplicates", role: "assistant", type: "poll",
+    question: "RELATÓRIO RHID", options: [], detail_table: { ...table, reportDate: "2026-09-28" } }] }));
+  root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit2"]').click();
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "");
+  view.destroy();
+  dom.window.close();
 });
 
 test("somente colaborador com presença pendente recebe botão de validação ao lado do nome", () => {
