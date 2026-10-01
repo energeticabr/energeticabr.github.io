@@ -1922,14 +1922,13 @@ test("tela de vencimento preenche DD/MM/AAAA, mascara a digitação e envia o pa
   dom.window.close();
 });
 
-test("lista expandida termina com Adicionar mais anexos e mostra fila para envio múltiplo", () => {
+test("popup consulta e encaminha anexos existentes sem oferecer bandeja de novos arquivos", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
   const commands = [];
-  view.on("pick-pending-provision-attachments", command => commands.push(command));
-  view.on("remove-pending-provision-upload", command => commands.push(command));
-  view.on("send-pending-provision-attachments", command => commands.push(command));
+  view.on("open-pending-provision-attachment", command => commands.push(command));
+  view.on("share-pending-provision-attachment", command => commands.push(command));
   view.render(signedInState({
     pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA" }] },
     pendingProvisionAttachments: { 306: { status: "available", items: [{ fileName: "existente.pdf", mimeType: "application/pdf", size: 2048 }] } },
@@ -1937,25 +1936,22 @@ test("lista expandida termina com Adicionar mais anexos e mostra fila para envio
     pendingProvisionUploads: { 306: { items: [{ fileName: "novo.pdf", size: 8, status: "ready" }], busy: false } },
   }));
 
-  const items = [...root.querySelectorAll(".chat-pending-provision__attachments > li")];
-  const add = root.querySelector('[data-action="pick-pending-provision-attachments"]');
-  assert.equal(items.at(-1).querySelector("[data-action]")?.dataset.action, "pick-pending-provision-attachments");
-  assert.match(items.at(-1).textContent, /Adicionar mais anexos/i);
-  assert.match(root.textContent, /novo\.pdf/);
-  assert.ok(root.querySelector('[data-action="send-pending-provision-attachments"]'));
-  add.click();
-  root.querySelector('[data-action="remove-pending-provision-upload"]').click();
-  root.querySelector('[data-action="send-pending-provision-attachments"]').click();
+  assert.equal(root.querySelectorAll(".chat-pending-provision__attachments > li").length, 1);
+  assert.equal(root.querySelector('[data-action="pick-pending-provision-attachments"]'), null);
+  assert.equal(root.querySelector('[data-action="send-pending-provision-attachments"]'), null);
+  assert.equal(root.querySelector(".chat-pending-provision__upload-queue"), null);
+  assert.doesNotMatch(root.textContent, /novo\.pdf|Adicionar mais anexos/);
+  root.querySelector('[data-action="open-pending-provision-attachment"]').click();
+  root.querySelector('[data-action="share-pending-provision-attachment"]').click();
   assert.deepEqual(commands.map(command => command.type), [
-    "pick-pending-provision-attachments", "remove-pending-provision-upload", "send-pending-provision-attachments",
+    "open-pending-provision-attachment", "share-pending-provision-attachment",
   ]);
-  assert.ok(commands.every(command => command.paymentId === "306"));
-  assert.equal(commands[1].uploadId, "novo.pdf");
+  assert.ok(commands.every(command => command.paymentId === "306" && command.fileName === "existente.pdf"));
   view.destroy();
   dom.window.close();
 });
 
-test("fila sem arquivos enviáveis explica conflitos e não habilita o envio", () => {
+test("estado de uma fila antiga não reaparece no popup de provisões", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -1963,19 +1959,14 @@ test("fila sem arquivos enviáveis explica conflitos e não habilita o envio", (
     pendingProvisions: { due: true, rows: [{ id: "306", supplier: "DIBRITA" }] },
     pendingProvisionAttachments: { 306: { status: "available", items: [{ fileName: "existente.pdf", size: 10 }] } },
     pendingProvisionExpandedPaymentId: "306",
-    pendingProvisionUploads: {
-      306: {
-        items: [{ fileName: "existente.pdf", size: 10, status: "conflict" }],
-        busy: false,
-        error: "Um arquivo com esse nome já existe.",
-      },
-    },
+    pendingProvisionUploads: { 306: {
+      items: [{ fileName: "existente.pdf", size: 10, status: "conflict" }],
+      busy: false, error: "Um arquivo com esse nome já existe.",
+    } },
   }));
-
-  const send = root.querySelector('[data-action="send-pending-provision-attachments"]');
-  assert.equal(send.disabled, true);
-  assert.match(root.textContent, /Nome repetido/);
-  assert.match(root.textContent, /já existe/i);
+  assert.equal(root.querySelector('[data-action="send-pending-provision-attachments"]'), null);
+  assert.doesNotMatch(root.textContent, /Nome repetido|já existe/i);
+  assert.ok(root.querySelector('[data-action="open-pending-provision-attachment"]'));
   view.destroy();
   dom.window.close();
 });
