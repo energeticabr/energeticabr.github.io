@@ -7280,19 +7280,21 @@ test("relatório RHID mostra estado de carregamento e erro sem remover a data", 
   errorDom.window.close();
 });
 
-test('filial da provisão fica recolhida e a seta funciona mesmo sem anexos', () => {
+test('filial e imóvel da provisão ficam recolhidos e a seta funciona mesmo sem anexos', () => {
   for (const status of ['available', 'empty', 'loading', 'error']) {
     const state = signedInState({ pendingProvisions: { due: true, rows: [{ id: '306', branch: 'Obra A', property: 'Imóvel A' }] },
       pendingProvisionAttachments: { 306: { status, items: status === 'available' ? [{ fileName: 'nota.pdf' }] : [] } } });
     const collapsed = new JSDOM(renderChatMarkup(state));
     const branch = collapsed.window.document.querySelector('[data-field="branch"]');
     assert.equal(branch.hidden, true, `filial recolhida com anexos ${status}`);
+    assert.equal(collapsed.window.document.querySelector('[data-field="property"]').hidden, true, `imóvel recolhido com anexos ${status}`);
     const arrow = collapsed.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]');
     assert.ok(arrow, `seta disponível com anexos ${status}`);
     assert.equal(arrow.disabled, false);
     assert.equal(arrow.getAttribute('aria-expanded'), 'false');
     assert.equal(commandFromTarget(arrow).paymentId, '306');
     assert.ok(arrow.getAttribute('aria-controls').split(' ').includes(branch.id));
+    assert.ok(arrow.getAttribute('aria-controls').split(' ').includes(collapsed.window.document.querySelector('[data-field="property"]').id));
     collapsed.window.close();
     const expanded = new JSDOM(renderChatMarkup({ ...state, pendingProvisionExpandedPaymentId: '306' }));
     assert.equal(expanded.window.document.querySelector('[data-field="branch"]').hidden, false);
@@ -7303,8 +7305,9 @@ test('filial da provisão fica recolhida e a seta funciona mesmo sem anexos', ()
 });
 
 
-test('filial fica recolhida também em provisões legadas sem ID', () => {
+test('filial e imóvel ficam recolhidos também em provisões legadas sem ID', () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({pendingProvisions: {due: true, rows: [{supplier: 'Fornecedor', branch: 'Obra A'}]}})));
   assert.equal(dom.window.document.querySelector('[data-field="branch"]').hidden, true);
+  assert.equal(dom.window.document.querySelector('[data-field="property"]').hidden, true);
   dom.window.close();
 });
