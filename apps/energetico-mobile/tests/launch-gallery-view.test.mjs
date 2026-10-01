@@ -609,10 +609,231 @@ test('order cluster requests one order by ID and only the LANCAMENTOS group, nev
   assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3451']);
 });
 
+test('pedido agrupado completa os dados de cada lançamento quando a busca por AGRUPAR devolve apenas IDs', async t => {
+  const first = row(3479);
+  first.fields = { ...first.fields, AGRUPAR: '348', DATA: '2026-09-30',
+    FORNECEDOR: 'JOSÉ GERALDO DOS SANTOS', CONTA: 'DINHEIRO',
+    PRODUTO: 'PEDREIRO', QUANTIDADE: 2, UN: 'DIÁRIA', 'VALOR UNITÁRIO': 250,
+    FRETE: 0, 'VALOR TOTAL': 500 };
+  first.total = 500;
+  first.hasAttachments = false;
+  const second = row(3478);
+  second.fields = { ...second.fields, AGRUPAR: '348', DATA: '2026-09-29',
+    FORNECEDOR: 'JOSÉ GERALDO DOS SANTOS', CONTA: 'DINHEIRO',
+    PRODUTO: 'PEDREIRO', QUANTIDADE: 2, UN: 'DIÁRIA', 'VALOR UNITÁRIO': 293,
+    FRETE: 0, 'VALOR TOTAL': 586 };
+  second.total = 586;
+  second.hasAttachments = false;
+  const details = new Map([['3479', first], ['3478', second]]);
+  const detailIds = [];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 1086 } }] }),
+    loadLaunchGroup: async () => [
+      { id: '3479', fields: { AGRUPAR: '348' } },
+      { id: '3478', fields: { AGRUPAR: '348' } },
+    ],
+    request: async (operation, payload) => {
+      if (operation === 'detail') {
+        detailIds.push(String(payload.id));
+        return detail({ item: details.get(String(payload.id)) });
+      }
+      return snapshot({ rows: [first] });
+    },
+  });
+  await ctx.gallery.open();
+  const trigger = ctx.root().querySelector('[data-cluster-kind="order"]');
+  assert.ok(trigger, 'pedido agrupado deve estar acessível na galeria');
+  trigger.click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  const rows = [...modal.querySelectorAll('[data-launch-id]')];
+  assert.deepEqual(rows.map(node => node.dataset.launchId), ['3479', '3478']);
+  assert.deepEqual(detailIds.sort(), ['3478', '3479']);
+  assert.match(rows[0].textContent, /JOSÉ GERALDO DOS SANTOS/);
+  assert.match(rows[0].textContent, /DINHEIRO/);
+  assert.match(rows[0].textContent, /PEDREIRO/);
+  assert.match(rows[0].textContent, /R\$\s*500,00/);
+  assert.match(modal.textContent, /Valores conferem/);
+});
+
+test('pedido usa campos completos do SharePoint sem abrir detalhes individuais e calcula o total', async t => {
+  const card = row(3479);
+  card.fields.AGRUPAR = '348';
+  card.hasAttachments = false;
+  const linked = [
+    { id: '3479', fields: { AGRUPAR: '348', DATA: '2026-09-30', FORNECEDOR: 'JOSÉ GERALDO',
+      CONTA: 'DINHEIRO', PRODUTO: 'PEDREIRO', QUANTIDADE: 2, 'VALOR UNITÁRIO': 250,
+      FRETE: 0, UN: 'DIÁRIA', 'CONCLUÍDO': 'PEDIDO EMPENHADO' } },
+    { id: '3478', fields: { AGRUPAR: '348', DATA: '2026-09-29', FORNECEDOR: 'JOSÉ GERALDO',
+      CONTA: 'DINHEIRO', PRODUTO: 'PEDREIRO', QUANTIDADE: 2, 'VALOR UNITÁRIO': 293,
+      FRETE: 0, UN: 'DIÁRIA', 'CONCLUÍDO': 'PEDIDO EMPENHADO' } },
+  ];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 1086 } }] }),
+    loadLaunchGroup: async () => linked,
+    request: async operation => {
+      if (operation === 'detail') throw new Error('Não deve consultar detalhes individuais');
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  const rows = [...modal.querySelectorAll('[data-launch-id]')];
+  assert.deepEqual(rows.map(node => node.dataset.launchId), ['3479', '3478']);
+  assert.match(rows[0].textContent, /JOSÉ GERALDO/);
+  assert.match(rows[0].textContent, /R\$\s*500,00/);
+  assert.match(modal.textContent, /Valores conferem/);
+  assert.match(modal.textContent, /R\$\s*1\.086,00/);
+});
+
+test('pedido considera frete vazio como zero e arredonda cada lançamento antes de somar', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const linked = ['3479', '3478'].map(id => ({ id, fields: {
+    AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', QUANTIDADE: 0.5,
+    'VALOR UNITÁRIO': 0.01, FRETE: null,
+  } }));
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 0.02 } }] }),
+    loadLaunchGroup: async () => linked,
+    request: async operation => {
+      if (operation === 'detail') throw new Error('Não deve consultar detalhes individuais');
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.match(modal.textContent, /Valores conferem/);
+  assert.match(modal.textContent, /R\$\s*0,02/);
+});
+
+test('pedido usa arredondamento decimal half-up idêntico ao servidor', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 10.08 } }] }),
+    loadLaunchGroup: async () => [{ id: '3479', fields: {
+      AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', QUANTIDADE: 0.5,
+      'VALOR UNITÁRIO': 20.15, FRETE: null,
+    } }],
+    request: async operation => {
+      if (operation === 'detail') throw new Error('Não deve consultar detalhes individuais');
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.match(modal.textContent, /Valores conferem/);
+  assert.match(modal.textContent, /R\$\s*10,08/);
+});
+
+test('contingência limita detalhes individuais de grupos grandes e marca restantes incompletos', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const ids = Array.from({ length: 10 }, (_, index) => String(3479 - index));
+  const requested = [];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 10 } }] }),
+    loadLaunchGroup: async () => ids.map(id => ({ id, fields: { AGRUPAR: '348' } })),
+    request: async (operation, payload) => {
+      if (operation === 'detail') {
+        requested.push(String(payload.id));
+        return detail({ item: { id: String(payload.id), fields: {
+          AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', 'VALOR TOTAL': 1,
+        } } });
+      }
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.deepEqual(requested, ids.slice(0, 8));
+  assert.equal(modal.querySelectorAll('[data-launch-id]').length, 10);
+  assert.match(modal.textContent, /lançamentos 3471, 3470 ainda não foram carregados/i);
+  assert.match(modal.textContent, /Total incompleto/i);
+  assert.doesNotMatch(modal.textContent, /Valores conferem/i);
+  button(modal, 'Carregar próximos lançamentos').click();
+  await settle(); await settle();
+  assert.deepEqual(requested, ids);
+  assert.match(modal.textContent, /Valores conferem/);
+});
+
+test('lote adicional que não responde libera o popup e pode ser repetido sem aceitar resposta tardia', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const ids = Array.from({ length: 9 }, (_, index) => String(3479 - index));
+  const delayed = deferred(); let attempts = 0;
+  const ctx = await setup(t, {
+    clusterTimeoutMs: 20,
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 9 } }] }),
+    loadLaunchGroup: async () => ids.map(id => ({ id, fields: { AGRUPAR: '348' } })),
+    request: async (operation, payload) => {
+      if (operation === 'detail') {
+        if (String(payload.id) === '3471' && attempts++ === 0) return delayed.promise;
+        return detail({ item: { id: String(payload.id), fields: {
+          AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', 'VALOR TOTAL': 1,
+        } } });
+      }
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  button(modal, 'Carregar próximos lançamentos').click();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(modal.getAttribute('aria-busy'), 'false');
+  assert.match(modal.textContent, /demorou mais|tempo limite/i);
+  button(modal, 'Carregar próximos lançamentos').click();
+  await settle(); await settle();
+  assert.match(modal.textContent, /Valores conferem/);
+  delayed.resolve(detail({ item: { id: '3471', fields: { AGRUPAR: '999', 'VALOR TOTAL': 999 } } }));
+  await settle();
+  assert.match(modal.textContent, /Valores conferem/);
+});
+
+test('falha de um detalhe preserva os outros lançamentos e mantém a conciliação incompleta', async t => {
+  const first = row(3479);
+  first.fields.AGRUPAR = '348';
+  first.fields['VALOR TOTAL'] = 500;
+  first.total = 500;
+  first.hasAttachments = false;
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 1086 } }] }),
+    loadLaunchGroup: async () => [
+      { id: '3479', fields: { AGRUPAR: '348' } },
+      { id: '3478', fields: { AGRUPAR: '348' } },
+    ],
+    request: async (operation, payload) => {
+      if (operation === 'detail' && String(payload.id) === '3479') return detail({ item: first });
+      if (operation === 'detail') throw new Error('Falha na consulta do lançamento 3478');
+      return snapshot({ rows: [first] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3479', '3478']);
+  assert.match(modal.textContent, /lançamento 3478 não pôde ser carregado/i);
+  assert.match(modal.textContent, /R\$\s*500,00/);
+  assert.match(modal.textContent, /1 lançamento\(s\) sem valor total/i);
+  assert.doesNotMatch(modal.textContent, /Valores conferem/i);
+});
+
 test('order reconciliation stays indeterminate when linked launch amounts are missing', async t => {
   const item = row(3451);
   item.total = undefined;
   item.fields = { ...item.fields, AGRUPAR: '334' };
+  delete item.fields['VALOR UNITÁRIO'];
   const ctx = await setup(t, {
     loadOrderSnapshot: async () => ({ rows: [{ id: '334', fields: { VALORTOTAL: 0 } }] }),
     request: async (operation, payload) => operation !== 'snapshot' ? detail({ item })

@@ -2,6 +2,7 @@ import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import Decimal from 'decimal.js';
 
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
@@ -11,6 +12,7 @@ const FILTERS = [
 const SORTS = ['MAIOR ID', 'MAIOR DATA', 'MAIOR DATA PGTO PREVISTO', 'MAIOR DATA PGTO EFETUADO',
   'CRIADO MAIS RECENTE', 'CRIADO MAIS ANTIGO', 'MODIFICADO MAIS RECENTE', 'MODIFICADO MAIS ANTIGO'];
 const TOTALS = [['paid', 'Pago']];
+const MAX_SPARSE_ORDER_DETAILS = 8;
 const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const display = value => {
   if (value == null) return '';
@@ -631,7 +633,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return [...rowsById.values()];
   }
   function amountFor(item) {
-    return numericAmount(field(item?.fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
+    const fields = item?.fields;
+    const explicit = numericAmount(field(fields, 'VALOR TOTAL', 'TOTAL') ?? item?.total);
+    if (explicit != null) return explicit;
+    const quantity = numericAmount(field(fields, 'QUANTIDADE', 'QTD'));
+    const unitPrice = numericAmount(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'));
+    const freight = numericAmount(field(fields, 'FRETE')) ?? 0;
+    if (quantity == null || unitPrice == null) return null;
+    return new Decimal(quantity).times(unitPrice).plus(freight)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
   }
   function summarizeLaunchAmounts(rows) {
     let total = 0, missing = 0;
@@ -663,7 +673,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const quantityLabel = [quantity, unit].filter(value => value != null && display(value).trim()).map(display).join(' ');
       const cells = mode === 'order'
         ? [item.id, fieldText('DATA', date) || '—', field(fields, 'FORNECEDOR') ?? '—',
-          field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO') ?? '—',
+          field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO', 'CONTA') ?? '—',
           field(fields, 'PRODUTO', 'DESCRIÇÃO', 'DESCRICAO') ?? '—', quantityLabel || '—',
           fieldText('VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')) || '—',
           fieldText('FRETE', field(fields, 'FRETE')) || '—', amount == null ? fieldText('VALOR TOTAL', field(fields, 'VALOR TOTAL')) || '—' : money(amount),
@@ -788,21 +798,94 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
         const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
-        const linked = (Array.isArray(launchRows) ? launchRows : [])
+        const linkedIds = (Array.isArray(launchRows) ? launchRows : [])
           .filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
-        const content = [];
-        if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
-        if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
-        if (order) {
-          const headerData = renderOrderHeader(order, rawValue, linked);
-          content.push(headerData.overview, headerData.reconcile);
+        const linked = [...linkedIds];
+        const sparse = linkedIds.map((item, index) => ({ item, index })).filter(({ item }) =>
+          ['DATA', 'FORNECEDOR', 'PRODUTO', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE']
+            .filter(name => field(item.fields, name) != null).length < 3);
+        const failedIds = [];
+        let sparseCursor = 0;
+        let loadMoreError = '';
+        const current = () => active(epoch) && version === clusterVersion && !clusterPanel.hidden;
+        async function hydrateNext(batchSignal, isLive = current) {
+          const fallback = sparse.slice(sparseCursor, sparseCursor + MAX_SPARSE_ORDER_DETAILS);
+          for (let offset = 0; offset < fallback.length; offset += 4) {
+            const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }) =>
+              request('detail', { id: item.id }, { signal: batchSignal })));
+            if (!isLive()) return;
+            batch.forEach((result, index) => {
+              const expectedId = String(fallback[offset + index].item.id);
+              const item = result.status === 'fulfilled' ? result.value?.item : null;
+              if (String(item?.id) !== expectedId
+                || clusterKey(field(item?.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
+                failedIds.push(expectedId);
+              } else {
+                linked[fallback[offset + index].index] = item;
+              }
+            });
+          }
+          if (isLive()) sparseCursor += fallback.length;
         }
-        if (linked.length) {
-          content.push(element('h3', 'lg-cluster-table-title', `Lançamentos vinculados ao pedido ${rawValue}`));
-          const listing = launchTable(linked, 'order', rawValue);
-          content.push(listing.table, listing.totals);
+        async function loadMore() {
+          if (!current() || clusterPanel.getAttribute('aria-busy') === 'true') return;
+          const nextController = new AbortController();
+          clusterAbortController = nextController;
+          clusterPanel.setAttribute('aria-busy', 'true');
+          let timedOut = false;
+          const timeoutMarker = Symbol('load-more-timeout');
+          const deadline = new Promise(resolve => {
+            clusterTimer = setTimeout(() => {
+              timedOut = true;
+              nextController.abort();
+              resolve(timeoutMarker);
+            }, timeout);
+          });
+          try {
+            const outcome = await Promise.race([
+              hydrateNext(nextController.signal, () => current() && !timedOut), deadline,
+            ]);
+            loadMoreError = outcome === timeoutMarker
+              ? 'A consulta dos próximos lançamentos demorou mais que o esperado. Tente novamente.' : '';
+            if (current()) renderOrderPanel();
+          } catch (error) {
+            loadMoreError = failure(error, 'Não foi possível carregar os próximos lançamentos');
+            if (current()) renderOrderPanel();
+          } finally {
+            if (clusterAbortController === nextController) {
+              clearTimeout(clusterTimer);
+              clusterTimer = null;
+              clusterAbortController = null;
+            }
+            if (current()) clusterPanel.setAttribute('aria-busy', 'false');
+          }
         }
-        clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
+        function renderOrderPanel() {
+          const pendingIds = sparse.slice(sparseCursor).map(({ item }) => String(item.id));
+          const content = [];
+          if (loadMoreError) content.push(element('p', 'lg-error', loadMoreError));
+          if (failedIds.length) content.push(element('p', 'lg-error', failedIds.length === 1
+            ? `O lançamento ${failedIds[0]} não pôde ser carregado. O total permanece incompleto; reabra o pedido para tentar novamente.`
+            : `Os lançamentos ${failedIds.join(', ')} não puderam ser carregados. O total permanece incompleto; reabra o pedido para tentar novamente.`));
+          if (pendingIds.length) content.push(element('p', 'lg-hint',
+            `Os lançamentos ${pendingIds.join(', ')} ainda não foram carregados. O total permanece incompleto.`));
+          if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
+          if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
+          if (order) {
+            const headerData = renderOrderHeader(order, rawValue, linked);
+            content.push(headerData.overview, headerData.reconcile);
+          }
+          if (linked.length) {
+            content.push(element('h3', 'lg-cluster-table-title', `Lançamentos vinculados ao pedido ${rawValue}`));
+            const listing = launchTable(linked, 'order', rawValue);
+            content.push(listing.table, listing.totals);
+          }
+          if (pendingIds.length) content.push(button('Carregar próximos lançamentos', () => { void loadMore(); }, { locked: false }));
+          clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
+        }
+        await hydrateNext(signal);
+        if (!current()) return;
+        renderOrderPanel();
       }
       focus(closeButton);
     } catch (error) {

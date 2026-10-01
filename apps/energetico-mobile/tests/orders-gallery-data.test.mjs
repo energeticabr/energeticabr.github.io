@@ -377,9 +377,38 @@ test("filtra LANCAMENTOS por AGRUPAR no SharePoint e pagina somente as linhas co
   assert.deepEqual(rows.map(row => row.id), ["3451", "3449"]);
   assert.deepEqual(calls, [
     ["resolveList", "personal", ["LANCAMENTOS"], { signal }],
-    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
-    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields($select=AGRUPAR,UN,field_2,field_5,field_7,field_8,field_9,field_10,field_14,field_19)&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields($select=AGRUPAR,UN,field_2,field_5,field_7,field_8,field_9,field_10,field_14,field_19)&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
   ]);
+});
+
+test("pedido agrupado traduz os nomes internos de LANCAMENTOS sem consultar cada item novamente", async () => {
+  const calls = [];
+  const data = galleryData.createLaunchClusterData({ repository: {
+    async resolveList() { return { status: "resolved", id: "list-lancamentos" }; },
+    async getItemsPage(_site, _list, query) {
+      calls.push(query);
+      return { items: [{ id: "3479", fields: {
+        AGRUPAR: "348", field_2: "2026-09-30", field_5: "JOSÉ GERALDO DOS SANTOS",
+        field_7: "PEDREIRO", field_8: 2, field_9: 250, field_10: 0,
+        field_14: "DINHEIRO", field_19: "PEDIDO EMPENHADO", UN: "DIÁRIA",
+      } }], hasMore: false };
+    },
+    async getItem() { throw new Error("O agrupamento completo não deve consultar cada item."); },
+  } });
+
+  const rows = await data.loadGroup("348");
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].fields.DATA, "2026-09-30");
+  assert.equal(rows[0].fields.FORNECEDOR, "JOSÉ GERALDO DOS SANTOS");
+  assert.equal(rows[0].fields.PRODUTO, "PEDREIRO");
+  assert.equal(rows[0].fields.QUANTIDADE, 2);
+  assert.equal(rows[0].fields["VALOR UNITÁRIO"], 250);
+  assert.equal(rows[0].fields.FRETE, 0);
+  assert.equal(rows[0].fields.CONTA, "DINHEIRO");
+  assert.equal(rows[0].fields["CONCLUÍDO"], "PEDIDO EMPENHADO");
+  assert.match(calls[0], /fields\(\$select=.*field_9/);
 });
 
 test("recusa valores de AGRUPAR que não são IDs numéricos antes de consultar o SharePoint", async () => {
