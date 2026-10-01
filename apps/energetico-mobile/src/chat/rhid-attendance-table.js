@@ -168,6 +168,13 @@ export function rhidUpdateLabel(report = {}) {
     : `ÚLTIMA COLETA DO RHID ÀS ${time}`;
 }
 
+export function suggestedRhidAdjustmentTime(slot, reportDate) {
+  if (!isValidRhidReportDate(reportDate)) return "";
+  const day = new Date(`${reportDate}T12:00:00Z`).getUTCDay();
+  if (day === 0 || day === 6) return "";
+  return { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: day === 5 ? "16:00" : "17:00" }[slot] || "";
+}
+
 export function buildRhidAttendanceTable(rows = []) {
   const people = new Map();
   for (const row of rows) {
