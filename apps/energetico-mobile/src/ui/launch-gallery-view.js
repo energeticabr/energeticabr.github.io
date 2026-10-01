@@ -11,6 +11,7 @@ const FILTERS = [
 const SORTS = ['MAIOR ID', 'MAIOR DATA', 'MAIOR DATA PGTO PREVISTO', 'MAIOR DATA PGTO EFETUADO',
   'CRIADO MAIS RECENTE', 'CRIADO MAIS ANTIGO', 'MODIFICADO MAIS RECENTE', 'MODIFICADO MAIS ANTIGO'];
 const TOTALS = [['paid', 'Pago']];
+const MAX_SPARSE_ORDER_DETAILS = 8;
 const money = value => Number(value ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const display = value => {
   if (value == null) return '';
@@ -636,8 +637,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (explicit != null) return explicit;
     const quantity = numericAmount(field(fields, 'QUANTIDADE', 'QTD'));
     const unitPrice = numericAmount(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'));
-    const freight = numericAmount(field(fields, 'FRETE'));
-    return quantity == null || unitPrice == null || freight == null ? null : quantity * unitPrice + freight;
+    const freight = numericAmount(field(fields, 'FRETE')) ?? 0;
+    if (quantity == null || unitPrice == null) return null;
+    const raw = quantity * unitPrice + freight;
+    return Math.sign(raw) * Math.round((Math.abs(raw) + Number.EPSILON) * 100) / 100;
   }
   function summarizeLaunchAmounts(rows) {
     let total = 0, missing = 0;
@@ -798,21 +801,22 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
           .filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
         const linked = [...linkedIds];
         const sparse = linkedIds.map((item, index) => ({ item, index })).filter(({ item }) =>
-          !['DATA', 'FORNECEDOR', 'PRODUTO', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE']
-            .some(name => field(item.fields, name) != null));
-        const failedIds = [];
-        for (let offset = 0; offset < sparse.length; offset += 4) {
-          const batch = await Promise.allSettled(sparse.slice(offset, offset + 4).map(({ item }) =>
+          ['DATA', 'FORNECEDOR', 'PRODUTO', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE']
+            .filter(name => field(item.fields, name) != null).length < 3);
+        const failedIds = sparse.slice(MAX_SPARSE_ORDER_DETAILS).map(({ item }) => String(item.id));
+        const fallback = sparse.slice(0, MAX_SPARSE_ORDER_DETAILS);
+        for (let offset = 0; offset < fallback.length; offset += 4) {
+          const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }) =>
             request('detail', { id: item.id }, { signal })));
           if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
           batch.forEach((result, index) => {
-            const expectedId = String(sparse[offset + index].item.id);
+            const expectedId = String(fallback[offset + index].item.id);
             const item = result.status === 'fulfilled' ? result.value?.item : null;
             if (String(item?.id) !== expectedId
               || clusterKey(field(item?.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
               failedIds.push(expectedId);
             } else {
-              linked[sparse[offset + index].index] = item;
+              linked[fallback[offset + index].index] = item;
             }
           });
         }

@@ -690,6 +690,56 @@ test('pedido usa campos completos do SharePoint sem abrir detalhes individuais e
   assert.match(modal.textContent, /R\$\s*1\.086,00/);
 });
 
+test('pedido considera frete vazio como zero e arredonda cada lançamento antes de somar', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const linked = ['3479', '3478'].map(id => ({ id, fields: {
+    AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', QUANTIDADE: 0.5,
+    'VALOR UNITÁRIO': 0.01, FRETE: null,
+  } }));
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 0.02 } }] }),
+    loadLaunchGroup: async () => linked,
+    request: async operation => {
+      if (operation === 'detail') throw new Error('Não deve consultar detalhes individuais');
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.match(modal.textContent, /Valores conferem/);
+  assert.match(modal.textContent, /R\$\s*0,02/);
+});
+
+test('contingência limita detalhes individuais de grupos grandes e marca restantes incompletos', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const ids = Array.from({ length: 10 }, (_, index) => String(3479 - index));
+  const requested = [];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 10 } }] }),
+    loadLaunchGroup: async () => ids.map(id => ({ id, fields: { AGRUPAR: '348' } })),
+    request: async (operation, payload) => {
+      if (operation === 'detail') {
+        requested.push(String(payload.id));
+        return detail({ item: { id: String(payload.id), fields: {
+          AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', 'VALOR TOTAL': 1,
+        } } });
+      }
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.deepEqual(requested, ids.slice(0, 8));
+  assert.equal(modal.querySelectorAll('[data-launch-id]').length, 10);
+  assert.match(modal.textContent, /lançamentos 3471, 3470 não puderam ser carregados/i);
+  assert.match(modal.textContent, /Total incompleto/i);
+  assert.doesNotMatch(modal.textContent, /Valores conferem/i);
+});
+
 test('falha de um detalhe preserva os outros lançamentos e mantém a conciliação incompleta', async t => {
   const first = row(3479);
   first.fields.AGRUPAR = '348';
