@@ -1263,6 +1263,29 @@ test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar",
   dom.window.close();
 });
 
+test("gerar relatório RHID não volta o foco ao calendário durante a consulta", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ messages: [{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS",
+    options: [{ id: "hr", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" }],
+  }] }));
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  assert.ok(dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'));
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+
+  assert.equal(
+    dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'),
+    false,
+    "a atualização não deve focar novamente um dia pequeno e deslocar a janela no celular",
+  );
+  view.destroy();
+  dom.window.close();
+});
+
 test("batidas RHID duplicadas não recebem justificativa de ponto não apontado", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");

@@ -4943,9 +4943,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
-    if (rhidAttendanceReportOpen) {
+    if (rhidAttendanceReportOpen && !rhidAttendanceReportBusy && !rhidAttendanceReportError) {
       (root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]')
-        || root.querySelector('[data-action="cancel-rhid-attendance-report"]'))?.focus?.();
+        || root.querySelector('[data-action="cancel-rhid-attendance-report"]'))?.focus?.({ preventScroll: true });
     }
     // SIGNATURE_GESTURE_LOCK_START: signature-pad-mount
     if (signaturePadOpen) setupSignaturePad();
