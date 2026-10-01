@@ -6311,6 +6311,93 @@ test("prioriza duas casas no total das linhas de lançamento", () => {
   assert.match(markup, /class="chat-launch-total"/);
 });
 
+test("confirmação de lançamento único mostra valores preenchidos antes das ações", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR UNITÁRIO", value: "175,3333333" },
+      { label: "QUANTIDADE", value: "3" },
+      { label: "FRETE", value: "12,50" },
+      { label: "VALOR TOTAL DO PEDIDO", value: "R$ 538,50" },
+    ] },
+    messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
+      question: "✅ CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?",
+      options: [{ id: "yes", label: "✅ SIM" }, { id: "edit", label: "✏️ EDITAR" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const card = dom.window.document.querySelector(".chat-choice-card");
+  const table = card.querySelector('[aria-label="Conferência do lançamento único"]');
+  assert.ok(table);
+  assert.deepEqual([...table.querySelectorAll("dt")].map(node => node.textContent),
+    ["VLOR UN.", "QTD", "FRETE", "TOTAL"]);
+  assert.deepEqual([...table.querySelectorAll("dd")].map(node => node.textContent.replace(/\s/g, " ").trim()),
+    ["R$ 175,3333333", "3", "R$ 12,50", "R$ 538,50"]);
+  assert.ok(card.querySelector("p").compareDocumentPosition(table) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(table.compareDocumentPosition(card.querySelector('[data-reply-id="yes"]')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  dom.window.close();
+});
+
+test("não mostra conferência de lançamento único na confirmação de múltiplas linhas", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR UNITÁRIO", value: "100" }, { label: "QUANTIDADE", value: "2" },
+    ] },
+    messages: [{ id: "confirmar-lancamentos", role: "assistant", type: "poll",
+      question: "CONFIRMA A CRIAÇÃO DESTES LANÇAMENTOS NO SHAREPOINT?",
+      options: [{ id: "yes", label: "SIM" }],
+    }],
+  }));
+  assert.doesNotMatch(markup, /Conferência do lançamento único/);
+});
+
+test("total da conferência usa o cálculo informado pela VM, não o valor unitário arredondado", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR UNITÁRIO", value: "R$ 175,33" },
+      { label: "QUANTIDADE", value: "3" },
+      { label: "FRETE", value: "R$ 0,00" },
+      { label: "VALOR TOTAL DO PEDIDO", value: "R$ 526,00" },
+    ] },
+    messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
+      question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?", options: [{ id: "confirm_yes", label: "SIM" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const values = [...dom.window.document.querySelectorAll(".chat-single-launch-confirmation dd")].map(node => node.textContent);
+  assert.deepEqual(values, ["R$ 175,33", "3", "R$ 0,00", "R$ 526,00"]);
+  dom.window.close();
+});
+
+test("não inventa total quando a VM ainda não o informou", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR UNITÁRIO", value: "100" }, { label: "QUANTIDADE", value: "2" },
+    ] },
+    messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
+      question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?", options: [{ id: "confirm_yes", label: "SIM" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  assert.equal(dom.window.document.querySelector(".chat-single-launch-confirmation > div:last-child dd")?.textContent, "—");
+  dom.window.close();
+});
+
+test("não reabre a tabela em uma confirmação antiga durante a edição", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR UNITÁRIO", value: "100" },
+      { label: "VALOR TOTAL DO PEDIDO", value: "R$ 100,00" },
+    ] },
+    messages: [
+      { id: "confirmar-antigo", role: "assistant", type: "poll",
+        question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?", options: [{ id: "confirm_edit", label: "EDITAR" }] },
+      { id: "editar", role: "assistant", type: "poll", question: "QUAL CAMPO DESEJA EDITAR?",
+        options: [{ id: "unit", label: "VALOR UNITÁRIO" }] },
+    ],
+  }));
+  assert.doesNotMatch(markup, /Conferência do lançamento único/);
+});
+
 test("compacta linhas de contrato com cabeçalhos abreviados, números centralizados e qtd vazia como hífen", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: {

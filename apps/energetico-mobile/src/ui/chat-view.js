@@ -15,6 +15,7 @@ import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 import { provisionDateKey, provisionDueState, provisionNumericValue } from "../chat/pending-provision-dates.js";
+import Decimal from "decimal.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
@@ -1164,6 +1165,42 @@ function presenceDateSummaryMarkup(summary) {
   return `<div class="chat-presence-date-summary" role="status"><strong>📅 ${escapeHtml(date)}</strong><span>${count} presença(s) pendente(s) para esta data.</span><small>Use “VER OUTRAS DATAS” para consultar outros dias.</small></div>`;
 }
 
+function singleLaunchConfirmationMarkup(message, activeFlow) {
+  const question = String(message?.question || message?.prompt || "").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR");
+  if (activeFlow?.id !== "launch" || !/CONFIRMA A CRIACAO DESTE LANCAMENTO\b/.test(question)) return "";
+  const rows = Array.isArray(activeFlow.rows) ? activeFlow.rows : [];
+  const field = (...names) => rows.find(row => names.includes(String(row?.label || "").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/[^A-Z0-9]+/g, " ").trim()))?.value;
+  const unit = field("VALOR UNITARIO", "VALOR UN", "VLOR UN");
+  const quantity = field("QUANTIDADE", "QTD");
+  const freight = field("FRETE");
+  const statedTotal = field("VALOR TOTAL DO PEDIDO", "VALOR TOTAL", "TOTAL");
+  if (unit == null && quantity == null && freight == null && statedTotal == null) return "";
+  const parse = value => {
+    const numeric = String(value ?? "").trim().replace(/^R\$\s*/i, "").replace(/\s/g, "");
+    if (!/^-?[\d.,]+$/.test(numeric)) return null;
+    const normalized = numeric.includes(",") ? numeric.replace(/\./g, "").replace(",", ".") : numeric;
+    try { return new Decimal(normalized); } catch { return null; }
+  };
+  const money = (value, preservePrecision = false) => {
+    if (value == null) return "—";
+    const [whole, fraction] = value.toFixed(preservePrecision ? Math.max(2, value.decimalPlaces()) : 2).split(".");
+    return `R$ ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${fraction}`;
+  };
+  const unitNumber = parse(unit);
+  const quantityNumber = parse(quantity);
+  const freightNumber = parse(freight);
+  const totalNumber = parse(statedTotal);
+  const cells = [
+    ["VLOR UN.", money(unitNumber, true)],
+    ["QTD", quantityNumber ? quantityNumber.toString().replace(".", ",") : "—"],
+    ["FRETE", money(freightNumber)],
+    ["TOTAL", money(totalNumber?.toDecimalPlaces(2, Decimal.ROUND_HALF_UP))],
+  ];
+  return `<dl class="chat-single-launch-confirmation" aria-label="Conferência do lançamento único">${cells.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>`;
+}
+
 function delegatedTaskRows(message, snapshot) {
   if (snapshot && Array.isArray(snapshot.rows)) {
     return snapshot.rows.map(row => ({
@@ -1230,7 +1267,7 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
   return "<div class=\"chat-epi-product-select chat-choice-list\">" + rows + selectAll + finalize + "</div>";
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
+function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1385,7 +1422,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       : `<div class="${choiceListClass}${launchPaymentSummary ? " chat-choice-list--launch-payment" : ""}">${choices}</div>`
     : "";
   const epiMarkup = isEpiProductSelection
-    ? renderEpiProductSelection(choiceOptions, busy, attendanceCurrent, attendanceCurrent ? message.epiSelectedProductIds || [] : [])
+    ? renderEpiProductSelection(choiceOptions, busy, currentPoll, currentPoll ? message.epiSelectedProductIds || [] : [])
     : "";
   const attendanceMarkup = isAttendanceMultiSelect ? (() => {
     const selected = new Set(attendanceSelectedIds.map(String));
@@ -1396,18 +1433,18 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
       const replyId = draftReplyId(option);
       const match = String(replyId).match(/^(?:choice:registro_presenca_pendente:)?(\d+)$/);
       if (!match) {
-        controls.push(pollButton(option, busy || !attendanceCurrent));
+        controls.push(pollButton(option, busy || !currentPoll));
         continue;
       }
       const id = match[1];
       visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
-      records.push(`<div class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !attendanceCurrent ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
+      records.push(`<div class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
     }
     const selectAll = visibleIds.length
-      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !attendanceCurrent ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
+      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
       : "";
-    return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !attendanceCurrent || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
+    return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !currentPoll || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
     const selected = new Set(launchPayrollSelectedIds.map(String));
@@ -1442,6 +1479,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu ? "" : `<p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
     ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh, activeFlow)}
@@ -1549,7 +1587,7 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
@@ -1559,7 +1597,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, attendanceCurrent, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2268,7 +2306,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceCurrent: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${visibleMessages.length ? visibleMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
