@@ -1947,6 +1947,27 @@ export function createAppController({
     return day ? generateRhidAttendanceReport(day, { replaceMessageId: id }) : false;
   }
 
+  async function loadRhidAttendanceMonth({ value } = {}) {
+    const month = String(value || "");
+    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month) || !account || stopped || typeof client.getRhidAttendanceMonth !== "function") {
+      view.setRhidAttendanceMonthStatus?.({ month, error: "Calendário RHID indisponível nesta sessão." });
+      return false;
+    }
+    const reportAccount = account;
+    const reportRevision = sessionRevision;
+    try {
+      const summary = await client.getRhidAttendanceMonth(month);
+      if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
+      view.setRhidAttendanceMonthStatus?.({ month, presentDates: summary.presentDates });
+      return true;
+    } catch (error) {
+      if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
+        view.setRhidAttendanceMonthStatus?.({ month, error: "Não foi possível consultar as presenças do mês. Tente novamente." });
+      }
+      return false;
+    }
+  }
+
   const rhidAttendanceAdjustmentRequests = new Set();
   async function saveRhidAttendanceAdjustment({ messageId, personKey, slot, time, reason } = {}) {
     const id = String(messageId || "").trim();
@@ -5871,6 +5892,7 @@ export function createAppController({
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
     bind("rhid-refresh", refreshRhidAttendance);
     bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
+    bind("rhid-attendance-month-load", loadRhidAttendanceMonth);
     bind("rhid-attendance-adjust-save", saveRhidAttendanceAdjustment);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));

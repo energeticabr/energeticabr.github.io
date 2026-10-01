@@ -157,6 +157,20 @@ test("consulta o relatório RHID do dia selecionado com a sessão Microsoft", as
   assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_report", date: "2026-09-25" });
 });
 
+test("consulta resumo mensal RHID autenticado sem baixar relatórios diários", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [], attendanceMonth: {
+      month: "2026-09", presentDates: ["2026-09-28"],
+    } });
+  });
+  assert.deepEqual((await client.getRhidAttendanceMonth("2026-09")).presentDates, ["2026-09-28"]);
+  assert.equal(request.headers.Authorization, "Bearer graph-token");
+  assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_month", month: "2026-09" });
+  await assert.rejects(client.getRhidAttendanceMonth("2026-13"), /mês válido/i);
+});
+
 test("salva ajuste RHID autenticado com horário e justificativa e recusa justificativa vazia", async () => {
   const requests = [];
   const client = clientWith(async (url, options) => {

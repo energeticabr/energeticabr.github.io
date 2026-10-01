@@ -7111,14 +7111,14 @@ test("relatório RHID mostra navegação diária centrada sem o cabeçalho Energ
   assert.equal(report.querySelector(".chat-bubble > strong"), null, "remove a marca no início do cartão RHID");
   assert.equal(report.querySelector(".chat-choice-card > p"), null, "não repete o título com emoji de gráfico");
   assert.equal(navigation.querySelector("time")?.textContent, "25/09/2026");
-  assert.equal(buttons.length, 2);
+  assert.equal(buttons.length, 3);
   assert.equal(commandFromTarget(buttons[0]).type, "rhid-attendance-report-navigate");
   assert.deepEqual(
     { messageId: commandFromTarget(buttons[0]).messageId, value: commandFromTarget(buttons[0]).value },
     { messageId: "rhid-nav-25", value: "-1" },
   );
   assert.deepEqual(
-    { messageId: commandFromTarget(buttons[1]).messageId, value: commandFromTarget(buttons[1]).value },
+    { messageId: commandFromTarget(buttons[2]).messageId, value: commandFromTarget(buttons[2]).value },
     { messageId: "rhid-nav-25", value: "1" },
   );
   assert.match(report.textContent, /PRESENÇAS/);
@@ -7162,6 +7162,33 @@ test("ícone de calendário abre o relatório exibido na data atual e consulta a
   dom.window.close();
 });
 
+test("data entre as setas abre calendário RHID e distingue dias com e sem presença", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const months = [];
+  const reports = [];
+  view.on("rhid-attendance-month-load", event => months.push(event));
+  view.on("rhid-attendance-report-generate", event => reports.push(event));
+  view.render(signedInState({ messages: [{ id: "rhid-calendar-card", role: "assistant", type: "poll", question: "RHID", options: [], detail_table: {
+    kind: "rhid_attendance", reportDate: "2026-09-28", headers: ["Nome", "Entrada 1", "Saída 1", "Total"], rows: [],
+  } }] }));
+  const dateButton = root.querySelector('.chat-rhid-date-navigation [data-action="open-rhid-attendance-report"]');
+  assert.equal(dateButton?.textContent.trim(), "28/09/2026");
+  dateButton.click();
+  assert.equal(months[0]?.value, "2026-09");
+  assert.equal(root.querySelectorAll('[data-role="rhid-calendar-day"]').length, 30);
+  view.setRhidAttendanceMonthStatus({ month: "2026-09", presentDates: ["2026-09-28"] });
+  assert.ok(root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-28"]').classList.contains("chat-rhid-calendar__day--present"));
+  assert.ok(root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-27"]').classList.contains("chat-rhid-calendar__day--absent"));
+  root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-27"]').click();
+  assert.equal(root.querySelector('[data-role="rhid-attendance-report-date"]').value, "2026-09-27");
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+  assert.equal(reports[0]?.value, "2026-09-27");
+  view.destroy();
+  dom.window.close();
+});
+
 test("relatório RHID também expõe a mesma ação de ressincronização do menu de Recursos Humanos", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
@@ -7201,7 +7228,7 @@ test("relatório RHID vazio mantém as setas e informa que não há presenças",
   }] }));
   const dom = new JSDOM(markup);
   const report = dom.window.document.querySelector(".chat-message--rhid-report");
-  assert.equal(report.querySelectorAll(".chat-rhid-date-navigation button").length, 2);
+  assert.equal(report.querySelectorAll(".chat-rhid-date-navigation button").length, 3);
   assert.match(report.textContent, /Nenhuma presença foi encontrada/);
   dom.window.close();
 });
@@ -7216,7 +7243,7 @@ test("relatório RHID mostra estado de carregamento e erro sem remover a data", 
   });
   const loadingDom = new JSDOM(renderChatMarkup(signedInState({ messages: [report({ navigationBusy: true })] })));
   const loading = loadingDom.window.document.querySelector(".chat-message--rhid-report");
-  assert.equal(loading.querySelectorAll(".chat-rhid-date-navigation button:disabled").length, 2);
+  assert.equal(loading.querySelectorAll(".chat-rhid-date-navigation button:disabled").length, 3);
   assert.match(loading.textContent, /Atualizando dados do RHID/);
   assert.equal(loading.querySelector(".chat-rhid-date-navigation time")?.textContent, "25/09/2026");
   loadingDom.window.close();

@@ -322,6 +322,22 @@ test("seletor de calendário RHID atualiza a data escolhida no mesmo cartão do 
   assert.deepEqual(reports[0].detail_table.rows[0], ["Pessoa A", "08:00", "12:00", "13:00", "18:00", "09:00"]);
 });
 
+test("calendário RHID carrega o resumo mensal e informa falha sem inventar ausências", async t => {
+  const h = makeHarness();
+  const statuses = [];
+  h.view.setRhidAttendanceMonthStatus = value => statuses.push(value);
+  h.client.getRhidAttendanceMonth = async month => {
+    if (month === "2026-10") throw new Error("Rede indisponível");
+    return { month, presentDates: ["2026-09-28"] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
+  await h.view.emit("rhid-attendance-month-load", { value: "2026-10" });
+  assert.deepEqual(statuses[0], { month: "2026-09", presentDates: ["2026-09-28"] });
+  assert.match(statuses[1].error, /não foi possível consultar/i);
+});
+
 test("falha ao trocar data pelo calendário libera o popup e preserva o relatório atual", async t => {
   const h = makeHarness();
   const statuses = [];

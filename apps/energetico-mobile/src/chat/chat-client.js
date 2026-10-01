@@ -329,6 +329,23 @@ export function createChatClient({
     return report;
   }
 
+  async function getRhidAttendanceMonth(selectedMonth) {
+    const month = String(selectedMonth || "").trim();
+    if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) throw new Error("Selecione um mês válido para o calendário RHID.");
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_attendance_month", month }),
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "O calendário de presenças RHID", { allowRecovery: true }), true);
+    const summary = result?.attendanceMonth;
+    if (!summary || summary.month !== month || !Array.isArray(summary.presentDates)) {
+      throw new Error("A VM não devolveu o calendário RHID do mês escolhido.");
+    }
+    return summary;
+  }
+
   async function saveRhidAttendanceAdjustment({ date, personKey, slot, time, reason } = {}) {
     if (!validIsoDate(date)) throw new Error("Selecione uma data válida para o ajuste RHID.");
     if (!/^(?:rhid|id):[^\s:]+$/.test(String(personKey || ""))) throw new Error("Colaborador RHID inválido.");
@@ -477,5 +494,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu });
 }
