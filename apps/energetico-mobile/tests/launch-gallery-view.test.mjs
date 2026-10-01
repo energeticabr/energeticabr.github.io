@@ -712,6 +712,27 @@ test('pedido considera frete vazio como zero e arredonda cada lançamento antes 
   assert.match(modal.textContent, /R\$\s*0,02/);
 });
 
+test('pedido usa arredondamento decimal half-up idêntico ao servidor', async t => {
+  const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 10.08 } }] }),
+    loadLaunchGroup: async () => [{ id: '3479', fields: {
+      AGRUPAR: '348', DATA: '2026-09-30', PRODUTO: 'SERVIÇO', QUANTIDADE: 0.5,
+      'VALOR UNITÁRIO': 20.15, FRETE: null,
+    } }],
+    request: async operation => {
+      if (operation === 'detail') throw new Error('Não deve consultar detalhes individuais');
+      return snapshot({ rows: [card] });
+    },
+  });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-cluster-kind="order"]').click();
+  await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.match(modal.textContent, /Valores conferem/);
+  assert.match(modal.textContent, /R\$\s*10,08/);
+});
+
 test('contingência limita detalhes individuais de grupos grandes e marca restantes incompletos', async t => {
   const card = row(3479); card.fields.AGRUPAR = '348'; card.hasAttachments = false;
   const ids = Array.from({ length: 10 }, (_, index) => String(3479 - index));
@@ -735,9 +756,13 @@ test('contingência limita detalhes individuais de grupos grandes e marca restan
   const modal = ctx.root().querySelector('.lg-cluster-modal');
   assert.deepEqual(requested, ids.slice(0, 8));
   assert.equal(modal.querySelectorAll('[data-launch-id]').length, 10);
-  assert.match(modal.textContent, /lançamentos 3471, 3470 não puderam ser carregados/i);
+  assert.match(modal.textContent, /lançamentos 3471, 3470 ainda não foram carregados/i);
   assert.match(modal.textContent, /Total incompleto/i);
   assert.doesNotMatch(modal.textContent, /Valores conferem/i);
+  button(modal, 'Carregar próximos lançamentos').click();
+  await settle(); await settle();
+  assert.deepEqual(requested, ids);
+  assert.match(modal.textContent, /Valores conferem/);
 });
 
 test('falha de um detalhe preserva os outros lançamentos e mantém a conciliação incompleta', async t => {

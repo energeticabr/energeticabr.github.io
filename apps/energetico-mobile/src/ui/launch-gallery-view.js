@@ -2,6 +2,7 @@ import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import Decimal from 'decimal.js';
 
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
@@ -639,8 +640,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const unitPrice = numericAmount(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'));
     const freight = numericAmount(field(fields, 'FRETE')) ?? 0;
     if (quantity == null || unitPrice == null) return null;
-    const raw = quantity * unitPrice + freight;
-    return Math.sign(raw) * Math.round((Math.abs(raw) + Number.EPSILON) * 100) / 100;
+    return new Decimal(quantity).times(unitPrice).plus(freight)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
   }
   function summarizeLaunchAmounts(rows) {
     let total = 0, missing = 0;
@@ -803,39 +804,71 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         const sparse = linkedIds.map((item, index) => ({ item, index })).filter(({ item }) =>
           ['DATA', 'FORNECEDOR', 'PRODUTO', 'QUANTIDADE', 'VALOR UNITÁRIO', 'FRETE']
             .filter(name => field(item.fields, name) != null).length < 3);
-        const failedIds = sparse.slice(MAX_SPARSE_ORDER_DETAILS).map(({ item }) => String(item.id));
-        const fallback = sparse.slice(0, MAX_SPARSE_ORDER_DETAILS);
-        for (let offset = 0; offset < fallback.length; offset += 4) {
-          const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }) =>
-            request('detail', { id: item.id }, { signal })));
-          if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
-          batch.forEach((result, index) => {
-            const expectedId = String(fallback[offset + index].item.id);
-            const item = result.status === 'fulfilled' ? result.value?.item : null;
-            if (String(item?.id) !== expectedId
-              || clusterKey(field(item?.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
-              failedIds.push(expectedId);
-            } else {
-              linked[fallback[offset + index].index] = item;
+        const failedIds = [];
+        let sparseCursor = 0;
+        const current = () => active(epoch) && version === clusterVersion && !clusterPanel.hidden;
+        async function hydrateNext(batchSignal) {
+          const fallback = sparse.slice(sparseCursor, sparseCursor + MAX_SPARSE_ORDER_DETAILS);
+          for (let offset = 0; offset < fallback.length; offset += 4) {
+            const batch = await Promise.allSettled(fallback.slice(offset, offset + 4).map(({ item }) =>
+              request('detail', { id: item.id }, { signal: batchSignal })));
+            if (!current()) return;
+            batch.forEach((result, index) => {
+              const expectedId = String(fallback[offset + index].item.id);
+              const item = result.status === 'fulfilled' ? result.value?.item : null;
+              if (String(item?.id) !== expectedId
+                || clusterKey(field(item?.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
+                failedIds.push(expectedId);
+              } else {
+                linked[fallback[offset + index].index] = item;
+              }
+            });
+          }
+          if (current()) sparseCursor += fallback.length;
+        }
+        async function loadMore() {
+          if (!current() || clusterPanel.getAttribute('aria-busy') === 'true') return;
+          const nextController = new AbortController();
+          clusterAbortController = nextController;
+          clusterPanel.setAttribute('aria-busy', 'true');
+          clusterTimer = setTimeout(() => nextController.abort(), timeout);
+          try {
+            await hydrateNext(nextController.signal);
+            if (current()) renderOrderPanel();
+          } finally {
+            if (clusterAbortController === nextController) {
+              clearTimeout(clusterTimer);
+              clusterTimer = null;
+              clusterAbortController = null;
             }
-          });
+            if (current()) clusterPanel.setAttribute('aria-busy', 'false');
+          }
         }
-        const content = [];
-        if (failedIds.length) content.push(element('p', 'lg-error', failedIds.length === 1
-          ? `O lançamento ${failedIds[0]} não pôde ser carregado. O total permanece incompleto; reabra o pedido para tentar novamente.`
-          : `Os lançamentos ${failedIds.join(', ')} não puderam ser carregados. O total permanece incompleto; reabra o pedido para tentar novamente.`));
-        if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
-        if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
-        if (order) {
-          const headerData = renderOrderHeader(order, rawValue, linked);
-          content.push(headerData.overview, headerData.reconcile);
+        function renderOrderPanel() {
+          const pendingIds = sparse.slice(sparseCursor).map(({ item }) => String(item.id));
+          const content = [];
+          if (failedIds.length) content.push(element('p', 'lg-error', failedIds.length === 1
+            ? `O lançamento ${failedIds[0]} não pôde ser carregado. O total permanece incompleto; reabra o pedido para tentar novamente.`
+            : `Os lançamentos ${failedIds.join(', ')} não puderam ser carregados. O total permanece incompleto; reabra o pedido para tentar novamente.`));
+          if (pendingIds.length) content.push(element('p', 'lg-hint',
+            `Os lançamentos ${pendingIds.join(', ')} ainda não foram carregados. O total permanece incompleto.`));
+          if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
+          if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));
+          if (order) {
+            const headerData = renderOrderHeader(order, rawValue, linked);
+            content.push(headerData.overview, headerData.reconcile);
+          }
+          if (linked.length) {
+            content.push(element('h3', 'lg-cluster-table-title', `Lançamentos vinculados ao pedido ${rawValue}`));
+            const listing = launchTable(linked, 'order', rawValue);
+            content.push(listing.table, listing.totals);
+          }
+          if (pendingIds.length) content.push(button('Carregar próximos lançamentos', () => { void loadMore(); }, { locked: false }));
+          clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
         }
-        if (linked.length) {
-          content.push(element('h3', 'lg-cluster-table-title', `Lançamentos vinculados ao pedido ${rawValue}`));
-          const listing = launchTable(linked, 'order', rawValue);
-          content.push(listing.table, listing.totals);
-        }
-        clusterPanel.replaceChildren(clusterPanel.querySelector('.lg-detail-header'), ...content);
+        await hydrateNext(signal);
+        if (!current()) return;
+        renderOrderPanel();
       }
       focus(closeButton);
     } catch (error) {
