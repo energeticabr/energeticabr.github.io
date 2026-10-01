@@ -987,16 +987,18 @@ test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", 
   }] }));
 
   root.querySelector('[data-action="open-rhid-attendance-report"]').click();
-  const dateInput = root.querySelector('[data-role="rhid-attendance-report-date"]');
-  assert.ok(dateInput?.value, "a data local de hoje deve vir preenchida");
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog] input[type="date"]'), null, "o calendário RHID não deve abrir seletor nativo");
+  assert.ok(root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]'), "a data de hoje deve vir selecionada");
   root.querySelector('[data-action="cancel-rhid-attendance-report"]').click();
   assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null);
   assert.deepEqual(requests, [], "cancelar deve apenas fechar a janela");
 
   root.querySelector('[data-action="open-rhid-attendance-report"]').click();
-  root.querySelector('[data-role="rhid-attendance-report-date"]').value = "2026-09-25";
+  const selectedDay = root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]');
+  const selectedMonth = selectedDay.dataset.value.slice(0, 7);
+  root.querySelector(`[data-role="rhid-calendar-day"][data-value="${selectedMonth}-15"]`).click();
   root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
-  assert.deepEqual(requests, ["2026-09-25"]);
+  assert.deepEqual(requests, [`${selectedMonth}-15`]);
   assert.ok(root.querySelector('[data-rhid-attendance-report-dialog]'), "o popup aguarda a resposta do servidor");
   view.destroy();
   dom.window.close();
@@ -7193,9 +7195,9 @@ test("ícone de calendário abre o relatório exibido na data atual e consulta a
   assert.equal(root.querySelector('.chat-flow-status [data-action="show-summary"]'), null);
 
   calendar.click();
-  const dateInput = root.querySelector('[data-role="rhid-attendance-report-date"]');
-  assert.equal(dateInput?.value, "2026-09-25", "o seletor deve começar na data já exibida");
-  dateInput.value = "2026-09-26";
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog] input[type="date"]'), null);
+  assert.equal(root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]')?.dataset.value, "2026-09-25", "o calendário deve começar na data já exibida");
+  root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-26"]').click();
   root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
 
   assert.deepEqual(requests, [{ type: "rhid-attendance-report-generate", value: "2026-09-26", messageId: "rhid-calendar-25" }]);
@@ -7219,11 +7221,12 @@ test("data entre as setas abre calendário RHID e distingue dias com e sem prese
   dateButton.click();
   assert.equal(months[0]?.value, "2026-09");
   assert.equal(root.querySelectorAll('[data-role="rhid-calendar-day"]').length, 30);
+  assert.equal(root.querySelector('[data-rhid-attendance-report-dialog] input[type="date"]'), null);
   view.setRhidAttendanceMonthStatus({ month: "2026-09", presentDates: ["2026-09-28"] });
   assert.ok(root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-28"]').classList.contains("chat-rhid-calendar__day--present"));
   assert.ok(root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-27"]').classList.contains("chat-rhid-calendar__day--absent"));
   root.querySelector('[data-role="rhid-calendar-day"][data-value="2026-09-27"]').click();
-  assert.equal(root.querySelector('[data-role="rhid-attendance-report-date"]').value, "2026-09-27");
+  assert.equal(root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]')?.dataset.value, "2026-09-27");
   root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
   assert.equal(reports[0]?.value, "2026-09-27");
   view.destroy();
