@@ -1777,6 +1777,37 @@ test("cancelar a transferência permite que uma saída normal limpe os anexos", 
   assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(/);
 });
 
+test("novo fluxo após inatividade preserva o anexo recém-enviado só depois da confirmação", async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const attachment = { id: "new-inactive-photo", fileName: "nova-foto.jpg", mimeType: "image/jpeg", size: 512,
+    mediaUrl: "/api/portal-media/new-inactive-photo" };
+  const activeFlow = { id: "task", title: "ADICIONAR UMA NOVA TAREFA", contextId: "inactive-task" };
+  h.store.ingestRemoteMessages([{ type: "poll", question: "USAR ANEXO NO FLUXO ATUAL?", options: [
+    { id: "inactivity_attachment_new_flow", label: "USAR EM UM NOVO FLUXO" },
+  ] }], { activeFlow });
+  h.store.syncAttachments([attachment]);
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "inactivity_attachment_new_flow") return { status: "processed", activeFlow,
+      attachments: [attachment], messages: [{ type: "poll", question: "TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?",
+        options: [{ id: "portal_draft_exit_discard", label: "SIM, ABANDONAR" },
+          { id: "portal_draft_exit_cancel", label: "NÃO, CONTINUAR" }] }] };
+    return { status: "processed", resetConversation: true, returned_to_main_menu: true,
+      started_new_flow_with_inactivity_attachment: true, activeFlow: null, attachments: [attachment],
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }] };
+  };
+  await h.view.emit("select-reply", { replyId: "inactivity_attachment_new_flow", label: "USAR EM UM NOVO FLUXO" });
+  assert.deepEqual(calls, ["inactivity_attachment_new_flow"]);
+  assert.equal(h.store.getState().attachments.length, 1);
+  await h.view.emit("select-reply", { replyId: "portal_draft_exit_discard", label: "SIM, ABANDONAR" });
+  assert.deepEqual(calls, ["inactivity_attachment_new_flow", "portal_draft_exit_discard"]);
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+});
+
 test("quando a data validada não tem pendências mostra resumo e permite ver outras datas", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());

@@ -4421,9 +4421,12 @@ export function createAppController({
       const transferPromptCancelled = transferPromptWasActive
         && !transferConfirmedInResponse
         && !hasAttachmentTransferPrompt(result.messages);
-      const preserveTransferredAttachments = attachmentTransferPending
-        && previousState.attachments.length > 0
-        && (transferConfirmedInResponse || attachmentTransferCompleted);
+      const preserveTransferredAttachments = (
+        (attachmentTransferPending && previousState.attachments.length > 0
+          && (transferConfirmedInResponse || attachmentTransferCompleted))
+        || (result.started_new_flow_with_inactivity_attachment === true
+          && Array.isArray(result.attachments) && result.attachments.length > 0)
+      );
       const enteredNextTransferredFlow = attachmentTransferPending
         && attachmentTransferCompleted
         && !menuResult
