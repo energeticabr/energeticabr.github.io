@@ -1,5 +1,6 @@
 import { createAppController } from "../app-controller.js";
 import { createChatClient } from "../chat/chat-client.js";
+import { createPendingConstructionDiaryData } from "../chat/pending-construction-diary-data.js";
 import { createConversationStore } from "../chat/conversation-store.js";
 import { createChatView, renderPublicLinks } from "../ui/chat-view.js";
 import { createRecoveryStorage } from "../web/recovery-storage.js";
@@ -58,6 +59,7 @@ export function createNativeBootstrap({ root, auth, native, config, fetchImpl = 
     controller = createAppController({ auth: sessionAuth, native: appNative, recovery, view,
       store: createConversationStore({ historyMode: "current-step" }),
       client,
+      pendingConstructionDiaryDataFactory: demo ? undefined : options => createPendingConstructionDiaryData({ ...options, fetchImpl }),
     });
     return controller.start();
   }

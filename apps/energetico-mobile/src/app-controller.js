@@ -615,6 +615,7 @@ export function createAppController({
   registrationGalleryFactory = defaultRegistrationGalleryFactory,
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
+  pendingConstructionDiaryDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
   databaseFilterDebounceMs = 300,
@@ -841,6 +842,12 @@ export function createAppController({
   let pendingProvisionSnapshot = null;
   let pendingNotesSnapshot = null;
   let pendingNotesSessionDismissed = false;
+  let pendingConstructionDiarySnapshot = null;
+  let pendingConstructionDiaryFillingId = "";
+  let pendingConstructionDiaryError = "";
+  let pendingConstructionDiarySessionDismissed = false;
+  let pendingConstructionDiaryRequest = null;
+  let pendingConstructionDiaryData = null;
   let pendingNoteLaunchOrderId = "";
   let pendingNoteLaunchFailed = false;
   let pendingNoteLaunchNeedsResync = false;
@@ -1426,8 +1433,176 @@ export function createAppController({
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
-    await Promise.all([refreshPendingProvisionSnapshot(), refreshDelegatedTasksSnapshot()]);
+    await Promise.all([
+      refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries),
+      refreshDelegatedTasksSnapshot(),
+    ]);
     return true;
+  }
+
+  function pendingConstructionDiaryTime() {
+    const hour = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23",
+    }).format(new Date());
+    return Number(hour) >= 15;
+  }
+
+  async function refreshPendingConstructionDiaries() {
+    if (!account || stopped || pendingConstructionDiarySessionDismissed
+      || typeof pendingConstructionDiaryDataFactory !== "function") return false;
+    if (!pendingConstructionDiaryTime()) {
+      pendingConstructionDiarySnapshot = null;
+      render();
+      return false;
+    }
+    if (pendingConstructionDiaryRequest) return pendingConstructionDiaryRequest;
+    const targetAccount = account, targetRevision = sessionRevision;
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision;
+    const request = Promise.resolve().then(async () => {
+      const controller = new AbortController();
+      try {
+        if (!pendingConstructionDiaryData) {
+          const data = await pendingConstructionDiaryDataFactory({ tokenProvider: async scopes => {
+            if (!current()) throw new Error("A sessão dos diários foi encerrada.");
+            let token;
+            try { token = await auth.getToken(scopes); }
+            catch (error) {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              if (!pendingProvisionSharePointAuthorization) {
+                const authorization = Promise.resolve(auth.authorize(scopes)).finally(() => {
+                  if (pendingProvisionSharePointAuthorization === authorization) pendingProvisionSharePointAuthorization = null;
+                });
+                pendingProvisionSharePointAuthorization = authorization;
+              }
+              await pendingProvisionSharePointAuthorization;
+              if (!current()) throw new Error("A sessão dos diários foi encerrada.");
+              token = await auth.getToken(scopes);
+            }
+            if (!current()) throw new Error("A sessão dos diários foi encerrada.");
+            return token;
+          } });
+          if (!current()) return false;
+          pendingConstructionDiaryData = data;
+        }
+        const snapshot = await withTimeout(pendingConstructionDiaryData.loadSnapshot({ signal: controller.signal }),
+          8_000, "A consulta dos diários pendentes excedeu o tempo limite.");
+        if (!current() || pendingConstructionDiarySessionDismissed) return false;
+        const rows = (Array.isArray(snapshot?.rows) ? snapshot.rows : []).filter(row => (
+          String(row?.status || "").trim().toUpperCase() === "PENDENTE"
+        ));
+        pendingConstructionDiarySnapshot = rows.length && pendingConstructionDiaryTime()
+          ? { ...snapshot, rows, count: rows.length } : null;
+        render();
+        return Boolean(pendingConstructionDiarySnapshot);
+      } catch {
+        // A read-only reminder must not block the chat or show stale records.
+        if (current()) { pendingConstructionDiarySnapshot = null; render(); }
+        return false;
+      } finally {
+        controller.abort();
+        if (pendingConstructionDiaryRequest === request) pendingConstructionDiaryRequest = null;
+      }
+    });
+    pendingConstructionDiaryRequest = request;
+    return request;
+  }
+
+  function dismissPendingConstructionDiaries() {
+    if (!pendingConstructionDiarySnapshot || pendingProvisionSnapshot || pendingConstructionDiaryFillingId) return false;
+    pendingConstructionDiarySessionDismissed = true;
+    pendingConstructionDiarySnapshot = null;
+    render();
+    return true;
+  }
+
+  function isPendingConstructionDiaryPicker(poll, activeFlow) {
+    if (activeFlow?.id !== "construction_diary_fill") return false;
+    const question = normalizedSettlementText(poll?.question);
+    return question.includes("QUAL DIARIO DE OBRA PENDENTE")
+      || question.includes("DESEJA PREENCHER MAIS ALGUM");
+  }
+
+  function isSelectedConstructionDiary(activeFlow, id) {
+    if (activeFlow?.id !== "construction_diary_fill" || activeFlow.paused
+      || !activeFlow.contextId || !Array.isArray(activeFlow.rows)) return false;
+    const selected = activeFlow.rows.filter(row => normalizedSettlementText(row?.label) === "ID");
+    return selected.length === 1 && String(selected[0].value ?? "").trim() === id;
+  }
+
+  async function fillPendingConstructionDiary(diaryId) {
+    const id = String(diaryId || "").trim();
+    if (!/^[1-9]\d*$/.test(id) || !account || stopped || flowBusy({ allowUncertainRecovery: true }) || pendingProvisionSnapshot
+      || pendingConstructionDiaryFillingId
+      || !pendingConstructionDiarySnapshot?.rows?.some(row => String(row.id) === id)) return false;
+    const local = store.getState();
+    if (local.draft.trim() || local.pendingFiles.length) {
+      pendingConstructionDiaryError = "Envie ou remova o texto e os arquivos ainda não enviados antes de preencher este diário.";
+      render();
+      return false;
+    }
+    const targetAccount = account, targetRevision = sessionRevision;
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision;
+    pendingConstructionDiaryFillingId = id;
+    pendingConstructionDiaryError = "";
+    render();
+    const fail = message => {
+      if (current()) { pendingConstructionDiaryError = message; render(); }
+      return false;
+    };
+    const advance = async option => {
+      if (!current() || !option) return false;
+      return sendSettlementReply(String(option.label || option.title || id),
+        String(option.reply || option.id), targetAccount, targetRevision, undefined, current);
+    };
+    const finish = () => {
+      pendingConstructionDiarySessionDismissed = true;
+      pendingConstructionDiarySnapshot = null;
+      return true;
+    };
+    try {
+      // Resume first: a previous request may have arrived despite a lost response.
+      if (!await continueConversation() || !current()) return fail("Não foi possível retomar a conversa. Tente novamente.");
+      let poll = currentAssistantPoll();
+      if (isSelectedConstructionDiary(currentAssistantActiveFlow(), id)
+        && !isPendingConstructionDiaryPicker(poll, currentAssistantActiveFlow())) return finish();
+      const stages = ["group_construction_stage", "action_construction_diary_section", "action_fill_construction_diary"];
+      let stage = stages.findIndex(reply => pendingNoteOption(poll, reply));
+      if (!isPendingConstructionDiaryPicker(poll, currentAssistantActiveFlow())) {
+        const active = currentAssistantActiveFlow();
+        if (stage < 0 || (active && !String(active.id || "").startsWith("menu:"))) {
+          return fail("Conclua o formulário em andamento ou volte ao menu antes de preencher este diário. Seus dados foram preservados.");
+        }
+        for (; stage < stages.length; stage++) {
+          if (!await advance(pendingNoteOption(poll, stages[stage])) || !current()) {
+            return fail("A VM não abriu a seleção de diários pendentes. Tente novamente.");
+          }
+          poll = currentAssistantPoll();
+        }
+      }
+      if (!isPendingConstructionDiaryPicker(poll, currentAssistantActiveFlow())) {
+        return fail("A VM não mostrou a seleção dos diários pendentes. Tente novamente.");
+      }
+      const contextId = String(currentAssistantActiveFlow()?.contextId || "");
+      if (!contextId) return fail("A VM não identificou o contexto da seleção do diário.");
+      const option = pendingNoteOption(poll, `choice:diario_obra_pendente:${id}`)
+        || pendingNoteOption(poll, id);
+      // The backend resolves plain numeric input against its complete pending
+      // options, including records outside the currently displayed page.
+      const sent = option ? await advance(option)
+        : await sendSettlementReply(id, undefined, targetAccount, targetRevision, undefined, current);
+      if (!current()) return false;
+      if (!sent) return fail(`Não foi possível confirmar o preenchimento do diário ${id}. Tente novamente.`);
+      if (currentAssistantActiveFlow()?.contextId === contextId
+        || isPendingConstructionDiaryPicker(currentAssistantPoll(), currentAssistantActiveFlow())
+        || !isSelectedConstructionDiary(currentAssistantActiveFlow(), id)) {
+        return fail(`A VM não confirmou a seleção do diário de ID ${id}. O lembrete permanece aberto.`);
+      }
+      return finish();
+    } catch (error) {
+      return fail(`Não foi possível iniciar o diário de ID ${id}. ${error?.message || "Tente novamente."}`);
+    } finally {
+      if (current()) { pendingConstructionDiaryFillingId = ""; render(); }
+    }
   }
 
   function pendingProvisionReminderSuppressed() {
@@ -3212,6 +3387,10 @@ export function createAppController({
       recoveryUncertain,
       pendingProvisions: pendingProvisionSnapshot,
       pendingNotes: pendingNotesSnapshot,
+      pendingConstructionDiaries: pendingProvisionSnapshot || !pendingConstructionDiaryTime()
+        ? null : pendingConstructionDiarySnapshot,
+      pendingConstructionDiaryFillingId,
+      pendingConstructionDiaryError,
       pendingNoteLaunchOrderId,
       pendingNoteLaunchFailed,
       pendingProvisionReminderOpen,
@@ -4757,12 +4936,19 @@ export function createAppController({
       sessionStatus = "authenticated";
       pendingProvisionSessionDismissed = false;
       pendingNotesSessionDismissed = false;
+      pendingConstructionDiarySnapshot = null;
+      pendingConstructionDiarySessionDismissed = false;
+      pendingConstructionDiaryFillingId = "";
+      pendingConstructionDiaryError = "";
+      pendingConstructionDiaryRequest = null;
+      pendingConstructionDiaryData = null;
       clearPendingProvisionAttachmentState({ clearData: true });
       pendingProvisionSharePointAuthorization = null;
       openRecovery();
       render();
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
       await refreshDelegatedTasksSnapshot();
       // A shared file may have arrived before the user authenticated. Read
@@ -4828,6 +5014,12 @@ export function createAppController({
     pendingProvisionSnapshot = null;
     pendingNotesSnapshot = null;
     pendingNotesSessionDismissed = false;
+    pendingConstructionDiarySnapshot = null;
+    pendingConstructionDiarySessionDismissed = false;
+    pendingConstructionDiaryFillingId = "";
+    pendingConstructionDiaryError = "";
+    pendingConstructionDiaryRequest = null;
+    pendingConstructionDiaryData = null;
     pendingNoteLaunchOrderId = "";
     pendingNoteLaunchFailed = false;
     pendingNoteLaunchNeedsResync = false;
@@ -5606,6 +5798,8 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
+    bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
+    bind("fill-pending-construction-diary", command => fillPendingConstructionDiary(command.diaryId));
     bind("launch-pending-note", command => launchPendingNote(command.orderId));
     bind("cancel-pending-provisions-reminder", cancelPendingProvisionReminderChoice);
     bind("pending-provisions-reminder-choice", command => choosePendingProvisionReminder(command.value));
@@ -5699,6 +5893,12 @@ export function createAppController({
     sessionStatus = account ? "authenticated" : "signed-out";
     pendingProvisionSessionDismissed = false;
     pendingNotesSessionDismissed = false;
+    pendingConstructionDiarySnapshot = null;
+    pendingConstructionDiarySessionDismissed = false;
+    pendingConstructionDiaryFillingId = "";
+    pendingConstructionDiaryError = "";
+    pendingConstructionDiaryRequest = null;
+    pendingConstructionDiaryData = null;
     clearPendingProvisionAttachmentState({ clearData: true });
     pendingProvisionSharePointAuthorization = null;
     openRecovery();
@@ -5707,6 +5907,7 @@ export function createAppController({
     if (account) {
       await continueConversation();
       await refreshPendingProvisionSnapshot();
+      await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
       await refreshDelegatedTasksSnapshot();
       const sharedFileIds = await sharedFileIdsPromise;

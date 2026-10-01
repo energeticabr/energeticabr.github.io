@@ -1678,6 +1678,38 @@ function pendingProvisionDateInputValue(value) {
   return key ? `${key.slice(8, 10)}/${key.slice(5, 7)}/${key.slice(0, 4)}` : "";
 }
 
+function pendingConstructionDiariesMarkup(snapshot, fillingId = "", error = "", busy = false) {
+  const disabled = fillingId || busy ? "disabled" : "";
+  const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+  if (!rows.length) return "";
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-construction-diaries" data-pending-construction-diaries-dialog>
+    <div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments chat-pending-construction-diaries" role="dialog" aria-modal="true" aria-labelledby="pending-construction-diaries-title">
+      <div class="chat-date-picker__header chat-pending-provisions__header">
+        <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-construction-diaries" data-immediate-action="true" aria-label="Fechar lembrete de diários pendentes" ${disabled}>×</button>
+        <div class="chat-pending-provisions__title"><h2 id="pending-construction-diaries-title">Diários de obra pendentes</h2><p>${rows.length === 1 ? "Há 1 diário aguardando preenchimento." : `Há ${rows.length} diários aguardando preenchimento.`}</p></div>
+      </div>
+      <div class="chat-pending-provisions__list" role="list" aria-label="Diários de obra com status pendente">
+        ${rows.map(row => {
+          const date = provisionDateKey(row.date);
+          const dateLabel = date ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : "Data não informada";
+          return `<article class="chat-pending-construction-diary" role="listitem">
+            <div class="chat-pending-provision__field"><span>Data · ID ${escapeHtml(row.id || "—")}</span><strong>${escapeHtml(dateLabel)}</strong></div>
+            <div class="chat-pending-provision__field"><span>Filial</span><strong>${escapeHtml(row.branch || "Filial não informada")}</strong></div>
+            <div class="chat-pending-provision__field"><span>Responsável técnico</span><strong>${escapeHtml(row.responsible || "Responsável não informado")}</strong></div>
+            <div class="chat-pending-construction-diary__actions"><span class="chat-pending-construction-diary__status">PENDENTE</span>
+              <button class="chat-pending-construction-diary__fill" type="button" data-action="fill-pending-construction-diary" data-diary-id="${escapeHtml(row.id)}" aria-label="Preencher diário de obra de ID ${escapeHtml(row.id)}" ${disabled}>
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 5 5-12 12-6 1 1-6L16 3Z"/><path d="m13 6 5 5"/></svg><span>${String(row.id) === fillingId ? "Abrindo…" : "Preencher"}</span>
+              </button>
+            </div>
+          </article>`;
+        }).join("")}
+      </div>
+      ${error ? `<p class="chat-pending-construction-diary__error" role="alert">${escapeHtml(error)}</p>` : ""}
+      <div class="chat-confirmation__actions"><button class="chat-confirmation__confirm" type="button" data-action="dismiss-pending-construction-diaries" ${disabled}>Fechar</button></div>
+    </div>
+  </div>`;
+}
+
 function pendingNotesMarkup(snapshot, launchingOrderId = "", error = "") {
   const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
   if (!rows.length) return "";
@@ -2215,7 +2247,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy)}
-    ${state.pendingProvisions ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "")}
+    ${state.pendingProvisions ? "" : pendingConstructionDiariesMarkup(state.pendingConstructionDiaries, state.pendingConstructionDiaryFillingId, state.pendingConstructionDiaryError, state.busy)}
+    ${state.pendingProvisions || state.pendingConstructionDiaries ? "" : pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "")}
     ${rhidAttendanceReportMarkup(rhidAttendanceReport || {})}
   </section>`;
 }
@@ -2233,6 +2266,7 @@ export function commandFromTarget(target) {
     ...(actionTarget.dataset.taskId ? { taskId: actionTarget.dataset.taskId } : {}),
     ...(actionTarget.dataset.paymentId ? { paymentId: actionTarget.dataset.paymentId } : {}),
     ...(actionTarget.dataset.orderId ? { orderId: actionTarget.dataset.orderId } : {}),
+    ...(actionTarget.dataset.diaryId ? { diaryId: actionTarget.dataset.diaryId } : {}),
     ...(actionTarget.dataset.uploadId ? { uploadId: actionTarget.dataset.uploadId } : {}),
     ...(actionTarget.dataset.fileName ? { fileName: actionTarget.dataset.fileName } : {}),
     ...(actionTarget.dataset.value ? { value: actionTarget.dataset.value } : {}),
@@ -3369,7 +3403,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
-         "delegatedTasks", "pendingProvisions", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
+         "delegatedTasks", "pendingProvisions", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",
