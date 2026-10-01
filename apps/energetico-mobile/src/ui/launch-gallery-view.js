@@ -663,7 +663,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const quantityLabel = [quantity, unit].filter(value => value != null && display(value).trim()).map(display).join(' ');
       const cells = mode === 'order'
         ? [item.id, fieldText('DATA', date) || '—', field(fields, 'FORNECEDOR') ?? '—',
-          field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO') ?? '—',
+          field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO', 'CONTA') ?? '—',
           field(fields, 'PRODUTO', 'DESCRIÇÃO', 'DESCRICAO') ?? '—', quantityLabel || '—',
           fieldText('VALOR UNITÁRIO', field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')) || '—',
           fieldText('FRETE', field(fields, 'FRETE')) || '—', amount == null ? fieldText('VALOR TOTAL', field(fields, 'VALOR TOTAL')) || '—' : money(amount),
@@ -788,8 +788,22 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
         if (!Array.isArray(orders?.rows)) throw new Error('O SharePoint não devolveu os pedidos.');
         const order = orders.rows.find(item => clusterKey(item.id ?? field(item.fields, 'ID')) === clusterKey(rawValue));
-        const linked = (Array.isArray(launchRows) ? launchRows : [])
+        const linkedIds = (Array.isArray(launchRows) ? launchRows : [])
           .filter(item => clusterKey(field(item.fields, 'AGRUPAR')) === clusterKey(rawValue));
+        const linked = [];
+        for (let offset = 0; offset < linkedIds.length; offset += 4) {
+          const batch = await Promise.all(linkedIds.slice(offset, offset + 4).map(item =>
+            request('detail', { id: item.id }, { signal })));
+          if (!active(epoch) || version !== clusterVersion || clusterPanel.hidden) return;
+          batch.forEach((detail, index) => {
+            const expectedId = String(linkedIds[offset + index].id);
+            if (String(detail?.item?.id) !== expectedId
+              || clusterKey(field(detail.item.fields, 'AGRUPAR')) !== clusterKey(rawValue)) {
+              throw new Error(`O lançamento ${expectedId} mudou de pedido ou não foi devolvido. Atualize e tente novamente.`);
+            }
+            linked.push(detail.item);
+          });
+        }
         const content = [];
         if (!order) content.push(element('p', 'lg-error', `Pedido #${rawValue} não encontrado na lista do SharePoint.`));
         if (!linked.length) content.push(element('p', 'lg-hint', `Nenhum lançamento encontrado com AGRUPAR = ${rawValue}.`));

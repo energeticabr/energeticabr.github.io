@@ -609,6 +609,54 @@ test('order cluster requests one order by ID and only the LANCAMENTOS group, nev
   assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3451']);
 });
 
+test('pedido agrupado completa os dados de cada lançamento quando a busca por AGRUPAR devolve apenas IDs', async t => {
+  const first = row(3479);
+  first.fields = { ...first.fields, AGRUPAR: '348', DATA: '2026-09-30',
+    FORNECEDOR: 'JOSÉ GERALDO DOS SANTOS', CONTA: 'DINHEIRO',
+    PRODUTO: 'PEDREIRO', QUANTIDADE: 2, UN: 'DIÁRIA', 'VALOR UNITÁRIO': 250,
+    FRETE: 0, 'VALOR TOTAL': 500 };
+  first.total = 500;
+  first.hasAttachments = false;
+  const second = row(3478);
+  second.fields = { ...second.fields, AGRUPAR: '348', DATA: '2026-09-29',
+    FORNECEDOR: 'JOSÉ GERALDO DOS SANTOS', CONTA: 'DINHEIRO',
+    PRODUTO: 'PEDREIRO', QUANTIDADE: 2, UN: 'DIÁRIA', 'VALOR UNITÁRIO': 293,
+    FRETE: 0, 'VALOR TOTAL': 586 };
+  second.total = 586;
+  second.hasAttachments = false;
+  const details = new Map([['3479', first], ['3478', second]]);
+  const detailIds = [];
+  const ctx = await setup(t, {
+    loadOrderSnapshot: async () => ({ rows: [{ id: '348', fields: { VALORTOTAL: 1086 } }] }),
+    loadLaunchGroup: async () => [
+      { id: '3479', fields: { AGRUPAR: '348' } },
+      { id: '3478', fields: { AGRUPAR: '348' } },
+    ],
+    request: async (operation, payload) => {
+      if (operation === 'detail') {
+        detailIds.push(String(payload.id));
+        return detail({ item: details.get(String(payload.id)) });
+      }
+      return snapshot({ rows: [first] });
+    },
+  });
+  await ctx.gallery.open();
+  const trigger = ctx.root().querySelector('[data-cluster-kind="order"]');
+  assert.ok(trigger, 'pedido agrupado deve estar acessível na galeria');
+  trigger.click();
+  await settle(); await settle();
+
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  const rows = [...modal.querySelectorAll('[data-launch-id]')];
+  assert.deepEqual(rows.map(node => node.dataset.launchId), ['3479', '3478']);
+  assert.deepEqual(detailIds.sort(), ['3478', '3479']);
+  assert.match(rows[0].textContent, /JOSÉ GERALDO DOS SANTOS/);
+  assert.match(rows[0].textContent, /DINHEIRO/);
+  assert.match(rows[0].textContent, /PEDREIRO/);
+  assert.match(rows[0].textContent, /R\$\s*500,00/);
+  assert.match(modal.textContent, /Valores conferem/);
+});
+
 test('order reconciliation stays indeterminate when linked launch amounts are missing', async t => {
   const item = row(3451);
   item.total = undefined;
