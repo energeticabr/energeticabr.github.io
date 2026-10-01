@@ -498,6 +498,18 @@ button { touch-action: manipulation; }
 .chat-presence-confirmation__status--absent { color: #991b1b; background: #fee2e2; }
 
 .chat-choice-card p { margin-bottom: 10px; }
+.chat-single-launch-confirmation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 2px 0 14px; overflow: hidden; border: 1px solid #c7d9df; border-radius: 12px; background: #f4faf9; }
+.chat-single-launch-confirmation > div { min-width: 0; padding: 9px 10px; }
+.chat-single-launch-confirmation > div:nth-child(even) { border-left: 1px solid #dce8e9; }
+.chat-single-launch-confirmation > div:nth-child(n + 3) { border-top: 1px solid #dce8e9; }
+.chat-single-launch-confirmation dt { color: #5c7280; font-size: .7rem; font-weight: 800; letter-spacing: .02em; }
+.chat-single-launch-confirmation dd { margin: 2px 0 0; color: #173b50; font-size: .92rem; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.chat-single-launch-confirmation > div:last-child { background: #e5f4eb; }
+.chat-single-launch-confirmation > div:last-child dd { color: #146442; }
+@media (min-width: 600px) {
+  .chat-single-launch-confirmation { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .chat-single-launch-confirmation > div:nth-child(n + 3) { border-top: 0; border-left: 1px solid #dce8e9; }
+}
 .chat-change-table { margin: 10px 0 12px; overflow-x: auto; border: 1px solid #d5e2e6; border-radius: 6px; background: #fff; }
 .chat-change-table > strong { display: block; padding: 9px 10px; background: #991b1b; color: #fff; font-size: 12px; text-align: center; }
 .chat-change-table-row { display: grid; grid-template-columns: minmax(44px, .55fr) minmax(110px, 1.35fr) minmax(110px, 1fr) minmax(110px, 1fr); min-width: 430px; border-top: 1px solid #e6eef0; }
