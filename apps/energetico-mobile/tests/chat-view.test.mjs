@@ -1263,6 +1263,39 @@ test("justificativa sugerida para lacuna RHID pode ser editada antes de salvar",
   dom.window.close();
 });
 
+test("gerar relatório RHID não volta o foco ao calendário durante a consulta", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ messages: [{
+    id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS",
+    options: [{ id: "hr", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" }],
+  }] }));
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  assert.ok(dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'));
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+
+  assert.equal(
+    dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'),
+    false,
+    "a atualização não deve focar novamente um dia pequeno e deslocar a janela no celular",
+  );
+  assert.ok(dom.window.document.activeElement.closest('[data-rhid-attendance-report-dialog]'), "o foco permanece na janela durante a consulta");
+
+  view.setRhidAttendanceReportStatus({ busy: false, error: "Não foi possível consultar o relatório." });
+  assert.ok(dom.window.document.activeElement.closest('[data-rhid-attendance-report-dialog]'), "o foco permanece na janela após erro");
+  assert.equal(dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'), false);
+  const selectedMonth = root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]').dataset.value.slice(0, 7);
+  view.setRhidAttendanceMonthStatus({ month: selectedMonth, presentDates: [`${selectedMonth}-01`] });
+  assert.match(root.querySelector('[data-rhid-attendance-report-dialog] [role="alert"]').textContent, /Não foi possível consultar/);
+  assert.ok(dom.window.document.activeElement.closest('[data-rhid-attendance-report-dialog]'), "a resposta mensal tardia não tira o foco da janela");
+  assert.equal(dom.window.document.activeElement.matches('[data-role="rhid-calendar-day"]'), false);
+  view.destroy();
+  dom.window.close();
+});
+
 test("batidas RHID duplicadas não recebem justificativa de ponto não apontado", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");

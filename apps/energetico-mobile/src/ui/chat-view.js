@@ -1944,7 +1944,7 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
   if (!open) return "";
   const changingExistingReport = Boolean(messageId);
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-rhid-attendance-report" data-rhid-attendance-report-dialog>
-    <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="rhid-attendance-report-title">
+    <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
       <div class="chat-date-picker__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
@@ -2408,6 +2408,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
   let rhidAttendanceReportError = "";
+  let rhidAttendanceMonthError = "";
   let rhidAttendanceMonth = "";
   let rhidAttendanceMonthLoading = false;
   let rhidAttendanceMonthKnown = false;
@@ -3940,6 +3941,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthPresentDates = [];
       rhidAttendanceReportBusy = false;
       rhidAttendanceReportError = "";
+      rhidAttendanceMonthError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
       emit({ type: "rhid-attendance-month-load", value: rhidAttendanceMonth });
       return;
@@ -3953,6 +3955,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthKnown = false;
       rhidAttendanceMonthPresentDates = [];
       rhidAttendanceReportError = "";
+      rhidAttendanceMonthError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
       emit({ type: "rhid-attendance-month-load", value: rhidAttendanceMonth });
       return;
@@ -3977,6 +3980,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportDate = "";
       rhidAttendanceReportMessageId = "";
       rhidAttendanceReportError = "";
+      rhidAttendanceMonthError = "";
       rhidAttendanceMonthLoading = false;
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
@@ -4892,7 +4896,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         date: rhidAttendanceReportDate,
         messageId: rhidAttendanceReportMessageId,
         busy: rhidAttendanceReportBusy,
-        error: rhidAttendanceReportError,
+        error: rhidAttendanceReportError || rhidAttendanceMonthError,
         month: rhidAttendanceMonth,
         monthLoading: rhidAttendanceMonthLoading,
         monthKnown: rhidAttendanceMonthKnown,
@@ -4944,8 +4948,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
     if (rhidAttendanceReportOpen) {
-      (root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]')
-        || root.querySelector('[data-action="cancel-rhid-attendance-report"]'))?.focus?.();
+      const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog] [role="dialog"]');
+      const focusTarget = rhidAttendanceReportBusy || rhidAttendanceReportError || rhidAttendanceMonthError
+        ? reportDialog
+        : root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]') || reportDialog;
+      focusTarget?.focus?.({ preventScroll: true });
     }
     // SIGNATURE_GESTURE_LOCK_START: signature-pad-mount
     if (signaturePadOpen) setupSignaturePad();
@@ -4988,7 +4995,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     rhidAttendanceMonthLoading = false;
     rhidAttendanceMonthKnown = !error;
     rhidAttendanceMonthPresentDates = Array.isArray(presentDates) ? presentDates : [];
-    rhidAttendanceReportError = String(error || "");
+    rhidAttendanceMonthError = String(error || "");
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;
   }
@@ -5019,6 +5026,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     rhidAttendanceReportMessageId = "";
     rhidAttendanceReportBusy = false;
     rhidAttendanceReportError = "";
+    rhidAttendanceMonthError = "";
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;
   }
@@ -5141,6 +5149,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportDate = "";
       rhidAttendanceReportBusy = false;
       rhidAttendanceReportError = "";
+      rhidAttendanceMonthError = "";
       signaturePadOpen = false;
       signaturePadTargetFileId = "";
       signaturePadError = "";
