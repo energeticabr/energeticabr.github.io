@@ -972,7 +972,7 @@ test("atalho RHID não permanece no cabeçalho após relatório vazio", () => {
   assert.match(markup, /Nenhuma presença foi encontrada/);
 });
 
-test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", () => {
+test("tela do calendário RHID cancela sem enviar e gera com a data escolhida", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -987,6 +987,8 @@ test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", 
   }] }));
 
   root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  assert.equal(root.querySelector('.chat-confirmation-backdrop'), null, "o calendário RHID usa a própria tela, sem camada escura");
+  assert.equal(root.querySelector('.chat-transcript .chat-choice-button'), null, "o menu fica oculto enquanto o calendário RHID está aberto");
   assert.equal(root.querySelector('[data-rhid-attendance-report-dialog] input[type="date"]'), null, "o calendário RHID não deve abrir seletor nativo");
   assert.ok(root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]'), "a data de hoje deve vir selecionada");
   root.querySelector('[data-action="cancel-rhid-attendance-report"]').click();
@@ -997,11 +999,71 @@ test("popup de relatório RHID cancela sem enviar e gera com a data escolhida", 
   const selectedDay = root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]');
   const selectedMonth = selectedDay.dataset.value.slice(0, 7);
   root.querySelector(`[data-role="rhid-calendar-day"][data-value="${selectedMonth}-15"]`).click();
+  assert.equal(root.querySelector('[data-action="generate-rhid-attendance-report"]')?.dataset.value, `${selectedMonth}-15`, "a confirmação usa a data do calendário visível");
   root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
   assert.deepEqual(requests, [`${selectedMonth}-15`]);
   assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'), null, "o calendário sai da tela durante a consulta");
   assert.equal(root.querySelector('.chat-confirmation-backdrop'), null, "nenhuma camada escura permanece sem conteúdo");
+  assert.match(root.querySelector('.chat-transcript')?.textContent || "", /Consultando relatório RHID/);
+  assert.equal(root.querySelector('.chat-transcript .chat-choice-button'), null, "o menu não substitui a tela de carregamento");
   assert.match(root.querySelector('.chat-progress')?.textContent || "", /Consultando relatório RHID/);
+  view.destroy();
+  dom.window.close();
+});
+
+test("calendário antigo de perguntas não cobre a seleção de data RHID", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  view.render(signedInState({ messages: [{ id: "date", role: "assistant", type: "poll",
+    question: "Qual é a data de pagamento?", options: [{ id: "today", label: "HOJE" }] }] }));
+  root.querySelector('[data-action="open-date-picker"]').click();
+  assert.ok(root.querySelector('[data-date-picker-dialog]'));
+
+  view.render(signedInState({ messages: [{ id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS", options: [
+      { id: "attendance", reply: "action_validate_attendance", label: "VALIDAR PRESENÇAS" },
+      { id: "rhid", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" },
+    ] }] }));
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+
+  assert.equal(root.querySelector('[data-date-picker-dialog]'), null);
+  assert.ok(root.querySelector('[data-rhid-attendance-report-dialog]'));
+  assert.equal(root.querySelector('.chat-confirmation-backdrop'), null);
+  view.destroy();
+  dom.window.close();
+});
+
+test("toque de iPhone em Gerar relatório envia uma vez a data do calendário RHID visível", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const requested = [];
+  view.on("rhid-attendance-report-generate", command => requested.push(command.value));
+  view.render(signedInState({ messages: [{ id: "hr-menu", role: "assistant", type: "poll",
+    question: "👥 RECURSOS HUMANOS", options: [
+      { id: "attendance", reply: "action_validate_attendance", label: "VALIDAR PRESENÇAS" },
+      { id: "rhid", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" },
+    ] }] }));
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  const month = root.querySelector('[data-role="rhid-calendar-day"]').dataset.value.slice(0, 7);
+  root.querySelector(`[data-role="rhid-calendar-day"][data-value="${month}-18"]`).click();
+  const confirm = root.querySelector('[data-action="generate-rhid-attendance-report"]');
+  confirm.getBoundingClientRect = () => ({ left: 20, right: 220, top: 500, bottom: 560, width: 200, height: 60 });
+  dom.window.document.elementFromPoint = () => confirm;
+  const pointer = type => {
+    const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+    for (const [key, value] of Object.entries({ clientX: 100, clientY: 530, pointerId: 21, pointerType: "touch", isPrimary: true }))
+      Object.defineProperty(event, key, { value, configurable: true });
+    return event;
+  };
+  confirm.dispatchEvent(pointer("pointerdown"));
+  confirm.dispatchEvent(pointer("pointerup"));
+  confirm.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+  assert.deepEqual(requested, [`${month}-18`]);
+  assert.ok(root.querySelector('.chat-rhid-report-loading'));
+  assert.equal(root.querySelector('.chat-confirmation-backdrop'), null);
   view.destroy();
   dom.window.close();
 });
