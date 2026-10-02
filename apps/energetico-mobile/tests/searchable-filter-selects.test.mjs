@@ -95,6 +95,27 @@ test('iOS option tap commits on pointerup before a delayed synthetic click', t =
   assert.equal(new ctx.FormData(ctx.form).get('product'), 'concrete');
 });
 
+test('secondary mouse button does not commit a searchable option', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const option = ctx.options().find(item => item.textContent === 'Concreto');
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 2 }));
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 2 }));
+  assert.equal(ctx.select.value, '');
+});
+
+test('captured touch released outside its option does not commit it', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const option = ctx.options().find(item => item.textContent === 'Concreto');
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  ctx.document.elementFromPoint = () => ctx.document.querySelector('#outside');
+  // Touch pointer capture can keep event.target on the option even though
+  // the release coordinates are outside it.
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 300, clientY: 300 }));
+  assert.equal(ctx.select.value, '');
+});
+
 test('releasing a dragged option outside the list restores normal popup dismissal', async t => {
   const ctx = fixture(t);
   ctx.trigger().click();

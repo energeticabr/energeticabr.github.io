@@ -51,6 +51,7 @@ function createPicker(select, closeOthers) {
   let observedViewport = null;
   let selectingOption = false;
   let pressedOption = null;
+  let pressedAt = null;
   let selectionReset = null;
 
   function disabled(option) {
@@ -106,6 +107,7 @@ function createPicker(select, closeOthers) {
   function close({ focus = false } = {}) {
     selectingOption = false;
     pressedOption = null;
+    pressedAt = null;
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
@@ -175,7 +177,8 @@ function createPicker(select, closeOthers) {
   function onOutside(event) { if (!wrapper.contains(event.target)) close(); }
   function onOptionPointerDown(event) {
     const target = event.target.closest?.('.sfs-option');
-    pressedOption = target && list.contains(target) ? target : null;
+    pressedOption = event.button === 0 && event.isPrimary !== false && target && list.contains(target) ? target : null;
+    pressedAt = pressedOption ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
     selectingOption = Boolean(pressedOption);
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
@@ -183,7 +186,14 @@ function createPicker(select, closeOthers) {
   function onOptionPointerUp(event) {
     if (!selectingOption) return;
     const target = event.target.closest?.('.sfs-option');
-    if (target === pressedOption && list.contains(target)) {
+    const travel = Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y);
+    const hit = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(event.clientX, event.clientY) : null;
+    // Touch pointer capture can keep event.target on the pressed option after
+    // a drag. A stationary tap may still be valid while the keyboard reflows.
+    const landed = typeof doc.elementFromPoint !== 'function' || pressedOption.contains(hit)
+      || event.pointerType === 'touch' && travel <= 4;
+    if (event.button === 0 && event.isPrimary !== false && event.pointerId === pressedAt.id
+      && travel <= 12 && landed && target === pressedOption && list.contains(target)) {
       const index = [...list.children].indexOf(target);
       if (candidates[index]) { choose(candidates[index]); return; }
     }
@@ -192,6 +202,7 @@ function createPicker(select, closeOthers) {
   function onOptionPointerCancel() {
     selectingOption = false;
     pressedOption = null;
+    pressedAt = null;
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
   }
