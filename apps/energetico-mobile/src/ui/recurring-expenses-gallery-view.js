@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
@@ -483,7 +484,7 @@ export function createRecurringExpensesGallery({
     controller = new AbortController();
     listLoading = true;
     setNotice("");
-    listStatus.textContent = "Carregando despesas recorrentes…";
+    listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando despesas recorrentes…"));
     updateBusy();
     try {
       const snapshot = await data.loadSnapshot({ signal: controller.signal });

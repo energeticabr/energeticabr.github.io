@@ -1,3 +1,4 @@
+import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
@@ -978,7 +979,7 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="-1" aria-label="Dia anterior" title="Dia anterior"${table.navigationBusy === true ? " disabled" : ""}>←</button>
       <button class="chat-rhid-date-navigation__date" type="button" data-action="open-rhid-attendance-report" data-message-id="${escapeHtml(messageId)}" aria-label="Escolher data do relatório RHID" title="Abrir calendário"${table.navigationBusy === true ? " disabled" : ""}><time datetime="${escapeHtml(date)}">${dateLabel}</time></button>
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia"${table.navigationBusy === true ? " disabled" : ""}>→</button>
-    </nav>${table.navigationBusy === true ? `<p class="chat-rhid-attendance-table__status" role="status">Atualizando dados do RHID…</p>` : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
+    </nav>${table.navigationBusy === true ? loadingIndicatorMarkup("Atualizando dados do RHID…", { compact: true }) : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
     : "";
   return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
@@ -1954,7 +1955,7 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
       </div>
       <p>${changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
       ${rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown)}
-      ${monthLoading ? '<p role="status">Consultando presenças deste mês…</p>' : ""}
+      ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
@@ -1965,9 +1966,9 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
 
 function rhidAttendanceReportLoadingMarkup(date = "") {
   return `<section class="chat-confirmation chat-rhid-report-page chat-rhid-report-loading" role="status" aria-live="polite">
-    <h2>Consultando relatório RHID…</h2>
+    <h2>Relatório RHID</h2>
     <p>Data selecionada: <strong>${escapeHtml(isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : date)}</strong></p>
-    <p>Aguarde a resposta da VM.</p>
+    ${loadingIndicatorMarkup("Consultando relatório RHID…")}
   </section>`;
 }
 
@@ -2042,10 +2043,10 @@ function signaturePlacementMarkup(placement, busy, stampApplied = false) {
   const selected = placement?.selection && Number.isFinite(Number(placement.selection.x))
     && Number.isFinite(Number(placement.selection.y));
   if (placement?.status === "loading") {
-    return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions">Carregando o documento para você escolher o local da assinatura…</p></div></div>`;
+    return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header>${loadingIndicatorMarkup("Carregando o documento para você escolher o local da assinatura…")}</div></div>`;
   }
   if (placement?.status === "signing") {
-    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><h2 id="signature-placement-title">Gerando PDF assinado</h2></header><p class="signature-placement-instructions" role="status">Aguarde a confirmação do novo documento. O original continuará preservado até o envio terminar.</p></div></div>`;
+    return `<div class="signature-placement-backdrop" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><h2 id="signature-placement-title">Gerando PDF assinado</h2></header>${loadingIndicatorMarkup("Gerando PDF assinado… O original continuará preservado até o envio terminar.")}</div></div>`;
   }
   if (placement?.status === "error") {
     return `<div class="signature-placement-backdrop" data-popup-backdrop="true" data-popup-close-action="close-signature-placement" data-signature-placement-dialog><div class="signature-placement-dialog" role="dialog" aria-modal="true" aria-labelledby="signature-placement-title"><header class="signature-placement-header"><button class="signature-placement-close" type="button" data-action="close-signature-placement" aria-label="Fechar posicionamento">×</button><h2 id="signature-placement-title">Posicionar assinatura</h2></header><p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error || "Não foi possível carregar o documento.")}</p></div></div>`;
@@ -2233,7 +2234,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   const isLoading = status === "initializing";
   return `<section class="auth-screen">
     <div class="auth-card">
-      <img class="auth-mascot" src="${MASCOT_URL}" alt="Mascote Energético">
+      ${isLoading ? loadingIndicatorMarkup("Entrando com a Microsoft…", { compact: true }) : `<img class="auth-mascot" src="${MASCOT_URL}" alt="Mascote Energético">`}
       <p class="eyebrow">ENERGÉTICA</p>
       <h1>Energético</h1>
       <p>Seu assistente administrativo em uma conversa segura.</p>
@@ -2325,7 +2326,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
+    ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>

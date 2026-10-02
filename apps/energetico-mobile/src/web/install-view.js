@@ -1,3 +1,4 @@
+import { loadingIndicatorMarkup } from "../ui/loading-indicator.js";
 import { escapeHtml } from "../ui/escape-html.js";
 
 const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=4663F165";
@@ -45,7 +46,7 @@ export function renderInstallMarkup(state = {}) {
     <a class="primary-button setup-link" data-tool-action="install-shortcut" href="${PREPARED_SHORTCUT_URL}">Instalar compartilhamento ENERGÉTICO</a>
     <button class="danger-button" type="button" data-tool-action="revoke">Revogar credencial</button>
   </section>` : !state.ready ? `<section class="setup-section"><h3>Compartilhamento</h3><p>Entre com a Microsoft para consultar sua configuração.</p></section>`
-    : state.checking ? `<section class="setup-section"><h3>Compartilhamento</h3><p role="status">Consultando sua credencial…</p></section>`
+    : state.checking ? `<section class="setup-section"><h3>Compartilhamento</h3>${loadingIndicatorMarkup("Consultando sua credencial…", { compact: true })}</section>`
     : state.credentialStatus === "active" && !state.reconfigure ? `<section class="setup-section">
     <h3>Credencial de compartilhamento ativa</h3>
     <p>Você já criou uma credencial. Se o Atalho já está configurado no iPhone, não é necessário configurá-lo novamente.</p>

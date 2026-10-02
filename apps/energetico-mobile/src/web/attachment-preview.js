@@ -1,4 +1,5 @@
 import { createPinchZoom } from "./pinch-zoom.js";
+import { createLoadingIndicator } from "../ui/loading-indicator.js";
 
 let nextPreviewId = 0;
 
@@ -272,7 +273,7 @@ export function createAttachmentPreview({
     active = session;
     title.textContent = session.fileName;
     updateCollectionNavigation();
-    status.textContent = "Carregando arquivo…";
+    status.replaceChildren(createLoadingIndicator(documentRef, "Carregando arquivo…"));
     exportButton.disabled = true;
     if (!dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
@@ -354,7 +355,7 @@ export function createAttachmentPreview({
             }
           },
         });
-        status.textContent = "Carregando imagem…";
+        status.replaceChildren(createLoadingIndicator(documentRef, "Carregando imagem…"));
       } else if (kind === "video" || kind === "audio") {
         const media = element(kind, `attachment-preview-${kind}`);
         media.controls = true;
@@ -373,7 +374,7 @@ export function createAttachmentPreview({
         }, { once: true });
         media.src = href;
         content.append(media);
-        status.textContent = `Carregando ${kind === "video" ? "vídeo" : "áudio"}…`;
+        status.replaceChildren(createLoadingIndicator(documentRef, `Carregando ${kind === "video" ? "vídeo" : "áudio"}…`));
       } else if (kind === "text") {
         const text = await readText(blob.slice(0, maxTextBytes));
         if (active !== session) return;

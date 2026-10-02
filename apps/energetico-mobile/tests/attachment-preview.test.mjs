@@ -414,10 +414,13 @@ test("arquivo da rede abre janela imediatamente e só permite exportar depois de
   const ready = preview.open(new Promise(resolve => { resolveDownload = resolve; }), "resposta.txt");
   assert.equal(documentRef.querySelector("dialog").open, true);
   assert.equal(documentRef.querySelector('[data-preview-action="export"]').disabled, true);
+  assert.ok(documentRef.querySelector('dialog .app-loading__mascot'));
+  assert.ok(documentRef.querySelector('dialog .app-loading__spinner'));
   resolveDownload(new Blob(["resposta baixada"], { type: "text/plain" }));
   await ready;
   assert.equal(documentRef.querySelector("dialog pre").textContent, "resposta baixada");
   assert.equal(documentRef.querySelector('[data-preview-action="export"]').disabled, false);
+  assert.equal(documentRef.querySelector('dialog .app-loading'), null);
 });
 
 test("erro da rede fica na janela e resposta atrasada após fechar não altera o chat", async t => {

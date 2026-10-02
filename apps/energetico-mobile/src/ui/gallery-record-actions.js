@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
@@ -175,7 +176,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     state.controller = null;
     state.error.hidden = true;
     const cancel = button("Cancelar", "data-gallery-editor-cancel", "", () => { if (active(state) && !state.busy) close(); });
-    state.body.replaceChildren(element("p", "gallery-record-dialog-loading", "Carregando formulário…"), cancel);
+    state.body.replaceChildren(createLoadingIndicator(document, "Carregando formulário…"), cancel);
     try {
       if (typeof loadEditor !== "function") throw new Error("Os metadados deste formulário não estão disponíveis. Tente novamente.");
       const context = await loadEditor(state.row.id, { refresh: true, ...options });

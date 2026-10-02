@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS } from "../chat/registration-gallery-data.js";
@@ -419,7 +420,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     attachmentCountQueue = [];
     loadFailed = false;
     root.setAttribute("aria-busy", "true");
-    feedback.textContent = "Carregando registros…";
+    feedback.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
     try {
       const snapshot = await data.loadSnapshot();
       if (destroyed || current !== request) return;

@@ -74,6 +74,19 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 
 .auth-mascot { width: 124px; height: 124px; object-fit: contain; }
+.app-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 230px; padding: 24px 16px; text-align: center; color: var(--brand); }
+.app-loading__mascot { display: block; width: 110px; height: 150px; object-fit: contain; animation: loading-mascot-float 2.2s ease-in-out infinite; }
+.app-loading[data-loading-variant="1"] .app-loading__mascot { animation-name: loading-mascot-sway; }
+.app-loading[data-loading-variant="2"] .app-loading__mascot { animation-duration: 2.8s; }
+.app-loading__spinner { display: block; flex: none; width: 30px; height: 30px; border: 3px solid #c8e2e9; border-top-color: var(--brand); border-right-color: var(--accent); border-radius: 50%; animation: loading-spinner-turn .85s linear infinite; }
+.app-loading__text { display: block; max-width: 320px; font-size: .92rem; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
+.app-loading--compact { min-height: 0; padding: 12px; gap: 8px; }
+.app-loading--compact .app-loading__mascot { width: 58px; height: 78px; }
+.app-loading--compact .app-loading__spinner { width: 24px; height: 24px; }
+@keyframes loading-spinner-turn { to { transform: rotate(360deg); } }
+@keyframes loading-mascot-float { 50% { transform: translateY(-5px); } }
+@keyframes loading-mascot-sway { 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+@media (prefers-reduced-motion: reduce) { .app-loading__mascot, .app-loading__spinner { animation: none; } }
 .eyebrow { color: var(--brand); font-weight: 800; letter-spacing: .16em; font-size: .78rem; }
 .auth-card h1 { margin: 4px 0 8px; font-size: 2.25rem; }
 .auth-card > p:not(.eyebrow, .error-banner) { color: var(--muted); line-height: 1.5; }
@@ -454,8 +467,7 @@ button:disabled { cursor: wait; opacity: .55; }
   background: linear-gradient(#f6fafb, #edf5f7);
 }
 
-.chat-progress { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding: 10px 14px; color: var(--brand); background: var(--surface-soft); font-size: .9rem; font-weight: 650; }
-.chat-progress span { animation: chat-pulse 1s ease-in-out infinite alternate; }
+.chat-progress { flex-shrink: 0; color: var(--brand); background: var(--surface-soft); }
 @keyframes chat-pulse { from { opacity: .25; } to { opacity: 1; } }
 button { touch-action: manipulation; }
 .chat-flow-status { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:10px; padding:8px 12px; background:#e7f5f0; border-bottom:1px solid #badbcf; }
