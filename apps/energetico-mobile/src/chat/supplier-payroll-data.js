@@ -215,17 +215,22 @@ export function createSupplierPayrollData({
           order.indexOf(monthKey(a.label)) - order.indexOf(monthKey(b.label)),
       );
   }
+  function writableColumn(descriptor, label, required = true) {
+    const c = column(descriptor.columns, [label], required);
+    if (!c) return null;
+    if (c.readOnly || c.calculated)
+      throw new Error(`O campo ${label} não permite gravação.`);
+    if (c.lookup || c.personOrGroup)
+      throw new Error(
+        `O campo ${label} requer um vínculo relacional que não foi identificado.`,
+      );
+    return c;
+  }
   function fieldsFor(descriptor, values, optional = []) {
     const result = {};
     for (const [label, value] of Object.entries(values)) {
-      const c = column(descriptor.columns, [label], !optional.includes(label));
+      const c = writableColumn(descriptor, label, !optional.includes(label));
       if (!c) continue;
-      if (c.readOnly || c.calculated)
-        throw new Error(`O campo ${label} não permite gravação.`);
-      if (c.lookup || c.personOrGroup)
-        throw new Error(
-          `O campo ${label} requer um vínculo relacional que não foi identificado.`,
-        );
       if (
         c.choice?.choices?.length &&
         c.choice.allowTextEntry !== true &&
@@ -300,6 +305,16 @@ export function createSupplierPayrollData({
     if (!/^[a-zA-Z0-9-]{1,80}$/.test(String(progress?.operationId || "")))
       throw new Error("A operação da folha não foi identificada.");
   }
+  function payrollValues(result, sheet, line) {
+    return {
+      FORNECEDOR: result.supplier.label,
+      TIPOPGTO: line.payrollType,
+      VALORUNITARIO: line.unitValue,
+      QTD: line.quantity,
+      DATA: result.date,
+      IDFOLHA: Number(sheet.id),
+    };
+  }
   async function post(rawDraft, progress) {
     if (posting) throw new Error("A folha já está sendo postada.");
     operation(progress);
@@ -331,10 +346,11 @@ export function createSupplierPayrollData({
         throw new Error(
           "O fornecedor ou sua filial foi alterado; revise o cadastro.",
         );
-      const [products, accounts, stages] = await Promise.all([
+      const [products, accounts, stages, sheets] = await Promise.all([
         loadProducts(supplier),
         loadAccounts(),
         loadStages(supplier),
+        loadSheets(supplier),
       ]);
       const product = products.find((p) => p.id === draft.product.id),
         stage = stages.find((s) => s.id === draft.stage.id);
@@ -342,6 +358,17 @@ export function createSupplierPayrollData({
         throw new Error("O produto selecionado não está ativo.");
       if (!stage || key(stage.label) !== key(draft.stage.label))
         throw new Error("A etapa não pertence à filial do fornecedor.");
+      const sheet = sheets.find((s) => s.id === draft.sheet.id);
+      if (!sheet || key(sheet.label) !== key(draft.sheet.label))
+        throw new Error("Selecione um IDFOLHA válido desse fornecedor.");
+      const payrollDescriptor = await describe("FOLHAPGTO");
+      writableColumn(payrollDescriptor, "Title");
+      writableColumn(payrollDescriptor, "IDLANCAMENTO");
+      for (const line of draft.lines)
+        fieldsFor(
+          payrollDescriptor,
+          payrollValues({ ...draft, supplier }, sheet, line),
+        );
       const descriptor = await describe("LANCAMENTOS");
       const values = draft.lines.map((line) => {
         const account = accounts.find((a) => a.id === line.account.id);
@@ -416,7 +443,9 @@ export function createSupplierPayrollData({
         }
         lines.push({ ...line, id });
       }
-      return { ...draft, supplier, product, stage, lines };
+      const result = { ...draft, supplier, product, stage, sheet, lines };
+      const linked = await linkPayroll(result, sheet.id, progress);
+      return { ...result, sheet: linked.sheet };
     } finally {
       posting = false;
     }
@@ -431,6 +460,8 @@ export function createSupplierPayrollData({
         result.lines.some((l) => progress.lines?.[l.rubric]?.id !== l.id)
       )
         throw new Error("Os lançamentos da folha não foram confirmados.");
+      if (String(sheetId) !== result.sheet?.id)
+        throw new Error("O IDFOLHA deve ser o selecionado antes da postagem.");
       const sheet = (await loadSheets(result.supplier)).find(
         (s) => s.id === String(sheetId),
       );
@@ -438,12 +469,7 @@ export function createSupplierPayrollData({
       const descriptor = await describe("FOLHAPGTO");
       const payloads = result.lines.map((line) =>
         fieldsFor(descriptor, {
-          FORNECEDOR: result.supplier.label,
-          TIPOPGTO: line.payrollType,
-          VALORUNITARIO: line.unitValue,
-          QTD: line.quantity,
-          DATA: result.date,
-          IDFOLHA: Number(sheet.id),
+          ...payrollValues(result, sheet, line),
           IDLANCAMENTO: Number(line.id),
         }),
       );

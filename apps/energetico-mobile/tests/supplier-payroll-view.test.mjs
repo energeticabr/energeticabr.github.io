@@ -13,10 +13,8 @@ async function harness() {
     products = [{ id: "2", label: "PEDREIRO", recommended: true }],
     accounts = [{ id: "3", label: "PIX" }],
     stages = [{ id: "4", label: "FUNDAÇÃO" }];
-  const posts = [],
-    links = [];
+  const posts = [];
   let closed = 0;
-  let releasePost;
   const data = {
     loadSuppliers: async () => suppliers,
     loadProducts: async () => products,
@@ -31,10 +29,6 @@ async function harness() {
           .filter((l) => l.unitValue)
           .map((l, i) => ({ ...l, id: String(10 + i) })),
       };
-    },
-    linkPayroll: async (r, id) => {
-      links.push(id);
-      return {};
     },
   };
   const view = module.createSupplierPayrollView({
@@ -60,7 +54,6 @@ async function harness() {
     view,
     data,
     posts,
-    links,
     input,
     click,
     get closed() {
@@ -68,7 +61,7 @@ async function harness() {
     },
   };
 }
-async function fill(h) {
+async function fillToSheet(h) {
   h.input("[name=date]", "2026-10-02");
   await h.click("[data-payroll-next]");
   assert.match(
@@ -92,22 +85,68 @@ async function fill(h) {
   await h.click("[data-payroll-next]");
   await h.click('[data-payroll-option="4"]');
 }
-test("fluxo completo gera resumo antes de gravar e pede vínculo ao IDFOLHA só após Postar", async (t) => {
+async function fill(h) {
+  await fillToSheet(h);
+  await h.click('[data-payroll-option="5"]');
+}
+test("IDFOLHA é escolhido antes do resumo e enviado na postagem obrigatória", async (t) => {
   const h = await harness();
   t.after(() => {
     h.view.destroy();
     h.dom.window.close();
   });
-  await fill(h);
+  await fillToSheet(h);
+  const doc = h.dom.window.document;
+  assert.match(doc.body.textContent, /Qual IDFOLHA de EDGAR/);
+  assert.equal(doc.querySelector("[data-payroll-post]"), null);
   assert.equal(h.posts.length, 0);
-  assert.match(h.dom.window.document.body.textContent, /Resumo da folha/);
-  await h.click("[data-payroll-post]");
-  assert.equal(h.posts.length, 1);
-  assert.match(h.dom.window.document.body.textContent, /IDFOLHA/);
-  await h.click("[data-payroll-link-yes]");
   await h.click('[data-payroll-option="5"]');
-  assert.deepEqual(h.links, ["5"]);
-  assert.match(h.dom.window.document.body.textContent, /vinculad/i);
+  assert.match(doc.body.textContent, /Resumo da folha/);
+  assert.match(doc.body.textContent, /IDFOLHA: 5.*10\/2026/);
+  await h.click("[data-payroll-post]");
+  assert.equal(h.posts[0].sheet.id, "5");
+  assert.match(doc.body.textContent, /postada e vinculada/);
+  assert.match(doc.body.textContent, /IDFOLHA: 5/);
+  assert.equal(doc.querySelector("[data-payroll-link-no]"), null);
+});
+test("sem IDFOLHA cadastrado não há como postar ou concluir sem vínculo", async (t) => {
+  const h = await harness();
+  t.after(() => {
+    h.view.destroy();
+    h.dom.window.close();
+  });
+  h.data.loadSheets = async () => [];
+  await fillToSheet(h);
+  const doc = h.dom.window.document;
+  assert.match(doc.body.textContent, /IDFOLHA.*obrigatório/i);
+  assert.equal(doc.querySelector("[data-payroll-post]"), null);
+  assert.ok(
+    ![...doc.querySelectorAll("button")].some(
+      (b) => b.textContent === "Concluir",
+    ),
+  );
+  assert.equal(h.posts.length, 0);
+  await h.click("[data-payroll-back]");
+  assert.match(doc.body.textContent, /Indique a etapa/);
+});
+test("falha ao buscar IDFOLHA preserva etapa e permite repetir consulta", async (t) => {
+  const h = await harness();
+  t.after(() => {
+    h.view.destroy();
+    h.dom.window.close();
+  });
+  h.data.loadSheets = async () => {
+    throw new Error("sem rede para IDFOLHA");
+  };
+  await fillToSheet(h);
+  const doc = h.dom.window.document;
+  assert.match(doc.querySelector("[role=alert]").textContent, /sem rede/);
+  assert.match(doc.body.textContent, /Indique a etapa/);
+  assert.equal(h.posts.length, 0);
+  h.data.loadSheets = async () => [{ id: "5", label: "10/2026" }];
+  await h.click('[data-payroll-option="4"]');
+  await h.click('[data-payroll-option="5"]');
+  assert.match(doc.body.textContent, /Resumo da folha/);
 });
 test("formulário inválido conserva valores e não inicia gravação", async (t) => {
   const h = await harness();
@@ -164,6 +203,7 @@ test("comprovantes ficam associados à rubrica e são descartados ao destruir", 
   await fill(h);
   await h.click("[data-payroll-back]");
   await h.click("[data-payroll-back]");
+  await h.click("[data-payroll-back]");
   const file = new File(["a"], "salario.pdf", { type: "application/pdf" });
   const input = h.dom.window.document.querySelector('[name="salary-files"]');
   Object.defineProperty(input, "files", { value: [file], configurable: true });
@@ -171,6 +211,7 @@ test("comprovantes ficam associados à rubrica e são descartados ao destruir", 
   assert.match(h.dom.window.document.body.textContent, /salario.pdf/);
   await h.click("[data-payroll-next]");
   await h.click('[data-payroll-option="4"]');
+  await h.click('[data-payroll-option="5"]');
   await h.click("[data-payroll-post]");
   assert.equal(h.posts[0].lines[0].files[0].name, "salario.pdf");
   h.view.destroy();
@@ -205,4 +246,33 @@ test("consulta antiga não altera etapa ao fechar e reabrir página", async (t) 
     h.dom.window.document.querySelectorAll("[data-payroll-option]").length,
     1,
   );
+});
+
+test("erro no vínculo conserva o IDFOLHA e exige retomada antes da conclusão", async (t) => {
+  const h = await harness();
+  t.after(() => {
+    h.view.destroy();
+    h.dom.window.close();
+  });
+  await fill(h);
+  const complete = h.data.post;
+  h.data.post = async (draft, progress) => {
+    progress.fingerprint = "postagem iniciada";
+    throw new Error("não foi possível confirmar o vínculo ao IDFOLHA");
+  };
+  await h.click("[data-payroll-post]");
+  const doc = h.dom.window.document;
+  assert.match(doc.body.textContent, /Resumo da folha/);
+  assert.match(doc.body.textContent, /IDFOLHA: 5/);
+  assert.match(doc.querySelector("[data-payroll-post]").textContent, /Retomar/);
+  assert.equal(doc.querySelector("[data-payroll-back]"), null);
+  assert.ok(
+    ![...doc.querySelectorAll("button")].some(
+      (b) => b.textContent === "Concluir",
+    ),
+  );
+  h.data.post = complete;
+  await h.click("[data-payroll-post]");
+  assert.equal(h.posts[0].sheet.id, "5");
+  assert.match(doc.body.textContent, /postada e vinculada/);
 });

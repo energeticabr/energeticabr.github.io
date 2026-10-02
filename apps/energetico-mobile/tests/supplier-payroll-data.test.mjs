@@ -155,6 +155,7 @@ export function fixture() {
     supplier: { id: "1", label: "EDGAR", branch: "OBRA A" },
     product: { id: "4", label: "PEDREIRO" },
     stage: { id: "7", label: "FUNDAÇÃO" },
+    sheet: { id: "9", label: "10/2026" },
     lines: [
       {
         rubric: "salary",
@@ -369,7 +370,7 @@ test("posta uma linha por rubrica com os campos pedidos e vincula tipos existent
     assert.equal(fields[key], v);
   for (const key of ["DATA", "DATA PGTO EFETUADO", "DATA PGTO PREVISTO"])
     assert.equal(fields[key].slice(0, 10), "2026-10-02");
-  await f.data.linkPayroll(result, "9", progress);
+  assert.equal(result.sheet.id, "9");
   assert.equal(f.rows.FOLHAPGTO.length, 2);
   const linked = f.decode("FOLHAPGTO", f.rows.FOLHAPGTO[1].fields);
   assert.equal(linked.TIPOPGTO, "VALE REFEIÇÃO");
@@ -414,7 +415,7 @@ test("revalida fornecedor e etapa e impede vínculo a folha de outra pessoa", as
   const p = { operationId: "op5" };
   const result = await f.data.post(f.draft, p);
   await assert.rejects(f.data.linkPayroll(result, "11", p), /folha/i);
-  assert.equal(f.rows.FOLHAPGTO.length, 0);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
 });
 test("paginação completa encontra fornecedores elegíveis depois da primeira página", async () => {
   const f = fixture();
@@ -500,4 +501,83 @@ test("campos booleanos recebem valor booleano e data aceita ISO equivalente", as
     f.decode("LANCAMENTOS", f.writes[0].fields).GERADESEMBOLSO,
     true,
   );
+});
+
+test("postagem exige IDFOLHA válido do fornecedor antes de qualquer gravação", async () => {
+  for (const sheet of [
+    null,
+    { id: "11", label: "10/2026" },
+    { id: "10", label: "08/2026" },
+    { id: "999", label: "10/2026" },
+    { id: "9", label: "09/2026" },
+  ]) {
+    const f = fixture();
+    await assert.rejects(
+      f.data.post({ ...f.draft, sheet }, { operationId: "required-sheet" }),
+      /IDFOLHA|folha/i,
+    );
+    assert.equal(f.writes.length, 0);
+  }
+});
+test("metadados incompletos de FOLHAPGTO bloqueiam lançamentos antes de gravar", async () => {
+  for (const field of ["Title", "IDFOLHA", "IDLANCAMENTO", "TIPOPGTO"]) {
+    const f = fixture();
+    f.columns.FOLHAPGTO = f.columns.FOLHAPGTO.filter(
+      (c) => c.displayName !== field,
+    );
+    await assert.rejects(
+      f.data.post(f.draft, { operationId: "link-preflight" }),
+      /campo/i,
+    );
+    assert.equal(f.writes.length, 0);
+  }
+});
+test("falha na confirmação do vínculo retoma a mesma folha sem duplicar registros", async () => {
+  const f = fixture();
+  const p = { operationId: "lost-link" };
+  const create = f.repository.createItem;
+  let lose = true;
+  f.repository.createItem = async (...args) => {
+    const row = await create(...args);
+    if (args[1] === "FOLHAPGTO" && lose) {
+      lose = false;
+      throw new Error("resposta do vínculo perdida");
+    }
+    return row;
+  };
+  await assert.rejects(f.data.post(f.draft, p), /vínculo perdida/);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+  await assert.rejects(
+    f.data.post({ ...f.draft, sheet: { id: "12", label: "11/2026" } }, p),
+    /alterada/,
+  );
+  const result = await f.data.post(f.draft, p);
+  assert.equal(result.sheet.id, "9");
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+  for (const line of result.lines) assert.ok(p.lines[line.rubric].payrollId);
+});
+
+test("postagem só conclui depois de confirmar o IDFOLHA gravado em todas as rubricas", async () => {
+  const f = fixture();
+  const get = f.repository.getItem;
+  const idColumn = f.columns.FOLHAPGTO.find(
+    (c) => c.displayName === "IDFOLHA",
+  ).name;
+  let mismatch = true;
+  f.repository.getItem = async (...args) => {
+    const row = await get(...args);
+    return args[1] === "FOLHAPGTO" && mismatch
+      ? { ...row, fields: { ...row.fields, [idColumn]: 11 } }
+      : row;
+  };
+  const p = { operationId: "verify-link" };
+  await assert.rejects(f.data.post(f.draft, p), /confirmou todos/);
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+  mismatch = false;
+  const result = await f.data.post(f.draft, p);
+  assert.equal(result.sheet.id, "9");
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
 });

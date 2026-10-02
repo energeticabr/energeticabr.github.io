@@ -84,9 +84,16 @@ export function validatePayrollDraft(draft) {
   }
   if (!String(draft.supplier.branch || "").trim())
     throw new RangeError("O fornecedor não possui filial cadastrada.");
+  if (!/^[1-9]\d*$/.test(String(draft.sheet?.id || "")) || !draft.sheet?.label)
+    throw new RangeError(
+      "Selecione o IDFOLHA cadastrado do fornecedor. O vínculo é obrigatório.",
+    );
+  return { ...draft, ...validatePayrollLines(draft.lines) };
+}
+export function validatePayrollLines(rawLines = []) {
   const seen = new Set();
   const lines = [];
-  for (const line of draft.lines || []) {
+  for (const line of rawLines) {
     if (String(line.unitValue ?? "").trim() === "") {
       if (line.files?.length)
         throw new RangeError(
@@ -122,5 +129,5 @@ export function validatePayrollDraft(draft) {
     throw new RangeError(
       "Preencha pelo menos uma rubrica com valor maior que zero.",
     );
-  return { ...draft, lines, total: payrollTotal(lines) };
+  return { lines, total: payrollTotal(lines) };
 }
