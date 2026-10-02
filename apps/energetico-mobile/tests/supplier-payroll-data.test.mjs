@@ -195,6 +195,100 @@ export function fixture() {
     },
   };
 }
+test("folha usa paginação Graph real e inclui fornecedores após a primeira página", async () => {
+  const f = fixture();
+  const calls = [];
+  const status = f.columns.FORNECEDORES.find(
+    (c) => c.displayName === "STATUS",
+  ).name;
+  const name = f.columns.FORNECEDORES.find(
+    (c) => c.displayName === "CADASTRO",
+  ).name;
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    id: String(index + 1),
+    fields: {
+      ...f.rows.FORNECEDORES[0].fields,
+      [status]: index ? "INATIVO" : "ATIVO",
+    },
+  }));
+  const lastSupplier = {
+    id: "101",
+    fields: { ...f.rows.FORNECEDORES[0].fields, [name]: "OUTRO EMPREITEIRO" },
+  };
+  const data = module.createSupplierPayrollData({
+    tokenProvider: async () => "token",
+    now: () => new Date("2026-10-02T20:00:00Z"),
+    fetchImpl: async (url, options) => {
+      const parsed = new URL(url);
+      calls.push({
+        url: parsed,
+        method: options.method,
+        headers: options.headers,
+      });
+      if (parsed.pathname.includes(".sharepoint.com:"))
+        return Response.json({
+          id: parsed.pathname.includes("-my.")
+            ? "site-personal"
+            : "site-company",
+        });
+      if (parsed.pathname.endsWith("/lists"))
+        return Response.json({
+          value: Object.keys(f.columns).map((id) => ({
+            id,
+            displayName: id,
+            list: { template: "genericList" },
+          })),
+        });
+      const match = parsed.pathname.match(/\/lists\/([^/]+)\/(columns|items)$/);
+      assert.ok(match, `URL Graph inesperada: ${parsed.pathname}`);
+      const [, list, collection] = match;
+      if (collection === "columns")
+        return Response.json({ value: f.columns[list] });
+      if (list === "FORNECEDORES") {
+        return Response.json(
+          parsed.searchParams.has("$skiptoken")
+            ? { value: [lastSupplier] }
+            : {
+                value: firstPage,
+                "@odata.nextLink":
+                  "https://graph.microsoft.com/v1.0/sites/site-personal/lists/FORNECEDORES/items?$expand=fields&$top=100&$skiptoken=second-page",
+              },
+        );
+      }
+      return Response.json({ value: f.rows[list] });
+    },
+  });
+  const suppliers = await data.loadSuppliers();
+  assert.deepEqual(
+    suppliers.map((s) => s.id),
+    ["1", "101"],
+  );
+  assert.deepEqual(
+    (await data.loadProducts(suppliers[0])).map((p) => p.id),
+    ["4"],
+  );
+  assert.deepEqual(
+    (await data.loadAccounts()).map((a) => a.id),
+    ["6"],
+  );
+  assert.deepEqual(
+    (await data.loadStages(suppliers[0])).map((s) => s.id),
+    ["7"],
+  );
+  assert.deepEqual(
+    (await data.loadSheets(suppliers[0])).map((s) => s.id),
+    ["9"],
+  );
+  const itemCalls = calls.filter((c) => c.url.pathname.endsWith("/items"));
+  assert.equal(
+    itemCalls.filter((c) => c.url.pathname.includes("FORNECEDORES")).length,
+    2,
+  );
+  assert.ok(
+    itemCalls.every((c) => Number(c.url.searchParams.get("$top")) <= 100),
+  );
+  assert.ok(calls.every((c) => c.method === "GET"));
+});
 test("prepara permissões Graph e anexos SharePoint antes de qualquer gravação", async () => {
   const f = fixture();
   const scopes = [];
