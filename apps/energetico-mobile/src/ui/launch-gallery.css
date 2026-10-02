@@ -375,6 +375,11 @@
 .lg-editor-grid > .lg-attachments { width: 100%; min-width: 0; padding: 14px; border: 1px solid var(--lg-line); border-radius: 8px; background: #f5f9fc; }
 .lg-attachment-tray { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px; }
 .lg-attachment-item { max-width: 100%; overflow-wrap: anywhere; text-align: left; color: var(--lg-navy); background: #fff; border: 1px solid #8ea5ba; }
+.lg-attachment-add { display: grid; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--lg-line); }
+.lg-attachment-add-title { margin: 0; color: var(--lg-navy); font-size: .9rem; }
+.lg-attachment-picker { width: 100%; max-width: 100%; min-width: 0; padding: 8px; border: 1px solid #8ea5ba; border-radius: 6px; background: #fff; font: inherit; }
+.lg-attachment-add > .lg-file-name { margin: 0; color: var(--lg-muted); }
+.lg-attachment-add > .lg-button { width: 100%; color: #fff; background: #0a5670; }
 .lg-editor-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
 .lg-editor-actions > .lg-button { width: 100%; min-width: 0; }
 .lg-editor-actions > .lg-editor-cancel { color: #fff; background: #b91c24; }

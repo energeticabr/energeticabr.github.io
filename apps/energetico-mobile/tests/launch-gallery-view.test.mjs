@@ -66,6 +66,13 @@ function input(ctx, name, value, parent = ctx.root()) {
   field.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
   return field;
 }
+function selectAttachment(ctx, file) {
+  const picker = ctx.root().querySelector('.lg-attachments input[type="file"]');
+  assert.ok(picker, 'file picker below the current attachments');
+  Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
+  picker.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  return picker;
+}
 async function showDetail(ctx) {
   const card = ctx.root().querySelector('.lg-record');
   assert.ok(card?.querySelector('[data-gallery-action="edit"]'), 'launch pencil');
@@ -247,7 +254,7 @@ test('filters start collapsed so records are visible; details and review scroll 
   assert.ok(scrolled.includes(ctx.root().querySelector('.lg-review')));
 });
 
-test('edit modal shows compact dates and attachments below UN, but no unrelated operations or signature', async t => {
+test('edit modal shows compact dates and an attachment picker below the current attachments', async t => {
   const png = 'data:image/png;base64,iVBORw0KGgo=';
   const item = {...row(), fields: {...row().fields, ASSINATURA: JSON.stringify(png), 'DATA PGTO PREVISTO': '2026-09-25T00:00:00Z'}};
   const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({item, editFields: [
@@ -263,12 +270,17 @@ test('edit modal shows compact dates and attachments below UN, but no unrelated 
   const unit = form.querySelector('[name="UN"]').closest('.lg-field');
   assert.equal(unit.nextElementSibling, form.querySelector('.lg-attachments'));
   assert.equal(form.querySelector('.lg-attachments'), ctx.root().querySelector('.lg-attachments'));
+  const attachmentSection = form.querySelector('.lg-attachments');
+  assert.ok(attachmentSection.querySelector('input[type="file"]'));
+  assert.ok(attachmentSection.querySelector('.lg-attachment-add'));
+  assert.ok(attachmentSection.querySelector('.lg-attachment-add').compareDocumentPosition(form.querySelector('.lg-editor-actions'))
+    & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(button(attachmentSection, 'Adicionar anexo').disabled);
   assert.equal(ctx.root().querySelector('.lg-signature'), null);
   for (const text of ['Excluir lançamento', 'Provisionar pagamento', 'Aplicar medição', 'Desenhar assinatura',
-    'Adicionar anexo', 'Limpar arquivo selecionado', 'Remover anexo']) {
+    'Limpar arquivo selecionado', 'Remover anexo']) {
     assert.equal([...ctx.root().querySelectorAll('.lg-detail button')].some(node => node.textContent === text), false);
   }
-  assert.equal(form.querySelector('input[type="file"]'), null);
   const buttons = [...form.querySelectorAll('.lg-editor-actions > button')];
   assert.deepEqual(buttons.map(node => node.textContent), ['Cancelar edição', 'Revisar alterações']);
   input(ctx, 'DATA', '18/09/2026');
@@ -1519,6 +1531,294 @@ test('attachment tray opens the chosen file without leaving the editing form', a
   assert.equal(ctx.root().hidden, true);
   viewer.resolve(); await settle();
   assert.equal(ctx.root().hidden, false);
+});
+
+test('new attachment tray and controls use the available editor width', async t => {
+  const ctx = await setup(t);
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const tray = ctx.root().querySelector('.lg-attachment-add');
+  const picker = tray.querySelector('input[type="file"]');
+  const submit = button(tray, 'Adicionar anexo');
+  assert.equal(ctx.dom.window.getComputedStyle(tray).display, 'grid');
+  assert.equal(ctx.dom.window.getComputedStyle(picker).width, '100%');
+  assert.equal(ctx.dom.window.getComputedStyle(submit).width, '100%');
+});
+
+test('new attachment is confirmed, uploaded to the selected launch and shown below the existing files', async t => {
+  const uploads = [];
+  let attachments = [{ fileName: 'um.pdf' }, { fileName: 'dois.png' }];
+  let modified = '2026-09-18T12:34:56Z';
+  const ctx = await setup(t, {
+    request: async operation => operation === 'snapshot' ? snapshot()
+      : detail({ attachments, item: { ...row(), expectedModified: modified } }),
+    upload: async (id, file, options) => {
+      uploads.push({ id, file, options });
+      attachments = [...attachments, { fileName: file.name }];
+      modified = `version-${uploads.length + 1}`;
+      return { ok: true };
+    },
+  });
+  await ctx.gallery.open(); await showDetail(ctx);
+  const file = new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' });
+  selectAttachment(ctx, file);
+  assert.match(ctx.root().querySelector('.lg-attachment-add').textContent, /novo\.pdf/);
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(uploads.length, 0, 'choosing a file never uploads it immediately');
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /novo\.pdf/);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].id, 17);
+  assert.equal(uploads[0].file, file);
+  assert.equal(uploads[0].options.operation, 'attachment_add');
+  assert.equal(uploads[0].options.confirm, true);
+  assert.equal(uploads[0].options.expectedModified, '2026-09-18T12:34:56Z');
+  assert.match(uploads[0].options.requestId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent),
+    ['📎 um.pdf', '📎 dois.png', '📎 novo.pdf']);
+  assert.equal(mutations(ctx).length, 0, 'upload is not a field update');
+  selectAttachment(ctx, new ctx.dom.window.File(['outro'], 'outro.pdf', { type: 'application/pdf' }));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[1].options.expectedModified, 'version-2');
+  assert.notEqual(uploads[0].options.requestId, uploads[1].options.requestId);
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent),
+    ['📎 um.pdf', '📎 dois.png', '📎 novo.pdf', '📎 outro.pdf']);
+});
+
+test('adding an attachment preserves unsaved fields and refreshes the SharePoint version', async t => {
+  const uploads = []; let attachments = []; let modified = '2026-09-18T12:34:56Z';
+  let remoteDescription = row().fields.DESCRIÇÃO;
+  let remoteStatus = 'PEDIDO EMPENHADO';
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments, item: { ...row(), expectedModified: modified,
+      fields: { ...row().fields, DESCRIÇÃO: remoteDescription, CONCLUÍDO: remoteStatus } } }),
+  upload: async (...args) => {
+    uploads.push(args);
+    attachments = [{ fileName: args[1].name }]; modified = '2026-09-18T12:40:00Z';
+    remoteDescription = 'Alterado por colega';
+    remoteStatus = 'PEDIDO FINALIZADO';
+    return { ok: true, fileName: args[1].name };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  assert.match(ctx.root().querySelector('.lg-attachments').textContent, /Nenhum anexo/);
+  const file = new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' });
+  selectAttachment(ctx, file);
+  input(ctx, 'QUANTIDADE', '3');
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '3');
+  assert.equal(uploads.length, 0);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '3');
+  assert.equal(ctx.root().querySelector('[name="DESCRIÇÃO"]').value, 'Alterado por colega');
+  assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').value, 'PEDIDO FINALIZADO');
+  assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').nextElementSibling.querySelector('.sfs-value').textContent, 'Finalizado');
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
+  button(ctx.root(), 'Revisar alterações').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  assert.deepEqual(ctx.calls.at(-1), { operation: 'detail', payload: { id: 17 } });
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, '2026-09-18T12:40:00Z');
+  assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.fields.QUANTIDADE, 3);
+  assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'DESCRIÇÃO'), false);
+  assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'CONCLUÍDO'), false);
+});
+
+test('a concurrent change to an edited field keeps the draft but blocks a stale update', async t => {
+  let attachments = []; let quantity = 2.5;
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments, item: { ...row(), fields: { ...row().fields, QUANTIDADE: quantity } } }),
+  upload: async (id, file) => { attachments = [{ fileName: file.name }]; quantity = 5; return { fileName: file.name }; } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /campo editado mudou/i);
+  button(ctx.root(), 'Revisar alterações').click(); await settle();
+  assert.equal(ctx.calls.some(call => call.operation === 'update'), false);
+});
+
+test('a failed detail refresh after upload keeps the draft and retries before reviewing fields', async t => {
+  let attachments = []; let failRefresh = true; let uploaded = false;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return snapshot();
+    if (uploaded && failRefresh) { failRefresh = false; throw new Error('Detalhe indisponível'); }
+    return detail({ attachments, item: { ...row(), expectedModified: uploaded ? 'new-version' : 'old-version' } });
+  }, upload: async (id, file) => {
+    uploaded = true; attachments = [{ fileName: file.name }]; return { fileName: file.name };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /Anexo enviado.*atualiza/i);
+  button(ctx.root(), 'Revisar alterações').click(); await settle();
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
+});
+
+test('failed attachment upload keeps the confirmation and retry identity', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { upload: async (id, file, options) => {
+    uploads.push({ id, file, options });
+    if (uploads.length === 1) throw new Error('Falha no envio');
+    return { ok: true };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' }));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /Falha no envio/);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[0].options.requestId, uploads[1].options.requestId);
+});
+
+test('lost upload response reconciles the stored file before another write', async t => {
+  let attachments = []; let modified = 'old-version'; const uploads = [];
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments, item: { ...row(), expectedModified: modified } }),
+  upload: async (id, file, options) => {
+    uploads.push(options);
+    attachments = [{ fileName: file.name }]; modified = 'new-version';
+    throw new Error('Resposta perdida');
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /arquivo com esse nome.*verifique/i);
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
+  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
+});
+
+test('a rejected duplicate name is never reported as an uploaded attachment', async t => {
+  let checked = false; let uploads = 0;
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments: checked ? [{ fileName: 'nota.pdf' }] : [] }),
+  upload: async () => {
+    uploads += 1; checked = true;
+    throw Object.assign(new Error('Já existe um anexo com esse nome; nenhum arquivo foi sobrescrito.'), { status: 409 });
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'nota.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /já existe um anexo/i);
+  assert.doesNotMatch(ctx.root().querySelector('[role="alert"]').textContent, /anexo enviado/i);
+});
+
+test('the picker rejects an existing attachment name before sending', async t => {
+  let uploads = 0;
+  const ctx = await setup(t, { upload: async () => { uploads += 1; } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['outro'], 'UM.PDF'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /já existe um anexo/i);
+  assert.equal(uploads, 0);
+});
+
+test('an uncertain upload waits for a successful detail check instead of uploading twice', async t => {
+  let stored = false; let detailFailures = 2; let uploads = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return snapshot();
+    if (stored && detailFailures-- > 0) throw new Error('Consulta indisponível');
+    return detail({ attachments: stored ? [{ fileName: 'novo.pdf' }] : [] });
+  }, upload: async () => { uploads += 1; stored = true; throw new Error('Resposta perdida'); } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1, 'an unavailable detail response must not trigger a second write');
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
+});
+
+test('cancelling an uncertain confirmation still checks the server before a new attempt', async t => {
+  let stored = false; let failDetail = true; let uploads = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return snapshot();
+    if (stored && failDetail) { failDetail = false; throw new Error('Consulta indisponível'); }
+    return detail({ attachments: stored ? [{ fileName: 'novo.pdf' }] : [] });
+  }, upload: async () => { uploads += 1; stored = true; throw new Error('Resposta perdida'); } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  button(ctx.root(), 'Cancelar confirmação').click();
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+});
+
+test('cancelling an uncertain attachment retry keeps its request identity', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { upload: async (id, file, options) => {
+    uploads.push(options.requestId); throw new Error('Conexão interrompida');
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' }));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  button(ctx.root(), 'Cancelar confirmação').click();
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[0], uploads[1]);
+});
+
+test('changing the selected attachment invalidates its prior confirmation', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { upload: async (...args) => uploads.push(args) });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['um'], 'primeiro.pdf', { type: 'application/pdf' }));
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /primeiro\.pdf/);
+  selectAttachment(ctx, new ctx.dom.window.File(['dois'], 'segundo.pdf', { type: 'application/pdf' }));
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /segundo\.pdf/);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0][1].name, 'segundo.pdf');
+});
+
+test('an attachment above the gallery limit is rejected before confirmation', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, { name: 'grande.pdf', size: 20 * 1024 * 1024 + 1 });
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /20 MB/);
 });
 
 test('stale detail responses are discarded and failed detail can be retried', async t => {
