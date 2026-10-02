@@ -199,6 +199,38 @@ test('modified editor inputs and searchable triggers have a visible orange fill'
   assert.equal(ctx.dom.window.getComputedStyle(form.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 240, 214)');
 });
 
+test('dependent choice cleared by a branch change is highlighted until its original value is restored', async t => {
+  const item = row(); item.fields.ETAPA = 'Etapa antiga';
+  const ctx = await setup(t, {request: async (operation, payload) => {
+    if (operation === 'snapshot') return snapshot({rows: [item]});
+    if (operation === 'schema') return {fields: [{name: 'ETAPA', options: payload.fields.FILIAL === 'Obra B'
+      ? [{value: 'Etapa nova', label: 'Etapa nova'}]
+      : [{value: 'Etapa antiga', label: 'Etapa antiga'}]}]};
+    return detail({item, editFields: [
+      {name: 'FILIAL', label: 'Filial', type: 'select', options: ['Obra A', 'Obra B']},
+      {name: 'ETAPA', label: 'Etapa', type: 'select', options: ['Etapa antiga']},
+    ]});
+  }});
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const form = ctx.root().querySelector('.lg-editor');
+  const stage = form.querySelector('[name="ETAPA"]');
+  const stageField = stage.closest('.lg-field');
+
+  input(ctx, 'FILIAL', 'Obra B'); await settle();
+  assert.equal(stage.value, '');
+  assert.equal(stageField.classList.contains('lg-field-modified'), true);
+  assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 240, 214)');
+  input(ctx, 'FILIAL', 'Obra A'); await settle();
+  stage.closest('.lg-field').querySelector('.sfs-trigger').click();
+  [...stageField.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Etapa antiga').click();
+  assert.equal(stage.value, 'Etapa antiga');
+  assert.equal(stageField.classList.contains('lg-field-modified'), false);
+  assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 255, 255)');
+});
+
 test('filters start collapsed so records are visible; details and review scroll into view', async t => {
   const ctx = await setup(t);
   const scrolled = [];
