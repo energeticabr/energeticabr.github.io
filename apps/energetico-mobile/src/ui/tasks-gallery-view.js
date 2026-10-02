@@ -1,6 +1,6 @@
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
-import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS_FILTER = "__ATIVIDADE_CRIADA_OU_EM_ATENDIMENTO__";
@@ -62,11 +62,23 @@ function formatValue(name, value) {
   return date || text(value) || "—";
 }
 
-function completion(fields) { return truthy(field(fields, ["CONCLUÍDO", "CONCLUIDO"])); }
+function formatTimestamp(value) {
+  const date = new Date(text(value));
+  if (Number.isNaN(date.getTime())) return formatValue("DATA", value);
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(date);
+}
+
+function completion(fields) {
+  const aliases = new Set(["DATA CONCLUSÃO", "DATA CONCLUSAO", "field_8"].map(key));
+  return Object.entries(fields || {}).some(([name, value]) => aliases.has(key(name)) && text(value).trim().length > 0);
+}
 function priority(fields) { return truthy(field(fields, ["PRIORITÁRIA", "PRIORITARIA"])); }
 function charge(fields) { return truthy(field(fields, ["COBRAR"])); }
 function dueDate(fields) { return field(fields, ["DATA FATAL", "DATAFATAL", "field_7"]); }
-function startDate(fields) { return field(fields, ["DATA INÍCIO", "DATA INICIO"]); }
+function startDate(fields) { return field(fields, ["DATA INÍCIO", "DATA INICIO", "field_6"]); }
 function createdDate(fields, row) { return field(fields, ["DATA CRIAÇÃO", "DATA CRIACAO", "CRIADO", "CREATED"]) ?? row?.createdDateTime; }
 function taskInProgress(fields, todayKey) {
   const start = dateKey(startDate(fields));
@@ -74,9 +86,9 @@ function taskInProgress(fields, todayKey) {
 }
 
 function status(fields, todayKey) {
-  const explicit = text(field(fields, ["STATUS"])).trim();
-  if (explicit) return explicit;
   if (completion(fields)) return "CONCLUÍDA";
+  const explicit = text(field(fields, ["STATUS"])).trim();
+  if (explicit && !/conclu[ií]d|finalizad/i.test(explicit)) return explicit;
   const due = dateKey(dueDate(fields));
   if (due && due < todayKey) return "ATRASADA";
   return taskInProgress(fields, todayKey) ? "EM ATENDIMENTO" : "NÃO INICIADA";
@@ -110,10 +122,11 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const homeButton = el("button", "og-button", "Início"); homeButton.type = "button";
   header.append(closeButton, title, homeButton);
   const content = el("main", "og-content");
-  const filterDisclosure = el("details", "og-filters");
+  const filterDisclosure = el("details", "og-filters tg-filters");
   filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros e ordenação"));
-  const form = el("form", "og-filter-form");
+  const form = el("form", "og-filter-form tg-filter-form");
   form.setAttribute("aria-label", "Filtros da G7 — Histórico Tarefas");
+  const toolbar = el("div", "tg-toolbar");
   const grid = el("div", "og-filter-grid");
   const controls = new Map();
 
@@ -124,7 +137,18 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     if (tag === "select") { const all = el("option", "", "Todos"); all.value = ""; control.append(all); }
     controls.set(name, control); wrapper.append(control); grid.append(wrapper); return control;
   }
-  addControl("search", "Descrição, ID ou responsável", "input", "search").placeholder = "Pesquisar tarefa…";
+  const searchControl = addControl("search", "Descrição, ID ou responsável", "input", "search");
+  searchControl.placeholder = "Pesquisar tarefas (descrição, responsável, ID…)";
+  const searchField = searchControl.parentElement;
+  searchField.classList.add("tg-search-field");
+  const filterToggle = el("button", "og-button tg-filter-toggle", "⚲ Filtros");
+  filterToggle.type = "button";
+  filterToggle.setAttribute("aria-expanded", "false");
+  filterToggle.addEventListener("click", () => {
+    filterDisclosure.open = !filterDisclosure.open;
+    filterToggle.setAttribute("aria-expanded", String(filterDisclosure.open));
+  });
+  toolbar.append(searchField, filterToggle);
   const statusControl = addControl("status", "Status");
   statusControl.append(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
   statusControl.value = DEFAULT_STATUS_FILTER;
@@ -145,7 +169,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   pageSizeControl.value = String(pageSize);
   const actions = el("div", "og-actions");
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
-  actions.append(clearButton); form.append(grid, actions); filterDisclosure.append(form);
+  actions.append(clearButton); filterDisclosure.append(grid, actions); form.append(toolbar, filterDisclosure);
   const metrics = el("section", "og-metrics tg-metrics"); metrics.setAttribute("aria-label", "Resumo de tarefas");
   const notice = el("p", "og-notice"); notice.hidden = true;
   const listStatus = el("p", "og-list-status tg-list-status"); listStatus.setAttribute("aria-live", "polite");
@@ -157,7 +181,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   pagination.append(previous, pageLabel, next);
   const detail = el("section", "og-detail tg-detail"); detail.hidden = true; detail.tabIndex = -1;
   detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes da tarefa");
-  content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
+  content.append(metrics, form, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
@@ -173,14 +197,79 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     onChange: updateAttachmentCount,
   });
 
+  function actualAttachmentCount(row) {
+    return attachmentCounts.attachmentsFor(row)?.length ?? knownGalleryAttachmentCount(row) ?? 0;
+  }
+
+  function renderAttachmentRail(row) {
+    const id = field(row.fields, ["ID 2", "ID"]) ?? row.id;
+    const label = attachmentCounts.label(row);
+    const attachmentButton = el("button", "og-button og-card-attachment-rail");
+    attachmentButton.type = "button";
+    attachmentButton.dataset.action = "attachments";
+    attachmentButton.setAttribute("aria-label", `Abrir anexos da tarefa ${id}: ${label}`);
+    attachmentButton.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
+      el("span", "og-card-attachment-count", label));
+    attachmentButton.addEventListener("click", () => openAttachments(row));
+    return attachmentButton;
+  }
+
   function updateAttachmentCount(row) {
     if (!opened || destroyed) return;
     const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
-    const count = card?.querySelector('.og-card-attachment-count');
+    if (!card) return;
+    const main = card.querySelector(".tg-card-main");
+    let retry = main?.querySelector('[data-action="retry-attachments"]');
+    if (attachmentCounts.hasError(row)) {
+      if (!retry) {
+        retry = el("button", "tg-attachment-retry", "Falha ao consultar arquivos. Tentar novamente");
+        retry.type = "button";
+        retry.dataset.action = "retry-attachments";
+        retry.addEventListener("click", () => {
+          retry.disabled = true;
+          retry.textContent = "Consultando arquivos…";
+          void attachmentCounts.load(row, { force: true }).catch(() => null);
+        });
+        main.append(retry);
+      }
+      retry.textContent = "Falha ao consultar arquivos. Tentar novamente";
+      retry.disabled = listLoading || attachmentLoading;
+    } else retry?.remove();
+    let rail = card.querySelector('.og-card-attachment-rail');
+    if (actualAttachmentCount(row) < 1) {
+      rail?.remove();
+      card.classList.remove("og-card--with-attachments");
+      updateExpandButton(card);
+      return;
+    }
+    if (!rail) {
+      rail = renderAttachmentRail(row);
+      card.insertBefore(rail, card.querySelector(".og-card-main"));
+      card.classList.add("og-card--with-attachments");
+    }
     const label = attachmentCounts.label(row);
-    if (count) count.textContent = label;
+    rail.querySelector('.og-card-attachment-count').textContent = label;
     const id = field(row.fields, ["ID 2", "ID"]) ?? row.id;
-    card?.querySelector('.og-card-attachment-rail')?.setAttribute('aria-label', `Abrir anexos da tarefa ${id}: ${label}`);
+    rail.setAttribute('aria-label', `Abrir anexos da tarefa ${id}: ${label}`);
+    updateExpandButton(card);
+  }
+
+  function updateExpandButton(card) {
+    const description = card.querySelector(".tg-description");
+    const expand = card.querySelector('[data-action="expand"]');
+    if (!description || !expand) return;
+    const wasExpanded = description.classList.contains("tg-description--expanded");
+    description.classList.remove("tg-description--expanded");
+    const overflowing = description.scrollHeight > description.clientHeight + 1;
+    if (wasExpanded && overflowing) description.classList.add("tg-description--expanded");
+    expand.dataset.baseDisabled = String(!overflowing);
+    expand.disabled = listLoading || attachmentLoading || !overflowing;
+    expand.setAttribute("aria-expanded", String(wasExpanded && overflowing));
+    expand.setAttribute("aria-label", `${wasExpanded && overflowing ? "Recolher" : "Expandir"} descrição da tarefa ${card.dataset.itemId}`);
+  }
+
+  function refreshExpandButtons() {
+    for (const card of cards.querySelectorAll(".tg-card")) updateExpandButton(card);
   }
 
   function updateBusy() {
@@ -222,17 +311,15 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
 
   function updateMetrics() {
-    const today = dateKey(now());
     const done = rows.filter(row => completion(row.fields)).length;
     const pending = rows.length - done;
-    const inProgress = rows.filter(row => !completion(row.fields) && taskInProgress(row.fields, today)).length;
-    const notStarted = rows.filter(row => !completion(row.fields) && !taskInProgress(row.fields, today)).length;
-    const createdToday = rows.filter(row => dateKey(createdDate(row.fields, row)) === today).length;
-    const dueToday = rows.filter(row => !completion(row.fields) && dateKey(dueDate(row.fields)) === today).length;
-    const overdue = rows.filter(row => !completion(row.fields) && dateKey(dueDate(row.fields)) && dateKey(dueDate(row.fields)) < today).length;
-    const values = [["Total", rows.length], ["Concluídas", done], ["Pendentes", pending], ["Em atendimento", inProgress], ["Não iniciadas", notStarted], ["Criadas hoje", createdToday], ["Vencem hoje", dueToday], ["Atrasadas", overdue]];
-    metrics.replaceChildren(...values.map(([label, value]) => {
-      const item = el("div", "og-metric"); item.append(el("dt", "", label), el("dd", "", String(value))); return item;
+    const values = [["Total", rows.length, "▤"], ["Pendentes", pending, "◷"], ["Concluídas", done, "✓"]];
+    metrics.replaceChildren(...values.map(([label, value, icon]) => {
+      const item = el("div", "og-metric tg-metric");
+      const copy = el("div", "tg-metric-copy");
+      const badge = el("span", "tg-metric-icon", icon); badge.setAttribute("aria-hidden", "true");
+      copy.append(el("dt", "", label), el("dd", "", String(value)));
+      item.append(badge, copy); return item;
     }));
   }
 
@@ -264,52 +351,70 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     renderList();
   }
 
-  function renderCard(row) {
+  function renderCard(row, index) {
     const fields = row.fields || {};
     const id = String(field(fields, ["ID 2", "ID"]) ?? row.id);
-    const task = text(field(fields, ["TAREFA", "Title"])) || "Tarefa sem descrição";
-    const hasAttachmentControl = row.hasAttachments !== false;
-    const card = el("article", `og-card tg-card${hasAttachmentControl ? " og-card--with-attachments" : ""}`); card.dataset.itemId = row.id;
-    const main = el("div", "og-card-main");
-    const heading = el("header", "og-card-heading"); heading.append(el("span", "og-card-id", id), el("h2", "", task));
+    const task = text(field(fields, ["TAREFA", "field_11", "Title"])) || "Tarefa sem descrição";
+    const hasAttachmentControl = actualAttachmentCount(row) > 0;
+    const card = el("article", `og-card tg-card gallery-record-card tg-card--${index % 2 ? "blue" : "light"}${hasAttachmentControl ? " og-card--with-attachments" : ""}`);
+    card.dataset.itemId = row.id;
+    const main = el("div", "og-card-main tg-card-main");
+    const heading = el("header", "tg-card-heading");
+    heading.append(el("span", "og-card-id", id));
+    const urgency = text(field(fields, ["GRAU URGÊNCIA", "GRAU URGENCIA", "URGÊNCIA", "URGENCIA", "field_1"]));
+    const urgencyLabel = /emergenc/i.test(urgency) ? "ATIVIDADE EMERGENCIAL" : priority(fields) ? "ATIVIDADE PRIORITÁRIA" : urgency || "ATIVIDADE NORMAL";
+    heading.append(el("span", `tg-urgency${/emergenc/i.test(urgencyLabel) ? " tg-urgency--emergency" : ""}`, urgencyLabel));
+    const due = dueDate(fields);
+    if (dateKey(due)) heading.append(el("span", "tg-due", formatValue("DATA FATAL", due)));
+    const association = text(field(fields, ["ASSOCIAÇÃO", "ASSOCIACAO", "field_10"])).trim();
+    const badges = el("div", "tg-card-badges");
+    if (association) badges.append(el("span", "tg-association", association));
     const statusText = status(fields, dateKey(now()));
-    const statusPill = el("span", `og-status${/pendente|atrasad|não iniciad/i.test(statusText) ? " og-status--pending" : ""}`, statusText);
-    const cardFields = el("dl", "og-card-fields");
-    const summaries = [
-      ["PRIORITÁRIA", field(fields, ["PRIORITÁRIA", "PRIORITARIA"])], ["COBRAR", field(fields, ["COBRAR"])],
-      ["FILIAL", field(fields, ["FILIAL"])], ["REFERENTE", field(fields, ["REFERENTE"])], ["ASSOCIAÇÃO", field(fields, ["ASSOCIAÇÃO", "ASSOCIACAO", "field_10"])],
-      ["CRIADO POR", field(fields, ["CRIADO POR", "AUTHOR", "CREATED BY"]) ?? row?.createdBy?.user?.displayName],
-      ["DATA CRIAÇÃO", createdDate(fields, row)], ["DATA IDENTIFICAÇÃO", field(fields, ["DATA IDENTIFICAÇÃO", "DATA IDENTIFICACAO"])],
-      ["DATA INÍCIO", startDate(fields)], ["DATA FATAL", dueDate(fields)], ["DATA CONCLUSÃO", field(fields, ["DATA CONCLUSÃO", "DATA CONCLUSAO"])],
-      ["GRAU URGÊNCIA", field(fields, ["GRAU URGÊNCIA", "GRAU URGENCIA", "URGÊNCIA", "URGENCIA"])],
-      ...(row.hasAttachments === false ? [["ANEXOS", "0 anexos"]] : []),
-    ];
-    for (const [name, value] of summaries) {
-      if (value == null || value === "") continue;
-      const display = name === "PRIORITÁRIA" || name === "COBRAR" ? truthy(value) ? "SIM" : "NÃO" : formatValue(name, value);
-      const pair = el("div", "og-card-field"); pair.append(el("dt", "", name), el("dd", "", display)); cardFields.append(pair);
-    }
-    const actions = el("div", "og-card-actions");
-    const detailsButton = el("button", "og-button og-button--detail", "Detalhes"); detailsButton.type = "button"; detailsButton.dataset.action = "details"; detailsButton.addEventListener("click", () => openDetails(row));
-    actions.append(detailsButton); main.append(heading, statusPill, cardFields, actions);
-    if (hasAttachmentControl) {
-      const attachmentButton = el("button", "og-button og-card-attachment-rail"); attachmentButton.type = "button"; attachmentButton.dataset.action = "attachments";
-      attachmentButton.setAttribute("aria-label", `Abrir anexos da tarefa ${id}: ${attachmentCounts.label(row)}`);
-      attachmentButton.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
-        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
-      attachmentButton.addEventListener("click", () => openAttachments(row)); card.append(attachmentButton);
-    }
-    card.classList.add('gallery-record-card');
-    card.append(main, recordActions.render(row)); return card;
+    badges.append(el("span", `tg-status${/conclu[ií]d|finalizad/i.test(statusText) ? " tg-status--done" : ""}`, statusText));
+    if (charge(fields)) badges.append(el("span", "tg-charge", "COBRAR"));
+    const times = el("div", "tg-card-times");
+    const created = createdDate(fields, row);
+    const modified = field(fields, ["MODIFICADO", "MODIFIED"]) ?? row?.lastModifiedDateTime;
+    if (created) times.append(el("span", "", `Criado em ${formatTimestamp(created)}`));
+    if (modified) times.append(el("span", "", `Mod. em ${formatTimestamp(modified)}`));
+    const description = el("button", "tg-description", task);
+    description.id = `tg-description-${row.id}`;
+    description.type = "button";
+    description.dataset.action = "details";
+    description.setAttribute("aria-label", `Abrir detalhes da tarefa ${id}: ${task}`);
+    description.addEventListener("click", () => openDetails(row));
+    main.append(heading, badges, times, description);
+    if (hasAttachmentControl) card.append(renderAttachmentRail(row));
+    const recordControls = recordActions.render(row);
+    const expand = el("button", "gallery-record-action tg-expand", "⌄");
+    expand.type = "button";
+    expand.dataset.action = "expand";
+    expand.dataset.baseDisabled = "true";
+    expand.setAttribute("aria-controls", description.id);
+    expand.setAttribute("aria-expanded", "false");
+    expand.setAttribute("aria-label", `Expandir descrição da tarefa ${id}`);
+    expand.disabled = true;
+    expand.addEventListener("click", () => {
+      if (expand.disabled) return;
+      description.classList.toggle("tg-description--expanded");
+      updateExpandButton(card);
+    });
+    recordControls.append(expand);
+    card.append(main, recordControls);
+    return card;
   }
 
   function renderList() {
     const pageCount = Math.ceil(filteredRows.length / pageSize); page = Math.min(page, Math.max(1, pageCount));
     const start = (page - 1) * pageSize; const visible = filteredRows.slice(start, start + pageSize);
-    cards.replaceChildren(...visible.map(renderCard));
+    cards.replaceChildren(...visible.map((row, index) => renderCard(row, index)));
+    for (const row of visible) if (attachmentCounts.hasError(row)) updateAttachmentCount(row);
     void attachmentCounts.request(visible);
     listStatus.textContent = filteredRows.length ? `${filteredRows.length} tarefa(s)` : "Nenhuma tarefa encontrada para estes filtros.";
-    pageLabel.textContent = `Página ${pageCount ? page : 0} de ${pageCount}`; updateBusy();
+    pageLabel.textContent = `Página ${pageCount ? page : 0} de ${pageCount}`;
+    updateBusy();
+    refreshExpandButtons();
+    doc.defaultView?.requestAnimationFrame?.(refreshExpandButtons);
   }
 
   function renderDetailsTable(row) {
@@ -318,7 +423,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     if (!entries.some(([name]) => ["ID", "ID2"].includes(key(name)))) entries.unshift(["ID", row.id]);
     for (const [name, value] of entries) {
       const tr = el("tr");
-      const label = key(name) === "FIELD7" ? "DATA FATAL" : key(name) === "FIELD10" ? "ASSOCIAÇÃO" : name;
+      const label = key(name) === "FIELD7" ? "DATA FATAL" : key(name) === "FIELD8" ? "DATA CONCLUSÃO" : key(name) === "FIELD10" ? "ASSOCIAÇÃO" : name;
       tr.append(el("th", "", label), el("td", "", formatValue(label, value)));
       body.append(tr);
     }
@@ -369,6 +474,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
 
   const autoFilters = bindAutoFilterForm(form, applyLocalFilters);
+  doc.defaultView?.addEventListener("resize", refreshExpandButtons);
   clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS_FILTER : name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
@@ -387,6 +493,6 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; recordActions.destroy(); autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
+  function destroy() { if (destroyed) return; recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }
