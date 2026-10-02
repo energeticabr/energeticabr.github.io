@@ -97,9 +97,31 @@ test("falha de consulta mostra erro e botão de tentar novamente que recupera a 
   } });
   await report(ctx);
   assert.match(ctx.root().querySelector("[role=alert]").textContent, /SharePoint indisponível/);
+  assert.equal(ctx.root().querySelector('[data-metric="active"]').textContent.trim(), "—", "sem dados válidos não pode parecer que há zero ativos");
+  assert.equal(ctx.root().querySelector('[data-metric="contracts"]').textContent.trim(), "—");
   click(ctx.dom.window, ctx.root().querySelector(".cr-retry"));
   await settle(); await settle();
   assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 1);
+});
+
+test("reabrir o relatório e tocar Atualizar consultam dados novos sem manter totais antigos", async t => {
+  let count = 0;
+  const ctx = setup(t, { async loadOverview() {
+    count += 1;
+    return { rows: [row(237, { VALORGLOBALESTIMADO: count * 100 })], documentStatuses: {}, warnings: [] };
+  } });
+  await report(ctx);
+  assert.match(ctx.root().querySelector('[data-metric="activeGlobalValue"]').textContent, /100,00/);
+  click(ctx.dom.window, ctx.root().querySelector(".cr-refresh"));
+  await settle(); await settle();
+  assert.equal(count, 2);
+  assert.match(ctx.root().querySelector('[data-metric="activeGlobalValue"]').textContent, /200,00/);
+  ctx.view.close();
+  await ctx.view.open();
+  click(ctx.dom.window, ctx.root().querySelector('[data-report-id="1"]'));
+  await settle(); await settle();
+  assert.equal(count, 3);
+  assert.match(ctx.root().querySelector('[data-metric="activeGlobalValue"]').textContent, /300,00/);
 });
 
 test("ao fechar durante a consulta, cancela a sessão e ignora uma resposta atrasada", async t => {

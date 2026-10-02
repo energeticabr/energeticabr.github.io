@@ -13,7 +13,9 @@
 .cr-hub-center { border-color: #163a5f; background: #0d3767; color: #fff; letter-spacing: .03em; }
 .cr-hub-center small { font-size: .65em; letter-spacing: .12em; }
 .cr-report { padding: clamp(12px, 1.5vw, 22px); border: 1px solid #c4d4df; border-radius: 12px; background: #fff; }
-.cr-report-title { padding-bottom: 10px; border-bottom: 3px solid #163a5f; margin-bottom: 16px; }
+.cr-report-heading { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 3px solid #163a5f; margin-bottom: 16px; }
+.cr-report-title { flex: 1; min-width: 0; }
+.cr-refresh { flex: 0 0 auto; }
 .cr-filters { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 9px; }
 .cr-filter { display: flex; flex-direction: column; min-width: 0; }
 .cr-filter-label { display: flex; align-items: center; justify-content: center; min-height: 38px; padding: 5px 7px; background: #ad0909; color: #fff; font-size: .84rem; font-weight: 800; text-align: center; }

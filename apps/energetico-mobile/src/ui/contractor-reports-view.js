@@ -70,7 +70,10 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   hub.append(hubGrid);
 
   const report = make("section", "cr-report"); report.hidden = true;
-  report.append(make("h2", "cr-report-title", "CONTROLE DE EMPREITEIROS"));
+  const reportHeading = make("div", "cr-report-heading");
+  const refresh = button("og-button cr-refresh", "Atualizar");
+  reportHeading.append(make("h2", "cr-report-title", "CONTROLE DE EMPREITEIROS"), refresh);
+  report.append(reportHeading);
   const filterGrid = make("div", "cr-filters");
   const controls = new Map();
   for (const [name, label] of FILTERS) {
@@ -147,8 +150,15 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   }
 
   function renderMain() {
+    if (!overview) {
+      for (const value of metrics.querySelectorAll("[data-metric]")) value.textContent = "—";
+      pageLabel.textContent = "Dados não carregados";
+      previous.disabled = true; next.disabled = true;
+      mainTable.tBodies[0].replaceChildren();
+      return;
+    }
     const filters = Object.fromEntries([...controls].map(([name, control]) => [name, control.value]));
-    const view = contractorReport(overview?.rows || [], filters);
+    const view = contractorReport(overview.rows || [], filters);
     for (const [name, value] of Object.entries(view.metrics)) {
       metrics.querySelector(`[data-metric="${name}"]`).textContent = name === "activeGlobalValue" ? formatReportMoney(value) : String(value);
     }
@@ -227,6 +237,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
 
   async function loadOverview() {
     overviewController?.abort(); overviewRevision += 1;
+    detailController?.abort(); detailRevision += 1;
     const revision = overviewRevision;
     const controller = new AbortController(); overviewController = controller;
     overview = null; detail.hidden = true; setNotice("Carregando controle de empreiteiros…");
@@ -249,7 +260,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   async function showReport() {
     if (destroyed) return;
     mode = "report"; hub.hidden = true; report.hidden = false; title.textContent = "RELATÓRIO 1";
-    if (!overview) await loadOverview(); else renderMain();
+    await loadOverview();
   }
 
   function close() {
@@ -263,6 +274,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   });
   previous.addEventListener("click", () => { if (page > 1) { page--; renderMain(); } });
   next.addEventListener("click", () => { page++; renderMain(); });
+  refresh.addEventListener("click", () => { void loadOverview(); });
   back.addEventListener("click", () => {
     if (mode === "report") {
       detailController?.abort(); detailRevision++; mode = "hub"; report.hidden = true; hub.hidden = false; title.textContent = "RELATÓRIOS";

@@ -53,6 +53,17 @@ test("combina os seis filtros e calcula indicadores sobre todas as linhas filtra
   assert.deepEqual(filtered.metrics, { active: 1, inactive: 0, contracts: 1, activeGlobalValue: 3386.08 });
 });
 
+test("filtro de fornecedor preserva pontuação e acentos para não incluir contratos de nomes diferentes", () => {
+  const rows = [
+    model.normalizeContractorRow(contractor(1, { field_2: "ACME-A", field_11: "100" }), columns),
+    model.normalizeContractorRow(contractor(2, { field_2: "ACMEA", field_9: "300", field_11: "200" }), columns),
+    model.normalizeContractorRow(contractor(3, { field_2: "ACME-Á", field_9: "400", field_11: "300" }), columns),
+  ];
+  const filtered = model.contractorReport(rows, { supplier: "acme-a" });
+  assert.deepEqual(filtered.rows.map(row => row.id), ["1"]);
+  assert.deepEqual(filtered.metrics, { active: 1, inactive: 0, contracts: 1, activeGlobalValue: 100 });
+});
+
 test("classifica documentos pendentes e submetidos sem tratar ausência de status como aprovação", () => {
   assert.equal(model.documentCell("214", "PENDENTE").tone, "danger");
   assert.equal(model.documentCell("215", "SUBMETIDO").tone, "success");

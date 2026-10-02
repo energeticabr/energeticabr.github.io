@@ -72,7 +72,8 @@ export function normalizeContractorRow(item, columns = []) {
 }
 
 function equals(left, right) {
-  return key(left) === key(right);
+  return String(left ?? "").trim().toLocaleLowerCase("pt-BR")
+    === String(right ?? "").trim().toLocaleLowerCase("pt-BR");
 }
 
 export function contractorReport(rows, filters = {}) {
