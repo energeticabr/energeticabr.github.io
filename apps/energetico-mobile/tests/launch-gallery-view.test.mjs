@@ -66,6 +66,13 @@ function input(ctx, name, value, parent = ctx.root()) {
   field.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
   return field;
 }
+function selectAttachment(ctx, file) {
+  const picker = ctx.root().querySelector('.lg-attachments input[type="file"]');
+  assert.ok(picker, 'file picker below the current attachments');
+  Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
+  picker.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  return picker;
+}
 async function showDetail(ctx) {
   const card = ctx.root().querySelector('.lg-record');
   assert.ok(card?.querySelector('[data-gallery-action="edit"]'), 'launch pencil');
@@ -247,7 +254,7 @@ test('filters start collapsed so records are visible; details and review scroll 
   assert.ok(scrolled.includes(ctx.root().querySelector('.lg-review')));
 });
 
-test('edit modal shows compact dates and attachments below UN, but no unrelated operations or signature', async t => {
+test('edit modal shows compact dates and an attachment picker below the current attachments', async t => {
   const png = 'data:image/png;base64,iVBORw0KGgo=';
   const item = {...row(), fields: {...row().fields, ASSINATURA: JSON.stringify(png), 'DATA PGTO PREVISTO': '2026-09-25T00:00:00Z'}};
   const ctx = await setup(t, {request: async op => op === 'snapshot' ? snapshot() : detail({item, editFields: [
@@ -263,12 +270,17 @@ test('edit modal shows compact dates and attachments below UN, but no unrelated 
   const unit = form.querySelector('[name="UN"]').closest('.lg-field');
   assert.equal(unit.nextElementSibling, form.querySelector('.lg-attachments'));
   assert.equal(form.querySelector('.lg-attachments'), ctx.root().querySelector('.lg-attachments'));
+  const attachmentSection = form.querySelector('.lg-attachments');
+  assert.ok(attachmentSection.querySelector('input[type="file"]'));
+  assert.ok(attachmentSection.querySelector('.lg-attachment-add'));
+  assert.ok(attachmentSection.querySelector('.lg-attachment-add').compareDocumentPosition(form.querySelector('.lg-editor-actions'))
+    & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(button(attachmentSection, 'Adicionar anexo').disabled);
   assert.equal(ctx.root().querySelector('.lg-signature'), null);
   for (const text of ['Excluir lançamento', 'Provisionar pagamento', 'Aplicar medição', 'Desenhar assinatura',
-    'Adicionar anexo', 'Limpar arquivo selecionado', 'Remover anexo']) {
+    'Limpar arquivo selecionado', 'Remover anexo']) {
     assert.equal([...ctx.root().querySelectorAll('.lg-detail button')].some(node => node.textContent === text), false);
   }
-  assert.equal(form.querySelector('input[type="file"]'), null);
   const buttons = [...form.querySelectorAll('.lg-editor-actions > button')];
   assert.deepEqual(buttons.map(node => node.textContent), ['Cancelar edição', 'Revisar alterações']);
   input(ctx, 'DATA', '18/09/2026');
@@ -1519,6 +1531,113 @@ test('attachment tray opens the chosen file without leaving the editing form', a
   assert.equal(ctx.root().hidden, true);
   viewer.resolve(); await settle();
   assert.equal(ctx.root().hidden, false);
+});
+
+test('new attachment tray and controls use the available editor width', async t => {
+  const ctx = await setup(t);
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const tray = ctx.root().querySelector('.lg-attachment-add');
+  const picker = tray.querySelector('input[type="file"]');
+  const submit = button(tray, 'Adicionar anexo');
+  assert.equal(ctx.dom.window.getComputedStyle(tray).display, 'grid');
+  assert.equal(ctx.dom.window.getComputedStyle(picker).width, '100%');
+  assert.equal(ctx.dom.window.getComputedStyle(submit).width, '100%');
+});
+
+test('new attachment is confirmed, uploaded to the selected launch and shown below the existing files', async t => {
+  const uploads = [];
+  let attachments = [{ fileName: 'um.pdf' }, { fileName: 'dois.png' }];
+  const ctx = await setup(t, {
+    request: async operation => operation === 'snapshot' ? snapshot() : detail({ attachments }),
+    upload: async (id, file, options) => {
+      uploads.push({ id, file, options });
+      attachments = [...attachments, { fileName: file.name }];
+      return { ok: true };
+    },
+  });
+  await ctx.gallery.open(); await showDetail(ctx);
+  const file = new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' });
+  selectAttachment(ctx, file);
+  assert.match(ctx.root().querySelector('.lg-attachment-add').textContent, /novo\.pdf/);
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(uploads.length, 0, 'choosing a file never uploads it immediately');
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /novo\.pdf/);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].id, 17);
+  assert.equal(uploads[0].file, file);
+  assert.equal(uploads[0].options.operation, 'attachment_add');
+  assert.equal(uploads[0].options.confirm, true);
+  assert.equal(uploads[0].options.expectedModified, '2026-09-18T12:34:56Z');
+  assert.match(uploads[0].options.requestId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent),
+    ['📎 um.pdf', '📎 dois.png', '📎 novo.pdf']);
+  assert.equal(mutations(ctx).length, 0, 'upload is not a field update');
+});
+
+test('attachment picker stays available on launches without files and protects unsaved field edits', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot() : detail({ attachments: [] }),
+    upload: async (...args) => uploads.push(args) });
+  await ctx.gallery.open(); await showDetail(ctx);
+  assert.match(ctx.root().querySelector('.lg-attachments').textContent, /Nenhum anexo/);
+  const file = new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' });
+  selectAttachment(ctx, file);
+  input(ctx, 'QUANTIDADE', '3');
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /alterações.*antes de adicionar/i);
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '3');
+  assert.equal(uploads.length, 0);
+  input(ctx, 'QUANTIDADE', '2.5');
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+});
+
+test('failed attachment upload keeps the confirmation and retry identity', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { upload: async (id, file, options) => {
+    uploads.push({ id, file, options });
+    if (uploads.length === 1) throw new Error('Falha no envio');
+    return { ok: true };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf', { type: 'application/pdf' }));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /Falha no envio/);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[0].options.requestId, uploads[1].options.requestId);
+});
+
+test('changing the selected attachment invalidates its prior confirmation', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { upload: async (...args) => uploads.push(args) });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['um'], 'primeiro.pdf', { type: 'application/pdf' }));
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /primeiro\.pdf/);
+  selectAttachment(ctx, new ctx.dom.window.File(['dois'], 'segundo.pdf', { type: 'application/pdf' }));
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /segundo\.pdf/);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0][1].name, 'segundo.pdf');
+});
+
+test('an attachment above the gallery limit is rejected before confirmation', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, { name: 'grande.pdf', size: 20 * 1024 * 1024 + 1 });
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /20 MB/);
 });
 
 test('stale detail responses are discarded and failed detail can be retried', async t => {

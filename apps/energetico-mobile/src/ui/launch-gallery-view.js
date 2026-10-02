@@ -1247,7 +1247,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     try {
       if (pending.file) {
         if (typeof upload !== 'function') throw new Error('Envio de arquivo indisponível');
-        await upload(pending.payload.id, pending.file, { operation: pending.operation, confirm: true, expectedModified: pending.payload.expectedModified });
+        await upload(pending.payload.id, pending.file, { operation: pending.operation, confirm: true,
+          expectedModified: pending.payload.expectedModified, requestId: pending.payload.requestId });
       } else await request(pending.operation, pending.payload);
       if (destroyed) return;
       if (pending.key) retryIds.delete(pending.key);
@@ -1270,18 +1271,49 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     section.append(element('h3', 'lg-section-title', 'Anexos'));
     if (!attachments.length) {
       section.append(element('p', 'lg-hint', 'Nenhum anexo neste lançamento.'));
-      return section;
+    } else {
+      const tray = element('div', 'lg-attachment-tray');
+      for (const attachment of attachments) {
+        const fileName = attachmentFileName(attachment);
+        if (!fileName) continue;
+        const open = button(`📎 ${fileName}`, () => viewAttachment(fileName), { disabled: !openMedia });
+        open.classList.add('lg-attachment-item');
+        open.setAttribute('aria-label', `Abrir anexo ${fileName}`);
+        tray.append(open);
+      }
+      section.append(tray);
     }
-    const tray = element('div', 'lg-attachment-tray');
-    for (const attachment of attachments) {
-      const fileName = attachmentFileName(attachment);
-      if (!fileName) continue;
-      const open = button(`📎 ${fileName}`, () => viewAttachment(fileName), { disabled: !openMedia });
-      open.classList.add('lg-attachment-item');
-      open.setAttribute('aria-label', `Abrir anexo ${fileName}`);
-      tray.append(open);
-    }
-    section.append(tray);
+    const add = element('div', 'lg-attachment-add');
+    add.append(element('h4', 'lg-attachment-add-title', 'Adicionar mais anexos'));
+    const picker = element('input', 'lg-attachment-picker');
+    picker.type = 'file'; picker.setAttribute('aria-label', 'Selecionar novo anexo');
+    picker.dataset.lgLock = 'true';
+    const selectedName = element('p', 'lg-file-name', 'Nenhum arquivo selecionado.');
+    const addButton = button('Adicionar anexo', () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      if (review) { notify('Conclua ou cancele a confirmação aberta antes de adicionar um anexo.', true); return; }
+      if (editor?.controls.some(({ control, initial }) => (control.type === 'checkbox' ? control.checked : control.value) !== initial)) {
+        notify('Revise ou cancele as alterações antes de adicionar um anexo.', true); return;
+      }
+      if (!file.size || file.size > 20 * 1024 * 1024) {
+        notify('Selecione um arquivo não vazio de até 20 MB.', true); return;
+      }
+      let requestId;
+      try { requestId = uuid(); }
+      catch (error) { notify(failure(error, 'Não foi possível preparar o anexo'), true); return; }
+      showReview('Confirme o novo anexo', [`Lançamento #${current.item.id}`, `Arquivo: ${file.name}`],
+        'Enviar anexo', 'attachment_add', { id: current.item.id, expectedModified: modified(), requestId }, file);
+    }, { disabled: true });
+    picker.addEventListener('change', () => {
+      if (review?.operation === 'attachment_add') clearReview();
+      const file = picker.files?.[0];
+      selectedName.textContent = file?.name || 'Nenhum arquivo selecionado.';
+      addButton.dataset.lgDisabled = String(!file);
+      updateBusy(); notify('');
+    });
+    add.append(picker, selectedName, addButton);
+    section.append(add);
     return section;
   }
   async function external(work) {
