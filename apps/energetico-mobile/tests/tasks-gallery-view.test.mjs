@@ -314,6 +314,46 @@ test("seta de expansão só habilita quando a descrição não cabe e abre o tex
   assert.equal(description.classList.contains("tg-description--expanded"), false);
 });
 
+test("prévia da tarefa mostra quatro linhas completas com reticências e expande sem corte", async t => {
+  const ctx = await setup(t);
+  const css = await readFile(new URL("../src/ui/tasks-gallery.css", import.meta.url), "utf8");
+  const style = ctx.document.createElement("style");
+  style.textContent = css;
+  ctx.document.head.append(style);
+  await ctx.gallery.open();
+  const description = ctx.root().querySelector('.tg-card[data-item-id="176"] .tg-description');
+  const collapsed = ctx.dom.window.getComputedStyle(description);
+  assert.equal(collapsed.display, "-webkit-box");
+  assert.equal(collapsed.getPropertyValue("-webkit-line-clamp"), "4");
+  assert.equal(collapsed.lineHeight, "1.3");
+  assert.equal(collapsed.overflow, "hidden");
+  Object.defineProperties(description, { scrollHeight: { configurable: true, value: 100 }, clientHeight: { configurable: true, value: 65 } });
+  ctx.dom.window.dispatchEvent(new ctx.dom.window.Event("resize"));
+  ctx.root().querySelector('.tg-card[data-item-id="176"] [data-action="expand"]').click();
+  const expanded = ctx.dom.window.getComputedStyle(description);
+  assert.equal(expanded.display, "block");
+  assert.equal(expanded.getPropertyValue("-webkit-line-clamp"), "none");
+  assert.equal(expanded.overflow, "visible");
+});
+
+test("seta de expansão é um ícone geométrico centrado no botão", async t => {
+  const ctx = await setup(t);
+  const styles = await Promise.all([
+    "../src/ui/gallery-record-actions.css", "../src/ui/tasks-gallery.css",
+  ].map(path => readFile(new URL(path, import.meta.url), "utf8")));
+  const style = ctx.document.createElement("style");
+  style.textContent = styles.join("\n");
+  ctx.document.head.append(style);
+  await ctx.gallery.open();
+  const expand = ctx.root().querySelector('.tg-card[data-item-id="176"] [data-action="expand"]');
+  assert.equal(expand.textContent, "", "a posição não depende da linha de base de um caractere de fonte");
+  assert.ok(expand.querySelector("svg path"));
+  const layout = ctx.dom.window.getComputedStyle(expand);
+  assert.equal(layout.display, "inline-flex");
+  assert.equal(layout.alignItems, "center");
+  assert.equal(layout.justifyContent, "center");
+});
+
 test("retorno ao menu e fechamento limpam a sessão visual da galeria", async t => {
   let home = 0;
   const ctx = await setup(t, { onHome: () => { home++; } });
