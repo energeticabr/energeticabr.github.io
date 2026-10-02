@@ -368,6 +368,8 @@
 .lg-detail-modal .lg-editor-grid > .lg-attachments { margin-top: 0; padding: 14px; border-top: 1px solid var(--lg-line); }
 .lg-editor, .lg-attachments, .lg-signature { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--lg-line); }
 .lg-detail-modal:not(.lg-cluster-modal) .lg-detail-header { background: var(--lg-navy); border-left: 6px solid var(--lg-red); }
+.lg-detail-modal:not(.lg-cluster-modal) .lg-detail-close { display: inline-flex; align-items: center; gap: 8px; }
+.lg-detail-modal:not(.lg-cluster-modal) .lg-detail-close::before { content: '✕'; font-size: 1.1em; line-height: 1; }
 .lg-editor { margin-top: 0; padding: 16px; border: 1px solid #d9e2e9; border-radius: 12px; background: #fff; }
 .lg-editor > .lg-section-title { margin: -16px -16px 16px; padding: 12px 16px; border-radius: 11px 11px 0 0; color: #fff; background: var(--lg-red); }
 .lg-editor-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
