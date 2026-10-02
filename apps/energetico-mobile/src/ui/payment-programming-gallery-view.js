@@ -2,6 +2,7 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { provisionTotal } from '../chat/pending-provision-dates.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS = "PAGAMENTO PREVISTO";
@@ -75,13 +76,8 @@ function numericValue(value) {
 }
 
 function paymentTotal(fields) {
-  const amount = field(fields, ["VALOR TOTAL", "VALORTOTAL"]);
-  const amountValue = numericValue(amount);
-  const quantity = field(fields, ["QTD", "QUANTIDADE"]);
-  const quantityValue = numericValue(quantity);
-  return Number.isFinite(amountValue) && quantity != null && text(quantity).trim() !== "" && Number.isFinite(quantityValue)
-    ? amountValue * quantityValue
-    : amount;
+  return provisionTotal(text(field(fields, ["VALOR TOTAL", "VALORTOTAL"])),
+    text(field(fields, ["QTD", "QUANTIDADE"])), text(field(fields, ["FRETE"])));
 }
 
 function displayValue(name, value) {

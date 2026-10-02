@@ -3828,20 +3828,23 @@ test("abre o popup com próximos vencimentos mesmo sem provisões vencidas", asy
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions?.rows.map(row => row.id), ["306"]);
 });
 
-test("combina os vencimentos por ID preservando os dados da VM e mantém vencidos quando a consulta futura falha", async t => {
+test("confere totais dos vencidos por ID no SharePoint e oculta valores não conferidos quando a consulta falha", async t => {
   let fail = false;
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
-    loadUpcomingPayments: async () => { if (fail) throw new Error("offline"); return [{ id: "306", supplier: "REPETIDO" }, { id: "307", supplier: "FUTURO" }]; },
+    loadUpcomingPayments: async options => { assert.equal(options.includeOverdue, true); if (fail) throw new Error("offline"); return [{ id: "306", supplier: "REPETIDO", total: 1250 }, { id: "307", supplier: "FUTURO", total: 2671 }]; },
     listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }) });
   t.after(() => h.controller.stop());
-  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "ORIGINAL" }] });
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "ORIGINAL", total: "120", quantity: "10" }] });
   await h.controller.start();
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.supplier), ["ORIGINAL", "FUTURO"]);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.total), [1250, 2671]);
   await h.view.emit("sign-out");
   fail = true;
   await h.view.emit("sign-in");
   assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows.map(row => row.supplier), ["ORIGINAL"]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].total, "");
+  assert.equal(h.view.renders.at(-1).pendingProvisions.totalsUnavailable, true);
   assert.equal(h.view.renders.at(-1).pendingProvisions.upcomingUnavailable, true);
 });
 

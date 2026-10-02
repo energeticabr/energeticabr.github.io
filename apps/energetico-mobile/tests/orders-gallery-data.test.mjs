@@ -12,7 +12,7 @@ test("consulta os próximos dois vencimentos no SharePoint sem incluir pagamento
     async getItemsPage(site, list, query, options) {
       queries.push({ site, list, query, options });
       return options.cursor ? { items: [
-        { id: "4", fields: { "DATA PREVISTO PGTO": "2026-10-02", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": "1.200,50", QTD: 2, FORNECEDOR: { LookupValue: "COFER" }, DESCRICAOPGTO: "CIMENTO", FILIAL: "XAVANTE", IMOVEL: "TODOS" } },
+        { id: "4", fields: { "DATA PREVISTO PGTO": "2026-10-02", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": "1.200,50", QTD: 2, FRETE: "270,00", FORNECEDOR: { LookupValue: "COFER" }, DESCRICAOPGTO: "CIMENTO", FILIAL: "XAVANTE", IMOVEL: "TODOS" } },
         { id: "5", fields: { "DATA PREVISTO PGTO": "2026-10-03", STATUS: "PAGAMENTO PREVISTO" } },
       ], hasMore: false } : { items: [
         { id: "1", fields: { "DATA PREVISTO PGTO": "2026-10-01T03:00:00Z", STATUS: "PAGAMENTO PREVISTO" } },
@@ -26,11 +26,42 @@ test("consulta os próximos dois vencimentos no SharePoint sem incluir pagamento
   assert.equal(typeof data.loadUpcomingPayments, "function");
   const rows = await data.loadUpcomingPayments({ now: new Date("2026-10-01T01:00:00Z") });
   assert.deepEqual(rows.map(row => row.id), ["1", "4"]);
-  assert.deepEqual(rows[1], { id: "4", dueDate: "2026-10-02", total: 2401, supplier: "COFER", product: "CIMENTO", branch: "XAVANTE", property: "TODOS" });
+  assert.deepEqual(rows[1], { id: "4", dueDate: "2026-10-02", total: 2671, supplier: "COFER", product: "CIMENTO", branch: "XAVANTE", property: "TODOS" });
   assert.equal(queries.length, 2);
   assert.match(queries[0].query, /fields\/DATA_x0020_PREVISTO_x0020_PGTO ge '2026-10-01T00:00:00Z'/);
   assert.match(queries[0].query, /lt '2026-10-03T03:00:00Z'/);
   assert.equal(queries[1].options.cursor, "next");
+});
+
+test("provisões incluem vencidos e somam o frete uma vez usando os nomes internos do SharePoint", async () => {
+  let query;
+  const data = createPendingProvisionAttachmentsData({ repository: {
+    async resolveList() { return { status: "resolved", id: "provisoes" }; },
+    async getColumns() { return [
+      { name: "field_1", displayName: "DATA PREVISTO PGTO" },
+      { name: "field_2", displayName: "VALOR TOTAL" },
+      { name: "field_3", displayName: "QTD" },
+      { name: "field_4", displayName: "FRETE" },
+      { name: "field_5", displayName: "STATUS" },
+      { name: "field_6", displayName: "DATA PGTO EFETUADO" },
+    ]; },
+    async getItemsPage(_site, _list, value) {
+      query = value;
+      return { items: [
+        { id: "1", fields: { field_1: "2026-09-29", field_2: "120,00", field_3: 10, field_4: 50, field_5: "PAGAMENTO PREVISTO" } },
+        { id: "2", fields: { field_1: "2026-09-30", field_2: 0, field_3: 0, field_4: 25, field_5: "PAGAMENTO PREVISTO" } },
+        { id: "3", fields: { field_1: "2026-10-01", field_2: "20,15", field_3: "0,5", field_4: null, field_5: "PAGAMENTO PREVISTO" } },
+        { id: "4", fields: { field_1: "2026-10-02", field_2: 120, field_3: 10, field_4: "inválido", field_5: "PAGAMENTO PREVISTO" } },
+        { id: "5", fields: { field_1: "2026-10-03", field_5: "PAGAMENTO PREVISTO" } },
+        { id: "6", fields: { field_1: "2026-09-29", field_5: "PAGO" } },
+        { id: "7", fields: { field_1: "2026-09-29", field_5: "PAGAMENTO PREVISTO", field_6: "2026-09-29" } },
+      ], hasMore: false };
+    },
+  } });
+  const rows = await data.loadUpcomingPayments({ now: new Date("2026-09-30T15:00:00Z"), includeOverdue: true });
+  assert.deepEqual(rows.map(row => [row.id, row.total]), [["1", 1250], ["2", 25], ["3", 10.08], ["4", ""]]);
+  assert.doesNotMatch(query, / ge /);
+  assert.match(query, /fields\/field_5 eq 'PAGAMENTO PREVISTO'/);
 });
 
 test("consulta de vencimentos próximos recusa paginação incompleta e coluna ambígua", async () => {
