@@ -26,7 +26,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -67,7 +67,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -7625,4 +7625,70 @@ test('seta da provisão expande e recolhe a filial quando não existem anexos', 
   assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), true);
   assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '');
   assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '999' }), false);
+});
+
+
+test("folha de Novo Pedido abre página local sem enviar opção à VM e limpa a sessão", async t => {
+ let opened=0,destroyed=0,assertSession;
+ const h=makeHarness({supplierPayrollDataFactory:async options=>{assertSession=options.assertSession;assert.equal(await options.tokenProvider(['Sites.Read.All']), 'token');return {};},supplierPayrollFactory:async()=>({open:async()=>{opened++;},destroy:()=>{destroyed++;}})});
+ t.after(()=>h.controller.stop());await h.controller.start();
+ const poll={type:'poll',question:'COMO DESEJA EFETUAR O LANÇAMENTO?',options:[{id:'choice:tipo_lancamento:2',label:'LANÇAMENTO MÚLTIPLO'}]};
+ const activeFlow={id:'launch',title:'EFETUAR LANÇAMENTO',rows:[{label:'TIPO DE PEDIDO',value:'NOVO PEDIDO'}]};h.store.ingestRemoteMessages([poll],{activeFlow});
+ const before=h.chatCalls.length;assert.equal(await h.view.emit('select-reply',{replyId:'action_supplier_payroll_launch'}),true,JSON.stringify({error:h.view.renders.at(-1).error,flow:h.store.getState().activeFlow,messages:h.store.getState().messages.map(m=>({type:m.type,question:m.question,options:m.options}))}));assert.equal(opened,1);assert.equal(h.chatCalls.length,before);
+ h.controller.stop();assert.equal(destroyed,1);assert.throws(assertSession,/sessão/i);
+});
+test("folha não abre fora de Novo Pedido",async t=>{
+ let opened=0;const h=makeHarness({supplierPayrollFactory:async()=>{opened++;return{};}});t.after(()=>h.controller.stop());await h.controller.start();
+ assert.equal(await h.view.emit('select-reply',{replyId:'action_supplier_payroll_launch'}),false);assert.equal(opened,0);
+});
+
+function openPayrollMenu(h) {
+  h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
+}
+
+test("folha autoriza antes de abrir e não redireciona após iniciar preenchimento", async t => {
+  let provider, prepared = false, grants = 0, expired = false;
+  const h = makeHarness({
+    supplierPayrollDataFactory: async options => {
+      provider = options.tokenProvider;
+      return { prepare: async () => { await provider(["Sites.ReadWrite.All"]); prepared = true; } };
+    },
+    supplierPayrollFactory: async () => {
+      assert.equal(prepared, true, "o formulário só pode abrir depois da autorização");
+      return { open: async () => {}, destroy() {} };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.auth.getToken = async () => {
+    if (!grants || expired) throw Object.assign(new Error("autorize"), { code: "AUTH_REQUIRED" });
+    return "token";
+  };
+  h.auth.authorize = async (_scopes, options) => { assert.equal(options.resumeAction, "action_supplier_payroll_launch"); grants++; };
+  openPayrollMenu(h);
+  assert.equal(await h.view.emit("select-reply", { replyId: "action_supplier_payroll_launch" }), true);
+  assert.equal(grants, 1);
+  expired = true;
+  await assert.rejects(provider(["Sites.ReadWrite.All"]), error => error.code === "AUTH_REQUIRED");
+  assert.equal(grants, 1, "falha tardia deve preservar a página sem iniciar redirecionamento");
+});
+
+test("token da folha obtido depois de sair não permite enviar gravação", async t => {
+  let provider, resolveToken;
+  const h = makeHarness({
+    supplierPayrollDataFactory: async options => { provider = options.tokenProvider; return {}; },
+    supplierPayrollFactory: async () => ({ open: async () => {}, destroy() {} }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  openPayrollMenu(h);
+  await h.view.emit("select-reply", { replyId: "action_supplier_payroll_launch" });
+  h.auth.getToken = () => new Promise(resolve => { resolveToken = resolve; });
+  const writes = [];
+  const pending = provider(["Sites.ReadWrite.All"]).then(token => writes.push(token));
+  const rejected = assert.rejects(pending, /sessão.*encerrada/i);
+  await h.view.emit("sign-out");
+  resolveToken("old-token");
+  await rejected;
+  assert.deepEqual(writes, []);
 });
