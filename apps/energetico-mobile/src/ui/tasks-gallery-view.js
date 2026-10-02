@@ -354,7 +354,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   function renderCard(row, index) {
     const fields = row.fields || {};
     const id = String(field(fields, ["ID 2", "ID"]) ?? row.id);
-    const task = ["TAREFA", "field_11", "Title"].map(name => text(field(fields, [name])).trim()).find(Boolean) || "Tarefa sem descrição";
+    const titleFallback = text(field(fields, ["Title"])).trim();
+    const task = ["TAREFA", "field_11"].map(name => text(field(fields, [name])).trim()).find(Boolean)
+      || (/^WA-task-/i.test(titleFallback) ? "" : titleFallback) || "Tarefa sem descrição";
     const hasAttachmentControl = actualAttachmentCount(row) > 0;
     const card = el("article", `og-card tg-card gallery-record-card tg-card--${index % 2 ? "blue" : "light"}${hasAttachmentControl ? " og-card--with-attachments" : ""}`);
     card.dataset.itemId = row.id;

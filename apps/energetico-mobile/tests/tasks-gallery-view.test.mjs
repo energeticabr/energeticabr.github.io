@@ -96,10 +96,12 @@ test("G7 prefere a tarefa do SharePoint ao Title técnico mesmo quando Title vem
   const ctx = await setup(t, { rows: [
     { id: "401", fields: { Title: "WA-task-55c38f1ee7b027a86624a63d", field_11: "CONFERIR CONTRATO E DOCUMENTOS", STATUS: "ATIVIDADE CRIADA" } },
     { id: "402", fields: { Title: "WA-task-aba", TAREFA: "", field_11: "REVISAR ORÇAMENTO", STATUS: "EM ATENDIMENTO" } },
+    { id: "403", fields: { Title: "WA-task-sem-texto", field_11: "", STATUS: "ATIVIDADE CRIADA" } },
   ] });
   await ctx.gallery.open();
   assert.equal(ctx.root().querySelector('.tg-card[data-item-id="401"] .tg-description')?.textContent, "CONFERIR CONTRATO E DOCUMENTOS");
   assert.equal(ctx.root().querySelector('.tg-card[data-item-id="402"] .tg-description')?.textContent, "REVISAR ORÇAMENTO");
+  assert.equal(ctx.root().querySelector('.tg-card[data-item-id="403"] .tg-description')?.textContent, "Tarefa sem descrição");
 });
 
 test("G7 distingue concluídas, pendentes e total e colore datas de criação e modificação", async t => {
@@ -112,6 +114,9 @@ test("G7 distingue concluídas, pendentes e total e colore datas de criação e 
   const metrics = [...ctx.root().querySelectorAll(".tg-metrics .tg-metric")];
   assert.deepEqual(metrics.map(metric => metric.querySelector("dt")?.textContent), ["Concluídas", "Pendentes", "Total"]);
   assert.equal(ctx.dom.window.getComputedStyle(metrics[1]).backgroundColor, "rgb(255, 239, 239)");
+  assert.equal(ctx.dom.window.getComputedStyle(metrics[1].querySelector("dt")).color, "rgb(172, 39, 49)");
+  assert.equal(ctx.dom.window.getComputedStyle(metrics[1].querySelector("dd")).color, "rgb(172, 39, 49)");
+  assert.equal(ctx.dom.window.getComputedStyle(metrics[1].querySelector(".tg-metric-icon")).backgroundColor, "rgb(197, 46, 58)");
   const card = ctx.root().querySelector('.tg-card[data-item-id="176"]');
   const created = card.querySelector(".tg-card-times .tg-created");
   const modified = card.querySelector(".tg-card-times .tg-modified");
