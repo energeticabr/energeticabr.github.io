@@ -200,6 +200,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let page = 1, pages = 0, needsDetailRefresh = false, pendingAttachmentName = null;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
   const retryIds = new Map();
+  const uncertainAttachments = new Set();
   const filterControls = new Map();
   const recordItems = new Map();
 
@@ -1165,15 +1166,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (control.tagName === 'SELECT' && value != null && ![...control.options].some(opt => opt.value === display(value))) control.append(option(value));
         control.value = type === 'date' && value ? formatEditorDate(value) : display(value);
       }
-      const initial = isCheck ? control.checked : control.value;
+      const entry = { definition, control, initial: isCheck ? control.checked : control.value };
       const field = label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control);
       const markModified = () => control.closest('.lg-field')?.classList.toggle('lg-field-modified', operation === 'update'
-        && (isCheck ? control.checked : control.value) !== initial);
+        && (isCheck ? control.checked : control.value) !== entry.initial);
       const invalidate = () => { control.setCustomValidity(''); clearReview(); notify(''); markModified(); };
       if (type === 'date') control.addEventListener('input', () => { control.value = maskEditorDate(control.value); });
       control.addEventListener('input', invalidate);
       control.addEventListener('change', () => { invalidate(); void refreshDependencies(definition, control); });
-      controls.push({ definition, control, initial, markModified });
+      entry.markModified = markModified; controls.push(entry);
       if (control.tagName === 'TEXTAREA' || ['FILIAL', 'FORNECEDOR', 'PRODUTO'].includes(definition.name)) field.classList.add('lg-field-wide');
       grid.append(field);
       if (operation === 'update' && definition.name === 'UN') {
@@ -1253,10 +1254,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       button('Cancelar confirmação', () => { clearReview(); focus(editor?.controls[0]?.control ?? panel); }));
     reviewHost.hidden = false; reveal(reviewHost);
   }
-  async function refreshAttachmentDetail() {
+  async function refreshAttachmentDetail(refreshed) {
     if (!current || !editor?.form) throw new Error('Edição não disponível para atualizar os anexos');
     const original = current;
-    const result = await request('detail', { id: original.item.id });
+    const result = refreshed ?? await request('detail', { id: original.item.id });
     if (!result?.item?.fields) throw new Error('Resposta de edição inválida');
     if (pendingAttachmentName && !(result.attachments ?? []).some(file => attachmentFileName(file) === pendingAttachmentName)) {
       throw new Error('O novo anexo ainda não aparece na consulta. Tente atualizar novamente');
@@ -1265,8 +1266,36 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       (control.type === 'checkbox' ? control.checked : control.value) !== initial
       && display(result.item.fields[definition.name]) !== display(original.item.fields[definition.name]));
     if (conflict) throw new Error('Um campo editado mudou no SharePoint. Cancele a edição e abra o lançamento novamente');
+    for (const entry of editor.controls) {
+      const { definition, control, initial } = entry;
+      if ((control.type === 'checkbox' ? control.checked : control.value) !== initial) continue;
+      const value = result.item.fields[definition.name];
+      if (control.type === 'checkbox') control.checked = value === true || value === 1 || value === 'true';
+      else {
+        if (control.tagName === 'SELECT' && value != null && ![...control.options].some(opt => opt.value === display(value))) {
+          control.append(option(value));
+        }
+        control.value = String(definition.type ?? '').toLowerCase() === 'date' && value ? formatEditorDate(value) : display(value);
+      }
+      entry.initial = control.type === 'checkbox' ? control.checked : control.value;
+      entry.markModified();
+    }
+    editor.pickers.sync();
     current = result; pendingAttachmentName = null; needsDetailRefresh = false;
     editor.form.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
+  }
+  async function finishAttachmentUpload(pending, fileName, refreshed) {
+    if (destroyed) return;
+    if (pending.key) { retryIds.delete(pending.key); uncertainAttachments.delete(pending.key); }
+    clearReview();
+    pendingAttachmentName = fileName; needsDetailRefresh = true;
+    if (!(current.attachments ?? []).some(file => attachmentFileName(file) === fileName)) {
+      current.attachments = [...(current.attachments ?? []), { fileName }];
+    }
+    editor?.form?.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
+    try { await refreshAttachmentDetail(refreshed); notify('Anexo enviado.'); }
+    catch (error) { notify(failure(error, 'Anexo enviado, mas não foi possível atualizar os dados'), true); }
+    if (opened) await loadSnapshot(applied);
   }
   async function commitReview() {
     if (!review || busy || !opened) return;
@@ -1275,19 +1304,34 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     try {
       if (pending.file) {
         if (typeof upload !== 'function') throw new Error('Envio de arquivo indisponível');
-        const uploaded = await upload(pending.payload.id, pending.file, { operation: pending.operation, confirm: true,
-          expectedModified: pending.payload.expectedModified, requestId: pending.payload.requestId });
+        if (pending.operation === 'attachment_add' && pending.uncertain) {
+          const fresh = await request('detail', { id: pending.payload.id });
+          if (!fresh?.item?.fields) throw new Error('Não foi possível verificar se o anexo já foi enviado');
+          if ((fresh.attachments ?? []).some(file => attachmentFileName(file) === pending.file.name)) {
+            await finishAttachmentUpload(pending, pending.file.name, fresh); return;
+          }
+          await refreshAttachmentDetail(fresh);
+          pending.payload.expectedModified = modified();
+        }
+        let uploaded;
+        try {
+          uploaded = await upload(pending.payload.id, pending.file, { operation: pending.operation, confirm: true,
+            expectedModified: pending.payload.expectedModified, requestId: pending.payload.requestId });
+        } catch (error) {
+          if (pending.operation === 'attachment_add') {
+            pending.uncertain = true;
+            if (pending.key) uncertainAttachments.add(pending.key);
+            try {
+              const fresh = await request('detail', { id: pending.payload.id });
+              if ((fresh?.attachments ?? []).some(file => attachmentFileName(file) === pending.file.name)) {
+                await finishAttachmentUpload(pending, pending.file.name, fresh); return;
+              }
+            } catch { /* Keep the confirmation; check again before any retry. */ }
+          }
+          throw error;
+        }
         if (pending.operation === 'attachment_add') {
-          if (destroyed) return;
-          if (pending.key) retryIds.delete(pending.key);
-          clearReview();
-          pendingAttachmentName = uploaded?.fileName || pending.file.name;
-          needsDetailRefresh = true;
-          current.attachments = [...(current.attachments ?? []), { fileName: pendingAttachmentName }];
-          editor?.form?.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
-          try { await refreshAttachmentDetail(); notify('Anexo enviado.'); }
-          catch (error) { notify(failure(error, 'Anexo enviado, mas não foi possível atualizar os dados'), true); }
-          if (opened) await loadSnapshot(applied);
+          await finishAttachmentUpload(pending, uploaded?.fileName || pending.file.name);
           return;
         }
       } else await request(pending.operation, pending.payload);
@@ -1344,6 +1388,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       catch (error) { notify(failure(error, 'Não foi possível preparar o anexo'), true); return; }
       showReview('Confirme o novo anexo', [`Lançamento #${current.item.id}`, `Arquivo: ${file.name}`],
         'Enviar anexo', 'attachment_add', { id: current.item.id, expectedModified: modified(), requestId }, file, key);
+      review.uncertain = uncertainAttachments.has(key);
     }, { disabled: true });
     picker.addEventListener('change', () => {
       if (review?.operation === 'attachment_add') clearReview();
@@ -1422,7 +1467,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     attachmentCounts.destroy();
     cancelClusterLoad();
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
-    retryIds.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
+    retryIds.clear(); uncertainAttachments.clear(); root.removeEventListener('keydown', onKeyDown); root.remove();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   }
   return { open, close, destroy };

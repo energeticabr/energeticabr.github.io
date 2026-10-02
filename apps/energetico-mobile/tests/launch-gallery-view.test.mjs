@@ -1591,11 +1591,16 @@ test('new attachment is confirmed, uploaded to the selected launch and shown bel
 
 test('adding an attachment preserves unsaved fields and refreshes the SharePoint version', async t => {
   const uploads = []; let attachments = []; let modified = '2026-09-18T12:34:56Z';
+  let remoteDescription = row().fields.DESCRIÇÃO;
+  let remoteStatus = 'PEDIDO EMPENHADO';
   const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
-    : detail({ attachments, item: { ...row(), expectedModified: modified } }),
+    : detail({ attachments, item: { ...row(), expectedModified: modified,
+      fields: { ...row().fields, DESCRIÇÃO: remoteDescription, CONCLUÍDO: remoteStatus } } }),
   upload: async (...args) => {
     uploads.push(args);
     attachments = [{ fileName: args[1].name }]; modified = '2026-09-18T12:40:00Z';
+    remoteDescription = 'Alterado por colega';
+    remoteStatus = 'PEDIDO FINALIZADO';
     return { ok: true, fileName: args[1].name };
   } });
   await ctx.gallery.open(); await showDetail(ctx);
@@ -1610,6 +1615,9 @@ test('adding an attachment preserves unsaved fields and refreshes the SharePoint
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(uploads.length, 1);
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '3');
+  assert.equal(ctx.root().querySelector('[name="DESCRIÇÃO"]').value, 'Alterado por colega');
+  assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').value, 'PEDIDO FINALIZADO');
+  assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').nextElementSibling.querySelector('.sfs-value').textContent, 'Finalizado');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
   button(ctx.root(), 'Revisar alterações').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
@@ -1617,6 +1625,24 @@ test('adding an attachment preserves unsaved fields and refreshes the SharePoint
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, '2026-09-18T12:40:00Z');
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.fields.QUANTIDADE, 3);
+  assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'DESCRIÇÃO'), false);
+  assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'CONCLUÍDO'), false);
+});
+
+test('a concurrent change to an edited field keeps the draft but blocks a stale update', async t => {
+  let attachments = []; let quantity = 2.5;
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments, item: { ...row(), fields: { ...row().fields, QUANTIDADE: quantity } } }),
+  upload: async (id, file) => { attachments = [{ fileName: file.name }]; quantity = 5; return { fileName: file.name }; } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /campo editado mudou/i);
+  button(ctx.root(), 'Revisar alterações').click(); await settle();
+  assert.equal(ctx.calls.some(call => call.operation === 'update'), false);
 });
 
 test('a failed detail refresh after upload keeps the draft and retries before reviewing fields', async t => {
@@ -1659,6 +1685,69 @@ test('failed attachment upload keeps the confirmation and retry identity', async
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(uploads.length, 2);
   assert.equal(uploads[0].options.requestId, uploads[1].options.requestId);
+});
+
+test('lost upload response reconciles the stored file before another write', async t => {
+  let attachments = []; let modified = 'old-version'; const uploads = [];
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments, item: { ...row(), expectedModified: modified } }),
+  upload: async (id, file, options) => {
+    uploads.push(options);
+    attachments = [{ fileName: file.name }]; modified = 'new-version';
+    throw new Error('Resposta perdida');
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads.length, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
+  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
+});
+
+test('an uncertain upload waits for a successful detail check instead of uploading twice', async t => {
+  let stored = false; let detailFailures = 2; let uploads = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return snapshot();
+    if (stored && detailFailures-- > 0) throw new Error('Consulta indisponível');
+    return detail({ attachments: stored ? [{ fileName: 'novo.pdf' }] : [] });
+  }, upload: async () => { uploads += 1; stored = true; throw new Error('Resposta perdida'); } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1, 'an unavailable detail response must not trigger a second write');
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
+});
+
+test('cancelling an uncertain confirmation still checks the server before a new attempt', async t => {
+  let stored = false; let failDetail = true; let uploads = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return snapshot();
+    if (stored && failDetail) { failDetail = false; throw new Error('Consulta indisponível'); }
+    return detail({ attachments: stored ? [{ fileName: 'novo.pdf' }] : [] });
+  }, upload: async () => { uploads += 1; stored = true; throw new Error('Resposta perdida'); } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'novo.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  button(ctx.root(), 'Cancelar confirmação').click();
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
 });
 
 test('cancelling an uncertain attachment retry keeps its request identity', async t => {
