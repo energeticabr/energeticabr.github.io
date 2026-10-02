@@ -50,6 +50,7 @@ test("informa que a quantidade está indisponível sem repetir falhas automatica
   await counter.request([row]);
   await counter.request([row]);
   assert.equal(counter.label(row), "Quantidade indisponível");
+  assert.equal(counter.hasError(row), true);
   assert.equal(calls, 1);
   counter.destroy();
 });

@@ -101,6 +101,22 @@
 }
 .tg-description--expanded { max-height: none; }
 .tg-description:focus-visible { outline: 3px solid #e3aa19; outline-offset: 3px; }
+.tg-attachment-retry {
+  display: block;
+  margin-top: 7px;
+  padding: 4px 0;
+  border: 0;
+  color: #a34b18;
+  background: transparent;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.tg-attachment-retry:disabled { opacity: .6; cursor: default; }
+.tg-attachment-retry:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
 .tg-card > .gallery-record-actions { gap: 4px; }
 .tg-card .gallery-record-action { width: 40px; height: 40px; min-width: 40px; padding: 8px; border-radius: 7px; }
 .tg-expand { color: #fff; background: #f48027; font-size: 1.8rem; line-height: 1; }

@@ -146,6 +146,10 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
     return state?.status === "ready" ? state.items : null;
   }
 
+  function hasError(row) {
+    return states.get(rowKey(row))?.status === "error";
+  }
+
   function reset() {
     epoch += 1;
     for (const task of queue) task.resolve(null);
@@ -159,5 +163,5 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
     reset();
   }
 
-  return Object.freeze({ label, load, request, attachmentsFor, reset, destroy });
+  return Object.freeze({ label, load, request, attachmentsFor, hasError, reset, destroy });
 }

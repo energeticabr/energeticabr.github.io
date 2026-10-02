@@ -218,6 +218,23 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     if (!opened || destroyed) return;
     const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
     if (!card) return;
+    const main = card.querySelector(".tg-card-main");
+    let retry = main?.querySelector('[data-action="retry-attachments"]');
+    if (attachmentCounts.hasError(row)) {
+      if (!retry) {
+        retry = el("button", "tg-attachment-retry", "Falha ao consultar arquivos. Tentar novamente");
+        retry.type = "button";
+        retry.dataset.action = "retry-attachments";
+        retry.addEventListener("click", () => {
+          retry.disabled = true;
+          retry.textContent = "Consultando arquivos…";
+          void attachmentCounts.load(row, { force: true }).catch(() => null);
+        });
+        main.append(retry);
+      }
+      retry.textContent = "Falha ao consultar arquivos. Tentar novamente";
+      retry.disabled = listLoading || attachmentLoading;
+    } else retry?.remove();
     let rail = card.querySelector('.og-card-attachment-rail');
     if (actualAttachmentCount(row) < 1) {
       rail?.remove();

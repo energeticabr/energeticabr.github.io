@@ -213,6 +213,28 @@ test("G7 só exibe a bandeja de anexos quando existe ao menos um arquivo", async
   assert.equal(populated.querySelector(".og-card-attachment-count")?.textContent, "1 anexo");
 });
 
+test("consulta de anexos que falhou permite repetir sem mostrar clipe de arquivo inexistente", async t => {
+  let attempts = 0;
+  const ctx = await setup(t, { rows: [
+    { id: "205", hasAttachments: true, fields: { TAREFA: "Revisar contrato", STATUS: "ATIVIDADE CRIADA" } },
+  ], data: { async listAttachments() {
+    attempts++;
+    if (attempts === 1) throw new Error("falha temporária");
+    return [{ fileName: "contrato.pdf" }];
+  } } });
+  await ctx.gallery.open();
+  await settle();
+  const card = ctx.root().querySelector('.tg-card[data-item-id="205"]');
+  assert.equal(card.querySelector(".og-card-attachment-rail"), null);
+  const retry = card.querySelector('[data-action="retry-attachments"]');
+  assert.ok(retry, "falha oferece nova consulta fora da bandeja de anexos");
+  retry.click();
+  await settle();
+  assert.equal(attempts, 2);
+  assert.equal(card.querySelector(".og-card-attachment-count")?.textContent, "1 anexo");
+  assert.equal(card.querySelector('[data-action="retry-attachments"]'), null);
+});
+
 test("G7 apresenta três indicadores, busca compacta e linhas alternadas com ações preservadas", async t => {
   const ctx = await setup(t, { rows: [
     { id: "201", fields: { TAREFA: "Verificar orçamento", STATUS: "ATIVIDADE CRIADA", "GRAU URGÊNCIA": "ATIVIDADE EMERGENCIAL", "ASSOCIAÇÃO": "COMPRAS E SUPRIMENTOS", field_7: "2026-10-05T03:00:00Z", Criado: "2026-10-01T12:00:00Z" } },
