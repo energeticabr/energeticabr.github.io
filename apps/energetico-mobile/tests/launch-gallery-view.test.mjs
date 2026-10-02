@@ -1455,6 +1455,20 @@ test('the pencil opens the over-gallery editing form and closes back to the gall
   assert.equal(ctx.root().hidden, false);
 });
 
+test('edit close button is on the left with an X before its accessible label', async t => {
+  const ctx = await setup(t);
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const close = button(ctx.root().querySelector('.lg-detail'), 'Fechar edição');
+  assert.equal(ctx.dom.window.getComputedStyle(close).order, '-1');
+  assert.equal(ctx.dom.window.getComputedStyle(close).display, 'inline-flex');
+  const iconRule = [...stylesheet.sheet.cssRules].find(rule =>
+    rule.selectorText === '.lg-detail-modal:not(.lg-cluster-modal) .lg-detail-close::before');
+  assert.match(iconRule?.style.content ?? '', /[×✕]/u);
+});
+
 test('Escape closes the detail screen before closing the gallery', async t => {
   const ctx = await setup(t);
   await ctx.gallery.open(); await showDetail(ctx);
