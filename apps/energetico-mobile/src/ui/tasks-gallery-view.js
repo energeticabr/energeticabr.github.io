@@ -408,6 +408,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const pageCount = Math.ceil(filteredRows.length / pageSize); page = Math.min(page, Math.max(1, pageCount));
     const start = (page - 1) * pageSize; const visible = filteredRows.slice(start, start + pageSize);
     cards.replaceChildren(...visible.map((row, index) => renderCard(row, index)));
+    for (const row of visible) if (attachmentCounts.hasError(row)) updateAttachmentCount(row);
     void attachmentCounts.request(visible);
     listStatus.textContent = filteredRows.length ? `${filteredRows.length} tarefa(s)` : "Nenhuma tarefa encontrada para estes filtros.";
     pageLabel.textContent = `Página ${pageCount ? page : 0} de ${pageCount}`;

@@ -224,8 +224,10 @@ test("consulta de anexos que falhou permite repetir sem mostrar clipe de arquivo
   } } });
   await ctx.gallery.open();
   await settle();
-  const card = ctx.root().querySelector('.tg-card[data-item-id="205"]');
+  let card = ctx.root().querySelector('.tg-card[data-item-id="205"]');
   assert.equal(card.querySelector(".og-card-attachment-rail"), null);
+  setFilter(ctx, "status", "");
+  card = ctx.root().querySelector('.tg-card[data-item-id="205"]');
   const retry = card.querySelector('[data-action="retry-attachments"]');
   assert.ok(retry, "falha oferece nova consulta fora da bandeja de anexos");
   retry.click();
