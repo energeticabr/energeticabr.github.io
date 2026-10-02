@@ -56,10 +56,11 @@ test("destaca fornecedor divergente, ausência e status de pagamento da presenç
   assert.match(card.querySelector(".pp-status-field").textContent, /DESCONHECIDO/);
 });
 
-test("valor diário ausente mostra total incompleto em vez de zero", async t => {
-  const ctx = setup(t, { async loadSnapshot() { return snapshot([presence(1, { dailyValue: null })]); } });
+test("valor diário ausente mostra soma parcial identificada, sem fingir total definitivo", async t => {
+  const ctx = setup(t, { async loadSnapshot() { return snapshot([presence(1, { dailyValue: null }), presence(2, { dailyValue: 150 })]); } });
   await ctx.view.open();
-  assert.equal(ctx.root.querySelector('[data-metric="totalDaily"]').textContent, "INCOMPLETO");
+  assert.match(ctx.root.querySelector('[data-metric="totalDaily"]').textContent, /150,00.*PARCIAL/);
+  assert.match(ctx.root.querySelector(".pp-values").textContent, /150,00.*PARCIAL/);
   assert.match(ctx.root.querySelector(".pp-values").textContent, /INCOMPLETO/);
 });
 
