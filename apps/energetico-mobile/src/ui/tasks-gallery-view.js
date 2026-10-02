@@ -313,9 +313,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   function updateMetrics() {
     const done = rows.filter(row => completion(row.fields)).length;
     const pending = rows.length - done;
-    const values = [["Total", rows.length, "▤"], ["Pendentes", pending, "◷"], ["Concluídas", done, "✓"]];
-    metrics.replaceChildren(...values.map(([label, value, icon]) => {
-      const item = el("div", "og-metric tg-metric");
+    const values = [["Concluídas", done, "✓", "done"], ["Pendentes", pending, "◷", "pending"], ["Total", rows.length, "▤", "total"]];
+    metrics.replaceChildren(...values.map(([label, value, icon, variant]) => {
+      const item = el("div", `og-metric tg-metric tg-metric--${variant}`);
       const copy = el("div", "tg-metric-copy");
       const badge = el("span", "tg-metric-icon", icon); badge.setAttribute("aria-hidden", "true");
       copy.append(el("dt", "", label), el("dd", "", String(value)));
@@ -354,7 +354,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   function renderCard(row, index) {
     const fields = row.fields || {};
     const id = String(field(fields, ["ID 2", "ID"]) ?? row.id);
-    const task = text(field(fields, ["TAREFA", "field_11", "Title"])) || "Tarefa sem descrição";
+    const titleFallback = text(field(fields, ["Title"])).trim();
+    const task = ["TAREFA", "field_11"].map(name => text(field(fields, [name])).trim()).find(Boolean)
+      || (/^WA-task-/i.test(titleFallback) ? "" : titleFallback) || "Tarefa sem descrição";
     const hasAttachmentControl = actualAttachmentCount(row) > 0;
     const card = el("article", `og-card tg-card gallery-record-card tg-card--${index % 2 ? "blue" : "light"}${hasAttachmentControl ? " og-card--with-attachments" : ""}`);
     card.dataset.itemId = row.id;
@@ -375,8 +377,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const times = el("div", "tg-card-times");
     const created = createdDate(fields, row);
     const modified = field(fields, ["MODIFICADO", "MODIFIED"]) ?? row?.lastModifiedDateTime;
-    if (created) times.append(el("span", "", `Criado em ${formatTimestamp(created)}`));
-    if (modified) times.append(el("span", "", `Mod. em ${formatTimestamp(modified)}`));
+    if (created) times.append(el("span", "tg-created", `Criado em ${formatTimestamp(created)}`));
+    if (modified) times.append(el("span", "tg-modified", `Mod. em ${formatTimestamp(modified)}`));
     const description = el("button", "tg-description", task);
     description.id = `tg-description-${row.id}`;
     description.type = "button";

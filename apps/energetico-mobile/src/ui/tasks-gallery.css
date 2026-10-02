@@ -14,7 +14,8 @@
   border-radius: 9px;
   background: #f5faff;
 }
-.tg-overlay .tg-metric:last-child { background: #e9f8ee; border-color: #b9d7c3; }
+.tg-overlay .tg-metric--done { background: #e9f8ee; border-color: #b9d7c3; }
+.tg-overlay .tg-metric--pending { background: #ffefef; border-color: #e6b5b8; }
 .tg-metric-icon {
   display: grid;
   flex: 0 0 36px;
@@ -27,10 +28,14 @@
   font-size: 1.3rem;
   font-weight: 800;
 }
-.tg-metric:last-child .tg-metric-icon { color: #fff; background: #25a24e; }
+.tg-metric--done .tg-metric-icon { color: #fff; background: #25a24e; }
+.tg-metric--pending .tg-metric-icon { color: #fff; background: #c52e3a; }
 .tg-metric dt { color: #215486 !important; font-size: .7rem !important; }
-.tg-metric:last-child dt { color: #166336 !important; }
+.tg-metric--done dt { color: #166336 !important; }
+.tg-metric--pending dt { color: #ac2731 !important; }
 .tg-metric dd { margin: 0 !important; font-size: 1.35rem !important; }
+.tg-metric--done dd { color: #166336; }
+.tg-metric--pending dd { color: #ac2731; }
 .tg-filter-form { padding: 0; }
 .tg-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 .tg-search-field .og-label {
@@ -81,6 +86,8 @@
 .tg-status--done { color: #14613c; background: #d7f3e2; }
 .tg-charge { color: #985310; background: #fff0d9; }
 .tg-card-times { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 5px; color: #335675; font-size: .68rem; }
+.tg-card-times .tg-created { color: #187542; }
+.tg-card-times .tg-modified { color: #ac2731; }
 .tg-description {
   display: block;
   width: 100%;
