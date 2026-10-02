@@ -22,6 +22,7 @@ import "../ui/searchable-filter-selects.css";
 import "../ui/gallery-record-actions.css";
 import "../ui/orders-gallery.css";
 import "../ui/tasks-gallery.css";
+import "../ui/contractor-reports.css";
 import "../ui/registration-gallery.css";
 import "./attachment-preview.css";
 

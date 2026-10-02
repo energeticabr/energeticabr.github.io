@@ -323,6 +323,10 @@ function powerBiDashboardOption() {
   return { id: "action_powerbi_dashboard", reply: "action_powerbi_dashboard", label: "📊 POWER BI" };
 }
 
+function contractorReportsOption() {
+  return { id: "action_contractor_reports", reply: "action_contractor_reports", label: "📑 RELATÓRIOS" };
+}
+
 function insertPowerBiAfterPersonalExpenses(options) {
   if (options.some(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_powerbi_dashboard")) return options;
   const index = options.findIndex(option => (
@@ -331,6 +335,15 @@ function insertPowerBiAfterPersonalExpenses(options) {
   ));
   if (index < 0) return options;
   return [...options.slice(0, index + 1), powerBiDashboardOption(), ...options.slice(index + 1)];
+}
+
+function insertMainReportsOption(options) {
+  const result = insertPowerBiAfterPersonalExpenses(options);
+  if (result.some(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_contractor_reports")) return result;
+  const powerBiIndex = result.findIndex(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_powerbi_dashboard");
+  const diaryIndex = result.findIndex(option => mainMenuDiaryRank(option) > 0);
+  const index = powerBiIndex >= 0 ? powerBiIndex + 1 : diaryIndex >= 0 ? diaryIndex : result.length;
+  return [...result.slice(0, index), contractorReportsOption(), ...result.slice(index)];
 }
 
 function draftMenuOptions(message) {
@@ -358,7 +371,7 @@ function draftMenuOptions(message) {
         return option;
       })
     : options;
-  if (!/RASCUNHOS?/i.test(question)) return isMainAreaMenu ? insertPowerBiAfterPersonalExpenses(menuOptions) : menuOptions;
+  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? insertMainReportsOption(menuOptions) : menuOptions;
 
   const deleteIds = new Set(menuOptions
     .map(option => String(option.reply || option.id || ""))

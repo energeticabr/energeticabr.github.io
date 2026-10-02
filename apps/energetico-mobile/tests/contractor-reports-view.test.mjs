@@ -45,11 +45,17 @@ test("abre o seletor de quadrados com somente o Relatório 1 disponível e mostr
   await settle(); await settle();
   assert.match(ctx.root().textContent, /CONTROLE DE EMPREITEIROS/);
   assert.equal(ctx.root().querySelectorAll(".cr-main-table thead th").length, 13);
-  assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 2);
+  assert.equal(ctx.root().querySelector('[name="status"]').value, "ATIVO");
+  assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 1);
   assert.equal(ctx.root().querySelector('[data-metric="active"]').textContent.trim(), "1");
-  assert.equal(ctx.root().querySelector('[data-metric="inactive"]').textContent.trim(), "1");
-  assert.equal(ctx.root().querySelector('[data-metric="contracts"]').textContent.trim(), "2");
+  assert.equal(ctx.root().querySelector('[data-metric="inactive"]').textContent.trim(), "0");
+  assert.equal(ctx.root().querySelector('[data-metric="contracts"]').textContent.trim(), "1");
   assert.match(ctx.root().querySelector('[data-metric="activeGlobalValue"]').textContent, /3\.386,08/);
+  const status = ctx.root().querySelector('[name="status"]');
+  status.value = "";
+  status.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
+  assert.equal(ctx.root().querySelector('[data-metric="inactive"]').textContent.trim(), "1");
+  assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 2);
 });
 
 test("combina filtros e exibe detalhe do ID selecionado sem confundir com IDCONTRATO", async t => {
@@ -94,4 +100,22 @@ test("falha de consulta mostra erro e botão de tentar novamente que recupera a 
   click(ctx.dom.window, ctx.root().querySelector(".cr-retry"));
   await settle(); await settle();
   assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 1);
+});
+
+test("ao fechar durante a consulta, cancela a sessão e ignora uma resposta atrasada", async t => {
+  let resolveOverview;
+  let observedSignal;
+  const ctx = setup(t, { loadOverview({ signal }) {
+    observedSignal = signal;
+    return new Promise(resolve => { resolveOverview = resolve; });
+  } });
+  await ctx.view.open();
+  click(ctx.dom.window, ctx.root().querySelector('[data-report-id="1"]'));
+  await settle();
+  ctx.view.close();
+  assert.equal(observedSignal.aborted, true);
+  assert.equal(ctx.root().hidden, true);
+  resolveOverview({ rows: [row(237)], documentStatuses: {}, warnings: [] });
+  await settle();
+  assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 0);
 });

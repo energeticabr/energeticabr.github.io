@@ -33,7 +33,8 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     return node;
   };
   const button = (className, label) => { const node = make("button", className, label); node.type = "button"; return node; };
-  let destroyed = false; let opened = false; let mode = "hub"; let overview = null; let selected = {}; let page = 1;
+  let destroyed = false; let opened = false; let mode = "hub"; let overview = null; let page = 1;
+  let defaultStatusApplied = false;
   let overviewController = null; let detailController = null; let overviewRevision = 0; let detailRevision = 0;
   let returnFocus = null;
 
@@ -127,7 +128,10 @@ export function createContractorReportsView({ document: doc = globalThis.documen
       const values = [...new Set(rows.map(row => row[name]).filter(Boolean))]
         .sort((a, b) => name === "id" ? Number(a) - Number(b) : a.localeCompare(b, "pt-BR"));
       for (const value of values) control.append(Object.assign(make("option", "", value), { value }));
-      control.value = values.includes(current) ? current : "";
+      control.value = name === "status" && !defaultStatusApplied
+        ? values.find(value => value.trim().toUpperCase() === "ATIVO") || ""
+        : values.includes(current) ? current : "";
+      if (name === "status") defaultStatusApplied = true;
     }
     pickers.sync();
   }
@@ -267,6 +271,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   home.addEventListener("click", () => { close(); void onHome?.(); });
 
   return Object.freeze({
+    close,
     async open() {
       if (destroyed) throw new Error("A tela de relatórios foi encerrada.");
       returnFocus = doc.activeElement; opened = true; root.hidden = false;

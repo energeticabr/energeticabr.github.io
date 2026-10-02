@@ -44,6 +44,16 @@ async function defaultTasksGalleryDataFactory(options) {
   return createTasksGalleryData(options);
 }
 
+async function defaultContractorReportsFactory(options) {
+  const { createContractorReportsView } = await import("./ui/contractor-reports-view.js");
+  return createContractorReportsView(options);
+}
+
+async function defaultContractorReportDataFactory(options) {
+  const { createContractorReportData } = await import("./chat/contractor-report-data.js");
+  return createContractorReportData(options);
+}
+
 async function defaultPaymentProgrammingGalleryFactory(options) {
   const { createPaymentProgrammingGallery } = await import("./ui/payment-programming-gallery-view.js");
   return createPaymentProgrammingGallery(options);
@@ -137,6 +147,7 @@ const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
+const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
@@ -609,6 +620,8 @@ export function createAppController({
   ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
   tasksGalleryFactory = defaultTasksGalleryFactory,
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
+  contractorReportsFactory = defaultContractorReportsFactory,
+  contractorReportDataFactory = defaultContractorReportDataFactory,
   paymentProgrammingGalleryFactory = defaultPaymentProgrammingGalleryFactory,
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
@@ -654,6 +667,8 @@ export function createAppController({
   const ordersGalleryDataOpening = new Map();
   let tasksGallery = null;
   let tasksGalleryOpening = null;
+  let contractorReports = null;
+  let contractorReportsOpening = null;
   let paymentProgrammingGallery = null;
   let paymentProgrammingGalleryOpening = null;
   let recurringExpensesGallery = null;
@@ -3778,6 +3793,11 @@ export function createAppController({
     tasksGallery = null;
   }
 
+  function disposeContractorReports() {
+    contractorReports?.destroy?.();
+    contractorReports = null;
+  }
+
   function disposePaymentProgrammingGallery() {
     paymentProgrammingGallery?.destroy?.();
     paymentProgrammingGallery = null;
@@ -3799,6 +3819,7 @@ export function createAppController({
       launchGallery,
       ordersGallery,
       tasksGallery,
+      contractorReports,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4143,6 +4164,45 @@ export function createAppController({
       }
     })();
     return tasksGalleryOpening;
+  }
+
+  async function openContractorReports() {
+    if (!account || stopped || flowBusy()) return false;
+    if (contractorReportsOpening) return contractorReportsOpening;
+    const reportsAccount = account;
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount) throw new Error("A sessão dos Relatórios foi encerrada.");
+    };
+    contractorReportsOpening = (async () => {
+      try {
+        if (!contractorReports) {
+          const data = await contractorReportDataFactory({ tokenProvider: scopes => {
+            assertSession();
+            return auth.getToken(scopes).catch(async error => {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes, { resumeAction: CONTRACTOR_REPORTS_ID });
+              assertSession();
+              return auth.getToken(scopes);
+            });
+          } });
+          assertSession();
+          const panel = await contractorReportsFactory({
+            data,
+            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+          });
+          if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }
+          contractorReports = panel;
+        }
+        await contractorReports.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount) setSessionError(error, "Não foi possível abrir os Relatórios.");
+        return false;
+      } finally {
+        contractorReportsOpening = null;
+      }
+    })();
+    return contractorReportsOpening;
   }
 
   async function openPaymentProgrammingGallery() {
@@ -5075,6 +5135,7 @@ export function createAppController({
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
+    disposeContractorReports();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -5686,6 +5747,7 @@ export function createAppController({
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
+      if (command.replyId === CONTRACTOR_REPORTS_ID) return openContractorReports();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6008,6 +6070,7 @@ export function createAppController({
     if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
     else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
+    else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -6023,6 +6086,7 @@ export function createAppController({
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
+    disposeContractorReports();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
