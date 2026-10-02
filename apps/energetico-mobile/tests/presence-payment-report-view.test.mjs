@@ -44,6 +44,17 @@ test("filtros combinados atualizam todas as medidas e permitem status ATIVO", as
   assert.equal(ctx.root.querySelector('[name="status"]').value, "", "Atualizar preserva a escolha Todos");
 });
 
+test("destaca fornecedor divergente, ausência e status de pagamento da presença", async t => {
+  const ctx = setup(t, { async loadSnapshot() { return snapshot([presence(1, { supplier: "Outra", presence: "AUSENTE", dailyValue: 0 })]); } });
+  await ctx.view.open();
+  const status = ctx.root.querySelector('[name="status"]'); status.value = "";
+  status.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
+  const card = ctx.root.querySelector(".pp-presence-card");
+  assert.equal(card.querySelector(".pp-badge").dataset.tone, "danger");
+  assert.ok(card.querySelector(".pp-field--warning"));
+  assert.equal(card.querySelector(".pp-status-field").dataset.tone, "danger");
+});
+
 test("erro não mantém total antigo e Atualizar refaz a consulta", async t => {
   let calls = 0;
   const ctx = setup(t, { async loadSnapshot() { if (++calls === 2) throw new Error("Falha 503"); return snapshot(); } });

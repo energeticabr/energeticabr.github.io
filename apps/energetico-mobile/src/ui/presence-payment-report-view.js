@@ -71,7 +71,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
   function field(parent, label, value, className = "") {
     const item = make("div", `pp-field ${className}`.trim());
     item.append(make("span", "pp-field-label", label), make("strong", "pp-field-value", display(value)));
-    parent.append(item);
+    parent.append(item); return item;
   }
 
   function valuesFor(name) {
@@ -104,7 +104,9 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     field(grid, "FORNECEDOR", row.supplier, row.supplierMismatch ? "pp-field--warning" : "");
     field(grid, "FILIAL", row.branch); field(grid, "ETAPA", row.stage);
     field(grid, "ATIVIDADE", row.activity); field(grid, "IMÓVEL", row.property);
-    field(grid, "DIÁRIA", money(row.dailyValue)); field(grid, "STATUS FORNECEDOR", row.supplierStatus);
+    field(grid, "DIÁRIA", money(row.dailyValue));
+    const supplierStatus = field(grid, "STATUS FORNECEDOR", row.supplierStatus, "pp-status-field");
+    supplierStatus.dataset.tone = row.supplierStatus === "PAGO" ? "success" : row.supplierStatus === "PENDENTE PGTO" ? "pending" : "danger";
     if (row.observation) field(grid, "OBS", row.observation);
     if (row.motivation) field(grid, "MOTIVAÇÃO", row.motivation);
     card.append(grid); return card;
@@ -150,6 +152,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     for (const order of result.orders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)) {
       const section = make("section", "pp-order-card"); section.dataset.order = order.order;
       const head = make("div", "pp-order-header");
+      head.style.gridRow = `1 / span ${order.groups.length}`;
       head.append(make("h3", "", `PEDIDO ${order.order}`), make("strong", "", money(order.totalValue)));
       section.append(head);
       order.groups.forEach(group => section.append(renderPayment(group)));
