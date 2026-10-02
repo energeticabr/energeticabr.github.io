@@ -1854,7 +1854,7 @@ function pendingProvisionsMarkup(
         <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
         <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Vencidas ou com vencimento em até 2 dias (${rows.length}).</p></div>
       </div>
-      ${snapshot.upcomingUnavailable ? '<p class="chat-pending-provision__error" role="status">Não foi possível consultar os próximos vencimentos. Os itens abaixo são os confirmados.</p>' : ""}
+      ${snapshot.upcomingUnavailable || snapshot.totalsUnavailable ? '<p class="chat-pending-provision__error" role="status">Não foi possível conferir todos os valores e vencimentos. Valores não conferidos aparecem como —.</p>' : ""}
       <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou com vencimento em até 2 dias">
         ${rows.map(row => {
           const paymentId = String(row.id ?? "").trim();

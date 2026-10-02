@@ -213,7 +213,7 @@ test("G28 esconde o clipe se a contagem consultada confirmar que não há anexos
 test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visualizador compartilhado", async t => {
   const rows = [{ id: "306", hasAttachments: true, fields: {
     ID: 306, FORNECEDOR: "DIBRITA", OBS: "texto <img src=x onerror=alert(1)>", "DATA PREVISTO PGTO": "2026-09-23T03:00:00Z",
-    "DATA PGTO EFETUADO": "", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": "1.200,50", QTD: 10,
+    "DATA PGTO EFETUADO": "", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": "1.200,50", QTD: 10, FRETE: "50,00",
     DESCRICAOPGTO: "BRITA", APROVACAO: "PENDENTE", FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS",
     IDPEDIDO: "", IDLANCAMENTOS: "", IDRECORRENCIA: "REC-10", PGTOAGENDADO: false, Criado: "2026-09-20T03:00:00Z",
   } }];
@@ -227,7 +227,8 @@ test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visua
   assert.match(detail.textContent, /23\/09\/2026/);
   assert.match(detail.textContent, /texto <img src=x onerror=alert\(1\)>/);
   assert.equal(detail.querySelector("img, [onerror]"), null);
-  assert.match(detail.textContent, /R\$\s?12\.005,00/);
+  assert.match(detail.textContent, /R\$\s?12\.055,00/);
+  assert.match(ctx.root().querySelector('.pg-card[data-item-id="306"]').textContent, /R\$\s?12\.055,00/);
   button(detail, "Fechar detalhes").click();
 
   ctx.root().querySelector('.pg-card[data-item-id="306"] [data-action="attachments"]').click();

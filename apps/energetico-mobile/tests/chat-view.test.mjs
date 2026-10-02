@@ -2037,11 +2037,12 @@ test("vencimento laranja passa a vermelho ao renderizar depois da meia-noite bra
   dom.window.close();
 });
 
-test("avisa quando os próximos vencimentos não puderam ser consultados sem esconder os vencidos", () => {
+test("avisa quando valores e vencimentos não puderam ser conferidos sem esconder os vencidos", () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
     due: true, upcomingUnavailable: true, rows: [{ id: "306", supplier: "COFER", dueDate: "30/09/2026" }],
   } })));
-  assert.match(dom.window.document.querySelector('[data-pending-provisions-dialog] [role="status"]')?.textContent || "", /Não foi possível consultar os próximos vencimentos/);
+  assert.match(dom.window.document.querySelector('[data-pending-provisions-dialog] [role="status"]')?.textContent || "", /Não foi possível conferir todos os valores e vencimentos/);
+  assert.match(dom.window.document.querySelector('[data-field="total"] strong')?.textContent || "", /—/);
   assert.ok(dom.window.document.querySelector('[role="listitem"][data-payment-id="306"]'));
   dom.window.close();
 });

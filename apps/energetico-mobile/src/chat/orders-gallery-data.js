@@ -2,7 +2,7 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createSharePointAttachmentTransport, validateAttachment } from "../../../../portal/data/attachments.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { provisionDateKey, provisionDayOffset, provisionDueState, provisionNumericValue } from "./pending-provision-dates.js";
+import { provisionDateKey, provisionDayOffset, provisionDueState, provisionTotal } from "./pending-provision-dates.js";
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -710,7 +710,7 @@ function createSharePointListData({
     return result;
   }
 
-  async function loadUpcomingPayments({ now = new Date(), signal } = {}) {
+  async function loadUpcomingPayments({ now = new Date(), signal, includeOverdue = false } = {}) {
     const today = provisionDateKey(now);
     if (!today) throw new RangeError("A data de referência dos vencimentos não é válida.");
     const list = await resolveList(signal);
@@ -723,7 +723,19 @@ function createSharePointListData({
       throw new Error("Não foi possível identificar com segurança a coluna DATA PREVISTO PGTO.");
     }
     const dateField = dueColumns[0];
-    const query = `$expand=fields&$top=${PAGE_SIZE}&$filter=fields/${dateField} ge '${provisionDayOffset(today, 1)}T00:00:00Z' and fields/${dateField} lt '${provisionDayOffset(today, 3)}T03:00:00Z'`;
+    let filter = `fields/${dateField} ge '${provisionDayOffset(today, 1)}T00:00:00Z' and fields/${dateField} lt '${provisionDayOffset(today, 3)}T03:00:00Z'`;
+    if (includeOverdue) {
+      const statusColumns = [...new Set((Array.isArray(columns) ? columns : [])
+        .filter(column => [column?.name, column?.displayName].some(name => fieldKey(name) === "STATUS"))
+        .map(column => String(column.name || "")))];
+      if (statusColumns.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(statusColumns[0])) {
+        throw new Error("Não foi possível identificar com segurança a coluna STATUS das provisões.");
+      }
+      // Query one field to avoid Graph's multi-index restriction and skip paid history.
+      // The Brazilian calendar window is still enforced on every returned row below.
+      filter = `fields/${statusColumns[0]} eq 'PAGAMENTO PREVISTO'`;
+    }
+    const query = `$expand=fields&$top=${PAGE_SIZE}&$filter=${filter}`;
     const rows = new Map();
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
@@ -736,19 +748,25 @@ function createSharePointListData({
         const row = normalizeItem(item);
         if (!row) continue;
         const fields = row.fields;
-        const dueDate = scalar(fieldValue(fields, [dateField, "DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
-        if (provisionDueState(dueDate, today).kind !== "upcoming"
-          || fieldKey(scalar(fieldValue(fields, ["STATUS"]))) !== "PAGAMENTOPREVISTO"
-          || fieldValue(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"])
-          || fieldKey(scalar(fieldValue(fields, ["PGTOAGENDADO"]))) === "PAGO") continue;
-        const amount = provisionNumericValue(scalar(fieldValue(fields, ["VALOR TOTAL", "VALORTOTAL"])));
-        const quantity = provisionNumericValue(scalar(fieldValue(fields, ["QTD", "QUANTIDADE"])));
+        const value = aliases => {
+          const keys = new Set(aliases.map(fieldKey));
+          const internalNames = (Array.isArray(columns) ? columns : [])
+            .filter(column => keys.has(fieldKey(column?.name)) || keys.has(fieldKey(column?.displayName)))
+            .map(column => column.name);
+          return scalar(fieldValue(fields, [...aliases, ...internalNames]));
+        };
+        const dueDate = value([dateField, "DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]);
+        const timing = provisionDueState(dueDate, today).kind;
+        if (!(timing === "upcoming" || (includeOverdue && timing === "urgent"))
+          || fieldKey(value(["STATUS"])) !== "PAGAMENTOPREVISTO"
+          || value(["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"])
+          || fieldKey(value(["PGTOAGENDADO"])) === "PAGO") continue;
         rows.set(row.id, Object.freeze({
           id: row.id, dueDate,
-          total: Number.isFinite(amount) ? amount * (Number.isFinite(quantity) ? quantity : 1) : "",
-          supplier: scalar(fieldValue(fields, ["FORNECEDOR"])),
-          product: scalar(fieldValue(fields, ["DESCRICAOPGTO", "PRODUTO", "DESCRIÇÃO PGTO"])),
-          branch: scalar(fieldValue(fields, ["FILIAL"])), property: scalar(fieldValue(fields, ["IMOVEL", "IMÓVEL"])),
+          total: provisionTotal(value(["VALOR TOTAL", "VALORTOTAL"]), value(["QTD", "QUANTIDADE"]), value(["FRETE"])),
+          supplier: value(["FORNECEDOR"]),
+          product: value(["DESCRICAOPGTO", "PRODUTO", "DESCRIÇÃO PGTO"]),
+          branch: value(["FILIAL"]), property: value(["IMOVEL", "IMÓVEL"]),
         }));
       }
       if (page?.hasMore !== true) return Object.freeze([...rows.values()].sort((a, b) => provisionDateKey(a.dueDate).localeCompare(provisionDateKey(b.dueDate)) || Number(a.id) - Number(b.id)));

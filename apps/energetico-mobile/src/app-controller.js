@@ -1674,19 +1674,26 @@ export function createAppController({
                 reject(new Error("A consulta dos próximos vencimentos excedeu o tempo limite."));
               }, 8_000);
             });
-            try { upcoming = await Promise.race([data.loadUpcomingPayments({ signal: readController.signal }), timeout]); }
+            try { upcoming = await Promise.race([data.loadUpcomingPayments({ signal: readController.signal, includeOverdue: true }), timeout]); }
             finally { clearTimeout(timer); }
           }
         } catch { upcomingUnavailable = true; }
         if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision || pendingProvisionReminderSuppressed()) return false;
         const rowsById = new Map();
-        for (const row of [...(Array.isArray(original?.rows) ? original.rows : []), ...upcoming]) {
+        for (const row of Array.isArray(original?.rows) ? original.rows : []) {
           const id = String(row?.id ?? "").trim();
           // Preserve legacy snapshots without IDs, but do not duplicate actionable payments.
-          if (!id || !rowsById.has(id)) rowsById.set(id || Symbol(), row);
+          // The VM sends the unit amount without freight; only SharePoint confirms the total.
+          if (!id || !rowsById.has(id)) rowsById.set(id || Symbol(), { ...row, total: "" });
+        }
+        for (const row of upcoming) {
+          const id = String(row?.id ?? "").trim();
+          const originalRow = id ? rowsById.get(id) : null;
+          rowsById.set(id || Symbol(), originalRow ? { ...row, ...originalRow, total: row.total } : row);
         }
         const rows = [...rowsById.values()];
-        const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable };
+        const totalsUnavailable = rows.some(row => row.total == null || row.total === "");
+        const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
         if (!due) {
           cancelScheduledPendingProvisionReminder();

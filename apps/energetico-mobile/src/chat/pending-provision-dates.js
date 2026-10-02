@@ -1,3 +1,5 @@
+import Decimal from "decimal.js";
+
 const DAY_MS = 86_400_000;
 
 // SharePoint timestamps represent instants; date-only fields represent calendar days.
@@ -42,4 +44,14 @@ export function provisionNumericValue(value) {
   if (!raw || !/^-?[\d.,]+$/.test(raw)) return NaN;
   const number = Number(raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw);
   return Number.isFinite(number) ? number : NaN;
+}
+
+export function provisionTotal(amount, quantity, freight) {
+  const price = provisionNumericValue(amount);
+  const count = quantity == null || String(quantity).trim() === "" ? 1 : provisionNumericValue(quantity);
+  const shipping = freight == null || String(freight).trim() === "" ? 0 : provisionNumericValue(freight);
+  if (![price, count, shipping].every(Number.isFinite)) return "";
+  const total = new Decimal(price).times(count).plus(shipping)
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+  return Number.isFinite(total) ? total : "";
 }
