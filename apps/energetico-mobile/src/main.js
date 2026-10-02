@@ -4,6 +4,7 @@ import { createNativeBootstrap } from "./demo/native-bootstrap.js";
 import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
 import "./styles.css";
+import "./ui/supplier-payroll.css";
 import "./ui/launch-gallery.css";
 import "./ui/searchable-filter-selects.css";
 import "./ui/orders-gallery.css";
