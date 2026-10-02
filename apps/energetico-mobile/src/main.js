@@ -12,6 +12,7 @@ import "./ui/registration-gallery.css";
 import "./ui/hr-payroll-gallery.css";
 import "./ui/gallery-record-actions.css";
 import "./ui/tasks-gallery.css";
+import "./ui/contractor-reports.css";
 import "./demo/demo.css";
 import "./web/attachment-preview.css";
 

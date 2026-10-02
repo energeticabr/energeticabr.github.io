@@ -3373,10 +3373,12 @@ test("menu inicial posiciona Power BI logo depois de Gastos Pessoais", () => {
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_personal_expenses",
     "action_powerbi_dashboard",
+    "action_contractor_reports",
     "group_supplies",
     "start_pending_construction_diary",
   ]);
   assert.equal(buttons[1].dataset.label, "📊 POWER BI");
+  assert.equal(buttons[2].dataset.label, "📑 RELATÓRIOS");
   dom.window.close();
 });
 
@@ -3510,6 +3512,7 @@ test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", ()
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_supplies",
     "group_demands",
+    "action_contractor_reports",
     "append_today_construction_diary_photos",
     "start_pending_construction_diary",
   ]);
@@ -3535,6 +3538,7 @@ test("menu inicial mantém apenas adicionar fotos no último botão azul", () =>
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_supplies",
+    "action_contractor_reports",
     "append_today_construction_diary_photos",
   ]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
@@ -3558,7 +3562,7 @@ test("menu com anexos põe COMEÇAR DIÁRIO latente depois de fotos e em vermelh
   const dom = new JSDOM(markup);
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
-    "group_supplies", "group_demands", "append_today_construction_diary_photos", "resume_latent_construction_diary",
+    "group_supplies", "group_demands", "action_contractor_reports", "append_today_construction_diary_photos", "resume_latent_construction_diary",
   ]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
   dom.window.close();
@@ -3577,7 +3581,7 @@ test("CONTINUAR DIÁRIO latente fica no fim sem destaque vermelho", () => {
   }] }));
   const dom = new JSDOM(markup);
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
-  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "resume_latent_construction_diary"]);
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "action_contractor_reports", "resume_latent_construction_diary"]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
   dom.window.close();
 });

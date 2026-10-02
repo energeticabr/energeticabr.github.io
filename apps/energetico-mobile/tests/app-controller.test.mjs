@@ -26,7 +26,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, contractorReportDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -67,7 +67,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, contractorReportDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -1389,6 +1389,40 @@ test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da te
   t.after(() => h.controller.stop());
   await h.controller.start();
   assert.equal(opens, 1);
+});
+
+test("Relatórios abre localmente com token Microsoft e não envia a escolha para a VM", async t => {
+  let opens = 0;
+  let callbacks;
+  const h = makeHarness({
+    contractorReportsFactory: async options => { callbacks = options; return { async open() { opens++; }, destroy() {} }; },
+    contractorReportDataFactory: async ({ tokenProvider }) => ({
+      async loadOverview() { return { token: await tokenProvider(["Sites.Read.All"]) }; },
+      async loadDetails() { return { launches: [], measurements: [] }; },
+    }),
+  });
+  h.auth.getToken = async () => "sharepoint-token";
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_contractor_reports", label: "RELATÓRIOS" });
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal((await callbacks.data.loadOverview()).token, "sharepoint-token");
+  assert.equal(typeof callbacks.onHome, "function");
+});
+
+test("Relatórios retoma após consentimento Microsoft e descarta a tela ao encerrar a sessão", async t => {
+  let opens = 0; let destroys = 0;
+  const h = makeHarness({
+    contractorReportsFactory: async () => ({ async open() { opens++; }, destroy() { destroys++; } }),
+    contractorReportDataFactory: async () => ({}),
+  });
+  h.auth.consumePendingAction = () => "action_contractor_reports";
+  await h.controller.start();
+  assert.equal(opens, 1);
+  h.controller.stop();
+  assert.equal(destroys, 1);
 });
 
 test("Galeria Programação de Pagamentos consulta SharePoint autenticado, abre anexos e permanece local", async t => {
