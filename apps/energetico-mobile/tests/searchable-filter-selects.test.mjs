@@ -113,12 +113,34 @@ test('captured touch released outside its option does not commit it', t => {
   // Touch pointer capture can keep event.target on the option even though
   // the release coordinates are outside it.
   option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 300, clientY: 300 }));
-  option.click();
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true, detail: 1 }));
   assert.equal(ctx.select.value, '');
   ctx.document.elementFromPoint = () => option;
   option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
   option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
   assert.equal(ctx.select.value, 'concrete', 'a próxima tentativa válida continua disponível');
+});
+
+test('old captured click cannot replace a newer option tap', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const oldOption = ctx.options().find(item => item.textContent === 'Aço estrutural');
+  const newOption = ctx.options().find(item => item.textContent === 'Concreto');
+  oldOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 20, clientY: 20 }));
+  oldOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 200, clientY: 200 }));
+  newOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  oldOption.dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  assert.equal(ctx.select.value, '', 'o clique antigo não escolhe aço');
+  newOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  assert.equal(ctx.select.value, 'concrete');
+});
+
+test('click without preceding pointer event still selects for legacy activation', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  ctx.options().find(item => item.textContent === 'Concreto')
+    .dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  assert.equal(ctx.select.value, 'concrete');
 });
 
 test('small stationary touch still commits when keyboard reflow moves the hit target', t => {

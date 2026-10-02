@@ -52,7 +52,7 @@ function createPicker(select, closeOthers) {
   let selectingOption = false;
   let pressedOption = null;
   let pressedAt = null;
-  let suppressClickFor = null;
+  let pointerSeen = false;
   let selectionReset = null;
 
   function disabled(option) {
@@ -95,8 +95,10 @@ function createPicker(select, closeOthers) {
       const item = doc.createElement('div'); item.className = 'sfs-option'; item.id = `${id}-option-${index}`;
       item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.selected));
       item.setAttribute('aria-disabled', String(disabled(option))); item.textContent = option.label;
-      item.addEventListener('click', () => {
-        if (suppressClickFor === item) { suppressClickFor = null; return; }
+      item.addEventListener('click', event => {
+        // Pointerup already accepted or rejected this gesture. A later click
+        // must not revive it, even if another option was pressed meanwhile.
+        if (pointerSeen && event.detail > 0) return;
         choose(option);
       });
       return item;
@@ -180,7 +182,7 @@ function createPicker(select, closeOthers) {
   }
   function onOutside(event) { if (!wrapper.contains(event.target)) close(); }
   function onOptionPointerDown(event) {
-    suppressClickFor = null;
+    pointerSeen = true;
     const target = event.target.closest?.('.sfs-option');
     pressedOption = event.button === 0 && event.isPrimary !== false && target && list.contains(target) ? target : null;
     pressedAt = pressedOption ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
@@ -198,9 +200,6 @@ function createPicker(select, closeOthers) {
     // real hit target because pointer capture can retain the pressed element.
     const landed = event.pointerType === 'touch' || typeof doc.elementFromPoint !== 'function'
       || pressedOption.contains(hit);
-    // A captured pointer can still emit a delayed click on the original item
-    // even when this pointerup was rejected. Do not let it bypass the guard.
-    suppressClickFor = pressedOption;
     if (event.button === 0 && event.isPrimary !== false && event.pointerId === pressedAt.id
       && travel <= 12 && landed && target === pressedOption && list.contains(target)) {
       const index = [...list.children].indexOf(target);
@@ -209,7 +208,6 @@ function createPicker(select, closeOthers) {
     selectionReset = view.setTimeout(() => { selectingOption = false; pressedOption = null; selectionReset = null; }, 0);
   }
   function onOptionPointerCancel() {
-    suppressClickFor = pressedOption;
     selectingOption = false;
     pressedOption = null;
     pressedAt = null;
