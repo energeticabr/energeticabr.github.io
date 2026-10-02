@@ -15,7 +15,7 @@ function row(id, overrides = {}) {
   } });
 }
 
-function setup(t, dataOverrides = {}) {
+function setup(t, dataOverrides = {}, presenceData) {
   assert.equal(typeof module.createContractorReportsView, "function");
   const dom = new JSDOM("<main id=app></main>", { url: "https://example.test" });
   const data = {
@@ -23,7 +23,7 @@ function setup(t, dataOverrides = {}) {
     async loadDetails() { return { launches: [{ id: "3486", date: "2026-10-01", supplier: "Israel", contract: "237", total: 55, paymentStatus: "PAGO", paymentTone: "success" }], measurements: [{ id: "1", supplier: "Israel", contract: "237", status: "ATIVO", statusTone: "success" }] }; },
     ...dataOverrides,
   };
-  const view = module.createContractorReportsView({ document: dom.window.document, data });
+  const view = module.createContractorReportsView({ document: dom.window.document, data, presenceData });
   t.after(() => { view.destroy(); dom.window.close(); });
   return { dom, view, root: () => dom.window.document.querySelector(".cr-overlay") };
 }
@@ -47,6 +47,10 @@ test("abre o seletor de quadrados com somente o Relatório 1 disponível e mostr
   assert.equal(ctx.root().querySelectorAll(".cr-main-table thead th").length, 13);
   assert.equal(ctx.root().querySelector('[name="status"]').value, "ATIVO");
   assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 1);
+  assert.equal(ctx.root().querySelector('.cr-main-table [data-column="supplier"]').dataset.label, "FORNECEDOR");
+  const supplierCell = ctx.root().querySelector('.cr-main-table [data-column="supplier"]');
+  assert.equal(supplierCell.firstElementChild.className, "cr-cell-label");
+  assert.equal(supplierCell.firstElementChild.textContent, "FORNECEDOR");
   assert.equal(ctx.root().querySelector('[data-metric="active"]').textContent.trim(), "1");
   assert.equal(ctx.root().querySelector('[data-metric="inactive"]').textContent.trim(), "0");
   assert.equal(ctx.root().querySelector('[data-metric="contracts"]').textContent.trim(), "1");
@@ -77,6 +81,7 @@ test("combina filtros e exibe detalhe do ID selecionado sem confundir com IDCONT
   assert.match(root.querySelector(".cr-detail").textContent, /3486/);
   assert.match(root.querySelector(".cr-detail").textContent, /R\$.*55,00/);
   assert.match(root.querySelector(".cr-detail").textContent, /MEDIÇÕES VINCULADAS/);
+  assert.equal(root.querySelector('.cr-detail-table [data-label="VALOR TOTAL"]').textContent.trim().includes("55,00"), true);
   const doc = root.querySelector('tr[data-row-id="237"] [data-column="contractDocumentId"]');
   assert.match(doc.textContent, /214 \(PENDENTE\)/);
   assert.equal(doc.dataset.tone, "danger");
@@ -140,4 +145,17 @@ test("ao fechar durante a consulta, cancela a sessão e ignora uma resposta atra
   resolveOverview({ rows: [row(237)], documentStatuses: {}, warnings: [] });
   await settle();
   assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 0);
+});
+
+test("quadrado 2 abre o relatório de presenças e Voltar retorna ao seletor", async t => {
+  const ctx = setup(t, {}, { async loadSnapshot() { return { presences: [], launchesById: {}, supplierStatusByName: {}, warnings: [] }; } });
+  await ctx.view.open();
+  const tile = ctx.root().querySelector('[data-report-id="2"]');
+  assert.equal(tile.disabled, false);
+  click(ctx.dom.window, tile); await settle();
+  assert.match(ctx.root().textContent, /PRESENÇAS VINCULADAS POR PEDIDO/);
+  assert.equal(ctx.root().querySelector(".pp-report").hidden, false);
+  click(ctx.dom.window, ctx.root().querySelector(".cr-header button"));
+  assert.equal(ctx.root().querySelector(".cr-hub").hidden, false);
+  assert.equal(ctx.root().querySelector(".pp-report").hidden, true);
 });
