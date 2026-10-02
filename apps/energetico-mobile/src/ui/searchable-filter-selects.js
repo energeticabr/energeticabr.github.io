@@ -50,6 +50,7 @@ function createPicker(select, closeOthers) {
   let destroyed = false;
   let observedViewport = null;
   let selectingOption = false;
+  let pressedOption = null;
   let selectionReset = null;
 
   function disabled(option) {
@@ -104,6 +105,7 @@ function createPicker(select, closeOthers) {
   }
   function close({ focus = false } = {}) {
     selectingOption = false;
+    pressedOption = null;
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
@@ -172,16 +174,24 @@ function createPicker(select, closeOthers) {
   }
   function onOutside(event) { if (!wrapper.contains(event.target)) close(); }
   function onOptionPointerDown(event) {
-    selectingOption = Boolean(event.target.closest?.('.sfs-option') && list.contains(event.target));
+    const target = event.target.closest?.('.sfs-option');
+    pressedOption = target && list.contains(target) ? target : null;
+    selectingOption = Boolean(pressedOption);
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
   }
-  function onOptionPointerUp() {
+  function onOptionPointerUp(event) {
     if (!selectingOption) return;
-    selectionReset = view.setTimeout(() => { selectingOption = false; selectionReset = null; }, 0);
+    const target = event.target.closest?.('.sfs-option');
+    if (target === pressedOption && list.contains(target)) {
+      const index = [...list.children].indexOf(target);
+      if (candidates[index]) { choose(candidates[index]); return; }
+    }
+    selectionReset = view.setTimeout(() => { selectingOption = false; pressedOption = null; selectionReset = null; }, 0);
   }
   function onOptionPointerCancel() {
     selectingOption = false;
+    pressedOption = null;
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
   }

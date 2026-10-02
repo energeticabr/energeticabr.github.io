@@ -80,6 +80,21 @@ test('a tap on another option survives search blur and applies the new filter', 
   assert.equal(ctx.popup().hidden, true);
 });
 
+test('iOS option tap commits on pointerup before a delayed synthetic click', t => {
+  const ctx = fixture(t);
+  ctx.select.value = 'steel'; ctx.binding.sync();
+  ctx.trigger().click(); ctx.type('concreto');
+  const next = ctx.options()[0];
+  next.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  ctx.search().dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+  next.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+  // Mobile Safari can dismiss the keyboard and reflow the page before firing
+  // its click. The choice must already be committed at pointerup.
+  assert.equal(ctx.select.value, 'concrete');
+  assert.equal(ctx.trigger().textContent.includes('Concreto'), true);
+  assert.equal(new ctx.FormData(ctx.form).get('product'), 'concrete');
+});
+
 test('releasing a dragged option outside the list restores normal popup dismissal', async t => {
   const ctx = fixture(t);
   ctx.trigger().click();
