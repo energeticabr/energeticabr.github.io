@@ -1,4 +1,5 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
+import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { escapeHtml } from "./escape-html.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
@@ -1316,6 +1317,15 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
   const hrReport = humanResourcesReportInsertion(message, options);
   if (hrReport) options.splice(hrReport.index, 0, hrReport.option);
+  if (currentPoll && isSupplierPayrollMenu(message, activeFlow)
+    && !options.some(option => draftReplyId(option) === PAYROLL_LAUNCH_REPLY_ID)) {
+    const multiple = options.findIndex(option => draftReplyId(option) === "choice:tipo_lancamento:2");
+    options.splice(multiple + 1, 0, {
+      id: PAYROLL_LAUNCH_REPLY_ID,
+      reply: PAYROLL_LAUNCH_REPLY_ID,
+      label: "💰 EFETUAR FOLHA DE PAGAMENTO",
+    });
+  }
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
     || (message.detail_table?.kind === "payment_audit" ? message.detail_table : null)
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);

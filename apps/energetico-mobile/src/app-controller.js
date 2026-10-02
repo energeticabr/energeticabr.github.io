@@ -1,3 +1,4 @@
+import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
@@ -97,6 +98,16 @@ async function defaultHrPayrollGalleryDataFactory(options) {
 async function defaultHrPayrollGalleryFactory(options) {
   const { createHrPayrollGallery } = await import("./ui/hr-payroll-gallery-view.js");
   return createHrPayrollGallery(options);
+}
+
+async function defaultSupplierPayrollFactory(options) {
+  const { createSupplierPayrollView } = await import("./ui/supplier-payroll-view.js");
+  return createSupplierPayrollView(options);
+}
+
+async function defaultSupplierPayrollDataFactory(options) {
+  const { createSupplierPayrollData } = await import("./chat/supplier-payroll-data.js");
+  return createSupplierPayrollData(options);
 }
 
 function errorMessage(error, fallback) {
@@ -632,6 +643,8 @@ export function createAppController({
   pendingConstructionDiaryDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
+  supplierPayrollFactory = defaultSupplierPayrollFactory,
+  supplierPayrollDataFactory = defaultSupplierPayrollDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -675,6 +688,8 @@ export function createAppController({
   let recurringExpensesGalleryOpening = null;
   const registrationGalleries = new Map();
   const registrationGalleryOpenings = new Map();
+  let supplierPayroll = null;
+  let supplierPayrollOpening = null;
   let hrPayrollGallery = null;
   let hrPayrollGalleryName = "";
   let hrPayrollGalleryOpening = null;
@@ -3823,6 +3838,7 @@ export function createAppController({
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
+      supplierPayroll,
       ...registrationGalleries.values(),
     ]) gallery?.close?.();
   }
@@ -3909,6 +3925,65 @@ export function createAppController({
     } finally {
       if (ordersGalleryDataOpening.get(cacheKey) === opening) ordersGalleryDataOpening.delete(cacheKey);
     }
+  }
+
+  function disposeSupplierPayroll() {
+    supplierPayroll?.destroy?.();
+    supplierPayroll = null;
+    supplierPayrollOpening = null;
+  }
+
+  async function openSupplierPayroll() {
+    if (!account || stopped || flowBusy()) return false;
+    const state = store.getState();
+    if (!isSupplierPayrollMenu(latestAssistantPoll(state.messages), state.activeFlow)) return false;
+    if (supplierPayrollOpening) return supplierPayrollOpening;
+    const payrollAccount = account;
+    const payrollRevision = sessionRevision;
+    let allowAuthorization = true;
+    const assertSession = () => {
+      if (stopped || account !== payrollAccount || sessionRevision !== payrollRevision) throw new Error("A sessão da folha de pagamento foi encerrada.");
+    };
+    const tokenProvider = async scopes => {
+      assertSession();
+      let token;
+      try { token = await auth.getToken(scopes); }
+      catch (error) {
+        assertSession();
+        if (error?.code !== "AUTH_REQUIRED" || !allowAuthorization || typeof auth.authorize !== "function") throw error;
+        await auth.authorize(scopes, { resumeAction: PAYROLL_LAUNCH_REPLY_ID });
+        assertSession();
+        token = await auth.getToken(scopes);
+      }
+      assertSession();
+      return token;
+    };
+    const opening = (async () => {
+      try {
+        if (!supplierPayroll) {
+          const data = await supplierPayrollDataFactory({
+            tokenProvider,
+            assertSession,
+          });
+          assertSession();
+          await data.prepare?.();
+          assertSession();
+          allowAuthorization = false;
+          const panel = await supplierPayrollFactory({ data, assertSession });
+          if (stopped || account !== payrollAccount || sessionRevision !== payrollRevision) { panel.destroy?.(); return false; }
+          supplierPayroll = panel;
+        }
+        await supplierPayroll.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === payrollAccount && sessionRevision === payrollRevision) setSessionError(error, "Não foi possível abrir a folha de pagamento.");
+        return false;
+      }
+    })();
+    supplierPayrollOpening = opening;
+    try { return await opening; }
+    finally { if (supplierPayrollOpening === opening) supplierPayrollOpening = null; }
   }
 
   function disposeHrPayrollGallery() {
@@ -5140,6 +5215,7 @@ export function createAppController({
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
     disposeHrPayrollGallery();
+    disposeSupplierPayroll();
     sessionRevision += 1;
     sharedResumeRequested = false;
     cancelFlowReminder();
@@ -5732,6 +5808,7 @@ export function createAppController({
       return formatted ? sendText(formatted) : false;
     });
     bind("select-reply", command => {
+      if (command.replyId === PAYROLL_LAUNCH_REPLY_ID) return openSupplierPayroll();
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
       if (command.replyId === NAVIGATION_BACK_ID) {
         const latestPoll = latestAssistantPoll(store.getState().messages);
@@ -6067,7 +6144,8 @@ export function createAppController({
     starting = false;
     if (sharedResumeRequested) await resumeSharedFiles();
     const pendingAction = account ? auth.consumePendingAction?.() : null;
-    if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
+    if (pendingAction === PAYROLL_LAUNCH_REPLY_ID) await openSupplierPayroll();
+    else if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
     else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
@@ -6091,6 +6169,7 @@ export function createAppController({
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
     disposeHrPayrollGallery();
+    disposeSupplierPayroll();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

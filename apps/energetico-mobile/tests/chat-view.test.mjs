@@ -7696,3 +7696,12 @@ test('filial e imóvel ficam recolhidos também em provisões legadas sem ID', (
   assert.equal(dom.window.document.querySelector('[data-field="property"]').hidden, true);
   dom.window.close();
 });
+
+
+test("Novo Pedido insere Efetuar Folha abaixo de Lançamento Múltiplo e não altera Pedido Existente",()=>{
+ const message={role:'assistant',type:'poll',question:'COMO DESEJA EFETUAR O LANÇAMENTO?',options:[{id:'choice:tipo_lancamento:1',label:'LANÇAMENTO ÚNICO'},{id:'choice:tipo_lancamento:2',label:'LANÇAMENTO MÚLTIPLO'}]};
+ const activeFlow={id:'launch',rows:[{label:'TIPO DE PEDIDO',value:'NOVO PEDIDO'}]};
+ const markup=renderChatMarkup(signedInState({messages:[message],activeFlow}));
+ assert.match(markup,/action_supplier_payroll_launch/);assert.ok(markup.indexOf('LANÇAMENTO MÚLTIPLO')<markup.indexOf('EFETUAR FOLHA DE PAGAMENTO'));
+ assert.doesNotMatch(renderChatMarkup(signedInState({messages:[message],activeFlow:{...activeFlow,rows:[{label:'TIPO DE PEDIDO',value:'PEDIDO EXISTENTE'}]}})),/action_supplier_payroll_launch/);
+});
