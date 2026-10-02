@@ -80,6 +80,83 @@ test('a tap on another option survives search blur and applies the new filter', 
   assert.equal(ctx.popup().hidden, true);
 });
 
+test('iOS option tap commits on pointerup before a delayed synthetic click', t => {
+  const ctx = fixture(t);
+  ctx.select.value = 'steel'; ctx.binding.sync();
+  ctx.trigger().click(); ctx.type('concreto');
+  const next = ctx.options()[0];
+  next.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  ctx.search().dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+  next.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+  // Mobile Safari can dismiss the keyboard and reflow the page before firing
+  // its click. The choice must already be committed at pointerup.
+  assert.equal(ctx.select.value, 'concrete');
+  assert.equal(ctx.trigger().textContent.includes('Concreto'), true);
+  assert.equal(new ctx.FormData(ctx.form).get('product'), 'concrete');
+});
+
+test('secondary mouse button does not commit a searchable option', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const option = ctx.options().find(item => item.textContent === 'Concreto');
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 2 }));
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 2 }));
+  assert.equal(ctx.select.value, '');
+});
+
+test('captured touch released outside its option does not commit it', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const option = ctx.options().find(item => item.textContent === 'Concreto');
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  ctx.document.elementFromPoint = () => ctx.document.querySelector('#outside');
+  // Touch pointer capture can keep event.target on the option even though
+  // the release coordinates are outside it.
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 300, clientY: 300 }));
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  assert.equal(ctx.select.value, '');
+  ctx.document.elementFromPoint = () => option;
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  assert.equal(ctx.select.value, 'concrete', 'a próxima tentativa válida continua disponível');
+});
+
+test('old captured click cannot replace a newer option tap', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const oldOption = ctx.options().find(item => item.textContent === 'Aço estrutural');
+  const newOption = ctx.options().find(item => item.textContent === 'Concreto');
+  oldOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 20, clientY: 20 }));
+  oldOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 200, clientY: 200 }));
+  newOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  oldOption.dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  assert.equal(ctx.select.value, '', 'o clique antigo não escolhe aço');
+  newOption.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  assert.equal(ctx.select.value, 'concrete');
+});
+
+test('click without preceding pointer event still selects for legacy activation', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  ctx.options().find(item => item.textContent === 'Concreto')
+    .dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true, detail: 1 }));
+  assert.equal(ctx.select.value, 'concrete');
+});
+
+test('small stationary touch still commits when keyboard reflow moves the hit target', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const option = ctx.options().find(item => item.textContent === 'Concreto');
+  const down = new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 });
+  const up = new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 36, clientY: 30 });
+  Object.defineProperty(down, 'pointerType', { value: 'touch' });
+  Object.defineProperty(up, 'pointerType', { value: 'touch' });
+  option.dispatchEvent(down);
+  ctx.document.elementFromPoint = () => ctx.document.querySelector('#outside');
+  option.dispatchEvent(up);
+  assert.equal(ctx.select.value, 'concrete');
+});
+
 test('releasing a dragged option outside the list restores normal popup dismissal', async t => {
   const ctx = fixture(t);
   ctx.trigger().click();

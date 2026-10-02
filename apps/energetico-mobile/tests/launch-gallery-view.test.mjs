@@ -103,6 +103,35 @@ test('the launch pencil opens a searchable editing form without a separate detai
   assert.equal(supplier.value, 'Fornecedor B');
 });
 
+test('editing a launch replaces a selected option and submits the replacement', async t => {
+  const item = row(); item.fields.ETAPA = 'ALVENARIA E ESTRUTURAS';
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item, editFields: [{ name: 'ETAPA', label: 'Etapa', type: 'select', options: [
+      { value: 'ALVENARIA E ESTRUTURAS', label: 'Alvenaria e estruturas' },
+      { value: 'CONTABILIDADE', label: 'Contabilidade' },
+    ] }] }) });
+  await ctx.gallery.open(); await showDetail(ctx);
+  const editor = ctx.root().querySelector('.lg-editor');
+  const stage = editor.querySelector('[name="ETAPA"]');
+  editor.querySelector('.sfs-trigger').click();
+  const search = editor.querySelector('.sfs-search');
+  search.value = 'contabilidade';
+  search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  const replacement = editor.querySelector('.sfs-option');
+  replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+  search.dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+  replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+  assert.equal(stage.value, 'CONTABILIDADE');
+  assert.match(editor.querySelector('.sfs-trigger').textContent, /Contabilidade/);
+  button(ctx.root(), 'Revisar alterações').click();
+  assert.match(ctx.root().querySelector('.lg-review').textContent, /Contabilidade/);
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.deepEqual(mutations(ctx), [{ operation: 'update', payload: {
+    id: 17, fields: { ETAPA: 'CONTABILIDADE' }, confirm: true,
+    expectedModified: '2026-09-18T12:34:56Z',
+  } }]);
+});
+
 test('filters start collapsed so records are visible; details and review scroll into view', async t => {
   const ctx = await setup(t);
   const scrolled = [];

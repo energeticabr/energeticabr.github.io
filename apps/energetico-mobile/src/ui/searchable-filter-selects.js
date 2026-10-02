@@ -50,6 +50,9 @@ function createPicker(select, closeOthers) {
   let destroyed = false;
   let observedViewport = null;
   let selectingOption = false;
+  let pressedOption = null;
+  let pressedAt = null;
+  let pointerSeen = false;
   let selectionReset = null;
 
   function disabled(option) {
@@ -92,7 +95,12 @@ function createPicker(select, closeOthers) {
       const item = doc.createElement('div'); item.className = 'sfs-option'; item.id = `${id}-option-${index}`;
       item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.selected));
       item.setAttribute('aria-disabled', String(disabled(option))); item.textContent = option.label;
-      item.addEventListener('click', () => choose(option));
+      item.addEventListener('click', event => {
+        // Pointerup already accepted or rejected this gesture. A later click
+        // must not revive it, even if another option was pressed meanwhile.
+        if (pointerSeen && event.detail > 0) return;
+        choose(option);
+      });
       return item;
     }));
     const hasOptions = candidates.length > 0;
@@ -104,6 +112,8 @@ function createPicker(select, closeOthers) {
   }
   function close({ focus = false } = {}) {
     selectingOption = false;
+    pressedOption = null;
+    pressedAt = null;
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
@@ -172,16 +182,35 @@ function createPicker(select, closeOthers) {
   }
   function onOutside(event) { if (!wrapper.contains(event.target)) close(); }
   function onOptionPointerDown(event) {
-    selectingOption = Boolean(event.target.closest?.('.sfs-option') && list.contains(event.target));
+    pointerSeen = true;
+    const target = event.target.closest?.('.sfs-option');
+    pressedOption = event.button === 0 && event.isPrimary !== false && target && list.contains(target) ? target : null;
+    pressedAt = pressedOption ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
+    selectingOption = Boolean(pressedOption);
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
   }
-  function onOptionPointerUp() {
+  function onOptionPointerUp(event) {
     if (!selectingOption) return;
-    selectionReset = view.setTimeout(() => { selectingOption = false; selectionReset = null; }, 0);
+    const target = event.target.closest?.('.sfs-option');
+    const travel = Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y);
+    const hit = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(event.clientX, event.clientY) : null;
+    // A touch tap is identified by its short travel, not hit testing: closing
+    // the iOS keyboard can move the option before pointerup. Mouse/pen use the
+    // real hit target because pointer capture can retain the pressed element.
+    const landed = event.pointerType === 'touch' || typeof doc.elementFromPoint !== 'function'
+      || pressedOption.contains(hit);
+    if (event.button === 0 && event.isPrimary !== false && event.pointerId === pressedAt.id
+      && travel <= 12 && landed && target === pressedOption && list.contains(target)) {
+      const index = [...list.children].indexOf(target);
+      if (candidates[index]) { choose(candidates[index]); return; }
+    }
+    selectionReset = view.setTimeout(() => { selectingOption = false; pressedOption = null; selectionReset = null; }, 0);
   }
   function onOptionPointerCancel() {
     selectingOption = false;
+    pressedOption = null;
+    pressedAt = null;
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
   }
