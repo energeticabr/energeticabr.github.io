@@ -55,6 +55,11 @@ async function defaultContractorReportDataFactory(options) {
   return createContractorReportData(options);
 }
 
+async function defaultPresencePaymentReportDataFactory(options) {
+  const { createPresencePaymentReportData } = await import("./chat/presence-payment-report-data.js");
+  return createPresencePaymentReportData(options);
+}
+
 async function defaultPaymentProgrammingGalleryFactory(options) {
   const { createPaymentProgrammingGallery } = await import("./ui/payment-programming-gallery-view.js");
   return createPaymentProgrammingGallery(options);
@@ -633,6 +638,7 @@ export function createAppController({
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
   contractorReportsFactory = defaultContractorReportsFactory,
   contractorReportDataFactory = defaultContractorReportDataFactory,
+  presencePaymentReportDataFactory = defaultPresencePaymentReportDataFactory,
   paymentProgrammingGalleryFactory = defaultPaymentProgrammingGalleryFactory,
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
@@ -4251,7 +4257,7 @@ export function createAppController({
     contractorReportsOpening = (async () => {
       try {
         if (!contractorReports) {
-          const data = await contractorReportDataFactory({ tokenProvider: scopes => {
+          const tokenProvider = scopes => {
             assertSession();
             return auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
@@ -4259,10 +4265,13 @@ export function createAppController({
               assertSession();
               return auth.getToken(scopes);
             });
-          } });
+          };
+          const data = await contractorReportDataFactory({ tokenProvider });
+          const presenceData = await presencePaymentReportDataFactory({ tokenProvider });
           assertSession();
           const panel = await contractorReportsFactory({
             data,
+            presenceData,
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }
