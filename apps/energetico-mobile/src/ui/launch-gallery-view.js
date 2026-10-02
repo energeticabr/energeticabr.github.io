@@ -1129,6 +1129,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
           Object.assign(entry.definition, refreshed);
           if (entry.control.tagName === 'SELECT' && Array.isArray(refreshed.options)) {
             setOptions(entry.control, refreshed.options, 'Selecione', entry.control === control);
+            entry.markModified();
           }
         }
         clearReview(); notify('Opções relacionadas atualizadas.');
@@ -1162,12 +1163,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (control.tagName === 'SELECT' && value != null && ![...control.options].some(opt => opt.value === display(value))) control.append(option(value));
         control.value = type === 'date' && value ? formatEditorDate(value) : display(value);
       }
-      const invalidate = () => { control.setCustomValidity(''); clearReview(); notify(''); };
+      const initial = isCheck ? control.checked : control.value;
+      const field = label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control);
+      const markModified = () => control.closest('.lg-field')?.classList.toggle('lg-field-modified', operation === 'update'
+        && (isCheck ? control.checked : control.value) !== initial);
+      const invalidate = () => { control.setCustomValidity(''); clearReview(); notify(''); markModified(); };
       if (type === 'date') control.addEventListener('input', () => { control.value = maskEditorDate(control.value); });
       control.addEventListener('input', invalidate);
       control.addEventListener('change', () => { invalidate(); void refreshDependencies(definition, control); });
-      controls.push({ definition, control, initial: isCheck ? control.checked : control.value });
-      const field = label(`${definition.label ?? definition.name}${definition.required ? ' *' : ''}`, control);
+      controls.push({ definition, control, initial, markModified });
       if (control.tagName === 'TEXTAREA' || ['FILIAL', 'FORNECEDOR', 'PRODUTO'].includes(definition.name)) field.classList.add('lg-field-wide');
       grid.append(field);
       if (operation === 'update' && definition.name === 'UN') {
