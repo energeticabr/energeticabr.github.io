@@ -234,6 +234,28 @@ test("filtra fornecedores, produtos, etapa por filial e IDFOLHA atual com estrel
     ["9"],
   );
 });
+test("IDFOLHA aceita referências de mês nos mesmos formatos do lançamento existente", async () => {
+  const f = fixture();
+  const monthColumn = f.columns.IDFOLHA.find(
+    (c) => c.displayName === "MESREFERENCIA",
+  ).name;
+  f.rows.IDFOLHA[0].fields[monthColumn] = "2026/10";
+  f.rows.IDFOLHA.push({
+    id: "12",
+    fields: { ...f.rows.IDFOLHA[0].fields, [monthColumn]: "2026-9" },
+  });
+  f.rows.IDFOLHA.push({
+    id: "13",
+    fields: { ...f.rows.IDFOLHA[0].fields, [monthColumn]: "11-2026" },
+  });
+  f.rows.IDFOLHA.push({
+    id: "14",
+    fields: { ...f.rows.IDFOLHA[0].fields, [monthColumn]: "2026/13" },
+  });
+  const sheets = await f.data.loadSheets((await f.data.loadSuppliers())[0]);
+  assert.deepEqual(sheets.map((s) => s.id).sort(), ["12", "13", "9"]);
+  assert.equal(sheets.find((s) => s.id === "9").recommended, true);
+});
 test("posta uma linha por rubrica com os campos pedidos e vincula tipos existentes em FOLHAPGTO", async () => {
   const f = fixture();
   const progress = { operationId: "op1" };
