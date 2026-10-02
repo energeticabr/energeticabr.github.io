@@ -1,5 +1,6 @@
 import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 import { contractorReport, documentCell, formatReportDate, formatReportMoney } from "../chat/contractor-report-model.js";
+import { createPresencePaymentReportView } from "./presence-payment-report-view.js";
 
 const FILTERS = [
   ["id", "NÚMERO CONTRATO"], ["branch", "FILIAL"], ["supplier", "FORNECEDOR"],
@@ -22,7 +23,7 @@ function safeError(error) {
   return `Não foi possível carregar o relatório: ${message}`;
 }
 
-export function createContractorReportsView({ document: doc = globalThis.document, data, onHome } = {}) {
+export function createContractorReportsView({ document: doc = globalThis.document, data, presenceData, onHome } = {}) {
   if (!doc?.body || typeof data?.loadOverview !== "function" || typeof data?.loadDetails !== "function") {
     throw new TypeError("A tela de relatórios requer documento e fonte de dados.");
   }
@@ -59,12 +60,14 @@ export function createContractorReportsView({ document: doc = globalThis.documen
       center.append(make("small", "", "RELATÓRIOS")); hubGrid.append(center); continue;
     }
     const number = position < 5 ? position : position - 1;
-    const tile = button(`cr-report-tile ${number === 1 ? "cr-report-tile--active" : ""}`,
-      number === 1 ? "1 · Controle de empreiteiros" : `${number} · Em breve`);
+    const available = number === 1 || (number === 2 && typeof presenceData?.loadSnapshot === "function");
+    const tile = button(`cr-report-tile ${available ? "cr-report-tile--active" : ""}`,
+      number === 1 ? "1 · Controle de empreiteiros" : number === 2 ? "2 · Presenças por pedido / IDPGTO" : `${number} · Em breve`);
     tile.dataset.reportId = String(number);
-    tile.disabled = number !== 1;
-    if (number !== 1) tile.title = "Relatório ainda não definido";
-    else tile.addEventListener("click", () => { void showReport(); });
+    tile.disabled = !available;
+    if (!available) tile.title = "Relatório ainda não definido";
+    else if (number === 1) tile.addEventListener("click", () => { void showReport(); });
+    else tile.addEventListener("click", () => { void showPresenceReport(); });
     hubGrid.append(tile);
   }
   hub.append(hubGrid);
@@ -99,17 +102,19 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   report.append(note);
   const notice = make("div", "cr-notice"); notice.hidden = true;
   const mainTableWrap = make("div", "cr-table-scroll"); mainTableWrap.tabIndex = 0;
-  mainTableWrap.setAttribute("role", "region"); mainTableWrap.setAttribute("aria-label", "Tabela de controle de empreiteiros; role horizontalmente para ver todas as colunas");
+  mainTableWrap.setAttribute("role", "region"); mainTableWrap.setAttribute("aria-label", "Controle de empreiteiros");
   const mainTable = make("table", "cr-table cr-main-table");
   const thead = make("thead"); const headRow = make("tr");
   MAIN_COLUMNS.forEach(([, label]) => headRow.append(make("th", "", label)));
   thead.append(headRow); mainTable.append(thead, make("tbody")); mainTableWrap.append(mainTable);
-  report.append(notice, make("p", "cr-scroll-hint", "Deslize a tabela para o lado para ver todas as colunas."), mainTableWrap);
+  report.append(notice, make("p", "cr-scroll-hint", "No computador, deslize a tabela para consultar as colunas."), mainTableWrap);
   const pager = make("nav", "cr-pager"); pager.setAttribute("aria-label", "Páginas do relatório");
   const previous = button("og-button", "Anterior"); const pageLabel = make("span", "cr-page-label"); const next = button("og-button", "Próxima");
   pager.append(previous, pageLabel, next); report.append(pager);
   const detail = make("section", "cr-detail"); detail.hidden = true; report.append(detail);
-  content.append(hub, report); doc.body.append(root);
+  const presenceReport = presenceData ? createPresencePaymentReportView({ document: doc, data: presenceData }) : null;
+  content.append(hub, report); if (presenceReport) content.append(presenceReport.element);
+  doc.body.append(root);
   const pickers = bindSearchableFilterSelects(filterGrid);
 
   function setNotice(message, retry = false) {
@@ -139,8 +144,9 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     pickers.sync();
   }
 
-  function appendCell(tr, column, value, tone = "neutral") {
+  function appendCell(tr, column, value, tone = "neutral", label = "") {
     const cell = make("td", "", value); cell.dataset.column = column; cell.dataset.tone = tone;
+    if (label) cell.dataset.label = label;
     tr.append(cell);
   }
 
@@ -169,7 +175,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     const body = mainTable.tBodies[0]; body.replaceChildren();
     for (const row of view.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)) {
       const tr = make("tr"); tr.dataset.rowId = row.id;
-      for (const [name] of MAIN_COLUMNS) {
+      for (const [name, label] of MAIN_COLUMNS) {
         let value = row[name], tone = "neutral";
         if (name === "contractDocumentId" || name === "estimateDocumentId") {
           const document = documentCell(value, overview?.documentStatuses?.[value]);
@@ -183,7 +189,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
           if (name === "status") tone = statusTone(value);
         }
         if (value === "PENDENTE") tone = "pending";
-        appendCell(tr, name, value, tone);
+        appendCell(tr, name, value, tone, label);
       }
       body.append(tr);
     }
@@ -203,7 +209,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     const body = make("tbody");
     for (const row of rows) {
       const line = make("tr");
-      values(row).forEach(([value, tone], index) => appendCell(line, String(index), value || "PENDENTE", tone || (value ? "neutral" : "pending")));
+      values(row).forEach(([value, tone], index) => appendCell(line, String(index), value || "PENDENTE", tone || (value ? "neutral" : "pending"), headings[index]));
       body.append(line);
     }
     table.append(body); wrapper.append(table); section.append(wrapper); return section;
@@ -259,12 +265,22 @@ export function createContractorReportsView({ document: doc = globalThis.documen
 
   async function showReport() {
     if (destroyed) return;
+    presenceReport?.close();
     mode = "report"; hub.hidden = true; report.hidden = false; title.textContent = "RELATÓRIO 1";
     await loadOverview();
   }
 
+  async function showPresenceReport() {
+    if (destroyed || !presenceReport) return;
+    overviewController?.abort(); overviewRevision++;
+    detailController?.abort(); detailRevision++;
+    mode = "report2"; hub.hidden = true; report.hidden = true; title.textContent = "RELATÓRIO 2";
+    await presenceReport.open();
+  }
+
   function close() {
     overviewController?.abort(); detailController?.abort(); overviewRevision++; detailRevision++;
+    presenceReport?.close();
     opened = false; root.hidden = true; pickers.close(); returnFocus?.focus?.();
   }
 
@@ -276,8 +292,10 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   next.addEventListener("click", () => { page++; renderMain(); });
   refresh.addEventListener("click", () => { void loadOverview(); });
   back.addEventListener("click", () => {
-    if (mode === "report") {
-      detailController?.abort(); detailRevision++; mode = "hub"; report.hidden = true; hub.hidden = false; title.textContent = "RELATÓRIOS";
+    if (mode === "report" || mode === "report2") {
+      overviewController?.abort(); overviewRevision++;
+      detailController?.abort(); detailRevision++; presenceReport?.close();
+      mode = "hub"; report.hidden = true; hub.hidden = false; title.textContent = "RELATÓRIOS";
     } else close();
   });
   home.addEventListener("click", () => { close(); void onHome?.(); });
@@ -287,12 +305,12 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     async open() {
       if (destroyed) throw new Error("A tela de relatórios foi encerrada.");
       returnFocus = doc.activeElement; opened = true; root.hidden = false;
-      mode = "hub"; hub.hidden = false; report.hidden = true; title.textContent = "RELATÓRIOS";
+      mode = "hub"; hub.hidden = false; report.hidden = true; presenceReport?.close(); title.textContent = "RELATÓRIOS";
       root.focus(); return opened;
     },
     destroy() {
       if (destroyed) return;
-      close(); destroyed = true; pickers.destroy(); root.remove();
+      close(); destroyed = true; pickers.destroy(); presenceReport?.destroy(); root.remove();
     },
   });
 }

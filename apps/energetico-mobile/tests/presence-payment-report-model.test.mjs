@@ -41,6 +41,14 @@ test("normaliza colunas internas do SharePoint, moeda brasileira e data sem desl
   } });
   assert.equal(linked.order, "346");
   assert.equal(linked.total, 750);
+  const internal = model.normalizePaymentLaunchRow({ id: "3471", fields: {
+    AGRUPAR: "347", Title: "004 - EDIFÍCIO XAVANTE", field_2: "2026-09-22T00:00:00Z",
+    field_5: "OUTRO", field_6: "ALVENARIA", field_7: "ENGENHEIRO", field_8: 5,
+    field_9: "150,00", field_10: 0, field_14: "CAIXA", field_16: "DIÁRIAS",
+  } });
+  assert.equal(internal.total, 750);
+  assert.equal(internal.supplier, "OUTRO");
+  assert.equal(internal.description, "DIÁRIAS");
   assert.equal(model.normalizeSupplierStatusRow({ id: "12", fields: { CADASTRO: "RAFAEL GONTIJO", STATUS: "ATIVO" } }).status, "ATIVO");
 });
 

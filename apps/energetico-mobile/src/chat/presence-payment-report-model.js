@@ -75,13 +75,13 @@ export function normalizePresencePaymentRow(item, columns = []) {
 
 export function normalizePaymentLaunchRow(item, columns = []) {
   const get = (...aliases) => valueFor(item, columns, aliases);
-  const unit = amount(get("VALOR UNITÁRIO", "VALORUNITARIO"));
-  const quantity = amount(get("QUANTIDADE"));
-  const freight = amount(get("FRETE"));
+  const unit = amount(get("VALOR UNITÁRIO", "VALORUNITARIO", "field_9"));
+  const quantity = amount(get("QUANTIDADE", "field_8"));
+  const freight = amount(get("FRETE", "field_10"));
   return Object.freeze({
-    id: canonicalId(item?.id || get("ID")), order: get("AGRUPAR"), date: dateOnly(get("DATA")),
-    supplier: get("FORNECEDOR"), branch: get("FILIAL"), stage: get("ETAPA"),
-    description: get("DESCRIÇÃO", "DESCRICAO"), product: get("PRODUTO"), account: get("CONTA"),
+    id: canonicalId(item?.id || get("ID")), order: get("AGRUPAR"), date: dateOnly(get("DATA", "field_2")),
+    supplier: get("FORNECEDOR", "field_5"), branch: get("FILIAL", "Title"), stage: get("ETAPA", "field_6"),
+    description: get("DESCRIÇÃO", "DESCRICAO", "field_16"), product: get("PRODUTO", "field_7"), account: get("CONTA", "field_14"),
     total: unit == null || quantity == null ? null : unit * quantity + (freight || 0),
   });
 }
