@@ -581,3 +581,38 @@ test("postagem só conclui depois de confirmar o IDFOLHA gravado em todas as rub
   assert.equal(f.rows.LANCAMENTOS.length, 2);
   assert.equal(f.rows.FOLHAPGTO.length, 2);
 });
+
+test("retomada após virada do mês preserva IDFOLHA validado sem aceitar nova folha fora do período", async () => {
+  const f = fixture();
+  let now = new Date("2026-10-02T20:00:00Z");
+  f.rows.IDFOLHA[0].fields.c0 = "09/2026";
+  f.draft.sheet.label = "09/2026";
+  const data = module.createSupplierPayrollData({
+    repository: f.repository,
+    now: () => now,
+  });
+  const create = f.repository.createItem;
+  let lose = true;
+  f.repository.createItem = async (...args) => {
+    const row = await create(...args);
+    if (args[1] === "FOLHAPGTO" && lose) {
+      lose = false;
+      throw new Error("resposta perdida antes da virada do mês");
+    }
+    return row;
+  };
+  const p = { operationId: "month-rollover" };
+  await assert.rejects(data.post(f.draft, p), /perdida/);
+  now = new Date("2026-11-02T20:00:00Z");
+  const result = await data.post(f.draft, p);
+  assert.equal(result.sheet.id, "9");
+  assert.equal(result.sheet.label, "09/2026");
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+  const writes = f.writes.length;
+  await assert.rejects(
+    data.post(f.draft, { operationId: "new-stale-sheet" }),
+    /IDFOLHA/,
+  );
+  assert.equal(f.writes.length, writes);
+});

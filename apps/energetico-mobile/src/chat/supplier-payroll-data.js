@@ -200,15 +200,15 @@ export function createSupplierPayrollData({
     (await source("LANCAMENTOOBRA")).filter(
       (s) => key(s.branch) === key(supplier.branch),
     );
+  const registeredSheets = async (supplier) =>
+    (await source("IDFOLHA")).filter(
+      (s) => key(s.supplier) === key(supplier.label),
+    );
   async function loadSheets(supplier) {
     const current = currentMonth(now());
     const order = [current, shiftMonth(current, 1), shiftMonth(current, -1)];
-    return (await source("IDFOLHA"))
-      .filter(
-        (s) =>
-          key(s.supplier) === key(supplier.label) &&
-          order.includes(monthKey(s.label)),
-      )
+    return (await registeredSheets(supplier))
+      .filter((s) => order.includes(monthKey(s.label)))
       .map((s) => ({ ...s, recommended: monthKey(s.label) === current }))
       .sort(
         (a, b) =>
@@ -350,7 +350,10 @@ export function createSupplierPayrollData({
         loadProducts(supplier),
         loadAccounts(),
         loadStages(supplier),
-        loadSheets(supplier),
+        // Once posting starts, keep its validated sheet across month rollover.
+        progress.fingerprint
+          ? registeredSheets(supplier)
+          : loadSheets(supplier),
       ]);
       const product = products.find((p) => p.id === draft.product.id),
         stage = stages.find((s) => s.id === draft.stage.id);
@@ -462,8 +465,9 @@ export function createSupplierPayrollData({
         throw new Error("Os lançamentos da folha não foram confirmados.");
       if (String(sheetId) !== result.sheet?.id)
         throw new Error("O IDFOLHA deve ser o selecionado antes da postagem.");
-      const sheet = (await loadSheets(result.supplier)).find(
-        (s) => s.id === String(sheetId),
+      const sheet = (await registeredSheets(result.supplier)).find(
+        (s) =>
+          s.id === String(sheetId) && key(s.label) === key(result.sheet.label),
       );
       if (!sheet) throw new Error("Escolha uma folha válida desse fornecedor.");
       const descriptor = await describe("FOLHAPGTO");
