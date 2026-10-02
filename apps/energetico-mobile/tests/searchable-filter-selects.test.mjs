@@ -113,7 +113,26 @@ test('captured touch released outside its option does not commit it', t => {
   // Touch pointer capture can keep event.target on the option even though
   // the release coordinates are outside it.
   option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 300, clientY: 300 }));
+  option.click();
   assert.equal(ctx.select.value, '');
+  ctx.document.elementFromPoint = () => option;
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 30, clientY: 30 }));
+  assert.equal(ctx.select.value, 'concrete', 'a próxima tentativa válida continua disponível');
+});
+
+test('small stationary touch still commits when keyboard reflow moves the hit target', t => {
+  const ctx = fixture(t);
+  ctx.trigger().click();
+  const option = ctx.options().find(item => item.textContent === 'Concreto');
+  const down = new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 30, clientY: 30 });
+  const up = new ctx.dom.window.MouseEvent('pointerup', { bubbles: true, button: 0, clientX: 36, clientY: 30 });
+  Object.defineProperty(down, 'pointerType', { value: 'touch' });
+  Object.defineProperty(up, 'pointerType', { value: 'touch' });
+  option.dispatchEvent(down);
+  ctx.document.elementFromPoint = () => ctx.document.querySelector('#outside');
+  option.dispatchEvent(up);
+  assert.equal(ctx.select.value, 'concrete');
 });
 
 test('releasing a dragged option outside the list restores normal popup dismissal', async t => {
