@@ -381,6 +381,8 @@
 .lg-editor-actions > .lg-editor-review { color: #fff; background: #167044; }
 .lg-editor .lg-field:not(.lg-check) > .lg-label { display: block; padding: 6px 9px; color: #fff; background: var(--lg-red); font-size: .76rem; line-height: 1.3; }
 .lg-editor .lg-field .lg-input, .lg-editor .sfs-trigger { background: #fff; border-color: #8ea5ba; }
+.lg-editor .lg-field-modified > .lg-input, .lg-editor .lg-field-modified > .sfs .sfs-trigger { background: #fff0d6; border-color: #d97706; }
+.lg-editor .lg-check.lg-field-modified { background: #fff0d6; border-radius: 6px; }
 .lg-editor .lg-field { gap: 0; }
 .lg-editor .lg-field:not(.lg-check) > .lg-input, .lg-editor .lg-field:not(.lg-check) > .sfs { margin-top: 0; }
 .lg-file-name { overflow-wrap: anywhere; }

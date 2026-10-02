@@ -132,6 +132,105 @@ test('editing a launch replaces a selected option and submits the replacement', 
   } }]);
 });
 
+test('editor highlights only fields changed from the loaded launch and clears restored values', async t => {
+  const ctx = await setup(t, {request: async operation => operation === 'snapshot' ? snapshot() : detail({editFields: [
+    {name: 'QUANTIDADE', label: 'Quantidade', type: 'number'},
+    {name: 'DATA', label: 'Data', type: 'date'},
+  ]})});
+  await ctx.gallery.open(); await showDetail(ctx);
+  const form = ctx.root().querySelector('.lg-editor');
+  const quantity = form.querySelector('[name="QUANTIDADE"]').closest('.lg-field');
+  const date = form.querySelector('[name="DATA"]').closest('.lg-field');
+  assert.equal(quantity.classList.contains('lg-field-modified'), false);
+  assert.equal(date.classList.contains('lg-field-modified'), false);
+
+  input(ctx, 'QUANTIDADE', '3');
+  assert.equal(quantity.classList.contains('lg-field-modified'), true);
+  assert.equal(date.classList.contains('lg-field-modified'), false);
+  input(ctx, 'DATA', '18/09/2026');
+  assert.equal(date.classList.contains('lg-field-modified'), true);
+  input(ctx, 'QUANTIDADE', '2.5');
+  input(ctx, 'DATA', '17/09/2026');
+  assert.equal(quantity.classList.contains('lg-field-modified'), false);
+  assert.equal(date.classList.contains('lg-field-modified'), false);
+});
+
+test('editor highlights searchable choices and checkboxes only while their values differ', async t => {
+  const ctx = await setup(t, {request: async operation => operation === 'snapshot' ? snapshot() : detail({editFields: [
+    {name: 'CONCLUÍDO', label: 'Situação', type: 'select', options: [
+      {value: 'PEDIDO EMPENHADO', label: 'Empenhado'}, {value: 'PEDIDO FINALIZADO', label: 'Finalizado'},
+    ]},
+    {name: 'CONFERIDO', label: 'Conferido', type: 'boolean'},
+  ]})});
+  await ctx.gallery.open(); await showDetail(ctx);
+  const form = ctx.root().querySelector('.lg-editor');
+  const status = form.querySelector('[name="CONCLUÍDO"]').closest('.lg-field');
+  const checked = form.querySelector('[name="CONFERIDO"]').closest('.lg-field');
+  assert.equal(status.classList.contains('lg-field-modified'), false);
+  assert.equal(checked.classList.contains('lg-field-modified'), false);
+
+  form.querySelector('.sfs-trigger').click();
+  [...form.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Finalizado').click();
+  assert.equal(status.classList.contains('lg-field-modified'), true);
+  input(ctx, 'CONFERIDO', true);
+  assert.equal(checked.classList.contains('lg-field-modified'), true);
+  form.querySelector('.sfs-trigger').click();
+  [...form.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Empenhado').click();
+  input(ctx, 'CONFERIDO', false);
+  assert.equal(status.classList.contains('lg-field-modified'), false);
+  assert.equal(checked.classList.contains('lg-field-modified'), false);
+});
+
+test('modified editor inputs and searchable triggers have a visible orange fill', async t => {
+  const ctx = await setup(t);
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const form = ctx.root().querySelector('.lg-editor');
+  const quantity = form.querySelector('[name="QUANTIDADE"]');
+  const status = form.querySelector('[name="CONCLUÍDO"]');
+  assert.equal(ctx.dom.window.getComputedStyle(quantity).backgroundColor, 'rgb(255, 255, 255)');
+  input(ctx, 'QUANTIDADE', '3');
+  assert.equal(ctx.dom.window.getComputedStyle(quantity).backgroundColor, 'rgb(255, 240, 214)');
+  form.querySelector('.sfs-trigger').click();
+  [...form.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Finalizado').click();
+  assert.equal(status.value, 'PEDIDO FINALIZADO');
+  assert.equal(ctx.dom.window.getComputedStyle(form.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 240, 214)');
+});
+
+test('dependent choice cleared by a branch change is highlighted until its original value is restored', async t => {
+  const item = row(); item.fields.ETAPA = 'Etapa antiga';
+  const ctx = await setup(t, {request: async (operation, payload) => {
+    if (operation === 'snapshot') return snapshot({rows: [item]});
+    if (operation === 'schema') return {fields: [{name: 'ETAPA', options: payload.fields.FILIAL === 'Obra B'
+      ? [{value: 'Etapa nova', label: 'Etapa nova'}]
+      : [{value: 'Etapa antiga', label: 'Etapa antiga'}]}]};
+    return detail({item, editFields: [
+      {name: 'FILIAL', label: 'Filial', type: 'select', options: ['Obra A', 'Obra B']},
+      {name: 'ETAPA', label: 'Etapa', type: 'select', options: ['Etapa antiga']},
+    ]});
+  }});
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const form = ctx.root().querySelector('.lg-editor');
+  const stage = form.querySelector('[name="ETAPA"]');
+  const stageField = stage.closest('.lg-field');
+
+  input(ctx, 'FILIAL', 'Obra B'); await settle();
+  assert.equal(stage.value, '');
+  assert.equal(stageField.classList.contains('lg-field-modified'), true);
+  assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 240, 214)');
+  input(ctx, 'FILIAL', 'Obra A'); await settle();
+  stage.closest('.lg-field').querySelector('.sfs-trigger').click();
+  [...stageField.querySelectorAll('.sfs-option')].find(option => option.textContent === 'Etapa antiga').click();
+  assert.equal(stage.value, 'Etapa antiga');
+  assert.equal(stageField.classList.contains('lg-field-modified'), false);
+  assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 255, 255)');
+});
+
 test('filters start collapsed so records are visible; details and review scroll into view', async t => {
   const ctx = await setup(t);
   const scrolled = [];
