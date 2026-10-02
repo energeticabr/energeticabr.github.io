@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 
 async function setup(t, overrides = {}) {
@@ -46,7 +47,7 @@ test("Galeria G7 exibe métricas e filtros reais e formata datas em dd/mm/aaaa",
   for (const name of ["search", "status", "priority", "charge", "branch", "association", "identificationDate"]) {
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G7 filter ${name}`);
   }
-  assert.match(ctx.root().querySelector(".tg-metrics").textContent, /Total[\s\S]*Pendentes[\s\S]*Concluídas/i);
+  assert.match(ctx.root().querySelector(".tg-metrics").textContent, /Concluídas[\s\S]*Pendentes[\s\S]*Total/i);
   assert.match(ctx.root().querySelector(".tg-cards").textContent, /03\/10\/2026/);
   assert.doesNotMatch(ctx.root().querySelector(".tg-cards").textContent, /2026-10-03T03:00:00Z/);
   assert.equal(ctx.root().querySelector(".tg-cards img, .tg-cards [onerror]"), null);
@@ -89,6 +90,35 @@ test("G7 reconhece os nomes internos SharePoint dos campos da tarefa", async t =
   assert.match(card.textContent, /05\/10\/2026/);
   assert.match(card.textContent, /ADMINISTRATIVO/);
   assert.match(card.textContent, /CONCLUÍDA/);
+});
+
+test("G7 prefere a tarefa do SharePoint ao Title técnico mesmo quando Title vem primeiro", async t => {
+  const ctx = await setup(t, { rows: [
+    { id: "401", fields: { Title: "WA-task-55c38f1ee7b027a86624a63d", field_11: "CONFERIR CONTRATO E DOCUMENTOS", STATUS: "ATIVIDADE CRIADA" } },
+    { id: "402", fields: { Title: "WA-task-aba", TAREFA: "", field_11: "REVISAR ORÇAMENTO", STATUS: "EM ATENDIMENTO" } },
+  ] });
+  await ctx.gallery.open();
+  assert.equal(ctx.root().querySelector('.tg-card[data-item-id="401"] .tg-description')?.textContent, "CONFERIR CONTRATO E DOCUMENTOS");
+  assert.equal(ctx.root().querySelector('.tg-card[data-item-id="402"] .tg-description')?.textContent, "REVISAR ORÇAMENTO");
+});
+
+test("G7 distingue concluídas, pendentes e total e colore datas de criação e modificação", async t => {
+  const ctx = await setup(t);
+  const css = await readFile(new URL("../src/ui/tasks-gallery.css", import.meta.url), "utf8");
+  const style = ctx.document.createElement("style");
+  style.textContent = css;
+  ctx.document.head.append(style);
+  await ctx.gallery.open();
+  const metrics = [...ctx.root().querySelectorAll(".tg-metrics .tg-metric")];
+  assert.deepEqual(metrics.map(metric => metric.querySelector("dt")?.textContent), ["Concluídas", "Pendentes", "Total"]);
+  assert.equal(ctx.dom.window.getComputedStyle(metrics[1]).backgroundColor, "rgb(255, 239, 239)");
+  const card = ctx.root().querySelector('.tg-card[data-item-id="176"]');
+  const created = card.querySelector(".tg-card-times .tg-created");
+  const modified = card.querySelector(".tg-card-times .tg-modified");
+  assert.match(created?.textContent || "", /Criado em/);
+  assert.match(modified?.textContent || "", /Mod\. em/);
+  assert.equal(ctx.dom.window.getComputedStyle(created).color, "rgb(24, 117, 66)");
+  assert.equal(ctx.dom.window.getComputedStyle(modified).color, "rgb(172, 39, 49)");
 });
 
 test("pesquisa e filtros da G7 refinam a lista localmente sem novas escritas", async t => {
@@ -243,7 +273,7 @@ test("G7 apresenta três indicadores, busca compacta e linhas alternadas com aç
     { id: "202", fields: { TAREFA: "Revisar documento", STATUS: "EM ATENDIMENTO", "PRIORITÁRIA": true, "ASSOCIAÇÃO": "ADMINISTRATIVO", field_7: "2026-10-06T03:00:00Z" } },
   ] });
   await ctx.gallery.open();
-  assert.deepEqual([...ctx.root().querySelectorAll(".tg-metrics dt")].map(node => node.textContent), ["Total", "Pendentes", "Concluídas"]);
+  assert.deepEqual([...ctx.root().querySelectorAll(".tg-metrics dt")].map(node => node.textContent), ["Concluídas", "Pendentes", "Total"]);
   assert.ok(ctx.root().querySelector('.tg-toolbar [name="search"]'), "search appears outside collapsed filters");
   assert.ok(ctx.root().querySelector(".tg-toolbar .tg-filter-toggle"));
   const shown = [...ctx.root().querySelectorAll(".tg-card")];
