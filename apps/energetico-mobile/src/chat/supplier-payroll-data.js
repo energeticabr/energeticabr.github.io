@@ -134,7 +134,7 @@ export function createSupplierPayrollData({
       const response = await repository.getItemsPage(
         SITE,
         descriptor.id,
-        `$expand=fields&$top=200${filter ? `&$filter=${filter}` : ""}`,
+        `$expand=fields&$top=100${filter ? `&$filter=${filter}` : ""}`,
         {
           pageNumber: page,
           maxPages: 100,
