@@ -1284,7 +1284,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     current = result; pendingAttachmentName = null; needsDetailRefresh = false;
     editor.form.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
   }
-  async function finishAttachmentUpload(pending, fileName, refreshed) {
+  async function finishAttachmentUpload(pending, fileName, refreshed, uncertain = false) {
     if (destroyed) return;
     if (pending.key) { retryIds.delete(pending.key); uncertainAttachments.delete(pending.key); }
     clearReview();
@@ -1293,8 +1293,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       current.attachments = [...(current.attachments ?? []), { fileName }];
     }
     editor?.form?.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
-    try { await refreshAttachmentDetail(refreshed); notify('Anexo enviado.'); }
-    catch (error) { notify(failure(error, 'Anexo enviado, mas não foi possível atualizar os dados'), true); }
+    try {
+      await refreshAttachmentDetail(refreshed);
+      notify(uncertain ? 'Arquivo com esse nome encontrado após falha de comunicação. Verifique o conteúdo do anexo.'
+        : 'Anexo enviado.', uncertain);
+    } catch (error) {
+      notify(failure(error, uncertain ? 'Arquivo encontrado; confirme o conteúdo e atualize os dados'
+        : 'Anexo enviado, mas não foi possível atualizar os dados'), true);
+    }
     if (opened) await loadSnapshot(applied);
   }
   async function commitReview() {
@@ -1308,7 +1314,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
           const fresh = await request('detail', { id: pending.payload.id });
           if (!fresh?.item?.fields) throw new Error('Não foi possível verificar se o anexo já foi enviado');
           if ((fresh.attachments ?? []).some(file => attachmentFileName(file) === pending.file.name)) {
-            await finishAttachmentUpload(pending, pending.file.name, fresh); return;
+            await finishAttachmentUpload(pending, pending.file.name, fresh, true); return;
           }
           await refreshAttachmentDetail(fresh);
           pending.payload.expectedModified = modified();
@@ -1319,12 +1325,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
             expectedModified: pending.payload.expectedModified, requestId: pending.payload.requestId });
         } catch (error) {
           if (pending.operation === 'attachment_add') {
+            if (error?.status === 409 || /attachment_exists|já existe um anexo/i.test(String(error?.message ?? ''))) throw error;
             pending.uncertain = true;
             if (pending.key) uncertainAttachments.add(pending.key);
             try {
               const fresh = await request('detail', { id: pending.payload.id });
               if ((fresh?.attachments ?? []).some(file => attachmentFileName(file) === pending.file.name)) {
-                await finishAttachmentUpload(pending, pending.file.name, fresh); return;
+                await finishAttachmentUpload(pending, pending.file.name, fresh, true); return;
               }
             } catch { /* Keep the confirmation; check again before any retry. */ }
           }
@@ -1379,6 +1386,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (!file) return;
       if (review) { notify('Conclua ou cancele a confirmação aberta antes de adicionar um anexo.', true); return; }
       if (needsDetailRefresh) { notify('Atualize os dados do lançamento antes de adicionar outro anexo.', true); return; }
+      if ((current.attachments ?? []).some(attachment => attachmentFileName(attachment).toLocaleLowerCase() === file.name.toLocaleLowerCase())) {
+        notify('Já existe um anexo com esse nome neste lançamento. Escolha outro nome.', true); return;
+      }
       if (!file.size || file.size > MAX_GALLERY_ATTACHMENT_BYTES) {
         notify('Selecione um arquivo não vazio de até 20 MB.', true); return;
       }

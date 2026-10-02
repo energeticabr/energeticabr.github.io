@@ -1703,11 +1703,41 @@ test('lost upload response reconciles the stored file before another write', asy
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(uploads.length, 1);
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /arquivo com esse nome.*verifique/i);
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
   button(ctx.root(), 'Revisar alterações').click();
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
+});
+
+test('a rejected duplicate name is never reported as an uploaded attachment', async t => {
+  let checked = false; let uploads = 0;
+  const ctx = await setup(t, { request: async op => op === 'snapshot' ? snapshot()
+    : detail({ attachments: checked ? [{ fileName: 'nota.pdf' }] : [] }),
+  upload: async () => {
+    uploads += 1; checked = true;
+    throw Object.assign(new Error('Já existe um anexo com esse nome; nenhum arquivo foi sobrescrito.'), { status: 409 });
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['novo'], 'nota.pdf'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(uploads, 1);
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /já existe um anexo/i);
+  assert.doesNotMatch(ctx.root().querySelector('[role="alert"]').textContent, /anexo enviado/i);
+});
+
+test('the picker rejects an existing attachment name before sending', async t => {
+  let uploads = 0;
+  const ctx = await setup(t, { upload: async () => { uploads += 1; } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['outro'], 'UM.PDF'));
+  button(ctx.root(), 'Adicionar anexo').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /já existe um anexo/i);
+  assert.equal(uploads, 0);
 });
 
 test('an uncertain upload waits for a successful detail check instead of uploading twice', async t => {
