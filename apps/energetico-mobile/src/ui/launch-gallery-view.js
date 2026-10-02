@@ -1085,7 +1085,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const title = element('h2', 'lg-section-title', `Lançamento #${item.id}`);
     const close = button('Fechar edição', dismissDetail, { locked: false });
     close.classList.add('lg-detail-close');
-    const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(title, close);
+    close.setAttribute('aria-label', 'Fechar edição');
+    const detailHeader = element('div', 'lg-detail-header'); detailHeader.append(close, title);
     panel.replaceChildren(detailHeader);
     panel.append(reviewHost);
     if (current.editFields?.length) beginEditor('update', { fromRender: true });

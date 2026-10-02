@@ -1462,7 +1462,9 @@ test('edit close button is on the left with an X before its accessible label', a
   ctx.document.head.append(stylesheet);
   await ctx.gallery.open(); await showDetail(ctx);
   const close = button(ctx.root().querySelector('.lg-detail'), 'Fechar edição');
-  assert.equal(ctx.dom.window.getComputedStyle(close).order, '-1');
+  assert.equal(close.parentElement.firstElementChild, close);
+  assert.equal(close.getAttribute('aria-label'), 'Fechar edição');
+  assert.equal(ctx.dom.window.getComputedStyle(close).order, '0');
   assert.equal(ctx.dom.window.getComputedStyle(close).display, 'inline-flex');
   const iconRule = [...stylesheet.sheet.cssRules].find(rule =>
     rule.selectorText === '.lg-detail-modal:not(.lg-cluster-modal) .lg-detail-close::before');
