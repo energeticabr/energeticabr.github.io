@@ -3,6 +3,7 @@ import {
   payrollTotal,
   validPayrollDate,
   validatePayrollDraft,
+  validatePayrollLines,
 } from "../chat/supplier-payroll.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { validateAttachment } from "../../../../portal/data/attachments.js";
@@ -69,6 +70,7 @@ export function createSupplierPayrollView({
       supplier: null,
       product: null,
       stage: null,
+      sheet: null,
       lines: PAYROLL_RUBRICS.map((r) => ({
         rubric: r.id,
         quantity: "1",
@@ -341,6 +343,11 @@ export function createSupplierPayrollView({
     }
     content.append(
       element("p", "", `Etapa: ${draft.stage.label}`),
+      element(
+        "p",
+        "",
+        `IDFOLHA: ${draft.sheet.id} · Referência: ${draft.sheet.label}`,
+      ),
       list,
       element(
         "p",
@@ -365,10 +372,7 @@ export function createSupplierPayrollView({
     }
     if (step === "rubrics") {
       try {
-        validatePayrollDraft({
-          ...draft,
-          stage: { id: "pending", label: "a selecionar" },
-        });
+        validatePayrollLines(draft.lines);
       } catch (cause) {
         showError(cause);
         return;
@@ -388,7 +392,8 @@ export function createSupplierPayrollView({
       product: "supplier",
       rubrics: "product",
       stage: "rubrics",
-      summary: "stage",
+      sheet: "stage",
+      summary: "sheet",
     }[step];
     if (previous) {
       step = previous;
@@ -433,6 +438,7 @@ export function createSupplierPayrollView({
               files: [],
             }));
             draft.stage = null;
+            draft.sheet = null;
             draft.product = null;
           }
           draft.supplier = option;
@@ -464,12 +470,16 @@ export function createSupplierPayrollView({
     if (step === "stage") {
       heading("Indique a etapa");
       identity();
-      choiceList(stages, (option) => {
-        draft.stage = option;
-        step = "summary";
-        render();
-        focus();
-      });
+      choiceList(stages, (option) =>
+        work(async (assertCurrent) => {
+          const loaded = await data.loadSheets(draft.supplier);
+          assertCurrent();
+          draft.stage = option;
+          draft.sheet = null;
+          sheets = loaded;
+          step = "sheet";
+        }),
+      );
     }
     if (step === "summary") {
       summary();
@@ -486,78 +496,46 @@ export function createSupplierPayrollView({
                 );
                 assertCurrent();
                 result = posted;
-                step = "link";
+                step = "linked";
               },
-              "Postando lançamentos e comprovantes…",
+              "Postando lançamentos, comprovantes e vínculo ao IDFOLHA…",
               true,
             ),
         ),
       );
     }
-    if (step === "link") {
-      heading("Deseja vincular os lançamentos ao IDFOLHA do fornecedor?");
+    if (step === "sheet") {
+      heading(`Qual IDFOLHA de ${draft.supplier.label} deseja utilizar?`);
       content.append(
         element(
           "p",
           "",
-          `Lançamentos gravados: ${result.lines.map((l) => l.id).join(", ")}.`,
+          "O IDFOLHA é obrigatório. Selecione a folha que receberá todas as rubricas.",
         ),
       );
-      footer.append(
-        button("Sim", "data-payroll-link-yes", () =>
-          work(async (assertCurrent) => {
-            const loaded = await data.loadSheets(draft.supplier);
-            assertCurrent();
-            sheets = loaded;
-            step = "sheet";
-          }),
-        ),
-        button("Não", "data-payroll-link-no", () => {
-          step = "done";
-          render();
-        }),
-      );
-    }
-    if (step === "sheet") {
-      heading(`Qual IDFOLHA de ${draft.supplier.label} deseja utilizar?`);
-      choiceList(sheets, (option) =>
-        work(
-          async (assertCurrent) => {
-            await data.linkPayroll(result, option.id, progress);
-            assertCurrent();
-            step = "linked";
-          },
-          "Vinculando rubricas à folha…",
-          true,
-        ),
-      );
+      choiceList(sheets, (option) => {
+        draft.sheet = option;
+        step = "summary";
+        render();
+        focus();
+      });
       if (!sheets.length) {
         content.append(
           element(
             "p",
             "",
-            "O fornecedor não possui folha do mês vigente, anterior ou próximo. Os lançamentos estão gravados e permanecem sem vínculo.",
+            "O fornecedor não possui folha do mês vigente, anterior ou próximo. Cadastre um IDFOLHA válido para esse fornecedor e volte para selecioná-lo antes de postar.",
           ),
-        );
-        footer.append(
-          button("Concluir", null, () => {
-            step = "done";
-            render();
-          }),
         );
       }
     }
-    if (step === "done" || step === "linked") {
-      heading(
-        step === "linked"
-          ? "Folha postada e vinculada ao IDFOLHA"
-          : "Folha postada",
-      );
+    if (step === "linked") {
+      heading("Folha postada e vinculada ao IDFOLHA");
       content.append(
         element(
           "p",
           "",
-          `Lançamentos: ${result.lines.map((l) => l.id).join(", ")}.`,
+          `IDFOLHA: ${result.sheet.id} · Referência: ${result.sheet.label}. Lançamentos: ${result.lines.map((l) => l.id).join(", ")}.`,
         ),
         element(
           "p",
@@ -568,7 +546,9 @@ export function createSupplierPayrollView({
       footer.append(button("Concluir", null, close));
     }
     if (
-      ["supplier", "product", "rubrics", "stage", "summary"].includes(step) &&
+      ["supplier", "product", "rubrics", "stage", "sheet", "summary"].includes(
+        step,
+      ) &&
       !progress.fingerprint
     )
       footer.prepend(button("Voltar", "data-payroll-back", back));
@@ -618,7 +598,7 @@ export function createSupplierPayrollView({
       if (destroyed) return false;
       assertSession();
       if (opened) return true;
-      if (["done", "linked"].includes(step)) fresh();
+      if (step === "linked") fresh();
       previousFocus = doc.activeElement;
       opened = true;
       epoch++;

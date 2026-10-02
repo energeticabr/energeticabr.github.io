@@ -69,6 +69,7 @@ test("validação ignora linhas vazias e recusa quantidade, conta, data e valore
     supplier: { id: "1", label: "EDGAR", branch: "OBRA A" },
     product: { id: "2", label: "PEDREIRO" },
     stage: { id: "3", label: "FUNDAÇÃO" },
+    sheet: { id: "9", label: "10/2026" },
     lines: [
       {
         rubric: "salary",
@@ -80,6 +81,17 @@ test("validação ignora linhas vazias e recusa quantidade, conta, data e valore
     ],
   };
   assert.equal(payroll.validatePayrollDraft(draft).lines.length, 1);
+  for (const sheet of [
+    null,
+    {},
+    { id: "0", label: "10/2026" },
+    { id: "abc", label: "10/2026" },
+    { id: "9" },
+  ])
+    assert.throws(
+      () => payroll.validatePayrollDraft({ ...draft, sheet }),
+      /IDFOLHA/,
+    );
   for (const patch of [
     { quantity: "0" },
     { quantity: "-1" },
