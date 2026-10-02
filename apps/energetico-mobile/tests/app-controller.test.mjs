@@ -105,6 +105,54 @@ test("relatório RHID consulta a data escolhida e coloca os registros no chat", 
   assert.equal(report.detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:12");
 });
 
+test("calendário RHID atual gera e abre o relatório da data tocada, sem voltar ao menu escuro", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const originalView = createChatView(root);
+  let calendarClosedBeforeReportRender = false;
+  const view = {
+    ...originalView,
+    closeRhidAttendanceReport(options) {
+      if (options?.render === false) calendarClosedBeforeReportRender = true;
+      return originalView.closeRhidAttendanceReport(options);
+    },
+    render(state) {
+      if (state.messages.some(message => message?.detail_table?.kind === "rhid_attendance"))
+        assert.equal(calendarClosedBeforeReportRender, true, "fechar o calendário antes de renderizar o relatório evita a camada antiga no iOS");
+      return originalView.render(state);
+    },
+  };
+  const h = makeHarness({ view });
+  const requested = [];
+  h.client.getRhidAttendanceMonth = async () => ({ presentDates: [] });
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [{ ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00" }] };
+  };
+  t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ id: "hr-menu", type: "poll", question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?", options: [
+    { id: "attendance", reply: "action_validate_attendance", label: "VALIDAR PRESENÇAS" },
+    { id: "rhid", reply: "action_rhid_attendance_report", label: "RELATÓRIO DE PRESENÇAS RHID" },
+  ] }], { activeFlow: { id: "human_resources", title: "👥 RECURSOS HUMANOS" }, resetConversation: false });
+
+  root.querySelector('[data-action="open-rhid-attendance-report"]').click();
+  const month = root.querySelector('[data-role="rhid-calendar-day"]').dataset.value.slice(0, 7);
+  const selected = `${month}-15`;
+  root.querySelector(`[data-role="rhid-calendar-day"][data-value="${selected}"]`).click();
+  root.querySelector('[data-action="generate-rhid-attendance-report"]').click();
+  assert.equal(root.querySelector('.chat-confirmation-backdrop'), null);
+  assert.match(root.querySelector('.chat-transcript')?.textContent || "", /Consultando relatório RHID/);
+
+  for (let attempt = 0; attempt < 20 && !root.querySelector('.chat-rhid-attendance-report'); attempt += 1)
+    await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(requested, [selected]);
+  assert.ok(root.querySelector('.chat-rhid-attendance-report'), "o relatório substitui o calendário e o menu RH");
+  assert.equal(root.querySelector('.chat-confirmation-backdrop'), null);
+  assert.doesNotMatch(root.querySelector('.chat-transcript')?.textContent || "", /QUAL FLUXO VOCÊ DESEJA INICIAR/i);
+});
+
 test("consulta RHID sem resposta termina a espera e informa o erro", async t => {
   const h = makeHarness({ rhidReportTimeoutMs: 15 });
   const statuses = [];

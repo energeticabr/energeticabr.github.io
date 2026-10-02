@@ -1904,13 +1904,14 @@ export function createAppController({
           reportOriginSnapshot.messages = current.messages;
           reportOriginSnapshot.attachments = current.attachments;
           rhidAttendanceReportPreviousSnapshot = reportOriginSnapshot;
+          view.closeRhidAttendanceReport?.({ render: false });
           store.ingestRemoteMessages([message], {
             resetConversation: false,
             activeFlow: current.activeFlow,
             attachments: current.attachments,
           });
         }
-        view.closeRhidAttendanceReport?.();
+        if (replaceMessageId) view.closeRhidAttendanceReport?.();
         if (openPdf) {
           const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
           const pdf = await buildRhidAttendancePdf(table, { dateLabel: reportDate, updateLabel });

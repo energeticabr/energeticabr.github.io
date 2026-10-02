@@ -1947,8 +1947,7 @@ function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth =
 function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", month = "", monthLoading = false, monthKnown = false, monthPresentDates = [] } = {}) {
   if (!open || busy) return "";
   const changingExistingReport = Boolean(messageId);
-  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-rhid-attendance-report" data-rhid-attendance-report-dialog>
-    <div class="chat-confirmation chat-date-picker" role="dialog" aria-modal="true" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
+  return `<section class="chat-confirmation chat-date-picker chat-rhid-report-page" data-rhid-attendance-report-dialog role="dialog" aria-modal="false" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
       <div class="chat-date-picker__header">
         <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
@@ -1959,10 +1958,17 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
-        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report"${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report" data-value="${escapeHtml(date)}"${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
       </div>
-    </div>
-  </div>`;
+  </section>`;
+}
+
+function rhidAttendanceReportLoadingMarkup(date = "") {
+  return `<section class="chat-confirmation chat-rhid-report-page chat-rhid-report-loading" role="status" aria-live="polite">
+    <h2>Consultando relatório RHID…</h2>
+    <p>Data selecionada: <strong>${escapeHtml(isValidRhidReportDate(date) ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : date)}</strong></p>
+    <p>Aguarde a resposta da VM.</p>
+  </section>`;
 }
 
 function rhidAttendanceAdjustmentMarkup(adjustment) {
@@ -2313,7 +2319,11 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
       ${renderRecovery(state)}
-      ${transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+      ${rhidAttendanceReport?.open
+        ? rhidAttendanceReport.busy
+          ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date)
+          : rhidAttendanceReportMarkup(rhidAttendanceReport)
+        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress" role="status" aria-live="polite"><span aria-hidden="true">●</span> ${rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…"}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
@@ -2345,14 +2355,13 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${pendingDocumentDelete ? pendingDocumentDeleteMarkup() : ""}
     ${attachmentSource ? attachmentSourceMarkup() : ""}
-    ${datePicker ? datePickerMarkup(datePickerValue) : ""}
+    ${datePicker && !rhidAttendanceReport?.open ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
     ${showPendingReminders ? pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy) : ""}
     ${showPendingReminders && !state.pendingProvisions ? pendingConstructionDiariesMarkup(state.pendingConstructionDiaries, state.pendingConstructionDiaryFillingId, state.pendingConstructionDiaryError, state.busy) : ""}
     ${showPendingReminders && !state.pendingProvisions && !state.pendingConstructionDiaries ? pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "") : ""}
-    ${rhidAttendanceReportMarkup(rhidAttendanceReport || {})}
     ${rhidAttendanceAdjustmentMarkup(rhidAttendanceAdjustment)}
   </section>`;
 }
@@ -3929,6 +3938,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "open-rhid-attendance-report") {
       if (rhidAttendanceReportOpen) return;
+      datePickerOpen = false;
+      datePickerValue = "";
       rhidAttendanceReportMessageId = String(command.messageId || "").trim();
       rhidAttendanceReportOpen = true;
       const currentMessage = rhidAttendanceReportMessageId
@@ -3994,7 +4005,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "generate-rhid-attendance-report") {
       if (rhidAttendanceReportBusy) return;
-      const selectedDate = String(rhidAttendanceReportDate || "").trim();
+      const selectedDate = String(command.value || "").trim();
       const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(selectedDate) ? new Date(`${selectedDate}T00:00:00Z`) : null;
       if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== selectedDate) {
         rhidAttendanceReportError = "Selecione uma data válida.";
@@ -4956,7 +4967,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
     if (rhidAttendanceReportOpen) {
-      const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog] [role="dialog"]');
+      const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog]');
       const focusTarget = rhidAttendanceReportBusy || rhidAttendanceReportError || rhidAttendanceMonthError
         ? reportDialog
         : root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]') || reportDialog;
@@ -5027,7 +5038,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (lastState) { const state = lastState; lastState = null; render(state); }
   }
 
-  function closeRhidAttendanceReport() {
+  function closeRhidAttendanceReport({ render: shouldRender = true } = {}) {
     if (!rhidAttendanceReportOpen) return false;
     rhidAttendanceReportOpen = false;
     rhidAttendanceReportDate = "";
@@ -5035,7 +5046,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     rhidAttendanceReportBusy = false;
     rhidAttendanceReportError = "";
     rhidAttendanceMonthError = "";
-    if (lastState) { const state = lastState; lastState = null; render(state); }
+    if (shouldRender && lastState) { const state = lastState; lastState = null; render(state); }
     return true;
   }
 

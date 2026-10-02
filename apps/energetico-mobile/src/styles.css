@@ -178,6 +178,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-confirmation__actions button { min-height: clamp(50px, 5.5vw, 68px); border-radius: 12px; padding: clamp(10px, 1.2vw, 16px) clamp(14px, 2vw, 26px); font-size: clamp(1rem, 1.8vw, 1.2rem); font-weight: 750; }
 .chat-confirmation__cancel { border: 1px solid #a9c5ce; color: var(--brand); background: white; }
 .chat-confirmation__confirm { border: 1px solid var(--brand); color: white; background: var(--brand); }
+.chat-rhid-report-page { margin: 0 auto; }
+.chat-rhid-report-loading { min-height: 180px; }
 .chat-confirmation__stack { display: grid; gap: 10px; }
 .chat-confirmation__stack button { width: 100%; min-height: clamp(50px, 5.5vw, 68px); border-radius: 12px; padding: clamp(10px, 1.2vw, 16px) clamp(14px, 2vw, 26px); font-size: clamp(1rem, 1.8vw, 1.2rem); font-weight: 750; }
 .chat-date-picker__header { display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; margin-bottom: 10px; }
