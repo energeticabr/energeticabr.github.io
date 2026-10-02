@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
@@ -373,7 +374,7 @@ export function createOrdersGallery({
     listLoading = true;
     snapshotError = null;
     showNotice("");
-    listStatus.textContent = "Carregando pedidos…";
+    listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando pedidos…"));
     cards.replaceChildren();
     updateBusy();
     try {

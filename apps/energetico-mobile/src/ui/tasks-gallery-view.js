@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -461,7 +462,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     if (!opened || destroyed) return false;
     attachmentCounts.reset();
     const current = session; controller?.abort(); controller = new AbortController(); listLoading = true;
-    showNotice(""); listStatus.textContent = "Carregando tarefas…"; cards.replaceChildren(); updateBusy();
+    showNotice(""); listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando tarefas…")); cards.replaceChildren(); updateBusy();
     try {
       const result = await data.loadSnapshot({ signal: controller.signal });
       if (!opened || destroyed || current !== session) return false;

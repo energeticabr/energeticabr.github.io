@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 function element(documentRef, tag, className, text) {
   const node = documentRef.createElement(tag);
   if (className) node.className = className;
@@ -181,7 +182,7 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     controller?.abort();
     controller = new AbortController();
     overlay.setAttribute("aria-busy", "true");
-    status.textContent = "Carregando pagamentos da folha…";
+    status.replaceChildren(createLoadingIndicator(doc, "Carregando pagamentos da folha…"));
     totals.replaceChildren();
     breakdownCards.replaceChildren();
     payments.replaceChildren();

@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -414,7 +415,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
-    listLoading = true; listStatus.replaceChildren(element('p', 'lg-hint', 'Carregando lançamentos…')); updateBusy();
+    listLoading = true; listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando lançamentos…")); updateBusy();
     try {
       const result = await request('snapshot', { ...data, filters: { ...data.filters } });
       if (!active(epoch) || version !== listVersion) return;
@@ -763,7 +764,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const title = kind === 'supplier' ? `Lançamentos do fornecedor ${display(value)}` : `Pedido agrupado #${display(value)}`;
     const closeButton = button('Fechar', closeCluster, { locked: false });
     closeButton.classList.add('lg-detail-close');
-    clusterPanel.replaceChildren(element('div', 'lg-detail-header', ''), element('p', 'lg-hint', 'Carregando informações…'));
+    clusterPanel.replaceChildren(element('div', 'lg-detail-header', ''), createLoadingIndicator(doc, "Carregando informações…"));
     const heading = element('h2', 'lg-section-title', title);
     clusterPanel.querySelector('.lg-detail-header').replaceChildren(heading, closeButton);
     focus(closeButton);
@@ -1051,7 +1052,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     selectedId = id;
     const version = ++detailVersion, epoch = session;
     detailLoading = true; panel.hidden = false;
-    panel.replaceChildren(element('p', 'lg-hint', `Carregando edição de #${id}…`)); updateBusy();
+    panel.replaceChildren(createLoadingIndicator(doc, `Carregando edição de #${id}…`)); updateBusy();
     try {
       const result = await request('detail', { id });
       if (!active(epoch) || version !== detailVersion) return;

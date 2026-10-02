@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -506,7 +507,7 @@ export function createPaymentProgrammingGallery({
     controller = new AbortController();
     listLoading = true;
     setNotice("");
-    listStatus.textContent = "Carregando programação de pagamentos…";
+    listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando programação de pagamentos…"));
     cards.replaceChildren();
     updateBusy();
     try {

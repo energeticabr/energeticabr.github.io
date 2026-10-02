@@ -1,3 +1,4 @@
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
 import { createMascotReportButton } from "./report-action-button.js";
@@ -132,7 +133,7 @@ export function createHrPayrollGallery({ document: documentOption,
   async function loadPage(targetPage, cursor = pageCursors[targetPage] || null) {
     if (!opened || destroyed || busy) return;
     busy = true;
-    status.textContent = "Carregando registros…";
+    status.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
     cards.replaceChildren();
     updateControls();
     const epoch = session;

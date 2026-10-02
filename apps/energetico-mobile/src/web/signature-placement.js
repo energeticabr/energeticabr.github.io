@@ -150,8 +150,8 @@ export function createSignaturePlacement({
   viewport.setAttribute("aria-label", "Páginas do PDF; toque ou arraste a assinatura");
   root.append(viewport);
   const loadingMessage = () => {
-    const message = element(documentRef, "p", "signature-placement-pdf-loading", "Carregando as páginas do documento…");
-    message.setAttribute("role", "status");
+    const message = createLoadingIndicator(documentRef, "Carregando as páginas do documento…");
+    message.classList.add("signature-placement-pdf-loading");
     return message;
   };
   viewport.append(loadingMessage());
@@ -1004,3 +1004,4 @@ export function createSignaturePlacement({
     getSummary: () => pdf ? `${pdf.numPages === 1 ? "1 página" : `${pdf.numPages} páginas`} • ${documentBlob.size} bytes` : "",
   });
 }
+import { createLoadingIndicator } from "../ui/loading-indicator.js";
