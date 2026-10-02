@@ -63,7 +63,7 @@ test("filtra até o último dia inclusive, agrupa IDPGTO uma vez e soma pedidos 
     supplierStatusByName: { "RAFAEL GONTIJO": "ATIVO", OUTRO: "INATIVO" },
   };
   const result = model.buildPresencePaymentReport(snapshot, { startDate: "2026-09-21", endDate: "2026-09-23", status: "ATIVO" });
-  assert.deepEqual(result.metrics, { paymentIds: 2, presences: 3, totalDaily: 500, complete: true });
+  assert.deepEqual(result.metrics, { paymentIds: 2, presences: 3, totalDaily: 500, partialDaily: 500, complete: true });
   assert.equal(result.orders.length, 1);
   assert.equal(result.orders[0].order, "346");
   assert.equal(result.orders[0].totalValue, 950);
@@ -114,4 +114,8 @@ test("valor diário ausente sinaliza total incompleto e filtros preservam pontua
   assert.equal(result.orders[0].groups[0].presencesTotal, null);
   assert.equal(result.orders[0].groups[0].presences[0].supplierMismatch, true);
   assert.equal(result.orders[0].groups[0].presences[0].presence, "AUSENTE");
+  const unfiltered = model.buildPresencePaymentReport(snapshot);
+  assert.equal(unfiltered.metrics.totalDaily, null);
+  assert.equal(unfiltered.metrics.partialDaily, 100);
+  assert.equal(unfiltered.orders[0].groups[0].partialPresencesTotal, 100);
 });

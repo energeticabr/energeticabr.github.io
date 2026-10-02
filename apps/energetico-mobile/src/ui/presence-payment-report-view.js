@@ -126,7 +126,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     card.append(details);
     const values = make("div", "pp-values");
     field(values, "LANÇAMENTO", money(group.launchTotal));
-    field(values, "PRESENÇAS", group.presencesTotal == null ? "INCOMPLETO" : money(group.presencesTotal));
+    field(values, "PRESENÇAS", group.presencesTotal == null ? `${money(group.partialPresencesTotal)} · PARCIAL` : money(group.presencesTotal));
     field(values, "DIFERENÇA", group.presencesTotal == null ? "INCOMPLETO" : money(group.difference), group.difference == null ? "pp-field--pending" : group.balanced ? "pp-field--success" : "pp-field--danger");
     card.append(values);
     const list = make("div", "pp-presence-list");
@@ -144,7 +144,8 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     const result = buildPresencePaymentReport(snapshot, selected);
     metrics.querySelector('[data-metric="paymentIds"]').textContent = String(result.metrics.paymentIds);
     metrics.querySelector('[data-metric="presences"]').textContent = String(result.metrics.presences);
-    metrics.querySelector('[data-metric="totalDaily"]').textContent = result.metrics.complete ? money(result.metrics.totalDaily) : "INCOMPLETO";
+    metrics.querySelector('[data-metric="totalDaily"]').textContent = result.metrics.complete
+      ? money(result.metrics.totalDaily) : `${money(result.metrics.partialDaily)} · PARCIAL`;
     const count = result.orders.length; const pages = Math.max(1, Math.ceil(count / PAGE_SIZE)); page = Math.min(page, pages);
     pageLabel.textContent = `Página ${page} de ${pages} · ${count} pedido(s)`;
     previous.disabled = page <= 1; next.disabled = page >= pages;

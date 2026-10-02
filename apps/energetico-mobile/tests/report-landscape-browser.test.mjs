@@ -173,7 +173,9 @@ test(
         await Promise.race([exited, delay(3000)]);
       }
       await server.close();
-      rmSync(profile, { recursive: true, force: true });
+      // No Windows o Chrome pode manter arquivos do perfil bloqueados por alguns instantes
+      // depois que o processo principal termina.
+      rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
     }
   },
 );

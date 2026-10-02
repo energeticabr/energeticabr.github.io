@@ -118,7 +118,8 @@ export function buildPresencePaymentReport(snapshot, filters = {}) {
     const order = scalar(launch?.order) || "SEM PEDIDO";
     const orderKey = launch?.order ? `PEDIDO:${order}` : `SEM:${paymentId}`;
     const valuesComplete = rows.every(row => Number.isFinite(row.dailyValue));
-    const presencesTotal = valuesComplete ? rows.reduce((sum, row) => sum + row.dailyValue, 0) : null;
+    const partialPresencesTotal = rows.reduce((sum, row) => sum + (Number.isFinite(row.dailyValue) ? row.dailyValue : 0), 0);
+    const presencesTotal = valuesComplete ? partialPresencesTotal : null;
     const launchTotal = Number.isFinite(launch?.total) ? launch.total : null;
     const difference = presencesTotal == null || launchTotal == null ? null : launchTotal - presencesTotal;
     const presences = rows.map(row => Object.freeze({ ...row,
@@ -127,7 +128,7 @@ export function buildPresencePaymentReport(snapshot, filters = {}) {
     })).sort((a, b) => a.date.localeCompare(b.date) || sortIdsDescending(b.id, a.id));
     const dates = presences.map(row => row.date).filter(Boolean);
     const group = Object.freeze({ paymentId, launch, order, count: rows.length,
-      firstDate: dates[0] || "", lastDate: dates.at(-1) || "", presencesTotal, launchTotal, difference,
+      firstDate: dates[0] || "", lastDate: dates.at(-1) || "", presencesTotal, partialPresencesTotal, launchTotal, difference,
       balanced: difference != null && Math.round(difference * 100) === 0,
       presences: Object.freeze(presences),
     });
@@ -149,9 +150,10 @@ export function buildPresencePaymentReport(snapshot, filters = {}) {
       : sortIdsDescending(a.order, b.order) || sortIdsDescending(a.maxPaymentId, b.maxPaymentId);
   });
   const complete = selected.every(row => Number.isFinite(row.dailyValue));
+  const partialDaily = selected.reduce((sum, row) => sum + (Number.isFinite(row.dailyValue) ? row.dailyValue : 0), 0);
   return Object.freeze({
     metrics: Object.freeze({ paymentIds: byPayment.size, presences: selected.length,
-      totalDaily: complete ? selected.reduce((sum, row) => sum + row.dailyValue, 0) : null, complete }),
+      totalDaily: complete ? partialDaily : null, partialDaily, complete }),
     orders: Object.freeze(orders),
   });
 }
