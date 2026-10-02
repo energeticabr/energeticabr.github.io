@@ -48,6 +48,9 @@ test("abre o seletor de quadrados com somente o Relatório 1 disponível e mostr
   assert.equal(ctx.root().querySelector('[name="status"]').value, "ATIVO");
   assert.equal(ctx.root().querySelectorAll(".cr-main-table tbody tr").length, 1);
   assert.equal(ctx.root().querySelector('.cr-main-table [data-column="supplier"]').dataset.label, "FORNECEDOR");
+  const supplierCell = ctx.root().querySelector('.cr-main-table [data-column="supplier"]');
+  assert.equal(supplierCell.firstElementChild.className, "cr-cell-label");
+  assert.equal(supplierCell.firstElementChild.textContent, "FORNECEDOR");
   assert.equal(ctx.root().querySelector('[data-metric="active"]').textContent.trim(), "1");
   assert.equal(ctx.root().querySelector('[data-metric="inactive"]').textContent.trim(), "0");
   assert.equal(ctx.root().querySelector('[data-metric="contracts"]').textContent.trim(), "1");

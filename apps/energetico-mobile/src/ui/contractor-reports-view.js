@@ -145,8 +145,11 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   }
 
   function appendCell(tr, column, value, tone = "neutral", label = "") {
-    const cell = make("td", "", value); cell.dataset.column = column; cell.dataset.tone = tone;
-    if (label) cell.dataset.label = label;
+    const cell = make("td"); cell.dataset.column = column; cell.dataset.tone = tone;
+    if (label) {
+      cell.dataset.label = label;
+      cell.append(make("span", "cr-cell-label", label), make("span", "cr-cell-value", value));
+    } else cell.textContent = value;
     tr.append(cell);
   }
 

@@ -90,6 +90,14 @@ test("pedidos ausentes ficam separados por IDPGTO e não aparecem como valor zer
   assert.equal(result.orders[0].groups[0].difference, null);
 });
 
+test("ordena pedidos pelo número do pedido, não pelo maior IDPGTO", () => {
+  const result = model.buildPresencePaymentReport({
+    presences: [presence(1, 99, "2026-09-21", 10), presence(2, 2, "2026-09-21", 20), presence(3, 100, "2026-09-21", 30)],
+    launchesById: { 99: launch(99, "1", 10), 2: launch(2, "9", 20) }, supplierStatusByName: {},
+  });
+  assert.deepEqual(result.orders.map(order => order.order), ["9", "1", "SEM PEDIDO"]);
+});
+
 test("valor diário ausente sinaliza total incompleto e filtros preservam pontuação dos nomes", () => {
   const snapshot = {
     presences: [

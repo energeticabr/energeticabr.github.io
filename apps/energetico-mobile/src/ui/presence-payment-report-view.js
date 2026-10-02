@@ -105,7 +105,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     field(grid, "FILIAL", row.branch); field(grid, "ETAPA", row.stage);
     field(grid, "ATIVIDADE", row.activity); field(grid, "IMÓVEL", row.property);
     field(grid, "DIÁRIA", money(row.dailyValue));
-    const supplierStatus = field(grid, "STATUS FORNECEDOR", row.supplierStatus, "pp-status-field");
+    const supplierStatus = field(grid, "STATUS FORNECEDOR", row.supplierStatus || "DESCONHECIDO", "pp-status-field");
     supplierStatus.dataset.tone = row.supplierStatus === "PAGO" ? "success" : row.supplierStatus === "PENDENTE PGTO" ? "pending" : "danger";
     if (row.observation) field(grid, "OBS", row.observation);
     if (row.motivation) field(grid, "MOTIVAÇÃO", row.motivation);
@@ -126,8 +126,8 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     card.append(details);
     const values = make("div", "pp-values");
     field(values, "LANÇAMENTO", money(group.launchTotal));
-    field(values, "PRESENÇAS", money(group.presencesTotal));
-    field(values, "DIFERENÇA", money(group.difference), group.difference == null ? "pp-field--pending" : group.balanced ? "pp-field--success" : "pp-field--danger");
+    field(values, "PRESENÇAS", group.presencesTotal == null ? "INCOMPLETO" : money(group.presencesTotal));
+    field(values, "DIFERENÇA", group.presencesTotal == null ? "INCOMPLETO" : money(group.difference), group.difference == null ? "pp-field--pending" : group.balanced ? "pp-field--success" : "pp-field--danger");
     card.append(values);
     const list = make("div", "pp-presence-list");
     group.presences.forEach(row => list.append(renderPresence(row)));
@@ -144,7 +144,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
     const result = buildPresencePaymentReport(snapshot, selected);
     metrics.querySelector('[data-metric="paymentIds"]').textContent = String(result.metrics.paymentIds);
     metrics.querySelector('[data-metric="presences"]').textContent = String(result.metrics.presences);
-    metrics.querySelector('[data-metric="totalDaily"]').textContent = money(result.metrics.totalDaily);
+    metrics.querySelector('[data-metric="totalDaily"]').textContent = result.metrics.complete ? money(result.metrics.totalDaily) : "INCOMPLETO";
     const count = result.orders.length; const pages = Math.max(1, Math.ceil(count / PAGE_SIZE)); page = Math.min(page, pages);
     pageLabel.textContent = `Página ${page} de ${pages} · ${count} pedido(s)`;
     previous.disabled = page <= 1; next.disabled = page >= pages;

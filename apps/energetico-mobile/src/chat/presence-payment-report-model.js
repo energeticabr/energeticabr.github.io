@@ -142,7 +142,12 @@ export function buildPresencePaymentReport(snapshot, filters = {}) {
       totalValue: complete ? value.groups.reduce((sum, group) => sum + group.launchTotal, 0) : null,
       groups: Object.freeze(value.groups), maxPaymentId: value.groups[0]?.paymentId || "",
     });
-  }).sort((a, b) => sortIdsDescending(a.maxPaymentId, b.maxPaymentId));
+  }).sort((a, b) => {
+    const missingA = a.key.startsWith("SEM:"); const missingB = b.key.startsWith("SEM:");
+    if (missingA !== missingB) return missingA ? 1 : -1;
+    return missingA ? sortIdsDescending(a.maxPaymentId, b.maxPaymentId)
+      : sortIdsDescending(a.order, b.order) || sortIdsDescending(a.maxPaymentId, b.maxPaymentId);
+  });
   const complete = selected.every(row => Number.isFinite(row.dailyValue));
   return Object.freeze({
     metrics: Object.freeze({ paymentIds: byPayment.size, presences: selected.length,

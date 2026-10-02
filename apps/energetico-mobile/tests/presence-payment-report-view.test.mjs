@@ -53,6 +53,14 @@ test("destaca fornecedor divergente, ausência e status de pagamento da presenç
   assert.equal(card.querySelector(".pp-badge").dataset.tone, "danger");
   assert.ok(card.querySelector(".pp-field--warning"));
   assert.equal(card.querySelector(".pp-status-field").dataset.tone, "danger");
+  assert.match(card.querySelector(".pp-status-field").textContent, /DESCONHECIDO/);
+});
+
+test("valor diário ausente mostra total incompleto em vez de zero", async t => {
+  const ctx = setup(t, { async loadSnapshot() { return snapshot([presence(1, { dailyValue: null })]); } });
+  await ctx.view.open();
+  assert.equal(ctx.root.querySelector('[data-metric="totalDaily"]').textContent, "INCOMPLETO");
+  assert.match(ctx.root.querySelector(".pp-values").textContent, /INCOMPLETO/);
 });
 
 test("erro não mantém total antigo e Atualizar refaz a consulta", async t => {
