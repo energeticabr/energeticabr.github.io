@@ -894,6 +894,7 @@ export function createAppController({
   }
   let starting = false;
   let sessionRevision = 0;
+  let pendingAutomaticExit = null;
   let flowReminderTimer = null;
   let flowReminderRevision = 0;
   let attachmentReminderTimer = null;
@@ -3579,6 +3580,28 @@ export function createAppController({
     }
   }
 
+  function returnToMainMenu() {
+    return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID, { autoDiscardExit: true, requireMenuResult: true });
+  }
+
+  function reconcilePendingAutomaticExit(result) {
+    if (!pendingAutomaticExit) return;
+    const flow = result?.activeFlow;
+    const poll = latestAssistantPoll(result?.messages);
+    const discard = (poll?.options || []).find(option =>
+      String(option?.reply || option?.id || "").trim() === "portal_draft_exit_discard");
+    if (pendingAutomaticExit.account !== account
+      || pendingAutomaticExit.sessionRevision !== sessionRevision
+      || !isDraftExitConfirmation(poll)
+      || !discard
+      || String(flow?.id || "") !== pendingAutomaticExit.flowId
+      || String(flow?.contextId || "") !== pendingAutomaticExit.contextId) {
+      pendingAutomaticExit = null;
+      return;
+    }
+    pendingAutomaticExit.label = String(discard.label || pendingAutomaticExit.label);
+  }
+
   async function openPowerBiDashboard() {
     const dashboardAccount = account;
     if (!dashboardAccount || stopped) return false;
@@ -3587,7 +3610,7 @@ export function createAppController({
       if (stopped || account !== dashboardAccount) return false;
       return await (view.openPowerBiDashboard?.({
         accessToken,
-        onHome: () => sendText("", PORTAL_MAIN_MENU_CONFIRM_ID),
+        onHome: returnToMainMenu,
         getAccessToken: async () => {
           if (stopped || account !== dashboardAccount) throw new Error("A sessão do Power BI foi encerrada.");
           return powerBiAccessToken();
@@ -3748,6 +3771,19 @@ export function createAppController({
         }
       }
       if (account !== conversationAccount || stopped) return false;
+      const hadPendingAutomaticExit = Boolean(pendingAutomaticExit);
+      reconcilePendingAutomaticExit(result);
+      let automaticExitCompleted = false;
+      if (pendingAutomaticExit) {
+        result = preparePresenceResult(await client.sendText({
+          text: pendingAutomaticExit.label,
+          replyId: pendingAutomaticExit.replyId,
+        }));
+        if (account !== conversationAccount || stopped) return false;
+        if (!isMenuResult(result)) throw new Error("A VM não confirmou o retorno ao menu principal. Tente novamente.");
+        pendingAutomaticExit = null;
+        automaticExitCompleted = true;
+      }
       // Some resume responses identify the current menu only by its stage and
       // accidentally echo the previous flow metadata. Treat that response as
       // authoritative menu state so the old header cannot become resumable.
@@ -3778,6 +3814,10 @@ export function createAppController({
         resetConversation: ingestedResult.resetConversation === true,
         attachments: ingestedResult.attachments,
       });
+      if (menuResult && (hadPendingAutomaticExit || automaticExitCompleted)) {
+        store.setDraft("");
+        for (const file of store.getState().pendingFiles) store.discardFile(file.id);
+      }
       recoveryUncertain = Boolean(paymentProvisionAutoReplyError);
       if (paymentProvisionAutoReplyError) {
         sessionError = "Não foi possível confirmar o avanço automático da provisão. Toque em Retomar conversa para sincronizar antes de continuar.";
@@ -4179,7 +4219,7 @@ export function createAppController({
               });
             },
             onClose: () => { gallerySignatureResolve?.(null); gallerySignatureResolve = null; },
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
           launchGallery = panel;
@@ -4211,7 +4251,7 @@ export function createAppController({
           const panel = await ordersGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
           ordersGallery = panel;
@@ -4251,7 +4291,7 @@ export function createAppController({
           const panel = await tasksGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
           tasksGallery = panel;
@@ -4295,7 +4335,7 @@ export function createAppController({
             data,
             presenceData,
             extraReports,
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }
           contractorReports = panel;
@@ -4335,7 +4375,7 @@ export function createAppController({
           const panel = await paymentProgrammingGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
           paymentProgrammingGallery = panel;
@@ -4375,7 +4415,7 @@ export function createAppController({
           const panel = await recurringExpensesGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
           recurringExpensesGallery = panel;
@@ -4427,7 +4467,7 @@ export function createAppController({
                 return openGalleryMedia(collection, assertSession);
               },
             } : {}),
-            onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
+            onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== galleryAccount || sessionRevision !== galleryRevision) { panel.destroy?.(); return false; }
           registrationGalleries.set(kind, panel);
@@ -4447,13 +4487,24 @@ export function createAppController({
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    let retryingAutomaticExit = false;
+    if (behavior.autoDiscardExit === true && pendingAutomaticExit) {
+      if (pendingAutomaticExit.account === account && pendingAutomaticExit.sessionRevision === sessionRevision) {
+        retryingAutomaticExit = true;
+        text = pendingAutomaticExit.label;
+        replyId = pendingAutomaticExit.replyId;
+        behavior = { ...behavior, requireMenuResult: true };
+      } else {
+        pendingAutomaticExit = null;
+      }
+    }
     const continuingWithoutAttachment = String(replyId || "").trim().toLowerCase() === "input_continue";
     const pendingError = pendingAttachmentGuard();
-    if (pendingError && !continuingWithoutAttachment) {
+    if (pendingError && !continuingWithoutAttachment && behavior.autoDiscardExit !== true) {
       setSessionError(new Error(pendingError));
       return false;
     }
-    if (!continuingWithoutAttachment) {
+    if (!continuingWithoutAttachment && behavior.autoDiscardExit !== true) {
       const attachmentVerification = verifyAttachmentSnapshotBeforeSubmit();
       if (attachmentVerification !== true && !await attachmentVerification) return false;
     }
@@ -4476,7 +4527,7 @@ export function createAppController({
       epiFinalizeProgress?.phase === "advance"
       && String(replyId || "") === epiFinalizeProgress.advanceReplyId
     );
-    if (epiFinalizeProgress?.phase === "advance" && !epiFinalizeAdvanceRetry) {
+    if (epiFinalizeProgress?.phase === "advance" && !epiFinalizeAdvanceRetry && behavior.autoDiscardExit !== true) {
       setSessionError(new Error("Escolha SIM para continuar os EPIs selecionados antes de finalizar."));
       return false;
     }
@@ -4487,7 +4538,8 @@ export function createAppController({
       && isEpiQuantityQuestion(previousPoll)
     );
     const epiQuantityAnswer = Boolean(
-      replyId !== NAVIGATION_BACK_ID
+      behavior.autoDiscardExit !== true
+      && replyId !== NAVIGATION_BACK_ID
       && (pendingEpiButtonProduct || epiFinalizeQuantityRetry || resumedEpiQuantity)
       && documentSigningFlow(previousState.activeFlow)
       && isEpiQuantityQuestion(previousPoll)
@@ -4509,6 +4561,7 @@ export function createAppController({
     let epiAdvanceError = null;
     let paymentProvisionAutoReplyError = null;
     let remoteResponseReceived = false;
+    let automaticExitDiscarded = false;
     try {
       if (editingSignature) {
         signaturePlacementEditPending = true;
@@ -4539,6 +4592,24 @@ export function createAppController({
         ...(replyId ? { replyId } : {}),
       }));
       remoteResponseReceived = true;
+      if (behavior.autoDiscardExit === true && isDraftExitConfirmation(latestAssistantPoll(result.messages))) {
+        const discardOptions = (latestAssistantPoll(result.messages)?.options || []).filter(option =>
+          String(option?.reply || option?.id || "").trim() === "portal_draft_exit_discard");
+        if (discardOptions.length !== 1) throw new Error("Não foi possível abandonar o fluxo. Tente novamente.");
+        pendingAutomaticExit = {
+          account,
+          sessionRevision,
+          flowId: String(previousState.activeFlow?.id || ""),
+          contextId: String(previousState.activeFlow?.contextId || ""),
+          label: String(discardOptions[0].label || "SIM, ABANDONAR"),
+          replyId: "portal_draft_exit_discard",
+        };
+        automaticExitDiscarded = true;
+        result = preparePresenceResult(await client.sendText({
+          text: pendingAutomaticExit.label,
+          replyId: pendingAutomaticExit.replyId,
+        }));
+      }
       result = recommendEffectivePaymentDate(previousPoll, submissionText, replyId, result);
       result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
       const blankPaymentFormOption = paymentProvisionBlankFormOption(
@@ -4630,6 +4701,8 @@ export function createAppController({
       if (positioningSignature) invalidateSignaturePlacement({ clearOverride: true });
       attachmentRevision += 1;
       const menuResult = isMenuResult(result);
+      if (behavior.autoDiscardExit === true && menuResult) pendingAutomaticExit = null;
+      if (behavior.autoDiscardExit === true && !menuResult && (automaticExitDiscarded || retryingAutomaticExit)) pendingAutomaticExit = null;
       const summaryStatus = result.results?.find(item => ["flow_summary", "no_active_flow", "flow_summary_failed"].includes(item.status))?.status;
       if (summaryStatus) {
         const confirmed = store.confirmText(operation, { ...result, readOnlySummary: true });
@@ -4704,6 +4777,10 @@ export function createAppController({
       const confirmed = store.confirmText(operation, staged?.immediate || presentationResult);
       let resumeEpiFinalize = false;
       if (confirmed) {
+        if (behavior.autoDiscardExit === true && menuResult) {
+          store.setDraft("");
+          for (const file of store.getState().pendingFiles) store.discardFile(file.id);
+        }
         if (epiQuantityAnswer && epiQuantityProduct && !isEpiQuantityQuestion(latestAssistantPoll(effectiveResult.messages))) {
           const key = epiDescriptionKey(epiQuantityProduct.description);
           if (key) {
@@ -4755,6 +4832,10 @@ export function createAppController({
         scheduleCompletionMenu(effectiveResult);
         if (resumeEpiFinalize) await finalizeEpiProductSelection();
       }
+      if (confirmed && (behavior.requireMenuResult === true || automaticExitDiscarded) && !menuResult) {
+        setSessionError(new Error("A VM não confirmou o retorno ao menu principal. Tente novamente."));
+        return false;
+      }
       return confirmed && !epiAdvanceError && (behavior.requireMenuResult !== true || menuResult);
     } catch (error) {
       // Preserve the hidden step so a failed automatic answer can be retried
@@ -4762,7 +4843,8 @@ export function createAppController({
       if (!remoteResponseReceived && behavior.epiFinalizeStep === true && previousAssistantPollSnapshot) {
         currentAssistantPollSnapshot = previousAssistantPollSnapshot;
       }
-      if (operation && store.getState().activeText?.id === operation.id && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
+      if (operation && store.getState().activeText?.id === operation.id
+        && (error?.code === "NETWORK_UNCERTAIN" || automaticExitDiscarded || retryingAutomaticExit)) recoveryUncertain = true;
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
@@ -5241,6 +5323,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
     rhidAttendanceReportRequests.clear();
     view.closeRhidAttendanceReport?.({ render: false });
@@ -5855,6 +5938,7 @@ export function createAppController({
           rhidAttendanceReportPreviousSnapshot = null;
           return store.restoreSnapshot(previous);
         }
+        return sendText(command.label, command.replyId, { autoDiscardExit: true });
       }
       if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
@@ -5917,7 +6001,7 @@ export function createAppController({
       }
       if (command.replyId === "navigation_main_menu") {
         rhidAttendanceReportPreviousSnapshot = null;
-        return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID);
+        return returnToMainMenu();
       }
       if (command.replyId === "attachment_upload_skip") {
         discardExpiredTemporaryAttachment();
@@ -6203,6 +6287,7 @@ export function createAppController({
   }
 
   function stop() {
+    pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;

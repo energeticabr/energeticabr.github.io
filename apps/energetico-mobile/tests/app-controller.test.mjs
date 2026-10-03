@@ -925,6 +925,37 @@ test("abrir Power BI obtém token delegado, solicita consentimento e navega ao m
   assert.equal(h.chatCalls.length, before + 1);
 });
 
+test('casinha do painel Power BI também abandona o fluxo sem mostrar confirmação', async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO' };
+  const calls = [];
+  let onHome;
+  h.view.openPowerBiDashboard = options => { onHome = options.onHome; return true; };
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === 'portal_confirm_main_menu') return {
+      status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?', options: [
+        { id: 'portal_draft_exit_discard', label: 'SIM, ABANDONAR' },
+        { id: 'portal_draft_exit_cancel', label: 'NÃO, CONTINUAR' },
+      ] }],
+    };
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É O VALOR?', options: [] }], { activeFlow });
+  await h.view.emit('select-reply', { replyId: 'action_powerbi_dashboard', label: 'POWER BI' });
+  const before = calls.length;
+
+  assert.equal(await onHome(), true);
+  assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.view.renders.some(render => render.messages?.some(message => /ABANDONAR ESTE FLUXO/.test(message.question || ''))), false);
+});
+
 test("retoma a abertura do painel Power BI após consentimento Microsoft", async t => {
   const h = makeHarness();
   let opens = 0;
@@ -2821,6 +2852,32 @@ test("voltar da quantidade EPI retorna ao catálogo sem validar navegação como
   assert.deepEqual(h.chatCalls.filter(([, payload]) => payload.replyId !== "input_continue").map(([, payload]) => payload.replyId), ["612", "navigation_back"]);
   assert.match(h.store.getState().messages.at(-1).question, /PRODUTO EPI/);
   assert.equal(h.view.renders.at(-1).error, null);
+});
+
+test('casinha abandona a quantidade EPI sem tratá-la como resposta numérica', async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const resumedFlow = {
+    ...epiActiveFlow,
+    epiDelivery: {
+      stage: 'document_signing_epi_quantity',
+      pendingProduct: { description: 'CAPACETE', unit: 'UN' },
+      items: [],
+    },
+  };
+  h.store.ingestRemoteMessages([epiQuantityPoll()], { activeFlow: resumedFlow });
+  const sent = [];
+  h.client.sendText = async payload => {
+    sent.push(payload.replyId);
+    assert.equal(payload.replyId, 'portal_confirm_main_menu');
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
+  assert.deepEqual(sent, ['portal_confirm_main_menu']);
+  assert.equal(h.store.getState().activeFlow, null);
 });
 
 test("quantidade retomada usa o estágio EPI ativo para aplicar limites do PDF", async t => {
@@ -5217,7 +5274,7 @@ test('resumo sem fluxo ou indisponível preserva a pergunta e informa o motivo',
   assert.match(h.view.renders.at(-1).error, /nenhum fluxo/);
 });
 
-test('menu do portal preserva confirmação mesmo quando só há campos vazios e texto de filtro', async () => {
+test('casinha descarta o fluxo mesmo com campos vazios e texto de filtro', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = {
     id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-empty',
@@ -5248,13 +5305,214 @@ test('menu do portal preserva confirmação mesmo quando só há campos vazios e
 
   await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
 
-  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu']);
-  assert.equal(h.store.getState().activeFlow?.id, 'task');
-  assert.equal(h.store.getState().attachments.length, 1);
-  assert.match(h.store.getState().messages.at(-1).question, /Deseja deixar como rascunho/);
+  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(h.store.getState().draft, '');
+  assert.match(h.store.getState().messages.at(-1).question, /QUAL ÁREA VOCÊ DESEJA ACESSAR/);
 });
 
-test('menu do portal mantém a opção de rascunho quando o fluxo tem dado preenchido', async () => {
+test('casinha abandona provisão pendente sem mostrar confirmação e limpa anexos', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO', contextId: 'provision-1' };
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === 'portal_confirm_main_menu') return {
+      status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?', options: [
+        { id: 'portal_draft_exit_discard', label: 'SIM, ABANDONAR' },
+        { id: 'portal_draft_exit_cancel', label: 'NÃO, CONTINUAR' },
+      ] }],
+    };
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, attachments: [],
+      messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  await h.controller.start();
+  const before = calls.length;
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É O VALOR?', options: [
+    { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
+  ] }], { activeFlow });
+  h.store.syncAttachments([{ id: 'file-1', fileName: 'conta.pdf', mediaUrl: '/api/portal-media/file-1' }]);
+  h.store.setDraft('2000');
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
+
+  assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL ÁREA VOCÊ DESEJA ACESSAR?');
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.equal(h.store.getState().draft, '');
+  assert.equal(h.view.renders.some(render => render.messages?.some(message => /ABANDONAR ESTE FLUXO/.test(message.question || ''))), false);
+});
+
+test('casinha sai mesmo com anexo ainda na fila e sem conferir anexos do formulário', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO' };
+  const calls = [];
+  h.client.getAttachments = async () => { throw new Error('consulta de anexos indisponível'); };
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, attachments: [],
+      messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  await h.controller.start();
+  const before = calls.length;
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É O VALOR?', options: [] }], { activeFlow });
+  h.store.syncAttachments([{ id: 'confirmed-1', fileName: 'antigo.pdf', mediaUrl: '/api/portal-media/confirmed-1' }]);
+  h.store.queueFiles([Object.assign(new Blob(['novo'], { type: 'application/pdf' }), { name: 'novo.pdf' })]);
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
+  assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.deepEqual(h.store.getState().pendingFiles, []);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test('casinha retenta o descarte pendente sem reenviar a saída inicial após falha', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO' };
+  const calls = [];
+  let failedOnce = false;
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === 'input_continue') return { status: 'processed', activeFlow,
+      messages: [failedOnce
+        ? { type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?', options: [
+          { id: 'portal_draft_exit_discard', label: 'SIM, ABANDONAR' },
+          { id: 'portal_draft_exit_cancel', label: 'NÃO, CONTINUAR' },
+        ] }
+        : { type: 'poll', question: 'QUAL É O VALOR?', options: [] }] };
+    if (payload.replyId === 'portal_confirm_main_menu') return { status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?', options: [
+        { id: 'portal_draft_exit_discard', label: 'SIM, ABANDONAR' },
+        { id: 'portal_draft_exit_cancel', label: 'NÃO, CONTINUAR' },
+      ] }] };
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    if (!failedOnce) { failedOnce = true; throw new Error('falha temporária'); }
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  await h.controller.start();
+  const before = calls.length;
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), false);
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), false);
+  assert.equal(await h.view.emit('retry-session'), true);
+  assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu', 'portal_draft_exit_discard', 'input_continue', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL ÁREA VOCÊ DESEJA ACESSAR?');
+  assert.equal(h.view.renders.some(render => render.messages?.some(message => /ABANDONAR ESTE FLUXO/.test(message.question || ''))), false);
+});
+
+test('retomar conversa no menu elimina descarte antigo antes da próxima casinha', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO', contextId: 'provision-resume' };
+  const calls = [];
+  let discarded = false;
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === 'input_continue') return discarded
+      ? { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+        activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] }
+      : { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'QUAL É O VALOR?', options: [] }] };
+    if (payload.replyId === 'portal_confirm_main_menu') return discarded
+      ? { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+        activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] }
+      : { status: 'processed', activeFlow,
+        messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?', options: [
+          { id: 'portal_draft_exit_discard', label: 'SIM, ABANDONAR' },
+          { id: 'portal_draft_exit_cancel', label: 'NÃO, CONTINUAR' },
+        ] }] };
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    discarded = true;
+    const error = new Error('resposta perdida'); error.code = 'NETWORK_UNCERTAIN'; throw error;
+  };
+  await h.controller.start();
+  const before = calls.length;
+  h.store.setDraft('2000');
+  h.store.queueFiles([Object.assign(new Blob(['comprovante'], { type: 'application/pdf' }), { name: 'comprovante.pdf' })]);
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), false);
+  assert.equal(await h.view.emit('retry-session'), true);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.store.getState().draft, '');
+  assert.deepEqual(h.store.getState().pendingFiles, []);
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
+  assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu', 'portal_draft_exit_discard', 'input_continue', 'portal_confirm_main_menu']);
+});
+
+test('casinha não apaga o texto nem informa sucesso se a VM não retornar ao menu', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO' };
+  h.client.sendText = async payload => {
+    if (payload.replyId === 'input_continue') return { status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'QUAL É O VALOR?', options: [] }] };
+    return { status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'AINDA NO FORMULÁRIO', options: [] }] };
+  };
+  await h.controller.start();
+  h.store.setDraft('2000');
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), false);
+  assert.equal(h.store.getState().activeFlow.id, 'payment_provision');
+  assert.equal(h.store.getState().draft, '2000');
+  assert.match(h.view.renders.at(-1).error || '', /menu principal/i);
+});
+
+test('seta ao sair do fluxo abandona sem confirmação e retorna ao menu', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO', contextId: 'provision-2' };
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === 'navigation_back') return {
+      status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?', options: [
+        { reply: 'portal_draft_exit_discard', label: 'SIM, ABANDONAR' },
+        { reply: 'portal_draft_exit_cancel', label: 'NÃO, CONTINUAR' },
+      ] }],
+    };
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  };
+  await h.controller.start();
+  const before = calls.length;
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'PRIMEIRA PERGUNTA', options: [
+    { id: 'navigation_back', label: 'RETORNAR' },
+  ] }], { activeFlow });
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_back', label: '↩️ RETORNAR À PERGUNTA ANTERIOR' }), true);
+  assert.deepEqual(calls.slice(before), ['navigation_back', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL ÁREA VOCÊ DESEJA ACESSAR?');
+  assert.equal(h.view.renders.some(render => render.messages?.some(message => /ABANDONAR ESTE FLUXO/.test(message.question || ''))), false);
+});
+
+test('seta dentro do fluxo volta à pergunta anterior sem descartar o formulário', async () => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO', contextId: 'provision-3' };
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    return { status: 'processed', activeFlow,
+      messages: [{ type: 'poll', question: 'QUAL É O FORNECEDOR?', options: [] }] };
+  };
+  await h.controller.start();
+  const before = calls.length;
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É O VALOR?', options: [
+    { id: 'navigation_back', label: 'RETORNAR' },
+  ] }], { activeFlow });
+
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_back', label: '↩️ RETORNAR À PERGUNTA ANTERIOR' }), true);
+  assert.deepEqual(calls.slice(before), ['navigation_back']);
+  assert.equal(h.store.getState().activeFlow.id, 'payment_provision');
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL É O FORNECEDOR?');
+});
+
+test('casinha descarta fluxo preenchido sem pedir para salvar rascunho', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = {
     id: 'task', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-1',
@@ -5269,8 +5527,9 @@ test('menu do portal mantém a opção de rascunho quando o fluxo tem dado preen
         { id: 'portal_draft_exit_discard', label: 'NÃO, SAIR SEM SALVAR' },
       ] }] };
     }
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
     return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
-      results: [{ draft_saved: true }], activeFlow: null,
+      activeFlow: null,
       messages: [{ type: 'poll', question: 'MENU PRINCIPAL', options: [] }] };
   };
   await h.controller.start();
@@ -5279,15 +5538,14 @@ test('menu do portal mantém a opção de rascunho quando o fluxo tem dado preen
   ] }], { activeFlow });
   assert.ok(h.store.getState().activeFlow);
   await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
-  assert.equal(calls.at(-1).replyId, 'portal_confirm_main_menu');
-  assert.match(h.store.getState().messages.at(-1).question, /Deseja deixar como rascunho/);
-  await h.view.emit('select-reply', { label: 'SIM, SALVAR COMO RASCUNHO', replyId: 'portal_draft_exit_save' });
-  assert.equal(calls.at(-1).replyId, 'portal_draft_exit_save');
+  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.store.getState().messages.at(-1).question, 'MENU PRINCIPAL');
   assert.equal(h.view.renders.at(-1).recoveryReference, null);
   assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Rascunho da conversa anterior/);
 });
 
-test('menu do portal reconhece linhas de lançamento como dados preenchidos', async () => {
+test('casinha descarta linhas de lançamento sem mostrar pergunta de rascunho', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = {
     id: 'launch', title: 'EFETUAR LANÇAMENTO', contextId: 'ctx-launch',
@@ -5309,7 +5567,9 @@ test('menu do portal reconhece linhas de lançamento como dados preenchidos', as
         { id: 'portal_draft_exit_discard', label: 'NÃO, SAIR SEM SALVAR' },
       ] }] };
     }
-    throw new Error(`resposta inesperada: ${payload.replyId}`);
+    assert.equal(payload.replyId, 'portal_draft_exit_discard');
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
   };
   await h.controller.start();
   h.store.ingestRemoteMessages([{ type: 'poll', question: 'Confirme a linha', options: [
@@ -5318,8 +5578,9 @@ test('menu do portal reconhece linhas de lançamento como dados preenchidos', as
 
   await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });
 
-  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu']);
-  assert.match(h.store.getState().messages.at(-1).question, /Deseja deixar como rascunho/);
+  assert.deepEqual(calls.map(call => call.replyId), ['input_continue', 'portal_confirm_main_menu', 'portal_draft_exit_discard']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL ÁREA VOCÊ DESEJA ACESSAR?');
 });
 
 for (const decision of ['portal_draft_exit_save', 'portal_draft_exit_discard']) {
