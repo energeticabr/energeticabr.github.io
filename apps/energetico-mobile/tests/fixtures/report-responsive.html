@@ -17,9 +17,14 @@ const presenceData = { async loadSnapshot() { return { presences: [
   { id: "2080", paymentId: "3470", date: "2026-09-21", supplier: "Rafael Gontijo", branch: "004 - EDIFÍCIO XAVANTE", stage: "ALVENARIA E ESTRUTURAS", activity: longValue || "EXECUÇÃO DE ALVENARIA CERÂMICA", property: "TODOS", presence: "PRESENTE", dailyValue: 150, observation: "", motivation: "" },
   { id: "2090", paymentId: "3470", date: "2026-09-22", supplier: "Rafael Gontijo", branch: "004 - EDIFÍCIO XAVANTE", stage: "ALVENARIA E ESTRUTURAS", activity: "EXECUÇÃO DE ALVENARIA CERÂMICA", property: "TODOS", presence: "PRESENTE", dailyValue: 150, observation: "", motivation: "" },
 ], launchesById: { "3470": { id: "3470", order: "346", date: "2026-09-30", supplier: "Rafael Gontijo", branch: "004 - EDIFÍCIO XAVANTE", stage: "ALVENARIA E ESTRUTURAS", description: "PAGAMENTO SEMANA RAFAEL", product: "ENGENHEIRO", account: "CAIXA", total: 300 } }, supplierStatusByName: { "Rafael Gontijo": "ATIVO" }, warnings: [] }; } };
-const view = createContractorReportsView({ document, data, presenceData });
+const extraElement = document.createElement("section"); extraElement.hidden = true;
+const extraReports = [{ ids: Array.from({ length: 15 }, (_, index) => index + 3), view: {
+  element: extraElement, async open(number) { extraElement.hidden = false; extraElement.textContent = `RELATÓRIO ${number} · ${longValue}`; },
+  close() { extraElement.hidden = true; }, destroy() {},
+} }];
+const view = createContractorReportsView({ document, data, presenceData, extraReports });
 await view.open();
-document.querySelector(`[data-report-id="${report}"]`).click();
+if (report !== "hub") document.querySelector(`[data-report-id="${report}"]`).click();
 window.reportReady = true;
 setTimeout(() => {
   document.documentElement.dataset.viewportWidth = String(innerWidth);

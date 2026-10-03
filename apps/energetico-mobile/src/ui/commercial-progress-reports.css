@@ -1,0 +1,45 @@
+.cpr-report, .cpr-report * { box-sizing: border-box; }
+.cpr-report { width: 100%; max-width: 100%; min-width: 0; color: #17324d; overflow-wrap: anywhere; }
+.cpr-report [hidden] { display: none !important; }
+.cpr-report button, .cpr-report select { max-width: 100%; min-width: 0; }
+.cpr-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; min-width: 0; }
+.cpr-title { min-width: 0; max-width: 100%; margin: 0; font-size: clamp(1.05rem, 2.7vw, 1.45rem); line-height: 1.25; }
+.cpr-button { min-height: 2.35rem; padding: 0.4rem 0.75rem; border: 1px solid #577ca0; border-radius: 0.5rem; background: #edf5fc; color: #17324d; font: inherit; font-weight: 700; cursor: pointer; }
+.cpr-button:disabled { opacity: 0.5; cursor: default; }
+.cpr-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 0.6rem; min-width: 0; margin-bottom: 1rem; }
+.cpr-filter { display: grid; gap: 0.25rem; min-width: 0; max-width: 100%; font-size: 0.75rem; font-weight: 700; }
+.cpr-filter-label { min-width: 0; }
+.cpr-select { display: block; width: 100%; min-height: 2.35rem; padding: 0.4rem; border: 1px solid #91a9bf; border-radius: 0.45rem; background: #fff; color: inherit; font: inherit; }
+.cpr-metrics, .cpr-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 0.6rem; min-width: 0; }
+.cpr-metrics { margin: 0 0 1rem; }
+.cpr-metric, .cpr-field { min-width: 0; max-width: 100%; margin: 0; padding: 0.55rem 0.65rem; border: 1px solid #b8d0e7; border-radius: 0.6rem; background: #f3f8fd; }
+.cpr-metric dt, .cpr-field-label { display: block; min-width: 0; font-size: 0.7rem; font-weight: 700; line-height: 1.25; }
+.cpr-metric dd, .cpr-field-value { display: block; min-width: 0; max-width: 100%; margin: 0.35rem 0 0; font-size: 0.95rem; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.cpr-notice { min-width: 0; padding: 0.75rem; margin: 0 0 1rem; border: 1px solid #adbac8; border-radius: 0.6rem; background: #f4f7fa; }
+.cpr-notice[role="alert"] { border-color: #a52424; color: #8b1717; background: #fff0f0; }
+.cpr-notice p { margin: 0 0 0.5rem; }
+.cpr-notice p:last-child { margin-bottom: 0; }
+.cpr-content, .cpr-card-list, .cpr-detail { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; min-width: 0; max-width: 100%; }
+.cpr-content { gap: 1rem; }
+.cpr-branch, .cpr-detail, .cpr-property, .cpr-subcard { min-width: 0; max-width: 100%; border: 1px solid #adc4d8; border-radius: 0.7rem; padding: 0.75rem; }
+.cpr-branch, .cpr-detail { background: #fff; }
+.cpr-property { background: #f9fcff; }
+.cpr-subcard { background: #f5f9fd; }
+.cpr-section-title, .cpr-branch-title, .cpr-property-title, .cpr-subtitle { min-width: 0; max-width: 100%; margin: 0 0 0.6rem; line-height: 1.3; overflow-wrap: anywhere; word-break: break-word; }
+.cpr-section-title { margin-top: 0.2rem; font-size: 1.15rem; }
+.cpr-branch-title { font-size: 1.05rem; }
+.cpr-property-title, .cpr-subtitle { font-size: 0.95rem; }
+.cpr-receipt { min-width: 0; max-width: 100%; padding: 0.5rem; border-top: 1px solid #cfdfeb; overflow-wrap: anywhere; word-break: break-word; }
+.cpr-count, .cpr-empty { min-width: 0; margin: 0; padding: 0.5rem; }
+.cpr-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.7rem; min-width: 0; max-width: 100%; padding: 1rem 0; }
+.cpr-page-label { min-width: 0; max-width: 100%; text-align: center; overflow-wrap: anywhere; }
+
+@media (max-width: 740px) {
+  .cpr-report { font-size: 0.88rem; }
+  .cpr-heading { align-items: stretch; }
+  .cpr-metrics, .cpr-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cpr-branch, .cpr-detail, .cpr-property, .cpr-subcard { padding: 0.55rem; }
+}
+@media (max-width: 420px) {
+  .cpr-metrics, .cpr-fields { grid-template-columns: minmax(0, 1fr); }
+}

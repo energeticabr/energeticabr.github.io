@@ -1,0 +1,166 @@
+.or-report,
+.or-report * {
+  box-sizing: border-box;
+}
+
+.or-report {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #202a35;
+}
+
+.or-report[hidden] { display: none; }
+
+.or-report .or-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 2px solid #243b53;
+  border-radius: 10px;
+  background: #e6f0ff;
+}
+
+.or-report .or-title {
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(1rem, 2.5vw, 1.4rem);
+  line-height: 1.3;
+}
+
+.or-report .or-refresh,
+.or-report .or-retry { flex: 0 0 auto; max-width: 100%; }
+
+.or-report .or-filters,
+.or-report .or-metrics,
+.or-report .or-fields,
+.or-report .or-activity-list,
+.or-report .or-task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.or-report .or-filters,
+.or-report .or-metrics { margin: 12px 0; }
+
+.or-report .or-filter,
+.or-report .or-metric,
+.or-report .or-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.or-report .or-filter-label,
+.or-report .or-field-label,
+.or-report .or-metric dt {
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  line-height: 1.3;
+}
+
+.or-report .or-filter-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.or-report .or-metric {
+  padding: 12px;
+  border: 2px solid #2a527c;
+  border-radius: 8px;
+  background: #edf5ff;
+}
+
+.or-report .or-metric dd {
+  margin: 4px 0 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.or-report .or-notice,
+.or-report .or-empty,
+.or-report .or-limit {
+  max-width: 100%;
+  padding: 10px;
+  border-radius: 7px;
+  background: #f1f4f7;
+}
+
+.or-report .or-notice[hidden] { display: none; }
+.or-report .or-notice[role="alert"] { border: 2px solid #b42318; background: #fff0ef; }
+.or-report .or-notice p { margin: 0 0 8px; }
+
+.or-report .or-results {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.or-report .or-stage-card,
+.or-report .or-diary-card,
+.or-report .or-due-card,
+.or-report .or-task-card,
+.or-report .or-activity-card {
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px;
+  border: 2px solid #8ca0b3;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.or-report [data-tone="success"] { border-color: #2e7d32; background: #e8f5e9; }
+.or-report [data-tone="info"] { border-color: #1565c0; background: #e3f2fd; }
+.or-report [data-tone="warning"] { border-color: #ef6c00; background: #fff2df; }
+.or-report [data-tone="danger"] { border-color: #c62828; background: #ffebee; }
+.or-report [data-tone="neutral"] { border-color: #607d8b; background: #f3f5f6; }
+
+.or-report .or-stage-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.or-report .or-card-title,
+.or-report .or-person-title {
+  margin: 0 0 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.or-report .or-stage-summary .or-card-title { margin: 0; font-size: 1.13rem; }
+.or-report .or-badge { width: fit-content; max-width: 100%; padding: 3px 8px; border-radius: 6px; background: #fff; font-weight: 800; }
+.or-report .or-activity-list,
+.or-report .or-task-list { align-items: stretch; }
+.or-report .or-field { gap: 2px; padding: 5px 0; overflow-wrap: anywhere; }
+.or-report .or-field-value { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.or-report .or-group-total,
+.or-report .or-due-state { margin: 8px 0; font-weight: 700; }
+.or-report .or-person-group { min-width: 0; padding-top: 10px; border-top: 1px solid #a8b5c1; }
+.or-report .or-person-group + .or-person-group { margin-top: 12px; }
+
+@media (max-width: 740px) {
+  .or-report .or-filters,
+  .or-report .or-metrics,
+  .or-report .or-fields,
+  .or-report .or-activity-list,
+  .or-report .or-task-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+  .or-report .or-heading,
+  .or-report .or-stage-card,
+  .or-report .or-diary-card,
+  .or-report .or-due-card { padding: 9px; }
+}

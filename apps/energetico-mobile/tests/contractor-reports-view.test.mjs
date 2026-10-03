@@ -15,7 +15,7 @@ function row(id, overrides = {}) {
   } });
 }
 
-function setup(t, dataOverrides = {}, presenceData) {
+function setup(t, dataOverrides = {}, presenceData, extraReports = []) {
   assert.equal(typeof module.createContractorReportsView, "function");
   const dom = new JSDOM("<main id=app></main>", { url: "https://example.test" });
   const data = {
@@ -23,7 +23,7 @@ function setup(t, dataOverrides = {}, presenceData) {
     async loadDetails() { return { launches: [{ id: "3486", date: "2026-10-01", supplier: "Israel", contract: "237", total: 55, paymentStatus: "PAGO", paymentTone: "success" }], measurements: [{ id: "1", supplier: "Israel", contract: "237", status: "ATIVO", statusTone: "success" }] }; },
     ...dataOverrides,
   };
-  const view = module.createContractorReportsView({ document: dom.window.document, data, presenceData });
+  const view = module.createContractorReportsView({ document: dom.window.document, data, presenceData, extraReports });
   t.after(() => { view.destroy(); dom.window.close(); });
   return { dom, view, root: () => dom.window.document.querySelector(".cr-overlay") };
 }
@@ -158,4 +158,36 @@ test("quadrado 2 abre o relatório de presenças e Voltar retorna ao seletor", a
   click(ctx.dom.window, ctx.root().querySelector(".cr-header button"));
   assert.equal(ctx.root().querySelector(".cr-hub").hidden, false);
   assert.equal(ctx.root().querySelector(".pp-report").hidden, true);
+});
+
+test("menu oferece 17 relatórios e encaminha os novos módulos sem manter telas anteriores abertas", async t => {
+  const dom = new JSDOM("<main></main>", { url: "https://example.test" });
+  const opened = [];
+  let closed = 0;
+  const element = dom.window.document.createElement("section");
+  element.hidden = true;
+  element.textContent = "RELATÓRIO EXTENDIDO";
+  const group = {
+    ids: Array.from({ length: 15 }, (_, i) => i + 3),
+    view: { element, async open(id) { opened.push(id); element.hidden = false; }, close() { closed++; element.hidden = true; }, destroy() {} },
+  };
+  const view = module.createContractorReportsView({
+    document: dom.window.document,
+    data: { async loadOverview() { return { rows: [], documentStatuses: {}, warnings: [] }; }, async loadDetails() { return {}; } },
+    extraReports: [group],
+  });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  const root = dom.window.document.querySelector(".cr-overlay");
+  assert.equal(root.querySelectorAll("[data-report-id]").length, 17);
+  assert.equal(root.querySelector('[data-report-id="17"]').disabled, false);
+  click(dom.window, root.querySelector('[data-report-id="17"]'));
+  await settle();
+  assert.deepEqual(opened, [17]);
+  assert.equal(element.hidden, false);
+  assert.equal(root.querySelector(".cr-hub").hidden, true);
+  click(dom.window, root.querySelector(".cr-header button"));
+  assert.equal(element.hidden, true);
+  assert.equal(root.querySelector(".cr-hub").hidden, false);
+  assert.ok(closed >= 1);
 });

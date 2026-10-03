@@ -1,0 +1,213 @@
+.cdr-report,
+.cdr-report * { box-sizing: border-box; }
+
+.cdr-report {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  color: #202a35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.cdr-report[hidden], .cdr-report .cdr-notice[hidden] { display: none; }
+
+.cdr-report .cdr-heading,
+.cdr-report .cdr-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+.cdr-report .cdr-heading {
+  padding: 12px;
+  border: 2px solid #243b53;
+  border-radius: 10px;
+  background: #e6f0ff;
+}
+.cdr-report .cdr-title {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(1rem, 2.5vw, 1.4rem);
+  line-height: 1.3;
+}
+.cdr-report .cdr-button {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #24527c;
+  border-radius: 7px;
+  background: #fff;
+  color: #173d61;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cdr-report .cdr-button:focus-visible,
+.cdr-report .cdr-filter-input:focus-visible { outline: 3px solid #1565c0; outline-offset: 2px; }
+
+.cdr-report .cdr-filters,
+.cdr-report .cdr-metrics,
+.cdr-report .cdr-identity,
+.cdr-report .cdr-document-grid,
+.cdr-report .cdr-field-total-grid,
+.cdr-report .cdr-branch-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.cdr-report .cdr-filters,
+.cdr-report .cdr-metrics { margin: 12px 0; }
+.cdr-report .cdr-metrics { padding: 0; }
+.cdr-report .cdr-filter,
+.cdr-report .cdr-metric,
+.cdr-report .cdr-field,
+.cdr-report .cdr-document-cell { min-width: 0; max-width: 100%; }
+.cdr-report .cdr-filter { display: flex; flex-direction: column; }
+.cdr-report .cdr-filter-label,
+.cdr-report .cdr-field-label,
+.cdr-report .cdr-document-label,
+.cdr-report .cdr-metric dt {
+  display: block;
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.3;
+}
+.cdr-report .cdr-filter-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 7px;
+  border: 1px solid #758a9e;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.cdr-report .cdr-metric {
+  padding: 10px;
+  border: 2px solid #2a527c;
+  border-radius: 8px;
+  background: #edf5ff;
+}
+.cdr-report .cdr-metric dd {
+  margin: 4px 0 0;
+  font-size: clamp(1.05rem, 3vw, 1.4rem);
+  font-weight: 800;
+}
+.cdr-report .cdr-notice,
+.cdr-report .cdr-empty {
+  max-width: 100%;
+  padding: 10px;
+  border-radius: 7px;
+  background: #f1f4f7;
+}
+.cdr-report .cdr-notice[role="alert"] { border: 2px solid #b42318; background: #fff0ef; }
+.cdr-report .cdr-notice p { margin: 0 0 8px; }
+
+.cdr-report .cdr-results { display: grid; gap: 12px; min-width: 0; max-width: 100%; }
+.cdr-report .cdr-commercial-summary,
+.cdr-report .cdr-branch-list { display: grid; gap: 12px; min-width: 0; max-width: 100%; }
+.cdr-report .cdr-overall-totals,
+.cdr-report .cdr-branch-summary {
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px;
+  border: 2px solid #8ca0b3;
+  border-radius: 9px;
+  background: #fff;
+}
+.cdr-report .cdr-branch-summary { border-color: #33566e; background: #f8fbfd; }
+.cdr-report .cdr-detail-hint,
+.cdr-report .cdr-page-status {
+  max-width: 100%;
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 4px solid #1565c0;
+  background: #eaf3fc;
+  font-weight: 700;
+}
+.cdr-report .cdr-summary-title { min-width: 0; margin: 0 0 8px; font-size: 1.05rem; }
+.cdr-report .cdr-total-category + .cdr-total-category { margin-top: 12px; }
+.cdr-report .cdr-field-total {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #9eafbc;
+  border-radius: 6px;
+  background: #fff;
+}
+.cdr-report .cdr-field-total strong { display: block; font-size: 1.15rem; }
+.cdr-report .cdr-branch-fields { min-width: 0; max-width: 100%; margin-top: 10px; }
+.cdr-report .cdr-branch-fields summary { cursor: pointer; font-weight: 700; }
+.cdr-report .cdr-branch-fields[open] { padding: 8px; border: 1px solid #9eafbc; border-radius: 6px; }
+.cdr-report .cdr-property-card,
+.cdr-report .cdr-rent-card {
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px;
+  border: 2px solid #8ca0b3;
+  border-radius: 9px;
+  background: #fff;
+}
+.cdr-report .cdr-rent-card[data-due-state="overdue"] { border-color: #b42318; background: #fff7f6; }
+.cdr-report .cdr-rent-card[data-due-state="today"] { border-color: #b56a00; background: #fff9ea; }
+.cdr-report .cdr-rent-card[data-due-state="upcoming"] { border-color: #2e7d32; background: #f4fbf3; }
+.cdr-report .cdr-card-title {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+.cdr-report .cdr-badge,
+.cdr-report .cdr-rent-amount {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #e9f1f8;
+  font-weight: 800;
+}
+.cdr-report .cdr-identity { margin: 10px 0; }
+.cdr-report .cdr-field,
+.cdr-report .cdr-document-cell { padding: 5px 0; }
+.cdr-report .cdr-field-value,
+.cdr-report .cdr-document-value { display: block; min-width: 0; line-height: 1.4; }
+.cdr-report .cdr-subtitle { margin: 14px 0 6px; font-size: .95rem; }
+.cdr-report .cdr-document-cell {
+  padding: 8px;
+  border: 1px solid #8ca0b3;
+  border-radius: 6px;
+  background: #f6f8fa;
+}
+.cdr-report .cdr-document-cell[data-pending="true"] { border-color: #b42318; background: #fff0ef; }
+.cdr-report .cdr-document-cell[data-pending="false"] { border-color: #2e7d32; background: #f0f8ef; }
+.cdr-report .cdr-pending-label { display: block; margin-top: 3px; color: #9f1e16; font-size: .78rem; font-weight: 800; }
+.cdr-report .cdr-contracts { min-width: 0; }
+.cdr-report .cdr-contract {
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 7px;
+  border: 1px solid #8ca0b3;
+  border-radius: 5px;
+  background: #f6f8fa;
+}
+.cdr-report .cdr-more { justify-self: start; }
+.cdr-report .cdr-due-status { margin: 10px 0 0; font-weight: 800; }
+
+@media (max-width: 740px) {
+  .cdr-report .cdr-filters,
+  .cdr-report .cdr-metrics,
+  .cdr-report .cdr-identity,
+  .cdr-report .cdr-document-grid,
+  .cdr-report .cdr-field-total-grid,
+  .cdr-report .cdr-branch-figures { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+  .cdr-report .cdr-heading,
+  .cdr-report .cdr-property-card,
+  .cdr-report .cdr-rent-card { padding: 9px; }
+}

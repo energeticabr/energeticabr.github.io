@@ -1,0 +1,41 @@
+.ar-report { box-sizing: border-box; width: min(100%, 1600px); max-width: 100%; min-width: 0; margin-inline: auto; padding: clamp(10px, 1.5vw, 22px); border: 1px solid #c4d4df; border-radius: 12px; background: #fff; color: #183b5e; overflow-wrap: anywhere; }
+.ar-report[hidden], .ar-filters[hidden], .ar-notice[hidden], .ar-pager[hidden] { display: none !important; }
+.ar-report *, .ar-report *::before, .ar-report *::after { box-sizing: border-box; }
+.ar-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 9px; border-bottom: 3px solid #163a5f; }
+.ar-title { min-width: 0; flex: 1 1 200px; margin: 0; font-size: clamp(1.06rem, 2.5vw, 1.5rem); color: #163a5f; }
+.ar-notice { padding: 10px; border: 1px solid #adc3d1; margin-bottom: 12px; background: #f4f8fb; }
+.ar-notice[role="alert"] { border-color: #d59da0; color: #8e1f25; background: #fff0f0; }
+.ar-notice p { margin: 0 0 7px; }
+.ar-notice p:last-child { margin-bottom: 0; }
+.ar-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.ar-filter { min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: .78rem; font-weight: 800; }
+.ar-filter .og-input { width: 100%; min-width: 0; }
+.ar-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; margin: 0 0 14px; }
+.ar-metric { min-width: 0; padding: 10px; border: 2px solid #b3cadc; background: #ecf4f9; text-align: center; }
+.ar-metric[data-tone="success"] { border-color: #70ad47; background: #e2f0d9; color: #24652c; }
+.ar-metric[data-tone="danger"] { border-color: #d4757b; background: #fff0f1; color: #a20d13; }
+.ar-metric[data-tone="warning"] { border-color: #dbac58; background: #fff4db; color: #865600; }
+.ar-metric[data-tone="info"] { border-color: #5b9bd5; background: #e2effb; color: #1f5c9b; }
+.ar-metric dt { font-size: .73rem; font-weight: 800; text-transform: uppercase; }
+.ar-metric dd { margin: 4px 0 0; font-size: clamp(1.1rem, 2.5vw, 1.5rem); font-weight: 850; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ar-content, .ar-group, .ar-card, .ar-subcard { min-width: 0; max-width: 100%; }
+.ar-card, .ar-group { margin-bottom: 14px; border: 1px solid #c6d6e3; border-radius: 9px; overflow: hidden; background: #fff; }
+.ar-card-title, .ar-group-title { margin: 0; padding: 10px 12px; background: #1f2937; color: #fff; font-size: 1rem; overflow-wrap: anywhere; }
+.ar-group-title { background: #163a5f; }
+.ar-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0; padding: 10px; }
+.ar-field { min-width: 0; padding: 7px 8px; border: 1px solid #d9e2e9; background: #f0f5f8; overflow-wrap: anywhere; }
+.ar-field dt { color: #47657b; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+.ar-field dd { margin: 3px 0 0; color: #193a56; font-size: .85rem; font-weight: 700; overflow-wrap: anywhere; }
+.ar-field[data-tone="expired"] { border-color: #dc2626; background: #fff1f2; color: #991b1b; }
+.ar-field[data-tone="due"] { border-color: #d97706; background: #fffbeb; color: #92400e; }
+.ar-card-list { padding: 10px; border-top: 1px solid #d9e2e9; }
+.ar-card-list h4 { margin: 0 0 8px; font-size: .88rem; }
+.ar-subcard { padding: 9px; margin-bottom: 8px; border: 1px solid #d9e2e9; border-radius: 7px; background: #fbfdff; }
+.ar-subcard:last-child { margin-bottom: 0; }
+.ar-subcard h4, .ar-subcard h5 { margin: 0 0 5px; font-size: .88rem; }
+.ar-subcard .ar-fields { padding: 0; }
+.ar-empty { margin: 0; padding: 12px; color: #526d7d; }
+.ar-subtitle { padding: 9px; background: #dceaf5; color: #163a5f; text-align: center; font-weight: 800; }
+.ar-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+@media (max-width: 1000px) { .ar-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ar-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .ar-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ar-fields { grid-template-columns: 1fr; } .ar-pager { justify-content: space-between; } }
