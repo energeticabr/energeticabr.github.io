@@ -196,7 +196,11 @@ export function createPaymentProgrammingGallery({
   const homeButton = el("button", "og-button", "Início"); homeButton.type = "button";
   header.append(closeButton, title, homeButton);
 
+  const body = el("div", "pg-body");
   const content = el("main", "og-content");
+  const loadingLayer = el("div", "pg-loading-layer");
+  loadingLayer.hidden = true;
+  loadingLayer.append(createLoadingIndicator(doc, "Carregando programação de pagamentos…"));
   const filterDisclosure = el("details", "og-filters pg-filters");
   const filterToggle = el("summary", "og-filter-toggle", "Filtros");
   const filterIcon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -268,7 +272,8 @@ export function createPaymentProgrammingGallery({
   detail.setAttribute("aria-modal", "true");
   detail.setAttribute("aria-label", "Detalhes do pagamento previsto");
   content.append(filterDisclosure, notice, listToolbar, cards, pagination);
-  root.append(header, content, detail);
+  body.append(content, loadingLayer);
+  root.append(header, body, detail);
   doc.body.append(root);
   const searchableSort = bindSearchableFilterSelects(listToolbar);
   const recordActions = createGalleryRecordActions({
@@ -344,7 +349,14 @@ export function createPaymentProgrammingGallery({
 
   function updateBusy() {
     const busy = opened && (listLoading || attachmentLoading);
+    const loading = opened && listLoading;
     root.setAttribute("aria-busy", String(Boolean(busy)));
+    loadingLayer.hidden = !loading;
+    body.classList.toggle("pg-body--loading", loading);
+    content.inert = loading;
+    if (loading) content.setAttribute("aria-hidden", "true");
+    else content.removeAttribute("aria-hidden");
+    for (const control of controls.values()) control.disabled = Boolean(busy);
     for (const button of root.querySelectorAll("button")) {
       if (button.closest(".gallery-record-dialog")) continue;
       if (button !== closeButton && button !== homeButton) button.disabled = Boolean(busy);
@@ -545,8 +557,6 @@ export function createPaymentProgrammingGallery({
     controller = new AbortController();
     listLoading = true;
     setNotice("");
-    listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando programação de pagamentos…"));
-    cards.replaceChildren();
     updateBusy();
     try {
       const result = await data.loadSnapshot({ signal: controller.signal });

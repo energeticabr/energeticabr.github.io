@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Galeria programação de pagamentos: teste responsivo</title>
+  <link rel="stylesheet" href="../../src/styles.css">
   <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
   <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
 </head>
@@ -35,11 +36,15 @@
       document,
       now: () => new Date("2026-10-03T12:00:00-03:00"),
       data: {
-        async loadSnapshot() { return { rows }; },
+        async loadSnapshot() {
+          if (window.holdPaymentLoad) await new Promise(resolve => { window.finishPaymentLoad = resolve; });
+          return { rows };
+        },
         async listAttachments(id) { return id === "301" ? [{ fileName: "conta.pdf" }] : []; },
       },
     });
     await gallery.open();
+    window.paymentGallery = gallery;
     document.documentElement.dataset.ready = "true";
   </script>
 </body>

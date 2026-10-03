@@ -39,6 +39,70 @@ async function setup(t, overrides = {}) {
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+test("G28 coloca o carregamento acima do conteúdo e libera controles após a resposta", async t => {
+  const request = deferred();
+  const ctx = await setup(t, { data: { loadSnapshot: () => request.promise } });
+  const opening = ctx.gallery.open();
+  const layer = ctx.root().querySelector(".pg-loading-layer");
+  assert.ok(layer, "carregamento precisa de uma camada própria fora da ordenação");
+  assert.equal(layer.hidden, false);
+  assert.ok(layer.querySelector(".app-loading__mascot"));
+  assert.ok(layer.querySelector(".app-loading__spinner"));
+  assert.equal(ctx.root().querySelector(".pg-list-toolbar .app-loading"), null);
+  assert.equal(ctx.root().querySelector(".og-content").inert, true);
+  assert.equal(ctx.root().querySelector(".og-content").getAttribute("aria-hidden"), "true");
+  assert.equal(ctx.root().querySelector('[name="sort"]').disabled, true);
+  assert.equal(button(ctx.root(), "Voltar").disabled, false);
+  assert.equal(button(ctx.root(), "Início").disabled, false);
+  request.resolve({ rows: [] });
+  await opening;
+  assert.equal(layer.hidden, true);
+  assert.equal(ctx.root().querySelector(".og-content").inert, false);
+  assert.equal(ctx.root().querySelector(".og-content").hasAttribute("aria-hidden"), false);
+  assert.equal(ctx.root().querySelector('[name="sort"]').disabled, false);
+  assert.equal(ctx.root().getAttribute("aria-busy"), "false");
+});
+
+test("G28 mantém os cartões ao fundo da atualização e remove a camada mesmo em falha", async t => {
+  const request = deferred();
+  let refreshing = false;
+  const ctx = await setup(t, { data: { loadSnapshot: async () => refreshing ? request.promise : { rows: [
+    { id: "300", hasAttachments: false, fields: { ID: 300, FORNECEDOR: "VIVO", STATUS: "PAGAMENTO PREVISTO" } },
+  ] } } });
+  await ctx.gallery.open();
+  refreshing = true;
+  const reload = ctx.gallery.reload();
+  assert.equal(ctx.root().querySelectorAll(".pg-card").length, 1, "refresh não apaga dados ao fundo");
+  assert.equal(ctx.root().querySelector(".pg-loading-layer").hidden, false);
+  request.reject(new Error("sem conexão"));
+  await reload;
+  assert.equal(ctx.root().querySelector(".pg-loading-layer").hidden, true);
+  assert.equal(ctx.root().querySelector(".og-content").inert, false);
+  assert.equal(button(ctx.root(), "Tentar novamente").disabled, false);
+});
+
+test("G28 mantém o novo carregamento quando uma resposta antiga chega após reabrir", async t => {
+  const oldRequest = deferred(), newRequest = deferred();
+  let calls = 0;
+  const ctx = await setup(t, { data: { loadSnapshot: () => (++calls === 1 ? oldRequest.promise : newRequest.promise) } });
+  const first = ctx.gallery.open();
+  ctx.gallery.close();
+  assert.equal(ctx.root().querySelector(".pg-loading-layer")?.hidden, true);
+  const second = ctx.gallery.open();
+  oldRequest.resolve({ rows: [] });
+  await first;
+  assert.equal(ctx.root().querySelector(".pg-loading-layer").hidden, false);
+  assert.equal(ctx.root().querySelector(".og-content").inert, true);
+  newRequest.resolve({ rows: [] });
+  await second;
+  assert.equal(ctx.root().querySelector(".pg-loading-layer").hidden, true);
+});
 function button(root, label) {
   const found = [...root.querySelectorAll("button")].find(node => node.textContent.trim() === label && !node.closest("[hidden]"));
   assert.ok(found, `visible button: ${label}`);
