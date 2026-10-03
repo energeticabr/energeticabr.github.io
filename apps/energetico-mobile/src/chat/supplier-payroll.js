@@ -94,19 +94,14 @@ export function validatePayrollLines(rawLines = []) {
   const seen = new Set();
   const lines = [];
   for (const line of rawLines) {
-    if (String(line.unitValue ?? "").trim() === "") {
-      if (line.files?.length)
-        throw new RangeError(
-          "Informe o valor da rubrica que contém comprovantes.",
-        );
-      continue;
-    }
+    if (String(line.unitValue ?? "").trim() === "") continue;
     const rubric = PAYROLL_RUBRICS.find((r) => r.id === line.rubric);
     if (!rubric || seen.has(rubric.id))
       throw new RangeError("Rubrica inválida ou repetida.");
     seen.add(rubric.id);
     const quantity = payrollDecimal(line.quantity),
       unitValue = payrollDecimal(line.unitValue);
+    if (unitValue.isZero()) continue;
     if (!quantity.gt(0))
       throw new RangeError(
         `Informe quantidade maior que zero em ${rubric.label}.`,
@@ -115,7 +110,6 @@ export function validatePayrollLines(rawLines = []) {
       throw new RangeError(
         `Selecione a forma de pagamento de ${rubric.label}.`,
       );
-    if (unitValue.isZero()) continue;
     lines.push({
       ...line,
       quantity: quantity.toNumber(),
