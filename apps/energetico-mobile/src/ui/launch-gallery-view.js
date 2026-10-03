@@ -933,13 +933,17 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const identity = element('header', 'lg-record-heading');
     identity.append(element('span', 'lg-record-id', display(field(fields, 'ID') ?? item.id)),
       element('h2', 'lg-record-product', display(product)));
+    const headingSummary = element('div', 'lg-record-heading-summary');
     const status = field(fields, 'CONCLUÍDO', 'CONCLUIDO', 'STATUS');
     if (status) {
       const normalizedStatus = key(status);
       const statusClass = normalizedStatus.includes('FINALIZADO') || normalizedStatus.includes('PAGO')
         ? 'lg-status-final' : normalizedStatus.includes('PENDENTE') ? 'lg-status-pending' : 'lg-status-other';
-      identity.append(element('span', `lg-record-status ${statusClass}`, display(status)));
+      headingSummary.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
+    const total = summaryField('VALOR TOTAL', moneyFieldValue(totalValue));
+    if (total) { total.classList.add('lg-record-total'); headingSummary.append(total); }
+    identity.append(headingSummary);
 
     const summary = element('section', 'lg-record-summary');
     const supplier = field(fields, 'FORNECEDOR');
@@ -959,8 +963,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const values = [
       ['VALOR UNITÁRIO', moneyFieldValue(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'))],
       ['QUANTIDADE', quantityText],
-      ['FRETE', moneyFieldValue(field(fields, 'FRETE'))],
-      ['VALOR TOTAL', moneyFieldValue(totalValue)],
+      ['FRETE', moneyFieldValue(field(fields, 'FRETE')) ?? '—'],
     ];
     for (const [name, value] of values) {
       const entry = summaryField(name, value);

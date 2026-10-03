@@ -628,6 +628,38 @@ test('launch cards keep a compact summary and reveal remaining fields only when 
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
 });
 
+test('launch total is highlighted beside status while the lower finance area shows freight instead', async t => {
+  const cases = [
+    { id: 3489, total: '13.040,00', freight: 40, wantTotal: 'R$ 13.040,00', wantFreight: 'R$ 40,00' },
+    { id: 3488, total: 0, freight: 0, wantTotal: 'R$ 0,00', wantFreight: 'R$ 0,00' },
+    { id: 3487, total: undefined, freight: undefined, wantTotal: 'R$ 85,00', wantFreight: '—' },
+  ];
+  const rows = cases.map(sample => ({ ...row(sample.id), fields: { ...row(sample.id).fields,
+    'VALOR TOTAL': sample.total, FRETE: sample.freight } }));
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot({ rows }) : detail() });
+  await ctx.gallery.open();
+  for (const sample of cases) {
+    const card = ctx.root().querySelector(`[data-item-id="${sample.id}"]`);
+    const headingSummary = card.querySelector('.lg-record-heading-summary');
+    assert.ok(headingSummary, 'status and highlighted total share the bottom of the heading');
+    assert.equal(headingSummary.querySelector('.lg-record-status').nextElementSibling,
+      headingSummary.querySelector('.lg-record-total'));
+    assert.equal(headingSummary.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
+    assert.equal(headingSummary.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
+    const finance = card.querySelector('.lg-record-finance');
+    assert.deepEqual([...finance.querySelectorAll('.lg-record-label')].map(label => label.textContent),
+      ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
+    assert.equal(finance.querySelector('.lg-record-field:last-child .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantFreight);
+  }
+});
+
+test('a launch without status still shows its total in the heading', async t => {
+  const item = row(); delete item.fields.CONCLUÍDO;
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail() });
+  await ctx.gallery.open();
+  assert.match(ctx.root().querySelector('.lg-record-heading .lg-record-total')?.textContent || '', /VALOR TOTAL.*85,00/);
+});
+
 test('supplier and AGRUPAR actions remain usable in the compact launch summary', async t => {
   const item = row(3458);
   item.fields = { ...item.fields, FORNECEDOR: 'Fornecedor A', AGRUPAR: 338 };

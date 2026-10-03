@@ -207,7 +207,8 @@
 .lg-record--with-media .lg-record-content { grid-column: 2; }
 .lg-record-heading {
   display: grid;
-  grid-template-columns: minmax(58px, auto) minmax(0, 1fr) minmax(125px, auto);
+  grid-template-columns: minmax(58px, auto) minmax(0, 1fr);
+  grid-template-rows: minmax(44px, auto) auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -230,6 +231,26 @@
 .lg-status-final { color: #16723c; border-color: #8dc9a4; background: #e2f7e8; }
 .lg-status-pending { color: #965200; border-color: #e7bd72; background: #fff3db; }
 .lg-status-other { color: var(--lg-red); border-color: #e5b8ba; background: #fff0f0; }
+.lg-record-heading-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-right: -108px;
+}
+.lg-record-heading-summary .lg-record-total {
+  flex: 0 1 auto;
+  max-width: 100%;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  text-align: right;
+}
+.lg-record-total .lg-record-label, .lg-record-total .lg-record-value { color: var(--lg-red); }
+.lg-record-total .lg-record-value { font-size: 1rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 .lg-record-main {
   display: block;
   min-width: 0;
@@ -270,7 +291,7 @@
 .lg-record-section-title { grid-column: 1 / -1; margin: 0; padding: 0 3px 4px; color: #3a657e; font-size: .72rem; font-weight: 850; text-transform: uppercase; }
 .lg-record-dates .lg-record-field { padding: 6px; border: 1px solid #e0eaf1; border-radius: 5px; background: #fff; margin-bottom: 5px; }
 .lg-record-dates .lg-record-label { text-transform: none; }
-.lg-record-finance { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--lg-line); border-bottom: 1px solid var(--lg-line); }
+.lg-record-finance { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--lg-line); border-bottom: 1px solid var(--lg-line); }
 .lg-record-finance .lg-record-field { border: 0; border-right: 1px solid var(--lg-line); }
 .lg-record-finance .lg-record-field:last-child { border-right: 0; }
 .lg-record-meta { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 8px; }
