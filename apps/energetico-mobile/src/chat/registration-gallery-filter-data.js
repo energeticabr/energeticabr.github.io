@@ -64,6 +64,10 @@ export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
     'ASSOCIAÇÃO': source('CADASTROTAREFAS', 'ASSOCIAÇÃO', { sourceAliases: ['field_1'] }),
     RECORRENCIA: source('TAREFASRECORRENTES', 'RECORRENCIA', { metadataChoices: true }),
   },
+  delegatedTasks: {
+    'ASSOCIAÇÃO': source('CADASTROTAREFAS', 'ASSOCIAÇÃO', { sourceAliases: ['field_1'] }),
+    DIFICULDADE: source('CADASTRODIFICULDADE', 'DIFICULDADE', { sourceAliases: ['Title'] }),
+  },
 });
 
 export function getRegistrationGalleryFilterSource(kind, field) {

@@ -9,6 +9,26 @@ const module = await import('../src/ui/searchable-filter-selects.js').catch(erro
 });
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test('searched multi-selection keeps both chosen statuses and clears them through Todos', t => {
+  const dom = new JSDOM('<section><label>Status<select multiple><option value="">Todos</option><option selected>ATIVIDADE CRIADA</option><option selected>EM ATENDIMENTO</option><option>CONCLUÍDO</option></select></label></section>');
+  const doc = dom.window.document, select = doc.querySelector('select');
+  const binding = module.bindSearchableFilterSelects(doc.querySelector('section'));
+  t.after(() => { binding.destroy(); dom.window.close(); });
+  const trigger = doc.querySelector('.sfs-trigger');
+  assert.ok(trigger);
+  trigger.click();
+  const search = doc.querySelector('.sfs-search');
+  search.value = 'concluido'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  doc.querySelector('[role="option"]').click();
+  assert.deepEqual([...select.selectedOptions].map(option => option.value), ['ATIVIDADE CRIADA','EM ATENDIMENTO','CONCLUÍDO']);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+  assert.equal(doc.querySelector('[role="listbox"]').getAttribute('aria-multiselectable'), 'true');
+  search.value = ''; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  [...doc.querySelectorAll('[role="option"]')].find(option => option.textContent === 'Todos').click();
+  assert.deepEqual([...select.selectedOptions].map(option => option.value), ['']);
+  assert.match(trigger.textContent, /Todos/);
+});
+
 function fixture(t, { auto = false } = {}) {
   const dom = new JSDOM(`<section role="dialog"><details open><form><label class="field"><span>Produto</span><select name="product"><option value="">Todos</option><option value="steel">Aço estrutural</option><option value="concrete">Concreto</option><option value="unsafe">&lt;img src=x onerror=alert(1)&gt;</option><option value="disabled" disabled>Indisponível</option></select></label><input name="description"></form></details><button id="outside">Fora</button></section>`);
   const { document, Event, KeyboardEvent, FormData } = dom.window;
@@ -26,6 +46,24 @@ function fixture(t, { auto = false } = {}) {
   t.after(() => { binding.destroy(); dom.window.close(); });
   return { dom, document, form, select, binding, trigger, search, popup, options, type, key, Event, FormData, applies: () => applies };
 }
+
+test('multiselect touch selection releases gesture state so outside focus and ancestor scrolling close it', t => {
+  const ctx = fixture(t);
+  ctx.select.multiple = true;
+  const tap = () => {
+    ctx.trigger().click();
+    const option = ctx.options().find(item => item.textContent === 'Concreto');
+    option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
+    option.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
+    assert.equal(ctx.popup().hidden, false, 'selecting multiple options keeps the picker open');
+  };
+  tap();
+  ctx.search().dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: ctx.document.querySelector('#outside') }));
+  assert.equal(ctx.popup().hidden, true);
+  tap();
+  ctx.document.querySelector('section').dispatchEvent(new ctx.Event('scroll'));
+  assert.equal(ctx.popup().hidden, true);
+});
 
 test('opens an internal search while retaining the native form control and safe option labels', t => {
   const ctx = fixture(t);

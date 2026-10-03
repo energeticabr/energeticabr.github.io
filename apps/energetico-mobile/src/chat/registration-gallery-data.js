@@ -114,6 +114,26 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     filterChoices: { STATUS: ["ATIVO", "INATIVO"], COBRAR: ["SIM", "NÃO"], PRIORITARIA: ["NÃO PRIORITÁRIA", "ATIVIDADE PRIORITÁRIA", "ATIVIDADE EMERGENCIAL"] },
     sourceSort: null, editFormVariant: "HISTORICOTAREFASRECORRENTES.pa.yaml#Form14_1",
   }),
+  delegatedTasks: Object.freeze({
+    title: "GALERIA DE TAREFAS DELEGADAS", screen: "G9- HISTÓRICO DELEGACAO", listName: "TAREFASDELEGADAS", aliases: ["TAREFASDELEGADAS", "TAREFAS DELEGADAS"],
+    nativeCard: true, showAttachments: true, recordLabel: "tarefa delegada", recordArticle: "a", searchPlaceholder: "Pesquisar descrição ou número da tarefa", searchFields: ["ID 2", "TAREFA"],
+    fields: ["TAREFA", "ID 2", "ASSOCIAÇÃO", "FILIAL", "RESPONSÁVEL", "PRIORITÁRIA", "CONCLUÍDO", "RECORRENCIA", "DATAIDENTIFICACAO", "DATA INÍCIO", "DATA FATAL", "DATA CONCLUSAO", "PONTUAÇÃO", "PRAZO", "TEMPO", ...AUDIT_FIELDS],
+    filterFields: ["CONCLUÍDO", "ASSOCIAÇÃO", "DIFICULDADE", "PRIORITÁRIA", "DATA FATAL"], multiSelectFilters: ["CONCLUÍDO"], dateFilterFields: ["DATA FATAL"],
+    fieldAliases: { ...AUDIT_ALIASES, "ID 2": ["OData__x0049_D2"], "ASSOCIAÇÃO": ["ASSOCIACAO", "ASSOCIA_x00c7__x00c3_O"], "RESPONSÁVEL": ["RESPONS_x00c1_VEL"], "PRIORITÁRIA": ["PRIORIT_x00c1_RIA"], "CONCLUÍDO": ["CONCLU_x00cd_DO"], "DATA FATAL": ["DATAFATAL"], "DATA INÍCIO": ["DATAIN_x00cd_CIO"], "DATA CONCLUSAO": ["DATACONCLUSAO0"] },
+    fieldLabels: { "ID 2": "Número da tarefa", RECORRENCIA: "Recorrência", DATAIDENTIFICACAO: "Data identificação", "DATA CONCLUSAO": "Data conclusão" },
+    fieldTypes: { DATAIDENTIFICACAO: "date", "DATA INÍCIO": "date", "DATA FATAL": "date", "DATA CONCLUSAO": "date", "PONTUAÇÃO": "number" },
+    computedFields: {
+      "PONTUAÇÃO": { priorityScore: [
+        { field: "DIFICULDADE", weights: { "MUITO ALTA DIFICULDADE": 5, "ALTA DIFICULDADE": 4, "MÉDIA DIFICULDADE": 3, "BAIXA DIFICULDADE": 2, "MUITO BAIXA DIFICULDADE": 1 } },
+        { field: "IMPACTO", weights: { "ALTO IMPACTO": 5, "MÉDIO IMPACTO": 3, "BAIXO IMPACTO": 1 } },
+        { field: "URGENCIA", weights: { "ALTA URGÊNCIA": 5, "MÉDIA URGÊNCIA": 3, "BAIXA URGÊNCIA": 1 } },
+      ] },
+      PRAZO: { deadlineNotice: ["DATA FATAL", "DATA CONCLUSAO"] },
+      TEMPO: { taskElapsed: ["DATA INÍCIO", "DATAIDENTIFICACAO", "DATA CONCLUSAO"] },
+    },
+    defaultFilters: { "CONCLUÍDO": ["ATIVIDADE CRIADA", "EM ATENDIMENTO"] }, filterChoices: { "CONCLUÍDO": ["CONCLUÍDO", "EM ATENDIMENTO", "ATIVIDADE CRIADA"], "PRIORITÁRIA": ["ATIVIDADE PRIORITÁRIA", "NÃO PRIORITÁRIA"] },
+    sourceSort: [{ field: "PRIORITÁRIA", direction: "asc", type: "text" }, { field: "DATA FATAL", direction: "asc", type: "date" }], editFormVariant: "G9- HISTÓRICO DELEGACAO.pa.yaml#FORM.TAREFA_4",
+  }),
 });
 
 export function registrationFieldKey(value) {
@@ -177,12 +197,14 @@ function galleryRepository(options) {
     });
   }
   const columnCache = new Map();
-  return new Proxy(repository, {
-    get(target, property) {
+  // A frozen repository cannot be the Proxy target when returning adapters
+  // for its methods. Forward through an empty facade to preserve invariants.
+  return new Proxy(Object.create(null), {
+    get(_target, property) {
       if (property === "getItemsPage") return async (site, list, ...args) => {
-        if (!columnCache.has(list)) columnCache.set(list, typeof target.getColumns === "function"
-          ? Promise.resolve(target.getColumns(site, list, args[1]?.signal ? { signal: args[1].signal } : {})).catch(error => { columnCache.delete(list); throw error; }) : Promise.resolve([]));
-        const [page, columns] = await Promise.all([target.getItemsPage(site, list, ...args), columnCache.get(list)]);
+        if (!columnCache.has(list)) columnCache.set(list, typeof repository.getColumns === "function"
+          ? Promise.resolve(repository.getColumns(site, list, args[1]?.signal ? { signal: args[1].signal } : {})).catch(error => { columnCache.delete(list); throw error; }) : Promise.resolve([]));
+        const [page, columns] = await Promise.all([repository.getItemsPage(site, list, ...args), columnCache.get(list)]);
         if (page?.hasMore === true && (typeof page.nextLink !== "string" || !page.nextLink)) throw new Error("A paginação da galeria não retornou o próximo cursor.");
         const items = (Array.isArray(page?.items) ? page.items : []).map(item => {
           const fields = { ...item.fields };
@@ -193,8 +215,8 @@ function galleryRepository(options) {
         });
         return { ...page, items };
       };
-      const value = target[property];
-      return typeof value === "function" ? value.bind(target) : value;
+      const value = repository[property];
+      return typeof value === "function" ? value.bind(repository) : value;
     },
   });
 }
@@ -217,15 +239,15 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   let editorPromise;
   function metadataEditor() {
     return editorPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) => {
-      const editorRepository = new Proxy(repository, {
-        get(target, property) {
+      const editorRepository = new Proxy(Object.create(null), {
+        get(_target, property) {
           if (property === "getColumns") return async (...args) => {
-            const columns = await target.getColumns(...args);
+            const columns = await repository.getColumns(...args);
             return (Array.isArray(columns) ? columns : []).filter(column => model.metadataEditorFields.some(field =>
               [column.name, column.displayName].some(name => registrationFieldKey(name) === registrationFieldKey(field))));
           };
-          const value = target[property];
-          return typeof value === "function" ? value.bind(target) : value;
+          const value = repository[property];
+          return typeof value === "function" ? value.bind(repository) : value;
         },
       });
       return createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,

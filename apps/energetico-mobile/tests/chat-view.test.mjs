@@ -3772,9 +3772,9 @@ test("menu de Demandas remove o avatar e coloca Galeria Tarefas à direita de Ad
   assert.ok(message);
   assert.equal(message.querySelector(".chat-avatar"), null);
   assert.deepEqual(pairs.map(pair => [...pair.querySelectorAll('[data-reply-id]')].map(button => button.dataset.replyId)), [
-    ['add_task', 'action_tasks_gallery'], ['finish_task'], ['delegate_task'], ['recurring_task', 'action_recurring_tasks_gallery'],
+    ['add_task', 'action_tasks_gallery'], ['finish_task'], ['delegate_task', 'action_delegated_tasks_gallery'], ['recurring_task', 'action_recurring_tasks_gallery'],
   ]);
-  assert.equal(message.querySelectorAll("[data-gallery-button]").length, 2);
+  assert.equal(message.querySelectorAll("[data-gallery-button]").length, 3);
   assert.doesNotMatch(markup, /📱 APPS/);
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(styles, /\.chat-choice-columns--task-menu\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) minmax\(0,\s*1fr\)/s);

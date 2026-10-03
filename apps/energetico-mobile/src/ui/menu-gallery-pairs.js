@@ -24,6 +24,7 @@ const STAGE_PAIRS = Object.freeze([
 ]);
 const TASK_PAIRS = Object.freeze([
   { primary: "action_task", primaryLabel: "adicionar uma nova tarefa", primaryLabels: ["adicionar nova tarefa"], id: "action_tasks_gallery", label: "GALERIA TAREFAS" },
+  { primary: "action_delegated_task", primaryLabel: "criar uma tarefa delegada", primaryLabels: ["criar tarefa delegada"], id: "action_delegated_tasks_gallery", label: "GALERIA DE TAREFAS DELEGADAS" },
   { primary: "action_recurring_task_registration", primaryLabel: "cadastrar tarefa recorrente", primaryLabels: ["tarefas recorrentes", "cadastro de tarefas recorrentes"], id: "action_recurring_tasks_gallery", label: "GALERIA DE TAREFAS RECORRENTES" },
 ]);
 

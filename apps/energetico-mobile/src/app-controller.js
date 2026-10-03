@@ -187,6 +187,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_stage_demonstrative_gallery: "stageDemonstratives",
   action_construction_stage_gallery: "constructionStages",
   action_recurring_tasks_gallery: "recurringTasks",
+  action_delegated_tasks_gallery: "delegatedTasks",
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
@@ -4407,7 +4408,7 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
-            ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks"].includes(kind) ? {
+            ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

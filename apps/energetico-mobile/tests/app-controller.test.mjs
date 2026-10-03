@@ -7746,6 +7746,7 @@ test("galerias de cadastro abrem localmente com anexos e preservam o menu", asyn
     ["action_stage_demonstrative_gallery", "stageDemonstratives"],
     ["action_construction_stage_gallery", "constructionStages"],
     ["action_recurring_tasks_gallery", "recurringTasks"],
+    ["action_delegated_tasks_gallery", "delegatedTasks"],
   ];
   const opened = [], destroyed = [], previews = [];
   const h = makeHarness({
