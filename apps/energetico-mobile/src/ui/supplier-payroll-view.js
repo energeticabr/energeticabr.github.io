@@ -161,11 +161,24 @@ export function createSupplierPayrollView({
     content.append(element("h2", "supplier-payroll-question", text));
   }
   function identity() {
-    const summary = element(
-      "p",
-      "supplier-payroll-identity",
-      `${draft.supplier?.label || ""} · ${draft.product?.label || ""} · ${draft.date.split("-").reverse().join("/")} · ${draft.supplier?.branch || ""}`,
-    );
+    const summary = element("div", "supplier-payroll-identity");
+    const table = element("table", "supplier-payroll-identity-table");
+    table.setAttribute("aria-label", "Dados da folha");
+    const body = element("tbody");
+    for (const [label, value] of [
+      ["Fornecedor", draft.supplier?.label],
+      ["Profissão", String(draft.supplier?.profession ?? "").trim() || draft.product?.label],
+      ["Data", draft.date.split("-").reverse().join("/")],
+      ["Filial", draft.supplier?.branch],
+    ]) {
+      const row = element("tr");
+      const field = element("th", "", label);
+      field.scope = "row";
+      row.append(field, element("td", "", String(value ?? "").trim() || "—"));
+      body.append(row);
+    }
+    table.append(body);
+    summary.append(table);
     content.append(summary);
   }
   function choiceList(options, select) {

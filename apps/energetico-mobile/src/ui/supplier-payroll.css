@@ -56,12 +56,38 @@
   font-size: 1.25rem;
 }
 .supplier-payroll-identity {
-  padding: 12px;
-  border-radius: 12px;
-  background: #e4f0fb;
-  line-height: 1.5;
+  margin: 0 0 18px;
+  border: 1px solid #c7dce9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+}
+.supplier-payroll-identity-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  line-height: 1.4;
+}
+.supplier-payroll-identity-table th,
+.supplier-payroll-identity-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
   overflow-wrap: anywhere;
 }
+.supplier-payroll-identity-table th {
+  width: 30%;
+  background: #edf5fb;
+  color: #526b7b;
+  font-size: .82rem;
+  font-weight: 700;
+}
+.supplier-payroll-identity-table td {
+  color: #123d50;
+  font-weight: 650;
+}
+.supplier-payroll-identity-table tr + tr > * { border-top: 1px solid #dbe7ee; }
+.supplier-payroll-identity-table tr:nth-child(even) td { background: #f8fbfe; }
 .supplier-payroll-field {
   display: flex;
   flex-direction: column;
