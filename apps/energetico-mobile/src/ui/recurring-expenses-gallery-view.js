@@ -12,6 +12,20 @@ const RECURRENCES = new Map([
   ["MONTH", "Mensal"], ["MONTHLY", "Mensal"], ["MENSAL", "Mensal"],
   ["YEAR", "Anual"], ["YEARLY", "Anual"], ["ANUAL", "Anual"],
 ]);
+const ICON_PATHS = Object.freeze({
+  back: ["m15 18-6-6 6-6"],
+  home: ["m3 10 9-7 9 7", "M5 9v12h14V9", "M9 21v-7h6v7"],
+  search: ["M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z", "m17 17 4 4"],
+  filter: ["M3 4h18l-7 8v6l-4 2v-8L3 4Z"],
+  supplier: ["M4 21V5l8-2v18", "M12 8h8v13", "M2 21h20", "M7 8h2", "M7 12h2", "M7 16h2", "M16 12h2", "M16 16h2"],
+  product: ["m12 2 9 5-9 5-9-5 9-5Z", "M3 7v10l9 5 9-5V7", "M12 12v10"],
+  property: ["m3 10 9-7 9 7", "M5 9v12h14V9", "M9 21v-7h6v7"],
+  branch: ["M12 22s7-7 7-13a7 7 0 1 0-14 0c0 6 7 13 7 13Z", "M12 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"],
+  money: ["M8 3h8l-2 5h-4L8 3Z", "M9 8c-3 3-5 6-5 9a5 5 0 0 0 5 5h6a5 5 0 0 0 5-5c0-3-2-6-5-9H9Z", "M12 11v8", "M10 13h4a1.5 1.5 0 0 1 0 3h-4"],
+  calendar: ["M4 5h16v16H4z", "M8 2v6", "M16 2v6", "M4 10h16"],
+  person: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 22v-2a8 8 0 0 1 16 0v2"],
+  info: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z", "M12 10v7", "M12 7h.01"],
+});
 const FILTERS = Object.freeze([
   ["id", "ID", ["ID"]],
   ["property", "Imóvel", ["IMOVEL", "IMÓVEL"]],
@@ -146,6 +160,23 @@ export function createRecurringExpensesGallery({
     if (label !== undefined) node.textContent = label;
     return node;
   };
+  const icon = (name, className = "") => {
+    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    if (className) svg.setAttribute("class", className);
+    for (const d of ICON_PATHS[name] || []) {
+      const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", d);
+      svg.append(path);
+    }
+    return svg;
+  };
   let opened = false;
   let destroyed = false;
   let session = 0;
@@ -168,16 +199,16 @@ export function createRecurringExpensesGallery({
   root.setAttribute("aria-label", "Galeria Despesas Recorrentes");
   root.setAttribute("aria-busy", "false");
 
-  const header = el("header", "og-header");
+  const header = el("header", "og-header re-header");
   const closeButton = el("button", "og-button", "Voltar"); closeButton.type = "button";
   const title = el("h1", "og-title", "GALERIA DESPESAS RECORRENTES");
   const homeButton = el("button", "og-button", "Início"); homeButton.type = "button";
+  closeButton.prepend(icon("back"));
+  homeButton.prepend(icon("home"));
   header.append(closeButton, title, homeButton);
 
   const content = el("main", "og-content");
-  const filterDisclosure = el("details", "og-filters re-filters");
-  filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros da G19"));
-  const form = el("form", "og-filter-form");
+  const form = el("form", "og-filter-form re-filter-form");
   form.setAttribute("aria-label", "Filtros da Galeria de Despesas Recorrentes G19");
   const grid = el("div", "og-filter-grid re-filter-grid");
   const controls = new Map();
@@ -197,12 +228,13 @@ export function createRecurringExpensesGallery({
     return control;
   }
 
-  addControl("search", "Pesquisar", "input", "search").placeholder = "Descrição, fornecedor, produto ou ID…";
+  addControl("search", "Pesquisar", "input", "search").placeholder = "Buscar despesa, fornecedor ou produto...";
   for (const [name, label] of FILTERS) addControl(name, label);
   const sort = addControl("sort", "Ordenar por");
-  for (const [value, label] of [["id-desc", "Maior ID"], ["id-asc", "Menor ID"], ["next-date-asc", "Próximo agendamento"], ["monthly-value-desc", "Maior valor mensal"], ["modified-desc", "Modificado recentemente"]]) {
+  for (const [value, label] of [["start-date-desc", "Início ↓"], ["start-date-asc", "Início ↑"], ["id-desc", "Maior ID"], ["id-asc", "Menor ID"], ["next-date-asc", "Próximo agendamento"], ["monthly-value-desc", "Maior valor mensal"], ["modified-desc", "Modificado recentemente"]]) {
     const option = el("option", "", label); option.value = value; sort.append(option);
   }
+  sortValue = "start-date-desc";
   sort.value = sortValue;
   const pageSizeControl = addControl("pageSize", "Itens por página");
   for (const value of PAGE_SIZES) { const option = el("option", "", String(value)); option.value = String(value); pageSizeControl.append(option); }
@@ -212,11 +244,29 @@ export function createRecurringExpensesGallery({
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
   const refreshButton = el("button", "og-button", "Atualizar dados"); refreshButton.type = "button";
   actions.append(clearButton, refreshButton);
-  form.append(grid, actions);
-  filterDisclosure.append(form);
+  const toolbar = el("div", "re-toolbar");
+  const searchBar = el("div", "re-search-bar");
+  searchBar.append(icon("search"), controls.get("search").parentElement);
+  const filterButton = el("button", "og-button re-filter-button");
+  filterButton.type = "button";
+  filterButton.setAttribute("aria-expanded", "false");
+  filterButton.setAttribute("aria-controls", "re-filter-panel");
+  const filterCount = el("span", "re-filter-count");
+  filterCount.hidden = true;
+  filterButton.append(icon("filter"), el("span", "", "Filtros"), filterCount);
+  toolbar.append(searchBar, filterButton);
+  const filterPanel = el("div", "re-filter-panel");
+  filterPanel.id = "re-filter-panel";
+  filterPanel.hidden = true;
+  filterPanel.append(grid, actions);
 
   const notice = el("p", "og-notice re-notice"); notice.hidden = true;
   const listStatus = el("p", "og-list-status re-list-status"); listStatus.setAttribute("aria-live", "polite");
+  const listToolbar = el("div", "re-list-toolbar");
+  const sortField = sort.parentElement;
+  sortField.classList.add("re-sort-field");
+  listToolbar.append(listStatus, sortField);
+  form.append(toolbar, filterPanel, listToolbar);
   const cards = el("div", "og-cards re-cards"); cards.setAttribute("aria-label", "Despesas recorrentes");
   const pagination = el("nav", "og-pagination"); pagination.setAttribute("aria-label", "Páginas de despesas recorrentes");
   const previous = el("button", "og-button", "Página anterior"); previous.type = "button";
@@ -229,7 +279,7 @@ export function createRecurringExpensesGallery({
   detail.setAttribute("role", "dialog");
   detail.setAttribute("aria-modal", "true");
   detail.setAttribute("aria-label", "Detalhes da despesa recorrente");
-  content.append(filterDisclosure, notice, listStatus, cards, pagination);
+  content.append(form, notice, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
   const recordActions = createGalleryRecordActions({
@@ -289,6 +339,14 @@ export function createRecurringExpensesGallery({
 
   function sortRows(items) {
     return [...items].sort((left, right) => {
+      if (sortValue === "start-date-desc" || sortValue === "start-date-asc") {
+        const leftDate = dateKey(field(left.fields, ["DATAINICIO", "DATA INÍCIO"]));
+        const rightDate = dateKey(field(right.fields, ["DATAINICIO", "DATA INÍCIO"]));
+        if (leftDate && rightDate && leftDate !== rightDate) {
+          return sortValue === "start-date-desc" ? rightDate.localeCompare(leftDate) : leftDate.localeCompare(rightDate);
+        }
+        if (leftDate !== rightDate) return leftDate ? -1 : 1;
+      }
       if (sortValue === "id-asc") return Number(left.id) - Number(right.id);
       if (sortValue === "monthly-value-desc") {
         const amount = numericValue(field(right.fields, ["VALOR MENSAL"])) - numericValue(field(left.fields, ["VALOR MENSAL"]));
@@ -326,7 +384,10 @@ export function createRecurringExpensesGallery({
 
   function applyFilters() {
     const values = Object.fromEntries([...controls].map(([name, control]) => [name, control.value.trim()]));
-    sortValue = values.sort || "id-desc";
+    sortValue = values.sort || "start-date-desc";
+    const activeCount = FILTERS.reduce((count, [name]) => count + Number(Boolean(values[name])), 0);
+    filterCount.textContent = String(activeCount);
+    filterCount.hidden = activeCount === 0;
     pageSize = PAGE_SIZES.includes(Number(values.pageSize)) ? Number(values.pageSize) : 10;
     const query = normalized(values.search);
     filteredRows = sortRows(rows.filter(row => {
@@ -341,26 +402,31 @@ export function createRecurringExpensesGallery({
     renderList();
   }
 
-  function appendField(list, label, value) {
+  function appendField(list, label, value, iconName, className = "") {
     if (value == null || value === "") return;
-    const pair = el("div", "og-card-field re-card-field");
-    pair.append(el("dt", "", label), el("dd", "", displayValue(label, value)));
+    const pair = el("div", `og-card-field re-card-field${className ? ` ${className}` : ""}`);
+    pair.append(icon(iconName, "re-field-icon"), el("dt", "", label), el("dd", "", displayValue(label, value)));
     list.append(pair);
   }
 
-  function metadata(fields) {
+  function appendMetadata(meta, fields) {
     const creator = text(field(fields, ["Criado por", "Author", "Created By"]));
     const createdAt = field(fields, ["Criado", "Created"]);
     const modifiedBy = text(field(fields, ["Modificado por", "Editor", "Modified By"]));
     const modifiedAt = field(fields, ["Modificado", "Modified"]);
-    const lines = [];
-    if (creator || createdAt) lines.push(`🕒 ADICIONADO POR: ${creator || "—"}${createdAt ? ` EM ${formatDateTime(createdAt)}` : ""}`);
-    if (!modifiedAt || !createdAt || Math.abs(Date.parse(text(modifiedAt)) - Date.parse(text(createdAt))) <= 5_000) {
-      if (createdAt) lines.push("✏️ SEM MODIFICAÇÕES APÓS CRIAÇÃO");
-    } else {
-      lines.push(`✏️ MODIFICADO POR: ${modifiedBy || "—"} EM ${formatDateTime(modifiedAt)}`);
+    if (!creator && !createdAt && !modifiedAt) return;
+    meta.append(icon("info", "re-meta-icon"));
+    const lines = el("div", "re-meta-lines");
+    if (creator || createdAt) {
+      lines.append(el("p", "re-meta-line re-meta-creator", `Adicionado por: ${creator || "—"}`));
+      if (createdAt) lines.append(el("p", "re-meta-line re-meta-date", `Em ${formatDateTime(createdAt)}`));
     }
-    return lines;
+    if (!modifiedAt || !createdAt || Math.abs(Date.parse(text(modifiedAt)) - Date.parse(text(createdAt))) <= 5_000) {
+      if (createdAt) lines.append(el("p", "re-meta-line re-meta-modified", "✏️ Sem modificações após criação"));
+    } else {
+      lines.append(el("p", "re-meta-line re-meta-modified", `✏️ Modificado por: ${modifiedBy || "—"} em ${formatDateTime(modifiedAt)}`));
+    }
+    meta.append(lines);
   }
 
   function renderCard(row) {
@@ -370,40 +436,52 @@ export function createRecurringExpensesGallery({
     const card = el("article", `og-card re-card${hasAttachmentControl ? " og-card--with-attachments re-card--attachments" : ""}`);
     card.dataset.itemId = row.id;
     const main = el("div", "og-card-main");
-    const titleText = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO"]) || field(fields, ["EQUIPAMENTO", "PRODUTO"]) || "Despesa recorrente");
+    const product = text(field(fields, ["EQUIPAMENTO", "PRODUTO"]));
+    const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO"]));
+    const titleText = product || description || "Despesa recorrente";
     const heading = el("header", "og-card-heading re-card-heading");
-    heading.append(el("span", "og-card-id", id), el("h2", "", titleText));
+    const headingText = el("div", "re-heading-text");
+    headingText.append(el("h2", "", titleText));
     const statusText = text(field(fields, ["STATUS"]) || "Status não informado");
     const inactive = /inativo|inativa|cancelad/i.test(statusText);
     const status = el("span", `og-status re-status${inactive ? " re-status--inactive" : " re-status--active"}`, statusText);
+    headingText.append(status);
+    heading.append(el("span", "og-card-id", id), headingText);
     const summary = el("dl", "og-card-fields re-card-fields");
-    appendField(summary, "FORNECEDOR", field(fields, ["FORNECEDOR"]));
-    appendField(summary, "PRODUTO/EQUIPAMENTO", field(fields, ["EQUIPAMENTO", "PRODUTO"]));
-    appendField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]));
-    appendField(summary, "FILIAL", field(fields, ["FILIAL"]));
-    appendField(summary, "VALOR MENSAL", field(fields, ["VALOR MENSAL"]));
-    appendField(summary, "FORMA PGTO", field(fields, ["FORMAPGTO", "FORMA PGTO", "FORMA DE PAGAMENTO"]));
-    appendField(summary, "RESPONSÁVEL PGTO", field(fields, ["RESPONSAVEL LOCACAO", "RESPONSÁVEL LOCAÇÃO"]));
-    appendField(summary, "RECORRÊNCIA", field(fields, ["RECORRENCIA", "RECORRÊNCIA"]) ?? field(fields, ["RECORRENCIADIAS"]));
-    appendField(summary, "DATA INÍCIO", field(fields, ["DATAINICIO", "DATA INÍCIO"]));
-    appendField(summary, "PRÓX. AGENDAMENTO", field(fields, ["DATAFIM", "DATA PRÓX AGENDAMENTO", "DATAPROXAGENDAMENTO"]));
+    appendField(summary, "FORNECEDOR", field(fields, ["FORNECEDOR"]), "supplier");
+    if (description && normalized(description) !== normalized(titleText)) appendField(summary, "DESCRIÇÃO", description, "product", "re-card-description");
+    appendField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "property");
+    appendField(summary, "FILIAL", field(fields, ["FILIAL"]), "branch");
+    const valueBand = el("dl", "re-value-band");
+    appendField(valueBand, "VALOR MENSAL", field(fields, ["VALOR MENSAL"]), "money", "re-card-field--value");
+    appendField(valueBand, "RECORRÊNCIA", recurrenceValue(fields), "calendar", "re-card-field--recurrence");
+    const secondary = el("dl", "re-secondary-fields");
+    appendField(secondary, "RESPONSÁVEL PGTO", field(fields, ["RESPONSAVEL LOCACAO", "RESPONSÁVEL LOCAÇÃO"]), "person");
+    appendField(secondary, "FORMA PGTO", field(fields, ["FORMAPGTO", "FORMA PGTO", "FORMA DE PAGAMENTO"]), "money");
+    const dates = el("dl", "re-date-row");
+    appendField(dates, "DATA INÍCIO", field(fields, ["DATAINICIO", "DATA INÍCIO"]), "calendar", "re-card-field--start");
+    appendField(dates, "PRÓX. AGENDAMENTO", field(fields, ["DATAFIM", "DATA PRÓX AGENDAMENTO", "DATAPROXAGENDAMENTO"]), "calendar", "re-card-field--next");
     const meta = el("div", "re-metadata");
-    for (const line of metadata(fields)) meta.append(el("p", "re-meta-line", line));
+    appendMetadata(meta, fields);
 
-    main.append(heading, status, summary);
+    main.append(heading, summary);
+    if (valueBand.childNodes.length) main.append(valueBand);
+    if (secondary.childNodes.length) main.append(secondary);
+    if (dates.childNodes.length) main.append(dates);
     if (meta.childNodes.length) main.append(meta);
+    let attachmentButton;
     if (hasAttachmentControl) {
-      const attachmentButton = el("button", "og-button og-card-attachment-rail");
+      attachmentButton = el("button", "og-button og-card-attachment-rail");
       attachmentButton.type = "button";
       attachmentButton.dataset.action = "attachments";
       attachmentButton.setAttribute("aria-label", `Abrir anexos da despesa recorrente ${id}: ${attachmentCounts.label(row)}`);
       attachmentButton.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
         el("span", "og-card-attachment-count", attachmentCounts.label(row)));
       attachmentButton.addEventListener("click", () => openAttachments(row));
-      card.append(attachmentButton);
     }
     card.classList.add('gallery-record-card');
     card.append(main, recordActions.render(row));
+    if (attachmentButton) card.append(attachmentButton);
     return card;
   }
 
@@ -503,9 +581,13 @@ export function createRecurringExpensesGallery({
   clearButton.addEventListener("click", () => {
     controls.get("search").value = "";
     for (const [name] of FILTERS) controls.get(name).value = "";
-    controls.get("sort").value = "id-desc";
+    controls.get("sort").value = "start-date-desc";
     controls.get("pageSize").value = "10";
     autoFilters.apply();
+  });
+  filterButton.addEventListener("click", () => {
+    filterPanel.hidden = !filterPanel.hidden;
+    filterButton.setAttribute("aria-expanded", String(!filterPanel.hidden));
   });
   refreshButton.addEventListener("click", () => { if (!listLoading) void loadSnapshot(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
