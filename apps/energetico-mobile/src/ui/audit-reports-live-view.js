@@ -1,4 +1,5 @@
 import { buildQuotationReport, buildDepreciationReport, buildDocumentReport, formatAuditDate, formatAuditMoney } from "../chat/audit-reports-live-model.js";
+const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
 
 const TITLES = Object.freeze({
   11: "COTAÇÕES E ORÇAMENTOS", 12: "CONTROLE DE DEPRECIAÇÃO DO IMOBILIZADO", 13: "CONTROLE DE DOCUMENTOS",
@@ -12,6 +13,12 @@ const FILTERS = Object.freeze({
 const PAGE_SIZE = 25;
 const localToday = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`; };
 const partial = (value, known) => value == null ? `${formatAuditMoney(known)} · PARCIAL` : formatAuditMoney(value);
+const elapsed = (value, today) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "";
+  const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${value}T00:00:00Z`)) / 86400000);
+  return Number.isFinite(days) && days >= 0 ? `${days} dia${days === 1 ? "" : "s"}` : "";
+};
+const statusTone = value => /ATIV|APROVAD|SUBMETIDO|CONCLU[IÍ]D|RECEBIDO/i.test(value || "") ? "success" : /INATIV|CANCELAD/i.test(value || "") ? "muted" : /PENDENT|VENCID/i.test(value || "") ? "danger" : "";
 
 function safeError(error) {
   return String(error?.message || "Falha na consulta ao SharePoint.")
@@ -35,12 +42,15 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
   heading.append(title, refresh);
   const notice = make("div", "ar-notice"); notice.hidden = true;
   const filters = make("div", "ar-filters");
+  const brand = make("div", "ar-brand");
+  const logo = make("img"); logo.src = LOGO_URL; logo.alt = "Energética Construtora"; brand.append(logo);
+  const reportBanner = make("div", "ar-report-banner");
   const metrics = make("dl", "ar-metrics");
   const content = make("div", "ar-content");
   const pager = make("nav", "ar-pager"); pager.hidden = true; pager.setAttribute("aria-label", "Páginas do relatório");
   const previous = button("og-button", "Anterior"); const pageLabel = make("span"); const next = button("og-button", "Próxima");
   pager.append(previous, pageLabel, next);
-  section.append(heading, notice, filters, metrics, content, pager);
+  section.append(heading, notice, filters, brand, reportBanner, metrics, content, pager);
   let reportNumber = 0; let snapshot = null; let controller = null; let revision = 0; let destroyed = false; let page = 1;
   const controls = new Map();
 
@@ -54,6 +64,27 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     const list = make("dl", "ar-fields");
     for (const [label, value, tone] of entries) list.append(field(label, value, tone));
     return list;
+  }
+  function status(value) {
+    const badge = make("span", "ar-status", value || "—");
+    const tone = statusTone(value); if (tone) badge.dataset.tone = tone;
+    return badge;
+  }
+  function desktopTable(className, labels, rows) {
+    const table = make("table", `ar-desktop-table ${className}`);
+    const head = make("thead"), header = make("tr"), body = make("tbody");
+    for (const label of labels) header.append(make("th", "", label));
+    head.append(header);
+    for (const values of rows) {
+      const line = make("tr");
+      for (const value of values) {
+        const cell = make("td"); cell.append(value?.nodeType ? value : doc.createTextNode(value == null || value === "" ? "—" : String(value)));
+        line.append(cell);
+      }
+      body.append(line);
+    }
+    table.append(head, body);
+    return table;
   }
   function metric(name, label, value, tone = "") {
     const card = make("div", "ar-metric");
@@ -86,7 +117,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     if (reportNumber === 13) {
       const wrapper = make("label", "ar-filter"); wrapper.append(make("span", "", "Ordenação"));
       const select = make("select", "og-input"); select.name = "order";
-      select.append(option("validityDate", "Vencimento"), option("id", "Maior ID"), option("branch", "Filial"));
+      select.append(option("id", "Maior ID"), option("validityDate", "Vencimento"), option("branch", "Filial"));
       select.addEventListener("change", () => { page = 1; render(); });
       wrapper.append(select); filters.append(wrapper); controls.set("order", select);
     }
@@ -102,12 +133,16 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     for (const quote of report.quotes) {
       const card = make("article", "ar-card");
       card.dataset.quotationId = quote.id;
-      card.append(make("h3", "ar-card-title", `COTAÇÃO Nº ${quote.id} · ${quote.budgetCount} orçamento(s)`));
+      const banner = make("div", "ar-quotation-banner");
+      banner.append(make("h3", "ar-card-title", `COTAÇÃO Nº ${quote.id}`), make("span", "ar-budget-count", `${quote.budgetCount} orçamento(s)`));
+      card.append(banner, make("p", "ar-section-label", "DADOS DA COTAÇÃO"));
       card.append(fields([["Filial", quote.branch], ["Etapa", quote.stage], ["Fornecedores vinculados", quote.supplierCount],
         ["Status", quote.status || "—"], ["Descrição", quote.description]]));
+      card.append(make("p", "ar-quotation-status-label", "STATUS"), status(quote.status));
       const list = make("div", "ar-card-list");
-      list.append(make("h4", "", `Orçamentos vinculados (${quote.budgetCount})`));
+      list.append(make("h4", "ar-list-title", `ORÇAMENTOS VINCULADOS (${quote.budgetCount})`));
       if (!quote.groups.length) list.append(make("p", "ar-empty", "Nenhum orçamento vinculado."));
+      const budgetRows = [];
       for (const group of quote.groups) {
         const groupNode = make("section", "ar-group");
         groupNode.append(make("h4", "ar-group-title", `${group.branch} · ${group.stage} · ${group.budgets.length} orçamento(s)`));
@@ -118,9 +153,11 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
             ["Data finalizado", formatAuditDate(budget.completedDate)], ["Valor total", formatAuditMoney(budget.total)],
             ["Status", budget.status], ["Observação", budget.observation]]));
           groupNode.append(row);
+          budgetRows.push([budget.id, quote.id, budget.branch, budget.stage, budget.supplier, formatAuditDate(budget.completedDate), formatAuditMoney(budget.total), status(budget.status), budget.observation]);
         }
         list.append(groupNode);
       }
+      if (budgetRows.length) list.append(desktopTable("ar-budget-table", ["ID", "ID COTAÇÃO", "FILIAL", "ETAPA", "FORNECEDOR", "DATA FINALIZADO", "VALOR TOTAL", "STATUS", "OBS"], budgetRows));
       card.append(list); content.append(card);
     }
     if (report.unlinkedBudgets.length) setNotice(`${report.unlinkedBudgets.length} orçamento(s) sem cotação correspondente nesta consulta.`);
@@ -135,7 +172,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     metric("toDepreciate", "Valor a depreciar", partial(report.metrics.toDepreciate, report.metrics.partialToDepreciate), "warning");
     metric("depreciated", "Valor depreciado", partial(report.metrics.depreciated, report.metrics.partialDepreciated), "danger");
     metric("current", "Valor atual", partial(report.metrics.current, report.metrics.partialCurrent), "success");
-    const subtitle = make("p", "ar-subtitle", `Itens com depreciação prevista até ${formatAuditDate(report.deadline)}`);
+    const subtitle = make("p", "ar-subtitle", `ITENS COM DEPRECIAÇÃO PREVISTA ATÉ ${formatAuditDate(report.deadline)} | POSIÇÃO EM ${formatAuditDate(report.today)}`);
     content.append(subtitle);
     if (!report.groups.length) { content.append(make("p", "ar-empty", "Nenhum item a depreciar até essa data com os filtros selecionados.")); return; }
     for (const branch of report.groups) {
@@ -143,6 +180,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
       group.append(make("h3", "ar-group-title", `FILIAL: ${branch.branch} · ${branch.rows.length} registro(s)`));
       group.append(make("p", "ar-group-summary", `Valor total: ${partial(branch.metrics.total, branch.metrics.partialTotal)}`));
       const list = make("div", "ar-card-list");
+      const assetRows = [];
       for (const row of branch.rows) {
         const card = make("article", "ar-subcard");
         card.dataset.assetId = row.id;
@@ -156,8 +194,12 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
           ["Valor atual", formatAuditMoney(current)],
           ["A depreciar", row.percent == null || current == null ? "PENDENTE" : formatAuditMoney(row.percent * current / 100)]]));
         list.append(card);
+        assetRows.push([row.assetNumber, formatAuditDate(row.depreciationDate), row.group, row.asset,
+          row.percent == null ? "PENDENTE" : `${row.percent.toLocaleString("pt-BR")}%`, formatAuditMoney(row.estimated), row.quantity ?? "PENDENTE",
+          formatAuditMoney(total), total == null || current == null ? "PENDENTE" : formatAuditMoney(total - current),
+          formatAuditMoney(current), row.percent == null || current == null ? "PENDENTE" : formatAuditMoney(row.percent * current / 100)]);
       }
-      group.append(list); content.append(group);
+      group.append(list, desktopTable("ar-asset-table", ["Nº PATRIM.", "DATA DEPREC.", "GRUPO", "IMOBILIZADO", "% DEPREC.", "VALOR UNIT.", "QTD.", "VALOR TOTAL", "VALOR DEPRECIADO", "VALOR ATUAL", "A DEPRECIAR"], assetRows)); content.append(group);
     }
   }
   function renderDocuments() {
@@ -167,24 +209,32 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     metric("total", "Documentos totais", report.metrics.total, "info");
     metric("expired", "Documentos vencidos", report.metrics.expired, "danger");
     metric("expiring15", "A vencer em 15 dias", report.metrics.expiring15, "warning");
+    reportBanner.className = "ar-report-banner ar-documents-banner";
+    reportBanner.append(make("h3", "", "📁 CONTROLE DE DOCUMENTOS"), make("span", "", `Ordenação: ${controls.get("order")?.selectedOptions[0]?.textContent || "Maior ID"}`));
     if (!report.rows.length) { content.append(make("p", "ar-empty", "Nenhum documento corresponde aos filtros.")); return; }
     const pages = Math.max(1, Math.ceil(report.rows.length / PAGE_SIZE)); page = Math.min(page, pages);
     pageLabel.textContent = `Página ${page} de ${pages} · ${report.rows.length} documento(s)`;
     previous.disabled = page === 1; next.disabled = page === pages; pager.hidden = pages < 2;
+    const documentRows = [];
     for (const row of report.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)) {
       const card = make("article", "ar-card");
       card.dataset.documentId = row.id;
       card.append(make("h3", "ar-card-title", `DOCUMENTO ID ${row.id} · ${row.status || "STATUS NÃO INFORMADO"}`));
-      card.append(fields([["Data submetido", formatAuditDate(row.submittedDate)], ["Data emitido", formatAuditDate(row.issuedDate)],
+      const created = elapsed(row.submittedDate, localToday()), issued = elapsed(row.issuedDate, localToday());
+      card.append(fields([["Data submetido", `${formatAuditDate(row.submittedDate)}${created ? ` · Criado há ${created}` : ""}`], ["Data emitido", `${formatAuditDate(row.issuedDate)}${issued ? ` · Emitido há ${issued}` : ""}`],
         ["Data vencimento", formatAuditDate(row.validityDate), row.daysToExpiry == null ? "" : row.daysToExpiry < 0 ? "expired" : row.daysToExpiry <= 15 ? "due" : ""],
         ["Prazo", row.daysToExpiry == null ? "PENDENTE" : row.daysToExpiry < 0 ? `Vencido há ${-row.daysToExpiry} dia(s)` : row.daysToExpiry === 0 ? "Vence hoje" : `Vence em ${row.daysToExpiry} dia(s)`],
         ["Filial", row.branch], ["Homologação", row.homologation], ["Tipo documento", row.documentType], ["Pessoa relacionada", row.person],
         ["Etapa", row.stage], ["Imóvel", row.property], ["Status", row.status]]));
       content.append(card);
+      documentRows.push([row.id, `${formatAuditDate(row.submittedDate)}${created ? ` · criado há ${created}` : ""}`,
+        `${formatAuditDate(row.issuedDate)}${issued ? ` · emitido há ${issued}` : ""}`, formatAuditDate(row.validityDate),
+        row.branch, row.homologation, row.documentType, row.person, row.stage, row.property, status(row.status)]);
     }
+    content.append(desktopTable("ar-document-table", ["ID", "DATA SUBMETIDO", "DATA EMITIDO", "DATA VENCIMENTO", "FILIAL", "HOMOLOGAÇÃO", "TIPO DOCUMENTO", "PESSOA RELACIONADA", "ETAPA", "IMÓVEL", "STATUS"], documentRows));
   }
   function render() {
-    metrics.replaceChildren(); content.replaceChildren(); pager.hidden = true;
+    metrics.replaceChildren(); content.replaceChildren(); reportBanner.replaceChildren(); reportBanner.className = "ar-report-banner"; pager.hidden = true;
     if (!snapshot) return;
     if (reportNumber === 11) renderQuotations();
     else if (reportNumber === 12) renderDepreciation();
@@ -204,7 +254,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     number = Number(number);
     if (destroyed || !TITLES[number]) throw new RangeError("Relatório de auditoria desconhecido.");
     controller?.abort(); const current = ++revision; controller = new AbortController();
-    reportNumber = number; snapshot = null; page = 1; section.hidden = false;
+    reportNumber = number; snapshot = null; page = 1; section.hidden = false; section.dataset.report = String(number);
     title.textContent = TITLES[number]; filters.replaceChildren(); emptyMetrics(); content.replaceChildren();
     setNotice("Carregando dados do SharePoint…"); section.setAttribute("aria-busy", "true");
     try {

@@ -45,6 +45,53 @@ test("relatório 6 apresenta etapas, atividades e filtros sem tabela horizontal"
   assert.match(root.textContent, /PINTURA/);
 });
 
+test("relatórios 6–8 exibem o logo oficial e filtros com rótulos do Power Apps", async t => {
+  const { view, root } = setup(t);
+  for (const number of [6, 7, 8]) {
+    await view.open(number);
+    const logo = root.querySelector('.or-brand img[alt="Logo Energética"]');
+    assert.ok(logo, `logo ausente no relatório ${number}`);
+    assert.match(logo.src, /logo-energetica-oficial\.png/);
+  }
+  await view.open(6);
+  assert.equal(root.querySelector('[name="supplier"]').closest('label').querySelector('.or-filter-label').textContent, 'COLABORADOR');
+  await view.open(8);
+  assert.match(root.textContent, /ETAPA OBRA/);
+});
+
+test("relatório 6 mostra etapa sem atividades como seção com zero registros", async t => {
+  const snapshot = { stages: [{ branch: "A", stage: "LIMPEZA GERAL", status: "FINALIZADO", percent: 100, start: "2026-09-02", end: "2026-09-03", activities: [] }] };
+  const { view, root } = setup(t, { async loadReport() { return snapshot; } });
+  await view.open(6);
+  assert.equal(root.querySelectorAll('.or-stage-card').length, 1);
+  assert.match(root.querySelector('.or-stage-card').textContent, /LIMPEZA GERAL.*Total de registros nesta etapa: 0/s);
+});
+
+test("relatório 6 retira etapas sem correspondência ao filtrar atividade, status ou colaborador", async t => {
+  const snapshot = { stages: [
+    { branch: "A", stage: "ALVENARIA", status: "INICIADO", activities: [activity(1, { activity: "CONCRETO", supplier: "ANA" })] },
+    { branch: "A", stage: "PINTURA", status: "INICIADO", activities: [activity(2, { activity: "TINTA", supplier: "BIA", status: "ATIVIDADE FINALIZADA" })] },
+    { branch: "A", stage: "LIMPEZA GERAL", status: "FINALIZADO", activities: [] },
+  ] };
+  const { dom, view, root } = setup(t, { async loadReport() { return snapshot; } });
+  await view.open(6);
+  assert.equal(root.querySelectorAll(".or-stage-card").length, 3);
+  const stageFilter = root.querySelector('[name="stage"]');
+  stageFilter.value = "LIMPEZA GERAL";
+  stageFilter.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  assert.equal(root.querySelectorAll(".or-stage-card").length, 1);
+  stageFilter.value = "";
+  stageFilter.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  for (const [name, value] of [["activity", "TINTA"], ["status", "ATIVIDADE FINALIZADA"], ["supplier", "BIA"]]) {
+    const control = root.querySelector(`[name="${name}"]`);
+    control.value = value;
+    control.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    assert.deepEqual([...root.querySelectorAll(".or-stage-summary > .or-card-title")].map(node => node.textContent), ["PINTURA"]);
+    control.value = "";
+    control.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  }
+});
+
 test("filtro de status da etapa encontra lançamento posterior e mostra seus dados", async t => {
   const mixed = { number: 6, stages: [{
     branch: "A", stage: "FUNDAÇÃO", start: "2026-09-30", end: "", status: "INICIADO", percent: 40,
@@ -71,9 +118,11 @@ test("relatório 7 mostra contagem, ID, data, filial e status", async t => {
   const { view, root } = setup(t);
   await view.open(7);
   assert.match(root.textContent, /DIÁRIOS PENDENTES/);
-  assert.equal(root.querySelector('[data-metric="diaries"]').textContent, "2");
+  assert.equal(root.querySelector('.or-diary-footer [data-metric="diaries"]').textContent, "2");
   assert.equal(root.querySelectorAll(".or-diary-card").length, 2);
   assert.match(root.querySelector(".or-diary-card").textContent, /#11.*22\/09\/2026.*A.*PENDENTE/s);
+  assert.equal(root.querySelector('.or-diary-footer [data-metric="diaries"]').textContent, '2');
+  assert.equal(root.querySelectorAll('.or-diary-card [data-tone="danger"]').length, 2);
 });
 
 test("relatório 7 distingue total de pendentes do limite visível", async t => {
@@ -98,6 +147,21 @@ test("relatório 8 mantém resumo completo após filtro e escapa texto da lista"
   assert.equal(root.querySelectorAll(".or-task-card").length, 2);
   assert.equal(root.querySelector('[data-metric="total"]').textContent, "3");
   assert.equal(root.querySelectorAll(".or-due-card").length, 1);
+  assert.match(root.querySelector('.or-due-summary').textContent, /DATA FATAL.*Total de atividades nesta data:/s);
+});
+
+test("relatório 8 aceita múltiplos status simultâneos como o filtro Power Apps", async t => {
+  const { dom, view, root } = setup(t);
+  await view.open(8);
+  const statusBoxes = [...root.querySelectorAll('.or-status-options input[type="checkbox"]')];
+  assert.equal(statusBoxes.length, 3);
+  for (const box of statusBoxes.filter(box => ["ATIVIDADE CRIADA", "CONCLUÍDO"].includes(box.value))) {
+    box.checked = true;
+    box.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  }
+  assert.equal(root.querySelectorAll('.or-task-card').length, 2);
+  assert.match(root.querySelector('.or-status-summary').textContent, /2 itens/);
+  assert.equal(root.querySelector('[data-metric="total"]').textContent, '3');
 });
 
 test("relatório 8 só marca prazo vencido quando há atividade criada ou em atendimento", async t => {

@@ -10,13 +10,13 @@ const run = promisify(execFile);
 const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"].find(path => path && existsSync(path));
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
 
-test("relatórios 16 e 17 abrem no hub e cabem em 844×390 e 740×360", { timeout: 90_000 }, async t => {
+test("relatórios 16 e 17 usam tabelas no desktop e cartões sem corte em telefone horizontal", { timeout: 90_000 }, async t => {
   if (!browser) return t.skip("Chrome/Edge indisponível neste ambiente");
   const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0 }, logLevel: "silent" });
   try {
     await server.listen();
     const port = server.httpServer.address().port;
-    for (const [width, height] of [[844, 390], [740, 360]]) for (const scenario of ["report=16", "report=16&detail=1", "report=17"]) {
+    for (const [width, height] of [[1280, 720], [844, 390], [740, 360]]) for (const scenario of ["report=16", "report=16&detail=1", "report=17"]) {
       const { stdout } = await run(browser, [
         "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--disable-dev-shm-usage",
         `--window-size=${width + (process.platform === "win32" ? 26 : 0)},${height}`, "--virtual-time-budget=3000", "--dump-dom",
@@ -30,7 +30,20 @@ test("relatórios 16 e 17 abrem no hub e cabem em 844×390 e 740×360", { timeou
       assert.ok(layout.report.width > 0, `Relatório sem largura em ${width}px (${scenario})`);
       if (scenario === "report=16") assert.equal(layout.report.branchCards, 1);
       if (scenario === "report=16&detail=1") assert.equal(layout.report.propertyCards, 1);
+      if (scenario === "report=16&detail=1" && width > 900)
+        assert.notEqual(layout.report.mobileCardsDisplay, "none", "detalhe completo do imóvel precisa ficar visível no desktop");
       if (scenario === "report=17") assert.equal(layout.report.rentCards, 1);
+      if (width <= 900) {
+        assert.equal(layout.report.tableDisplay, "none", "tabela extensa deve virar cartões no telefone");
+        assert.notEqual(layout.report.mobileCardsDisplay, "none");
+      } else {
+        assert.equal(layout.report.tableDisplay, "table", "tabela deve aparecer no desktop");
+        if (scenario !== "report=16&detail=1") assert.equal(layout.report.mobileCardsDisplay, "none");
+      }
+      if (scenario.startsWith("report=16")) {
+        assert.notEqual(layout.report.pendingColor, layout.report.clearColor, "pendência e campo preenchido precisam de cores distintas");
+      }
+      assert.match(layout.report.filterColor, /^rgb\((?:153|176|183|198), 0, (?:0|20|28)\)$/, "filtros devem manter faixa vermelha");
       assert.ok(layout.document <= width + 1, `Documento transborda em ${width}px (${scenario}): ${JSON.stringify(layout)}`);
       assert.ok(layout.shell.scrollWidth <= layout.shell.width + 1, `Tela integrada exige rolagem lateral em ${width}px (${scenario})`);
       assert.ok(layout.report.width <= width + 1, `Relatório ultrapassa ${width}px (${scenario})`);

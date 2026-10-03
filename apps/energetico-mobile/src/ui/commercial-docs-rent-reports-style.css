@@ -26,6 +26,7 @@
   border-radius: 10px;
   background: #e6f0ff;
 }
+.cdr-report .cdr-logo { display: block; width: auto; max-width: min(100%, 190px); height: 58px; object-fit: contain; }
 .cdr-report .cdr-title {
   flex: 1 1 16rem;
   min-width: 0;
@@ -77,6 +78,7 @@
   letter-spacing: .02em;
   line-height: 1.3;
 }
+.cdr-report .cdr-filter-label { padding: 7px; background: #990000; color: #fff; text-align: center; }
 .cdr-report .cdr-filter-input {
   width: 100%;
   max-width: 100%;
@@ -95,6 +97,8 @@
   border-radius: 8px;
   background: #edf5ff;
 }
+.cdr-report .cdr-metric[data-tone="pending"] { border-color: #c62828; background: #ffebee; color: #8e0000; }
+.cdr-report .cdr-metric[data-tone="clear"] { border-color: #2e7d32; background: #e8f5e9; color: #1b5e20; }
 .cdr-report .cdr-metric dd {
   margin: 4px 0 0;
   font-size: clamp(1.05rem, 3vw, 1.4rem);
@@ -199,7 +203,35 @@
 }
 .cdr-report .cdr-more { justify-self: start; }
 .cdr-report .cdr-due-status { margin: 10px 0 0; font-weight: 800; }
+.cdr-report .cdr-branch-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .67rem; }
+.cdr-report .cdr-branch-table th, .cdr-report .cdr-branch-table td { border: 1px solid #9eafbc; padding: 5px 3px; overflow-wrap: anywhere; }
+.cdr-report .cdr-branch-table th { background: #e9ecef; text-align: left; }
+.cdr-report .cdr-branch-table tbody tr:nth-child(even) { background: #f3f7fa; }
+.cdr-report .cdr-branch-table td[data-state="pending"] { background: #f8cdd2; color: #ab0015; font-weight: 800; }
+.cdr-report .cdr-branch-table td[data-state="clear"] { background: #d5ead8; color: #17632a; font-weight: 800; }
+.cdr-report .cdr-mobile-cards { display: none; }
+.cdr-report .cdr-detail-cards { display: grid; gap: 9px; min-width: 0; }
+.cdr-report .cdr-branch-total { margin: 8px 0 0; padding: 7px; background: #f1f4f7; font-weight: 800; text-align: right; }
+.cdr-report .cdr-rental-section { min-width: 0; max-width: 100%; border: 1px solid #df3140; background: #fff; }
+.cdr-report .cdr-rental-title { margin: 0; padding: 9px; color: #a80013; background: #fff0f1; font-size: 1rem; }
+.cdr-report .cdr-rental-section table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .74rem; }
+.cdr-report .cdr-rental-section th, .cdr-report .cdr-rental-section td { padding: 6px 4px; border: 1px solid #e88b94; overflow-wrap: anywhere; }
+.cdr-report .cdr-rental-section th { text-align: left; background: #f8dadd; color: #333; }
+.cdr-report .cdr-rental-section tbody tr:nth-child(even) { background: #f9fafb; }
+.cdr-report .cdr-annual-table { font-size: .67rem !important; }
+.cdr-report .cdr-annual-table th, .cdr-report .cdr-annual-table td { padding: 4px 2px !important; }
+.cdr-report .cdr-annual-table th:first-child, .cdr-report .cdr-annual-table td:first-child { width: 16%; }
+.cdr-report .cdr-data-card { min-width: 0; max-width: 100%; padding: 9px; border: 1px solid #d66670; border-radius: 7px; background: #fff; }
+.cdr-report .cdr-data-card .cdr-field { border-bottom: 1px solid #eee; }
+.cdr-report .cdr-data-card .cdr-field:last-child { border: 0; }
 
+@media (max-width: 900px) {
+  .cdr-report .cdr-branch-table, .cdr-report .cdr-rental-section table { display: none; }
+  .cdr-report .cdr-mobile-cards { display: grid; gap: 9px; min-width: 0; }
+  .cdr-report .cdr-annual-section .cdr-data-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 9px; }
+  .cdr-report .cdr-annual-section .cdr-data-card .cdr-field:first-child,
+  .cdr-report .cdr-annual-section .cdr-data-card .cdr-field:last-child { grid-column: 1 / -1; font-weight: 800; }
+}
 @media (max-width: 740px) {
   .cdr-report .cdr-filters,
   .cdr-report .cdr-metrics,

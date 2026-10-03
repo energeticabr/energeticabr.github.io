@@ -46,6 +46,39 @@ test("etapa aceita qualquer lançamento do status filtrado e exibe o início mai
   assert.equal(buildStageReport(snapshot, {}, "2026-10-05").stages[0].status, "FINALIZADO");
 });
 
+test("relatório 6 mantém etapa lançada sem atividades com total zero", () => {
+  const snapshot = {
+    activities: [{ id: "1", branch: "A", stage: "ALVENARIA", executionDate: "2026-10-01" }],
+    launches: [
+      { id: "10", branch: "A", stage: "ALVENARIA", status: "INICIADO", startDate: "2026-09-01", percent: 20 },
+      { id: "11", branch: "A", stage: "LIMPEZA GERAL", status: "FINALIZADO", startDate: "2026-09-02", endDate: "2026-09-03", percent: 100 },
+    ],
+  };
+  const report = buildStageReport(snapshot, {}, "2026-10-02");
+  assert.deepEqual(report.stages.map(stage => [stage.stage, stage.rows.length]), [["LIMPEZA GERAL", 0], ["ALVENARIA", 1]]);
+  assert.equal(report.count, 1);
+});
+
+test("relatório 6 exclui etapas sem atividade correspondente ao filtro", () => {
+  const snapshot = {
+    activities: [
+      { id: "1", branch: "A", stage: "ALVENARIA", activity: "CONCRETO", status: "ATIVIDADE INICIADA", supplier: "ANA" },
+      { id: "2", branch: "A", stage: "PINTURA", activity: "TINTA", status: "ATIVIDADE FINALIZADA", supplier: "BIA" },
+    ],
+    launches: [
+      { id: "10", branch: "A", stage: "ALVENARIA" },
+      { id: "11", branch: "A", stage: "PINTURA" },
+      { id: "12", branch: "A", stage: "LIMPEZA GERAL" },
+    ],
+  };
+  assert.deepEqual(buildStageReport(snapshot, { stage: "LIMPEZA GERAL" }).stages.map(stage => stage.stage), ["LIMPEZA GERAL"]);
+  for (const filters of [{ activity: "TINTA" }, { status: "ATIVIDADE FINALIZADA" }, { supplier: "BIA" }]) {
+    const report = buildStageReport(snapshot, filters);
+    assert.deepEqual(report.stages.map(stage => stage.stage), ["PINTURA"]);
+    assert.equal(report.count, 1);
+  }
+});
+
 test("tarefas agrupa por prazo e responsável e mantém resumo sem filtros", () => {
   const snapshot = {
     summary: { pending: 2, completed: 1, total: 3 }, limited: false,

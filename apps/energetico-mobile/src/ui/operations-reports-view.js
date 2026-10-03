@@ -1,8 +1,9 @@
 import { selectStageLaunch } from "../chat/operations-reports-model.js";
 
+const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
 const TITLES = { 6: "ETAPAS E ATIVIDADES", 7: "DIÁRIOS PENDENTES", 8: "TAREFAS PESSOAIS" };
-const LABELS_6 = { branch: "FILIAL", stage: "ETAPA", activity: "ATIVIDADE", status: "STATUS DA ATIVIDADE", supplier: "FORNECEDOR", stageStatus: "STATUS DA ETAPA" };
-const LABELS_8 = { status: "STATUS", difficulty: "DIFICULDADE", association: "ASSOCIAÇÃO", priority: "PRIORIDADE" };
+const LABELS_6 = { branch: "FILIAL", stage: "ETAPA", activity: "ATIVIDADE EXECUTADA", status: "STATUS DEMONSTRATIVO", supplier: "COLABORADOR", stageStatus: "STATUS ETAPA" };
+const LABELS_8 = { difficulty: "DIFICULDADE", association: "ETAPA OBRA", priority: "PRIORITÁRIA" };
 const EMPTY = "—";
 
 function normalize(value) { return String(value ?? "").trim().toLocaleUpperCase("pt-BR"); }
@@ -49,6 +50,9 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   const refresh = button("og-button or-refresh", "Atualizar");
   header.append(title, refresh); element.append(header);
   const filters = make("div", "or-filters"); element.append(filters);
+  const brand = make("div", "or-brand");
+  const logo = make("img"); logo.src = LOGO_URL; logo.alt = "Logo Energética";
+  brand.append(logo); element.append(brand);
   const metrics = make("dl", "or-metrics"); element.append(metrics);
   const notice = make("div", "or-notice"); notice.hidden = true; element.append(notice);
   const results = make("div", "or-results"); element.append(results);
@@ -68,7 +72,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   }
 
   function addMetric(name, label, value) {
-    const card = make("div", "or-metric");
+    const card = make("div", `or-metric or-metric--${name}`);
     const definition = make("dt", "", label), content = make("dd", "", value);
     content.dataset.metric = name;
     card.append(definition, content); metrics.append(card);
@@ -76,7 +80,6 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
 
   function metricSkeleton() {
     metrics.replaceChildren();
-    if (number === 7) addMetric("diaries", "DIÁRIOS PENDENTES", EMPTY);
     if (number === 8) {
       addMetric("pending", "ATIVIDADES PENDENTES", EMPTY);
       addMetric("completed", "ATIVIDADES CONCLUÍDAS", EMPTY);
@@ -103,6 +106,26 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
     wrapper.append(control); filters.append(wrapper);
   }
 
+  function statusSelector(values) {
+    const wrapper = make("fieldset", "or-filter or-status-filter");
+    wrapper.append(make("legend", "or-filter-label", "STATUS"));
+    const summary = make("span", "or-status-summary");
+    const options = make("div", "or-status-options");
+    const statuses = [...new Set(values.map(String).map(value => value.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const updateSummary = () => { const count = selected.status?.length || 0; summary.textContent = count ? `${count} ${count === 1 ? "item selecionado" : "itens selecionados"}` : "Todos"; };
+    if (!Array.isArray(selected.status)) selected.status = [];
+    for (const value of statuses) {
+      const label = make("label", "or-status-option");
+      const checkbox = make("input"); checkbox.type = "checkbox"; checkbox.value = value; checkbox.checked = selected.status.some(status => normalize(status) === normalize(value));
+      checkbox.addEventListener("change", () => {
+        selected.status = [...options.querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value);
+        updateSummary(); render();
+      });
+      label.append(checkbox, make("span", "", value)); options.append(label);
+    }
+    updateSummary(); wrapper.append(summary, options); filters.append(wrapper);
+  }
+
   function buildFilters() {
     filters.replaceChildren();
     if (number === 6) {
@@ -124,6 +147,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       search.addEventListener("input", () => { selected.search = search.value; render(); });
       searchWrapper.append(search); filters.append(searchWrapper);
       for (const [name, label] of Object.entries(LABELS_8)) selector(name, label, snapshot.rows.map(row => row[name]));
+      statusSelector(snapshot.rows.map(row => row.status));
     }
   }
 
@@ -140,6 +164,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   }
 
   function renderStages() {
+    const hasActivityFilter = ["activity", "status", "supplier"].some(name => Boolean(selected[name]));
     const groups = snapshot.stages.filter(stage => ["branch", "stage"].every(name => !selected[name] || normalize(stage[name]) === normalize(selected[name])))
       .map(stage => {
         const launch = stage.launches?.length ? selectStageLaunch(stage.launches, selected.stageStatus)
@@ -150,7 +175,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
           activities: stage.activities.filter(row => ["activity", "status", "supplier"].every(name => !selected[name] || normalize(row[name]) === normalize(selected[name]))),
         };
       })
-      .filter(group => group.stage && group.activities.length);
+      .filter(group => group.stage && (!hasActivityFilter || group.activities.length));
     if (!groups.length) { results.append(make("p", "or-empty", "Nenhuma etapa corresponde aos filtros.")); return; }
     for (const { stage, activities } of groups) {
       const card = make("section", "or-stage-card");
@@ -172,16 +197,22 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   }
 
   function renderDiaries() {
-    metrics.querySelector('[data-metric="diaries"]').textContent = String(snapshot.count);
     if (snapshot.limited) results.append(make("p", "or-limit", `Exibindo os 2.000 mais recentes de ${Number(snapshot.count).toLocaleString("pt-BR")} pendentes.`));
-    if (!snapshot.rows.length) { results.append(make("p", "or-empty", "Nenhum diário pendente encontrado.")); return; }
+    if (!snapshot.rows.length) results.append(make("p", "or-empty", "Nenhum diário pendente encontrado."));
     for (const row of snapshot.rows) {
       const card = make("article", "or-diary-card");
       card.append(make("h3", "or-card-title", `#${row.id}`));
       const grid = make("div", "or-fields");
-      field(grid, "DATA", formattedDate(row.date)); field(grid, "FILIAL", row.branch); field(grid, "STATUS", row.status);
+      field(grid, "DATA", formattedDate(row.date)); field(grid, "FILIAL", row.branch);
+      const status = make("div", "or-field"); status.dataset.tone = "danger";
+      status.append(make("span", "or-field-label", "STATUS"), make("strong", "or-field-value", shown(row.status)));
+      grid.append(status);
       card.append(grid); results.append(card);
     }
+    const footer = make("div", "or-diary-footer");
+    footer.append(make("strong", "", "CONTAGEM DE PENDENTES:"));
+    const count = make("strong", "", Number(snapshot.count).toLocaleString("pt-BR")); count.dataset.metric = "diaries";
+    footer.append(count); results.append(footer);
   }
 
   function dueDescription(due, tasks) {
@@ -204,6 +235,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
     for (const name of ["pending", "completed", "total"]) metrics.querySelector(`[data-metric="${name}"]`).textContent = String(snapshot.summary[name]);
     const filtered = snapshot.rows.filter(row => {
       if (selected.search && !row.task.toLocaleLowerCase("pt-BR").includes(selected.search.trim().toLocaleLowerCase("pt-BR"))) return false;
+      if (selected.status?.length && !selected.status.some(status => normalize(row.status) === normalize(status))) return false;
       return Object.keys(LABELS_8).every(name => !selected[name] || normalize(row[name]) === normalize(selected[name]));
     }).sort((a, b) => dateKey(b.identified).localeCompare(dateKey(a.identified)) || Number(b.id) - Number(a.id));
     const selectedRows = filtered.slice(0, 2000);
@@ -219,8 +251,10 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       const group = make("section", "or-due-card");
       const pending = rows.some(row => ["ATIVIDADE CRIADA", "EM ATENDIMENTO"].includes(normalize(row.status)));
       group.dataset.tone = !due ? "neutral" : due < todayKey() && pending ? "danger" : due === todayKey() ? "warning" : "success";
-      group.append(make("h3", "or-card-title", `DATA FATAL: ${due ? formattedDate(due) : "SEM DATA"}`),
+      const dueSummary = make("div", "or-due-summary");
+      dueSummary.append(make("h3", "or-card-title", `DATA FATAL: ${due ? formattedDate(due) : "SEM DATA"}`),
         make("p", "or-due-state", dueDescription(due, rows)), make("p", "or-group-total", `Total de atividades nesta data: ${rows.length}`));
+      group.append(dueSummary);
       const byPerson = new Map();
       for (const row of rows) {
         const person = row.responsibleKey || "SEM RESPONSÁVEL";
@@ -278,7 +312,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       if (destroyed) throw new Error("A visualização foi encerrada.");
       if (![6, 7, 8].includes(reportNumber)) throw new RangeError("Escolha o relatório 6, 7 ou 8.");
       selected = number === reportNumber ? selected : Object.create(null);
-      number = reportNumber; title.textContent = TITLES[number]; active = true; element.hidden = false;
+      number = reportNumber; element.dataset.report = String(number); title.textContent = TITLES[number]; active = true; element.hidden = false;
       return load();
     },
     close() { active = false; controller?.abort(); revision++; element.hidden = true; element.setAttribute("aria-busy", "false"); },

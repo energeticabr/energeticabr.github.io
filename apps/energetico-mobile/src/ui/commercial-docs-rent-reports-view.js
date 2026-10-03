@@ -1,8 +1,24 @@
-import { selectCommercialDocsReport, selectOpenRentsReport } from "../chat/commercial-docs-rent-reports-data.js";
+import { selectCommercialDocsReport, selectRentDashboard } from "../chat/commercial-docs-rent-reports-data.js";
 
 const TITLES = { 16: "DOCUMENTOS COMERCIAIS POR IMÓVEL", 17: "ALUGUÉIS EM ABERTO" };
 const EMPTY = "—";
 const PAGE_SIZE = 25;
+const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
+const DOCUMENT_METRICS = [
+  ["SEGURO", "🛡️ SEGURO"], ["IDPROPOSTA", "📄 ID PROPOSTA"],
+  ["IDCONTRATOCAIXA", "🏦 ID CONTRATO CAIXA"], ["IDESCRITURA", "🖋️ ID ESCRITURA"],
+  ["IDDOCUMENTOCORRETAGEM", "🤝 ID DOC. CORRETAGEM"],
+  ["IDPGTOCORRETAGEM", "💳 ID PGTO. CORRETAGEM"],
+  ["IDDOCFISCAL", "🧾 ID DOC. FISCAL"],
+];
+const DOCUMENT_COLUMNS = [
+  ["property", "🏠 IMÓVEL"], ["totalPending", "❌ PENDÊNCIAS"], ["fiscal", "👮 SITUAÇÃO FISCAL"],
+  ["IDDOCFISCAL", "ID DOC. FISCAL"], ["IDPGTOFISCAL", "ID PGTO. FISCAL"],
+  ["status", "📌 COMERCIAL"], ["IDPGTOCORRETAGEM", "ID PGTO. CORRETAGEM"],
+  ["IDDOCUMENTOCORRETAGEM", "ID DOC. CORRETAGEM"], ["SEGURO", "🛡️ SEGURO"],
+  ["IDPROPOSTA", "ID PROPOSTA"], ["IDCONTRATOCAIXA", "ID CONTRATO CAIXA"], ["IDESCRITURA", "ID ESCRITURA"],
+];
+const MONTHS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 const currency = cents => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 const shown = value => String(value ?? "").trim() || EMPTY;
 const formatDate = key => /^\d{4}-\d{2}-\d{2}$/.test(String(key)) ? `${key.slice(8, 10)}/${key.slice(5, 7)}/${key.slice(0, 4)}` : EMPTY;
@@ -22,10 +38,11 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
   const button = (className, label) => { const node = make("button", className, label); node.type = "button"; return node; };
   const element = make("section", "cdr-report"); element.hidden = true;
   const heading = make("div", "cdr-heading");
+  const logo = make("img", "cdr-logo"); logo.src = LOGO_URL; logo.alt = "Logo Energética";
   const title = make("h2", "cdr-title");
   const refresh = button("cdr-button cdr-refresh", "Atualizar");
-  heading.append(title, refresh); element.append(heading);
-  const filters = make("div", "cdr-filters"); element.append(filters);
+  heading.append(logo, title, refresh);
+  const filters = make("div", "cdr-filters"); element.append(filters, heading);
   const metrics = make("dl", "cdr-metrics"); element.append(metrics);
   const notice = make("div", "cdr-notice"); notice.hidden = true; element.append(notice);
   const results = make("div", "cdr-results"); element.append(results);
@@ -47,6 +64,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
 
   function metric(key, label, value) {
     const card = make("div", "cdr-metric");
+    if (number === 16) card.dataset.tone = Number(value) > 0 ? "pending" : "clear";
     const term = make("dt", "", label), content = make("dd", "", value);
     content.dataset.metric = key; card.append(term, content); metrics.append(card);
   }
@@ -55,10 +73,11 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
     metrics.replaceChildren();
     const summary = result?.summary;
     if (number === 16) {
-      metric("properties", "IMÓVEIS", summary ? String(summary.properties) : EMPTY);
-      metric("idPending", "PENDÊNCIAS DE IDs E ESTADOS", summary ? String(summary.idPending) : EMPTY);
-      metric("fieldsPending", "CAMPOS EM BRANCO", summary ? String(summary.fieldsPending) : EMPTY);
-      metric("totalPending", "TOTAL DE PENDÊNCIAS", summary ? String(summary.totalPending) : EMPTY);
+      for (const [key, label] of DOCUMENT_METRICS) {
+        const count = summary?.fieldTotals.documents.find(entry => entry.key === key)?.count;
+        metric(key, label, count == null ? EMPTY : String(count));
+      }
+      metric("totalMeasures", "📏 TOTAL (MEDIDAS)", summary ? String(summary.idPending) : EMPTY);
     } else {
       metric("open", "ALUGUÉIS EM ABERTO", summary ? String(summary.open) : EMPTY);
       metric("overdue", "VENCIDOS", summary ? String(summary.overdue) : EMPTY);
@@ -67,10 +86,10 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
     }
   }
 
-  function select(name, label, values) {
+  function select(name, label, values, emptyLabel = "Todos") {
     const wrapper = make("label", "cdr-filter"); wrapper.append(make("span", "cdr-filter-label", label));
     const control = make("select", "cdr-filter-input"); control.name = name;
-    control.append(Object.assign(make("option", "", "Todos"), { value: "" }));
+    control.append(Object.assign(make("option", "", emptyLabel), { value: "" }));
     for (const value of [...new Set(values.map(String).map(text => text.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")))
       control.append(Object.assign(make("option", "", value), { value }));
     control.value = selected[name] || "";
@@ -103,10 +122,12 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
       select("contract", "Nº CONTRATO", snapshot.rows.flatMap(row => (row.contracts || []).map(contract => contract.id)));
       select("status", "STATUS", snapshot.rows.map(row => row.status));
     } else {
-      select("property", "IMÓVEL", snapshot.rows.map(row => row.property));
-      select("tenant", "INQUILINO", snapshot.rows.map(row => row.tenant));
+      select("year", "ANO", [...(snapshot.sourceRows || []).map(row => (row.paidDate || row.dueDate).slice(0, 4)), snapshot.year].filter(Boolean), "Ano atual");
+      select("property", "IMÓVEL", snapshot.contracts.map(row => row.property));
+      select("tenant", "INQUILINO", snapshot.contracts.map(row => row.tenant));
       select("dueState", "VENCIMENTO", ["overdue", "today", "upcoming"]);
-      select("paymentMethod", "FORMA DE PAGAMENTO", snapshot.rows.map(row => row.paymentMethod));
+      select("paymentMethod", "FORMA DE PAGAMENTO", snapshot.contracts.map(row => row.paymentMethod));
+      select("status", "STATUS", snapshot.contracts.map(row => row.status));
       search();
       for (const option of filters.querySelector('[name="dueState"]').options) {
         if (option.value === "overdue") option.textContent = "Vencidos";
@@ -189,44 +210,126 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
     const totals = make("section", "cdr-overall-totals");
     totals.append(make("h3", "cdr-summary-title", "Pendências por campo"));
     fieldTotals(totals, result.summary.fieldTotals); wrapper.append(totals);
-    const branches = make("div", "cdr-branch-list");
-    for (const branch of result.summary.branches) {
-      const card = make("section", "cdr-branch-summary");
-      card.append(make("h3", "cdr-summary-title", `Filial: ${branch.branch}`));
-      const figures = make("div", "cdr-branch-figures");
-      field(figures, "Imóveis", branch.properties);
-      field(figures, "IDs e estados pendentes", branch.idPending);
-      field(figures, "Campos em branco", branch.fieldsPending);
-      field(figures, "Total da filial", branch.totalPending);
-      card.append(figures);
-      const detail = make("details", "cdr-branch-fields");
-      detail.append(make("summary", "", "Pendências por campo nesta filial"));
-      fieldTotals(detail, branch.fieldTotals); card.append(detail);
-      branches.append(card);
-    }
-    wrapper.append(branches);
     return wrapper;
+  }
+
+  function documentValue(row, key) {
+    if (key === "property" || key === "totalPending" || key === "fiscal" || key === "status") return row[key];
+    return row.documents.find(entry => entry.key === key)?.value || "PENDENTE";
+  }
+
+  function commercialBranches(result) {
+    const wrapper = make("div", "cdr-branch-list");
+    for (const branch of result.summary.branches) {
+      const section = make("section", "cdr-branch-summary");
+      section.append(make("h3", "cdr-summary-title", `🏢 FILIAL: ${branch.branch}`));
+      const table = make("table", "cdr-branch-table");
+      const thead = make("thead"), header = make("tr");
+      for (const [, label] of DOCUMENT_COLUMNS) header.append(make("th", "", label));
+      thead.append(header); table.append(thead);
+      const tbody = make("tbody");
+      const cards = make("div", "cdr-mobile-cards");
+      if (result.detailMode) cards.classList.add("cdr-detail-cards");
+      for (const row of result.rows.filter(item => item.branch === branch.branch)) {
+        const tr = make("tr");
+        for (const [key] of DOCUMENT_COLUMNS) {
+          const cell = make("td", "", shown(documentValue(row, key)));
+          if (key === "totalPending") cell.dataset.state = row.totalPending ? "pending" : "clear";
+          else if (key === "fiscal" || key === "status")
+            cell.dataset.state = row.stateChecks.find(entry => entry.key === (key === "fiscal" ? "FISCAL" : "STATUS"))?.pending === false ? "clear" : "pending";
+          else if (key !== "property") cell.dataset.state = row.documents.find(entry => entry.key === key)?.pending === false ? "clear" : "pending";
+          tr.append(cell);
+        }
+        tbody.append(tr); cards.append(propertyCard(row));
+      }
+      table.append(tbody); section.append(table, cards);
+      section.append(make("p", "cdr-branch-total", `TOTAL DA FILIAL: ${branch.totalPending} pendência(s)`));
+      wrapper.append(section);
+    }
+    return wrapper;
+  }
+
+  function reportTable(className, columns, rows, cellText) {
+    const table = make("table", className);
+    const head = make("thead"), heading = make("tr");
+    for (const label of columns) heading.append(make("th", "", label));
+    head.append(heading); table.append(head);
+    const body = make("tbody");
+    for (const row of rows) {
+      const line = make("tr");
+      for (let index = 0; index < columns.length; index++) line.append(make("td", "", cellText(row, index)));
+      body.append(line);
+    }
+    table.append(body); return table;
+  }
+
+  function rentalSection(titleText, className) {
+    const section = make("section", `cdr-rental-section ${className}`);
+    section.append(make("h3", "cdr-rental-title", titleText));
+    return section;
+  }
+
+  function simpleCards(rows, columns, values) {
+    const list = make("div", "cdr-mobile-cards");
+    for (const row of rows) {
+      const card = make("article", "cdr-data-card");
+      columns.forEach((label, index) => field(card, label, values(row, index)));
+      list.append(card);
+    }
+    return list;
+  }
+
+  function rentSections(result) {
+    const open = rentalSection("⚠️ ALUGUÉIS EM ABERTO", "cdr-open-section");
+    const openColumns = ["IMÓVEL", "INQUILINO", "VENC.", "PGTO", "VALOR", "ATRASO"];
+    const openValue = (row, index) => [row.property, row.tenant, formatDate(row.dueDate), row.paymentMethod,
+      currency(row.amountCents), row.dueState === "overdue" ? `VENCIDO há ${row.days} dias` : row.dueState === "today" ? "VENCE HOJE" : `VENCE EM ${row.days} dias`][index];
+    const count = Math.min(visibleCount, result.rows.length);
+    const visibleRows = result.rows.slice(0, count);
+    open.append(reportTable("cdr-rent-table", openColumns, visibleRows, openValue), simpleCards(visibleRows, openColumns, openValue));
+    open.append(make("p", "cdr-page-status", `Exibindo ${count} de ${result.rows.length} aluguéis em aberto`));
+    if (count < result.rows.length) {
+      const more = button("cdr-button cdr-more", "Mostrar mais aluguéis");
+      more.addEventListener("click", () => { visibleCount += PAGE_SIZE; render(); });
+      open.append(more);
+    }
+    if (!result.rows.length) open.append(make("p", "cdr-empty", "Nenhum aluguel em aberto para os filtros selecionados."));
+    results.append(open);
+
+    const annual = rentalSection("📊 RELATÓRIO ANUAL DE ALUGUÉIS", "cdr-annual-section");
+    const annualRows = [...result.annualRows, { property: "TOTAL", months: result.monthlyTotals, totalCents: result.annualTotalCents }];
+    const annualColumns = ["IMÓVEL", ...MONTHS, "TOTAL"];
+    const annualValue = (row, index) => index === 0 ? row.property : index === 13 ? currency(row.totalCents) : currency(row.months[index - 1]);
+    annual.append(reportTable("cdr-annual-table", annualColumns, annualRows, annualValue), simpleCards(annualRows, annualColumns, annualValue));
+    results.append(annual);
+
+    const adjustments = rentalSection("📅 TABELA DE REAJUSTE", "cdr-adjustment-section");
+    const adjustmentColumns = ["IMÓVEL", "INQUILINO", "DATA REAJUSTE", "ÍNDICE"];
+    const adjustmentValue = (row, index) => [row.property, row.tenant, formatDate(row.date), row.index][index];
+    adjustments.append(reportTable("cdr-adjustment-table", adjustmentColumns, result.adjustments, adjustmentValue),
+      simpleCards(result.adjustments, adjustmentColumns, adjustmentValue));
+    results.append(adjustments);
+
+    const expirations = rentalSection("📅 TABELA DE VENCIMENTO DOS CONTRATOS", "cdr-expiration-section");
+    const expirationColumns = ["IMÓVEL", "INQUILINO", "VENCIMENTO"];
+    const expirationValue = (row, index) => [row.property, row.tenant, formatDate(row.date)][index];
+    expirations.append(reportTable("cdr-expiration-table", expirationColumns, result.expirations, expirationValue),
+      simpleCards(result.expirations, expirationColumns, expirationValue));
+    results.append(expirations);
   }
 
   function render() {
     results.replaceChildren();
     if (!snapshot) { renderMetrics(null); return; }
-    const result = number === 16 ? selectCommercialDocsReport(snapshot.rows, selected) : selectOpenRentsReport(snapshot.rows, selected);
+    const result = number === 16 ? selectCommercialDocsReport(snapshot.rows, selected) : selectRentDashboard(snapshot, selected);
     renderMetrics(result);
-    if (!result.rows.length) { results.append(make("p", "cdr-empty", "Nenhum registro encontrado para os filtros selecionados.")); return; }
     if (number === 16) {
+      if (!result.rows.length) { results.append(make("p", "cdr-empty", "Nenhum registro encontrado para os filtros selecionados.")); return; }
+      results.append(commercialBranches(result));
       if (!result.detailMode) results.append(commercialSummary(result));
-      else for (const row of result.rows) results.append(propertyCard(row));
       return;
     }
-    const count = Math.min(visibleCount, result.rows.length);
-    results.append(make("p", "cdr-page-status", `Exibindo ${count} de ${result.rows.length} aluguéis em aberto`));
-    for (const row of result.rows.slice(0, count)) results.append(rentCard(row));
-    if (count < result.rows.length) {
-      const more = button("cdr-button cdr-more", "Mostrar mais aluguéis");
-      more.addEventListener("click", () => { visibleCount += PAGE_SIZE; render(); });
-      results.append(more);
-    }
+    rentSections(result);
   }
 
   async function load() {
@@ -239,8 +342,13 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
     try {
       const result = await data.loadReport(reportNumber, { signal: controller.signal });
       if (destroyed || !active || controller.signal.aborted || current !== revision) return;
-      if (!result || !Array.isArray(result.rows)) throw new Error("O relatório retornou dados incompletos.");
-      snapshot = result; buildFilters(); message(""); render();
+      if (!result || !Array.isArray(result.rows) || (number === 17 && (!Array.isArray(result.sourceRows) || !Array.isArray(result.contracts)))) throw new Error("O relatório retornou dados incompletos.");
+      snapshot = result;
+      if (number === 17) {
+        if (selected.year === undefined) selected.year = result.year;
+        if (selected.status === undefined && result.contracts.some(row => row.status === "ATIVO")) selected.status = "ATIVO";
+      }
+      buildFilters(); message(""); render();
     } catch (error) {
       if (destroyed || !active || controller.signal.aborted || current !== revision) return;
       snapshot = null; render(); message(`Não foi possível carregar o relatório: ${safeError(error)}`, true);

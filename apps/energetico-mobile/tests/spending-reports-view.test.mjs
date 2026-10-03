@@ -16,25 +16,46 @@ function setup(t, data) {
   return { dom, view, root: view.element };
 }
 
-test("abre 9 com cartões gerenciais e 10 com cartões por data e fornecedor", async t => {
+test("9 preserva marca, período, faixas gerenciais, quantidades e cor de total; 10 apresenta provisões reais", async t => {
   const calls = [];
-  const { view, root } = setup(t, { async loadSnapshot({ reportNumber }) { calls.push(reportNumber); return { launches: [row(1)], productTypes: [{ product: "Cimento", expenseType: "Material" }] }; } });
+  const { view, root } = setup(t, { async loadSnapshot({ reportNumber }) { calls.push(reportNumber); return reportNumber === 9
+    ? { launches: [row(1)], productTypes: [{ product: "Cimento", expenseType: "Material" }] }
+    : { recurrences: [{ id: "7", status: "ATIVO" }], provisions: [{ id: "41", recurrenceId: "7", branch: "Filial A", supplier: "VIVO", product: "Internet", dueDate: "2026-10-04", schedule: "PENDENTE", total: 89.99, status: "PAGAMENTO PREVISTO" }] }; } });
   assert.equal(root.tagName, "SECTION");
   await view.open(9);
+  assert.match(root.querySelector(".sr-heading img")?.src || "", /logo-energetica-oficial\.png/);
+  assert.equal(root.firstElementChild?.className, "sr-filters", "Filtros acima da marca, como no Power Apps");
   assert.match(root.textContent, /RESUMO GERENCIAL DE GASTOS/);
+  assert.match(root.textContent, /PERÍODO/);
+  assert.match(root.textContent, /QTD TOTAL/);
+  assert.ok(root.querySelector(".sr-category--products"));
+  assert.ok(root.querySelector(".sr-field--money"));
   assert.match(root.textContent, /PERCENTUAL POR TIPO DE DESPESA/);
   assert.equal(root.querySelectorAll("table").length, 0);
   await view.open(10);
-  assert.match(root.textContent, /DATA PGTO/);
-  assert.match(root.textContent, /Fornecedor muito longo Alfa/);
+  assert.match(root.textContent, /DESPESAS RECORRENTES/);
+  assert.match(root.textContent, /04\/10\/2026/);
+  assert.match(root.textContent, /AGENDAMENTO/);
+  assert.match(root.textContent, /VIVO/);
+  assert.doesNotMatch(root.textContent, /PEDIDO 42/);
   assert.deepEqual(calls, [9, 10]);
 });
 
 test("valor incompleto aparece explicitamente sem total definitivo", async t => {
-  const { view, root } = setup(t, { async loadSnapshot() { return { launches: [row(1), row(2, { unit: null, total: null })], productTypes: [] }; } });
+  const { view, root } = setup(t, { async loadSnapshot() { return { recurrences: [{ id: "7", status: "ATIVO" }],
+    provisions: [{ id: "1", recurrenceId: "7", status: "PAGAMENTO PREVISTO", total: null }] }; } });
   await view.open(10);
   assert.match(root.querySelector('[data-metric="total"]').textContent, /INCOMPLETO/);
   assert.doesNotMatch(root.querySelector('[data-metric="total"]').textContent, /45,00/);
+});
+
+test("agendamento confirmado mostra a data, sem perder o status", async t => {
+  const { view, root } = setup(t, { async loadSnapshot() { return { recurrences: [{ id: "7", status: "ATIVO" }],
+    provisions: [{ id: "41", recurrenceId: "7", branch: "Filial A", supplier: "VIVO", product: "Internet",
+      dueDate: "2026-10-04", schedule: "AGENDADO", scheduledDate: "2026-10-03", total: 89.99,
+      status: "PAGAMENTO PREVISTO" }] }; } });
+  await view.open(10);
+  assert.match(root.textContent, /AGENDADO.*03\/10\/2026/);
 });
 
 test("fechar aborta carregamento, limpa números e ignora resposta tardia", async t => {
@@ -52,7 +73,8 @@ test("erro de consulta remove dados antigos e permite tentar novamente sem HTML 
   const { view, root } = setup(t, { async loadSnapshot() { if (++calls === 2) throw new Error("Falha 503");
     return { launches: [row(1, { product: '<img src=x onerror="alert(1)">' })], productTypes: [] }; } });
   await view.open(9);
-  assert.equal(root.querySelector("img"), null);
+  assert.equal(root.querySelectorAll("img").length, 1);
+  assert.match(root.querySelector("img")?.src || "", /logo-energetica-oficial\.png/);
   assert.match(root.textContent, /<img src=x/);
   root.querySelector(".sr-refresh").click(); await settle();
   assert.match(root.querySelector("[role=alert]").textContent, /Falha 503/);

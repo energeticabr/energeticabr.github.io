@@ -1,12 +1,15 @@
 import { buildSpendingReport9, buildSpendingReport10 } from "../chat/spending-reports-model.js";
 import { formatReportDate, formatReportMoney } from "../chat/contractor-report-model.js";
+import { provisionDueState } from "../chat/pending-provision-dates.js";
+
+const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
 
 const FILTERS = [
   ["year", "ANO", "select", [9]], ["month", "MÊS", "select", [9]],
-  ["startDate", "DATA INICIAL", "date", [10]], ["endDate", "DATA FINAL", "date", [10]],
   ["supplier", "FORNECEDOR", "select", [9, 10]], ["product", "PRODUTO", "select", [9, 10]],
-  ["branch", "FILIAL", "select", [9, 10]], ["disbursement", "GERA DESEMBOLSO", "select", [9, 10]],
-  ["order", "PEDIDO", "select", [9, 10]],
+  ["branch", "FILIAL", "select", [9, 10]], ["disbursement", "GERA DESEMBOLSO", "select", [9]],
+  ["order", "PEDIDO", "select", [9]], ["paymentStatus", "STATUS PAGAMENTOS", "select", [10]],
+  ["status", "STATUS", "select", [10]],
 ];
 const money = value => value == null ? "INCOMPLETO" : formatReportMoney(value);
 const number = value => value == null ? "INCOMPLETO" : new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value);
@@ -31,8 +34,9 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   const button = (className, label) => { const node = make("button", className, label); node.type = "button"; return node; };
   const element = make("section", "sr-report"); element.hidden = true;
   const heading = make("header", "sr-heading");
+  const logo = make("img", "sr-logo"); logo.src = LOGO_URL; logo.alt = "Energética Construtora";
   const title = make("h2", "sr-title"); const refresh = button("og-button sr-refresh", "Atualizar");
-  heading.append(title, refresh); element.append(heading);
+  heading.append(logo, title, refresh); element.append(heading);
   const filters = make("div", "sr-filters"); const controls = new Map();
   for (const [name, label, type, reports] of FILTERS) {
     const wrapper = make("label", "sr-filter"); wrapper.dataset.reports = reports.join(",");
@@ -43,7 +47,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
     else control.append(Object.assign(make("option", "", "Todos"), { value: "" }));
     wrapper.append(control); filters.append(wrapper); controls.set(name, control);
   }
-  element.append(filters);
+  element.insertBefore(filters, heading);
   const metrics = make("dl", "sr-metrics"); element.append(metrics);
   const notice = make("div", "sr-notice"); notice.hidden = true; element.append(notice);
   const content = make("div", "sr-content"); element.append(content);
@@ -61,8 +65,8 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
       retryButton.addEventListener("click", () => { void load(); }); notice.append(retryButton); }
   }
 
-  function field(parent, label, value) {
-    const item = make("div", "sr-field");
+  function field(parent, label, value, variant = "") {
+    const item = make("div", `sr-field${variant ? ` sr-field--${variant}` : ""}`);
     item.append(make("span", "sr-field-label", label), make("strong", "sr-field-value", display(value)));
     parent.append(item);
   }
@@ -79,29 +83,34 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
       const control = controls.get(name); const current = control.value;
       const values = name === "year" ? (snapshot?.launches || []).map(row => row.date?.slice(0, 4))
         : name === "month" ? Array.from({ length: 12 }, (_, index) => String(index + 1))
-          : (snapshot?.launches || []).map(row => row[name]);
+          : name === "status" ? (snapshot?.recurrences || []).map(row => row.status)
+            : name === "paymentStatus" ? (snapshot?.provisions || []).map(row => row.status)
+              : (reportNumber === 10 ? snapshot?.provisions : snapshot?.launches || []).map(row => row[name]);
       const unique = [...new Set(values.map(value => String(value || "").trim()).filter(Boolean))]
         .sort((a, b) => name === "year" || name === "month" ? Number(a) - Number(b) : a.localeCompare(b, "pt-BR"));
       control.replaceChildren(Object.assign(make("option", "", "Todos"), { value: "" }));
       for (const value of unique) control.append(Object.assign(make("option", "", value), { value }));
-      control.value = unique.includes(current) ? current : "";
+      control.value = unique.includes(current) ? current : reportNumber === 10 && name === "paymentStatus"
+        ? unique.find(value => value.toLocaleUpperCase("pt-BR") === "PAGAMENTO PREVISTO") || ""
+        : reportNumber === 10 && name === "status" ? unique.find(value => value.toLocaleUpperCase("pt-BR") === "ATIVO") || "" : "";
     }
   }
 
-  function category(titleText, groups, percentageLabel) {
-    const section = make("section", "sr-category"); section.append(make("h4", "sr-category-title", titleText));
+  function category(titleText, groups, percentageLabel, variant) {
+    const section = make("section", `sr-category sr-category--${variant}`); section.append(make("h4", "sr-category-title", titleText));
     if (!groups.length) section.append(make("p", "sr-empty", "Nenhum registro."));
     for (const group of groups) {
       const card = make("article", "sr-detail-card"); card.append(make("h5", "sr-detail-title", group.name));
       const fields = make("div", "sr-fields");
       field(fields, "QTDE. LINHAS", group.count); field(fields, "QTD TOTAL", number(group.quantity));
-      field(fields, "TOTAL GASTO", money(group.total)); field(fields, percentageLabel, percent(group.percentage));
+      field(fields, "TOTAL GASTO", money(group.total), "money"); field(fields, percentageLabel, percent(group.percentage));
       card.append(fields); section.append(card);
     }
     return section;
   }
 
   function renderNine(result) {
+    metric("period", "PERÍODO", result.period);
     metric("total", "TOTAL DO MÊS/PERÍODO FILTRADO", money(result.total));
     metric("count", "QTDE. LANÇAMENTOS", String(result.count));
     if (result.incompleteCount) showNotice(`${result.incompleteCount} lançamento(s) sem valor unitário ou quantidade; totais afetados aparecem como INCOMPLETO.`);
@@ -112,49 +121,35 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
     for (const branch of result.branches.slice((page - 1) * 8, page * 8)) {
       const card = make("section", "sr-branch-card"); card.append(make("h3", "sr-branch-title", branch.name));
       const summary = make("div", "sr-fields sr-branch-summary");
-      field(summary, "TOTAL GASTO ACUMULADO POR FILIAL", money(branch.total));
-      field(summary, "QTDE. LINHAS", branch.count); field(summary, "% DO TOTAL DO MÊS", percent(branch.percentage));
+      field(summary, "TOTAL GASTO ACUMULADO POR FILIAL", money(branch.total), "money");
+      field(summary, "QTDE. LINHAS", branch.count); field(summary, "QTD TOTAL", number(branch.quantity));
+      field(summary, "% DO TOTAL DO MÊS", percent(branch.percentage));
       card.append(summary);
-      card.append(category("PERCENTUAL POR TIPO DE DESPESA POR FILIAL", branch.expenseTypes, "% DA FILIAL"));
-      card.append(category("PRODUTOS COM MAIOR GASTO POR FILIAL", branch.products, "% DO TOTAL DO MÊS"));
-      card.append(category("ETAPAS COM MAIOR GASTO POR FILIAL", branch.stages, "% DO TOTAL DO MÊS"));
-      card.append(category("PRINCIPAIS FORNECEDORES POR FILIAL", branch.suppliers, "% DO TOTAL DO MÊS"));
-      card.append(category("MAIORES GASTOS POR CONTA POR FILIAL", branch.accounts, "% DO TOTAL DO MÊS"));
+      card.append(category("PERCENTUAL POR TIPO DE DESPESA POR FILIAL", branch.expenseTypes, "% DA FILIAL", "expense"));
+      card.append(category("PRODUTOS COM MAIOR GASTO POR FILIAL", branch.products, "% DO TOTAL DO MÊS", "products"));
+      card.append(category("ETAPAS COM MAIOR GASTO POR FILIAL", branch.stages, "% DO TOTAL DO MÊS", "stages"));
+      card.append(category("PRINCIPAIS FORNECEDORES POR FILIAL", branch.suppliers, "% DO TOTAL DO MÊS", "suppliers"));
+      card.append(category("MAIORES GASTOS POR CONTA POR FILIAL", branch.accounts, "% DO TOTAL DO MÊS", "accounts"));
       content.append(card);
     }
   }
 
   function renderTen(result) {
-    metric("total", "TOTAL GERAL", money(result.total)); metric("quantity", "SOMA DE QTD", number(result.quantity));
-    metric("suppliers", "FORNECEDORES", String(result.supplierCount)); metric("products", "PRODUTOS", String(result.productCount));
-    metric("ids", "IDs", String(result.count));
-    metric("unitMin", "VALOR UNITÁRIO MÍNIMO", money(result.unitMin));
-    metric("unitAverage", "VALOR UNITÁRIO MÉDIO", money(result.unitAverage));
-    metric("unitMax", "VALOR UNITÁRIO MÁXIMO", money(result.unitMax));
-    if (result.incompleteCount) showNotice(`${result.incompleteCount} lançamento(s) sem valor unitário ou quantidade; totais afetados aparecem como INCOMPLETO.`);
-    if (!result.days.length) { content.append(make("p", "sr-empty", "Nenhum lançamento corresponde aos filtros.")); return; }
-    const pages = Math.max(1, Math.ceil(result.days.length / 10)); page = Math.min(page, pages);
-    pageLabel.textContent = `Página ${page} de ${pages} · ${result.days.length} data(s) de pagamento`;
+    metric("total", "VALOR TOTAL PREVISTO", money(result.total)); metric("count", "PROVISÕES RECORRENTES", String(result.count));
+    if (result.incompleteCount) showNotice(`${result.incompleteCount} provisão(ões) sem valor completo; total exibido como INCOMPLETO.`);
+    if (!result.rows.length) { content.append(make("p", "sr-empty", "Nenhuma provisão de pagamento vinculada a despesa recorrente corresponde aos filtros.")); return; }
+    const pages = Math.max(1, Math.ceil(result.rows.length / 10)); page = Math.min(page, pages);
+    pageLabel.textContent = `Página ${page} de ${pages} · ${result.rows.length} provisão(ões)`;
     previous.disabled = page <= 1; next.disabled = page >= pages;
-    for (const day of result.days.slice((page - 1) * 10, page * 10)) {
-      const dayCard = make("section", "sr-day-card");
-      dayCard.append(make("h3", "sr-day-title", `DATA PGTO ${day.date ? formatReportDate(day.date) : "PENDENTE"} · ${money(day.total)}`));
-      for (const supplier of day.suppliers) {
-        const supplierCard = make("section", "sr-supplier-card");
-        supplierCard.append(make("h4", "sr-supplier-title", `${supplier.name} · TOTAL FORN. DIA ${money(supplier.total)}`));
-        for (const row of supplier.rows) {
-          const card = make("article", "sr-launch-card");
-          card.append(make("h5", "sr-launch-title", `PEDIDO ${display(row.order)} · ID ${row.id}`));
-          const fields = make("div", "sr-fields");
-          field(fields, "FILIAL", row.branch); field(fields, "CONTA", row.account);
-          field(fields, "PRODUTO", row.product); if (row.description) field(fields, "DESCRIÇÃO", row.description);
-          field(fields, "VU", money(row.unit)); field(fields, "QTD", number(row.quantity));
-          field(fields, "FRETE", money(row.freight)); field(fields, "TOTAL", money(row.total));
-          card.append(fields); supplierCard.append(card);
-        }
-        dayCard.append(supplierCard);
-      }
-      content.append(dayCard);
+    for (const row of result.rows.slice((page - 1) * 10, page * 10)) {
+      const card = make("article", "sr-provision-card");
+      card.append(make("h3", "sr-provision-title", `${display(row.supplier)} · ${display(row.product)}`));
+      const fields = make("div", "sr-fields");
+      field(fields, "FILIAL", row.branch); field(fields, "DATA VENCIMENTO", row.dueDate ? formatReportDate(row.dueDate) : "—");
+      field(fields, "AGENDAMENTO", [row.schedule, row.scheduledDate ? formatReportDate(row.scheduledDate) : ""].filter(Boolean).join(" · ") || "—");
+      field(fields, "VALOR", money(row.total), "money"); field(fields, "STATUS", row.status);
+      field(fields, "PRAZO", provisionDueState(row.dueDate).label);
+      card.append(fields); content.append(card);
     }
   }
 
@@ -171,7 +166,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   async function load() {
     controller?.abort(); revision++;
     const current = revision; controller = new AbortController(); snapshot = null;
-    render(); showNotice("Carregando lançamentos do SharePoint…"); element.setAttribute("aria-busy", "true");
+    render(); showNotice(reportNumber === 10 ? "Carregando despesas recorrentes e provisões do SharePoint…" : "Carregando lançamentos do SharePoint…"); element.setAttribute("aria-busy", "true");
     try {
       const result = await data.loadSnapshot({ reportNumber, signal: controller.signal });
       if (destroyed || element.hidden || controller.signal.aborted || current !== revision) return;
@@ -194,7 +189,8 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
       if (destroyed) throw new Error("A visualização de gastos foi encerrada.");
       if (number !== 9 && number !== 10) throw new RangeError("Relatório de gastos desconhecido.");
       reportNumber = number; page = 1; element.hidden = false;
-      title.textContent = number === 9 ? "RESUMO GERENCIAL DE GASTOS" : "PROVISÃO DE PAGAMENTOS RECORRENTES";
+      element.classList.toggle("sr-report--ten", number === 10);
+      title.textContent = number === 9 ? "RESUMO GERENCIAL DE GASTOS" : "DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS";
       for (const wrapper of filters.children) wrapper.hidden = !wrapper.dataset.reports.split(",").includes(String(number));
       return load();
     },

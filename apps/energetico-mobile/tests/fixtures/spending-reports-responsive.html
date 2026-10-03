@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/src/ui/spending-reports.css">
+  <link rel="stylesheet" href="/src/ui/spending-reports.css?v=powerapps-parity">
   <style>html,body { width: 100%; margin: 0; box-sizing: border-box; } body { padding: 10px; font-family: Arial, sans-serif; } main { width: 100%; min-width: 0; }</style>
 </head>
 <body>
@@ -15,7 +15,11 @@
       product: long, branch: long, disbursement: "SIM", order: "42", stage: long, account: long,
       description: long, unit: 20, quantity: 2, freight: 5, total: 45 };
     const view = createSpendingReportsView({ document, data: { async loadSnapshot() {
-      return { launches: [row], productTypes: [{ product: long, expenseType: long }] };
+      return Number(new URLSearchParams(location.search).get("report")) === 9
+        ? { launches: [row], productTypes: [{ product: long, expenseType: long }] }
+        : { recurrences: [{ id: "7", status: "ATIVO" }], provisions: [{ id: "41", recurrenceId: "7",
+          branch: long, supplier: long, product: long, dueDate: "2026-10-04", schedule: "PENDENTE",
+          status: "PAGAMENTO PREVISTO", total: 89.99 }] };
     } } });
     document.querySelector("#host").append(view.element);
     await view.open(Number(new URLSearchParams(location.search).get("report")));

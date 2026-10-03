@@ -1,3 +1,5 @@
+import { provisionDateKey } from "./pending-provision-dates.js";
+
 function key(value) {
   return String(value ?? "").replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -65,6 +67,30 @@ export function normalizeSpendingProduct(item, columns = []) {
   return Object.freeze({ product: get("PRODUTO"), expenseType: get("TIPODESPESA", "TIPO DE DESPESA") });
 }
 
+export function normalizeSpendingRecurrence(item, columns = []) {
+  const get = (...aliases) => valueFor(item, columns, aliases);
+  return Object.freeze({ id: scalar(item?.id || get("ID")), status: get("STATUS"),
+    branch: get("FILIAL"), supplier: get("FORNECEDOR"), product: get("EQUIPAMENTO", "PRODUTO") });
+}
+
+export function normalizeSpendingProvision(item, columns = []) {
+  const get = (...aliases) => valueFor(item, columns, aliases);
+  const fields = item?.fields || {};
+  const scheduleKey = (columns || []).find(column => key(column?.name) === "PGTOAGENDADO"
+    || key(column?.displayName) === "PGTOAGENDADO")?.name
+    || Object.keys(fields).find(name => key(name) === "PGTOAGENDADO");
+  const rawSchedule = scheduleKey ? fields[scheduleKey] : undefined;
+  const price = get("VALOR TOTAL", "VALORTOTAL");
+  const total = amount(price);
+  return Object.freeze({ id: scalar(item?.id || get("ID")), recurrenceId: get("IDRECORRENCIA"),
+    branch: get("FILIAL"), supplier: get("FORNECEDOR"), product: get("PRODUTO", "DESCRICAOPGTO"),
+    dueDate: provisionDateKey(get("DATA PREVISTO PGTO", "DATAPGTOPREVISTO")),
+    scheduledDate: provisionDateKey(get("DATAPGTOAGENDADO", "DATA EXECUÇÃO AGENDAMENTO", "DATAEXECUCAOAGENDAMENTO")),
+    paidDate: provisionDateKey(get("DATA PGTO EFETUADO", "DATAPGTOEFETUADO")),
+    schedule: typeof rawSchedule === "boolean" ? (rawSchedule ? "AGENDADO" : "PENDENTE") : get("PGTOAGENDADO"),
+    status: get("STATUS"), total });
+}
+
 const equals = (left, right) => scalar(left).toLocaleLowerCase("pt-BR") === scalar(right).toLocaleLowerCase("pt-BR");
 const completeSum = (rows, field) => rows.every(row => Number.isFinite(row[field]))
   ? rows.reduce((sum, row) => sum + row[field], 0) : null;
@@ -130,39 +156,27 @@ export function buildSpendingReport9(snapshot, filters = {}) {
       suppliers: grouped(values, "supplier", total, 15), accounts: grouped(values, "account", total),
     });
   }).sort(byValue);
-  return Object.freeze({ count: rows.length, total, incompleteCount: rows.filter(row => !Number.isFinite(row.total)).length,
+  const period = filters.year ? filters.month
+    ? `${new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date(2020, Number(filters.month) - 1, 1))}/${filters.year}`
+    : `Ano de ${filters.year}` : "Todos os períodos";
+  return Object.freeze({ count: rows.length, total, period, incompleteCount: rows.filter(row => !Number.isFinite(row.total)).length,
     branches: Object.freeze(branches) });
 }
 
 export function buildSpendingReport10(snapshot, filters = {}) {
-  const rows = selectedRows(snapshot?.launches, filters, 10);
-  const unitValues = rows.map(row => row.unit).filter(Number.isFinite);
-  const completeUnits = unitValues.length === rows.length;
-  const dates = new Map();
-  for (const row of rows) {
-    const date = row.paymentDate || "";
-    if (!dates.has(date)) dates.set(date, []);
-    dates.get(date).push(row);
-  }
-  const days = [...dates].sort(([a], [b]) => a.localeCompare(b)).map(([date, values]) => {
-    const suppliers = new Map();
-    for (const row of values) {
-      const name = scalar(row.supplier) || "-";
-      if (!suppliers.has(name)) suppliers.set(name, []);
-      suppliers.get(name).push(row);
+  const recurrences = new Map((snapshot?.recurrences || []).map(row => [scalar(row.id), row]));
+  const rows = (snapshot?.provisions || []).filter(row => {
+    const linked = scalar(row.recurrenceId).split(/[,;\r\n]+/).map(id => id.trim()).filter(Boolean);
+    const recurring = linked.map(id => recurrences.get(id)).find(item => item
+      && (!filters.status || equals(item.status, filters.status)));
+    if (!recurring) return false;
+    if (filters.paymentStatus && !equals(row.status, filters.paymentStatus)) return false;
+    for (const field of ["branch", "supplier", "product"]) {
+      if (filters[field] && !equals(row[field] || recurring[field], filters[field])) return false;
     }
-    return Object.freeze({ date, count: values.length, total: completeSum(values, "total"),
-      suppliers: Object.freeze([...suppliers].sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
-        .map(([name, supplierRows]) => Object.freeze({ name, total: completeSum(supplierRows, "total"),
-          rows: Object.freeze([...supplierRows].sort((a, b) => a.branch.localeCompare(b.branch, "pt-BR")
-            || a.account.localeCompare(b.account, "pt-BR") || b.id.localeCompare(a.id, "pt-BR", { numeric: true }))) }))),
-    });
-  });
-  return Object.freeze({ count: rows.length, total: completeSum(rows, "total"), quantity: completeSum(rows, "quantity"),
-    supplierCount: new Set(rows.map(row => row.supplier).filter(Boolean)).size,
-    productCount: new Set(rows.map(row => row.product).filter(Boolean)).size,
-    unitMin: completeUnits ? unitValues.length ? Math.min(...unitValues) : 0 : null,
-    unitAverage: completeUnits ? unitValues.length ? unitValues.reduce((sum, value) => sum + value, 0) / unitValues.length : 0 : null,
-    unitMax: completeUnits ? unitValues.length ? Math.max(...unitValues) : 0 : null,
-    incompleteCount: rows.filter(row => !Number.isFinite(row.total)).length, days: Object.freeze(days) });
+    return true;
+  }).sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999")
+    || scalar(a.id).localeCompare(scalar(b.id), "pt-BR", { numeric: true }));
+  return Object.freeze({ count: rows.length, total: completeSum(rows, "total"),
+    incompleteCount: rows.filter(row => !Number.isFinite(row.total)).length, rows: Object.freeze(rows) });
 }

@@ -1,5 +1,7 @@
 import { buildRhReport3, buildRhReport4, buildRhReport5 } from "../chat/rh-reports-model.js";
 
+const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
+
 const TITLES = {
   3: "FORNECEDORES POR FILIAL, IMÓVEL E PROFISSÃO",
   4: "PRESENÇAS E AUSÊNCIAS POR PERÍODO",
@@ -19,7 +21,12 @@ const money = value => Number.isFinite(value)
   : "VALOR INCOMPLETO";
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
   ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : "DATA NÃO INFORMADA";
+const dateWithWeekday = value => /^\d{4}-\d{2}-\d{2}$/.test(value || "")
+  ? `${date(value)} (${new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`))})`
+  : date(value);
 const display = value => String(value ?? "").trim() || "NÃO INFORMADO";
+const daysBetween = (start, end) => /^\d{4}-\d{2}-\d{2}$/.test(start || "") && /^\d{4}-\d{2}-\d{2}$/.test(end || "")
+  ? Math.max(0, Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86400000)) : null;
 const todayLocal = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -48,10 +55,8 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
     const node = make("button", className, label); node.type = "button"; return node;
   };
   const element = make("section", "rh-reports"); element.hidden = true;
-  const head = make("div", "rh-reports-head");
-  const heading = make("h2", "rh-reports-title");
-  const refresh = button("Atualizar", "rh-reports-refresh");
-  head.append(heading, refresh); element.append(head);
+  const toolbar = make("div", "rh-reports-toolbar");
+  const refresh = button("↻ Atualizar dados", "rh-reports-refresh"); toolbar.append(refresh); element.append(toolbar);
   const filters = make("div", "rh-reports-filters"); const controls = new Map();
   for (const [name, label] of Object.entries(LABELS)) {
     const wrap = make("label", "rh-reports-filter"); wrap.dataset.filter = name;
@@ -62,6 +67,13 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
     wrap.append(input); filters.append(wrap); controls.set(name, input);
   }
   element.append(filters);
+  const brand = make("div", "rh-reports-brand");
+  const logo = make("img"); logo.src = LOGO_URL; logo.alt = "Logo Energética Construtora";
+  brand.append(logo); element.append(brand);
+  const head = make("div", "rh-reports-head");
+  const heading = make("h2", "rh-reports-title");
+  const period = make("p", "rh-reports-period");
+  head.append(heading, period); element.append(head);
   const notice = make("div", "rh-reports-notice"); notice.hidden = true; element.append(notice);
   const metrics = make("div", "rh-reports-metrics"); element.append(metrics);
   const content = make("div", "rh-reports-content"); element.append(content);
@@ -79,8 +91,9 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
     }
   }
 
-  function metric(label, value) {
+  function metric(label, value, tone = "") {
     const card = make("div", "rh-reports-metric");
+    if (tone) card.dataset.tone = tone;
     card.append(make("span", "rh-reports-label", label), make("strong", "rh-reports-value", value));
     metrics.append(card);
   }
@@ -94,18 +107,24 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
 
   function supplierCard(row, reportNumber) {
     const card = make("article", "rh-reports-supplier");
+    card.dataset.report = String(reportNumber);
     card.append(make("h5", "", display(row.name)));
     const grid = make("div", "rh-reports-grid");
     field(grid, "STATUS", row.status); field(grid, "PROFISSÃO", row.profession);
     field(grid, "FORMA PGTO", row.paymentMethod || row.paymentType);
-    field(grid, "DIÁRIA CADASTRADA", row.dailyValue == null ? "NÃO INFORMADA" : money(row.dailyValue));
+    const measured = ["MEDIÇÃO", "VALOR GLOBAL"].includes(String(row.paymentMethod || row.paymentType || "").toUpperCase());
+    field(grid, "VLR DIÁRIO", row.dailyValue == null ? measured ? "CONFORME MEDIÇÃO" : "⚠️ PREENCHER" : money(row.dailyValue));
     if (reportNumber === 3) {
       field(grid, "PRIMEIRA DATA", row.firstDate ? date(row.firstDate) : "SEM REGISTRO");
       field(grid, "ÚLTIMA PRESENÇA", row.lastPresentDate ? date(row.lastPresentDate) : "SEM PRESENÇA");
       field(grid, "PRESENÇAS / REGISTROS", `${row.presentCount} / ${row.presenceCount}`);
-      field(grid, "ÚLTIMOS 30 DIAS", `${row.attendance?.last30Present ?? 0} presenças`);
+      field(grid, "FREQUÊNCIA · 30 DIAS", `${row.attendance?.last30Present ?? 0} / ${row.attendance?.last30Records ?? 0} — ${row.attendance?.last30Rate ?? 0}%`);
+      field(grid, "FREQUÊNCIA · HISTÓRICO", `${row.presentCount} / ${row.presenceCount} — ${row.attendance?.historyRate ?? 0}%`);
+      const periodEnd = row.status?.toUpperCase() === "INATIVO" ? row.lastPresentDate : todayLocal();
+      const periodDays = daysBetween(row.firstDate, periodEnd);
+      field(grid, "PERÍODO ATIVO", periodDays == null ? "SEM REGISTRO" : `${periodDays} dias`);
       field(grid, "ETAPA ATUAL", row.stage); field(grid, "ATIVIDADE EXERCIDA", row.activity);
-      if (row.measurement) field(grid, "MEDIÇÃO ATUAL", row.measurement);
+      field(grid, "MEDIÇÃO", row.paymentMethod === "DIÁRIA" ? "✅" : row.measurement || "⚠️ PREENCHER");
     } else {
       field(grid, "FILIAL", row.branch); field(grid, "DIÁRIAS PENDENTES", row.pendingCount);
       field(grid, "APROVADO", money(row.approvedValue));
@@ -115,12 +134,17 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
     card.append(grid);
     if (reportNumber === 5) {
       const dates = make("div", "rh-reports-entries");
-      dates.append(make("h6", "", "Datas pendentes"));
-      for (const presence of row.pendingRows) {
+      dates.append(make("h6", "", "Datas pendentes e ausências recentes"));
+      for (const presence of row.timelineRows) {
         const entry = make("div", "rh-reports-entry");
-        field(entry, "DATA", date(presence.date)); field(entry, "PRESENÇA", presence.presence);
-        field(entry, "VALOR", presence.dailyValue == null ? "NÃO INFORMADO" : money(presence.dailyValue));
+        entry.dataset.presence = String(presence.presence || "").toLowerCase();
+        field(entry, "DATA", dateWithWeekday(presence.date)); field(entry, "PRESENÇA", presence.presence);
+        field(entry, "VALOR", presence.presence === "AUSENTE" ? "AUSENTE"
+          : presence.dailyValue == null ? "CONFORME MEDIÇÃO" : money(presence.dailyValue));
+        field(entry, "HORAS", Number.isFinite(presence.workedHours)
+          ? `${presence.workedHours.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}h` : "HORAS INCOMPLETAS");
         field(entry, "ATIVIDADE", presence.activity); field(entry, "IMÓVEL", presence.property);
+        if (presence.hasDiscrepancy) field(entry, "ALERTA", "⚠️ CONFERIR JORNADA/VALOR", "danger");
         if (presence.paymentId) field(entry, "IDPGTO", presence.paymentId);
         if (presence.motivation) field(entry, "MOTIVAÇÃO", presence.motivation);
         if (presence.observation) field(entry, "OBS", presence.observation);
@@ -156,7 +180,15 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
         field(stats, "MEDIÇÃO", property.measurementCount); field(stats, "VALOR GLOBAL", property.globalCount);
         field(stats, "SOMA POR DIA", money(property.dailyAmount)); item.append(stats);
         for (const profession of property.professions) {
-          const group = make("section", "rh-reports-profession"); group.append(make("h5", "", display(profession.name)));
+          const group = make("section", "rh-reports-profession");
+          group.append(make("h5", "", `🧰 ${display(profession.name)} — ${profession.count} fornecedor(es)`));
+          const summary = make("div", "rh-reports-profession-summary");
+          field(summary, "PROFISSIONAIS", profession.count, "profession");
+          field(summary, "DIÁRIA", profession.dailyCount, "pending");
+          field(summary, "MEDIÇÃO", profession.measurementCount, "present");
+          field(summary, "VALOR GLOBAL", profession.globalCount, "info");
+          field(summary, "SOMA POR DIA", money(profession.dailyAmount), "money");
+          group.append(summary);
           for (const supplier of profession.suppliers) group.append(supplierCard(supplier, 3));
           item.append(group);
         }
@@ -167,12 +199,17 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
   }
 
   function render4(result) {
-    metric("PRESENTES", result.metrics.present); metric("PENDENTES", result.metrics.pending);
-    metric("AUSENTES", result.metrics.absent); metric("VALOR DOS PRESENTES", money(result.metrics.presentValue));
+    metric("⚠️ PENDENTES", result.metrics.pending, "pending");
+    metric("✅ PRESENTES", result.metrics.present, "present");
+    metric("❌ AUSENTES", result.metrics.absent, "absent");
+    metric("💰 TOTAL VLR DIÁRIO FILTRADO", money(result.metrics.presentValue), "info");
     const byProfession = make("section", "rh-reports-block");
-    byProfession.append(make("h3", "", "Profissões no período"));
+    byProfession.append(make("h3", "", "👷 PROFISSÕES TOTAIS NA SEMANA / PERÍODO FILTRADO"));
     for (const profession of result.professions) {
-      const card = make("article", "rh-reports-profession"); card.append(make("h4", "", profession.name));
+      const card = make("article", "rh-reports-profession");
+      card.dataset.situation = profession.suppliers.every(row => row.situation === "PAGO") ? "pago"
+        : profession.suppliers.every(row => row.situation === "PENDENTE") ? "pendente" : "misto";
+      card.append(make("h4", "", `👷 ${profession.name} — ${profession.professionals} profissional(is) · ${profession.count} registros`));
       const stats = make("div", "rh-reports-grid");
       field(stats, "REGISTROS", profession.count); field(stats, "PROFISSIONAIS", profession.professionals);
       field(stats, "APROVADO PARA PGTO", money(profession.approvedValue));
@@ -181,6 +218,7 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
       const people = make("div", "rh-reports-entries");
       for (const supplier of profession.suppliers) {
         const person = make("div", "rh-reports-entry");
+        person.dataset.situation = supplier.situation.toLowerCase();
         field(person, "FORNECEDOR", supplier.name); field(person, "REGISTROS", supplier.count);
         field(person, "PRESENTES / PENDENTES", `${supplier.present} / ${supplier.pending}`);
         field(person, "APROVADO PARA PGTO", money(supplier.approvedValue));
@@ -190,7 +228,15 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
         field(person, "SITUAÇÃO", supplier.situation);
         people.append(person);
       }
-      card.append(people); byProfession.append(card);
+      card.append(people);
+      const total = make("div", "rh-reports-profession-total");
+      total.append(make("h5", "", "RESUMO GERAL DA PROFISSÃO"));
+      field(total, "⏳ PENDENTE APROVAÇÃO", money(profession.validationValue), "pending");
+      field(total, "🟠 APROVADO PGTO", money(profession.approvedValue), "approved");
+      field(total, "✅ VALOR PAGO", money(profession.paidValue), "present");
+      field(total, "💰 TOTAL", money(profession.pendingValue == null || profession.approvedValue == null || profession.paidValue == null
+        ? null : profession.pendingValue + profession.approvedValue + profession.paidValue), "money");
+      card.append(total); byProfession.append(card);
     }
     if (!result.professions.length) byProfession.append(make("p", "rh-reports-empty", "Sem registros presentes ou pendentes no período."));
     content.append(byProfession);
@@ -200,7 +246,12 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
       card.append(make("h4", "", `${date(day.date)} · ${display(branch.name)}`));
       const stats = make("div", "rh-reports-grid");
       field(stats, "PENDENTES", branch.pending); field(stats, "PRESENTES", branch.present);
-      field(stats, "AUSENTES", branch.absent); card.append(stats);
+      field(stats, "AUSENTES", branch.absent);
+      field(stats, "TOTAL DO DIA", money(branch.dailyTotal), "present"); card.append(stats);
+      const professions = make("div", "rh-reports-day-professions");
+      professions.append(make("h5", "", "QTD POR PROFISSÃO · SOMENTE PRESENTES"));
+      for (const profession of branch.professionCounts) field(professions, profession.name, profession.count);
+      card.append(professions);
       const list = make("div", "rh-reports-entries");
       for (const row of branch.rows) {
         const entry = make("div", "rh-reports-entry");
@@ -218,12 +269,15 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
   }
 
   function render5(result) {
-    metric("APROVADO PENDENTE PGTO", money(result.metrics.approvedValue));
-    metric("PENDENTE VALIDAÇÃO", money(result.metrics.validationValue));
-    metric("TOTAL PENDENTE", money(result.metrics.totalValue));
+    metric("APROVADO PENDENTE PGTO", money(result.metrics.approvedValue), "present");
+    metric("PENDENTE VALIDAÇÃO", money(result.metrics.validationValue), "pending");
+    metric("TOTAL PENDENTE", money(result.metrics.totalValue), "absent");
     const pending = make("section", "rh-reports-block"); pending.append(make("h3", "", "Pagamentos pendentes"));
     if (!result.suppliers.length) pending.append(make("p", "rh-reports-empty", "Nenhum pagamento pendente corresponde aos filtros."));
     for (const row of result.suppliers) pending.append(supplierCard(row, 5));
+    const pendingTotal = make("div", "rh-reports-pending-total");
+    field(pendingTotal, "TOTAL GERAL PENDENTE", money(result.approvedTotal), "danger");
+    pending.append(pendingTotal);
     content.append(pending);
     const detail = make("section", "rh-reports-block"); detail.append(make("h3", "", "DETALHAMENTO GERAL"));
     if (!result.details.length) detail.append(make("p", "rh-reports-empty", "Nenhuma presença corresponde aos filtros."));
@@ -278,6 +332,8 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
   function render() {
     metrics.replaceChildren(); content.replaceChildren();
     if (!snapshot || !currentReport) return;
+    period.hidden = currentReport !== 4;
+    if (currentReport === 4) period.textContent = `${date(controls.get("startDate").value)} até ${date(controls.get("endDate").value)}`;
     const result = currentReport === 3 ? buildRhReport3(snapshot, activeFilters())
       : currentReport === 4 ? buildRhReport4(snapshot, activeFilters()) : buildRhReport5(snapshot, activeFilters());
     if (currentReport === 3) render3(result);
@@ -312,7 +368,7 @@ export function createRhReportsView({ document: doc = globalThis.document, data 
       if (destroyed) throw new Error("A visualização de RH foi encerrada.");
       const number = Number(reportNumber);
       if (![3, 4, 5].includes(number)) throw new RangeError("Número de relatório inválido: selecione 3, 4 ou 5.");
-      const previous = currentReport; currentReport = number; heading.textContent = TITLES[number]; element.hidden = false;
+      const previous = currentReport; currentReport = number; heading.textContent = TITLES[number]; element.dataset.report = String(number); element.hidden = false;
       for (const [name, control] of controls) {
         control.parentElement.hidden = !GROUP_FIELDS[number].includes(name);
         if (previous !== number) control.value = "";

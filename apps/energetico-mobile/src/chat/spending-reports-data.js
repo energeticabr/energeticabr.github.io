@@ -1,7 +1,7 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { normalizeSpendingLaunch, normalizeSpendingProduct } from "./spending-reports-model.js";
+import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
 
 const SITE = "personal";
 const MAX_PAGES = 100;
@@ -19,9 +19,10 @@ export function createSpendingReportsData({
 
   async function resolve(name, signal) {
     abortIfNeeded(signal);
-    const list = await repository.resolveList(SITE, [name], signal ? { signal } : {});
+    const aliases = Array.isArray(name) ? name : [name];
+    const list = await repository.resolveList(SITE, aliases, signal ? { signal } : {});
     abortIfNeeded(signal);
-    if (list?.status !== "resolved" || !list.id) throw new Error(`A lista ${name} não está disponível nesta conta.`);
+    if (list?.status !== "resolved" || !list.id) throw new Error(`A lista ${aliases[0]} não está disponível nesta conta.`);
     return list.id;
   }
 
@@ -49,13 +50,29 @@ export function createSpendingReportsData({
   async function loadSnapshot({ reportNumber, signal } = {}) {
     if (reportNumber !== 9 && reportNumber !== 10) throw new RangeError("Relatório de gastos desconhecido.");
     abortIfNeeded(signal);
+    if (reportNumber === 10) {
+      const [recurrenceList, provisionList] = await Promise.all([
+        resolve(["DESPESASRECORRENTES", "DESPESAS RECORRENTES"], signal),
+        resolve(["PROVISÃO PGTOS", "PROVISAO PGTOS", "PROVISAO PAGAMENTOS"], signal),
+      ]);
+      const [recurrenceColumns, recurrenceItems, provisionColumns, provisionItems] = await Promise.all([
+        repository.getColumns(SITE, recurrenceList, signal ? { signal } : {}), allItems(recurrenceList, signal),
+        repository.getColumns(SITE, provisionList, signal ? { signal } : {}), allItems(provisionList, signal),
+      ]);
+      abortIfNeeded(signal);
+      if (!Array.isArray(recurrenceColumns) || !Array.isArray(provisionColumns)) throw new Error("O SharePoint retornou colunas inválidas.");
+      return Object.freeze({
+        recurrences: Object.freeze(recurrenceItems.map(item => normalizeSpendingRecurrence(item, recurrenceColumns))),
+        provisions: Object.freeze(provisionItems.map(item => normalizeSpendingProvision(item, provisionColumns))),
+      });
+    }
     const launchList = await resolve("LANCAMENTOS", signal);
-    const productList = reportNumber === 9 ? await resolve("CADASTROPRODUTO", signal) : null;
+    const productList = await resolve("CADASTROPRODUTO", signal);
     const [launchColumns, launchItems, productColumns, productItems] = await Promise.all([
       repository.getColumns(SITE, launchList, signal ? { signal } : {}),
       allItems(launchList, signal),
-      productList ? repository.getColumns(SITE, productList, signal ? { signal } : {}) : [],
-      productList ? allItems(productList, signal) : [],
+      repository.getColumns(SITE, productList, signal ? { signal } : {}),
+      allItems(productList, signal),
     ]);
     abortIfNeeded(signal);
     if (!Array.isArray(launchColumns) || !Array.isArray(productColumns)) throw new Error("O SharePoint retornou colunas inválidas.");

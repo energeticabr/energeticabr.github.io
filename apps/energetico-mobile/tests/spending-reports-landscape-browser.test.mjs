@@ -53,7 +53,7 @@ test("relatórios 9 e 10 cabem em 844x390 e 740x360 com texto longo", { timeout:
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/spending-reports-responsive.html?report=${report}` }, sessionId);
       let ready = false;
       for (let i = 0; i < 200 && !ready; i++) {
-        ready = await evaluate(`location.search === '?report=${report}' && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector('.sr-detail-card, .sr-launch-card'))`);
+        ready = await evaluate(`location.search === '?report=${report}' && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector('.sr-detail-card, .sr-provision-card'))`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Relatório ${report}, ${width}px não carregou`);
@@ -63,11 +63,21 @@ test("relatórios 9 e 10 cabem em 844x390 e 740x360 com texto longo", { timeout:
           if (node.hidden || getComputedStyle(node).display === 'none') return false;
           const box = node.getBoundingClientRect(); return box.right > viewport + 1 || box.left < -1;
         }).slice(0, 3).map(node => ({ className: node.className, right: node.getBoundingClientRect().right }));
-        return { viewport, scrollWidth: document.documentElement.scrollWidth, rootWidth: root.scrollWidth, rootClient: root.clientWidth, clipped };
+        const colors = { branch: getComputedStyle(root.querySelector('.sr-branch-title') || root).backgroundColor,
+          products: getComputedStyle(root.querySelector('.sr-category--products .sr-category-title') || root).backgroundColor,
+          money: getComputedStyle(root.querySelector('.sr-field--money .sr-field-value') || root).color,
+          filter: getComputedStyle(root.querySelector('.sr-filter-label')).backgroundColor };
+        return { viewport, scrollWidth: document.documentElement.scrollWidth, rootWidth: root.scrollWidth, rootClient: root.clientWidth, clipped, colors };
       })()`);
       assert.ok(dimensions.scrollWidth <= dimensions.viewport, `Documento transborda: ${JSON.stringify({ report, width, dimensions })}`);
       assert.ok(dimensions.rootWidth <= dimensions.rootClient, `Relatório pede rolagem lateral: ${JSON.stringify({ report, width, dimensions })}`);
       assert.deepEqual(dimensions.clipped, [], `Conteúdo cortado: ${JSON.stringify({ report, width, dimensions })}`);
+      assert.equal(dimensions.colors.filter, "rgb(153, 0, 0)", `Cabeçalho do filtro do relatório ${report} deve seguir o Power Apps`);
+      if (report === 9) {
+        assert.equal(dimensions.colors.branch, "rgb(49, 88, 148)");
+        assert.equal(dimensions.colors.products, "rgb(84, 130, 53)");
+        assert.equal(dimensions.colors.money, "rgb(207, 29, 29)");
+      }
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

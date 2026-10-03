@@ -56,6 +56,18 @@ test("relatório 3 agrupa fornecedores por filial, imóvel e profissão e marca 
   assert.equal(buildRhReport3({ suppliers: [supplier("Ana"), supplier("Bia")], presences: [presence("Ana", "2026-09-30", "PRESENTE")] }, { startDate: "2026-09-01" }).supplierCount, 1);
 });
 
+test("relatório 3 preserva indicadores por profissão e frequência percentual do Power Apps", () => {
+  const result = buildRhReport3({ suppliers: [supplier("Ana"), supplier("Bia", { paymentMethod: "MEDIÇÃO", dailyValue: null })], presences: [
+    presence("Ana", "2026-08-01", "PRESENTE"),
+    presence("Ana", "2026-10-01", "PRESENTE"),
+    presence("Ana", "2026-10-02", "AUSENTE"),
+  ] }, {}, "2026-10-02");
+  const profession = result.groups[0].properties[0].professions[0];
+  assert.deepEqual([profession.dailyCount, profession.measurementCount, profession.globalCount, profession.dailyAmount], [1, 1, 0, 120]);
+  const attendance = profession.suppliers.find(row => row.name === "Ana").attendance;
+  assert.deepEqual([attendance.last30Present, attendance.last30Records, attendance.last30Rate, attendance.historyRate], [1, 2, 50, 66.7]);
+});
+
 test("relatório 4 contabiliza estados e separa aprovado, pago e pendente por profissão", () => {
   const rows = [
     presence("Ana", "2026-10-01", "PRESENTE", { dailyValue: 120 }),
@@ -71,6 +83,17 @@ test("relatório 4 contabiliza estados e separa aprovado, pago e pendente por pr
   assert.equal(result.professions[0].pendingValue, 80);
   assert.equal(result.days[0].date, "2026-10-02");
   assert.equal(result.days[0].branches[0].rows.length, 3);
+});
+
+test("relatório 4 fornece totais diários e quantidade de presentes por profissão", () => {
+  const rows = [
+    presence("Ana", "2026-10-02", "PRESENTE", { dailyValue: 120 }),
+    presence("Bia", "2026-10-02", "PRESENTE", { profession: "SERVENTE", dailyValue: 80 }),
+    presence("Cris", "2026-10-02", "PENDENTE", { dailyValue: 50 }),
+  ];
+  const branch = buildRhReport4({ presences: rows }).days[0].branches[0];
+  assert.equal(branch.dailyTotal, 200);
+  assert.deepEqual(branch.professionCounts, [{ name: "PEDREIRO", count: 1 }, { name: "SERVENTE", count: 1 }]);
 });
 
 test("relatórios 4 e 5 nunca mostram soma definitiva quando falta valor diário", () => {
@@ -111,4 +134,49 @@ test("relatório 5 mantém pendências de todas as datas e filtra só ocorrênci
   const noOccurrence = buildRhReport5({ suppliers: [supplier("Ana")], presences: rows }, { startDate: "2026-11-01" });
   assert.equal(noOccurrence.approvedTotal, 620);
   assert.equal(noOccurrence.details.length, 0);
+});
+
+test("relatório 5 soma validação de presença pendente mesmo sem status de pagamento", () => {
+  const rows = [presence("Ana", "2026-10-01", "PRESENTE", { dailyValue: 100 }),
+    presence("Ana", "2026-10-02", "PENDENTE", { status: "AGUARDANDO", dailyValue: 70 })];
+  const report = buildRhReport5({ suppliers: [supplier("Ana")], presences: rows });
+  assert.equal(report.pending[0].validationValue, 70);
+  assert.equal(report.pending[0].totalValue, 170);
+});
+
+test("relatório 5 mostra ausências recentes e sinaliza jornada e diária divergentes", () => {
+  const rows = [presence("Ana", "2026-10-01", "PRESENTE", { dailyValue: 100,
+    entry1: "08:00", exit1: "12:00", entry2: "13:00", exit2: "16:00" }),
+    presence("Ana", "2026-10-02", "AUSENTE", { status: "PAGO", dailyValue: 0 })];
+  const report = buildRhReport5({ suppliers: [supplier("Ana", { dailyValue: 120, hours: 8 })], presences: rows }, {}, "2026-10-02");
+  assert.equal(report.pending[0].pendingCount, 1);
+  assert.deepEqual(report.pending[0].timelineRows.map(row => row.presence), ["PRESENTE", "AUSENTE"]);
+  assert.equal(report.pending[0].timelineRows[0].workedHours, 7);
+  assert.equal(report.pending[0].timelineRows[0].hasDiscrepancy, true);
+});
+
+test("relatório 5 não presume jornada de 8 horas quando o contrato não informa horas", () => {
+  const row = presence("Ana", "2026-10-01", "PRESENTE", {
+    entry1: "08:00", exit1: "12:00", entry2: "13:00", exit2: "16:00",
+  });
+  const [timeline] = buildRhReport5({ suppliers: [supplier("Ana", { hours: null })], presences: [row] }, {}, "2026-10-02").pending[0].timelineRows;
+  assert.equal(timeline.workedHours, 7);
+  assert.equal(timeline.hasDiscrepancy, false);
+});
+
+test("relatório 5 não calcula horas nem alerta de jornada com batidas incompletas", () => {
+  const rows = [
+    presence("Ana", "2026-10-01", "PRESENTE", { entry1: "08:00", exit1: "12:00" }),
+    presence("Ana", "2026-10-02", "PRESENTE", { entry1: "08:00", exit1: "", entry2: "13:00", exit2: "17:00" }),
+  ];
+  const timeline = buildRhReport5({ suppliers: [supplier("Ana", { hours: 8 })], presences: rows }, {}, "2026-10-02").pending[0].timelineRows;
+  assert.deepEqual(timeline.map(row => row.workedHours), [null, null]);
+  assert.deepEqual(timeline.map(row => row.hasDiscrepancy), [false, false]);
+});
+
+test("relatório 5 mantém divergência de valor independente das batidas", () => {
+  const row = presence("Ana", "2026-10-01", "PRESENTE", { dailyValue: 100 });
+  const [timeline] = buildRhReport5({ suppliers: [supplier("Ana", { hours: null, dailyValue: 120 })], presences: [row] }, {}, "2026-10-02").pending[0].timelineRows;
+  assert.equal(timeline.workedHours, null);
+  assert.equal(timeline.hasDiscrepancy, true);
 });

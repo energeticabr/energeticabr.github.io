@@ -17,8 +17,8 @@ const PROPERTY_FIELDS = [
   "IDPGTOFISCAL", "IDPGTOCORRETAGEM", "OBS FISCAL", "CORRETAGEM", "CORRETOR",
   "DESCRITIVO CORRETAGEM", "VLORFISCAL", "VLORCORRETAGEM",
 ];
-const RENT_FIELDS = ["DESCRICAO", "INQUILINO", "DATA VENCIMENTO", "DATAPGTOEFETUADO", "FORMA PGTO", "NUM. CONTRATO ALUGUEL"];
-const CONTRACT_FIELDS = ["VALOR"];
+const RENT_FIELDS = ["DESCRICAO", "INQUILINO", "DATA VENCIMENTO", "DATAPGTOEFETUADO", "FORMA PGTO", "NUM. CONTRATO ALUGUEL", "VALOR BRUTO"];
+const CONTRACT_FIELDS = ["VALOR", "DESCRICAOIMOVEL", "INQUILINO", "FORMA DE PGTO", "STATUS", "DATA REAJUSTE", "INDEX", "DATA VENCIMENTO"];
 const PURCHASE_FIELDS = ["FILIAL", "IMOVEL", "NOME"];
 const DOCUMENT_FIELDS = [
   ["SEGURO", "Seguro"], ["IDPROPOSTA", "Proposta"], ["IDCONTRATOCAIXA", "Contrato Caixa"],
@@ -146,6 +146,54 @@ export function selectOpenRentsReport(sourceRows, filters = {}) {
   return { rows, summary };
 }
 
+export function selectRentDashboard(snapshot, filters = {}) {
+  const { sourceRows, contracts, todayKey } = snapshot;
+  if (!Array.isArray(sourceRows) || !Array.isArray(contracts) || !dateKey(todayKey)) throw new Error("A fonte do relatório anual de aluguéis está incompleta.");
+  const year = String(filters.year || todayKey.slice(0, 4));
+  if (!/^\d{4}$/.test(year)) throw new Error("O ano selecionado não é válido.");
+  const selectedContracts = contracts.filter(row => !filters.status || row.status === filters.status);
+  const selectedContractIds = new Set(selectedContracts.map(row => row.id));
+  const displayedContracts = selectedContracts.filter(row =>
+    (!filters.property || row.property === filters.property) &&
+    (!filters.tenant || row.tenant === filters.tenant) &&
+    (!filters.paymentMethod || row.paymentMethod === filters.paymentMethod));
+  const matchedLaunches = sourceRows.filter(row =>
+    selectedContractIds.has(row.contractId) &&
+    (!filters.property || row.property === filters.property) && (!filters.tenant || row.tenant === filters.tenant) &&
+    (!filters.paymentMethod || row.paymentMethod === filters.paymentMethod));
+  const annualSource = matchedLaunches.filter(row => (row.paidDate || row.dueDate).startsWith(year));
+  const today = Date.parse(`${todayKey}T00:00:00Z`);
+  const openRows = matchedLaunches.filter(row => !row.paidDate).map(row => {
+    const difference = Math.round((Date.parse(`${row.dueDate}T00:00:00Z`) - today) / 86_400_000);
+    return { ...row, amountCents: contracts.find(contract => contract.id === row.contractId).amountCents,
+      dueState: difference < 0 ? "overdue" : difference === 0 ? "today" : "upcoming", days: Math.abs(difference), year };
+  }).sort((a, b) => a.dueDate.localeCompare(b.dueDate) || Number(a.id) - Number(b.id));
+  const open = selectOpenRentsReport(openRows, filters);
+  const grouped = new Map();
+  const monthlyTotals = Array(12).fill(0);
+  for (const row of annualSource) {
+    let grossCents = row.grossCents;
+    if (grossCents == null) {
+      try { grossCents = moneyCents(row.grossValue, row.id); }
+      catch (error) {
+        if (row.paidDate) throw error;
+        grossCents = contracts.find(contract => contract.id === row.contractId).amountCents;
+      }
+    }
+    const month = Number((row.paidDate || row.dueDate).slice(5, 7)) - 1;
+    if (!grouped.has(row.property)) grouped.set(row.property, Array(12).fill(0));
+    grouped.get(row.property)[month] += grossCents;
+    monthlyTotals[month] += grossCents;
+  }
+  const annualRows = [...grouped].map(([property, months]) => ({ property, months, totalCents: months.reduce((sum, value) => sum + value, 0) }));
+  const adjustments = displayedContracts.map(row => ({ property: row.property, tenant: row.tenant,
+    date: row.adjustmentDate, index: row.index, status: row.status })).sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+  const expirations = displayedContracts.map(row => ({ property: row.property, tenant: row.tenant,
+    date: row.expiryDate, status: row.status })).sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+  return { ...snapshot, ...open, annualRows, monthlyTotals,
+    annualTotalCents: monthlyTotals.reduce((sum, value) => sum + value, 0), adjustments, expirations, year };
+}
+
 export function createCommercialDocsRentReportsData({ tokenProvider, repository: suppliedRepository, fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES, today = () => new Date() } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("Os relatórios requerem a sessão Microsoft ativa.");
   const repository = suppliedRepository || createSharePointRepository(createGraphClient(tokenProvider, { fetch: fetchImpl }), siteConfig);
@@ -202,22 +250,32 @@ export function createCommercialDocsRentReportsData({ tokenProvider, repository:
     if (number === 17) {
       const [rentSet, contractSet] = await Promise.all([loadList("rents", signal), loadList("contracts", signal)]);
       abortIfNeeded(signal);
-      const contracts = new Map(contractSet.items.map(item => [String(item.id), valueFor(item, contractSet.columns, "VALOR")]));
+      const contracts = contractSet.items.map(item => {
+        const get = name => valueFor(item, contractSet.columns, name);
+        const adjustmentDate = get("DATA REAJUSTE"), expiryDate = get("DATA VENCIMENTO");
+        if ((adjustmentDate && !dateKey(adjustmentDate)) || (expiryDate && !dateKey(expiryDate))) throw new Error(`Data de reajuste ou vencimento inválida no contrato ${item.id}.`);
+        return { id: String(item.id), property: get("DESCRICAOIMOVEL"), tenant: get("INQUILINO"),
+          paymentMethod: get("FORMA DE PGTO"), status: get("STATUS"), amountCents: moneyCents(get("VALOR"), item.id),
+          adjustmentDate: dateKey(adjustmentDate), expiryDate: dateKey(expiryDate), index: get("INDEX") };
+      });
+      const contractsById = new Map(contracts.map(row => [row.id, row]));
       const current = today();
       const todayValue = current instanceof Date ? `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}` : dateKey(current);
       if (!dateKey(todayValue)) throw new Error("A data atual não é válida para calcular os vencimentos.");
-      const rows = rentSet.items.filter(item => !valueFor(item, rentSet.columns, "DATAPGTOEFETUADO")).map(item => {
+      const sourceRows = rentSet.items.map(item => {
         const get = name => valueFor(item, rentSet.columns, name);
         const contractId = get("NUM. CONTRATO ALUGUEL");
-        if (!/^[1-9]\d*$/.test(contractId) || !contracts.has(contractId)) throw new Error(`O contrato do lançamento ${item.id} não foi encontrado; total não exibido.`);
+        if (!/^[1-9]\d*$/.test(contractId) || !contractsById.has(contractId)) throw new Error(`O contrato do lançamento ${item.id} não foi encontrado; total não exibido.`);
         const dueDate = dateKey(get("DATA VENCIMENTO"));
         if (!dueDate) throw new Error(`O vencimento do lançamento ${item.id} está ausente ou inválido.`);
         const property = get("DESCRICAO"), tenant = get("INQUILINO");
         if (!property || !tenant) throw new Error(`O imóvel ou inquilino do lançamento ${item.id} está ausente.`);
-        const difference = Math.round((Date.parse(`${dueDate}T00:00:00Z`) - Date.parse(`${todayValue}T00:00:00Z`)) / 86_400_000);
-        return { id: String(item.id), property, tenant, dueDate, paymentMethod: get("FORMA PGTO"), contractId, amountCents: moneyCents(contracts.get(contractId), contractId), dueState: difference < 0 ? "overdue" : difference === 0 ? "today" : "upcoming", days: Math.abs(difference) };
-      }).sort((a, b) => a.dueDate.localeCompare(b.dueDate) || Number(a.id) - Number(b.id));
-      return selectOpenRentsReport(rows, filters);
+        const paidRaw = get("DATAPGTOEFETUADO"), paidDate = dateKey(paidRaw);
+        if (paidRaw && !paidDate) throw new Error(`Data de pagamento inválida no lançamento ${item.id}.`);
+        return { id: String(item.id), property, tenant, dueDate, paidDate, paymentMethod: get("FORMA PGTO"),
+          status: contractsById.get(contractId).status, contractId, grossValue: get("VALOR BRUTO") };
+      });
+      return selectRentDashboard({ sourceRows, contracts, todayKey: todayValue }, filters);
     }
     throw new RangeError("Selecione o relatório 16 ou 17.");
   }

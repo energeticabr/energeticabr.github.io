@@ -14,7 +14,7 @@ const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\App
 
 test("relatórios 11–13 cabem em 844×390 e 740×360 sem rolagem lateral ou cortes", { timeout: 90_000 }, async t => {
   if (!browser) return t.skip("Chrome/Edge indisponível");
-  const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0 }, logLevel: "silent" });
+  const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0, fs: { allow: [resolve(appRoot, "../..")] } }, logLevel: "silent" });
   const profile = mkdtempSync(join(tmpdir(), "audit-reports-live-layout-"));
   let child, socket;
   const pending = new Map();
@@ -67,6 +67,26 @@ test("relatórios 11–13 cabem em 844×390 e 740×360 sem rolagem lateral ou co
       })()`);
       assert.ok(size.documentWidth <= width && size.reportWidth <= size.reportClientWidth && size.clipped.length === 0,
         `Relatório ${report}, ${width}×${height}: ${JSON.stringify(size)}`);
+      assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ar-desktop-table')).display`), "none", `Tabela ${report} deve dar lugar aos cartões no telefone`);
+    }
+    await send("Emulation.setDeviceMetricsOverride", { width: 1365, height: 768, deviceScaleFactor: 1, mobile: false }, sessionId);
+    for (const report of [11, 12, 13]) {
+      await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/audit-reports-live-responsive.html?report=${report}` }, sessionId);
+      let ready = false;
+      for (let i = 0; i < 120 && !ready; i++) {
+        ready = await evaluate(`location.search === '?report=${report}' && document.documentElement?.dataset.ready === 'true' && Boolean(document.querySelector('.ar-desktop-table')) && document.querySelector('.ar-brand img')?.complete`);
+        if (!ready) await delay(100);
+      }
+      assert.ok(ready, `Relatório ${report} não carregou no desktop`);
+      const presentation = await evaluate(`(() => ({
+        logoLoaded: document.querySelector('.ar-brand img').naturalWidth > 0,
+        tableDisplay: getComputedStyle(document.querySelector('.ar-desktop-table')).display,
+        cardVisible: document.querySelector('${report === 13 ? ".ar-card" : ".ar-subcard"}')?.getClientRects().length > 0,
+        logoSrc: document.querySelector('.ar-brand img')?.src,
+        width: document.documentElement.scrollWidth,
+      }))()`);
+      assert.ok(presentation.logoLoaded && presentation.tableDisplay === "table" && !presentation.cardVisible && presentation.width <= 1365,
+        `Relatório ${report} no desktop: ${JSON.stringify(presentation)}`);
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

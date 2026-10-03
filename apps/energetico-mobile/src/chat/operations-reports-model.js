@@ -44,6 +44,14 @@ export function buildStageReport(snapshot, filters = {}, today = new Date().toIS
     if (!groups.has(key)) groups.set(key, { branch: row.branch, stage: row.stage, rows: [] });
     groups.get(key).rows.push(row);
   }
+  const visibleBranches = new Set(activities.map(row => normalized(row.branch)));
+  const hasActivityFilter = ["activity", "status", "supplier"].some(name => Boolean(filters[name]));
+  for (const row of launches) {
+    if (hasActivityFilter || !text(row.stage) || !matches(row, filters, ["branch", "stage"])) continue;
+    if (!visibleBranches.has(normalized(row.branch)) && !same(filters.branch, row.branch) && !same(filters.stage, row.stage)) continue;
+    const key = `${normalized(row.branch)}\u0000${normalized(row.stage)}`;
+    if (!groups.has(key)) groups.set(key, { branch: row.branch, stage: row.stage, rows: [] });
+  }
   const stages = [];
   for (const group of groups.values()) {
     const stageLaunches = launches.filter(row => same(row.branch, group.branch) && same(row.stage, group.stage))

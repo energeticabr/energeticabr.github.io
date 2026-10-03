@@ -13,8 +13,12 @@
   const long = "DOCUMENTOEXTENSOSEMESPAÇOS".repeat(15);
   const field = (key, pending) => ({ key, label: long, value: pending ? "" : long, pending });
   const snapshots = {
-    16: { rows: [{ id: "1", branch: long, property: long, status: long, fiscal: long, contracts: [{ id: "10", buyer: long }], documents: Array.from({ length: 8 }, (_, n) => field(`DOC${n}`, n % 2 === 0)), stateChecks: [field("STATE", true)], otherFields: Array.from({ length: 8 }, (_, n) => field(`OTHER${n}`, n % 2 === 0)), idPending: 5, fieldsPending: 4, totalPending: 9 }] },
-    17: { rows: [{ id: "2", property: long, tenant: long, dueDate: "2026-10-02", paymentMethod: long, contractId: "3", amountCents: 123450, dueState: "overdue", days: 4 }] },
+    16: { rows: [{ id: "1", branch: long, property: long, status: long, fiscal: long, contracts: [{ id: "10", buyer: long }], documents: [field("SEGURO", true), field("IDPROPOSTA", false), ...Array.from({ length: 6 }, (_, n) => field(`DOC${n}`, n % 2 === 0))], stateChecks: [field("STATE", true)], otherFields: Array.from({ length: 8 }, (_, n) => field(`OTHER${n}`, n % 2 === 0)), idPending: 5, fieldsPending: 4, totalPending: 9 }] },
+    17: { todayKey: "2026-10-02", year: "2026",
+      rows: [{ id: "2", property: long, tenant: long, dueDate: "2026-10-02", paymentMethod: long, contractId: "3", amountCents: 123450, dueState: "today", days: 0 }],
+      sourceRows: [{ id: "2", property: long, tenant: long, dueDate: "2026-10-02", paidDate: "", paymentMethod: long, contractId: "3", grossCents: 123450 }],
+      contracts: [{ id: "3", property: long, tenant: long, paymentMethod: long, status: "ATIVO", amountCents: 123450,
+        adjustmentDate: "2026-11-02", expiryDate: "2027-01-02", index: "IPCA" }] },
   };
   const view = createCommercialDocsRentReportsView({ document, data: { async loadReport(report) { return snapshots[report]; } } });
   const shell = createContractorReportsView({
@@ -34,7 +38,12 @@
     shell: { width: content.getBoundingClientRect().width, scrollWidth: content.scrollWidth },
     report: { visible: !node.hidden, branchCards: node.querySelectorAll(".cdr-branch-summary").length,
       propertyCards: node.querySelectorAll(".cdr-property-card").length,
-      rentCards: node.querySelectorAll(".cdr-rent-card").length,
+      rentCards: node.querySelectorAll(".cdr-open-section .cdr-data-card").length,
+      tableDisplay: getComputedStyle(node.querySelector(".cdr-branch-table") || node.querySelector(".cdr-rent-table") || node).display,
+      mobileCardsDisplay: getComputedStyle(node.querySelector(".cdr-mobile-cards") || node).display,
+      filterColor: getComputedStyle(node.querySelector(".cdr-filter-label") || node).backgroundColor,
+      pendingColor: getComputedStyle(node.querySelector('[data-metric="SEGURO"]')?.parentElement || node).backgroundColor,
+      clearColor: getComputedStyle(node.querySelector('[data-metric="IDPROPOSTA"]')?.parentElement || node).backgroundColor,
       width: node.getBoundingClientRect().width, scrollWidth: node.scrollWidth,
       childOverflow: [...node.querySelectorAll("*")].some(child => child.getBoundingClientRect().right > innerWidth + 1) } });
 </script>
