@@ -17,6 +17,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     const previous = state; state = null;
     previous?.overlay.remove(); onBlocked(false);
     if (previous?.trigger?.isConnected) previous.trigger.focus();
+    else if (previous && host.isConnected && !host.hidden) host.focus({ preventScroll: true });
   }
   function error(current, failure) {
     if (!active(current)) return;
@@ -56,8 +57,8 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
         const focusable = [...dialog.querySelectorAll('button:not([disabled]), input:not([disabled])')];
         const first = focusable[0], last = focusable.at(-1);
         if (!first) { event.preventDefault(); dialog.focus(); }
-        else if (event.shiftKey && (doc.activeElement === first || !dialog.contains(doc.activeElement))) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && (doc.activeElement === last || !dialog.contains(doc.activeElement))) { event.preventDefault(); first.focus(); }
+        else if (event.shiftKey && (doc.activeElement === dialog || doc.activeElement === first || !dialog.contains(doc.activeElement))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (doc.activeElement === dialog || doc.activeElement === last || !dialog.contains(doc.activeElement))) { event.preventDefault(); first.focus(); }
       }
     });
     body.append(createLoadingIndicator(doc, 'Carregando conclusão…'));
@@ -79,6 +80,17 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
       const submit = el('button', 'gallery-record-dialog-button tg-completion-submit', 'Submeter');
       submit.type = 'submit'; submit.setAttribute('data-task-completion-submit', '');
       buttons.append(submit); form.append(buttons); body.replaceChildren(form); date.focus();
+      async function reconcile() {
+        const latest = await data.loadEditor(row.id, { refresh: true });
+        if (!active(current)) return;
+        if (String(latest.item?.id) !== String(row.id)) throw new Error('Não foi possível verificar a conclusão desta tarefa.');
+        const fields = latest.item.fields || {};
+        if (String(fields[dateColumn.name] || '').slice(0, 10) === current.attemptedDate
+          && key(fields[completedColumn.name]) === 'CONCLUIDA') {
+          current.persisted = true; current.needsReconcile = false;
+        } else if (latest.item.eTag === context.item.eTag) current.needsReconcile = false;
+        else throw new Error('O registro mudou. Cancele e reabra a tarefa para conferir os dados antes de submeter.');
+      }
       form.addEventListener('submit', async event => {
         event.preventDefault();
         if (!active(current) || current.busy || pending) return;
@@ -88,21 +100,33 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
         pending = true; current.busy = true; message.hidden = true; dialog.setAttribute('aria-busy', 'true');
         const inputs = [date, completed, cancel, submit]; inputs.forEach(input => { input.disabled = true; });
         try {
+          if (current.needsReconcile) await reconcile();
+          if (!active(current)) return;
           if (!current.persisted) {
+            current.attemptedDate = date.value;
+            current.needsReconcile = true;
             await data.saveEditor(context, { [dateColumn.name]: date.value, [completedColumn.name]: 'CONCLUÍDA' });
-            current.persisted = true;
+            current.persisted = true; current.needsReconcile = false;
           }
           if (!active(current)) return;
           await onChanged();
           if (active(current)) close();
         } catch (failure) {
+          if (!active(current)) return;
+          if (current.needsReconcile) {
+            try {
+              await reconcile();
+              if (!active(current)) return;
+              if (current.persisted) { await onChanged(); if (active(current)) close(); return; }
+            } catch (readFailure) { failure = readFailure; }
+          }
           error(current, current.persisted ? new Error(`Conclusão salva, mas não foi possível atualizar a galeria. ${failure.message || ''}`) : failure);
-          if (current.persisted) submit.textContent = 'Tentar atualizar galeria';
+          submit.textContent = current.persisted ? 'Tentar atualizar galeria' : current.needsReconcile ? 'Verificar conclusão' : 'Submeter';
         } finally {
           pending = false;
           if (active(current)) {
             current.busy = false; dialog.setAttribute('aria-busy', 'false');
-            date.disabled = completed.disabled = current.persisted;
+            date.disabled = completed.disabled = Boolean(current.persisted || current.needsReconcile);
             cancel.disabled = submit.disabled = false;
           }
         }

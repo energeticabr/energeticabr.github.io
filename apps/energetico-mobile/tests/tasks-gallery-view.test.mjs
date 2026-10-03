@@ -89,6 +89,66 @@ test('submeter conclusão grava só os dois nomes internos e retorna à galeria 
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
   assert.equal(ctx.root().hidden, false);
   assert.equal(ctx.root().querySelectorAll('.tg-card').length, 0);
+  assert.equal(ctx.document.activeElement, ctx.root(), 'foco permanece na galeria após recriar cartões');
+});
+
+test('falha de leitura após save verifica os campos antes de permitir nova gravação', async t => {
+  let writes = 0, reads = 0;
+  const baseline = { ...completionContext('176'), item: { ...completionContext('176').item, eTag: '"v1"' } };
+  const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data: {
+    loadEditor: async () => {
+      reads++;
+      if (reads === 2) throw new Error('Leitura indisponível');
+      return reads === 1 ? baseline : { ...baseline, item: { id: '176', eTag: '"v2"', fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' } } };
+    },
+    saveEditor: async () => { writes++; throw new Error('Leitura após gravação indisponível'); },
+  } });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1);
+  assert.equal(dialog.querySelector('[name="completionDate"]').disabled, true, 'não altera um envio ainda não reconciliado');
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1, 'o envio já reconhecido não é repetido com ETag antigo');
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+});
+
+test('Shift Tab no foco inicial do popup fica no último controle habilitado', async t => {
+  const waiting = deferred();
+  const ctx = await setup(t, { data: { loadEditor: async () => waiting.promise } });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-action="complete"]').click();
+  const dialog = ctx.root().querySelector('.tg-completion-dialog');
+  assert.equal(ctx.document.activeElement, dialog);
+  dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+  assert.equal(ctx.document.activeElement, dialog.querySelector('[data-task-completion-cancel]'));
+});
+
+test('serviço real reconcilia escrita confirmada cuja leitura posterior falhou sem novo PATCH', async t => {
+  const { createTasksGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  let writes = 0, reads = 0, fields = { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição original', STATUS: 'EM ATENDIMENTO' };
+  const data = createTasksGalleryData({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'tasks' }; },
+    async getItemsPage() { return { items: [{ id: '176', fields }], hasMore: false }; },
+    async getItem(_site, _list, id) { reads++; return { id, fields, eTag: writes ? '"v2"' : '"v1"' }; },
+    async getColumns() { return [
+      { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
+      { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
+      { name: 'field_11', displayName: 'TAREFA', text: {}, required: true },
+    ]; },
+    async updateItem(_site, _list, _id, values, options) {
+      assert.deepEqual(options, { eTag: '"v1"' }); writes++; fields = { ...fields, ...values };
+      throw new Error('GET após PATCH falhou');
+    },
+  } });
+  const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1); assert.equal(reads, 2);
+  assert.equal(fields.field_11, 'Descrição original');
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+  assert.equal(ctx.root().querySelectorAll('.tg-card').length, 0);
 });
 
 test('data vazia impede gravação; falha no save mantém valores para tentar novamente', async t => {
