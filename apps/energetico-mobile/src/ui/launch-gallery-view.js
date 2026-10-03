@@ -343,6 +343,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   clusterPanel.setAttribute('role', 'dialog'); clusterPanel.setAttribute('aria-modal', 'true');
   clusterPanel.setAttribute('aria-label', 'Detalhes do agrupamento');
   const reviewHost = element('section', 'lg-review'); reviewHost.hidden = true;
+  reviewHost.setAttribute('role', 'dialog'); reviewHost.setAttribute('aria-modal', 'true');
   reviewHost.setAttribute('aria-label', 'Revisão e confirmação'); reviewHost.tabIndex = -1;
   filterDisclosure.append(filterForm);
   content.append(filterDisclosure, totals, notice, listStatus, cards, pagination);
@@ -1080,6 +1081,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     editor = null;
   }
   function clearReview() { review = null; reviewHost.hidden = true; reviewHost.replaceChildren(); }
+  function dismissReview() { clearReview(); focus(editor?.form?.querySelector('.lg-editor-review') ?? panel); }
   function renderDetail() {
     clearReview(); clearEditor();
     const item = current.item;
@@ -1187,7 +1189,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const actions = element('div', 'lg-actions lg-editor-actions');
     const cancel = button('Cancelar edição', dismissDetail, { danger: true });
     cancel.classList.add('lg-editor-cancel');
-    const reviewButton = button('Revisar alterações', () => reviewEditor());
+    const reviewButton = button('SUBMETER', () => reviewEditor());
     reviewButton.classList.add('lg-editor-review');
     actions.append(cancel, reviewButton);
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
@@ -1210,7 +1212,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     if (editor.schemaState?.loading) { notify('Aguarde a atualização das opções relacionadas.', true); return; }
     if (!editor.form.reportValidity()) return;
-    const fields = {}, lines = [];
+    const fields = {}, changes = [];
     for (const { definition, control, initial } of editor.controls) {
       const type = String(definition.type ?? '').toLowerCase();
       let value = control.type === 'checkbox' ? control.checked : control.type === 'number' && control.value !== '' ? Number(control.value) : control.value;
@@ -1227,7 +1229,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       const unchanged = control.type === 'checkbox' ? value === initial : String(control.value) === String(initial);
       if (editor.operation === 'update' && unchanged) continue;
       fields[definition.name] = value;
-      lines.push(`${definition.label ?? definition.name}: ${control.tagName === 'SELECT' ? control.selectedOptions[0]?.textContent ?? '' : type === 'date' ? control.value : fieldText(definition.name, value)}`);
+      const shown = raw => {
+        if (raw === '' || raw == null) return '—';
+        if (control.type === 'checkbox') return raw ? 'Sim' : 'Não';
+        if (control.tagName === 'SELECT') return [...control.options].find(option => option.value === String(raw))?.textContent ?? display(raw);
+        if (type === 'date') return formatEditorDate(raw);
+        return fieldText(definition.name, raw);
+      };
+      changes.push({ label: definition.label ?? definition.name,
+        before: editor.operation === 'update' ? shown(initial) : '—', after: shown(value) });
     }
     const operation = editor.operation;
     if (operation === 'update' && !Object.keys(fields).length) {
@@ -1246,15 +1256,36 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       catch (error) { notify(failure(error, 'Erro na revisão'), true); return; }
       payload.requestId = retryIds.get(key);
     }
-    showReview('Revise antes de confirmar', [`Lançamento #${current.item.id}`, ...lines], 'Confirmar alterações', operation, payload, undefined, key);
+    showReview('Confirme as alterações', changes, 'Confirmar alterações', operation, payload, undefined, key);
   }
-  function showReview(title, lines, confirmText, operation, payload, file, key) {
+  function showReview(title, changes, confirmText, operation, payload, file, key) {
     clearReview();
     review = { operation, payload, file, key };
-    reviewHost.append(element('h3', 'lg-section-title', title), ...lines.map(line => element('p', 'lg-review-line', line)),
-      button(confirmText, commitReview, { danger: ['delete', 'attachment_delete'].includes(operation) }),
-      button('Cancelar confirmação', () => { clearReview(); focus(editor?.controls[0]?.control ?? panel); }));
-    reviewHost.hidden = false; reveal(reviewHost);
+    const card = element('div', 'lg-review-card');
+    const intro = element('p', 'lg-review-intro', `Lançamento #${current.item.id} — confirma as informações abaixo?`);
+    const table = element('table', 'lg-review-table');
+    const heading = element('thead');
+    const headings = element('tr');
+    headings.append(...['Campo', 'Antes', 'Depois'].map(name => element('th', '', name)));
+    heading.append(headings);
+    const body = element('tbody');
+    for (const change of changes) {
+      const row = element('tr');
+      row.append(element('th', '', change.label), element('td', '', change.before), element('td', '', change.after));
+      body.append(row);
+    }
+    table.append(heading, body);
+    const actions = element('div', 'lg-review-actions');
+    const cancel = button('Cancelar confirmação', dismissReview, { danger: true });
+    cancel.classList.add('lg-review-cancel');
+    const confirm = button(confirmText, commitReview);
+    confirm.classList.add('lg-review-confirm');
+    actions.append(cancel, confirm);
+    const reviewError = element('p', 'lg-review-error lg-error');
+    reviewError.hidden = true; reviewError.tabIndex = -1; reviewError.setAttribute('role', 'alert');
+    card.append(element('h3', 'lg-section-title', title), intro, table, reviewError, actions);
+    reviewHost.append(card);
+    reviewHost.hidden = false; focus(reviewHost);
   }
   async function refreshAttachmentDetail(refreshed) {
     if (!current || !editor?.form) throw new Error('Edição não disponível para atualizar os anexos');
@@ -1308,6 +1339,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   async function commitReview() {
     if (!review || busy || !opened) return;
     const pending = review;
+    const reviewError = reviewHost.querySelector('.lg-review-error');
+    if (reviewError) { reviewError.textContent = ''; reviewError.hidden = true; }
     busy = true; notify('Salvando…'); updateBusy();
     try {
       if (pending.file) {
@@ -1356,7 +1389,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         await Promise.all([loadSnapshot(applied), selectedId != null ? loadDetail(selectedId) : Promise.resolve()]);
       }
     } catch (error) {
-      if (!destroyed) notify(failure(error, 'Não foi possível salvar'), true);
+      if (!destroyed) {
+        const message = failure(error, 'Não foi possível salvar');
+        notify(message, true);
+        if (!reviewHost.hidden && review === pending && reviewError) {
+          reviewError.textContent = message; reviewError.hidden = false;
+          focus(reviewError);
+        }
+      }
     } finally { busy = false; if (!destroyed) updateBusy(); }
   }
   function renderAttachments() {
@@ -1398,7 +1438,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       let requestId;
       try { if (!retryIds.has(key)) retryIds.set(key, uuid()); requestId = retryIds.get(key); }
       catch (error) { notify(failure(error, 'Não foi possível preparar o anexo'), true); return; }
-      showReview('Confirme o novo anexo', [`Lançamento #${current.item.id}`, `Arquivo: ${file.name}`],
+      showReview('Confirme o novo anexo', [{label: 'Arquivo', before: '—', after: file.name}],
         'Enviar anexo', 'attachment_add', { id: current.item.id, expectedModified: modified(), requestId }, file, key);
       review.uncertain = uncertainAttachments.has(key);
     }, { disabled: true });
@@ -1439,12 +1479,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!opened || suspended || event.defaultPrevented) return;
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation();
+      if (!reviewHost.hidden) { dismissReview(); return; }
       if (!clusterPanel.hidden) { closeCluster(); return; }
       if (!panel.hidden) { dismissDetail(); return; }
       close(); return;
     }
     if (event.key !== 'Tab') return;
-    const activeModal = !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;
+    const activeModal = !reviewHost.hidden ? reviewHost : !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;
     const controls = [...activeModal.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
       .filter(node => !node.disabled && !node.closest('[hidden]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
     const first = controls[0] ?? activeModal, last = controls.at(-1) ?? activeModal;

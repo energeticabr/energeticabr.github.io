@@ -130,13 +130,79 @@ test('editing a launch replaces a selected option and submits the replacement', 
   replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
   assert.equal(stage.value, 'CONTABILIDADE');
   assert.match(editor.querySelector('.sfs-trigger').textContent, /Contabilidade/);
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.match(ctx.root().querySelector('.lg-review').textContent, /Contabilidade/);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.deepEqual(mutations(ctx), [{ operation: 'update', payload: {
     id: 17, fields: { ETAPA: 'CONTABILIDADE' }, confirm: true,
     expectedModified: '2026-09-18T12:34:56Z',
   } }]);
+});
+
+test('SUBMETER opens a modal table with only changed fields and saves only after confirmation', async t => {
+  const ctx = await setup(t);
+  const stylesheet = ctx.document.createElement('style');
+  stylesheet.textContent = readFileSync(new URL('../src/ui/launch-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(stylesheet);
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '3');
+  const editor = ctx.root().querySelector('.lg-editor');
+  const submit = button(editor, 'SUBMETER');
+  assert.deepEqual([...editor.querySelectorAll('.lg-editor-actions button')].map(node => node.textContent),
+    ['Cancelar edição', 'SUBMETER']);
+  submit.click();
+  const popup = ctx.root().querySelector('.lg-review');
+  assert.equal(popup.hidden, false);
+  assert.equal(popup.getAttribute('role'), 'dialog');
+  assert.equal(popup.getAttribute('aria-modal'), 'true');
+  assert.equal(ctx.dom.window.getComputedStyle(popup).position, 'fixed');
+  assert.deepEqual([...popup.querySelectorAll('thead th')].map(node => node.textContent), ['Campo', 'Antes', 'Depois']);
+  assert.deepEqual([...popup.querySelectorAll('tbody tr')].map(row => [...row.cells].map(cell => cell.textContent)),
+    [['Quantidade', '2.5', '3']]);
+  assert.equal(mutations(ctx).length, 0);
+  button(popup, 'Confirmar alterações').click(); await settle();
+  assert.deepEqual(mutations(ctx).map(({operation, payload}) => [operation, payload.fields]),
+    [['update', {QUANTIDADE: 3}]]);
+});
+
+test('modal review compares choice labels and dates without exposing unchanged fields', async t => {
+  const ctx = await setup(t, {request: async operation => operation === 'snapshot' ? snapshot() : detail({editFields: [
+    {name: 'CONCLUÍDO', label: 'Situação', type: 'select', options: [
+      {value: 'PEDIDO EMPENHADO', label: 'Empenhado'}, {value: 'PEDIDO FINALIZADO', label: 'Finalizado'},
+    ]},
+    {name: 'DATA', label: 'Data', type: 'date'},
+    {name: 'QUANTIDADE', label: 'Quantidade', type: 'number'},
+  ]})});
+  await ctx.gallery.open(); await showDetail(ctx);
+  const form = ctx.root().querySelector('.lg-editor');
+  form.querySelector('.sfs-trigger').click();
+  [...form.querySelectorAll('.sfs-option')].find(node => node.textContent === 'Finalizado').click();
+  input(ctx, 'DATA', '18/09/2026');
+  button(form, 'SUBMETER').click();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-review tbody tr')].map(row => [...row.cells].map(cell => cell.textContent)), [
+    ['Situação', 'Empenhado', 'Finalizado'],
+    ['Data', '17/09/2026', '18/09/2026'],
+  ]);
+  assert.equal(mutations(ctx).length, 0);
+});
+
+test('cancel and Escape close only the review popup and preserve the edited draft', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open(); await showDetail(ctx);
+  const draft = input(ctx, 'QUANTIDADE', '4');
+  const submit = button(ctx.root(), 'SUBMETER');
+  submit.click();
+  button(ctx.root().querySelector('.lg-review'), 'Cancelar confirmação').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.equal(draft.value, '4');
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(ctx.document.activeElement, submit);
+  submit.click();
+  ctx.root().querySelector('.lg-review').dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(draft.value, '4');
+  assert.equal(mutations(ctx).length, 0);
 });
 
 test('editor highlights only fields changed from the loaded launch and clears restored values', async t => {
@@ -238,7 +304,7 @@ test('dependent choice cleared by a branch change is highlighted until its origi
   assert.equal(ctx.dom.window.getComputedStyle(stageField.querySelector('.sfs-trigger')).backgroundColor, 'rgb(255, 255, 255)');
 });
 
-test('filters start collapsed so records are visible; details and review scroll into view', async t => {
+test('filters start collapsed, editor scrolls into view, and review opens as a focused popup', async t => {
   const ctx = await setup(t);
   const scrolled = [];
   ctx.dom.window.HTMLElement.prototype.scrollIntoView = function () { scrolled.push(this); };
@@ -250,8 +316,9 @@ test('filters start collapsed so records are visible; details and review scroll 
   await showDetail(ctx);
   assert.ok(scrolled.includes(ctx.root().querySelector('.lg-detail')));
   input(ctx, 'QUANTIDADE', '3');
-  button(ctx.root(), 'Revisar alterações').click();
-  assert.ok(scrolled.includes(ctx.root().querySelector('.lg-review')));
+  button(ctx.root(), 'SUBMETER').click();
+  assert.equal(ctx.document.activeElement, ctx.root().querySelector('.lg-review'));
+  assert.equal(scrolled.includes(ctx.root().querySelector('.lg-review')), false);
 });
 
 test('edit modal shows compact dates and an attachment picker below the current attachments', async t => {
@@ -282,9 +349,9 @@ test('edit modal shows compact dates and an attachment picker below the current 
     assert.equal([...ctx.root().querySelectorAll('.lg-detail button')].some(node => node.textContent === text), false);
   }
   const buttons = [...form.querySelectorAll('.lg-editor-actions > button')];
-  assert.deepEqual(buttons.map(node => node.textContent), ['Cancelar edição', 'Revisar alterações']);
+  assert.deepEqual(buttons.map(node => node.textContent), ['Cancelar edição', 'SUBMETER']);
   input(ctx, 'DATA', '18/09/2026');
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.deepEqual(ctx.root().querySelector('.lg-review')?.hidden, false);
   assert.match(ctx.root().querySelector('.lg-review').textContent, /18\/09\/2026/);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
@@ -297,7 +364,7 @@ test('invalid calendar dates cannot reach the update request', async t => {
   ]})});
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'DATA', '31/02/2026');
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
   assert.match(ctx.root().querySelector('[role="alert"]').textContent, /data válida/);
   assert.equal(mutations(ctx).length, 0);
@@ -311,7 +378,7 @@ test('numeric mobile date entry inserts separators before review', async t => {
   const date = input(ctx, 'DATA', '18102026');
   assert.equal(date.inputMode, 'numeric');
   assert.equal(date.value, '18/10/2026');
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(mutations(ctx).at(-1).payload.fields.DATA, '2026-10-18');
 });
@@ -1491,7 +1558,7 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   const field = input(ctx, 'QUANTIDADE', '3.75', ctx.root().querySelector('.lg-editor'));
   input(ctx, 'id', '17'); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor [name="QUANTIDADE"]'), field);
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.equal(mutations(ctx).length, 0);
   assert.match(ctx.root().querySelector('.lg-review').textContent, /3[.,]75/);
   button(ctx.root(), 'Confirmar alterações').click();
@@ -1512,7 +1579,7 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
 test('changing a reviewed input invalidates confirmation; closing and reopening never saves or loses the form', async t => {
   const ctx = await setup(t); await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4');
-  button(ctx.root(), 'Revisar alterações').click(); input(ctx, 'QUANTIDADE', '5');
+  button(ctx.root(), 'SUBMETER').click(); input(ctx, 'QUANTIDADE', '5');
   assert.equal(ctx.root().querySelector('.lg-review')?.hidden ?? true, true);
   ctx.gallery.close(); await ctx.gallery.open();
   assert.equal(ctx.root().querySelector('.lg-editor [name="QUANTIDADE"]').value, '5');
@@ -1635,7 +1702,7 @@ test('adding an attachment preserves unsaved fields and refreshes the SharePoint
   assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').value, 'PEDIDO FINALIZADO');
   assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').nextElementSibling.querySelector('.sfs-value').textContent, 'Finalizado');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
   assert.deepEqual(ctx.calls.at(-1), { operation: 'detail', payload: { id: 17 } });
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
@@ -1657,7 +1724,7 @@ test('a concurrent change to an edited field keeps the draft but blocks a stale 
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.match(ctx.root().querySelector('[role="alert"]').textContent, /campo editado mudou/i);
-  button(ctx.root(), 'Revisar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.calls.some(call => call.operation === 'update'), false);
 });
 
@@ -1678,7 +1745,7 @@ test('a failed detail refresh after upload keeps the draft and retries before re
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
   assert.match(ctx.root().querySelector('[role="alert"]').textContent, /Anexo enviado.*atualiza/i);
-  button(ctx.root(), 'Revisar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
@@ -1698,6 +1765,7 @@ test('failed attachment upload keeps the confirmation and retry identity', async
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.match(ctx.root().querySelector('[role="alert"]').textContent, /Falha no envio/);
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  assert.match(ctx.root().querySelector('.lg-review [role="alert"]').textContent, /Falha no envio/);
   button(ctx.root(), 'Enviar anexo').click(); await settle();
   assert.equal(uploads.length, 2);
   assert.equal(uploads[0].options.requestId, uploads[1].options.requestId);
@@ -1722,7 +1790,7 @@ test('lost upload response reconciles the stored file before another write', asy
   assert.match(ctx.root().querySelector('[role="alert"]').textContent, /arquivo com esse nome.*verifique/i);
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '4');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.expectedModified, 'new-version');
 });
@@ -1861,7 +1929,7 @@ test('invalid periods and required fields prevent review and calls; editing bloc
   assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, 2);
   assert.match(ctx.root().querySelector('[role=alert]').textContent, /data final/);
   await showDetail(ctx);
-  button(ctx.root(), 'Revisar alterações').click();
+  button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
   const form = ctx.root().querySelector('.lg-editor');
   input(ctx, 'QUANTIDADE', '12', form);
@@ -1910,7 +1978,7 @@ test('a confirmed mutation is never resent when its detail refresh fails', async
   } });
   await ctx.gallery.open(); await showDetail(ctx);
   input(ctx, 'QUANTIDADE', '4');
-  button(ctx.root(), 'Revisar alterações').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  button(ctx.root(), 'SUBMETER').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), null);
   assert.match(ctx.root().querySelector('.lg-detail').textContent, /Falha na atualização/);
   button(ctx.root().querySelector('.lg-detail'), 'Tentar novamente').click(); await settle();
