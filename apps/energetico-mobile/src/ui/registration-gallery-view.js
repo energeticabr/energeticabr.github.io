@@ -23,6 +23,32 @@ function normalizedFieldName(value) {
 }
 
 function computedValue(fields, calculation, model) {
+  const raw = field => valueText(registrationRawField(fields, field, model));
+  const dateMillis = value => /^\d{4}-\d{2}-\d{2}$/.test(registrationDateKey(value)) ? Date.parse(registrationDateKey(value)) : NaN;
+  if (calculation.priorityScore) {
+    const product = calculation.priorityScore.reduce((value, { field, weights }) => value * (weights[raw(field)] ?? 1), 1);
+    const score = Math.round(Math.cbrt(product) * 10) / 10;
+    return { Value: score, tone: score <= 2.5 ? "success" : score <= 4 ? "warning" : "danger" };
+  }
+  if (calculation.deadlineNotice || calculation.taskElapsed) {
+    const today = new Date();
+    const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const days = (start, end) => Math.floor((dateMillis(end) - dateMillis(start)) / 86400000);
+    if (calculation.deadlineNotice) {
+      const [dueField, completionField] = calculation.deadlineNotice;
+      if (raw(completionField)) return null;
+      const remaining = days(localToday, raw(dueField));
+      if (!Number.isFinite(remaining)) return null;
+      return { Value: remaining < 0 ? `VENCIDO HÁ ${Math.abs(remaining)} DIAS` : remaining === 0 ? "VENCE HOJE" : remaining === 1 ? "VENCE AMANHÃ" : `VENCE EM ${remaining} DIAS`,
+        tone: remaining < 0 ? "danger" : remaining === 0 ? "today" : remaining < 5 ? "warning" : "success" };
+    }
+    const [startField, identifiedField, completionField] = calculation.taskElapsed;
+    const completed = raw(completionField);
+    const elapsed = days(raw(completed ? identifiedField : startField), completed || localToday);
+    if (!Number.isFinite(elapsed)) return null;
+    const date = registrationDateKey(completed).split("-").reverse().join("/");
+    return { Value: completed ? `CONCLUÍDO EM ${date} (${elapsed} DIAS GASTOS)` : `CRIADO HÁ: ${elapsed} DIAS`, tone: completed ? "success" : "danger" };
+  }
   if (calculation.when) {
     const condition = calculation.when;
     return computedValue(fields, valueText(registrationRawField(fields, condition.field, model)) === condition.equals ? condition.then : condition.else, model);
@@ -141,10 +167,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterControls = new Map();
   for (const field of filterFields) {
     const label = el("label", "rg-field", fieldLabel(field));
-    const control = el("select", "rg-input");
+    const isDate = model.dateFilterFields?.includes(field);
+    const control = el(isDate ? "input" : "select", "rg-input");
+    if (isDate) control.type = "date";
+    else if (model.multiSelectFilters?.includes(field)) control.multiple = true;
     control.dataset.filterField = field;
     control.setAttribute("aria-label", `Filtrar por ${fieldLabel(field)}`);
-    control.append(option("Todos", ""));
+    if (!isDate) control.append(option("Todos", ""));
     label.append(control);
     toolbar.append(label);
     filterControls.set(field, control);
@@ -373,13 +402,18 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         if (visibility.equals && selector !== visibility.equals || visibility.includes && !visibility.includes.includes(selector)) continue;
       }
       const value = rowFieldValue(row, field);
-      appendDocumentDetail(details, field, fieldLabel(field), value);
+      const pair = appendDocumentDetail(details, field, fieldLabel(field), value);
+      const calculation = model.computedFields?.[field];
+      if (pair && calculation) {
+        const tone = computedValue(row.fields, calculation, model)?.tone;
+        if (tone) pair.dataset.tone = tone;
+      }
     }
     container.append(details);
   }
 
   function filterSelections() {
-    return Object.fromEntries([...filterControls].map(([field, control]) => [field, control.value]));
+    return Object.fromEntries([...filterControls].map(([field, control]) => [field, control.multiple ? [...control.selectedOptions].map(option => option.value).filter(Boolean) : control.value]));
   }
 
   async function populateCatalogFilter(field, { refresh = false } = {}) {
@@ -387,13 +421,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const current = (filterRequests.get(field) || 0) + 1;
     filterRequests.set(field, current);
     const epoch = filterEpoch, filters = filterSelections(), selectedValue = control.value;
+    const policy = data.getFilterPolicy?.(field);
+    const fixedValue = policy?.disabled === true ? policy.defaultValue || "" : "";
     filterErrors.delete(field);
     if (source.disabledUntil?.some(parent => !filters[parent])) {
       control.replaceChildren(option("Selecione o filtro anterior", ""));
       control.disabled = true;
       return;
     }
-    control.replaceChildren(option("Carregando…", ""));
+    control.replaceChildren(option("Carregando…", fixedValue));
     control.disabled = true;
     try {
       if (typeof data.loadFilterOptions !== "function") throw new Error("Fonte de filtro indisponível.");
@@ -401,11 +437,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
       if (!Array.isArray(options)) throw new Error("Opções do filtro indisponíveis.");
       control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
-      control.value = options.some(item => String(item.value) === selectedValue) ? selectedValue : "";
-      control.disabled = false;
+      if (fixedValue && !options.some(item => String(item.value) === fixedValue)) control.append(option(fixedValue, fixedValue));
+      const desiredValue = fixedValue || (!hasLoaded ? policy?.defaultValue || selectedValue : selectedValue);
+      control.value = fixedValue || (options.some(item => String(item.value) === desiredValue) ? desiredValue : "");
+      control.disabled = policy?.disabled === true;
     } catch {
       if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
-      control.replaceChildren(option("Indisponível", ""));
+      control.replaceChildren(option("Indisponível", fixedValue));
       control.disabled = true;
       filterErrors.set(field, `Filtro ${fieldLabel(field)} indisponível. Tente atualizar.`);
     }
@@ -413,8 +451,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   async function populateFilters({ refresh = false } = {}) {
     for (const [field, control] of filterControls) {
-      if (filterSources.has(field)) continue;
-      const selectedValue = control.value;
+      if (filterSources.has(field) || model.dateFilterFields?.includes(field)) continue;
+      const selectedValue = control.multiple ? [...control.selectedOptions].map(option => option.value) : control.value;
       const values = [...new Set([...(model.filterChoices?.[field] || []), ...rows.flatMap(row => {
         const value = rowFieldValue(row, field);
         return model.substringFilters?.includes(field) ? value.split(/;|\r?\n|,\s*|\s+\|\s+/).map(part => part.trim()) : [value];
@@ -423,6 +461,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         ? Number(right) - Number(left)
         : left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true }));
       control.replaceChildren(option("Todos", ""), ...values.map(value => option(value, value)));
+      if (control.multiple) {
+        const selected = !hasLoaded ? model.defaultFilters?.[field] || [] : selectedValue;
+        for (const option of control.options) option.selected = selected.includes(option.value);
+        continue;
+      }
       control.value = !hasLoaded && values.includes(model.defaultFilters?.[field]) ? model.defaultFilters[field]
         : values.includes(selectedValue) ? selectedValue : "";
     }
@@ -462,7 +505,16 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const query = search.value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const filtered = rows.filter(row => {
       for (const [field, control] of filterControls) {
+        if (control.multiple) {
+          const selected = [...control.selectedOptions].map(option => option.value).filter(Boolean);
+          if (selected.length && !selected.includes(rowFieldValue(row, field))) return false;
+          continue;
+        }
         if (!control.value) continue;
+        if (model.dateFilterFields?.includes(field)) {
+          if (registrationDateKey(valueText(registrationRawField(row.fields, field, model))) !== control.value) return false;
+          continue;
+        }
         const value = rowFieldValue(row, field);
         if (model.substringFilters?.includes(field)) {
           if (!value.toLocaleLowerCase("pt-BR").includes(control.value.toLocaleLowerCase("pt-BR"))) return false;

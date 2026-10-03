@@ -30,6 +30,11 @@
 .rg-detail { min-width: 0; }
 .rg-detail dt { color: #5c6d74; font-size: .75rem; font-weight: 700; }
 .rg-detail dd { margin: 0; overflow-wrap: anywhere; }
+.rg-detail[data-tone] dd { font-weight: 800; }
+.rg-detail[data-tone="danger"] dd { color: #b51e2b; }
+.rg-detail[data-tone="warning"] dd { color: #a65b00; }
+.rg-detail[data-tone="today"] dd { color: #8b4513; }
+.rg-detail[data-tone="success"] dd { color: #176347; }
 .rg-document-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .rg-document-heading .rg-row-title { margin: 0; color: #123b77; font-size: .94rem; line-height: 1.3; text-transform: uppercase; }
 .rg-document-id { flex: 0 0 auto; padding: 4px 8px; border-radius: 6px; color: #fff; background: #07566b; font-size: .85rem; font-weight: 800; }

@@ -41,6 +41,7 @@ function createPicker(select, closeOthers) {
   search.setAttribute('aria-controls', `${id}-list`);
   const list = doc.createElement('div'); list.className = 'sfs-list'; list.id = `${id}-list`;
   list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', labelText);
+  if (select.multiple) list.setAttribute('aria-multiselectable', 'true');
   const empty = doc.createElement('p'); empty.className = 'sfs-empty'; empty.textContent = 'Nenhuma opção encontrada.';
   empty.setAttribute('role', 'status'); empty.hidden = true;
   popup.append(search, list, empty); wrapper.append(trigger, popup); select.after(wrapper);
@@ -150,9 +151,16 @@ function createPicker(select, closeOthers) {
   }
   function choose(option) {
     if (destroyed || disabled(option) || ![...select.options].includes(option)) return;
-    const changed = select.value !== option.value;
-    select.value = option.value;
-    close({ focus: true }); sync();
+    const changed = select.multiple || select.value !== option.value;
+    if (select.multiple) {
+      onOptionPointerCancel();
+      if (!option.value) { for (const candidate of select.options) candidate.selected = candidate === option; }
+      else {
+        option.selected = !option.selected;
+        for (const candidate of select.options) if (!candidate.value) candidate.selected = false;
+      }
+    } else { select.value = option.value; close({ focus: true }); }
+    sync();
     if (changed) select.dispatchEvent(new view.Event('change', { bubbles: true }));
   }
   function onTriggerClick() { if (popup.hidden) open(); else close(); }
@@ -180,7 +188,7 @@ function createPicker(select, closeOthers) {
       }
     }
   }
-  function onOutside(event) { if (!wrapper.contains(event.target)) close(); }
+  function onOutside(event) { if (!wrapper.contains(event.target) && !event.composedPath?.().includes(wrapper)) close(); }
   function onOptionPointerDown(event) {
     pointerSeen = true;
     const target = event.target.closest?.('.sfs-option');
@@ -270,7 +278,7 @@ function createPicker(select, closeOthers) {
 export function bindSearchableFilterSelects(container) {
   const pickers = [];
   function close() { for (const picker of pickers) picker.close(); }
-  for (const select of container.querySelectorAll('select:not([multiple])')) {
+  for (const select of container.querySelectorAll('select')) {
     if (enhanced.has(select)) continue;
     const picker = createPicker(select, close);
     enhanced.set(select, picker); pickers.push(picker);
