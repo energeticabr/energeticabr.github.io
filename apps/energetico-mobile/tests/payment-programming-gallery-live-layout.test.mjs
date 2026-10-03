@@ -50,7 +50,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
       return response.result.value;
     };
     const port = server.httpServer.address().port;
-    for (const [width, height, expectedColumns] of [[390, 844, 3], [320, 740, 2], [1365, 768, 3]]) {
+    for (const [width, height, expectedColumns] of [[390, 844, 3], [320, 740, 2], [1365, 768, 3], [844, 390, 3]]) {
       await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/payment-programming-gallery-responsive.html?width=${width}` }, sessionId);
       let ready = false;
@@ -99,6 +99,43 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
         const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, sessionId);
         writeFileSync(process.env.PAYMENT_GALLERY_SCREENSHOT, Buffer.from(shot.data, "base64"));
       }
+      await evaluate(`(() => {
+        const content = document.querySelector('.og-content');
+        content.scrollTop = content.scrollHeight;
+        window.holdPaymentLoad = true;
+        window.paymentReload = window.paymentGallery.reload();
+      })()`);
+      const loading = await evaluate(`(() => {
+        const body = document.querySelector('.pg-body'), content = document.querySelector('.og-content');
+        const layer = document.querySelector('.pg-loading-layer'), indicator = layer.querySelector('.app-loading');
+        const rect = node => { const r = node.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, x:r.x+r.width/2, y:r.y+r.height/2 }; };
+        const b = rect(body), l = rect(layer), i = rect(indicator);
+        return {
+          visible: !layer.hidden,
+          centered: Math.abs(i.x-b.x) < 2 && Math.abs(i.y-b.y) < 2,
+          coversBody: Math.abs(l.top-b.top) < 1 && Math.abs(l.bottom-b.bottom) < 1,
+          fits: i.left >= 0 && i.right <= innerWidth && i.top >= b.top && i.bottom <= innerHeight,
+          backgroundInert: content.inert && getComputedStyle(content).opacity < .5,
+          blocksBackground: layer.contains(document.elementFromPoint(b.x, b.top+10)),
+          cardsRetained: document.querySelectorAll('.pg-card').length === 3,
+          mascotLoaded: indicator.querySelector('img').complete && indicator.querySelector('img').naturalWidth > 0,
+          navigationEnabled: [...document.querySelectorAll('.og-header button')].every(button => !button.disabled),
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      })()`);
+      assert.ok(Object.entries(loading).every(([key, value]) => key === 'overflow' ? !value : value),
+        `carregamento em ${width}x${height}: ${JSON.stringify(loading)}`);
+      if (width === 390 && process.env.PAYMENT_GALLERY_LOADING_SCREENSHOT) {
+        const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, sessionId);
+        writeFileSync(process.env.PAYMENT_GALLERY_LOADING_SCREENSHOT, Buffer.from(shot.data, "base64"));
+      }
+      await evaluate("window.finishPaymentLoad()");
+      let released = false;
+      for (let attempt = 0; attempt < 100 && !released; attempt++) {
+        released = await evaluate("document.querySelector('.pg-loading-layer').hidden && !document.querySelector('.og-content').inert && !document.querySelector('[name=sort]').disabled");
+        if (!released) await delay(50);
+      }
+      assert.ok(released, "carregamento terminou e liberou a galeria");
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);
