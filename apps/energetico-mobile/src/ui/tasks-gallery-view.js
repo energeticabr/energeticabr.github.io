@@ -2,6 +2,7 @@ import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
+import { createTaskCompletionDialog } from './task-completion-dialog.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS_FILTER = "__ATIVIDADE_CRIADA_OU_EM_ATENDIMENTO__";
@@ -196,6 +197,14 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const attachmentCounts = createGalleryAttachmentCounts({
     loadAttachments: row => data.listAttachments(row.id, { refresh: true }),
     onChange: updateAttachmentCount,
+  });
+  const completionDialog = createTaskCompletionDialog({
+    document: doc, host: root, data,
+    today: () => dateKey(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(now())),
+    onBlocked: blocked => { header.inert = content.inert = detail.inert = blocked; },
+    onChanged: async () => {
+      if (!await loadSnapshot()) throw new Error('Tente atualizar a lista novamente.');
+    },
   });
 
   function actualAttachmentCount(row) {
@@ -411,7 +420,15 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       description.classList.toggle("tg-description--expanded");
       updateExpandButton(card);
     });
-    recordControls.append(expand);
+    const complete = el('button', 'gallery-record-action tg-complete', '✓');
+    complete.type = 'button'; complete.dataset.action = 'complete';
+    complete.setAttribute('aria-label', `Concluir tarefa ${id}`);
+    complete.addEventListener('click', () => {
+      if (complete.disabled) return;
+      recordActions.close();
+      void completionDialog.open(row, complete);
+    });
+    recordControls.append(complete, expand);
     card.append(main, recordControls);
     return card;
   }
@@ -500,11 +517,12 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   function close() {
     if (!opened) return;
     recordActions.close();
+    completionDialog.close();
     autoFilters.cancelPending();
     opened = false; session += 1; controller?.abort(); controller = null; listLoading = false; attachmentLoading = false;
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
+  function destroy() { if (destroyed) return; completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }

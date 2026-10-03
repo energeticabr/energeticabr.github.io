@@ -26,6 +26,183 @@ async function setup(t, overrides = {}) {
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+const completionContext = id => ({
+  entity: { id: 'lancamentos-de-tarefas', title: 'Tarefa' },
+  item: { id, fields: { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Não alterar descrição' } },
+  columns: [
+    { name: 'field_8', label: 'DATA CONCLUSÃO', control: 'date', editable: true },
+    { name: 'field_12', label: 'CONCLUÍDO', control: 'text', editable: true },
+    { name: 'field_11', label: 'TAREFA', control: 'text', editable: true },
+  ], contract: { hasForm: true, readOnly: false },
+});
+async function openCompletion(ctx) {
+  const trigger = ctx.root().querySelector('.tg-card[data-item-id="176"] [data-action="complete"]');
+  assert.ok(trigger, 'check de conclusão deve existir acima da seta');
+  trigger.focus(); trigger.click();
+  for (let attempt = 0; attempt < 20 && !ctx.root().querySelector('[data-task-completion-form]'); attempt++) await settle();
+  return ctx.root().querySelector('.tg-completion-dialog');
+}
+
+test('check verde abre apenas data conclusão e concluído; cancelar não grava e restaura foco', async t => {
+  let writes = 0;
+  const ctx = await setup(t, { now: () => new Date('2026-10-04T01:30:00Z'), data: {
+    loadEditor: async id => completionContext(id), saveEditor: async () => { writes++; },
+  } });
+  const style = ctx.document.createElement('style');
+  style.textContent = await readFile(new URL('../src/ui/tasks-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(style);
+  await ctx.gallery.open();
+  const trigger = ctx.root().querySelector('[data-action="complete"]');
+  assert.ok(trigger, 'ação de conclusão presente');
+  assert.equal(ctx.dom.window.getComputedStyle(trigger).backgroundColor, 'rgb(37, 162, 78)');
+  assert.equal(trigger.nextElementSibling.dataset.action, 'expand');
+  const dialog = await openCompletion(ctx);
+  assert.equal(dialog.getAttribute('role'), 'dialog');
+  assert.deepEqual([...dialog.querySelectorAll('input')].map(input => [input.name, input.value]), [
+    ['completionDate', '2026-10-03'], ['completed', 'CONCLUÍDA'],
+  ], 'data do dia em São Paulo, não o dia UTC');
+  assert.equal(dialog.querySelectorAll('input, select, textarea').length, 2);
+  assert.equal(ctx.root().querySelector('.og-content').inert, true);
+  dialog.querySelector('[data-task-completion-cancel]').click();
+  assert.equal(writes, 0);
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+  assert.equal(ctx.root().querySelector('.og-content').inert, false);
+  assert.equal(ctx.document.activeElement, trigger);
+});
+
+test('submeter conclusão grava só os dois nomes internos e retorna à galeria atualizada', async t => {
+  const writes = [], saving = deferred();
+  const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data: {
+    loadEditor: async id => completionContext(id),
+    saveEditor: async (context, fields) => { writes.push([context.item.id, fields]); await saving.promise; ctx.data.loadSnapshot = async () => ({ rows: [] }); },
+  } });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[name="completionDate"]').value = '2026-10-02';
+  const submit = dialog.querySelector('[data-task-completion-submit]');
+  submit.click(); submit.click();
+  assert.deepEqual(writes, [['176', { field_8: '2026-10-02', field_12: 'CONCLUÍDA' }]]);
+  assert.equal(submit.disabled, true);
+  assert.equal(dialog.querySelector('[data-task-completion-cancel]').disabled, true);
+  saving.resolve(); await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(ctx.root().querySelectorAll('.tg-card').length, 0);
+  assert.equal(ctx.document.activeElement, ctx.root(), 'foco permanece na galeria após recriar cartões');
+});
+
+test('falha de leitura após save verifica os campos antes de permitir nova gravação', async t => {
+  let writes = 0, reads = 0;
+  const baseline = { ...completionContext('176'), item: { ...completionContext('176').item, eTag: '"v1"' } };
+  const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data: {
+    loadEditor: async () => {
+      reads++;
+      if (reads === 2) throw new Error('Leitura indisponível');
+      return reads === 1 ? baseline : { ...baseline, item: { id: '176', eTag: '"v2"', fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' } } };
+    },
+    saveEditor: async () => { writes++; throw new Error('Leitura após gravação indisponível'); },
+  } });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1);
+  assert.equal(dialog.querySelector('[name="completionDate"]').disabled, true, 'não altera um envio ainda não reconciliado');
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1, 'o envio já reconhecido não é repetido com ETag antigo');
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+});
+
+test('Shift Tab no foco inicial do popup fica no último controle habilitado', async t => {
+  const waiting = deferred();
+  const ctx = await setup(t, { data: { loadEditor: async () => waiting.promise } });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-action="complete"]').click();
+  const dialog = ctx.root().querySelector('.tg-completion-dialog');
+  assert.equal(ctx.document.activeElement, dialog);
+  dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+  assert.equal(ctx.document.activeElement, dialog.querySelector('[data-task-completion-cancel]'));
+});
+
+test('serviço real reconcilia escrita confirmada cuja leitura posterior falhou sem novo PATCH', async t => {
+  const { createTasksGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  let writes = 0, reads = 0, fields = { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição original', STATUS: 'EM ATENDIMENTO' };
+  const data = createTasksGalleryData({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'tasks' }; },
+    async getItemsPage() { return { items: [{ id: '176', fields }], hasMore: false }; },
+    async getItem(_site, _list, id) { reads++; return { id, fields, eTag: writes ? '"v2"' : '"v1"' }; },
+    async getColumns() { return [
+      { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
+      { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
+      { name: 'field_11', displayName: 'TAREFA', text: {}, required: true },
+    ]; },
+    async updateItem(_site, _list, _id, values, options) {
+      assert.deepEqual(options, { eTag: '"v1"' }); writes++; fields = { ...fields, ...values };
+      throw new Error('GET após PATCH falhou');
+    },
+  } });
+  const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1); assert.equal(reads, 2);
+  assert.equal(fields.field_11, 'Descrição original');
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+  assert.equal(ctx.root().querySelectorAll('.tg-card').length, 0);
+});
+
+test('data vazia impede gravação; falha no save mantém valores para tentar novamente', async t => {
+  let writes = 0;
+  const ctx = await setup(t, { data: {
+    loadEditor: async id => completionContext(id),
+    saveEditor: async () => { writes++; throw new Error('Sem conexão'); },
+  } });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx), form = dialog.querySelector('form'), date = dialog.querySelector('[name="completionDate"]');
+  date.value = '';
+  form.dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  assert.equal(writes, 0);
+  date.value = '2026-10-01';
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle();
+  assert.equal(writes, 1);
+  assert.match(dialog.querySelector('[role="alert"]').textContent, /Sem conexão/);
+  assert.equal(date.value, '2026-10-01');
+  assert.equal(dialog.querySelector('[data-task-completion-submit]').disabled, false);
+});
+
+test('conclusão salva com falha de refresh repete só a consulta, não a gravação', async t => {
+  let writes = 0, failRefresh = false;
+  const ctx = await setup(t, { data: {
+    loadEditor: async id => completionContext(id),
+    saveEditor: async () => { writes++; failRefresh = true; },
+    loadSnapshot: async () => { if (failRefresh) throw new Error('Consulta indisponível'); return { rows: [{ id: '176', fields: { STATUS: 'EM ATENDIMENTO' } }] }; },
+  } });
+  await ctx.gallery.open();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1);
+  assert.match(dialog.querySelector('[role="alert"]').textContent, /salva.*atualizar/i);
+  failRefresh = false;
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(writes, 1);
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+});
+
+test('fechar popup durante leitura ignora resposta tardia e campos não comprovados bloqueiam save', async t => {
+  const loading = deferred(); let writes = 0;
+  const ctx = await setup(t, { data: { loadEditor: async () => loading.promise, saveEditor: async () => { writes++; } } });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-action="complete"]').click();
+  ctx.root().querySelector('[data-task-completion-cancel]').click();
+  loading.resolve(completionContext('176')); await settle();
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+  ctx.data.loadEditor = async id => ({ ...completionContext(id), columns: [] });
+  ctx.root().querySelector('[data-action="complete"]').click(); await settle();
+  assert.match(ctx.root().querySelector('.tg-completion-dialog [role="alert"]').textContent, /campos|metadados/i);
+  assert.equal(ctx.root().querySelector('[data-task-completion-form]'), null);
+  assert.equal(writes, 0);
+});
 function button(root, label) {
   const found = [...root.querySelectorAll("button")].find(node => node.textContent.trim() === label && !node.closest("[hidden]"));
   assert.ok(found, `visible button: ${label}`);
