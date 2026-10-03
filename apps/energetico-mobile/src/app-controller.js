@@ -4120,6 +4120,10 @@ export function createAppController({
                 return rows;
               }
               : undefined,
+            onHome: () => {
+              assertSession();
+              return returnToMainMenu();
+            },
             onClose: () => {
               if (hrPayrollGallery === panel) {
                 panel?.destroy?.();

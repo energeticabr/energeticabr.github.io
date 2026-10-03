@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import {
   PAYROLL_RUBRICS,
   payrollTotal,
@@ -38,35 +39,21 @@ export function createSupplierPayrollView({
   const header = element("header", "supplier-payroll-header"),
     title = element("h1", "", "EFETUAR FOLHA DE PAGAMENTO");
   title.id = `supplier-payroll-title-${id}`;
-  function navigationButton(label, attribute, paths, handler) {
+  function navigationButton(label, attribute, handler) {
     const control = element("button", "supplier-payroll-button supplier-payroll-navigation", label);
     control.type = "button";
     control.setAttribute(attribute, "");
-    const icon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-    icon.setAttribute("viewBox", "0 0 24 24");
-    icon.setAttribute("fill", "none");
-    icon.setAttribute("stroke", "currentColor");
-    icon.setAttribute("stroke-width", "2");
-    icon.setAttribute("stroke-linecap", "round");
-    icon.setAttribute("stroke-linejoin", "round");
-    icon.setAttribute("aria-hidden", "true");
-    for (const d of paths) {
-      const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", d);
-      icon.append(path);
-    }
-    control.prepend(icon);
     control.addEventListener("click", handler);
     return control;
   }
-  const backButton = navigationButton("Voltar", "data-payroll-header-back", ["m15 18-6-6 6-6"], navigateBack);
-  const homeButton = navigationButton("Início", "data-payroll-home", ["m3 10 9-7 9 7", "M5 9v12h14V9", "M9 21v-7h6v7"], () => {
+  const backButton = navigationButton("Voltar", "data-payroll-header-back", navigateBack);
+  const homeButton = navigationButton("Início", "data-payroll-home", () => {
     if (close()) {
       fresh();
       onHome();
     }
   });
-  header.append(backButton, title, homeButton);
+  applyScreenNavigation({ header, back: backButton, home: homeButton, title });
   const body = element("div", "supplier-payroll-body"),
     error = element("p", "supplier-payroll-error");
   error.setAttribute("role", "alert");
@@ -480,6 +467,7 @@ export function createSupplierPayrollView({
   function render(loadingLabel) {
     content.replaceChildren();
     footer.replaceChildren();
+    footer.classList.toggle("supplier-payroll-footer--rubrics", step === "rubrics");
     footer.hidden = true;
     backButton.disabled = mutating;
     homeButton.disabled = mutating;
@@ -622,6 +610,8 @@ export function createSupplierPayrollView({
       );
       footer.append(button("Concluir", null, close));
     }
+    if (step === "rubrics")
+      footer.append(button("Voltar", "data-payroll-back", navigateBack));
     if (["date", "rubrics"].includes(step))
       footer.append(button("Continuar", "data-payroll-next", next));
     footer.hidden = footer.childElementCount === 0;

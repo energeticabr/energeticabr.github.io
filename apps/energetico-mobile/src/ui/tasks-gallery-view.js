@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -122,7 +123,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const closeButton = el("button", "og-button", "Voltar"); closeButton.type = "button";
   const title = el("h1", "og-title", "GALERIA TAREFAS");
   const homeButton = el("button", "og-button", "Início"); homeButton.type = "button";
-  header.append(closeButton, title, homeButton);
+  applyScreenNavigation({ header, back: closeButton, home: homeButton, title });
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters tg-filters");
   filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros e ordenação"));

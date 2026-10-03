@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -139,7 +140,7 @@ export function createOrdersGallery({
   const title = el("h1", "og-title", "GALERIA PEDIDOS");
   const homeButton = el("button", "og-button", "Início");
   homeButton.type = "button";
-  header.append(closeButton, title, homeButton);
+  applyScreenNavigation({ header, back: closeButton, home: homeButton, title });
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters");
   const filterToggle = el('summary', 'og-filter-toggle');

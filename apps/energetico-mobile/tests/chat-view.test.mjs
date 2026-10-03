@@ -3445,11 +3445,11 @@ test("cabeçalho do Power BI oferece retorno ao menu principal sem subtítulo ou
   assert.ok(dialog.querySelector(".powerbi-dashboard__back"));
   assert.ok(dialog.querySelector('[data-powerbi-home][aria-label="Ir ao menu principal"]'));
   assert.deepEqual([...dialog.querySelector(".powerbi-dashboard__header").children].map(element => element.className), [
-    "powerbi-dashboard__back",
-    "powerbi-dashboard__home",
-    "powerbi-dashboard__heading",
+    "screen-navigation",
+    "powerbi-dashboard__heading screen-navigation-title",
     "powerbi-dashboard__direct-link",
   ]);
+  assert.deepEqual([...dialog.querySelector(".screen-navigation").children].map(button => button.dataset.navigationIcon), ["↩️", "🏠"]);
   assert.equal(dialog.querySelector(".powerbi-dashboard__heading p"), null);
   assert.equal(dialog.querySelector(".powerbi-dashboard__heading h1")?.textContent, "📊 POWER BI");
   assert.equal(dialog.querySelector(".powerbi-dashboard__direct-link")?.textContent, "Abrir no Power BI");
