@@ -196,17 +196,101 @@ test("dados da despesa abrem pelo lápis e anexos no visualizador compartilhado"
   assert.deepEqual(ctx.calls.slice(-2), [["listAttachments", "33"], ["downloadAttachment", "33", "conta.pdf"]]);
 });
 
-test("G19 oferece anexos em ação discreta no rodapé do cartão", async t => {
+test("G19 mostra anexos à esquerda do conteúdo quando há arquivo", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();
   await settle();
   const card = ctx.root().querySelector('.re-card[data-item-id="33"]');
   const rail = card.querySelector(".og-card-attachment-rail");
   assert.ok(rail);
-  assert.ok(card.querySelector(".og-card-main").compareDocumentPosition(rail) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(card.firstElementChild, rail, "trilho de anexos precede o conteúdo do cartão");
+  assert.ok(card.classList.contains("og-card--with-attachments"));
   assert.equal(rail.querySelector(".og-card-attachment-icon").textContent, "📎");
   assert.equal(rail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
   assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
+});
+
+test("G19 não reserva coluna de anexos quando a consulta confirma lista vazia", async t => {
+  const ctx = await setup(t, { data: { async listAttachments() { return []; } } });
+  await ctx.gallery.open();
+  await settle();
+  const card = ctx.root().querySelector('.re-card[data-item-id="33"]');
+  assert.equal(card.querySelector('[data-action="attachments"]'), null);
+  assert.equal(card.classList.contains("og-card--with-attachments"), false);
+  assert.equal(card.firstElementChild, card.querySelector(".og-card-main"));
+});
+
+test("G19 cria o botão lateral quando descobre anexo em registro sem indicação inicial", async t => {
+  let finishLookup;
+  const ctx = await setup(t, {
+    rows: [{ id: "40", fields: { ID: 40, EQUIPAMENTO: "ENERGIA", STATUS: "ATIVO" } }],
+    data: { listAttachments: () => new Promise(resolve => { finishLookup = resolve; }) },
+  });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.re-card[data-item-id="40"]');
+  assert.equal(card.querySelector('[data-action="attachments"]'), null);
+  assert.equal(card.classList.contains("og-card--with-attachments"), false);
+  finishLookup([{ fileName: "conta.pdf", mimeType: "application/pdf", size: 1024 }]);
+  await settle();
+  assert.equal(card.firstElementChild.dataset.action, "attachments");
+  assert.equal(card.querySelector('.og-card-attachment-count').textContent, "1 anexo");
+  assert.ok(card.classList.contains("og-card--with-attachments"));
+});
+
+test("G19 permite repetir a consulta que falhou antes de confirmar anexos", async t => {
+  let attempts = 0;
+  const ctx = await setup(t, {
+    rows: [{ id: "40", fields: { ID: 40, EQUIPAMENTO: "ENERGIA", STATUS: "ATIVO" } }],
+    data: { async listAttachments() {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Falha temporária");
+      return [{ fileName: "conta.pdf", mimeType: "application/pdf", size: 1024 }];
+    } },
+  });
+  await ctx.gallery.open();
+  await settle();
+  const card = ctx.root().querySelector('.re-card[data-item-id="40"]');
+  assert.equal(card.querySelector('[data-action="attachments"]'), null);
+  assert.ok(card.querySelector('[data-action="retry-attachments"]'), "falha inicial oferece nova consulta");
+  choose(ctx, "sort", "id-asc");
+  await settle();
+  const retry = ctx.root().querySelector('.re-card[data-item-id="40"] [data-action="retry-attachments"]');
+  assert.ok(retry, "falha sem indicação de anexo oferece nova consulta");
+  retry.click();
+  await settle();
+  assert.equal(attempts, 2);
+  const refreshedCard = ctx.root().querySelector('.re-card[data-item-id="40"]');
+  assert.equal(refreshedCard.querySelector('[data-action="retry-attachments"]'), null);
+  assert.equal(refreshedCard.firstElementChild.dataset.action, "attachments");
+  assert.equal(refreshedCard.querySelector('.og-card-attachment-count').textContent, "1 anexo");
+});
+
+test("G19 mantém desabilitado o botão lateral inserido durante outra abertura", async t => {
+  let finishSecond;
+  let finishViewer;
+  const ctx = await setup(t, {
+    rows: [
+      { id: "35", hasAttachments: true, fields: { ID: 35, EQUIPAMENTO: "SEGURO" } },
+      { id: "34", fields: { ID: 34, EQUIPAMENTO: "CONTABILIDADE" } },
+    ],
+    data: { listAttachments: id => id === "35"
+      ? Promise.resolve([{ fileName: "seguro.pdf", mimeType: "application/pdf" }])
+      : new Promise(resolve => { finishSecond = resolve; }) },
+    openMediaCollection: () => new Promise(resolve => { finishViewer = resolve; }),
+  });
+  await ctx.gallery.open();
+  await settle();
+  ctx.root().querySelector('.re-card[data-item-id="35"] [data-action="attachments"]').click();
+  await settle();
+  assert.equal(ctx.root().getAttribute("aria-busy"), "true");
+  finishSecond([{ fileName: "conta.pdf", mimeType: "application/pdf" }]);
+  await settle();
+  const newButton = ctx.root().querySelector('.re-card[data-item-id="34"] [data-action="attachments"]');
+  assert.ok(newButton);
+  assert.equal(newButton.disabled, true);
+  finishViewer();
+  await settle();
+  assert.equal(newButton.disabled, false);
 });
 
 test("pagina resultados extensos e usa um layout responsivo", async t => {
