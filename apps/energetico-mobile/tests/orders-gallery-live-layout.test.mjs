@@ -55,7 +55,7 @@ test('Galeria Pedidos keeps compact paired cards and reachable controls on mobil
       await send('Page.navigate', { url: `http://127.0.0.1:${port}/tests/fixtures/orders-gallery-responsive.html?width=${width}` }, sessionId);
       let ready = false;
       for (let attempt = 0; attempt < 120 && !ready; attempt++) {
-        ready = await evaluate(`location.search === '?width=${width}' && document.documentElement.dataset.ready === 'true' && document.querySelectorAll('.og-order-card').length === 2`);
+        ready = await evaluate(`location.search === '?width=${width}' && document.documentElement?.dataset.ready === 'true' && document.querySelectorAll('.og-order-card').length === 2`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Galeria Pedidos não carregou em ${width}px`);

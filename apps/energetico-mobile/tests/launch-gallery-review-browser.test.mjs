@@ -55,7 +55,7 @@ test('launch edit confirmation stays readable above the form on phones and deskt
       await send('Page.navigate', { url: `http://127.0.0.1:${port}/tests/fixtures/launch-gallery-review-responsive.html?width=${width}` }, sessionId);
       let ready = false;
       for (let attempt = 0; attempt < 120 && !ready; attempt++) {
-        ready = await evaluate(`location.search === '?width=${width}' && document.documentElement.dataset.ready === 'true'`);
+        ready = await evaluate(`location.search === '?width=${width}' && document.documentElement?.dataset.ready === 'true'`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Revisão não carregou em ${width}px`);
