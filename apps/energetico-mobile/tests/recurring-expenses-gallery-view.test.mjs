@@ -11,7 +11,6 @@ async function setup(t, overrides = {}) {
     ID: 33,
     DESCRICAOPGTO: "TARIFA DE ENERGIA (TODOS)",
     FORNECEDOR: { LookupValue: "CEMIG" },
-    EQUIPAMENTO: "TARIFA DE ENERGIA",
     IMOVEL: "TODOS",
     FILIAL: "004 - EDIFÍCIO XAVANTE",
     "VALOR MENSAL": "144,92",
@@ -64,7 +63,7 @@ test("G19 mostra campos de despesas, recorrência em português, moeda e datas b
   await ctx.gallery.open();
 
   assert.equal(ctx.root().getAttribute("role"), "dialog");
-  assert.equal(ctx.root().querySelector("details.re-filters")?.open, false, "filtros de despesas recorrentes começam recolhidos");
+  assert.equal(ctx.root().querySelector(".re-filter-panel")?.hidden, true, "filtros de despesas recorrentes começam recolhidos");
   assert.match(ctx.root().querySelector("h1").textContent, /GALERIA DESPESAS RECORRENTES/i);
   for (const name of ["search", "id", "property", "branch", "supplier", "product", "responsible", "paymentMethod", "status", "recurrence"]) {
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G19 filter ${name}`);
@@ -81,6 +80,66 @@ test("G19 mostra campos de despesas, recorrência em português, moeda e datas b
   assert.match(cardText, /04\/11\/2026/);
   assert.match(cardText, /ATIVO/);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"], [data-action="delete"]').length, 0);
+});
+
+test("G19 segue a composição nova: busca, filtro, ordenação e cartões por produto", async t => {
+  const ctx = await setup(t, { rows: [{ id: "35", hasAttachments: false, fields: {
+    ID: 35, EQUIPAMENTO: "SEGURO DE VIDA COLETIVO",
+    DESCRICAOPGTO: "SEGURO PARA 7 TRABALHADORES CONFORME CCT",
+    FORNECEDOR: "ZURICH SEGUROS", IMOVEL: "TODOS", FILIAL: "004 - EDIFÍCIO XAVANTE",
+    "VALOR MENSAL": "121,78", RECORRENCIA: "Month", "RESPONSAVEL LOCACAO": "BERNARDO",
+    DATAINICIO: "2026-10-03T03:00:00Z", DATAFIM: "2026-10-11T03:00:00Z", STATUS: "ATIVO",
+    Criado: "2026-10-03T03:24:00Z", "Criado por": "Usuário não identificado",
+  } }] });
+  await ctx.gallery.open();
+  const root = ctx.root();
+  assert.ok(root.querySelector(".re-search-bar [name=search]"), "pesquisa aparece acima dos cartões");
+  assert.match(root.querySelector(".re-search-bar input").placeholder, /Buscar despesa, fornecedor ou produto/);
+  assert.equal(root.querySelector(".re-filter-button").getAttribute("aria-expanded"), "false");
+  assert.ok(root.querySelector(".re-list-toolbar [name=sort]"), "ordenação permanece visível");
+  const card = root.querySelector(".re-card");
+  assert.equal(card.querySelector(".re-card-heading h2").textContent, "SEGURO DE VIDA COLETIVO");
+  assert.equal(card.querySelector(".re-card-description dd").textContent, "SEGURO PARA 7 TRABALHADORES CONFORME CCT");
+  assert.ok(card.querySelector(".re-card-heading .re-status"), "status fica junto ao título");
+  assert.equal(card.querySelector(".re-value-band .re-card-field--value dd").textContent, "R$ 121,78");
+  assert.equal(card.querySelector(".re-value-band .re-card-field--recurrence dd").textContent, "Mensal");
+  assert.equal(card.querySelector(".re-date-row .re-card-field--start dd").textContent, "03/10/2026");
+  assert.equal(card.querySelector(".re-date-row .re-card-field--next dd").textContent, "11/10/2026");
+  assert.match(card.querySelector(".re-metadata").textContent, /Adicionado por: Usuário não identificado/);
+  assert.equal(card.querySelector('[data-gallery-action="edit"]').textContent, "✏️");
+  assert.equal(card.querySelector("[data-action=details]"), null);
+});
+
+test("filtro compacto mostra quantidade ativa e mantém a combinação local", async t => {
+  const ctx = await setup(t, { rows: [
+    { id: "35", hasAttachments: false, fields: { ID: 35, STATUS: "ATIVO", EQUIPAMENTO: "SEGURO", DATAINICIO: "2026-10-03" } },
+    { id: "34", hasAttachments: false, fields: { ID: 34, STATUS: "INATIVO", EQUIPAMENTO: "IPTU", DATAINICIO: "2026-09-01" } },
+  ] });
+  await ctx.gallery.open();
+  const root = ctx.root();
+  const toggle = root.querySelector(".re-filter-button");
+  toggle.click();
+  assert.equal(root.querySelector(".re-filter-panel").hidden, false);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  choose(ctx, "status", "ATIVO");
+  await settle();
+  assert.equal(root.querySelector(".re-filter-count").textContent, "1");
+  assert.deepEqual([...root.querySelectorAll(".re-card")].map(card => card.dataset.itemId), ["35"]);
+  toggle.click();
+  assert.equal(root.querySelector(".re-filter-panel").hidden, true);
+  assert.equal(root.querySelector(".re-filter-count").textContent, "1", "indicador continua visível após fechar filtros");
+});
+
+test("G19 ordena pela data de início mais recente e permite inverter a ordem", async t => {
+  const ctx = await setup(t, { rows: [
+    { id: "35", hasAttachments: false, fields: { ID: 35, EQUIPAMENTO: "ANTIGO", DATAINICIO: "2026-09-01" } },
+    { id: "34", hasAttachments: false, fields: { ID: 34, EQUIPAMENTO: "NOVO", DATAINICIO: "2026-10-03" } },
+  ] });
+  await ctx.gallery.open();
+  assert.deepEqual([...ctx.root().querySelectorAll(".re-card")].map(card => card.dataset.itemId), ["34", "35"]);
+  choose(ctx, "sort", "start-date-asc");
+  await settle();
+  assert.deepEqual([...ctx.root().querySelectorAll(".re-card")].map(card => card.dataset.itemId), ["35", "34"]);
 });
 
 test("pesquisa e filtros G19 combinam localmente sem recarregar dados", async t => {
@@ -136,14 +195,14 @@ test("dados da despesa abrem pelo lápis e anexos no visualizador compartilhado"
   assert.deepEqual(ctx.calls.slice(-2), [["listAttachments", "33"], ["downloadAttachment", "33", "conta.pdf"]]);
 });
 
-test("G19 posiciona anexos na coluna esquerda e exibe a quantidade abaixo do ícone", async t => {
+test("G19 oferece anexos em ação discreta no rodapé do cartão", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();
   await settle();
   const card = ctx.root().querySelector('.re-card[data-item-id="33"]');
   const rail = card.querySelector(".og-card-attachment-rail");
   assert.ok(rail);
-  assert.ok(rail.compareDocumentPosition(card.querySelector(".og-card-main")) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(card.querySelector(".og-card-main").compareDocumentPosition(rail) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   assert.equal(rail.querySelector(".og-card-attachment-icon").textContent, "📎");
   assert.equal(rail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
   assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
@@ -165,4 +224,5 @@ test("pagina resultados extensos e usa um layout responsivo", async t => {
   const styles = readFileSync(new URL("../src/ui/orders-gallery.css", import.meta.url), "utf8");
   assert.match(styles, /\.re-filter-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(styles, /\.re-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  assert.match(styles, /\.re-card\.gallery-record-card:nth-child\(even\)\s*\{\s*background:\s*#fff/s);
 });
