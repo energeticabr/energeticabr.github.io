@@ -28,8 +28,9 @@ const data = { loadSnapshot: async () => ({rows:[]}), loadOverview: async () => 
 const payrollData = {
  loadSuppliers: async () => [{id:'1',label:'CLEITON CESAR NONATO',branch:'004 - EDIFÍCIO XAVANTE',profession:'SERVENTE DE PEDREIRO'}],
  loadProducts: async () => [{id:'2',label:'SERVENTE DE PEDREIRO',recommended:true}],
- loadAccounts: async () => [{id:'3',label:'PIX'}],
+ loadAccounts: async () => [{id:'3',label:name === 'payroll-summary-long' ? 'PIX - CONTA DE PAGAMENTO COM DESCRIÇÃO EXTENSA PARA CONFERÊNCIA' : 'PIX'}],
  loadStages: async () => [{id:'4',label:'ALVENARIA E ESTRUTURAS'}],
+ loadSheets: async () => [{id:'5',label:'10/2026'}],
 };
 const factories = {
  launches: () => createLaunchGallery({...options, request: async () => ({ rows:[], count:0, page:1, pages:1, totals:{}, filterOptions:{} })}),
@@ -43,11 +44,13 @@ const factories = {
  hrreport: () => createHrPayrollReport({...options,request:async()=>[]}),
  payroll: () => createSupplierPayrollView({...options,data:payrollData}),
  'payroll-stage': () => createSupplierPayrollView({...options,data:payrollData}),
+ 'payroll-summary': () => createSupplierPayrollView({...options,data:payrollData}),
+ 'payroll-summary-long': () => createSupplierPayrollView({...options,data:payrollData}),
  powerbi: () => createPowerBiDashboardView({...options,powerBiClient:{models:{TokenType:{Aad:0}},embed:()=>({on(){},off(){}}),reset(){}}}),
 };
 const view = factories[name]();
 await view.open(name === 'hrreport' ? {id:'1'} : name === 'powerbi' ? {accessToken:'fixture',getAccessToken:async()=>'fixture',onHome(){}} : undefined);
-if(name === 'payroll' || name === 'payroll-stage') {
+if(name.startsWith('payroll')) {
  document.querySelector('[name=date]').value='2026-10-03';
  document.querySelector('[name=date]').dispatchEvent(new Event('input',{bubbles:true}));
  document.querySelector('[data-payroll-next]').click();
@@ -56,14 +59,29 @@ if(name === 'payroll' || name === 'payroll-stage') {
   document.querySelector('[data-payroll-option="'+id+'"]').click();
  }
  for(let i=0;i<100 && !document.querySelector('[data-payroll-rubric]');i++) await new Promise(r=>setTimeout(r,10));
- if(name === 'payroll-stage') {
+ if(name === 'payroll-stage' || name.startsWith('payroll-summary')) {
   for(const [selector,value] of [['[name=salary-value]','100'],['[name=salary-account]','3']]) {
    document.querySelector(selector).value=value;
    document.querySelector(selector).dispatchEvent(new Event('input',{bubbles:true}));
    document.querySelector(selector).dispatchEvent(new Event('change',{bubbles:true}));
   }
+  if(name === 'payroll-summary-long') {
+   for(const [selector,value] of [['[name=allowance-value]','10,25'],['[name=allowance-quantity]','2'],['[name=allowance-account]','3']]) {
+    document.querySelector(selector).value=value;
+    document.querySelector(selector).dispatchEvent(new Event('input',{bubbles:true}));
+    document.querySelector(selector).dispatchEvent(new Event('change',{bubbles:true}));
+   }
+   const input=document.querySelector('[name=salary-files]');
+   Object.defineProperty(input,'files',{value:[new File(['a'],'comprovante-de-pagamento-'+ 'referencia'.repeat(16)+'.pdf',{type:'application/pdf'}),new File(['b'],'segundo-comprovante.pdf',{type:'application/pdf'})]});
+   input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
   document.querySelector('[data-payroll-next]').click();
   for(let i=0;i<100 && document.querySelector('.supplier-payroll-question')?.textContent !== 'Indique a etapa';i++) await new Promise(r=>setTimeout(r,10));
+  if(name.startsWith('payroll-summary')) {
+   document.querySelector('[data-payroll-option="4"]').click();
+   for(let i=0;i<100 && !document.querySelector('[data-payroll-option="5"]');i++) await new Promise(r=>setTimeout(r,10));
+   document.querySelector('[data-payroll-option="5"]').click();
+  }
  }
 }
 document.documentElement.dataset.ready='true';
