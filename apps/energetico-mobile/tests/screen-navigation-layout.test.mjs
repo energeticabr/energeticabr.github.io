@@ -45,7 +45,7 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
       const response = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
       assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails)); return response.result.value;
     };
-    for (const screen of ['launches','orders','tasks','payments','recurring','reports','registration','hr','hrreport','payroll','powerbi']) {
+    for (const screen of ['launches','orders','tasks','payments','recurring','reports','registration','hr','hrreport','payroll','payroll-stage','powerbi']) {
       for (const [width, height] of [[320,740],[390,844],[1365,768],[844,390]]) {
         await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false},sessionId);
         const query = '?screen='+screen+'&w='+width;
@@ -61,17 +61,35 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
           const box=n=>{const r=n.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
           const buttons=[...nav.children];
           const footer=document.querySelector('.supplier-payroll-footer');
+          const identity=document.querySelector('.supplier-payroll-identity-table');
           return {nav:box(nav),header:box(header),title:box(title),buttons:buttons.map(box),
             icons:buttons.map(b=>getComputedStyle(b,'::before').content),
             color:buttons.map(b=>getComputedStyle(b).backgroundColor),
             radius:buttons.map(b=>getComputedStyle(b).borderRadius),
-            footer:footer ? {box:box(footer),back:box(footer.firstElementChild),next:box(footer.lastElementChild)}:null};
+            identity:identity ? {box:box(identity),rows:[...identity.rows].map(row=>[...row.cells].map(cell=>cell.textContent)),
+              overflow:identity.scrollWidth > identity.clientWidth+1 || [...identity.querySelectorAll('th,td')].some(cell=>cell.scrollWidth > cell.clientWidth+1)}:null,
+            footer:footer && !footer.hidden ? {box:box(footer),back:box(footer.firstElementChild),next:box(footer.lastElementChild)}:null};
         })()`);
         assert.ok(layout.nav.left >= layout.header.left && layout.nav.right <= layout.title.left, screen+' navigation/title overlap: '+JSON.stringify(layout));
         assert.ok(layout.buttons[0].right <= layout.buttons[1].left && layout.buttons[0].top === layout.buttons[1].top,screen+' not side by side');
         assert.ok(layout.title.right <= width+1 && layout.buttons.every(b=>b.width>=44 && b.height>=44),screen+' viewport/touch target');
         assert.deepEqual(layout.icons,['"↩️"','"🏠"']);
         assert.deepEqual(layout.color,['rgb(255, 255, 255)','rgb(255, 255, 255)']);
+        if(screen.startsWith('payroll')) {
+          assert.ok(layout.identity && !layout.identity.overflow, 'dados longos devem caber sem corte ou rolagem lateral');
+          assert.ok(layout.identity.box.left >= 0 && layout.identity.box.right <= width);
+          assert.deepEqual(layout.identity.rows, [
+            ['Fornecedor','CLEITON CESAR NONATO'],['Profissão','SERVENTE DE PEDREIRO'],
+            ['Data','03/10/2026'],['Filial','004 - EDIFÍCIO XAVANTE'],
+          ]);
+        }
+        if(screen==='payroll-stage') {
+          assert.equal(layout.footer, null, 'seleção de etapa permanece sem retorno inferior duplicado');
+          if(width===390 && process.env.PAYROLL_TABLE_SCREENSHOT) {
+            const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);
+            writeFileSync(process.env.PAYROLL_TABLE_SCREENSHOT,Buffer.from(shot.data,'base64'));
+          }
+        }
         if(screen==='payroll') {
           assert.ok(layout.footer.back.right <= layout.footer.next.left);
           assert.ok(layout.footer.back.left < width/2 && layout.footer.next.right > width/2);

@@ -26,9 +26,10 @@ const name = new URLSearchParams(location.search).get('screen');
 const options = { document, documentRef: document, onHome() {} };
 const data = { loadSnapshot: async () => ({rows:[]}), loadOverview: async () => ({rows:[]}), loadDetails: async () => ({}) };
 const payrollData = {
- loadSuppliers: async () => [{id:'1',label:'EDGAR',branch:'OBRA A',profession:'PEDREIRO'}],
- loadProducts: async () => [{id:'2',label:'PEDREIRO',recommended:true}],
+ loadSuppliers: async () => [{id:'1',label:'CLEITON CESAR NONATO',branch:'004 - EDIFÍCIO XAVANTE',profession:'SERVENTE DE PEDREIRO'}],
+ loadProducts: async () => [{id:'2',label:'SERVENTE DE PEDREIRO',recommended:true}],
  loadAccounts: async () => [{id:'3',label:'PIX'}],
+ loadStages: async () => [{id:'4',label:'ALVENARIA E ESTRUTURAS'}],
 };
 const factories = {
  launches: () => createLaunchGallery({...options, request: async () => ({ rows:[], count:0, page:1, pages:1, totals:{}, filterOptions:{} })}),
@@ -41,11 +42,12 @@ const factories = {
  hr: () => createHrPayrollGallery({...options,gallery:'IDFOLHA',request:async()=>({gallery:'IDFOLHA',rows:[],page:1,hasMore:false})}),
  hrreport: () => createHrPayrollReport({...options,request:async()=>[]}),
  payroll: () => createSupplierPayrollView({...options,data:payrollData}),
+ 'payroll-stage': () => createSupplierPayrollView({...options,data:payrollData}),
  powerbi: () => createPowerBiDashboardView({...options,powerBiClient:{models:{TokenType:{Aad:0}},embed:()=>({on(){},off(){}}),reset(){}}}),
 };
 const view = factories[name]();
 await view.open(name === 'hrreport' ? {id:'1'} : name === 'powerbi' ? {accessToken:'fixture',getAccessToken:async()=>'fixture',onHome(){}} : undefined);
-if(name === 'payroll') {
+if(name === 'payroll' || name === 'payroll-stage') {
  document.querySelector('[name=date]').value='2026-10-03';
  document.querySelector('[name=date]').dispatchEvent(new Event('input',{bubbles:true}));
  document.querySelector('[data-payroll-next]').click();
@@ -54,6 +56,15 @@ if(name === 'payroll') {
   document.querySelector('[data-payroll-option="'+id+'"]').click();
  }
  for(let i=0;i<100 && !document.querySelector('[data-payroll-rubric]');i++) await new Promise(r=>setTimeout(r,10));
+ if(name === 'payroll-stage') {
+  for(const [selector,value] of [['[name=salary-value]','100'],['[name=salary-account]','3']]) {
+   document.querySelector(selector).value=value;
+   document.querySelector(selector).dispatchEvent(new Event('input',{bubbles:true}));
+   document.querySelector(selector).dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  document.querySelector('[data-payroll-next]').click();
+  for(let i=0;i<100 && document.querySelector('.supplier-payroll-question')?.textContent !== 'Indique a etapa';i++) await new Promise(r=>setTimeout(r,10));
+ }
 }
 document.documentElement.dataset.ready='true';
 </script></body></html>

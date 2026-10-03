@@ -99,6 +99,58 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="2"]');
 }
 
+test("resumo da folha separa os quatro dados em tabela nas rubricas, etapa e confirmação", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [{ id: "1", label: "CLEITON CESAR NONATO",
+    profession: "SERVENTE DE PEDREIRO", branch: "004 - EDIFÍCIO XAVANTE" }];
+  h.data.loadProducts = async () => [{ id: "2", label: "OUTRO SERVIÇO" }];
+  const check = () => {
+    const table = h.dom.window.document.querySelector('table[aria-label="Dados da folha"]');
+    assert.ok(table, "dados associados a cabeçalhos de linha, não texto corrido");
+    assert.deepEqual([...table.rows].map(row => [...row.cells].map(cell => cell.textContent)), [
+      ["Fornecedor", "CLEITON CESAR NONATO"],
+      ["Profissão", "SERVENTE DE PEDREIRO"],
+      ["Data", "02/10/2026"],
+      ["Filial", "004 - EDIFÍCIO XAVANTE"],
+    ]);
+    assert.ok([...table.rows].every(row => row.cells[0].tagName === "TH" && row.cells[0].scope === "row"));
+    assert.equal(table.closest(".supplier-payroll-content").querySelector(".supplier-payroll-question").nextElementSibling, table.parentElement);
+  };
+  await openRubrics(h);
+  check();
+  h.input('[name="salary-value"]', "100");
+  h.input('[name="salary-account"]', "3");
+  await h.click("[data-payroll-next]");
+  assert.equal(h.dom.window.document.querySelector(".supplier-payroll-question").textContent, "Indique a etapa");
+  check();
+  await h.click('[data-payroll-option="4"]');
+  await h.click('[data-payroll-option="5"]');
+  check();
+});
+
+test("tabela usa profissão escolhida quando cadastro não informa e mantém nomes como texto seguro", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [{ id: "1", label: 'OFICINA & <img src=x onerror="alert(1)">', branch: "" }];
+  await openRubrics(h);
+  const table = h.dom.window.document.querySelector('table[aria-label="Dados da folha"]');
+  assert.ok(table);
+  assert.equal(table.rows[0].cells[1].textContent, 'OFICINA & <img src=x onerror="alert(1)">');
+  assert.equal(table.rows[1].cells[1].textContent, "PEDREIRO");
+  assert.equal(table.rows[3].cells[1].textContent, "—");
+  assert.equal(table.querySelector("img"), null);
+});
+
+test("tabela trata campos com apenas espaços como ausentes", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadSuppliers = async () => [{ id: "1", label: "  EDGAR  ", profession: "   ", branch: "   " }];
+  await openRubrics(h);
+  const table = h.dom.window.document.querySelector('table[aria-label="Dados da folha"]');
+  assert.deepEqual([...table.rows].map(row => row.cells[1].textContent), ["EDGAR", "PEDREIRO", "02/10/2026", "—"]);
+});
+
 test("folha mantém Voltar inferior apenas nas rubricas e esconde rodapés sem ações", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
