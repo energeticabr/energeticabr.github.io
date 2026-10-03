@@ -1,7 +1,8 @@
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
-import { REGISTRATION_GALLERY_MODELS } from "../chat/registration-gallery-data.js";
+import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
+import Decimal from "decimal.js";
 
 const PAGE_SIZE = 20;
 
@@ -18,16 +19,52 @@ function valueText(value) {
 }
 
 function normalizedFieldName(value) {
-  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return registrationFieldKey(value);
+}
+
+function computedValue(fields, calculation, model) {
+  if (calculation.when) {
+    const condition = calculation.when;
+    return computedValue(fields, valueText(registrationRawField(fields, condition.field, model)) === condition.equals ? condition.then : condition.else, model);
+  }
+  if (calculation.elapsedDays) {
+    const [startField, endField] = calculation.elapsedDays;
+    const start = Date.parse(registrationDateKey(valueText(registrationRawField(fields, startField, model))));
+    const endValue = valueText(registrationRawField(fields, endField, model));
+    const today = new Date();
+    const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const end = Date.parse(registrationDateKey(endValue || localToday));
+    return Number.isFinite(start) && Number.isFinite(end) ? Math.floor((end - start) / 86400000) : null;
+  }
+  const names = calculation.subtract || calculation.multiply || calculation.ratio;
+  const numbers = names.map(field => registrationNumber(valueText(registrationRawField(fields, field, model))));
+  if (numbers.some(number => number == null)) return null;
+  const values = numbers.map(number => calculation.roundInputs == null ? new Decimal(number) : new Decimal(number).toDecimalPlaces(calculation.roundInputs));
+  if (calculation.subtract) return values[0].minus(values[1]).toNumber();
+  if (calculation.ratio) return values[1].isZero() ? null : values[0].dividedBy(values[1]).toNumber();
+  return values.reduce((product, value) => product.times(value), new Decimal(1)).toNumber();
 }
 
 function fieldValue(fields, name, model) {
-  const accepted = [name, ...(model.fieldAliases?.[name] || [])].map(normalizedFieldName);
-  const entry = Object.entries(fields || {}).find(([key]) => accepted.includes(normalizedFieldName(key)));
-  const value = valueText(entry?.[1]);
-  if (!["data", "datavalidade", "datasubmetido", "criado", "modificado"].includes(normalizedFieldName(name))) return value;
-  const date = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/);
-  return date ? `${date[3]}/${date[2]}/${date[1]}` : value;
+  let raw = registrationRawField(fields, name, model);
+  const calculation = model.computedFields?.[name];
+  if (calculation) raw = computedValue(fields, calculation, model);
+  if ((raw == null || raw === "") && model.fieldDefaults?.[name]) raw = model.fieldDefaults[name];
+  const value = valueText(raw);
+  const type = model.fieldTypes?.[name];
+  if (["number", "rounded-number", "currency", "percent", "days"].includes(type)) {
+    const number = registrationNumber(value);
+    if (number == null) return "";
+    if (type === "days") return `${number} dia(s)`;
+    return new Intl.NumberFormat("pt-BR", type === "currency" ? { style: "currency", currency: "BRL" }
+      : type === "percent" ? { style: "percent", maximumFractionDigits: 2 }
+        : { maximumFractionDigits: type === "rounded-number" ? 2 : 6 }).format(number);
+  }
+  if (!["date", "weekday-date"].includes(type) && !["data", "datavalidade", "datasubmetido", "criado", "modificado"].includes(normalizedFieldName(name))) return value;
+  const date = registrationDateKey(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!date) return value;
+  const text = `${date[3]}/${date[2]}/${date[1]}`;
+  return type === "weekday-date" ? `${text} (${new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: "UTC" }).format(new Date(`${date[1]}-${date[2]}-${date[3]}T00:00:00Z`))})` : text;
 }
 
 function identityText(identity) {
@@ -112,6 +149,30 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     toolbar.append(label);
     filterControls.set(field, control);
   }
+  const dateBounds = new Map();
+  if (model.dateRangeField) {
+    for (const [bound, text] of [["start", "Data inicial"], ["end", "Data final"]]) {
+      const label = el("label", "rg-field", text);
+      const input = el("input", "rg-input");
+      input.type = "date";
+      input.dataset.dateBound = bound;
+      input.setAttribute("aria-label", text);
+      label.append(input);
+      toolbar.append(label);
+      dateBounds.set(bound, input);
+    }
+  }
+  let sortControl;
+  if (model.sortOptions) {
+    const label = el("label", "rg-field", "Ordenar por");
+    sortControl = el("select", "rg-input");
+    sortControl.dataset.gallerySort = "true";
+    sortControl.setAttribute("aria-label", "Ordenar por");
+    sortControl.append(...model.sortOptions.map(sort => option(sort.label, sort.value)));
+    if (model.defaultSort) sortControl.value = model.defaultSort;
+    label.append(sortControl);
+    toolbar.append(label);
+  }
   const refresh = el("button", "rg-button", "Atualizar");
   refresh.type = "button";
   refresh.dataset.action = "registration-refresh";
@@ -152,13 +213,19 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   let attachmentCountWorkers = 0;
   let attachmentCountQueue = [];
   const attachmentCounts = new Map();
+  let filterEpoch = 0;
+  const filterRequests = new Map();
+  const filterErrors = new Map();
+  const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
 
   function fieldLabel(field) {
-    return ({ TIPOHOMOLOGACAO: "Tipo de homologação", PESSOARELACIONADA: "Pessoa relacionada", TIPODOCUMENTO: "Tipo de documento", STATUS: "Status", FILIAL: "Filial", IMOVEL: "Imóvel", ETAPA: "Etapa", TIPOMARCO: "Tipo marco", ID: "ID" })[field] || field;
+    return model.fieldLabels?.[field] || ({ TIPOHOMOLOGACAO: "Tipo de homologação", PESSOARELACIONADA: "Pessoa relacionada", TIPODOCUMENTO: "Tipo de documento", STATUS: "Status", FILIAL: "Filial", IMOVEL: "Imóvel", ETAPA: "Etapa", TIPOMARCO: "Tipo marco", ID: "ID", IMOBILIZADO: "Imobilizado", FORNECEDOR: "Fornecedor", DEPRECIAR: "Depreciar", "INFORMAÇÕES CLIMÁTICAS": "Informações climáticas", TIPO: "Tipo" })[field] || field;
   }
 
   function rowFieldValue(row, field) {
-    return field === "ID" ? String(row.id || "") : fieldValue(row.fields, field, model);
+    if (field === "ID") return String(row.id || "");
+    if (model.nativeCard && ["Criado por", "Modificado por"].includes(field)) return documentAuthorValue(row, field);
+    return fieldValue(row.fields, field, model);
   }
 
   function documentAuthorValue(row, field) {
@@ -293,29 +360,127 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     container.append(details);
   }
 
-  function populateFilters() {
+  function renderNativeDetails(container, row, primary) {
+    const heading = el("div", "rg-document-heading");
+    heading.append(el("strong", "rg-row-title", primary), el("span", "rg-document-id", `ID ${row.id}`));
+    container.append(heading);
+    const details = el("dl", "rg-details");
+    for (const field of model.fields) {
+      if (field === "ID" || field === model.fields[0]) continue;
+      const visibility = model.fieldVisibility?.[field];
+      if (visibility) {
+        const selector = valueText(registrationRawField(row.fields, visibility.field, model));
+        if (visibility.equals && selector !== visibility.equals || visibility.includes && !visibility.includes.includes(selector)) continue;
+      }
+      const value = rowFieldValue(row, field);
+      appendDocumentDetail(details, field, fieldLabel(field), value);
+    }
+    container.append(details);
+  }
+
+  function filterSelections() {
+    return Object.fromEntries([...filterControls].map(([field, control]) => [field, control.value]));
+  }
+
+  async function populateCatalogFilter(field, { refresh = false } = {}) {
+    const source = filterSources.get(field), control = filterControls.get(field);
+    const current = (filterRequests.get(field) || 0) + 1;
+    filterRequests.set(field, current);
+    const epoch = filterEpoch, filters = filterSelections(), selectedValue = control.value;
+    filterErrors.delete(field);
+    if (source.disabledUntil?.some(parent => !filters[parent])) {
+      control.replaceChildren(option("Selecione o filtro anterior", ""));
+      control.disabled = true;
+      return;
+    }
+    control.replaceChildren(option("Carregando…", ""));
+    control.disabled = true;
+    try {
+      if (typeof data.loadFilterOptions !== "function") throw new Error("Fonte de filtro indisponível.");
+      const options = await data.loadFilterOptions(field, { filters, refresh });
+      if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
+      if (!Array.isArray(options)) throw new Error("Opções do filtro indisponíveis.");
+      control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
+      control.value = options.some(item => String(item.value) === selectedValue) ? selectedValue : "";
+      control.disabled = false;
+    } catch {
+      if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
+      control.replaceChildren(option("Indisponível", ""));
+      control.disabled = true;
+      filterErrors.set(field, `Filtro ${fieldLabel(field)} indisponível. Tente atualizar.`);
+    }
+  }
+
+  async function populateFilters({ refresh = false } = {}) {
     for (const [field, control] of filterControls) {
+      if (filterSources.has(field)) continue;
       const selectedValue = control.value;
-      const values = [...new Set(rows.map(row => rowFieldValue(row, field)).filter(Boolean))];
+      const values = [...new Set([...(model.filterChoices?.[field] || []), ...rows.flatMap(row => {
+        const value = rowFieldValue(row, field);
+        return model.substringFilters?.includes(field) ? value.split(/;|\r?\n|,\s*|\s+\|\s+/).map(part => part.trim()) : [value];
+      }).filter(Boolean)])];
       values.sort((left, right) => field === "ID"
         ? Number(right) - Number(left)
         : left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true }));
       control.replaceChildren(option("Todos", ""), ...values.map(value => option(value, value)));
-      control.value = values.includes(selectedValue) ? selectedValue : "";
+      control.value = !hasLoaded && values.includes(model.defaultFilters?.[field]) ? model.defaultFilters[field]
+        : values.includes(selectedValue) ? selectedValue : "";
     }
+    await populateCatalogFilters([...filterSources.keys()], { refresh });
+  }
+
+  async function populateCatalogFilters(fields, options) {
+    const pending = new Set(fields), epoch = filterEpoch;
+    while (pending.size && !destroyed && epoch === filterEpoch) {
+      const ready = [...pending].filter(field => ![...(filterSources.get(field).dependsOn || []), ...(filterSources.get(field).disabledUntil || [])].some(parent => pending.has(parent)));
+      if (!ready.length) throw new Error("Não foi possível resolver as dependências dos filtros.");
+      await Promise.all(ready.map(field => populateCatalogFilter(field, options)));
+      for (const field of ready) pending.delete(field);
+    }
+  }
+
+  async function refreshDependentFilters(parent) {
+    const affected = new Set();
+    let parents = [parent];
+    while (parents.length) {
+      const next = [];
+      for (const [field, source] of filterSources) {
+        if (affected.has(field) || ![...(source.dependsOn || []), ...(source.disabledUntil || [])].some(dependency => parents.includes(dependency))) continue;
+        affected.add(field);
+        filterControls.get(field).value = "";
+        next.push(field);
+      }
+      parents = next;
+    }
+    const pending = populateCatalogFilters([...affected]);
+    render();
+    await pending;
+    if (!destroyed && !root.hidden) render();
   }
 
   function filteredRows() {
     const query = search.value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    return rows.filter(row => {
+    const filtered = rows.filter(row => {
       for (const [field, control] of filterControls) {
-        if (control.value && rowFieldValue(row, field) !== control.value) return false;
+        if (!control.value) continue;
+        const value = rowFieldValue(row, field);
+        if (model.substringFilters?.includes(field)) {
+          if (!value.toLocaleLowerCase("pt-BR").includes(control.value.toLocaleLowerCase("pt-BR"))) return false;
+        } else if (value !== control.value) return false;
+      }
+      if (model.dateRangeField) {
+        const date = registrationDateKey(valueText(registrationRawField(row.fields, model.dateRangeField, model)));
+        const start = dateBounds.get("start").value, end = dateBounds.get("end").value;
+        const applyRange = model.dateRangeBothRequired ? start && end : start || end;
+        if (applyRange && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || start && date < start || end && date > end)) return false;
       }
       if (!query) return true;
-      const haystack = [row.id, ...model.fields.map(field => rowFieldValue(row, field))]
+      const haystack = (model.searchFields ? model.searchFields.map(field => rowFieldValue(row, field))
+        : [row.id, ...model.fields.map(field => rowFieldValue(row, field))])
         .join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       return haystack.includes(query);
     });
+    return sortRegistrationRows(filtered, model, model.sortOptions?.find(sort => sort.value === sortControl.value));
   }
 
   function render() {
@@ -326,7 +491,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     list.replaceChildren();
     const visibleRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     for (const row of visibleRows) {
-      const card = el("article", model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
+      const card = el("article", model.nativeCard ? "rg-row rg-row--native" : model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
       card.dataset.registrationRow = row.id;
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
@@ -338,7 +503,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           const attachments = el("button", "rg-button rg-row-attachment", "📎");
           attachments.type = "button";
           attachments.dataset.action = "registration-attachments";
-          attachments.setAttribute("aria-label", `Abrir anexos do documento ${row.id}: ${countLabel}`);
+          attachments.setAttribute("aria-label", `Abrir anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}: ${countLabel}`);
           attachments.title = "Abrir anexos";
           attachments.disabled = attachmentLoading;
           attachments.addEventListener("click", () => { void openAttachments(row); });
@@ -349,7 +514,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           el("span", "rg-row-file__count", attachmentCountLabel(row)),
         );
         const main = el("div", "rg-row-main");
-        renderDocumentDetails(main, row, primary);
+        if (model.nativeCard) renderNativeDetails(main, row, primary);
+        else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);
       } else {
@@ -373,7 +539,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
     feedback.textContent = loadFailed
       ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
-      : attachmentNotice || (filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.");
+      : [...filterErrors.values()].join(" ") || attachmentNotice || (filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.");
     pageText.textContent = `Página ${page} de ${pages}`;
     previous.disabled = page <= 1;
     next.disabled = page >= pages;
@@ -393,7 +559,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const attachments = await data.listAttachments(row.id);
       if (destroyed || root.hidden || current !== attachmentRequest) return;
       if (!attachments.length) {
-        attachmentNotice = `O documento ${row.id} não possui anexos.`;
+        attachmentNotice = `${(model.recordArticle || "o").toUpperCase()} ${model.recordLabel || "documento"} ${row.id} não possui anexos.`;
         return;
       }
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
@@ -403,7 +569,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       })));
     } catch {
       if (!destroyed && !root.hidden && current === attachmentRequest) {
-        attachmentNotice = `Não foi possível abrir os anexos do documento ${row.id}. Tente novamente.`;
+        attachmentNotice = `Não foi possível abrir os anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}. Tente novamente.`;
       }
     } finally {
       if (!destroyed && current === attachmentRequest) {
@@ -415,6 +581,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   async function load() {
     const current = ++request;
+    filterEpoch += 1;
+    filterErrors.clear();
     attachmentCountEpoch += 1;
     attachmentCounts.clear();
     attachmentCountQueue = [];
@@ -425,7 +593,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const snapshot = await data.loadSnapshot();
       if (destroyed || current !== request) return;
       rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
-      populateFilters();
+      await populateFilters({ refresh: hasLoaded });
+      if (destroyed || current !== request) return;
       const status = filterControls.get("STATUS");
       if (status && !model.filterFields) {
         const statuses = [...new Set(rows.map(row => fieldValue(row.fields, "STATUS", model)).filter(Boolean))].sort();
@@ -453,6 +622,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     searchableFilters.close();
     root.hidden = true;
     request += 1;
+    filterEpoch += 1;
     attachmentRequest += 1;
     attachmentLoading = false;
     if (returnFocus?.isConnected) returnFocus.focus?.();
@@ -461,7 +631,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   close.addEventListener("click", hide);
   refresh.addEventListener("click", load);
   search.addEventListener("input", () => { page = 1; attachmentNotice = ""; render(); });
-  for (const control of filterControls.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
+  for (const [field, control] of filterControls) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; void refreshDependentFilters(field); });
+  for (const control of dateBounds.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
+  sortControl?.addEventListener("change", () => { page = 1; render(); });
   previous.addEventListener("click", () => { page -= 1; render(); });
   next.addEventListener("click", () => { page += 1; render(); });
   root.addEventListener("keydown", event => {
@@ -481,6 +653,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

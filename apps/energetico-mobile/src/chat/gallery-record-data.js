@@ -1,6 +1,7 @@
 import { ENTITIES } from "../../../../portal/catalog/entities.js";
 import { resolvePowerAppsUiContract } from "../../../../portal/catalog/powerapps-ui-contract.js";
 import { mapSharePointColumns, validateFormValues } from "../../../../portal/data/column-mapper.js";
+import { createForm43StatusPolicy } from './orders-form43-locks.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -163,8 +164,13 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       if (typeof repository.searchPowerAppsOptions !== "function") throw new Error("A origem de opções não está disponível.");
       return repository.searchPowerAppsOptions(siteKey, source, term, dependencies, options);
     };
-    const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch });
-    contexts.set(context, { list, item, columns, contract, relationshipOptions });
+    const statusColumn = columns.find(column => key(column.name) === 'STATUS' || key(column.label) === 'STATUS');
+    const form43 = entity.id === 'notas-pendentes' && contract.formVariant?.formName === 'Form43' && statusColumn
+      ? createForm43StatusPolicy({ repository, siteKey, orderId: id, orderColumns: rawColumns, statusFieldName: inputName(statusColumn), orderListId: list.id }) : null;
+    const evaluateFieldLocks = form43 ? (draft = {}, options = {}) => form43.evaluate({ ...item.fields, ...draft }, options) : undefined;
+    const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
+      ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
+    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn });
     return context;
   }
 
@@ -243,6 +249,21 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       if (Object.hasOwn(changed, name) || dependencyChanged) await validateClosed(column, merged[name], baseline, columns, merged);
     }
     if (!Object.keys(changed).length) return item;
+    if (baseline.form43) {
+      const statusName = inputName(baseline.statusColumn);
+      const statusChanged = Object.hasOwn(changed, statusName);
+      const approvedDraft = String(changed[statusName] ?? item.fields[statusName] ?? '').trim().toUpperCase() === 'APROVADO';
+      if (statusChanged || approvedDraft) {
+        const current = await currentItem(list, item.id);
+        const outgoing = { ...current.fields, ...changed };
+        baseline.form43.assertApprovalDate(outgoing);
+        if (statusChanged) {
+          const locks = await baseline.form43.evaluate(outgoing, { refresh: true });
+          const status = locks[statusName];
+          if (!status.editable) throw new Error(`STATUS bloqueado: ${status.reasons.join(' ')}`);
+        } else await baseline.form43.assertSubmit(outgoing);
+      }
+    }
     if (typeof repository.updateItem !== "function") throw new Error("A gravação segura não está disponível.");
     const saved = await repository.updateItem(siteKey, list.id, item.id, changed, { eTag: version(item.eTag) });
     contexts.delete(context);

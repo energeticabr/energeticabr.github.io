@@ -174,6 +174,18 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_subfamily_gallery: "subfamily",
   action_product_gallery: "product",
   action_documents_gallery: "documents",
+  action_asset_gallery: "asset",
+  action_asset_function_gallery: "assetFunction",
+  action_asset_product_gallery: "assetProduct",
+  action_asset_group_gallery: "assetGroup",
+  action_work_diary_gallery: "workDiary",
+  action_quote_gallery: "quotes",
+  action_contract_gallery: "contracts",
+  action_contract_line_gallery: "contractLines",
+  action_measurement_gallery: "measurements",
+  action_measurement_line_gallery: "measurementLines",
+  action_stage_demonstrative_gallery: "stageDemonstratives",
+  action_construction_stage_gallery: "constructionStages",
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
@@ -4373,25 +4385,28 @@ export function createAppController({
     if (!account || stopped || flowBusy()) return false;
     if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
     const galleryAccount = account;
+    const galleryRevision = sessionRevision;
     const assertSession = () => {
-      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria de cadastros foi encerrada.");
+      if (stopped || account !== galleryAccount || sessionRevision !== galleryRevision) throw new Error("A sessão da galeria de cadastros foi encerrada.");
     };
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = await registrationGalleryDataFactory({ kind, tokenProvider: scopes => {
+          const data = await registrationGalleryDataFactory({ kind, tokenProvider: async scopes => {
             assertSession();
-            return auth.getToken(scopes).catch(async error => {
+            const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
               await auth.authorize(scopes, { resumeAction: replyId });
               assertSession();
               return auth.getToken(scopes);
             });
+            assertSession();
+            return token;
           } });
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
-            ...(kind === "documents" ? {
+            ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({
@@ -4403,16 +4418,16 @@ export function createAppController({
             } : {}),
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
-          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          if (stopped || account !== galleryAccount || sessionRevision !== galleryRevision) { panel.destroy?.(); return false; }
           registrationGalleries.set(kind, panel);
         }
         await registrationGalleries.get(kind).open();
         return true;
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
+        if (!stopped && account === galleryAccount && sessionRevision === galleryRevision) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
         return false;
       } finally {
-        registrationGalleryOpenings.delete(kind);
+        if (registrationGalleryOpenings.get(kind) === opening) registrationGalleryOpenings.delete(kind);
       }
     })();
     registrationGalleryOpenings.set(kind, opening);
@@ -5216,6 +5231,8 @@ export function createAppController({
 
   async function signOut() {
     rhidAttendanceReportPreviousSnapshot = null;
+    rhidAttendanceReportRequests.clear();
+    view.closeRhidAttendanceReport?.({ render: false });
     disposeLaunchGallery();
     disposeOrdersGallery();
     disposeTasksGallery();
@@ -6049,6 +6066,14 @@ export function createAppController({
       replaceMessageId: command.messageId || "",
     }));
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
+    bind("open-rhid-attendance-today", () => {
+      if (!account || stopped || flowBusy()) return false;
+      const pending = rhidAttendanceReportRequests.get("new-report");
+      if (pending) return pending;
+      const date = provisionDateKey();
+      if (view.openRhidAttendanceToday?.({ date }) === false) return false;
+      return generateRhidAttendanceReport(date);
+    });
     bind("rhid-refresh", refreshRhidAttendance);
     bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
     bind("rhid-presence-validate-open", startRhidPendingValidation);

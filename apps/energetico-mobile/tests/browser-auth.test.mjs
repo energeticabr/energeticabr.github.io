@@ -356,3 +356,26 @@ test("não retoma pedidos usando conta em cache quando o retorno não identifica
 
   assert.equal(resumedAuth.consumePendingAction(), null);
 });
+
+test("consentimento Microsoft retoma cada nova galeria local", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  for (const action of ["action_asset_gallery", "action_asset_function_gallery", "action_asset_product_gallery", "action_asset_group_gallery", "action_work_diary_gallery", "action_quote_gallery", "action_contract_gallery", "action_contract_line_gallery", "action_measurement_gallery", "action_measurement_line_gallery", "action_stage_demonstrative_gallery", "action_construction_stage_gallery"]) {
+    const values = new Map();
+    const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+    const first = createBrowserAuth({ storage, config, client: {
+      async initialize() {}, async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; }, async acquireTokenRedirect() {},
+    } });
+    await first.initialize();
+    await first.authorize(["Sites.Read.All"], { resumeAction: action });
+    const resumed = createBrowserAuth({ storage, config, client: {
+      async initialize() {},
+      async handleRedirectPromise() { return { account, accessToken: "gallery-token", scopes: ["Sites.Read.All"] }; },
+      getAllAccounts() { return [account]; },
+    } });
+    await resumed.initialize();
+    assert.equal(resumed.consumePendingAction(), action);
+    assert.equal(resumed.consumePendingAction(), null);
+    assert.equal(values.size, 0);
+  }
+});

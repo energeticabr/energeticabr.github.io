@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { bindForm43FieldLocks } from './orders-form43-locks-view.js';
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
@@ -37,6 +38,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     const previous = session;
     session = null;
     previous?.controller?.cleanup?.();
+    previous?.fieldLocks?.cleanup?.();
     previous?.overlay.remove();
     if (previous?.focus?.isConnected) previous.focus.focus();
   }
@@ -173,6 +175,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     const loadEpoch = ++state.loadEpoch;
     const current = () => active(state) && state.loadEpoch === loadEpoch;
     state.controller?.cleanup?.();
+    state.fieldLocks?.cleanup?.();
+    state.fieldLocks = null;
     state.controller = null;
     state.error.hidden = true;
     const cancel = button("Cancelar", "data-gallery-editor-cancel", "", () => { if (active(state) && !state.busy) close(); });
@@ -232,6 +236,11 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
             return saveEditor(context, fields);
           });
+          // Re-evaluate conditional locks after a rejected save, once the
+          // renderer has restored its own disabled-state snapshot.
+          if (active(state) && !state.persisted) queueMicrotask(() => queueMicrotask(() => {
+            if (active(state)) void state.fieldLocks?.refresh?.();
+          }));
           // The renderer restores its control snapshot after this callback;
           // postpone committed-state locking until that restoration completes.
           if (active(state) && state.persisted) queueMicrotask(() => queueMicrotask(() => {
@@ -240,6 +249,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
           }));
         },
       });
+      state.fieldLocks = bindForm43FieldLocks(state.body, context, { isBusy: () => state.busy || state.persisted });
       (state.body.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || focusable(state)[0] || state.dialog).focus();
     } catch (error) {
       if (!current()) return;

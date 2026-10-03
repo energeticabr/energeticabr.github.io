@@ -3,6 +3,7 @@ import { createSharePointAttachmentTransport, validateAttachment } from "../../.
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { provisionDateKey, provisionDayOffset, provisionDueState, provisionTotal } from "./pending-provision-dates.js";
+import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -205,7 +206,8 @@ export function createOrdersGalleryData(options = {}) {
     listName: options.listName || "NOTASPENDENTES",
   });
   const launchGroups = createLaunchClusterData(sharedOptions);
-  return Object.freeze({ ...data, loadLaunchGroup: launchGroups.loadGroup });
+  const linkedReport = createOrdersLinkedReportData(sharedOptions);
+  return Object.freeze({ ...data, loadLaunchGroup: launchGroups.loadGroup, loadLinkedReport: linkedReport.loadLinkedReport });
 }
 
 export function createLaunchClusterData({
@@ -536,6 +538,7 @@ function createSharePointListData({
   listAliases = LIST_ALIASES,
   listName = "NOTASPENDENTES",
   listMissingCode = "orders_list_missing",
+  preserveSourceOrder = false,
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
@@ -582,7 +585,7 @@ function createSharePointListData({
         if (row) rows.push(row);
       }
       if (!page?.hasMore || !page?.nextLink) {
-        rows.sort((left, right) => Number(right.id) - Number(left.id));
+        if (!preserveSourceOrder) rows.sort((left, right) => Number(right.id) - Number(left.id));
         return Object.freeze({ listName, rows: Object.freeze(rows) });
       }
       cursor = page.nextLink;
