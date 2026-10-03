@@ -107,17 +107,28 @@ async function galleryHarness(t, loadLinkedReport) {
   const calls = [];
   const gallery = createOrdersGallery({ document: dom.window.document, data: {
     async loadSnapshot() { return { rows }; },
+    async loadEditor(id) { return { entity: { id: 'pedidos', title: 'Pedido' }, item: { id, fields: { FORNECEDOR: `CARTÃO ${id}` } },
+      columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control: 'text', editable: true }], contract: { hasForm: true } }; },
     async loadLinkedReport(id, options) { calls.push([id, options]); return loadLinkedReport(id, options); },
   } });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
-  return { gallery, calls, dom, root: dom.window.document.querySelector('.og-overlay'), panel: dom.window.document.querySelector('.og-detail'), mascot(id) { return dom.window.document.querySelector(`.og-card[data-item-id="${id}"] [data-action="mascot-details"]`); } };
+  return { gallery, calls, dom, root: dom.window.document.querySelector('.og-overlay'), panel: dom.window.document.querySelector('.og-detail') };
 }
 
-test('mascot keeps the linked-order report while the separate Details action is absent', async t => {
+async function openReport(ctx, id) {
+  ctx.root.querySelector(`.og-card[data-item-id="${id}"] [data-gallery-action="edit"]`).click();
+  for (let attempt = 0; attempt < 20 && !ctx.root.querySelector('[data-order-linked-report]'); attempt++) await tick();
+  const button = ctx.root.querySelector('[data-order-linked-report]');
+  assert.ok(button, 'linked report is reachable through the pencil editor');
+  button.click();
+  return ctx.root.querySelector(`.og-card[data-item-id="${id}"] [data-gallery-action="edit"]`);
+}
+
+test('pencil editor keeps the linked-order report while the separate Details action is absent', async t => {
   const data = harness();
   const ctx = await galleryHarness(t, id => report(data, id));
-  ctx.mascot('319').click();
+  await openReport(ctx, '319');
   await tick(); await tick();
   assert.equal(ctx.calls[0]?.[0], '319', 'mascot must query the selected ID');
   assert.ok(ctx.panel.querySelector('.olr-report'));
@@ -140,8 +151,9 @@ test('mascot keeps the linked-order report while the separate Details action is 
 test('switching selected orders aborts the previous report and ignores out-of-order responses', async t => {
   const first = deferred(); const second = deferred();
   const ctx = await galleryHarness(t, id => id === '319' ? first.promise : second.promise);
-  ctx.mascot('319').click();
-  ctx.mascot('320').click();
+  await openReport(ctx, '319');
+  [...ctx.panel.querySelectorAll('button')].find(button => button.textContent === 'Fechar detalhes').click();
+  await openReport(ctx, '320');
   assert.deepEqual(ctx.calls.map(call => call[0]), ['319', '320']);
   assert.equal(ctx.calls[0][1].signal.aborted, true);
   second.resolve(await report(harness({ async getItemsPage() { return { items: [], hasMore: false }; } }), '320'));
@@ -157,7 +169,7 @@ test('report errors offer an exact-order retry and closing prevents late renderi
   let attempts = 0;
   const pending = deferred();
   const ctx = await galleryHarness(t, () => { if (!attempts++) throw new Error('Leitura do arquivo recusada'); return pending.promise; });
-  ctx.mascot('319').click(); await tick();
+  await openReport(ctx, '319'); await tick();
   assert.match(ctx.panel.textContent, /Leitura do arquivo recusada/);
   assert.equal(ctx.panel.querySelector('.olr-summary'), null, 'no misleading zero statistics on error');
   [...ctx.panel.querySelectorAll('button')].find(button => button.textContent === 'Tentar novamente').click();
@@ -169,14 +181,14 @@ test('report errors offer an exact-order retry and closing prevents late renderi
   assert.equal(ctx.panel.children.length, 0);
 });
 
-test('Escape closes the linked popup, aborts loading and restores focus to the selected mascot', async t => {
+test('Escape closes the linked popup, aborts loading and restores focus to the selected pencil', async t => {
   const pending = deferred();
   const ctx = await galleryHarness(t, () => pending.promise);
-  const mascot = ctx.mascot('319'); mascot.focus(); mascot.click();
+  const pencil = await openReport(ctx, '319');
   ctx.panel.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(ctx.panel.hidden, true);
   assert.equal(ctx.calls[0][1].signal.aborted, true);
-  assert.equal(ctx.dom.window.document.activeElement, mascot);
+  assert.equal(ctx.dom.window.document.activeElement, pencil);
   pending.resolve(await report(harness())); await tick();
   assert.equal(ctx.panel.hidden, true);
 });

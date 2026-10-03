@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Galeria de pedidos: layout responsivo</title>
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <script type="module">
+    import { createOrdersGallery } from '../../src/ui/orders-gallery-view.js';
+    const rows = [
+      { id: '353', hasAttachments: true, fields: {
+        ID: '353', FORNECEDOR: 'ISRAEL ESCORAMENTO E ARMAÇÕES', STATUS: 'PENDENTE AUDITORIA',
+        FILIAL: '004 - EDIFÍCIO XAVANTE', FORMAPGTO: 'ENERGÉTICA - CAIXA', VALORTOTAL: 13000,
+        'NOTA FISCAL': 'PENDENTE', Criado: '2026-10-03T10:00:00Z', Modificado: '2026-10-03T11:00:00Z',
+        'Criado por': 'Usuário não identificado', 'Modificado por': 'Bernardo notini',
+      } },
+      { id: '351', hasAttachments: false, fields: {
+        ID: '351', FORNECEDOR: 'CEMIG', STATUS: 'APROVADO', FILIAL: '004 - EDIFÍCIO XAVANTE',
+        FORMAPGTO: 'DÉBITO AUTOMÁTICO', VALORTOTAL: 450, 'NOTA FISCAL': 'PENDENTE',
+        Criado: '2026-10-02T10:00:00Z', Modificado: '2026-10-02T10:00:00Z',
+      } },
+    ];
+    const gallery = createOrdersGallery({ document, data: {
+      async loadSnapshot() { return { rows }; },
+      async listAttachments(id) { return id === '353' ? [{ fileName: 'pedido.pdf' }, { fileName: 'foto.jpg' }] : []; },
+    } });
+    await gallery.open();
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>

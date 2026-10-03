@@ -4,10 +4,9 @@ import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 import { renderOrdersLinkedReport } from './orders-linked-report-view.js';
 
-const MASCOT_URL = new URL("../assets/mascote.png", import.meta.url).href;
 const PAGE_SIZES = [10, 20, 50, 100];
 const SORTS = [
-  ["id-desc", "MAIOR ID"],
+  ["id-desc", "Mais recentes"],
   ["payment-desc", "DATA DE PAGAMENTO (RECENTE)"],
   ["invoice-asc", "NOTA FISCAL (A–Z)"],
   ["created-asc", "CRIADO MAIS ANTIGO"],
@@ -94,6 +93,21 @@ export function createOrdersGallery({
     if (label !== undefined) node.textContent = label;
     return node;
   };
+  const icon = (pathData, className = '') => {
+    const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    if (className) svg.setAttribute('class', className);
+    const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.append(path);
+    return svg;
+  };
   let opened = false;
   let destroyed = false;
   let session = 0;
@@ -112,7 +126,7 @@ export function createOrdersGallery({
   let detailController = null;
   let detailReturnFocus = null;
 
-  const root = el("section", "og-overlay");
+  const root = el('section', 'og-overlay og-orders-overlay');
   root.hidden = true;
   root.tabIndex = -1;
   root.setAttribute("role", "dialog");
@@ -128,7 +142,9 @@ export function createOrdersGallery({
   header.append(closeButton, title, homeButton);
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters");
-  filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros e ordenação"));
+  const filterToggle = el('summary', 'og-filter-toggle');
+  filterToggle.append(icon('M3 5h18l-7 8v6l-4 2v-8L3 5Z'), el('span', '', 'Filtros'));
+  filterDisclosure.append(filterToggle);
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros de pedidos");
   const grid = el("div", "og-filter-grid");
@@ -160,6 +176,10 @@ export function createOrdersGallery({
   const pageSizeControl = addControl("pageSize", "Itens por página", "select", "text", false);
   for (const value of PAGE_SIZES) { const option = el("option", "", String(value)); option.value = String(value); pageSizeControl.append(option); }
   pageSizeControl.value = String(pageSize);
+  const toolbar = el('div', 'og-list-toolbar');
+  const sortField = sort.closest('.og-field');
+  sortField.classList.add('og-sort-field');
+  sortField.querySelector('.og-label').textContent = 'Ordenar por';
   const actions = el("div", "og-actions");
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
   actions.append(clearButton);
@@ -170,6 +190,7 @@ export function createOrdersGallery({
   metrics.setAttribute("aria-label", "Resumo de pedidos");
   const notice = el("p", "og-notice"); notice.hidden = true;
   const listStatus = el("p", "og-list-status"); listStatus.setAttribute("aria-live", "polite");
+  toolbar.append(listStatus, sortField);
   const cards = el("div", "og-cards"); cards.setAttribute("aria-label", "Pedidos");
   const pagination = el("nav", "og-pagination"); pagination.setAttribute("aria-label", "Páginas de pedidos");
   const previous = el("button", "og-button", "Página anterior"); previous.type = "button";
@@ -178,7 +199,7 @@ export function createOrdersGallery({
   pagination.append(previous, pageLabel, next);
   const detail = el("section", "og-detail"); detail.hidden = true;
   detail.tabIndex = -1; detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes do pedido");
-  content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination);
+  content.append(metrics, toolbar, filterDisclosure, notice, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
   detail.addEventListener('keydown', event => {
@@ -194,6 +215,17 @@ export function createOrdersGallery({
     onChanged: () => {
       closeDetails();
       return loadSnapshot();
+    },
+    renderEditorExtra: row => {
+      if (typeof data.loadLinkedReport !== 'function') return null;
+      const report = el('button', 'og-button og-editor-report', 'Ver relatório do pedido e lançamentos vinculados');
+      report.type = 'button';
+      report.dataset.orderLinkedReport = '';
+      report.addEventListener('click', () => {
+        recordActions.close();
+        void openLinkedDetails(row);
+      });
+      return report;
     },
   });
   const attachmentCounts = createGalleryAttachmentCounts({
@@ -274,19 +306,20 @@ export function createOrdersGallery({
   }
 
   function updateMetrics() {
-    const total = rows.length;
-    const withAttachments = rows.filter(row => row.hasAttachments).length;
-    const attachmentPresenceUnknown = rows.some(row => row.hasAttachments == null);
     const pending = rows.filter(row => /pendente/i.test(text(field(row.fields, FIELD_ALIASES.status)))).length;
     const edited = rows.filter(row => {
       const created = Date.parse(text(field(row.fields, FIELD_ALIASES.created)));
       const modified = Date.parse(text(field(row.fields, FIELD_ALIASES.modified)));
       return Number.isFinite(created) && Number.isFinite(modified) && modified > created;
     }).length;
-    const attachmentCount = attachmentPresenceUnknown ? (withAttachments ? `≥${withAttachments}` : "—") : withAttachments;
-    const values = [["Pedidos", total], ["Com anexos", attachmentCount], ["Pendentes", pending], ["Editados", edited]];
+    const values = [["Pendentes", pending], ["Editados", edited]];
     metrics.replaceChildren(...values.map(([label, value]) => {
-      const item = el("div", "og-metric"); item.append(el("dt", "", label), el("dd", "", String(value))); return item;
+      const item = el('div', `og-metric og-metric--${label === 'Pendentes' ? 'pending' : 'edited'}`);
+      item.append(icon('M6 2h8l5 5v13H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 0v5h5M8 12h7M8 16h5m2 1 2 2 4-4', 'og-metric-icon'));
+      const copy = el('div', 'og-metric-copy');
+      copy.append(el('dt', '', label), el('dd', '', String(value)));
+      item.append(copy);
+      return item;
     }));
   }
 
@@ -299,61 +332,45 @@ export function createOrdersGallery({
 
   function renderCard(row) {
     const fields = row.fields || {};
-    const hasAttachmentControl = row.hasAttachments !== false;
-    const card = el("article", `og-card${hasAttachmentControl ? " og-card--with-attachments" : ""}`);
+    const card = el('article', 'og-card og-order-card og-card--with-attachments gallery-record-card');
     card.dataset.itemId = row.id;
     const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading");
-    heading.append(el("span", "og-card-id", text(field(fields, ["ID"]) ?? row.id)), el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Pedido")));
+    const headingCopy = el('div', 'og-heading-copy');
+    headingCopy.append(el('h2', '', text(field(fields, ['FORNECEDOR']) || 'Pedido')));
     const statusText = text(field(fields, FIELD_ALIASES.status)) || "Status não informado";
-    const status = el("span", `og-status${/pendente/i.test(statusText) ? " og-status--pending" : ""}`, statusText);
+    const status = el('span', `og-status${/pendente/i.test(statusText) ? ' og-status--pending' : ''}`, statusText);
+    headingCopy.append(status);
+    heading.append(el('span', 'og-card-id', text(field(fields, ['ID']) ?? row.id)), headingCopy);
     const cardFields = el("dl", "og-card-fields");
     const summaries = [
-      ["FILIAL", field(fields, FIELD_ALIASES.branch)],
-      ["FORMA DE PAGAMENTO", field(fields, FIELD_ALIASES.paymentForm)],
-      ["VALOR TOTAL", field(fields, FIELD_ALIASES.total)],
-      ["OBSERVAÇÃO", field(fields, ["OBS", "OBSERVACAO"])],
-      ["NOTA FISCAL", field(fields, FIELD_ALIASES.invoice)],
-      ["DATA DE PAGAMENTO", field(fields, FIELD_ALIASES.paymentDate)],
-      ["CRIADO", field(fields, FIELD_ALIASES.created)],
-      ["CRIADO POR", field(fields, ["CRIADO POR", "AUTHOR", "CREATED BY"])],
-      ["MODIFICADO", field(fields, FIELD_ALIASES.modified)],
-      ["MODIFICADO POR", field(fields, ["MODIFICADO POR", "EDITOR", "MODIFIED BY"])],
+      ['FILIAL', field(fields, FIELD_ALIASES.branch), 'M3 21V5l7-2v18M10 8h11v13M6 7h1m-1 4h1m-1 4h1m7-3h1m2-9h1m-1 4h1m-1 4h1'],
+      ['FORMA DE PAGAMENTO', field(fields, FIELD_ALIASES.paymentForm), 'M3 6h18v12H3zM3 10h18M7 15h4'],
+      ['NOTA FISCAL', field(fields, FIELD_ALIASES.invoice), 'M6 2h9l4 4v16H6zM15 2v5h4M9 11h7M9 15h7M9 19h5'],
+      ['VALOR TOTAL', field(fields, FIELD_ALIASES.total), 'M12 2v20M16 6c-1-2-7-2-8 1-1 3 2 4 4 5s5 2 4 5c-1 3-7 3-9 1'],
+      ['CRIADO', field(fields, FIELD_ALIASES.created), 'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16M8 14h3'],
+      ['MODIFICADO', field(fields, FIELD_ALIASES.modified), 'M4 5h16v16H4zM8 2v6m8-6v6M4 10h16M12 14v3l2 1'],
+      ['CRIADO POR', field(fields, ['CRIADO POR', 'AUTHOR', 'CREATED BY']), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0'],
+      ['MODIFICADO POR', field(fields, ['MODIFICADO POR', 'EDITOR', 'MODIFIED BY']), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 21a8 8 0 0 1 16 0'],
     ];
-    for (const [name, value] of summaries) {
-      if (value == null || value === "") continue;
-      const pair = el("div", "og-card-field"); pair.append(el("dt", "", name), el("dd", "", formatValue(name, value))); cardFields.append(pair);
+    for (const [name, value, iconPath] of summaries) {
+      const pair = el('div', 'og-card-field');
+      pair.append(icon(iconPath, 'og-field-icon'), el('dt', '', name), el('dd', '', formatValue(name, value)));
+      cardFields.append(pair);
     }
-    const actions = el("div", "og-card-actions");
-    const mascot = el("button", "og-button og-mascot-button");
-    mascot.type = "button";
-    mascot.dataset.action = "mascot-details";
-    mascot.setAttribute("aria-label", `Abrir relatório do pedido e lançamentos vinculados #${row.id}`);
-    mascot.title = "Relatório do pedido e lançamentos vinculados";
-    const mascotImage = el("img");
-    mascotImage.src = MASCOT_URL;
-    mascotImage.alt = "";
-    mascotImage.setAttribute("aria-hidden", "true");
-    mascotImage.draggable = false;
-    mascot.append(mascotImage);
-    mascot.addEventListener("click", () => { void openLinkedDetails(row); });
     const recordControls = recordActions.render(row);
     for (const action of ['edit', 'delete']) {
       recordControls.querySelector(`[data-gallery-action="${action}"]`).dataset.action = action;
     }
-    actions.append(mascot);
-    main.append(heading, status, cardFields, actions);
-    if (hasAttachmentControl) {
-      const attachments = el("button", "og-button og-card-attachment-rail");
-      attachments.type = "button";
-      attachments.dataset.action = "attachments";
-      attachments.setAttribute("aria-label", `Abrir anexos do pedido #${row.id}: ${attachmentCounts.label(row)}`);
-      attachments.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
-        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
-      attachments.addEventListener("click", () => openAttachments(row));
-      card.append(attachments);
-    }
-    card.classList.add('gallery-record-card');
+    main.append(heading, cardFields);
+    const attachments = el('button', 'og-button og-card-attachment-rail');
+    attachments.type = 'button';
+    attachments.dataset.action = 'attachments';
+    attachments.setAttribute('aria-label', `Abrir anexos do pedido #${row.id}: ${attachmentCounts.label(row)}`);
+    attachments.append(icon('M20 11.5 12.5 19a5 5 0 0 1-7-7L13 3.5a3.5 3.5 0 0 1 5 5L9.5 17a2 2 0 0 1-3-3l7-7', 'og-card-attachment-icon'),
+      el('span', 'og-card-attachment-count', attachmentCounts.label(row)));
+    attachments.addEventListener('click', () => openAttachments(row));
+    card.append(attachments);
     card.append(main, recordControls);
     return card;
   }
@@ -405,18 +422,6 @@ export function createOrdersGallery({
     } finally {
       if (opened && !destroyed && currentSession === session) { listLoading = false; updateBusy(); }
     }
-  }
-
-  function renderDetailsTable(row) {
-    const table = el("table", "og-data-table");
-    const body = el("tbody");
-    const entries = Object.entries(row.fields || {});
-    if (!entries.some(([name]) => key(name) === "ID")) entries.unshift(["ID", row.id]);
-    for (const [name, value] of entries) {
-      const tr = el("tr"); tr.append(el("th", "", name), el("td", "", formatValue(name, value))); body.append(tr);
-    }
-    table.append(body);
-    return table;
   }
 
   function closeDetails({ restoreFocus = false } = {}) {
@@ -476,17 +481,6 @@ export function createOrdersGallery({
     }
   }
 
-  function openDetails(row) {
-    const origin = doc.activeElement;
-    closeDetails();
-    detailReturnFocus = origin;
-    const currentDetailsSession = ++detailsSession;
-    detail.hidden = false;
-    const heading = detailHeading(row, currentDetailsSession);
-    detail.replaceChildren(heading, renderDetailsTable(row));
-    detail.focus({ preventScroll: true });
-  }
-
   async function openAttachments(row) {
     if (attachmentLoading || !opened || destroyed) return;
     const currentSession = session;
@@ -513,6 +507,7 @@ export function createOrdersGallery({
 
   function applyFilters() { applyLocalFilters(); }
   const autoFilters = bindAutoFilterForm(form, applyFilters);
+  sort.addEventListener('change', () => autoFilters.apply());
   clearButton.addEventListener("click", () => {
     for (const [name, control] of controls) control.value = name === "sort" ? "id-desc" : name === "pageSize" ? "10" : "";
     sortValue = "id-desc"; pageSize = 10; autoFilters.apply();

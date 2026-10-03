@@ -5,7 +5,7 @@ let dialogSequence = 0;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
-export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit,
+export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra,
   actions = ["edit", "delete"] } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
@@ -249,6 +249,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
           }));
         },
       });
+      const extra = renderEditorExtra?.(state.row);
+      if (extra) state.body.append(extra);
       state.fieldLocks = bindForm43FieldLocks(state.body, context, { isBusy: () => state.busy || state.persisted });
       (state.body.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || focusable(state)[0] || state.dialog).focus();
     } catch (error) {

@@ -53,12 +53,13 @@ test("orders gallery mirrors Screen10 actions, sorting, filters and page sizes",
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `Screen10/admin filter ${name}`);
   }
   assert.deepEqual([...ctx.root().querySelector('[name="pageSize"]').options].map(option => option.value), ["10", "20", "50", "100"]);
-  assert.match(ctx.root().querySelector(".og-metrics").textContent, /3/);
+  assert.deepEqual([...ctx.root().querySelectorAll('.og-metric dt')].map(node => node.textContent), ['Pendentes', 'Editados']);
+  assert.match(ctx.root().querySelector('.og-list-status').textContent, /3 pedido/);
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"]').length, 3);
   assert.equal(ctx.root().querySelectorAll('[data-action="delete"]').length, 3);
   assert.equal(ctx.root().querySelectorAll('[data-action="details"]').length, 0, "orders have no separate details shortcut");
-  assert.equal(ctx.root().querySelectorAll('[data-action="mascot-details"] img').length, 3);
+  assert.equal(ctx.root().querySelectorAll('[data-action="mascot-details"]').length, 0);
 });
 
 test("Screen10 filters refine rows and page navigation applies selected page size", async t => {
@@ -97,7 +98,8 @@ test("Screen10 dates render as dd/mm/yyyy and untrusted SharePoint values stay t
   assert.ok(cardPairs.some(([label, value]) => label === "CRIADO POR" && value === "Bernardo Notini"));
   assert.ok(cardPairs.some(([label, value]) => label === "MODIFICADO POR" && value === "Bernardo Notini"));
   assert.doesNotMatch(ctx.root().querySelector(".og-cards").textContent, /2026-09-20T02:00:00Z/);
-  assert.match(ctx.root().querySelector(".og-cards").textContent, /<img src=x onerror=alert\(1\)>/);
+  assert.doesNotMatch(ctx.root().querySelector('.og-cards').textContent, /<img src=x onerror=alert\(1\)>/,
+    'the compact card omits the longer observation field');
   assert.equal(ctx.root().querySelector(".og-cards [onerror]"), null);
 });
 
@@ -108,22 +110,8 @@ test("orders show their data without a separate details control", async t => {
   assert.equal(card.querySelector('[data-action="details"]'), null);
   assert.ok(card.querySelector('[data-gallery-action="edit"]'));
   assert.match(card.textContent, /IMPERMATEX/);
-  assert.match(card.textContent, /Pedido <img src=x onerror=alert\(1\)>/);
+  assert.doesNotMatch(card.textContent, /Pedido <img src=x onerror=alert\(1\)>/);
   assert.equal(card.querySelector('[onerror]'), null);
-});
-
-test("the Screen10 mascot opens the selected order details", async t => {
-  const ctx = await setup(t);
-  await ctx.gallery.open();
-
-  const mascot = ctx.root().querySelector('.og-card[data-item-id="320"] [data-action="mascot-details"]');
-  assert.ok(mascot);
-  assert.equal(mascot.getAttribute("aria-label"), "Abrir relatório do pedido e lançamentos vinculados #320");
-  assert.match(mascot.querySelector("img").src, /mascote\.png$/);
-  mascot.click();
-
-  assert.equal(ctx.root().querySelector(".og-detail").hidden, false);
-  assert.match(ctx.root().querySelector(".og-detail").textContent, /Pedido #320/);
 });
 
 test("editing an order opens proven closed fields and saves through the versioned editor", async t => {
@@ -217,9 +205,9 @@ test("orders with attachments show a full-height attachment rail on the left, be
   assert.equal(main.querySelector('[data-action="details"]'), null);
   assert.ok(card.querySelector('[data-gallery-action="edit"]'));
   const withoutAttachments = ctx.root().querySelector('.og-card[data-item-id="320"]');
-  assert.equal(withoutAttachments.querySelector(".og-card-attachment-rail"), null,
-    "orders without attachments keep the full-width card layout");
-  assert.equal(withoutAttachments.classList.contains("og-card--with-attachments"), false);
+  assert.ok(withoutAttachments.querySelector('.og-card-attachment-rail'),
+    'orders with zero attachments retain the left rail shown in the reference layout');
+  assert.equal(withoutAttachments.querySelector('.og-card-attachment-count').textContent, '0 anexos');
 });
 
 test("orders show the attachment quantity below the left icon", async t => {
@@ -228,20 +216,17 @@ test("orders show the attachment quantity below the left icon", async t => {
   await settle();
   const rail = ctx.root().querySelector('.og-card[data-item-id="319"] .og-card-attachment-rail');
   const icon = rail.querySelector(".og-card-attachment-icon");
-  const label = rail.querySelector(".og-card-attachment-label");
   const count = rail.querySelector(".og-card-attachment-count");
   assert.ok(icon);
-  assert.equal(label.textContent, "ANEXOS");
   assert.equal(count.textContent, "2 anexos");
-  assert.equal(icon.nextElementSibling, label);
-  assert.equal(label.nextElementSibling, count);
+  assert.equal(icon.nextElementSibling, count);
 });
 
 test("offers attachment access when the Graph list payload does not expose attachment presence", async t => {
   const ctx = await setup(t, { rows: [{ id: "500", fields: { ID: "500", FORNECEDOR: "COFER" } }] });
   await ctx.gallery.open();
   assert.ok(ctx.root().querySelector('.og-card[data-item-id="500"] [data-action="attachments"]'));
-  assert.match(ctx.root().querySelector(".og-metrics").textContent, /—/);
+  assert.match(ctx.root().querySelector('.og-card-attachment-count').textContent, /anexos|Contando/);
 });
 
 test("load failures expose a retry, and close invalidates pending snapshots", async t => {
