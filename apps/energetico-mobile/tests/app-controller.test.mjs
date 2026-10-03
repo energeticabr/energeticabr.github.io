@@ -7731,7 +7731,7 @@ test("token da folha obtido depois de sair não permite enviar gravação", asyn
   assert.deepEqual(writes, []);
 });
 
-test("doze novas galerias abrem localmente com anexos e preservam o menu", async t => {
+test("galerias de cadastro abrem localmente com anexos e preservam o menu", async t => {
   const entries = [
     ["action_asset_gallery", "asset"],
     ["action_asset_function_gallery", "assetFunction"],
@@ -7745,6 +7745,7 @@ test("doze novas galerias abrem localmente com anexos e preservam o menu", async
     ["action_measurement_line_gallery", "measurementLines"],
     ["action_stage_demonstrative_gallery", "stageDemonstratives"],
     ["action_construction_stage_gallery", "constructionStages"],
+    ["action_recurring_tasks_gallery", "recurringTasks"],
   ];
   const opened = [], destroyed = [], previews = [];
   const h = makeHarness({
@@ -7762,7 +7763,7 @@ test("doze novas galerias abrem localmente com anexos e preservam o menu", async
   const before = h.chatCalls.length;
   for (const [replyId] of entries) assert.equal(await h.view.emit("select-reply", { replyId }), true);
   assert.deepEqual(opened, entries.map(([, kind]) => kind));
-  assert.equal(previews.length, 12);
+  assert.equal(previews.length, entries.length);
   assert.equal(h.chatCalls.length, before);
   h.controller.stop();
   assert.deepEqual(destroyed.sort(), entries.map(([, kind]) => kind).sort());

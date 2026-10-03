@@ -3768,14 +3768,13 @@ test("menu de Demandas remove o avatar e coloca Galeria Tarefas à direita de Ad
   }));
   const dom = new JSDOM(markup);
   const message = dom.window.document.querySelector(".chat-message--demand-menu");
-  const primary = message.querySelector(".chat-choice-columns__primary");
-  const secondary = message.querySelector(".chat-choice-columns__secondary");
+  const pairs = [...message.querySelectorAll(".chat-menu-gallery-pair")];
   assert.ok(message);
   assert.equal(message.querySelector(".chat-avatar"), null);
-  assert.equal(primary.querySelector("[data-reply-id]").dataset.replyId, "add_task");
-  assert.deepEqual([...primary.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId), ["add_task", "finish_task", "delegate_task", "recurring_task"]);
-  assert.deepEqual([...secondary.querySelectorAll("[data-reply-id]")].map(button => [button.dataset.replyId, button.textContent]), [["action_tasks_gallery", "GALERIA TAREFAS"]]);
-  assert.equal(message.querySelectorAll("[data-gallery-button]").length, 1);
+  assert.deepEqual(pairs.map(pair => [...pair.querySelectorAll('[data-reply-id]')].map(button => button.dataset.replyId)), [
+    ['add_task', 'action_tasks_gallery'], ['finish_task'], ['delegate_task'], ['recurring_task', 'action_recurring_tasks_gallery'],
+  ]);
+  assert.equal(message.querySelectorAll("[data-gallery-button]").length, 2);
   assert.doesNotMatch(markup, /📱 APPS/);
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(styles, /\.chat-choice-columns--task-menu\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) minmax\(0,\s*1fr\)/s);

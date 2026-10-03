@@ -56,6 +56,14 @@ export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
   constructionStages: { FILIAL: branch, ETAPA: source(stages.listName, stages.sourceField, {
     ...stages, conditions: [{ sourceField: 'FILIAL', filterField: 'FILIAL' }],
   }) },
+  recurringTasks: {
+    FILIAL: branch,
+    FORNECEDOR: source('FORNECEDORES', 'CADASTRO', { sourceAliases: ['Title'], conditions: [
+      { sourceField: 'FILIAL', value: '000 - ESCRITÓRIO CENTRAL' }, { sourceField: 'TIPO', value: 'MÃO DE OBRA' }, { sourceField: 'STATUS', value: 'ATIVO' },
+    ] }),
+    'ASSOCIAÇÃO': source('CADASTROTAREFAS', 'ASSOCIAÇÃO', { sourceAliases: ['field_1'] }),
+    RECORRENCIA: source('TAREFASRECORRENTES', 'RECORRENCIA', { metadataChoices: true }),
+  },
 });
 
 export function getRegistrationGalleryFilterSource(kind, field) {
@@ -141,6 +149,12 @@ export function createRegistrationGalleryFilterData({ repository, siteKey = 'per
     if (!Array.isArray(columns)) throw new Error('Os metadados do catálogo retornaram um resultado inválido.');
     const needed = new Map();
     needed.set(descriptor.sourceField, columnFor(columns, descriptor.sourceField, descriptor.sourceAliases));
+    if (descriptor.metadataChoices) {
+      const choices = needed.get(descriptor.sourceField).choice?.choices;
+      if (!Array.isArray(choices) || choices.some(choice => typeof choice !== 'string')) throw new Error('As opções cadastradas do filtro não estão disponíveis.');
+      const options = Object.freeze([...new Set(choices)].filter(choice => choice.trim()).map(value => Object.freeze({ value, label: value })));
+      active(); cache.set(cacheKey, options); return options;
+    }
     for (const name of [...(descriptor.labelFields || []), ...(descriptor.conditions || []).map(condition => condition.sourceField)]) {
       if (!needed.has(name)) needed.set(name, columnFor(columns, name));
     }

@@ -387,13 +387,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const current = (filterRequests.get(field) || 0) + 1;
     filterRequests.set(field, current);
     const epoch = filterEpoch, filters = filterSelections(), selectedValue = control.value;
+    const policy = data.getFilterPolicy?.(field);
+    const fixedValue = policy?.disabled === true ? policy.defaultValue || "" : "";
     filterErrors.delete(field);
     if (source.disabledUntil?.some(parent => !filters[parent])) {
       control.replaceChildren(option("Selecione o filtro anterior", ""));
       control.disabled = true;
       return;
     }
-    control.replaceChildren(option("Carregando…", ""));
+    control.replaceChildren(option("Carregando…", fixedValue));
     control.disabled = true;
     try {
       if (typeof data.loadFilterOptions !== "function") throw new Error("Fonte de filtro indisponível.");
@@ -401,11 +403,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
       if (!Array.isArray(options)) throw new Error("Opções do filtro indisponíveis.");
       control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
-      control.value = options.some(item => String(item.value) === selectedValue) ? selectedValue : "";
-      control.disabled = false;
+      if (fixedValue && !options.some(item => String(item.value) === fixedValue)) control.append(option(fixedValue, fixedValue));
+      const desiredValue = fixedValue || (!hasLoaded ? policy?.defaultValue || selectedValue : selectedValue);
+      control.value = fixedValue || (options.some(item => String(item.value) === desiredValue) ? desiredValue : "");
+      control.disabled = policy?.disabled === true;
     } catch {
       if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
-      control.replaceChildren(option("Indisponível", ""));
+      control.replaceChildren(option("Indisponível", fixedValue));
       control.disabled = true;
       filterErrors.set(field, `Filtro ${fieldLabel(field)} indisponível. Tente atualizar.`);
     }

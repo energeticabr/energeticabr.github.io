@@ -104,6 +104,16 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     nativeCard: true, showAttachments: true, recordLabel: "etapa de obra", recordArticle: "a", fields: ["ETAPA", "FILIAL", "GRUPO DE OBRA", "PERCENTUALEFETUADO", "INÍCIO", "DATA FATAL", "FIM", "STATUS", ...AUDIT_FIELDS], filterFields: ["TIPO", "FILIAL", "ETAPA", "STATUS"], defaultFilters: { TIPO: "ATIVIDADE COMUM", STATUS: "INICIADO" }, filterChoices: { STATUS: ["NÃO INICIADO", "INICIADO", "FINALIZADO"] },
     fieldAliases: { ...AUDIT_ALIASES, "GRUPO DE OBRA": ["Title"], TIPO: ["field_2"], ETAPA: ["field_3"], "INÍCIO": ["field_4"], FIM: ["field_5"], "DATA FATAL": ["DATAFATAL"] }, fieldTypes: { PERCENTUALEFETUADO: "percent", "INÍCIO": "date", "DATA FATAL": "date", FIM: "date" }, fieldLabels: { "GRUPO DE OBRA": "Grupo de obra", PERCENTUALEFETUADO: "Andamento", "INÍCIO": "Data início", "DATA FATAL": "Data fatal", FIM: "Data final" }, sourceSort: [{ field: "FILIAL", direction: "asc", type: "text" }, { field: "INDICE", direction: "asc", type: "number" }], editFormVariant: "E7- EDITAR ETAPA OBRA.pa.yaml#EDITARGRUPO_9",
   }),
+  recurringTasks: Object.freeze({
+    title: "GALERIA DE TAREFAS RECORRENTES", screen: "HISTORICOTAREFASRECORRENTES", listName: "TAREFASRECORRENTES", aliases: ["TAREFASRECORRENTES"],
+    nativeCard: true, showAttachments: true, recordLabel: "tarefa recorrente", recordArticle: "a", searchPlaceholder: "Pesquisar descrição", searchFields: ["TAREFA"],
+    fields: ["TAREFA", "ASSOCIAÇÃO", "FORNECEDOR", "FILIAL", "RECORRENCIA", "COBRAR", "PRIORITARIA", "STATUS", "DATA", "DATACRIARNOVAMENTE", "DATAVENCIMENTO", ...AUDIT_FIELDS],
+    filterFields: ["FORNECEDOR", "FILIAL", "RECORRENCIA", "COBRAR", "PRIORITARIA", "STATUS", "ASSOCIAÇÃO"], fieldAliases: { ...AUDIT_ALIASES, "ASSOCIAÇÃO": ["ASSOCIA_x00c7__x00c3_O"] },
+    fieldLabels: { TAREFA: "Descrição", RECORRENCIA: "Recorrência", PRIORITARIA: "Atividade prioritária", DATA: "Data início", DATACRIARNOVAMENTE: "Data próxima criação", DATAVENCIMENTO: "Data próximo vencimento" },
+    fieldTypes: { DATA: "date", DATACRIARNOVAMENTE: "date", DATAVENCIMENTO: "date" }, defaultFilters: { STATUS: "ATIVO" },
+    filterChoices: { STATUS: ["ATIVO", "INATIVO"], COBRAR: ["SIM", "NÃO"], PRIORITARIA: ["NÃO PRIORITÁRIA", "ATIVIDADE PRIORITÁRIA", "ATIVIDADE EMERGENCIAL"] },
+    sourceSort: null, editFormVariant: "HISTORICOTAREFASRECORRENTES.pa.yaml#Form14_1",
+  }),
 });
 
 export function registrationFieldKey(value) {
@@ -229,6 +239,11 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   }
   return Object.freeze({ ...data,
     ...filters,
+    ...(kind === "recurringTasks" ? { getFilterPolicy(field) {
+      if (registrationFieldKey(field) !== "fornecedor") return null;
+      const email = String(options.userEmail || "").trim().toLowerCase();
+      return { disabled: email !== "bernardonotini@energeticabr.com", defaultValue: email === "arthurmarcos@energeticabr.com" ? "ARTHUR MARCOS SILVA ROCHA" : "" };
+    } } : {}),
     ...(model.editFormVariant ? { loadEditor: async (id, loadOptions = {}) => {
       if (loadOptions.formVariantId && loadOptions.formVariantId !== model.editFormVariant) throw new Error("O formulário solicitado não pertence a esta galeria.");
       return data.loadEditor(id, { ...loadOptions, formVariantId: model.editFormVariant });

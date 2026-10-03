@@ -186,6 +186,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_measurement_line_gallery: "measurementLines",
   action_stage_demonstrative_gallery: "stageDemonstratives",
   action_construction_stage_gallery: "constructionStages",
+  action_recurring_tasks_gallery: "recurringTasks",
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
@@ -4392,7 +4393,7 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = await registrationGalleryDataFactory({ kind, tokenProvider: async scopes => {
+          const data = await registrationGalleryDataFactory({ kind, userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
@@ -4406,7 +4407,7 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
-            ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages"].includes(kind) ? {
+            ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({
