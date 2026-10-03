@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revisão de edição de lançamento</title>
+  <link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+</head>
+<body>
+  <script type="module">
+    import { createLaunchGallery } from '../../src/ui/launch-gallery-view.js';
+    const item = { id: 3489, fields: {
+      ID: 3489, FORNECEDOR: 'FORNECEDOR DE TESTE', QUANTIDADE: 2.5, FRETE: 0,
+      CONCLUÍDO: 'PEDIDO EMPENHADO', Modified: '2026-10-03T10:00:00Z',
+    } };
+    const gallery = createLaunchGallery({ document, request: async operation => {
+      if (operation === 'snapshot') return { rows: [item], count: 1, page: 1, pages: 1, totals: {}, filterOptions: {} };
+      if (operation === 'detail') return { item, attachments: [], editFields: [
+        { name: 'QUANTIDADE', label: 'Quantidade', type: 'number' },
+        { name: 'FRETE', label: 'Frete', type: 'number' },
+        { name: 'CONCLUÍDO', label: 'Situação', type: 'select', options: [
+          { value: 'PEDIDO EMPENHADO', label: 'Empenhado' },
+          { value: 'PEDIDO FINALIZADO', label: 'Finalizado' },
+        ] },
+      ] };
+      throw new Error(`Operação inesperada: ${operation}`);
+    } });
+    await gallery.open();
+    document.querySelector('.lg-record [data-gallery-action="edit"]').click();
+    for (let attempt = 0; attempt < 30 && !document.querySelector('.lg-editor'); attempt++)
+      await new Promise(resolve => setTimeout(resolve, 20));
+    const quantity = document.querySelector('.lg-editor [name="QUANTIDADE"]');
+    const freight = document.querySelector('.lg-editor [name="FRETE"]');
+    for (const [control, value] of [[quantity, '3'], [freight, '15']]) {
+      control.value = value;
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    document.querySelector('.lg-editor-review').click();
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>
