@@ -205,6 +205,25 @@ test('cancel and Escape close only the review popup and preserve the edited draf
   assert.equal(mutations(ctx).length, 0);
 });
 
+test('Escape cannot dismiss a confirmation while its save is pending', async t => {
+  const pending = deferred();
+  const ctx = await setup(t, { request: async operation => {
+    if (operation === 'snapshot') return snapshot();
+    if (operation === 'detail') return detail();
+    if (operation === 'update') return pending.promise;
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  button(ctx.root(), 'SUBMETER').click();
+  const popup = ctx.root().querySelector('.lg-review');
+  button(popup, 'Confirmar alterações').click();
+  popup.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(popup.hidden, false);
+  pending.reject(new Error('Falha temporária'));
+  await settle();
+  assert.match(popup.querySelector('.lg-review-error').textContent, /Falha temporária/);
+});
+
 test('editor highlights only fields changed from the loaded launch and clears restored values', async t => {
   const ctx = await setup(t, {request: async operation => operation === 'snapshot' ? snapshot() : detail({editFields: [
     {name: 'QUANTIDADE', label: 'Quantidade', type: 'number'},

@@ -409,6 +409,8 @@
 .lg-review-actions > .lg-button { width: 100%; min-width: 0; }
 .lg-review-actions > .lg-review-cancel { color: #fff; border-color: #8f171b; background: var(--lg-red); }
 .lg-review-actions > .lg-review-confirm { color: #fff; border-color: #0c6539; background: #14804a; }
+.lg-review-actions > .lg-review-cancel:hover:not(:disabled) { background: var(--lg-red); }
+.lg-review-actions > .lg-review-confirm:hover:not(:disabled) { background: #14804a; }
 .lg-notice { margin-block: 12px; padding: 10px; border: 1px solid #7297b3; border-radius: 5px; background: var(--lg-sky); overflow-wrap: anywhere; }
 .lg-error { color: #941c20; background: #fff0f0; padding: 12px; border-radius: 5px; overflow-wrap: anywhere; }
 

@@ -1479,7 +1479,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!opened || suspended || event.defaultPrevented) return;
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation();
-      if (!reviewHost.hidden) { dismissReview(); return; }
+      if (!reviewHost.hidden) { if (!busy) dismissReview(); return; }
       if (!clusterPanel.hidden) { closeCluster(); return; }
       if (!panel.hidden) { dismissDetail(); return; }
       close(); return;

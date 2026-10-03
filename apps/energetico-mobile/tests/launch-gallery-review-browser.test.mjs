@@ -82,6 +82,15 @@ test('launch edit confirmation stays readable above the form on phones and deskt
       assert.equal(layout.rows, 2);
       assert.equal(layout.cancelColor, 'rgb(181, 31, 36)', 'Cancelar deve ser vermelho');
       assert.equal(layout.confirmColor, 'rgb(20, 128, 74)', 'Confirmar deve ser verde');
+      if (width === 390) {
+        for (const [className, expected] of [['lg-review-cancel', layout.cancelColor], ['lg-review-confirm', layout.confirmColor]]) {
+          const point = await evaluate(`(() => { const box = document.querySelector('.${className}').getBoundingClientRect();
+            return {x: box.left + box.width / 2, y: box.top + box.height / 2}; })()`);
+          await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: point.x, y: point.y }, sessionId);
+          assert.equal(await evaluate(`getComputedStyle(document.querySelector('.${className}')).backgroundColor`), expected,
+            `${className} deve manter a cor ao passar o mouse`);
+        }
+      }
       if (width === 390 && process.env.LAUNCH_REVIEW_SCREENSHOT) {
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }, sessionId);
         writeFileSync(process.env.LAUNCH_REVIEW_SCREENSHOT, Buffer.from(shot.data, 'base64'));
