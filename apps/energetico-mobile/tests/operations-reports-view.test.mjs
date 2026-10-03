@@ -45,6 +45,16 @@ test("relatório 6 apresenta etapas, atividades e filtros sem tabela horizontal"
   assert.match(root.textContent, /PINTURA/);
 });
 
+test("relatório 6 preserva o cabeçalho e as oito colunas visuais do Power Apps", async t => {
+  const { view, root } = setup(t);
+  await view.open(6);
+  assert.deepEqual([...root.querySelectorAll('.or-stage-columns > span')].slice(0, 8).map(node => node.textContent),
+    ['#', 'Atividade', 'Imóvel', 'Responsável', 'Início', 'Fim', 'Dias', 'Status']);
+  const first = root.querySelector('.or-activity-card');
+  assert.match(first.textContent, /ALVENARIA.*CASA.*JOÃO.*01\/09\/2026.*08\/09\/2026.*ATIVIDADE INICIADA/s);
+  assert.match(root.querySelector('.or-stage-summary').textContent, /ESTRUTURA.*25%.*01\/09\/2026.*HOJE/s);
+});
+
 test("relatórios 6–8 exibem o logo oficial e filtros com rótulos do Power Apps", async t => {
   const { view, root } = setup(t);
   for (const number of [6, 7, 8]) {
@@ -86,7 +96,7 @@ test("relatório 6 retira etapas sem correspondência ao filtrar atividade, stat
     const control = root.querySelector(`[name="${name}"]`);
     control.value = value;
     control.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-    assert.deepEqual([...root.querySelectorAll(".or-stage-summary > .or-card-title")].map(node => node.textContent), ["PINTURA"]);
+    assert.deepEqual([...root.querySelectorAll(".or-stage-summary > .or-card-title")].map(node => node.textContent), ["📋 PINTURA"]);
     control.value = "";
     control.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
   }
@@ -125,6 +135,15 @@ test("relatório 7 mostra contagem, ID, data, filial e status", async t => {
   assert.equal(root.querySelectorAll('.or-diary-card [data-tone="danger"]').length, 2);
 });
 
+test("relatório 7 exibe faixa de cabeçalhos alinhada aos diários", async t => {
+  const { view, root } = setup(t);
+  await view.open(7);
+  assert.deepEqual([...root.querySelectorAll('.or-diary-columns > span')].map(node => node.textContent),
+    ['ID', 'DATA', 'FILIAL', 'STATUS']);
+  assert.equal(root.querySelectorAll('.or-diary-card').length, 2);
+  assert.match(root.querySelector('.or-diary-footer').textContent, /CONTAGEM DE PENDENTES:.*2/s);
+});
+
 test("relatório 7 distingue total de pendentes do limite visível", async t => {
   const data = { async loadReport() { return { ...snapshots[7], count: 2001, limited: true }; } };
   const { view, root } = setup(t, data);
@@ -147,7 +166,27 @@ test("relatório 8 mantém resumo completo após filtro e escapa texto da lista"
   assert.equal(root.querySelectorAll(".or-task-card").length, 2);
   assert.equal(root.querySelector('[data-metric="total"]').textContent, "3");
   assert.equal(root.querySelectorAll(".or-due-card").length, 1);
-  assert.match(root.querySelector('.or-due-summary').textContent, /DATA FATAL.*Total de atividades nesta data:/s);
+  assert.match(root.querySelector('.or-due-summary').textContent, /DATA FATAL.*TOTAL: 2/s);
+});
+
+test("relatório 8 mantém colunas e faixas de data fatal do Power Apps sem omitir atributos", async t => {
+  const { view, root } = setup(t);
+  await view.open(8);
+  assert.deepEqual([...root.querySelectorAll('.or-task-columns > span')].slice(0, 6).map(node => node.textContent),
+    ['RESPONSÁVEL', 'ID', 'DATA', 'ASSOCIAÇÃO', 'TAREFA', 'PRIORIDADE']);
+  const due = root.querySelector('.or-due-card');
+  assert.match(due.querySelector('.or-due-summary').textContent, /DATA FATAL.*05\/10\/2026.*TOTAL: 2/s);
+  assert.match(due.textContent, /ANA.*Conferir orçamento.*ALTA.*ATIVIDADE CRIADA/s);
+});
+
+test("painéis 6 e 8 mantêm os ícones de contexto dos indicadores originais", async t => {
+  const { view, root } = setup(t);
+  await view.open(6);
+  assert.match(root.querySelector('.or-stage-summary .or-card-title').textContent, /📋/u);
+  await view.open(8);
+  assert.deepEqual([...root.querySelectorAll('.or-metric dt')].map(node => node.textContent),
+    ['⏳ ATIVIDADES PENDENTES', '✅ ATIVIDADES CONCLUÍDAS', '📊 TOTAL DE ATIVIDADES']);
+  assert.match(root.querySelector('.or-due-summary .or-card-title').textContent, /📅/u);
 });
 
 test("relatório 8 aceita múltiplos status simultâneos como o filtro Power Apps", async t => {
@@ -162,6 +201,18 @@ test("relatório 8 aceita múltiplos status simultâneos como o filtro Power App
   assert.equal(root.querySelectorAll('.or-task-card').length, 2);
   assert.match(root.querySelector('.or-status-summary').textContent, /2 itens/);
   assert.equal(root.querySelector('[data-metric="total"]').textContent, '3');
+});
+
+test("filtro de status do relatório 8 permanece recolhido e mostra a seleção", async t => {
+  const { dom, view, root } = setup(t);
+  await view.open(8);
+  const details = root.querySelector('.or-status-details');
+  assert.ok(details);
+  assert.equal(details.open, false);
+  const box = root.querySelector('.or-status-options input[value="ATIVIDADE CRIADA"]');
+  box.checked = true;
+  box.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.match(details.querySelector('summary').textContent, /1 item selecionado/);
 });
 
 test("relatório 8 só marca prazo vencido quando há atividade criada ou em atendimento", async t => {

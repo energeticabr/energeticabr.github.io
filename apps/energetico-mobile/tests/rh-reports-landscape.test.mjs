@@ -81,11 +81,28 @@ test("relatórios de RH cabem em 844×390 e 740×360 sem rolagem lateral nem tex
         const css = selector => getComputedStyle(root.querySelector(selector)).backgroundColor;
         const logo = root.querySelector('.rh-reports-brand img');
         return { logoLoaded: logo.complete && logo.naturalWidth > 0, logoSrc: logo.src, logoWidth: logo.naturalWidth,
-          color: css(${JSON.stringify(report === 3 ? ".rh-reports-branch > h3" : report === 4 ? '.rh-reports-metric[data-tone="pending"]' : ".rh-reports-block > h3")}) };
+          color: css(${JSON.stringify(report === 3 ? ".rh-reports-branch > h3" : report === 4 ? '.rh-reports-metric[data-tone="pending"]' : ".rh-reports-block > h3")}),
+          surface: css(${JSON.stringify(report === 3 ? ".rh-reports-property-head" : report === 4 ? ".rh-reports-professions-block" : ".rh-reports-pending-row")}),
+          accent: css(${JSON.stringify(report === 3 ? '.rh-reports-stat-pill[data-tone="pending"]' : report === 4 ? ".rh-reports-profession" : ".rh-reports-detail-block > h3")}),
+          dateLineDisplay: root.querySelector('.rh-reports-date-line')
+            ? getComputedStyle(root.querySelector('.rh-reports-date-line')).display : null,
+          metricsDisplay: getComputedStyle(root.querySelector('.rh-reports-metrics')).display,
+          summaryBorder: getComputedStyle(root.querySelector('.rh-reports-head')).borderTopWidth,
+          summaryInnerBorder: getComputedStyle(root.querySelector('.rh-reports-title')).borderBottomWidth };
       })()`);
       assert.equal(visual.logoLoaded, true, `Relatório ${report}: logo oficial não carregou (${visual.logoSrc}, ${visual.logoWidth}px)`);
-      const expectedColors = { 3: "rgb(227, 242, 253)", 4: "rgb(255, 243, 224)", 5: "rgb(255, 243, 224)" };
+      const expectedColors = { 3: "rgb(230, 240, 255)", 4: "rgb(255, 243, 224)", 5: "rgb(255, 243, 224)" };
       assert.equal(visual.color, expectedColors[report], `Relatório ${report}: paleta visual do Power Apps`);
+      const expectedSurfaces = { 3: "rgb(243, 246, 250)", 4: "rgb(255, 253, 231)", 5: "rgb(250, 250, 250)" };
+      const expectedAccents = { 3: "rgb(255, 235, 238)", 4: "rgb(255, 248, 225)", 5: "rgb(30, 136, 229)" };
+      assert.equal(visual.surface, expectedSurfaces[report], `Relatório ${report}: superfície suave da fórmula Power Apps`);
+      assert.equal(visual.accent, expectedAccents[report], `Relatório ${report}: acento da fórmula Power Apps`);
+      if (report === 5) assert.equal(visual.dateLineDisplay, "flex", "Relatório 5: data, atividade e valor na mesma faixa responsiva");
+      if (report !== 4) assert.equal(visual.metricsDisplay, "none", `Relatório ${report}: sem espaço de indicadores acima da tabela original`);
+      if (report === 4) {
+        assert.equal(visual.summaryBorder, "3px", "Relatório 4: uma faixa única de resumo como na fórmula");
+        assert.equal(visual.summaryInnerBorder, "0px", "Relatório 4: sem divisória entre título e período");
+      }
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

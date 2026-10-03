@@ -81,9 +81,9 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   function metricSkeleton() {
     metrics.replaceChildren();
     if (number === 8) {
-      addMetric("pending", "ATIVIDADES PENDENTES", EMPTY);
-      addMetric("completed", "ATIVIDADES CONCLUÍDAS", EMPTY);
-      addMetric("total", "TOTAL DE ATIVIDADES", EMPTY);
+      addMetric("pending", "⏳ ATIVIDADES PENDENTES", EMPTY);
+      addMetric("completed", "✅ ATIVIDADES CONCLUÍDAS", EMPTY);
+      addMetric("total", "📊 TOTAL DE ATIVIDADES", EMPTY);
     }
   }
 
@@ -91,6 +91,19 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
     const item = make("div", "or-field");
     item.append(make("span", "or-field-label", label), make("strong", "or-field-value", shown(value)));
     parent.append(item);
+  }
+
+  function columnHeadings(className, labels) {
+    const heading = make("div", className);
+    for (const label of labels) heading.append(make("span", "", label));
+    return heading;
+  }
+
+  function reportCell(label, value, className = "") {
+    const cell = make("div", `or-cell ${className}`.trim());
+    cell.dataset.label = label;
+    cell.textContent = shown(value);
+    return cell;
   }
 
   function selector(name, label, values) {
@@ -109,7 +122,8 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   function statusSelector(values) {
     const wrapper = make("fieldset", "or-filter or-status-filter");
     wrapper.append(make("legend", "or-filter-label", "STATUS"));
-    const summary = make("span", "or-status-summary");
+    const details = make("details", "or-status-details");
+    const summary = make("summary", "or-status-summary");
     const options = make("div", "or-status-options");
     const statuses = [...new Set(values.map(String).map(value => value.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     const updateSummary = () => { const count = selected.status?.length || 0; summary.textContent = count ? `${count} ${count === 1 ? "item selecionado" : "itens selecionados"}` : "Todos"; };
@@ -123,7 +137,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       });
       label.append(checkbox, make("span", "", value)); options.append(label);
     }
-    updateSummary(); wrapper.append(summary, options); filters.append(wrapper);
+    updateSummary(); details.append(summary, options); wrapper.append(details); filters.append(wrapper);
   }
 
   function buildFilters() {
@@ -154,13 +168,13 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   function renderStageActivity(row, index) {
     const card = make("article", "or-activity-card");
     card.dataset.tone = normalize(row.status) === "ATIVIDADE FINALIZADA" ? "success" : normalize(row.status) === "ATIVIDADE INICIADA" ? "info" : "danger";
-    card.append(make("h4", "or-card-title", `${index + 1}. ${shown(row.activity)}`));
-    const grid = make("div", "or-fields");
-    field(grid, "ID", `#${row.id}`); field(grid, "IMÓVEL", row.property); field(grid, "RESPONSÁVEL", row.supplier);
-    field(grid, "INÍCIO", formattedDate(row.start)); field(grid, "FIM", formattedDate(row.end));
     const elapsed = daysBetween(row.start, normalize(row.status) === "ATIVIDADE FINALIZADA" ? row.end : todayKey());
-    field(grid, "DIAS", elapsed == null ? EMPTY : `${elapsed} dias`); field(grid, "STATUS", row.status);
-    card.append(grid); return card;
+    card.append(reportCell("#", index + 1, "or-cell--number"), reportCell("Atividade", row.activity, "or-cell--activity"),
+      reportCell("Imóvel", row.property), reportCell("Responsável", row.supplier),
+      reportCell("Início", formattedDate(row.start), "or-cell--start"), reportCell("Fim", formattedDate(row.end), "or-cell--end"),
+      reportCell("Dias", elapsed == null ? EMPTY : `${elapsed} dias`, "or-cell--days"),
+      reportCell("Status", row.status, "or-cell--status"));
+    return card;
   }
 
   function renderStages() {
@@ -181,7 +195,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       const card = make("section", "or-stage-card");
       card.dataset.tone = normalize(stage.status) === "FINALIZADO" ? "success" : normalize(stage.status) === "INICIADO" ? "info" : "danger";
       const summary = make("div", "or-stage-summary");
-      summary.append(make("h3", "or-card-title", stage.stage), make("span", "or-badge", stage.percent == null ? "PERCENTUAL INDISPONÍVEL" : `${stage.percent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`));
+      summary.append(make("h3", "or-card-title", `📋 ${stage.stage}`), make("span", "or-badge", stage.percent == null ? "PERCENTUAL INDISPONÍVEL" : `${stage.percent.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`));
       const summaryFields = make("div", "or-fields");
       field(summaryFields, "FILIAL", stage.branch); field(summaryFields, "INÍCIO", formattedDate(stage.start));
       field(summaryFields, "FIM", stage.end ? formattedDate(stage.end) : "HOJE");
@@ -190,6 +204,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       field(summaryFields, "STATUS", stage.status);
       summary.append(summaryFields); card.append(summary);
       const list = make("div", "or-activity-list");
+      list.append(columnHeadings("or-stage-columns", ["#", "Atividade", "Imóvel", "Responsável", "Início", "Fim", "Dias", "Status"]));
       activities.forEach((row, index) => list.append(renderStageActivity(row, index)));
       card.append(list, make("p", "or-group-total", `Total de registros nesta etapa: ${activities.length}`));
       results.append(card);
@@ -199,15 +214,13 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   function renderDiaries() {
     if (snapshot.limited) results.append(make("p", "or-limit", `Exibindo os 2.000 mais recentes de ${Number(snapshot.count).toLocaleString("pt-BR")} pendentes.`));
     if (!snapshot.rows.length) results.append(make("p", "or-empty", "Nenhum diário pendente encontrado."));
+    if (snapshot.rows.length) results.append(columnHeadings("or-diary-columns", ["ID", "DATA", "FILIAL", "STATUS"]));
     for (const row of snapshot.rows) {
       const card = make("article", "or-diary-card");
-      card.append(make("h3", "or-card-title", `#${row.id}`));
-      const grid = make("div", "or-fields");
-      field(grid, "DATA", formattedDate(row.date)); field(grid, "FILIAL", row.branch);
-      const status = make("div", "or-field"); status.dataset.tone = "danger";
-      status.append(make("span", "or-field-label", "STATUS"), make("strong", "or-field-value", shown(row.status)));
-      grid.append(status);
-      card.append(grid); results.append(card);
+      card.append(reportCell("ID", `#${row.id}`), reportCell("DATA", formattedDate(row.date)),
+        reportCell("FILIAL", row.branch), reportCell("STATUS", row.status, "or-cell--status"));
+      card.lastElementChild.dataset.tone = "danger";
+      results.append(card);
     }
     const footer = make("div", "or-diary-footer");
     footer.append(make("strong", "", "CONTAGEM DE PENDENTES:"));
@@ -252,9 +265,9 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       const pending = rows.some(row => ["ATIVIDADE CRIADA", "EM ATENDIMENTO"].includes(normalize(row.status)));
       group.dataset.tone = !due ? "neutral" : due < todayKey() && pending ? "danger" : due === todayKey() ? "warning" : "success";
       const dueSummary = make("div", "or-due-summary");
-      dueSummary.append(make("h3", "or-card-title", `DATA FATAL: ${due ? formattedDate(due) : "SEM DATA"}`),
-        make("p", "or-due-state", dueDescription(due, rows)), make("p", "or-group-total", `Total de atividades nesta data: ${rows.length}`));
-      group.append(dueSummary);
+      dueSummary.append(make("h3", "or-card-title", `📅 DATA FATAL: ${due ? formattedDate(due) : "SEM DATA"}`),
+        make("p", "or-due-state", dueDescription(due, rows)), make("p", "or-due-count", `TOTAL: ${rows.length}`));
+      group.append(dueSummary, columnHeadings("or-task-columns", ["RESPONSÁVEL", "ID", "DATA", "ASSOCIAÇÃO", "TAREFA", "PRIORIDADE"]));
       const byPerson = new Map();
       for (const row of rows) {
         const person = row.responsibleKey || "SEM RESPONSÁVEL";
@@ -267,15 +280,16 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
         const taskList = make("div", "or-task-list");
         for (const row of entries.sort((a, b) => dateKey(b.identified).localeCompare(dateKey(a.identified)) || Number(b.id) - Number(a.id))) {
           const card = make("article", "or-task-card"); card.dataset.tone = taskTone(row);
-          card.append(make("h5", "or-card-title", row.task));
-          const grid = make("div", "or-fields");
-          field(grid, "ID", `#${row.id}`); field(grid, "DATA", formattedDate(row.identified));
-          field(grid, "ASSOCIAÇÃO", row.association); field(grid, "PRIORIDADE", row.priority);
-          field(grid, "DIFICULDADE", row.difficulty); field(grid, "STATUS", row.status);
-          card.append(grid); taskList.append(card);
+          card.append(reportCell("Responsável", person, "or-cell--person"), reportCell("ID", `#${row.id}`),
+            reportCell("Data", formattedDate(row.identified)), reportCell("Associação", row.association),
+            reportCell("Tarefa", row.task, "or-cell--task"), reportCell("Prioridade", row.priority, "or-cell--priority"));
+          const detail = make("div", "or-task-extra");
+          field(detail, "DIFICULDADE", row.difficulty); field(detail, "STATUS", row.status);
+          card.append(detail); taskList.append(card);
         }
         cluster.append(taskList); group.append(cluster);
       }
+      group.append(make("p", "or-group-total", `TOTAL DE ATIVIDADES NESTA DATA: ${rows.length}`));
       results.append(group);
     }
   }

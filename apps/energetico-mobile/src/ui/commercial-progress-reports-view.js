@@ -44,6 +44,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
     select.append(Object.assign(make("option", "", "Todos"), { value: "" }));
     wrapper.append(select); filters.append(wrapper); controls.set(name, select);
   }
+  filters.prepend(refresh);
   element.insertBefore(filters, brand);
   const metricsTitle = make("h3", "cpr-metrics-title", "📊 INDICADORES DO RESULTADO"); element.append(metricsTitle);
   const metrics = make("dl", "cpr-metrics"); element.append(metrics);
@@ -65,6 +66,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
 
   function field(parent, label, value) {
     const item = make("div", "cpr-field");
+    item.dataset.field = label;
     item.append(make("span", "cpr-field-label", label), make("strong", "cpr-field-value", display(value)));
     parent.append(item);
   }
@@ -79,6 +81,14 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
     counts.append(make("span", "cpr-status-active", `ATIVOS: ${active}`),
       make("span", "cpr-status-inactive", `INATIVOS: ${inactive}`));
     card.append(counts); metrics.append(card);
+  }
+  function propertyStatusMetric(status) {
+    const normalized = String(status || "").trim().toLocaleUpperCase("pt-BR");
+    const card = make("div", "cpr-metric cpr-status-metric");
+    card.dataset.tone = normalized === "ATIVO" ? "paid" : normalized === "INATIVO" ? "total" : "status";
+    card.append(make("dt", "", "📌 STATUS DO IMÓVEL"),
+      make("dd", "cpr-status-single", normalized === "ATIVO" ? "🟢 ATIVO" : normalized === "INATIVO" ? "🔴 INATIVO" : "⚪ NÃO INFORMADO"));
+    metrics.append(card);
   }
   function table(headers, rows) {
     const table = make("table", "cpr-table"); const thead = make("thead"); const headingRow = make("tr");
@@ -159,7 +169,8 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
       } else {
         section.append(table(["FILIAL", "IMÓVEL", "COMPRADOR", "ID CONTRATO", "ÚLTIMO TIPO MARCO", "DESCRIÇÃO", "INÍCIO", "DATA FATAL", "STATUS"],
           branch.properties.map(row => [row.branch, row.property, row.buyer, row.contractId, row.type, row.description,
-            date(row.startDate), date(row.dueDate), row.status])));
+            row.daysInProgress == null ? date(row.startDate) : `${date(row.startDate)}\n${row.daysInProgress} DIA(S) DE ANDAMENTO`,
+            date(row.dueDate), row.status])));
         section.append(make("p", "cpr-branch-footer", `TOTAL DE IMÓVEIS NA FILIAL: ${branch.count}`));
       }
       const cards = make("div", "cpr-card-list");
@@ -170,8 +181,12 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
   function renderFourteen(result, filtersSelected) {
     metric("VALOR TOTAL", money(result.indicators.total), "total"); metric("VALOR PAGO", money(result.indicators.paid), "paid");
     metric("VALOR PENDENTE", money(result.indicators.pending), "pending");
-    statusMetric(result.indicators.active, result.indicators.inactive);
-    content.append(make("h3", "cpr-section-title", "RESUMO POR IMÓVEL")); renderBranches(result, 14);
+    const specific = filtersSelected.contractId || filtersSelected.buyer || filtersSelected.property;
+    const propertyCount = result.branches.reduce((count, branch) => count + branch.properties.length, 0);
+    if (specific && propertyCount === 1) propertyStatusMetric(result.branches[0].properties[0].visualStatus);
+    else statusMetric(result.indicators.active, result.indicators.inactive);
+    if (!specific) content.append(make("p", "cpr-detail-hint", "🔎 SELECIONE UM NÚMERO DE CONTRATO, COMPRADOR OU IMÓVEL PARA DETALHAR UM CONTRATO EM ESPECÍFICO"));
+    content.append(make("h3", "cpr-section-title", "🏠 RESUMO POR IMÓVEL")); renderBranches(result, 14);
     const payments = make("section", "cpr-detail"); payments.append(make("h3", "cpr-section-title", "PAGAMENTOS PREVISTOS (PENDENTES)"));
     if (!result.pendingPayments.length) payments.append(make("p", "cpr-empty", "Nenhum pagamento pendente corresponde aos filtros."));
     for (const row of result.pendingPayments) {
@@ -208,10 +223,10 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
     }
   }
   function renderFifteen(result) {
-    content.append(make("p", "cpr-intro", result.detail
-      ? "FILTRE CONTRATO, COMPRADOR OU IMÓVEL PARA DETALHAR TODO O CONTRATO E VISUALIZAR TODOS OS TIPOMARCO"
-      : "UM REGISTRO POR IMÓVEL — CONSIDERANDO A DATA DE INÍCIO MAIS RECENTE, INDEPENDENTEMENTE DO CONTRATO OU COMPRADOR"));
-    content.append(make("h3", "cpr-section-title", "ÚLTIMO ANDAMENTO POR IMÓVEL")); renderBranches(result, 15);
+    content.append(make("h3", "cpr-section-title", "ÚLTIMO ANDAMENTO POR IMÓVEL"));
+    content.append(make("p", "cpr-intro", "UM REGISTRO POR IMÓVEL — CONSIDERANDO A DATA DE INÍCIO MAIS RECENTE, INDEPENDENTEMENTE DO CONTRATO OU COMPRADOR"));
+    if (!result.detail) content.append(make("p", "cpr-detail-hint", "🔎 FILTRE CONTRATO, COMPRADOR OU IMÓVEL PARA DETALHAR TODO O CONTRATO E VISUALIZAR TODOS OS TIPOMARCO"));
+    renderBranches(result, 15);
     if (result.detail) {
       const history = make("section", "cpr-detail"); history.append(make("h3", "cpr-section-title", "HISTÓRICO COMPLETO DE TIPOMARCO"));
       for (const row of result.history) {
@@ -266,7 +281,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
       element.dataset.report = String(number);
       title.textContent = number === 14 ? "INDICADORES COMERCIAIS POR IMÓVEL" : "ÚLTIMO ANDAMENTO POR IMÓVEL";
       metricsTitle.hidden = number === 15;
-      for (const wrapper of filters.children) wrapper.hidden = !wrapper.dataset.reports.split(",").includes(String(number));
+      for (const wrapper of filters.querySelectorAll(".cpr-filter")) wrapper.hidden = !wrapper.dataset.reports.split(",").includes(String(number));
       return load();
     },
     close() { controller?.abort(); revision++; snapshot = null; reportNumber = null; element.hidden = true;

@@ -44,6 +44,11 @@
       filterColor: getComputedStyle(node.querySelector(".cdr-filter-label") || node).backgroundColor,
       pendingColor: getComputedStyle(node.querySelector('[data-metric="SEGURO"]')?.parentElement || node).backgroundColor,
       clearColor: getComputedStyle(node.querySelector('[data-metric="IDPROPOSTA"]')?.parentElement || node).backgroundColor,
+      brandColor: getComputedStyle(node.querySelector(".cdr-heading")).backgroundColor,
+      logoLoaded: node.querySelector(".cdr-logo")?.naturalWidth > 0,
+      metricTitleVisible: getComputedStyle(node.querySelector(".cdr-metrics-title")).display !== "none",
+      rentHeaderColor: node.querySelector(".cdr-open-section .cdr-rental-title") ? getComputedStyle(node.querySelector(".cdr-open-section .cdr-rental-title")).backgroundColor : "",
+      mobileRowDisplay: node.querySelector(".cdr-open-section .cdr-data-card") ? getComputedStyle(node.querySelector(".cdr-open-section .cdr-data-card")).display : "",
       width: node.getBoundingClientRect().width, scrollWidth: node.scrollWidth,
       childOverflow: [...node.querySelectorAll("*")].some(child => child.getBoundingClientRect().right > innerWidth + 1) } });
 </script>

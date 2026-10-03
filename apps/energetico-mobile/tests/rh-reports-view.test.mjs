@@ -48,6 +48,65 @@ test("relatórios RH exibem logo oficial e hierarquia visual própria", async t 
   assert.ok(root.querySelector(".rh-reports-pending-total"));
 });
 
+test("relatório 3 organiza os mesmos dados em faixas de filial, imóvel, profissão e fornecedor", async t => {
+  const { view, root } = setup(t);
+  await view.open(3);
+  assert.equal(root.querySelector(".rh-reports-head").hidden, true, "após o logo começa a filial, como no Power Apps");
+  assert.equal(root.querySelector(".rh-reports-metrics").children.length, 0);
+  assert.match(root.querySelector(".rh-reports-branch-footer")?.textContent || "", /TOTAL DE FORNECEDORES: 1/);
+  const branch = root.querySelector(".rh-reports-branch");
+  const property = branch.querySelector(".rh-reports-property");
+  const profession = property.querySelector(".rh-reports-profession");
+  const person = profession.querySelector(".rh-reports-supplier");
+  assert.match(branch.querySelector(".rh-reports-branch-head")?.textContent || "", /🏢 FILIAL: CENTRO/);
+  assert.match(property.querySelector(".rh-reports-property-head")?.textContent || "", /🏠 IMÓVEL: OBRA A/);
+  assert.equal(property.querySelectorAll(":scope > .rh-reports-summary-strip .rh-reports-stat-pill").length, 5);
+  assert.match(profession.querySelector(".rh-reports-profession-head")?.textContent || "", /PEDREIRO.*1 fornecedor/);
+  assert.match(person.querySelector(".rh-reports-supplier-head")?.textContent || "", /Ana/);
+  assert.match(person.textContent, /FORMA PGTO.*DIÁRIA/);
+  assert.match(person.textContent, /FREQUÊNCIA · HISTÓRICO/);
+  assert.match(person.textContent, /ATIVIDADE EXERCIDA/);
+});
+
+test("relatório 4 dispõe profissão e trabalhador como cartões com extrato financeiro", async t => {
+  const { view, root } = setup(t);
+  await view.open(4);
+  const block = root.querySelector(".rh-reports-professions-block");
+  const profession = block.querySelector(".rh-reports-profession");
+  const person = profession.querySelector(".rh-reports-entry");
+  assert.match(block.querySelector("h3")?.textContent || "", /PROFISSÕES TOTAIS/);
+  assert.match(profession.querySelector(".rh-reports-profession-head")?.textContent || "", /PEDREIRO/);
+  assert.match(profession.querySelector(".rh-reports-profession-meta")?.textContent || "", /1 profissional.*1 registro/i);
+  assert.match(person.querySelector(".rh-reports-person-head")?.textContent || "", /Ana.*1X/);
+  assert.match(person.querySelector(".rh-reports-financial-lines")?.textContent || "", /APROVADO PARA PGTO.*120,00/);
+  assert.match(profession.querySelector(".rh-reports-profession-total")?.textContent || "", /RESUMO GERAL DA PROFISSÃO/);
+});
+
+test("relatório 5 mantém filial, fornecedor, diárias, datas e saldos em cada linha pendente", async t => {
+  const { view, root } = setup(t);
+  await view.open(5);
+  assert.equal(root.querySelector(".rh-reports-head").hidden, true, "após o logo começa a tabela de pagamentos");
+  assert.equal(root.querySelector(".rh-reports-metrics").children.length, 0);
+  const pending = root.querySelector(".rh-reports-pending-block");
+  const row = pending.querySelector(".rh-reports-pending-row");
+  assert.match(pending.querySelector("h3")?.textContent || "", /PAGAMENTOS PENDENTES/);
+  assert.match(row.querySelector(".rh-reports-pending-identity")?.textContent || "", /CENTRO.*Ana.*1/s);
+  assert.match(row.querySelector(".rh-reports-pending-dates")?.textContent || "", /01\/10\/2026/);
+  assert.match(row.querySelector(".rh-reports-pending-totals")?.textContent || "", /APROVADO.*120,00.*PENDENTE.*TOTAL/s);
+  assert.match(pending.querySelector(".rh-reports-pending-overview")?.textContent || "", /APROVADO PENDENTE PGTO.*120,00.*PENDENTE VALIDAÇÃO.*TOTAL PENDENTE/s);
+  assert.ok(root.querySelector(".rh-reports-detail-block"));
+  assert.match(root.querySelector(".rh-reports-detail-block")?.textContent || "", /DETALHAMENTO GERAL.*Ana/s);
+});
+
+test("relatório 5 mostra cada data como linha de atividade, horas e valor, sem espalhar informações", async t => {
+  const { view, root } = setup(t);
+  await view.open(5);
+  const entry = root.querySelector(".rh-reports-pending-dates .rh-reports-entry");
+  const line = entry.querySelector(".rh-reports-date-line");
+  assert.match(line?.textContent || "", /01\/10\/2026.*Alvenaria.*120,00/s);
+  assert.match(entry.querySelector(".rh-reports-date-extra")?.textContent || "", /PRESENTE.*HORAS INCOMPLETAS.*OBRA A/s);
+});
+
 test("relatório 3 distingue diária sem valor de medição conforme contrato", async t => {
   const { view, root } = setup(t, async () => ({ suppliers: [
     { ...supplier, name: "Medição", paymentMethod: "MEDIÇÃO", dailyValue: null },
@@ -66,7 +125,7 @@ test("relatório 4 mostra o intervalo filtrado no cabeçalho do resumo", async t
   const end = root.querySelector('[name="endDate"]');
   start.value = "2026-09-28"; end.value = "2026-10-02";
   end.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-  assert.match(root.querySelector(".rh-reports-head").textContent, /28\/09\/2026 até 02\/10\/2026/);
+  assert.match(root.querySelector(".rh-reports-head").textContent, /RESUMO DE PRESENÇAS E AUSÊNCIAS — PERÍODO FILTRADO.*28\/09\/2026 até 02\/10\/2026/s);
 });
 
 test("relatório 5 exibe horas indisponíveis sem falso alerta de jornada", async t => {

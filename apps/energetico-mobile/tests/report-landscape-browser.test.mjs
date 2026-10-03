@@ -127,7 +127,7 @@ test(
         );
         return response.result.value;
       };
-      for (const width of [667, 844])
+      for (const width of [667, 740, 844])
         for (const report of ["hub", "1", "2"]) {
           await send(
             "Emulation.setDeviceMetricsOverride",
@@ -163,6 +163,16 @@ test(
             Number(dimensions.reportWidth) <= Number(dimensions.contentWidth),
             `Relatório ${report}, ${width}px: conteúdo pede rolagem lateral ${JSON.stringify(dimensions)}`,
           );
+          if (report === "hub") {
+            const mascots = await evaluate(`(() => {
+              const images = [...document.querySelectorAll('.cr-report-tile-image')];
+              return { count: images.length, srcs: images.map(image => image.currentSrc || image.src),
+                colors: [3, 8, 9, 14, 17].map(id => document.querySelector('[data-report-id="' + id + '"]').style.getPropertyValue('--report-fill')) };
+            })()`);
+            assert.equal(mascots.count, 15);
+            assert.ok(mascots.srcs.every(src => src.includes("/assets/report-mascots/") || src.includes("report-mascots")));
+            assert.deepEqual(mascots.colors, ["#CB6666", "#638B2C", "#000D4B", "#AC3E0B", "#FBBC9F"]);
+          }
         }
     } finally {
       for (const request of pending.values()) clearTimeout(request.timer);

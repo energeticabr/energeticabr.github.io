@@ -40,6 +40,27 @@ test("11 destaca o estado da cotação e reproduz a grade de orçamentos vincula
   assert.match(root.querySelector('.ar-budget-table').textContent, /R\$\s*250,00/);
 });
 
+test("11 apresenta os dados da cotação uma vez, na ordem do Power Apps", async t => {
+  const { view, root } = setup(t, { async loadReport() { return {
+    quotes: [{ id: "5", branch: "004 - EDIFÍCIO XAVANTE", stage: "ALVENARIA", status: "ATIVA", description: "Material especial" }], budgets: [],
+  }; } });
+  await view.open(11);
+  const facts = root.querySelector('.ar-quotation-facts');
+  assert.ok(facts, "bloco dos dados da cotação");
+  assert.deepEqual([...facts.querySelectorAll('dt')].map(node => node.textContent),
+    ["ID", "Filial", "Etapa", "Qtd. fornecedores", "Status", "Descrição"]);
+  assert.equal(facts.querySelector('[data-field="status"] .ar-status')?.textContent, "ATIVA");
+  assert.equal(root.querySelectorAll('.ar-card > .ar-status').length, 0, "status não se repete fora da grade");
+  assert.equal(facts.querySelector('[data-field="description"] dd')?.textContent, "Material especial");
+  assert.match(root.querySelector('.ar-heading-subtitle')?.textContent || "", /Acompanhamento geral das cotações e dos orçamentos vinculados/);
+});
+
+test("11 não pinta cotação inativa como ativa", async t => {
+  const { view, root } = setup(t, { async loadReport() { return { quotes: [{ id: "4", status: "INATIVA" }], budgets: [] }; } });
+  await view.open(11);
+  assert.equal(root.querySelector('.ar-quotation-facts [data-field="status"] .ar-status')?.dataset.tone, "muted");
+});
+
 test("12 mostra data de posição e os campos financeiros por filial em grade", async t => {
   const { view, root } = setup(t, { async loadReport() { return { rows: [{ id: "1", assetNumber: "70", branch: "004 - EDIFÍCIO XAVANTE", asset: "MANGOTE", group: "FERRAMENTAS", depreciationDate: "2026-10-02", estimated: 100, residual: 80, quantity: 2, percent: 3 }] }; } });
   await view.open(12);
@@ -47,6 +68,17 @@ test("12 mostra data de posição e os campos financeiros por filial em grade", 
   assert.equal(root.querySelectorAll('.ar-metric').length, 7);
   assert.deepEqual([...root.querySelectorAll('.ar-asset-table th')].map(node => node.textContent),
     ["Nº PATRIM.", "DATA DEPREC.", "GRUPO", "IMOBILIZADO", "% DEPREC.", "VALOR UNIT.", "QTD.", "VALOR TOTAL", "VALOR DEPRECIADO", "VALOR ATUAL", "A DEPRECIAR"]);
+});
+
+test("12 apresenta período antes dos indicadores e total na faixa da filial", async t => {
+  const { view, root, dom } = setup(t, { async loadReport() { return { rows: [{ id: "1", branch: "004 - EDIFÍCIO XAVANTE", asset: "MANGOTE", depreciationDate: "2026-10-02", estimated: 100, residual: 80, quantity: 2, percent: 3 }] }; } });
+  await view.open(12);
+  const subtitle = root.querySelector('.ar-report-banner .ar-subtitle');
+  const metrics = root.querySelector('.ar-metrics');
+  assert.ok(subtitle?.compareDocumentPosition(metrics) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  const branchHeading = root.querySelector('.ar-branch-heading');
+  assert.match(branchHeading?.textContent || "", /FILIAL: 004 - EDIFÍCIO XAVANTE/);
+  assert.match(branchHeading?.textContent || "", /Valor total: R\$\s*200,00/);
 });
 
 test("13 inicia em maior ID e informa há quantos dias documento foi criado e emitido", async t => {

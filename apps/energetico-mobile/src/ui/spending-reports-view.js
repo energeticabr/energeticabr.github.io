@@ -6,8 +6,9 @@ const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", impor
 
 const FILTERS = [
   ["year", "ANO", "select", [9]], ["month", "MÊS", "select", [9]],
-  ["supplier", "FORNECEDOR", "select", [9, 10]], ["product", "PRODUTO", "select", [9, 10]],
-  ["branch", "FILIAL", "select", [9, 10]], ["disbursement", "GERA DESEMBOLSO", "select", [9]],
+  ["branch", "FILIAL", "select", [9, 10]], ["stage", "ETAPA", "select", [9]],
+  ["product", "PRODUTO", "select", [9, 10]], ["supplier", "FORNECEDOR", "select", [9, 10]],
+  ["disbursement", "GERA DESEMBOLSO", "select", [9]],
   ["order", "PEDIDO", "select", [9]], ["paymentStatus", "STATUS PAGAMENTOS", "select", [10]],
   ["status", "STATUS", "select", [10]],
 ];
@@ -36,7 +37,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   const heading = make("header", "sr-heading");
   const logo = make("img", "sr-logo"); logo.src = LOGO_URL; logo.alt = "Energética Construtora";
   const title = make("h2", "sr-title"); const refresh = button("og-button sr-refresh", "Atualizar");
-  heading.append(logo, title, refresh); element.append(heading);
+  heading.append(logo, refresh); element.append(heading, title);
   const filters = make("div", "sr-filters"); const controls = new Map();
   for (const [name, label, type, reports] of FILTERS) {
     const wrapper = make("label", "sr-filter"); wrapper.dataset.reports = reports.join(",");
@@ -99,13 +100,24 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   function category(titleText, groups, percentageLabel, variant) {
     const section = make("section", `sr-category sr-category--${variant}`); section.append(make("h4", "sr-category-title", titleText));
     if (!groups.length) section.append(make("p", "sr-empty", "Nenhum registro."));
+    if (!groups.length) return section;
+    const firstLabel = ({ expense: "TIPO DE DESPESA", products: "PRODUTO", stages: "ETAPA", suppliers: "FORNECEDOR", accounts: "CONTA" })[variant];
+    const labels = [firstLabel, "QTDE. LINHAS", "QTD TOTAL", "TOTAL GASTO", percentageLabel];
+    const table = make("table", "sr-category-table");
+    const head = make("thead"); const headRow = make("tr");
+    labels.forEach(label => headRow.append(make("th", "", label)));
+    head.append(headRow); table.append(head);
+    const body = make("tbody");
     for (const group of groups) {
-      const card = make("article", "sr-detail-card"); card.append(make("h5", "sr-detail-title", group.name));
-      const fields = make("div", "sr-fields");
-      field(fields, "QTDE. LINHAS", group.count); field(fields, "QTD TOTAL", number(group.quantity));
-      field(fields, "TOTAL GASTO", money(group.total), "money"); field(fields, percentageLabel, percent(group.percentage));
-      card.append(fields); section.append(card);
+      const row = make("tr");
+      [group.name, group.count, number(group.quantity), money(group.total), percent(group.percentage)]
+        .forEach((value, index) => {
+          const cell = make("td", index === 3 ? "sr-category-money" : "", display(value));
+          cell.dataset.label = labels[index]; row.append(cell);
+        });
+      body.append(row);
     }
+    table.append(body); section.append(table);
     return section;
   }
 
@@ -141,16 +153,31 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
     const pages = Math.max(1, Math.ceil(result.rows.length / 10)); page = Math.min(page, pages);
     pageLabel.textContent = `Página ${page} de ${pages} · ${result.rows.length} provisão(ões)`;
     previous.disabled = page <= 1; next.disabled = page >= pages;
+    const labels = ["FILIAL", "FORNECEDOR", "PRODUTO", "DATA VENCIMENTO", "AGENDAMENTO", "VALOR", "STATUS"];
+    const table = make("table", "sr-provision-table");
+    const head = make("thead"); const headRow = make("tr");
+    labels.forEach(label => headRow.append(make("th", "", label)));
+    head.append(headRow); table.append(head);
+    const body = make("tbody"); table.append(body);
     for (const row of result.rows.slice((page - 1) * 10, page * 10)) {
-      const card = make("article", "sr-provision-card");
-      card.append(make("h3", "sr-provision-title", `${display(row.supplier)} · ${display(row.product)}`));
-      const fields = make("div", "sr-fields");
-      field(fields, "FILIAL", row.branch); field(fields, "DATA VENCIMENTO", row.dueDate ? formatReportDate(row.dueDate) : "—");
-      field(fields, "AGENDAMENTO", [row.schedule, row.scheduledDate ? formatReportDate(row.scheduledDate) : ""].filter(Boolean).join(" · ") || "—");
-      field(fields, "VALOR", money(row.total), "money"); field(fields, "STATUS", row.status);
-      field(fields, "PRAZO", provisionDueState(row.dueDate).label);
-      card.append(fields); content.append(card);
+      const tr = make("tr");
+      const cells = [
+        display(row.branch), display(row.supplier), display(row.product),
+        row.dueDate ? formatReportDate(row.dueDate) : "—",
+        [row.schedule, row.scheduledDate ? formatReportDate(row.scheduledDate) : ""].filter(Boolean).join(" · ") || "—",
+        money(row.total), display(row.status),
+      ];
+      cells.forEach((value, index) => {
+        const td = make("td", `sr-provision-cell sr-provision-cell--${index}`, value);
+        td.dataset.label = labels[index];
+        if (index === 6) {
+          td.append(make("span", "sr-due-state", provisionDueState(row.dueDate).label));
+        }
+        tr.append(td);
+      });
+      body.append(tr);
     }
+    content.append(table);
   }
 
   function render() {
@@ -190,8 +217,14 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
       if (number !== 9 && number !== 10) throw new RangeError("Relatório de gastos desconhecido.");
       reportNumber = number; page = 1; element.hidden = false;
       element.classList.toggle("sr-report--ten", number === 10);
+      element.insertBefore(metrics, number === 10 ? pager : notice);
       title.textContent = number === 9 ? "RESUMO GERENCIAL DE GASTOS" : "DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS";
       for (const wrapper of filters.children) wrapper.hidden = !wrapper.dataset.reports.split(",").includes(String(number));
+      if (number === 10) {
+        for (const [index, name] of ["branch", "supplier", "product", "paymentStatus", "status"].entries()) {
+          controls.get(name).parentElement.style.order = String(index);
+        }
+      } else for (const wrapper of filters.children) wrapper.style.order = "";
       return load();
     },
     close() { controller?.abort(); revision++; snapshot = null; reportNumber = null; element.hidden = true;

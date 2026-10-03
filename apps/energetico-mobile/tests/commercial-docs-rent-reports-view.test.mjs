@@ -56,6 +56,26 @@ test("relatório 16 inicia em resumo por filial e campo; seleção exata abre de
   assert.match(root.textContent, /Loja B/);
 });
 
+test("16 mostra orientação, painel de IDs e filial na hierarquia do Power Apps", async t => {
+  const { view, root } = setup(t);
+  await view.open(16);
+  assert.ok(root.querySelector('.cdr-filters .cdr-refresh'), 'atualização deve estar com filtros acima da marca');
+  assert.match(root.querySelector(".cdr-detail-hint")?.textContent || "", /SELECIONE UM NÚMERO DE CONTRATO, COMPRADOR OU IMÓVEL/);
+  assert.match(root.querySelector(".cdr-metrics-title")?.textContent || "", /PENDÊNCIAS POR CAMPO DE ID/);
+  assert.ok(root.querySelector(".cdr-detail-hint").compareDocumentPosition(root.querySelector(".cdr-metrics-title")) & 4);
+  assert.ok(root.querySelector(".cdr-metrics-title").compareDocumentPosition(root.querySelector(".cdr-branch-summary")) & 4);
+  assert.match(root.querySelector(".cdr-branch-summary .cdr-summary-title")?.textContent || "", /FILIAL:/);
+});
+
+test("17 prioriza aluguéis em aberto e recolhe resumo adicional sem perder totais", async t => {
+  const { view, root } = setup(t);
+  await view.open(17);
+  assert.equal(root.querySelector(".cdr-metrics-fold")?.open, false);
+  assert.match(root.querySelector(".cdr-metrics-fold summary")?.textContent || "", /Resumo dos aluguéis/);
+  assert.ok(root.querySelector(".cdr-open-section").compareDocumentPosition(root.querySelector(".cdr-metrics-fold")) & 4);
+  assert.equal(root.querySelector('[data-metric="totalCents"]')?.textContent, "R$ 1.434,50");
+});
+
 test("relatório 16 comprador e contrato selecionam o mesmo lançamento e exibem valores pendentes", async t => {
   const { view, root, dom } = setup(t);
   await view.open(16);
