@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Galeria programação de pagamentos: teste responsivo</title>
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <script type="module">
+    import { createPaymentProgrammingGallery } from "../../src/ui/payment-programming-gallery-view.js";
+
+    const rows = [
+      { id: "300", hasAttachments: false, fields: {
+        ID: 300, FORNECEDOR: "VIVO", STATUS: "PAGAMENTO PREVISTO",
+        DESCRICAOPGTO: "SEGURO PARA 7 TRABALHADORES CONFORME CCT",
+        "DATA PREVISTO PGTO": "2026-10-04", "VALOR TOTAL": 89.99, QTD: 1,
+        FILIAL: "000 - ESCRITÓRIO CENTRAL", IMOVEL: "ESCRITÓRIO VILA DA SERRA", PGTOAGENDADO: "PENDENTE",
+      } },
+      { id: "301", hasAttachments: true, fields: {
+        ID: 301, FORNECEDOR: "CEMIG", STATUS: "PAGAMENTO PREVISTO",
+        DESCRICAOPGTO: "CONTA DE ENERGIA ELÉTRICA",
+        "DATA PREVISTO PGTO": "2026-10-08", "VALOR TOTAL": 450, QTD: 1,
+        FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS", PGTOAGENDADO: "PENDENTE",
+      } },
+      { id: "302", hasAttachments: false, fields: {
+        ID: 302, FORNECEDOR: "COPASA", STATUS: "PAGAMENTO PREVISTO",
+        DESCRICAOPGTO: "CONTA DE ÁGUA E ESGOTO",
+        "DATA PREVISTO PGTO": "2026-10-10", "VALOR TOTAL": 320.5, QTD: 1,
+        FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS", PGTOAGENDADO: "PENDENTE",
+      } },
+    ];
+    const gallery = createPaymentProgrammingGallery({
+      document,
+      now: () => new Date("2026-10-03T12:00:00-03:00"),
+      data: {
+        async loadSnapshot() { return { rows }; },
+        async listAttachments(id) { return id === "301" ? [{ fileName: "conta.pdf" }] : []; },
+      },
+    });
+    await gallery.open();
+    document.documentElement.dataset.ready = "true";
+  </script>
+</body>
+</html>

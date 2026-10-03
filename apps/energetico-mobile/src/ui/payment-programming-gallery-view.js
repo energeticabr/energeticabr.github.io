@@ -2,7 +2,7 @@ import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
-import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { provisionTotal } from '../chat/pending-provision-dates.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -119,7 +119,7 @@ function paymentTiming(fields, now) {
     return `VENCIDO HÁ ${days} ${days === 1 ? "DIA" : "DIAS"}`;
   }
   if (difference === 0) return "VENCE HOJE";
-  return `VENCERÁ EM ${difference} ${difference === 1 ? "DIA" : "DIAS"}`;
+  return `VENCE EM ${difference} ${difference === 1 ? "DIA" : "DIAS"}`;
 }
 
 function paymentScheduleSummary(fields) {
@@ -198,7 +198,18 @@ export function createPaymentProgrammingGallery({
 
   const content = el("main", "og-content");
   const filterDisclosure = el("details", "og-filters pg-filters");
-  filterDisclosure.append(el("summary", "og-filter-toggle", "Filtros"));
+  const filterToggle = el("summary", "og-filter-toggle", "Filtros");
+  const filterIcon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  filterIcon.setAttribute("viewBox", "0 0 24 24");
+  filterIcon.setAttribute("fill", "none");
+  filterIcon.setAttribute("stroke", "currentColor");
+  filterIcon.setAttribute("stroke-width", "2.5");
+  filterIcon.setAttribute("aria-hidden", "true");
+  const filterPath = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+  filterPath.setAttribute("d", "M3 5h18M6 10h12l-5 6v4l-2-1v-3l-5-6Z");
+  filterIcon.append(filterPath);
+  filterToggle.prepend(filterIcon);
+  filterDisclosure.append(filterToggle);
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros da Galeria de Programação de Pagamentos G28");
   const grid = el("div", "og-filter-grid pg-filter-grid");
@@ -275,23 +286,60 @@ export function createPaymentProgrammingGallery({
     onChange: updateAttachmentCount,
   });
 
+  function actualAttachmentCount(row) {
+    const attachments = attachmentCounts.attachmentsFor(row);
+    return attachments ? attachments.length : knownGalleryAttachmentCount(row) ?? (row.hasAttachments === true ? 1 : 0);
+  }
+
+  function renderAttachmentRail(row) {
+    const id = text(field(row.fields, ["ID"]) ?? row.id);
+    const rail = el("button", "og-button og-card-attachment-rail pg-attachment-rail");
+    rail.type = "button";
+    rail.dataset.action = "attachments";
+    rail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${attachmentCounts.label(row)}`);
+    rail.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
+      el("span", "og-card-attachment-count", attachmentCounts.label(row)));
+    rail.addEventListener("click", () => openAttachments(row));
+    return rail;
+  }
+
   function updateAttachmentCount(row) {
     if (!opened || destroyed) return;
     const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
-    let rail = card?.querySelector(".pg-attachment-rail");
-    const count = rail?.querySelector('.og-card-attachment-count');
-    const label = attachmentCounts.label(row);
-    if (count) count.textContent = label;
-    const id = text(field(row.fields, ["ID"]) ?? row.id);
-    const attachments = attachmentCounts.attachmentsFor(row);
-    if (attachments) card?.classList.toggle("pg-card--attachments", attachments.length > 0);
-    if (rail && attachments?.length === 0 && rail.matches("button")) {
-      const informationalRail = el("aside", "pg-attachment-rail og-card-attachment-rail");
-      informationalRail.append(el("span", "og-card-attachment-label", "ANEXOS"), el("span", "og-card-attachment-count", label));
-      rail.replaceWith(informationalRail);
-      rail = informationalRail;
+    if (!card) return;
+    const main = card.querySelector(".og-card-main");
+    let retry = main.querySelector('[data-action="retry-attachments"]');
+    if (attachmentCounts.hasError(row) && actualAttachmentCount(row) < 1) {
+      if (!retry) {
+        retry = el("button", "og-button pg-attachment-retry", "Falha ao consultar anexos. Tentar novamente");
+        retry.type = "button";
+        retry.dataset.action = "retry-attachments";
+        retry.addEventListener("click", () => {
+          retry.disabled = true;
+          retry.textContent = "Consultando anexos…";
+          void attachmentCounts.load(row, { force: true }).catch(() => null);
+        });
+        main.append(retry);
+      }
+      retry.textContent = "Falha ao consultar anexos. Tentar novamente";
+      retry.disabled = listLoading || attachmentLoading;
+    } else retry?.remove();
+    let rail = card.querySelector(".pg-attachment-rail");
+    if (actualAttachmentCount(row) < 1) {
+      rail?.remove();
+      card.classList.remove("og-card--with-attachments", "pg-card--attachments");
+      return;
     }
-    if (rail?.matches("button")) rail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${label}`);
+    if (!rail) {
+      rail = renderAttachmentRail(row);
+      card.insertBefore(rail, main);
+      card.classList.add("og-card--with-attachments", "pg-card--attachments");
+    }
+    const label = attachmentCounts.label(row);
+    rail.querySelector('.og-card-attachment-count').textContent = label;
+    const id = text(field(row.fields, ["ID"]) ?? row.id);
+    rail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${label}`);
+    rail.disabled = listLoading || attachmentLoading;
   }
 
   function updateBusy() {
@@ -351,8 +399,10 @@ export function createPaymentProgrammingGallery({
     const start = (page - 1) * pageSize;
     const visible = filteredRows.slice(start, start + pageSize);
     cards.replaceChildren(...visible.map(renderCard));
+    for (const row of visible) if (attachmentCounts.hasError(row)) updateAttachmentCount(row);
     void attachmentCounts.request(visible);
-    listStatus.textContent = filteredRows.length ? `${filteredRows.length} pagamento(s) previsto(s)` : "Nenhum pagamento encontrado para estes filtros.";
+    const defaultStatusSelected = key(controls.get("status").value) === key(DEFAULT_STATUS);
+    listStatus.textContent = filteredRows.length ? `${filteredRows.length} pagamento(s)${defaultStatusSelected ? " previsto(s)" : ""}` : "Nenhum pagamento encontrado para estes filtros.";
     pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
     updateBusy();
   }
@@ -375,64 +425,59 @@ export function createPaymentProgrammingGallery({
   }
 
   function appendSummaryField(list, label, value, icon, { wide = false } = {}) {
-    if (value == null || value === "") return;
     const pair = el("div", `og-card-field pg-card-field pg-summary-field${wide ? " pg-summary-field--wide" : ""}${label === "OBS" ? " pg-observation" : ""}`);
     pair.dataset.field = label;
     const symbol = el("span", "pg-summary-icon", icon);
     symbol.setAttribute("aria-hidden", "true");
-    pair.append(symbol, el("dt", "", label), el("dd", "", displayValue(label, value)));
+    const visibleLabel = {
+      "DATA PREVISTA PGTO": "Data prevista pgto", "VALOR TOTAL": "Valor total", QTD: "Qtd.",
+      FILIAL: "Filial", "IMÓVEL": "Imóvel", AGENDAMENTO: "Agendamento",
+    }[label] || label;
+    pair.append(symbol, el("dt", "", visibleLabel), el("dd", "", displayValue(label, value)));
     list.append(pair);
   }
 
   function renderCard(row) {
     const fields = row.fields || {};
     const id = text(field(fields, ["ID"]) ?? row.id);
-    const resolvedAttachments = attachmentCounts.attachmentsFor(row);
-    const hasAttachmentControl = row.hasAttachments !== false && resolvedAttachments?.length !== 0;
-    const hasAttachments = resolvedAttachments ? resolvedAttachments.length > 0 : row.hasAttachments === true;
-    const card = el("article", `og-card pg-card og-card--with-attachments${hasAttachments ? " pg-card--attachments" : ""}`);
+    const hasAttachments = actualAttachmentCount(row) > 0;
+    const card = el("article", `og-card pg-card${hasAttachments ? " og-card--with-attachments pg-card--attachments" : ""}`);
     card.dataset.itemId = row.id;
     const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading pg-card-heading");
-    heading.append(el("span", "og-card-id", id), el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Fornecedor não informado")));
+    const headingCopy = el("div", "pg-heading-copy");
+    headingCopy.append(el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Fornecedor não informado")));
+    heading.append(el("span", "og-card-id", id), headingCopy);
     const statusText = text(field(fields, ["STATUS"]) || "Status não informado");
     const paid = /pago|efetuado|quitado/i.test(statusText);
     const pending = /pendente|previst/i.test(statusText);
     const status = el("span", `og-status pg-status${pending ? " og-status--pending" : paid ? " pg-status--paid" : ""}`, statusText);
-    heading.append(status);
+    const timingText = paymentTiming(fields, now());
+    const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
+    if (timing) headingCopy.append(timing);
+    if (!timing || key(statusText) !== key(DEFAULT_STATUS)) headingCopy.append(status);
+    const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO", "PRODUTO"]) || "").trim();
+    const descriptionBand = description ? el("div", "pg-description") : null;
+    if (descriptionBand) descriptionBand.append(el("span", "pg-description-label", "Descrição"), el("strong", "", description));
     const summary = el("dl", "og-card-fields pg-card-fields pg-card-grid");
+    appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "▣");
     appendSummaryField(summary, "VALOR TOTAL", paymentTotal(fields), "$");
     appendSummaryField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]), "◇");
-    appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "▣");
-    appendSummaryField(summary, "DATA DO PAGAMENTO", field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]), "▣");
     appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "▦");
     appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "⌂");
     appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "◷");
-    const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO"]) || "").trim();
     const observation = text(field(fields, ["OBS", "OBSERVACAO", "OBSERVAÇÃO"]) || "").trim();
-    if (description) appendSummaryField(summary, "DESCRIÇÃO", description, "▤", { wide: true });
-    if (observation) appendSummaryField(summary, "OBS", observation, "▤", { wide: true });
-    const timingText = paymentTiming(fields, now());
-    const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
-    main.append(heading, summary);
-    if (timing) main.append(timing);
-    if (hasAttachmentControl) {
-      const attachmentRail = el("button", "og-button og-card-attachment-rail pg-attachment-rail");
-      attachmentRail.type = "button";
-      attachmentRail.dataset.action = "attachments";
-      attachmentRail.setAttribute("aria-label", `Abrir anexos do pagamento ${id}: ${attachmentCounts.label(row)}`);
-      attachmentRail.append(el("span", "og-card-attachment-icon", "📎"), el("span", "og-card-attachment-label", "ANEXOS"),
-        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
-      attachmentRail.addEventListener("click", () => openAttachments(row));
-      card.append(attachmentRail);
-    } else {
-      const attachmentRail = el("aside", "og-card-attachment-rail pg-attachment-rail");
-      attachmentRail.append(el("span", "og-card-attachment-label", "ANEXOS"),
-        el("span", "og-card-attachment-count", attachmentCounts.label(row)));
-      card.append(attachmentRail);
-    }
+    main.append(heading);
+    if (descriptionBand) main.append(descriptionBand);
+    main.append(summary);
+    const extra = el("dl", "pg-card-extra");
+    const paidAt = field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]);
+    if (paidAt) appendSummaryField(extra, "DATA DO PAGAMENTO", paidAt, "▣");
+    if (observation) appendSummaryField(extra, "OBS", observation, "▤", { wide: true });
+    if (extra.children.length) main.append(extra);
     card.classList.add('gallery-record-card');
     card.append(main, recordActions.render(row));
+    if (hasAttachments) card.insertBefore(renderAttachmentRail(row), main);
     return card;
   }
 
