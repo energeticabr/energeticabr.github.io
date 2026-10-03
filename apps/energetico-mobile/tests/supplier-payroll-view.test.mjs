@@ -91,6 +91,75 @@ async function fill(h) {
   await fillToSheet(h);
   await h.click('[data-payroll-option="5"]');
 }
+
+async function openRubrics(h) {
+  h.input("[name=date]", "2026-10-02");
+  await h.click("[data-payroll-next]");
+  await h.click('[data-payroll-option="1"]');
+  await h.click('[data-payroll-option="2"]');
+}
+
+test("quantidade padrão não ativa rubrica e pagamento só aparece com valor informado", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  const row = doc.querySelector('[data-payroll-rubric="salary"]');
+  const account = row.querySelector('[name=salary-account]');
+  assert.equal(row.querySelector('[name=salary-quantity]').value, "1");
+  assert.equal(row.dataset.payrollCompletion, "empty");
+  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.disabled, true);
+  assert.equal(account.required, false);
+  h.input('[name=salary-value]', "100,50");
+  assert.equal(account.closest('label').hidden, false);
+  assert.equal(account.disabled, false);
+  assert.equal(account.required, true);
+  assert.equal(row.dataset.payrollCompletion, "pending");
+  assert.match(row.querySelector('[data-payroll-line-status]').textContent, /Pendente/);
+  h.input('[name=salary-account]', "3");
+  assert.equal(row.dataset.payrollCompletion, "complete");
+  assert.match(row.querySelector('[data-payroll-line-status]').textContent, /Completa/);
+  h.input('[name=salary-quantity]', "0");
+  assert.equal(row.dataset.payrollCompletion, "pending");
+  h.input('[name=salary-quantity]', "2");
+  assert.equal(row.dataset.payrollCompletion, "complete");
+  h.input('[name=salary-value]', "0,00");
+  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.required, false);
+  assert.equal(row.dataset.payrollCompletion, "pending");
+  assert.match(row.querySelector('[data-payroll-line-status]').textContent, /Valor zero.*não será enviada/);
+  h.input('[name=salary-value]', "150");
+  assert.equal(account.closest('label').hidden, false);
+  assert.equal(account.required, true);
+  assert.equal(row.dataset.payrollCompletion, "complete");
+  h.input('[name=salary-value]', "abc");
+  assert.equal(row.dataset.payrollCompletion, "pending");
+  h.input('[name=salary-value]', "");
+  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.required, false);
+  assert.equal(row.dataset.payrollCompletion, "pending");
+});
+
+test("envio da folha só contém rubrica com valor e ignora demais quantidades padrão", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  h.input('[name=salary-value]', "200");
+  await h.click('[data-payroll-next]');
+  assert.match(h.dom.window.document.body.textContent, /forma de pagamento de Salário/);
+  assert.equal(h.posts.length, 0);
+  h.input('[name=salary-account]', "3");
+  h.input('[name=allowance-quantity]', "3");
+  await h.click('[data-payroll-next]');
+  await h.click('[data-payroll-option="4"]');
+  await h.click('[data-payroll-option="5"]');
+  assert.equal(h.dom.window.document.querySelectorAll('.supplier-payroll-summary article').length, 1);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts.length, 1);
+  assert.equal(h.posts[0].total, 200);
+  assert.deepEqual(h.posts[0].lines.map(line => line.rubric), ["salary"]);
+});
 test("IDFOLHA é escolhido antes do resumo e enviado na postagem obrigatória", async (t) => {
   const h = await harness();
   t.after(() => {

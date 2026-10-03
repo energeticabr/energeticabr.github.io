@@ -1,6 +1,7 @@
 import {
   PAYROLL_RUBRICS,
   payrollTotal,
+  payrollDecimal,
   validPayrollDate,
   validatePayrollDraft,
   validatePayrollLines,
@@ -255,6 +256,7 @@ export function createSupplierPayrollView({
       quantity.placeholder = "Quantidade";
       quantity.addEventListener("input", () => {
         line.quantity = quantity.value;
+        updateCompletion();
         updateTotal();
       });
       const value = element("input");
@@ -265,6 +267,7 @@ export function createSupplierPayrollView({
       value.placeholder = "Digite o valor";
       value.addEventListener("input", () => {
         line.unitValue = value.value;
+        updateCompletion();
         updateTotal();
       });
       const account = element("select");
@@ -280,11 +283,41 @@ export function createSupplierPayrollView({
       account.value = line.account?.id || "";
       account.addEventListener("change", () => {
         line.account = accounts.find((a) => a.id === account.value) || null;
+        updateCompletion();
       });
+      const accountField = field("Forma de pagamento", account);
+      const lineStatus = element("p", "supplier-payroll-line-status");
+      lineStatus.setAttribute("data-payroll-line-status", "");
+      lineStatus.setAttribute("role", "status");
+      function updateCompletion() {
+        const hasValue = String(line.unitValue ?? "").trim() !== "";
+        let isZero = false;
+        try { isZero = hasValue && payrollDecimal(line.unitValue).isZero(); } catch { /* Invalid values remain pending. */ }
+        const needsPayment = hasValue && !isZero;
+        accountField.hidden = !needsPayment;
+        account.disabled = !needsPayment;
+        account.required = needsPayment;
+        const started = hasValue || String(line.quantity).trim() !== "1" || line.account || line.files.length;
+        let complete = false;
+        if (hasValue) {
+          try {
+            complete = payrollDecimal(line.quantity).gt(0) && payrollDecimal(line.unitValue).gt(0) &&
+              Boolean(line.account?.id && line.account?.label);
+            if (complete) payrollTotal([line]);
+          } catch { complete = false; }
+        }
+        row.dataset.payrollCompletion = complete ? "complete" : started ? "pending" : "empty";
+        lineStatus.hidden = !started;
+        lineStatus.textContent = complete ? "✓ Completa — será incluída na folha" : isZero
+          ? "Valor zero: esta rubrica não será enviada."
+          : !hasValue
+          ? "Pendente: sem valor unitário, esta rubrica não será enviada."
+          : "Pendente: confira quantidade, valor unitário e forma de pagamento.";
+      }
       row.append(
         field("Quantidade", quantity),
         field("Valor unitário (R$)", value),
-        field("Forma de pagamento", account),
+        accountField,
       );
       const attachments = element("div", "supplier-payroll-attachments");
       const fileInput = element("input", "sr-only");
@@ -301,6 +334,7 @@ export function createSupplierPayrollView({
           const remove = button("×", null, () => {
             line.files = line.files.filter((f) => f !== file);
             drawFiles();
+            updateCompletion();
           });
           remove.setAttribute("aria-label", `Remover ${file.name}`);
           item.append(remove);
@@ -326,6 +360,7 @@ export function createSupplierPayrollView({
           line.files.push(...candidates);
           error.hidden = true;
           drawFiles();
+          updateCompletion();
         } catch (cause) {
           showError(cause);
         }
@@ -334,6 +369,8 @@ export function createSupplierPayrollView({
       const upload = button("📎 Comprovante", null, () => fileInput.click());
       attachments.append(upload, fileInput, fileList);
       row.append(attachments);
+      row.append(lineStatus);
+      updateCompletion();
       grid.append(row);
     }
     content.append(grid);

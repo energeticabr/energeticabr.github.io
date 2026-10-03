@@ -69,6 +69,8 @@
   font-size: 0.86rem;
   font-weight: 650;
 }
+.supplier-payroll-field[hidden],
+.supplier-payroll-line-status[hidden] { display: none; }
 .supplier-payroll-field input,
 .supplier-payroll-field select,
 .supplier-payroll-search {
@@ -101,6 +103,10 @@
 .supplier-payroll-rubric:nth-child(even) {
   background: #eaf3ff;
 }
+.supplier-payroll-rubric[data-payroll-completion="pending"] { background: #fff0da; }
+.supplier-payroll-rubric[data-payroll-completion="complete"] { background: #e5f5e9; }
+.supplier-payroll-line-status { grid-column: 1 / -1; margin: 0; font-size: .85rem; font-weight: 650; color: #85521b; }
+.supplier-payroll-rubric[data-payroll-completion="complete"] .supplier-payroll-line-status { color: #256338; }
 .supplier-payroll-rubric h3 {
   margin: 0;
   font-size: 1.05rem;

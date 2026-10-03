@@ -125,3 +125,22 @@ test("não permite totais além da precisão monetária segura", () => {
     /limite|precisão/i,
   );
 });
+
+test("rubrica sem valor nunca entra no envio, mesmo com quantidade alterada ou comprovante", () => {
+  const result = payroll.validatePayrollLines([
+    { rubric: "salary", quantity: "1", unitValue: "150", account: { id: "3", label: "PIX" } },
+    { rubric: "allowance", quantity: "2", unitValue: "  ", account: null, files: [{ name: "comprovante.pdf" }] },
+    { rubric: "meal", quantity: "1", unitValue: "", account: null },
+  ]);
+  assert.equal(result.total, 150);
+  assert.deepEqual(result.lines.map(line => line.rubric), ["salary"]);
+});
+
+test("valor zero não exige conta nem entra no envio de uma folha com rubrica válida", () => {
+  const result = payroll.validatePayrollLines([
+    { rubric: "salary", quantity: "1", unitValue: "150", account: { id: "3", label: "PIX" } },
+    { rubric: "allowance", quantity: "1", unitValue: "0", account: null },
+  ]);
+  assert.equal(result.total, 150);
+  assert.deepEqual(result.lines.map(line => line.rubric), ["salary"]);
+});
