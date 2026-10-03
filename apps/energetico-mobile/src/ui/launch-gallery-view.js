@@ -1338,7 +1338,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function commitReview() {
     if (!review || busy || !opened) return;
-    const pending = review;
+    const pending = review, epoch = session;
     const reviewError = reviewHost.querySelector('.lg-review-error');
     if (reviewError) { reviewError.textContent = ''; reviewError.hidden = true; }
     busy = true; notify('Salvando…'); updateBusy();
@@ -1382,11 +1382,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       clearReview(); clearEditor();
       notify('Operação concluída.');
       needsDetailRefresh = true;
-      if (pending.operation === 'delete') {
+      if (pending.operation === 'update' || pending.operation === 'delete') {
         ++detailVersion; current = null; selectedId = null; panel.hidden = true; panel.replaceChildren(); needsDetailRefresh = false;
       }
+      if (pending.operation === 'update' && active(epoch)) focus(back);
       if (opened) {
         await Promise.all([loadSnapshot(applied), selectedId != null ? loadDetail(selectedId) : Promise.resolve()]);
+        if (pending.operation === 'update' && active(epoch) && doc.activeElement === back) {
+          const updatedCard = [...cards.children].find(card => card.dataset.itemId === String(pending.payload.id));
+          focus(updatedCard?.querySelector('[data-gallery-action="edit"]') ?? back);
+        }
       }
     } catch (error) {
       if (!destroyed) {

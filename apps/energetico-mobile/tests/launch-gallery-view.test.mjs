@@ -1592,7 +1592,11 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   assert.match(ctx.root().textContent, /Conflito/);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(mutations(ctx).length, 2);
-  assert.ok(ctx.root().querySelector('.lg-editor'), 'the updated launch returns to its edit form');
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true, 'confirmed edit returns to the gallery');
+  assert.equal(ctx.root().querySelector('.lg-editor'), null);
+  assert.ok(ctx.root().querySelector('.lg-record'), 'the gallery remains available');
+  assert.equal(ctx.document.activeElement, ctx.root().querySelector('.lg-record [data-gallery-action="edit"]'),
+    'keyboard focus returns to the gallery');
 });
 
 test('changing a reviewed input invalidates confirmation; closing and reopening never saves or loses the form', async t => {
@@ -1988,7 +1992,7 @@ test('attachment read and viewer failures leave actionable errors with a usable 
   }
 });
 
-test('a confirmed mutation is never resent when its detail refresh fails', async t => {
+test('a confirmed edit returns to the gallery without reloading details or resending the mutation', async t => {
   let details = 0;
   const ctx = await setup(t, { request: async (op, payload) => {
     if (op === 'snapshot') return snapshot({ rows: [{ ...row(), hasAttachments: false }] });
@@ -1999,10 +2003,66 @@ test('a confirmed mutation is never resent when its detail refresh fails', async
   input(ctx, 'QUANTIDADE', '4');
   button(ctx.root(), 'SUBMETER').click(); button(ctx.root(), 'Confirmar alterações').click(); await settle();
   assert.equal(ctx.root().querySelector('.lg-editor'), null);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(details, 1);
+  assert.equal(mutations(ctx).length, 1);
+  await showDetail(ctx);
   assert.match(ctx.root().querySelector('.lg-detail').textContent, /Falha na atualização/);
   button(ctx.root().querySelector('.lg-detail'), 'Tentar novamente').click(); await settle();
   assert.equal(mutations(ctx).length, 1);
   assert.ok(ctx.root().querySelector('.lg-editor'));
+});
+
+test('confirmed edit restores gallery focus while its list refresh is pending', async t => {
+  const refresh = deferred(); let snapshots = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return ++snapshots === 2 ? refresh.promise : snapshot();
+    if (op === 'detail') return detail();
+    return { ok: true };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(ctx.document.activeElement, button(ctx.root(), 'Voltar'));
+  refresh.resolve(snapshot()); await settle();
+  assert.equal(ctx.document.activeElement, ctx.root().querySelector('.lg-record [data-gallery-action="edit"]'));
+});
+
+test('a stale edit refresh does not steal focus after closing and reopening the gallery', async t => {
+  const refresh = deferred(); let snapshots = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return ++snapshots === 2 ? refresh.promise : snapshot();
+    if (op === 'detail') return detail();
+    return { ok: true };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  ctx.gallery.close(); await ctx.gallery.open();
+  const filter = ctx.root().querySelector('[name="id"]');
+  filter.focus();
+  refresh.resolve(snapshot()); await settle();
+  assert.equal(ctx.document.activeElement, filter);
+});
+
+test('an edit refresh respects focus moved to a filter in the same gallery session', async t => {
+  const refresh = deferred(); let snapshots = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return ++snapshots === 2 ? refresh.promise : snapshot();
+    if (op === 'detail') return detail();
+    return { ok: true };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  const filter = ctx.root().querySelector('[name="id"]');
+  filter.focus();
+  refresh.resolve(snapshot()); await settle();
+  assert.equal(ctx.document.activeElement, filter);
 });
 
 test('gallery stylesheet keeps tools/signature above it and hidden overlays out of hit testing', async t => {
