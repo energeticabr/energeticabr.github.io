@@ -1388,7 +1388,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       if (pending.operation === 'update' && active(epoch)) focus(back);
       if (opened) {
         await Promise.all([loadSnapshot(applied), selectedId != null ? loadDetail(selectedId) : Promise.resolve()]);
-        if (pending.operation === 'update' && active(epoch)) {
+        if (pending.operation === 'update' && active(epoch) && doc.activeElement === back) {
           const updatedCard = [...cards.children].find(card => card.dataset.itemId === String(pending.payload.id));
           focus(updatedCard?.querySelector('[data-gallery-action="edit"]') ?? back);
         }

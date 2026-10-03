@@ -2048,6 +2048,23 @@ test('a stale edit refresh does not steal focus after closing and reopening the 
   assert.equal(ctx.document.activeElement, filter);
 });
 
+test('an edit refresh respects focus moved to a filter in the same gallery session', async t => {
+  const refresh = deferred(); let snapshots = 0;
+  const ctx = await setup(t, { request: async op => {
+    if (op === 'snapshot') return ++snapshots === 2 ? refresh.promise : snapshot();
+    if (op === 'detail') return detail();
+    return { ok: true };
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx, 'QUANTIDADE', '4');
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  const filter = ctx.root().querySelector('[name="id"]');
+  filter.focus();
+  refresh.resolve(snapshot()); await settle();
+  assert.equal(ctx.document.activeElement, filter);
+});
+
 test('gallery stylesheet keeps tools/signature above it and hidden overlays out of hit testing', async t => {
   const ctx = await setup(t); await ctx.gallery.open();
   const style = ctx.document.createElement('style');
