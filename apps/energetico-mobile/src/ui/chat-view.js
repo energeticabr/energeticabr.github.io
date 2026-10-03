@@ -1225,6 +1225,11 @@ function singleLaunchConfirmationMarkup(message, activeFlow) {
   const quantityNumber = parse(line.quantity);
   const freightNumber = parse(line.freight);
   const totalNumber = parse(line.total);
+  // The snapshot can omit a line still being edited; the confirmation total must agree with its sole captured line.
+  const summaryTotal = (Array.isArray(activeFlow.rows) ? activeFlow.rows : []).find(row =>
+    ["VALOR TOTAL DO PEDIDO", "VALOR TOTAL", "TOTAL"].includes(String(row?.label || "").normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/[^A-Z0-9]+/g, " ").trim()))?.value;
+  if (!unitNumber || !quantityNumber || !freightNumber || !totalNumber || !parse(summaryTotal)?.eq(totalNumber)) return "";
   const cells = [
     ["VLOR UN.", money(unitNumber, true)],
     ["QTD", quantityNumber ? quantityNumber.toString().replace(".", ",") : "—"],
