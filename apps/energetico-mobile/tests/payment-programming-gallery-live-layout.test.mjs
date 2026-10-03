@@ -55,7 +55,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/payment-programming-gallery-responsive.html?width=${width}` }, sessionId);
       let ready = false;
       for (let attempt = 0; attempt < 120 && !ready; attempt++) {
-        ready = await evaluate(`location.search === '?width=${width}' && document.documentElement.dataset.ready === 'true' && document.querySelectorAll('.pg-card').length === 3`);
+        ready = await evaluate(`location.search === '?width=${width}' && document.documentElement?.dataset.ready === 'true' && document.querySelectorAll('.pg-card').length === 3`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Galeria G28 não carregou em ${width}px`);

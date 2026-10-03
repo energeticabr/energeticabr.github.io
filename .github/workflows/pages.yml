@@ -41,7 +41,7 @@ jobs:
         run: pnpm --dir apps/energetico-mobile install --frozen-lockfile
 
       - name: Validate portal
-        run: node --test
+        run: node --test --test-concurrency=2
 
       - name: Build Energético Web App
         run: pnpm --dir apps/energetico-mobile run build:pwa
