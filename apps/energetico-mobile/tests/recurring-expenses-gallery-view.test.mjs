@@ -196,17 +196,45 @@ test("dados da despesa abrem pelo lápis e anexos no visualizador compartilhado"
   assert.deepEqual(ctx.calls.slice(-2), [["listAttachments", "33"], ["downloadAttachment", "33", "conta.pdf"]]);
 });
 
-test("G19 oferece anexos em ação discreta no rodapé do cartão", async t => {
+test("G19 mostra anexos à esquerda do conteúdo quando há arquivo", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();
   await settle();
   const card = ctx.root().querySelector('.re-card[data-item-id="33"]');
   const rail = card.querySelector(".og-card-attachment-rail");
   assert.ok(rail);
-  assert.ok(card.querySelector(".og-card-main").compareDocumentPosition(rail) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(card.firstElementChild, rail, "trilho de anexos precede o conteúdo do cartão");
+  assert.ok(card.classList.contains("og-card--with-attachments"));
   assert.equal(rail.querySelector(".og-card-attachment-icon").textContent, "📎");
   assert.equal(rail.querySelector(".og-card-attachment-label").textContent, "ANEXOS");
   assert.equal(rail.querySelector(".og-card-attachment-count").textContent, "1 anexo");
+});
+
+test("G19 não reserva coluna de anexos quando a consulta confirma lista vazia", async t => {
+  const ctx = await setup(t, { data: { async listAttachments() { return []; } } });
+  await ctx.gallery.open();
+  await settle();
+  const card = ctx.root().querySelector('.re-card[data-item-id="33"]');
+  assert.equal(card.querySelector('[data-action="attachments"]'), null);
+  assert.equal(card.classList.contains("og-card--with-attachments"), false);
+  assert.equal(card.firstElementChild, card.querySelector(".og-card-main"));
+});
+
+test("G19 cria o botão lateral quando descobre anexo em registro sem indicação inicial", async t => {
+  let finishLookup;
+  const ctx = await setup(t, {
+    rows: [{ id: "40", fields: { ID: 40, EQUIPAMENTO: "ENERGIA", STATUS: "ATIVO" } }],
+    data: { listAttachments: () => new Promise(resolve => { finishLookup = resolve; }) },
+  });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.re-card[data-item-id="40"]');
+  assert.equal(card.querySelector('[data-action="attachments"]'), null);
+  assert.equal(card.classList.contains("og-card--with-attachments"), false);
+  finishLookup([{ fileName: "conta.pdf", mimeType: "application/pdf", size: 1024 }]);
+  await settle();
+  assert.equal(card.firstElementChild.dataset.action, "attachments");
+  assert.equal(card.querySelector('.og-card-attachment-count').textContent, "1 anexo");
+  assert.ok(card.classList.contains("og-card--with-attachments"));
 });
 
 test("pagina resultados extensos e usa um layout responsivo", async t => {
