@@ -5,7 +5,7 @@ let dialogSequence = 0;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
-export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit,
+export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra,
   actions = ["edit", "delete"] } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
@@ -76,6 +76,10 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     error.hidden = true;
     const body = element("div", "gallery-record-dialog-body");
     dialog.append(heading, error, body);
+    if (operation === 'edit') {
+      const extra = renderEditorExtra?.(row);
+      if (extra) dialog.append(extra);
+    }
     overlay.append(dialog);
     (host || document.body).append(overlay);
     const state = { epoch, row, operation, overlay, dialog, error, body, focus: trigger || document.activeElement, busy: false, controller: null, loadEpoch: 0 };
