@@ -2,6 +2,7 @@ import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
+import { renderOrdersLinkedReport } from './orders-linked-report-view.js';
 
 const MASCOT_URL = new URL("../assets/mascote.png", import.meta.url).href;
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -108,6 +109,8 @@ export function createOrdersGallery({
   let sortValue = "id-desc";
   let controller = null;
   let detailsSession = 0;
+  let detailController = null;
+  let detailReturnFocus = null;
 
   const root = el("section", "og-overlay");
   root.hidden = true;
@@ -178,13 +181,18 @@ export function createOrdersGallery({
   content.append(filterDisclosure, metrics, notice, listStatus, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  detail.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || detail.hidden) return;
+    event.preventDefault(); event.stopPropagation();
+    closeDetails({ restoreFocus: true });
+  });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields) => data.saveEditor(context, fields),
     deleteItem: (id, options) => data.deleteItem(id, options),
     onChanged: () => {
-      detail.hidden = true; detail.replaceChildren();
+      closeDetails();
       return loadSnapshot();
     },
   });
@@ -321,14 +329,14 @@ export function createOrdersGallery({
     mascot.type = "button";
     mascot.dataset.action = "mascot-details";
     mascot.setAttribute("aria-label", `Abrir detalhes do pedido #${row.id}`);
-    mascot.title = "Abrir detalhes do pedido";
+    mascot.title = "Conferir pedido e lançamentos vinculados";
     const mascotImage = el("img");
     mascotImage.src = MASCOT_URL;
     mascotImage.alt = "";
     mascotImage.setAttribute("aria-hidden", "true");
     mascotImage.draggable = false;
     mascot.append(mascotImage);
-    mascot.addEventListener("click", () => openDetails(row));
+    mascot.addEventListener("click", () => { void openLinkedDetails(row); });
     const details = el("button", "og-button og-button--detail", "Detalhes"); details.type = "button"; details.addEventListener("click", () => openDetails(row));
     details.dataset.action = "details";
     const recordControls = recordActions.render(row);
@@ -367,6 +375,7 @@ export function createOrdersGallery({
 
   async function loadSnapshot({ retry = false } = {}) {
     if (!opened || destroyed) return false;
+    closeDetails();
     attachmentCounts.reset();
     const currentSession = session;
     if (controller) controller.abort();
@@ -412,17 +421,70 @@ export function createOrdersGallery({
     return table;
   }
 
-  function openDetails(row) {
-    const currentDetailsSession = ++detailsSession;
-    detail.hidden = false;
-    const heading = el("header", "og-detail-heading");
-    heading.append(el("h2", "", `Pedido #${row.id}`));
-    const close = el("button", "og-button", "Fechar detalhes"); close.type = "button";
-    close.addEventListener("click", () => {
-      if (currentDetailsSession !== detailsSession) return;
-      detail.hidden = true; detail.replaceChildren();
+  function closeDetails({ restoreFocus = false } = {}) {
+    detailsSession += 1;
+    detailController?.abort(); detailController = null;
+    detail.hidden = true; detail.replaceChildren();
+    detail.classList.remove('olr-detail');
+    detail.setAttribute('aria-busy', 'false');
+    if (restoreFocus && detailReturnFocus?.isConnected) detailReturnFocus.focus({ preventScroll: true });
+    detailReturnFocus = null;
+  }
+
+  function detailHeading(row, currentDetailsSession) {
+    const heading = el('header', 'og-detail-heading');
+    heading.append(el('h2', '', `Pedido #${row.id}`));
+    const close = el('button', 'og-button', 'Fechar detalhes'); close.type = 'button';
+    close.addEventListener('click', () => {
+      if (currentDetailsSession === detailsSession) closeDetails({ restoreFocus: true });
     });
     heading.append(close);
+    return heading;
+  }
+
+  async function openLinkedDetails(row) {
+    if (!opened || destroyed) return;
+    const origin = doc.activeElement;
+    closeDetails();
+    detailReturnFocus = origin;
+    const currentDetailsSession = ++detailsSession;
+    const currentSession = session;
+    const request = new AbortController(); detailController = request;
+    const current = () => opened && !destroyed && currentSession === session && currentDetailsSession === detailsSession && !request.signal.aborted;
+    detail.hidden = false;
+    detail.classList.add('olr-detail');
+    detail.setAttribute('aria-busy', 'true');
+    const heading = detailHeading(row, currentDetailsSession);
+    const status = el('div', 'olr-loading'); status.setAttribute('role', 'status');
+    status.append(createLoadingIndicator(doc, `Carregando pedido #${row.id} e lançamentos vinculados…`));
+    detail.replaceChildren(heading, status);
+    detail.focus({ preventScroll: true });
+    try {
+      if (typeof data.loadLinkedReport !== 'function') throw new Error('A consulta dos lançamentos vinculados não está disponível.');
+      const report = await data.loadLinkedReport(row.id, { signal: request.signal });
+      if (!current()) return;
+      if (String(report?.orderId) !== String(row.id)) throw new Error('A consulta não retornou o pedido selecionado.');
+      detail.replaceChildren(heading, renderOrdersLinkedReport(doc, report));
+    } catch (error) {
+      if (!current()) return;
+      const failure = el('div', 'olr-failure'); failure.setAttribute('role', 'alert');
+      failure.append(el('p', 'og-error', safeFailure(error, `Não foi possível conferir o pedido #${row.id}`)));
+      const retry = el('button', 'og-button og-button--primary', 'Tentar novamente'); retry.type = 'button';
+      retry.addEventListener('click', () => { void openLinkedDetails(row); });
+      failure.append(retry);
+      detail.replaceChildren(heading, failure);
+    } finally {
+      if (current()) detail.setAttribute('aria-busy', 'false');
+    }
+  }
+
+  function openDetails(row) {
+    const origin = doc.activeElement;
+    closeDetails();
+    detailReturnFocus = origin;
+    const currentDetailsSession = ++detailsSession;
+    detail.hidden = false;
+    const heading = detailHeading(row, currentDetailsSession);
     detail.replaceChildren(heading, renderDetailsTable(row));
     detail.focus({ preventScroll: true });
   }
@@ -480,7 +542,7 @@ export function createOrdersGallery({
     session += 1;
     controller?.abort(); controller = null;
     listLoading = false; attachmentLoading = false;
-    detail.hidden = true; detail.replaceChildren();
+    closeDetails();
     root.hidden = true;
     updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });

@@ -1,6 +1,7 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { escapeHtml } from "./escape-html.js";
+import { galleryPairForOption, pairedGalleryMenu } from "./menu-gallery-pairs.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
 import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
@@ -887,6 +888,15 @@ function isSupplyPaymentOption(option) {
     || /\bprovisao\b/.test(normalizedDateText(option?.label || option?.title || ""));
 }
 
+function isSupplyQuoteOption(option) {
+  return draftReplyId(option).trim().toLowerCase() === "action_new_quotation"
+    || /^nova\s+cotacao$/.test(normalizedDateText(option?.label || option?.title || "").replace(/[^\p{L}\p{N}\s]/gu, "").trim());
+}
+
+function quoteGalleryOption() {
+  return { id: "action_quote_gallery", reply: "action_quote_gallery", label: "GALERIA DE COTAÇÕES" };
+}
+
 function suppliesOptionVisual(option) {
   const label = normalizedDateText(option?.label || option?.title || "");
   if (isLaunchFlowOption(option)) return { displayIcon: "🧾", displayLabel: "LANÇAMENTOS" };
@@ -911,8 +921,16 @@ function suppliesMenuChoices(options, galleries, busy) {
   return `<div class="chat-choice-columns chat-choice-columns--launch-menu">
     ${pair(launches, galleries.orders, "PEDIDOS", galleries.launches, "LANÇAMENTOS")}
     ${pair(payment, galleries.payments, "PGTOS PREVISTOS", galleries.recurring, "DESPESAS RECORRENTES")}
-    <div class="chat-supplies-extras"><div class="chat-supplies-extras__primary">${others.map(primary).join("")}</div></div>
+    <div class="chat-supplies-extras">${others.map(option => `<div class="chat-supplies-extra-pair"><div class="chat-supplies-extras__primary">${primary(option)}</div>${isSupplyQuoteOption(option) ? `<div class="chat-gallery-actions">${gallery(galleries.quotes, "GALERIA DE COTAÇÕES")}</div>` : ""}</div>`).join("")}</div>
   </div>`;
+}
+
+function pairedGalleryMenuChoices(options, descriptor, busy) {
+  const galleries = new Map(options.map(option => [draftReplyId(option).trim().toLowerCase(), option]));
+  return `<div class="chat-choice-columns chat-choice-columns--paired-menu">${options.filter(option => !descriptor.pairs.some(pair => pair.id === draftReplyId(option).trim().toLowerCase())).map(option => {
+    const pair = galleryPairForOption(option, descriptor.pairs);
+    return `<div class="chat-menu-gallery-pair"><div class="chat-menu-gallery-pair__primary">${pollButton(option, busy)}</div>${pair ? `<div class="chat-gallery-actions">${pollButton(galleries.get(pair.id), busy, { galleryButton: true })}</div>` : ""}</div>`;
+  }).join("")}</div>`;
 }
 
 function launchGalleryOption() {
@@ -938,15 +956,19 @@ function recurringExpensesGalleryOption() {
 function menuOptionsWithoutApps(message, options) {
   const suppliesMenu = isSuppliesLaunchMenu(message);
   const registrationsMenu = isSuppliesRegistrationMenu(message);
+  const pairedMenu = pairedGalleryMenu(message);
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
     return (!suppliesMenu || !isWorksiteVisitOption(option))
+      && (!suppliesMenu || (replyId !== "action_launch_report" && !/\bobter\s+dados\b/.test(normalizedDateText(option?.label || option?.title || "")) && replyId !== "action_quote_gallery"))
+      && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId)
       && replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
       && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery"
       && replyId !== "action_recurring_expenses_gallery";
   });
-  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption()];
+  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption(), ...(filtered.some(isSupplyQuoteOption) ? [quoteGalleryOption()] : [])];
+  if (pairedMenu) return [...filtered, ...pairedMenu.pairs.filter(pair => filtered.some(option => galleryPairForOption(option, pairedMenu.pairs) === pair)).map(pair => ({ id: pair.id, reply: pair.id, label: pair.label }))];
   if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
   if (isAuditDocumentsMenu(message)) {
     return [...filtered.filter(option => draftReplyId(option).trim().toLowerCase() !== "action_documents_gallery"), documentsGalleryOption()];
@@ -1333,6 +1355,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const compressionPreview = compressionPreviewData(message);
   const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
+  const pairedMenu = pairedGalleryMenu(message);
   const isRegistrationMenu = isSuppliesRegistrationMenu(message);
   const isAuditMenu = isAuditDocumentsMenu(message);
   const isTaskMenu = isDemandsTaskMenu(message);
@@ -1342,7 +1365,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const replyId = draftReplyId(option).trim().toLowerCase();
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
-      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery"))
+      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_quote_gallery"))
+      && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
       && (!isAuditMenu || replyId !== "action_documents_gallery")
       && (!isHrGalleryMenu || !hrGalleryAction(option))
@@ -1422,6 +1446,9 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const recurringExpensesGallery = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_recurring_expenses_gallery")
     : null;
+  const quoteGallery = isLaunchMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_quote_gallery")
+    : null;
   const documentsGallery = isAuditMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_documents_gallery")
     : null;
@@ -1436,7 +1463,9 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ? isHrGalleryMenu
       ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries"><div class="chat-choice-columns__flow"><div class="${choiceListClass}">${choices}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${galleryChoices}</aside></div>`
       : isLaunchMenu
-      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, recurring: recurringExpensesGallery }, busy)
+      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, recurring: recurringExpensesGallery, quotes: quoteGallery }, busy)
+      : pairedMenu
+        ? pairedGalleryMenuChoices(displayOptions, pairedMenu, busy)
       : isRegistrationMenu
         ? `<div class="chat-choice-columns chat-choice-columns--registration-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${REGISTRATION_GALLERIES.map(gallery => pollButton(displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === gallery.id), busy, { galleryButton: true })).join("")}</div></div></div>`
       : isAuditMenu
@@ -1618,6 +1647,7 @@ function presenceConfirmationMarkup(value = {}) {
 function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
     const launchMenu = isSuppliesLaunchMenu(message);
+    const pairedMenu = pairedGalleryMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
     const auditMenu = isAuditDocumentsMenu(message);
     const taskMenu = isDemandsTaskMenu(message);
@@ -1625,7 +1655,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -1968,7 +1998,7 @@ function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth =
   </div>`;
 }
 
-function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", month = "", monthLoading = false, monthKnown = false, monthPresentDates = [] } = {}) {
+function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", directToday = false, month = "", monthLoading = false, monthKnown = false, monthPresentDates = [] } = {}) {
   if (!open || busy) return "";
   const changingExistingReport = Boolean(messageId);
   return `<section class="chat-confirmation chat-date-picker chat-rhid-report-page" data-rhid-attendance-report-dialog role="dialog" aria-modal="false" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
@@ -1976,13 +2006,13 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
         <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
-      <p>${changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
-      ${rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown)}
+      <p>${directToday ? `Presenças de hoje: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong>` : changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
+      ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown)}
       ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
-        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report" data-value="${escapeHtml(date)}"${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="${directToday ? "open-rhid-attendance-today" : "generate-rhid-attendance-report"}"${directToday ? "" : ` data-value="${escapeHtml(date)}"`}${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : directToday ? "Tentar novamente" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
       </div>
   </section>`;
 }
@@ -2330,11 +2360,13 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const voiceInputVisible = shouldShowVoiceInput(state, latestAssistantMessage, visibleMessages, databaseFilter, generatedSignatureChoice);
   const diaryActivitiesInput = isDiaryNumberedTextPrompt(state);
   const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
+  const headerReportDisabled = busy || rhidRefresh?.busy || signOutConfirm;
+  const headerReportAttributes = `type="button" data-action="open-rhid-attendance-today" aria-label="Abrir relatório de presenças RHID de hoje" title="Relatório de presenças RHID de hoje"${headerReportDisabled ? " disabled" : ""}`;
 
   return `<section class="chat-shell">
     <header class="chat-header">
-      ${assistantAvatar()}
-      <span><strong>Energético</strong><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
+      <button class="chat-header-avatar-shortcut" ${headerReportAttributes}>${assistantAvatar()}</button>
+      <span><button class="chat-header-name-shortcut" ${headerReportAttributes}><strong>Energético</strong></button><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
       ${showSettings ? settingsButton() : ""}
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
@@ -2447,6 +2479,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceReportDate = "";
   let rhidAttendanceReportMessageId = "";
   let rhidAttendanceReportBusy = false;
+  let rhidAttendanceReportDirectToday = false;
   let rhidAttendanceReportError = "";
   let rhidAttendanceMonthError = "";
   let rhidAttendanceMonth = "";
@@ -3547,7 +3580,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
        && [
          "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
-         "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "signaturePlacement",
+         "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
          "delegatedTasks", "pendingProvisions", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
@@ -3965,6 +3998,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       datePickerOpen = false;
       datePickerValue = "";
       rhidAttendanceReportMessageId = String(command.messageId || "").trim();
+      rhidAttendanceReportDirectToday = false;
       rhidAttendanceReportOpen = true;
       const currentMessage = rhidAttendanceReportMessageId
         ? lastState?.messages?.find(message => String(message?.id || "") === rhidAttendanceReportMessageId)
@@ -4024,6 +4058,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceReportError = "";
       rhidAttendanceMonthError = "";
       rhidAttendanceMonthLoading = false;
+      rhidAttendanceReportDirectToday = false;
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
     }
@@ -4936,6 +4971,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       datePickerValue,
       rhidAttendanceReport: {
         open: rhidAttendanceReportOpen,
+        directToday: rhidAttendanceReportDirectToday,
         date: rhidAttendanceReportDate,
         messageId: rhidAttendanceReportMessageId,
         busy: rhidAttendanceReportBusy,
@@ -5033,6 +5069,24 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
+  function openRhidAttendanceToday({ date = saoPauloDateIso() } = {}) {
+    if (lastState?.sessionStatus !== "authenticated" || !isValidRhidReportDate(date) || rhidAttendanceReportBusy) return false;
+    datePickerOpen = false;
+    datePickerValue = "";
+    rhidAttendanceReportOpen = true;
+    rhidAttendanceReportDirectToday = true;
+    rhidAttendanceReportDate = date;
+    rhidAttendanceReportMessageId = "";
+    rhidAttendanceReportBusy = true;
+    rhidAttendanceReportError = "";
+    rhidAttendanceMonthError = "";
+    rhidAttendanceMonthLoading = false;
+    const state = lastState;
+    lastState = null;
+    render(state);
+    return true;
+  }
+
   function setRhidAttendanceMonthStatus({ month, presentDates = [], error = "" } = {}) {
     if (!rhidAttendanceReportOpen || month !== rhidAttendanceMonth) return false;
     rhidAttendanceMonthLoading = false;
@@ -5068,6 +5122,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     rhidAttendanceReportDate = "";
     rhidAttendanceReportMessageId = "";
     rhidAttendanceReportBusy = false;
+    rhidAttendanceReportDirectToday = false;
     rhidAttendanceReportError = "";
     rhidAttendanceMonthError = "";
     if (shouldRender && lastState) { const state = lastState; lastState = null; render(state); }
@@ -5113,6 +5168,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   return Object.freeze({
     render,
     openPowerBiDashboard,
+    openRhidAttendanceToday,
     setRhidAttendanceReportStatus,
     setRhidAttendanceMonthStatus,
     setRhidAttendanceAdjustmentStatus,

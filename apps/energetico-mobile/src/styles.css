@@ -161,6 +161,13 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-header > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
 .chat-header > span:nth-child(2) > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-header small { color: rgb(255 255 255 / 74%); margin-top: 2px; }
+.chat-header-avatar-shortcut, .chat-header-name-shortcut { border: 0; padding: 0; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.chat-header-avatar-shortcut { flex: 0 0 auto; border-radius: 50%; }
+.chat-header-avatar-shortcut .chat-avatar { margin: 0; }
+.chat-header-name-shortcut { justify-self: start; max-width: 100%; text-align: left; border-radius: 4px; }
+.chat-header-name-shortcut strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-header-avatar-shortcut:focus-visible, .chat-header-name-shortcut:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.chat-header-avatar-shortcut:disabled, .chat-header-name-shortcut:disabled { cursor: default; opacity: .7; }
 .header-action { flex-shrink: 0; min-height: var(--compact-control-height); border: 1px solid rgb(255 255 255 / 36%); border-radius: 12px; padding-inline: var(--compact-control-padding-inline); color: white; background: transparent; font-size: clamp(.8rem, 1.4vw, .95rem); }
 .header-settings { display: inline-grid; place-items: center; width: var(--compact-control-size); min-height: var(--compact-control-size); padding: 0; font-size: clamp(1.1rem, 1.8vw, 1.35rem); }
 .auth-settings { margin-top: 16px; color: var(--brand); border-color: var(--brand); }
@@ -791,6 +798,9 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-supplies-pair { min-height: calc(2 * var(--supplies-gallery-height) + var(--supplies-gap)); }
 .chat-supplies-pair__primary, .chat-supplies-extras__primary { min-width: 0; display: grid; }
 .chat-supplies-extras__primary { gap: var(--supplies-gap); }
+.chat-supplies-extras { grid-template-columns: minmax(0, 1fr); }
+.chat-supplies-extra-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--supplies-gap); min-width: 0; }
+.chat-choice-columns--launch-menu .chat-supplies-extra-pair .chat-gallery-actions { grid-template-rows: minmax(var(--supplies-gallery-height), 1fr); }
 .chat-choice-columns--launch-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(2, minmax(var(--supplies-gallery-height), 1fr)); gap: var(--supplies-gap); }
 .chat-choice-columns--launch-menu .chat-choice-button { width: 100%; min-width: 0; min-height: var(--supplies-gallery-height); padding: 8px; border: 0; border-radius: 14px; color: #fff; background: var(--brand); font-size: clamp(.78rem, 2.5vw, 1.05rem); font-weight: 800; line-height: 1.2; }
 .chat-choice-columns--launch-menu .chat-supplies-pair__primary .chat-choice-button { height: 100%; }
@@ -812,6 +822,13 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-gallery-actions > .chat-choice-button { width: 100%; }
 .chat-choice-button--gallery { border-radius: 14px; color: #fff; border-color: #454c53; background: #454c53; }
 .chat-choice-button--gallery:hover:not(:disabled) { color: #fff; border-color: #343a40; background: #343a40; }
+.chat-message--asset-menu, .chat-message--construction-menu, .chat-message--contract-menu, .chat-message--construction-stage-menu { gap: 0; }
+.chat-message--asset-menu .chat-bubble, .chat-message--construction-menu .chat-bubble, .chat-message--contract-menu .chat-bubble, .chat-message--construction-stage-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
+.chat-choice-columns--paired-menu { display: grid; gap: clamp(8px, 1vw, 14px); }
+.chat-menu-gallery-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(8px, 1.4vw, 18px); min-width: 0; }
+.chat-menu-gallery-pair__primary, .chat-menu-gallery-pair .chat-gallery-actions { display: grid; min-width: 0; }
+.chat-menu-gallery-pair .chat-choice-button { width: 100%; min-width: 0; min-height: max(58px, var(--control-height)); height: auto; padding: 8px 5px; font-size: clamp(.72rem, 2.5vw, 1rem); line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+.chat-menu-gallery-pair__primary .chat-choice-button { border: 0; border-radius: 14px; color: #fff; background: var(--brand); font-size: clamp(.78rem, 2.5vw, 1.05rem); font-weight: 800; line-height: 1.2; }
 .chat-message--demand-menu { gap: 0; }
 .chat-message--demand-menu .chat-bubble { width: min(100%, 1120px); max-width: 100%; }
 .chat-choice-columns--task-menu { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(10px, 1.4vw, 18px); align-items: start; }
@@ -830,10 +847,13 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-choice-columns--audit-menu .chat-choice-button--gallery { min-width: 0; min-height: var(--control-height); padding-inline: 6px; font-size: clamp(.72rem, 2.9vw, .96rem); }
 @media (max-width: 360px) {
   .chat-choice-columns--registration-menu { --registration-row-height: 78px; }
+  .chat-menu-gallery-pair .chat-choice-button { min-height: 78px; }
 }
 @media (max-width: 320px) {
   .chat-supplies-pair, .chat-supplies-extras { grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); }
+  .chat-supplies-extras { grid-template-columns: minmax(0, 1fr); }
   .chat-choice-columns--launch-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
+  .chat-supplies-extra-pair { grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); }
   .chat-choice-columns--registration-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
   .chat-choice-columns--registration-menu .chat-choice-button--gallery { padding-inline: 2px; font-size: 10px; }
   .chat-choice-columns--task-menu { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }

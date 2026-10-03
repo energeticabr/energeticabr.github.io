@@ -25,6 +25,8 @@
 .rg-row-main { min-width: 0; padding: 5px 2px 5px 0; }
 .rg-row-title { display: block; margin-bottom: 7px; color: #07566b; overflow-wrap: anywhere; }
 .rg-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; margin: 0; }
+.rg-row--native .rg-details { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.rg-row--native .rg-document-heading { flex-wrap: wrap; }
 .rg-detail { min-width: 0; }
 .rg-detail dt { color: #5c6d74; font-size: .75rem; font-weight: 700; }
 .rg-detail dd { margin: 0; overflow-wrap: anywhere; }

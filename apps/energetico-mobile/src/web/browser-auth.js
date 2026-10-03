@@ -147,6 +147,18 @@ const RESUMABLE_ACTIONS = new Set([
   "action_powerbi_dashboard",
   "action_hr_gallery_idfolha",
   "action_hr_gallery_folhapgto",
+  "action_asset_gallery",
+  "action_asset_function_gallery",
+  "action_asset_product_gallery",
+  "action_asset_group_gallery",
+  "action_work_diary_gallery",
+  "action_quote_gallery",
+  "action_contract_gallery",
+  "action_contract_line_gallery",
+  "action_measurement_gallery",
+  "action_measurement_line_gallery",
+  "action_stage_demonstrative_gallery",
+  "action_construction_stage_gallery",
 ]);
 
 function browserStorage(storage) {
