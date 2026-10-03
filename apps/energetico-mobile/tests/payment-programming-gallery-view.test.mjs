@@ -272,7 +272,7 @@ test("G28 apresenta provisão sem anexos no cartão compacto da segunda referên
   assert.equal(card.querySelector(".pg-description-label").textContent, "Descrição");
   assert.equal(card.querySelector(".pg-description strong").textContent, "SEGURO PARA 7 TRABALHADORES CONFORME CCT");
   assert.deepEqual([...card.querySelectorAll(".pg-card-grid .pg-card-field")].map(field => field.dataset.field), [
-    "DATA PREVISTA PGTO", "VALOR TOTAL", "QTD", "FILIAL", "IMÓVEL", "AGENDAMENTO",
+    "DATA PREVISTA PGTO", "VALOR UNITÁRIO", "QTD", "FILIAL", "IMÓVEL", "AGENDAMENTO", "FRETE",
   ]);
   assert.equal(card.querySelector('.pg-card-field[data-field="DATA PREVISTA PGTO"] dt').textContent, "Data prevista pgto");
   assert.equal(card.querySelector('.pg-card-field[data-field="QTD"] dt').textContent, "Qtd.");
@@ -292,6 +292,35 @@ test("G28 mantém um status pendente específico mesmo quando o prazo é mostrad
   const card = ctx.root().querySelector('.pg-card[data-item-id="303"]');
   assert.match(card.querySelector(".pg-card-heading .pg-deadline").textContent, /VENCE EM 1 DIA/);
   assert.equal(card.querySelector(".pg-card-heading .pg-status")?.textContent, "PENDENTE APROVAÇÃO");
+});
+
+test("G28 separa total calculado, preço unitário e frete sem duplicar a multiplicação", async t => {
+  const fixtures = [
+    { id: "501", amount: 120.25, quantity: 2, freight: 5, total: "R$ 245,50", unit: "R$ 120,25", shipping: "R$ 5,00" },
+    { id: "502", amount: "1.200,50", quantity: "10", freight: "50,00", total: "R$ 12.055,00", unit: "R$ 1.200,50", shipping: "R$ 50,00" },
+    { id: "503", amount: 0, quantity: 1, freight: 0, total: "R$ 0,00", unit: "R$ 0,00", shipping: "R$ 0,00" },
+    { id: "504", amount: 89.99, quantity: 1, total: "R$ 89,99", unit: "R$ 89,99", shipping: "R$ 0,00" },
+    { id: "505", amount: null, quantity: 1, total: "—", unit: "—", shipping: "R$ 0,00" },
+  ];
+  const rows = fixtures.map(item => ({ id: item.id, hasAttachments: false, fields: {
+    ID: Number(item.id), FORNECEDOR: "FORNECEDOR", STATUS: "PAGAMENTO PREVISTO",
+    VALORTOTAL: item.amount, QTD: item.quantity, FRETE: item.freight,
+  } }));
+  const ctx = await setup(t, { rows });
+  await ctx.gallery.open();
+  const normalText = node => node?.textContent.replace(/\s+/g, " ").trim();
+  for (const fixture of fixtures) {
+    const card = ctx.root().querySelector(`.pg-card[data-item-id="${fixture.id}"]`);
+    const total = card.querySelector(".pg-card-total");
+    assert.ok(total, "total calculado deve aparecer ao lado do lápis");
+    assert.equal(normalText(total.querySelector("strong")), fixture.total);
+    assert.equal(normalText(card.querySelector('[data-field="VALOR UNITÁRIO"] dd')), fixture.unit);
+    assert.equal(normalText(card.querySelector('[data-field="VALOR UNITÁRIO"] dt')), "Valor unitário");
+    assert.equal(normalText(card.querySelector('[data-field="FRETE"] dd')), fixture.shipping);
+    assert.equal(card.querySelector('[data-field="VALOR TOTAL"]'), null, "grade não confunde unitário com total");
+    const edit = card.querySelector('[data-gallery-action="edit"]');
+    assert.ok(total.compareDocumentPosition(edit) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  }
 });
 
 test("G28 esconde o clipe se a contagem consultada confirmar que não há anexos", async t => {
@@ -441,7 +470,6 @@ test("layout G28 mantém filtros compactos e seis dados em grade de três coluna
   assert.match(styles, /\.pg-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   assert.match(styles, /\.pg-card-fields\.pg-card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(styles, /\.pg-overlay \.pg-card\.gallery-record-card[^}]*display:\s*block/s);
-  assert.match(styles, /\.pg-overlay \.pg-card > \.gallery-record-actions[^}]*flex-direction:\s*row/s);
   assert.match(styles, /\.pg-description\s*\{[^}]*background:/s);
   assert.match(styles, /\.pg-list-toolbar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s);
   assert.match(styles, /\.pg-deadline--today[^}]*color:/s);

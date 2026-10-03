@@ -84,7 +84,7 @@ function paymentTotal(fields) {
 function displayValue(name, value) {
   const date = formatDate(name, value);
   if (date) return date;
-  if (key(name) === "VALORTOTAL") {
+  if (["VALORTOTAL", "VALORUNITARIO", "FRETE"].includes(key(name))) {
     const amount = numericValue(value);
     if (Number.isFinite(amount)) return amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   }
@@ -442,7 +442,7 @@ export function createPaymentProgrammingGallery({
     const symbol = el("span", "pg-summary-icon", icon);
     symbol.setAttribute("aria-hidden", "true");
     const visibleLabel = {
-      "DATA PREVISTA PGTO": "Data prevista pgto", "VALOR TOTAL": "Valor total", QTD: "Qtd.",
+      "DATA PREVISTA PGTO": "Data prevista pgto", "VALOR UNITÁRIO": "Valor unitário", FRETE: "Frete", QTD: "Qtd.",
       FILIAL: "Filial", "IMÓVEL": "Imóvel", AGENDAMENTO: "Agendamento",
     }[label] || label;
     pair.append(symbol, el("dt", "", visibleLabel), el("dd", "", displayValue(label, value)));
@@ -468,16 +468,23 @@ export function createPaymentProgrammingGallery({
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
     if (timing) headingCopy.append(timing);
     if (!timing || key(statusText) !== key(DEFAULT_STATUS)) headingCopy.append(status);
+    const toolbar = el("div", "pg-card-toolbar");
+    const total = el("div", "pg-card-total");
+    total.append(el("span", "", "Valor total"), el("strong", "", displayValue("VALOR TOTAL", paymentTotal(fields))));
+    toolbar.append(total, recordActions.render(row));
+    heading.append(toolbar);
     const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO", "PRODUTO"]) || "").trim();
     const descriptionBand = description ? el("div", "pg-description") : null;
     if (descriptionBand) descriptionBand.append(el("span", "pg-description-label", "Descrição"), el("strong", "", description));
     const summary = el("dl", "og-card-fields pg-card-fields pg-card-grid");
     appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "▣");
-    appendSummaryField(summary, "VALOR TOTAL", paymentTotal(fields), "$");
+    appendSummaryField(summary, "VALOR UNITÁRIO", field(fields, ["VALOR TOTAL", "VALORTOTAL"]), "$");
     appendSummaryField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]), "◇");
     appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "▦");
     appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "⌂");
     appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "◷");
+    const freight = field(fields, ["FRETE"]);
+    appendSummaryField(summary, "FRETE", text(freight).trim() ? freight : 0, "▱", { wide: true });
     const observation = text(field(fields, ["OBS", "OBSERVACAO", "OBSERVAÇÃO"]) || "").trim();
     main.append(heading);
     if (descriptionBand) main.append(descriptionBand);
@@ -488,7 +495,7 @@ export function createPaymentProgrammingGallery({
     if (observation) appendSummaryField(extra, "OBS", observation, "▤", { wide: true });
     if (extra.children.length) main.append(extra);
     card.classList.add('gallery-record-card');
-    card.append(main, recordActions.render(row));
+    card.append(main);
     if (hasAttachments) card.insertBefore(renderAttachmentRail(row), main);
     return card;
   }

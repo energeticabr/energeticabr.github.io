@@ -64,6 +64,12 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
         const attached = document.querySelector('.pg-card[data-item-id="301"]');
         const fields = [...card.querySelectorAll('.pg-card-grid .pg-card-field')];
         const actions = [...card.querySelectorAll('.gallery-record-actions > button')].map(button => button.getBoundingClientRect());
+        const titleRect = card.querySelector('.pg-card-heading h2').getBoundingClientRect();
+        const totalsAligned = [...document.querySelectorAll('.pg-card')].every(item => {
+          const total = item.querySelector('.pg-card-total').getBoundingClientRect();
+          const edit = item.querySelector('[data-gallery-action="edit"]').getBoundingClientRect();
+          return total.right <= edit.left && Math.abs((total.top+total.bottom)/2 - (edit.top+edit.bottom)/2) < 1;
+        });
         const grid = getComputedStyle(card.querySelector('.pg-card-grid'));
         const cardRect = card.getBoundingClientRect();
         const attachedRect = attached.getBoundingClientRect();
@@ -81,18 +87,28 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
           attachedChildrenOutside,
           fieldColumns: grid.gridTemplateColumns.split(' ').length,
           fieldCount: fields.length,
+          totalsAligned,
+          total: card.querySelector('.pg-card-total strong').textContent.replace(/\\s+/g, ' '),
+          attachedTotal: attached.querySelector('.pg-card-total strong').textContent.replace(/\\s+/g, ' '),
+          unit: attached.querySelector('[data-field="VALOR UNITÁRIO"] dd').textContent.replace(/\\s+/g, ' '),
+          freight: attached.querySelector('[data-field="FRETE"] dd').textContent.replace(/\\s+/g, ' '),
           actionsSideBySide: actions.length === 2 && Math.abs(actions[0].top - actions[1].top) < 1,
           descriptionAboveFields: card.querySelector('.pg-description').getBoundingClientRect().bottom <= fields[0].getBoundingClientRect().top,
           emptyRail: Boolean(card.querySelector('.pg-attachment-rail')),
           attachedRail: Boolean(attached.querySelector('.pg-attachment-rail')),
-          headerOverlap: card.querySelector('.pg-card-heading h2').getBoundingClientRect().right > actions[0].left + 1,
+          headerOverlap: titleRect.right > actions[0].left + 1 && titleRect.bottom > actions[0].top + 1,
         };
       })()`);
       assert.ok(layout.documentWidth <= width && layout.cardRight <= width + 1 &&
         !layout.contentOverflow && !layout.cardOverflow && !layout.attachedCardOverflow && layout.attachedChildrenOutside.length === 0,
         `G28 extrapola a tela ${width}px: ${JSON.stringify(layout)}`);
       assert.equal(layout.fieldColumns, expectedColumns, `grade de ${width}px: ${JSON.stringify(layout)}`);
-      assert.equal(layout.fieldCount, 6);
+      assert.equal(layout.fieldCount, 7);
+      assert.equal(layout.total, "R$ 89,99");
+      assert.equal(layout.attachedTotal, "R$ 1.250,00");
+      assert.equal(layout.unit, "R$ 120,00");
+      assert.equal(layout.freight, "R$ 50,00");
+      assert.ok(layout.totalsAligned, `total à esquerda do lápis em ${width}px: ${JSON.stringify(layout)}`);
       assert.ok(layout.actionsSideBySide && layout.descriptionAboveFields && !layout.emptyRail && layout.attachedRail && !layout.headerOverlap,
         `composição de ${width}px: ${JSON.stringify(layout)}`);
       if (width === 390 && process.env.PAYMENT_GALLERY_SCREENSHOT) {
