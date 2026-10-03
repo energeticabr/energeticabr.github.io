@@ -175,11 +175,15 @@
 .re-sort-field { display: flex; flex-direction: row; align-items: center; gap: 8px; }
 .re-sort-field .og-label { color: #52687d; font-size: .85rem; font-weight: 500; white-space: nowrap; }
 .re-sort-field .og-input { min-width: 126px; min-height: 43px; border-color: #cbd9e4; border-radius: 10px; font-weight: 700; box-shadow: 0 2px 7px #163c6114; }
+.re-sort-field .sfs { width: 92px; }
+.re-sort-field .sfs-trigger { min-height: 43px; padding: 7px 9px; border-color: #cbd9e4; border-radius: 10px; font-size: .85rem; font-weight: 700; box-shadow: 0 2px 7px #163c6114; }
+.re-sort-field .sfs-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.re-sort-field .sfs-popup { left: auto; right: 0; width: min(260px, 80vw); }
 .re-cards { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .re-overlay .re-card.gallery-record-card,
 .re-overlay .re-card.gallery-record-card.og-card--with-attachments { position: relative; display: block; padding: 18px; border: 1px solid #d3e0e9; border-radius: 14px; background: #fff; box-shadow: 0 4px 12px #163c6114; }
 .re-card.gallery-record-card:nth-child(even) { background: #fff; }
-.re-card-heading { align-items: flex-start; gap: 11px; min-height: 76px; padding: 0 54px 15px 0; border-bottom: 1px solid #dce7ee; }
+.re-card-heading { align-items: flex-start; gap: 11px; min-height: 90px; padding: 0 54px 15px 0; border-bottom: 1px solid #dce7ee; }
 .re-card-heading .og-card-id { display: grid; width: 50px; min-width: 50px; min-height: 54px; place-items: center; padding: 6px; border-radius: 6px; background: #b51e2b; font-size: 1.4rem; }
 .re-heading-text { display: grid; justify-items: start; gap: 4px; min-width: 0; }
 .re-card-heading h2 { color: #123e70; font-size: 1.1rem; line-height: 1.28; overflow-wrap: anywhere; }
@@ -248,7 +252,8 @@
   .og-detail-heading .og-button { max-width: 116px; }
   .re-header .og-button { padding-inline: 7px; }
   .re-sort-field { gap: 4px; }
-  .re-sort-field .og-input { min-width: 100px; max-width: 110px; }
+  .re-sort-field .og-label { display: none; }
+  .re-sort-field .sfs { width: 88px; }
   .re-card-field { grid-template-columns: 21px minmax(64px, 27%) minmax(0, 1fr); gap: 5px; }
 }
 @media (prefers-reduced-motion: reduce) { .og-overlay *, .og-overlay *::before, .og-overlay *::after { scroll-behavior: auto !important; transition: none !important; } }

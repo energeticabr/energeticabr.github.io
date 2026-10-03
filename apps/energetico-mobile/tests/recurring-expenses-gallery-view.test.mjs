@@ -97,6 +97,7 @@ test("G19 segue a composição nova: busca, filtro, ordenação e cartões por p
   assert.match(root.querySelector(".re-search-bar input").placeholder, /Buscar despesa, fornecedor ou produto/);
   assert.equal(root.querySelector(".re-filter-button").getAttribute("aria-expanded"), "false");
   assert.ok(root.querySelector(".re-list-toolbar [name=sort]"), "ordenação permanece visível");
+  assert.ok(root.querySelector(".re-sort-field .sfs-trigger"), "seletor visual de ordenação recebe o estilo da G19");
   const card = root.querySelector(".re-card");
   assert.equal(card.querySelector(".re-card-heading h2").textContent, "SEGURO DE VIDA COLETIVO");
   assert.equal(card.querySelector(".re-card-description dd").textContent, "SEGURO PARA 7 TRABALHADORES CONFORME CCT");
@@ -225,4 +226,6 @@ test("pagina resultados extensos e usa um layout responsivo", async t => {
   assert.match(styles, /\.re-filter-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(styles, /\.re-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   assert.match(styles, /\.re-card\.gallery-record-card:nth-child\(even\)\s*\{\s*background:\s*#fff/s);
+  assert.match(styles, /\.re-card-heading\s*\{[^}]*min-height:\s*90px/s, "cabeçalho reserva espaço para editar e excluir sem cobrir fornecedor");
+  assert.match(styles, /\.re-sort-field \.sfs-trigger\s*\{[^}]*border-radius:\s*10px/s, "seletor de ordenação é estilizado no controle visível");
 });
