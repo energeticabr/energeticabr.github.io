@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/src/ui/operations-reports.css">
+  <style>html,body { margin:0; width:100%; max-width:100%; } main { width:100%; min-width:0; } section { margin-bottom:10px; }</style>
+</head>
+<body>
+<main id="reports"></main>
+<script type="module">
+  import { createOperationsReportsView } from "/src/ui/operations-reports-view.js";
+  const long = "EXTRAORDINARIAMENTEUMTEXTOEXTENSOSEMESPAÇOS".repeat(7);
+  const snapshots = {
+    6: { stages: [{ branch: long, stage: long, start: "2026-09-01", end: "", status: "INICIADO", percent: 25, activities: [{ id: "1", activity: long, property: long, supplier: long, start: "2026-09-01", end: "2026-10-01", status: "ATIVIDADE INICIADA" }] }] },
+    7: { count: 1, rows: [{ id: "44", date: "2026-10-01", branch: long, status: "PENDENTE" }] },
+    8: { summary: { pending: 1, completed: 0, total: 1 }, rows: [{ id: "7", identified: "2026-10-01", due: "2026-10-05", responsible: long, responsibleKey: long, status: "ATIVIDADE CRIADA", difficulty: long, association: long, priority: "ATIVIDADE EMERGENCIAL", task: long }] },
+  };
+  for (const number of [6, 7, 8]) {
+    const view = createOperationsReportsView({ document, data: { async loadReport(report) { return snapshots[report]; } } });
+    document.getElementById("reports").append(view.element);
+    await view.open(number);
+  }
+  const reportWidths = [...document.querySelectorAll(".or-report")].map(node => ({
+    report: node.querySelector("h2")?.textContent,
+    width: node.getBoundingClientRect().width,
+    scrollWidth: node.scrollWidth,
+    childOverflow: [...node.querySelectorAll("*")].some(child => child.getBoundingClientRect().right > innerWidth + 1),
+  }));
+  document.documentElement.dataset.layout = JSON.stringify({ viewport: innerWidth, document: document.documentElement.scrollWidth, reportWidths });
+</script>
+</body>
+</html>

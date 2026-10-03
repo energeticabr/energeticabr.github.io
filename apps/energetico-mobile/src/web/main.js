@@ -23,6 +23,12 @@ import "../ui/gallery-record-actions.css";
 import "../ui/orders-gallery.css";
 import "../ui/tasks-gallery.css";
 import "../ui/contractor-reports.css";
+import "../ui/rh-reports.css";
+import "../ui/operations-reports.css";
+import "../ui/spending-reports.css";
+import "../ui/audit-reports-live.css";
+import "../ui/commercial-progress-reports.css";
+import "../ui/commercial-docs-rent-reports-style.css";
 import "../ui/registration-gallery.css";
 import "./attachment-preview.css";
 

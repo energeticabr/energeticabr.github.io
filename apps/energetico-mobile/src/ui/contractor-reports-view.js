@@ -14,6 +14,14 @@ const MAIN_COLUMNS = [
   ["totalValue", "VALOR TOTAL"], ["totalMeasurements", "TOTAL MEDIÇÕES"], ["status", "STATUS"],
 ];
 const PAGE_SIZE = 25;
+const REPORT_NAMES = [
+  "Controle de empreiteiros", "Presenças por pedido / IDPGTO", "Fornecedores e atividades",
+  "Presenças e ausências", "Pagamentos pendentes", "Etapas e atividades",
+  "Diários de obras pendentes", "Tarefas pessoais", "Resumo gerencial de gastos",
+  "Despesas recorrentes", "Cotações e orçamentos", "Depreciação do imobilizado",
+  "Controle de documentos", "Indicadores comerciais", "Último andamento por imóvel",
+  "Pendências comerciais", "Aluguéis em aberto",
+];
 
 function safeError(error) {
   const message = String(error?.message || "Falha na consulta ao SharePoint.")
@@ -23,7 +31,7 @@ function safeError(error) {
   return `Não foi possível carregar o relatório: ${message}`;
 }
 
-export function createContractorReportsView({ document: doc = globalThis.document, data, presenceData, onHome } = {}) {
+export function createContractorReportsView({ document: doc = globalThis.document, data, presenceData, extraReports = [], onHome } = {}) {
   if (!doc?.body || typeof data?.loadOverview !== "function" || typeof data?.loadDetails !== "function") {
     throw new TypeError("A tela de relatórios requer documento e fonte de dados.");
   }
@@ -38,6 +46,14 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   let defaultStatusApplied = false;
   let overviewController = null; let detailController = null; let overviewRevision = 0; let detailRevision = 0;
   let returnFocus = null;
+  const extraViews = new Map();
+  for (const group of extraReports) {
+    if (!group?.view?.element || typeof group.view.open !== "function") continue;
+    for (const id of group.ids || []) {
+      if (Number.isInteger(id) && id >= 3 && id <= 17) extraViews.set(id, group.view);
+    }
+  }
+  const uniqueExtraViews = [...new Set(extraViews.values())];
 
   const root = make("section", "og-overlay cr-overlay");
   root.hidden = true; root.tabIndex = -1; root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true");
@@ -54,20 +70,16 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   hub.append(make("h2", "cr-hub-title", "Relatórios Energético"));
   hub.append(make("p", "cr-hub-intro", "Selecione um quadrado para consultar o relatório."));
   const hubGrid = make("div", "cr-hub-grid");
-  for (let position = 1; position <= 9; position++) {
-    if (position === 5) {
-      const center = make("div", "cr-hub-center", "ENERGÉTICA");
-      center.append(make("small", "", "RELATÓRIOS")); hubGrid.append(center); continue;
-    }
-    const number = position < 5 ? position : position - 1;
-    const available = number === 1 || (number === 2 && typeof presenceData?.loadSnapshot === "function");
+  for (let number = 1; number <= REPORT_NAMES.length; number++) {
+    const available = number === 1 || (number === 2 && typeof presenceData?.loadSnapshot === "function") || extraViews.has(number);
     const tile = button(`cr-report-tile ${available ? "cr-report-tile--active" : ""}`,
-      number === 1 ? "1 · Controle de empreiteiros" : number === 2 ? "2 · Presenças por pedido / IDPGTO" : `${number} · Em breve`);
+      `${number} · ${REPORT_NAMES[number - 1]}`);
     tile.dataset.reportId = String(number);
     tile.disabled = !available;
     if (!available) tile.title = "Relatório ainda não definido";
     else if (number === 1) tile.addEventListener("click", () => { void showReport(); });
-    else tile.addEventListener("click", () => { void showPresenceReport(); });
+    else if (number === 2) tile.addEventListener("click", () => { void showPresenceReport(); });
+    else tile.addEventListener("click", () => { void showExtraReport(number); });
     hubGrid.append(tile);
   }
   hub.append(hubGrid);
@@ -114,6 +126,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   const detail = make("section", "cr-detail"); detail.hidden = true; report.append(detail);
   const presenceReport = presenceData ? createPresencePaymentReportView({ document: doc, data: presenceData }) : null;
   content.append(hub, report); if (presenceReport) content.append(presenceReport.element);
+  for (const view of uniqueExtraViews) content.append(view.element);
   doc.body.append(root);
   const pickers = bindSearchableFilterSelects(filterGrid);
 
@@ -269,6 +282,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   async function showReport() {
     if (destroyed) return;
     presenceReport?.close();
+    uniqueExtraViews.forEach(view => view.close?.());
     mode = "report"; hub.hidden = true; report.hidden = false; title.textContent = "RELATÓRIO 1";
     await loadOverview();
   }
@@ -277,13 +291,27 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     if (destroyed || !presenceReport) return;
     overviewController?.abort(); overviewRevision++;
     detailController?.abort(); detailRevision++;
+    uniqueExtraViews.forEach(view => view.close?.());
     mode = "report2"; hub.hidden = true; report.hidden = true; title.textContent = "RELATÓRIO 2";
     await presenceReport.open();
+  }
+
+  async function showExtraReport(number) {
+    const view = extraViews.get(number);
+    if (destroyed || !view) return;
+    overviewController?.abort(); overviewRevision++;
+    detailController?.abort(); detailRevision++;
+    presenceReport?.close();
+    uniqueExtraViews.forEach(extraView => extraView.close?.());
+    mode = `report${number}`; hub.hidden = true; report.hidden = true;
+    title.textContent = `RELATÓRIO ${number}`;
+    await view.open(number);
   }
 
   function close() {
     overviewController?.abort(); detailController?.abort(); overviewRevision++; detailRevision++;
     presenceReport?.close();
+    uniqueExtraViews.forEach(view => view.close?.());
     opened = false; root.hidden = true; pickers.close(); returnFocus?.focus?.();
   }
 
@@ -295,9 +323,10 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   next.addEventListener("click", () => { page++; renderMain(); });
   refresh.addEventListener("click", () => { void loadOverview(); });
   back.addEventListener("click", () => {
-    if (mode === "report" || mode === "report2") {
+    if (mode !== "hub") {
       overviewController?.abort(); overviewRevision++;
       detailController?.abort(); detailRevision++; presenceReport?.close();
+      uniqueExtraViews.forEach(view => view.close?.());
       mode = "hub"; report.hidden = true; hub.hidden = false; title.textContent = "RELATÓRIOS";
     } else close();
   });
@@ -308,12 +337,14 @@ export function createContractorReportsView({ document: doc = globalThis.documen
     async open() {
       if (destroyed) throw new Error("A tela de relatórios foi encerrada.");
       returnFocus = doc.activeElement; opened = true; root.hidden = false;
-      mode = "hub"; hub.hidden = false; report.hidden = true; presenceReport?.close(); title.textContent = "RELATÓRIOS";
+      mode = "hub"; hub.hidden = false; report.hidden = true; presenceReport?.close();
+      uniqueExtraViews.forEach(view => view.close?.()); title.textContent = "RELATÓRIOS";
       root.focus(); return opened;
     },
     destroy() {
       if (destroyed) return;
-      close(); destroyed = true; pickers.destroy(); presenceReport?.destroy(); root.remove();
+      close(); destroyed = true; pickers.destroy(); presenceReport?.destroy();
+      uniqueExtraViews.forEach(view => view.destroy?.()); root.remove();
     },
   });
 }

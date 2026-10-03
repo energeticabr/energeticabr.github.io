@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body>
+<script type="module">
+  import "../../src/ui/orders-gallery.css";
+  import "../../src/ui/contractor-reports.css";
+  import "../../src/ui/commercial-docs-rent-reports-style.css";
+  import { createContractorReportsView } from "../../src/ui/contractor-reports-view.js";
+  import { createCommercialDocsRentReportsView } from "../../src/ui/commercial-docs-rent-reports-view.js";
+  const params = new URLSearchParams(location.search);
+  const number = Number(params.get("report") || 16);
+  const long = "DOCUMENTOEXTENSOSEMESPAÇOS".repeat(15);
+  const field = (key, pending) => ({ key, label: long, value: pending ? "" : long, pending });
+  const snapshots = {
+    16: { rows: [{ id: "1", branch: long, property: long, status: long, fiscal: long, contracts: [{ id: "10", buyer: long }], documents: Array.from({ length: 8 }, (_, n) => field(`DOC${n}`, n % 2 === 0)), stateChecks: [field("STATE", true)], otherFields: Array.from({ length: 8 }, (_, n) => field(`OTHER${n}`, n % 2 === 0)), idPending: 5, fieldsPending: 4, totalPending: 9 }] },
+    17: { rows: [{ id: "2", property: long, tenant: long, dueDate: "2026-10-02", paymentMethod: long, contractId: "3", amountCents: 123450, dueState: "overdue", days: 4 }] },
+  };
+  const view = createCommercialDocsRentReportsView({ document, data: { async loadReport(report) { return snapshots[report]; } } });
+  const shell = createContractorReportsView({
+    document,
+    data: { async loadOverview() { return { rows: [], documentStatuses: {}, warnings: [] }; }, async loadDetails() { return { launches: [], measurements: [] }; } },
+    extraReports: [{ ids: [16, 17], view }],
+  });
+  await shell.open();
+  document.querySelector(`[data-report-id="${number}"]`).click();
+  await new Promise(resolve => setTimeout(resolve, 100));
+  if (number === 16 && params.has("detail")) {
+    const property = view.element.querySelector('[name="property"]');
+    property.value = long; property.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  const content = document.querySelector(".cr-content"), node = view.element;
+  document.documentElement.dataset.layout = JSON.stringify({ viewport: innerWidth, document: document.documentElement.scrollWidth,
+    shell: { width: content.getBoundingClientRect().width, scrollWidth: content.scrollWidth },
+    report: { visible: !node.hidden, branchCards: node.querySelectorAll(".cdr-branch-summary").length,
+      propertyCards: node.querySelectorAll(".cdr-property-card").length,
+      rentCards: node.querySelectorAll(".cdr-rent-card").length,
+      width: node.getBoundingClientRect().width, scrollWidth: node.scrollWidth,
+      childOverflow: [...node.querySelectorAll("*")].some(child => child.getBoundingClientRect().right > innerWidth + 1) } });
+</script>
+</body>
+</html>
