@@ -35,11 +35,12 @@ async function setup(t, overrides = {}) {
     async downloadAttachment(id, name) { calls.push(["downloadAttachment", id, name]); return new Blob(["pdf"], { type: "application/pdf" }); },
     ...overrides.data,
   };
+  const { data: dataOverrides = {}, ...galleryOverrides } = overrides;
   const gallery = module.createRecurringExpensesGallery({
     document: dom.window.document,
-    data,
+    data: { ...data, ...dataOverrides },
     now: () => new Date("2026-09-23T12:00:00-03:00"),
-    ...overrides,
+    ...galleryOverrides,
   });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   return { dom, gallery, data, calls, root: () => dom.window.document.querySelector(".re-overlay") };
@@ -69,6 +70,8 @@ test("G19 mostra campos de despesas, recorrência em português, moeda e datas b
     assert.ok(ctx.root().querySelector(`[name="${name}"]`), `G19 filter ${name}`);
   }
   assert.deepEqual([...ctx.root().querySelectorAll(".re-card")].map(card => card.dataset.itemId), ["33"]);
+  assert.equal(ctx.root().querySelectorAll('.re-card [data-action="details"]').length, 0, "recurring-expense data opens from its edit pencil");
+  assert.equal(ctx.root().querySelectorAll('.re-card [data-gallery-action="edit"]').length, 1);
   const cardText = ctx.root().querySelector(".re-card").textContent;
   assert.match(cardText, /TARIFA DE ENERGIA/);
   assert.match(cardText, /CEMIG/);
@@ -100,22 +103,30 @@ test("pesquisa e filtros G19 combinam localmente sem recarregar dados", async t 
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
 });
 
-test("detalhes escapam texto e anexos abrem no visualizador compartilhado", async t => {
+test("dados da despesa abrem pelo lápis e anexos no visualizador compartilhado", async t => {
   const rows = [{ id: "33", hasAttachments: true, fields: {
     ID: 33, DESCRICAOPGTO: "TARIFA <img src=x onerror=alert(1)>", "VALOR MENSAL": "144,92", RECORRENCIA: "Month",
     DATAINICIO: "2026-07-27T03:00:00Z", STATUS: "ATIVO", Criado: "2026-07-27T19:07:00Z",
   } }];
   const opened = [];
-  const ctx = await setup(t, { rows, openMediaCollection: async items => opened.push(items) });
+  const ctx = await setup(t, { rows, openMediaCollection: async items => opened.push(items), data: {
+    async loadEditor(id) {
+      return {
+        entity: { id: "despesas", title: "Despesa" },
+        item: { id, fields: { DESCRICAOPGTO: rows[0].fields.DESCRICAOPGTO } },
+        columns: [{ name: "DESCRICAOPGTO", label: "Descrição", control: "textarea", editable: true }],
+        contract: { hasForm: true },
+      };
+    },
+  } });
   await ctx.gallery.open();
-  button(ctx.root(), "Detalhes").click();
-  const detail = ctx.root().querySelector(".re-detail");
-  assert.equal(detail.getAttribute("role"), "dialog");
-  assert.match(detail.textContent, /27\/07\/2026/);
-  assert.match(detail.textContent, /R\$\s*144,92/);
-  assert.equal(detail.querySelector("img, [onerror]"), null);
-  assert.match(detail.textContent, /TARIFA <img src=x onerror=alert\(1\)>/);
-  button(detail, "Fechar detalhes").click();
+  ctx.root().querySelector('.re-card[data-item-id="33"] [data-gallery-action="edit"]').click();
+  for (let attempt = 0; attempt < 20 && !ctx.root().querySelector('[data-dynamic-form]'); attempt++) await settle();
+  assert.equal(ctx.root().querySelector('[data-dynamic-form] [name="DESCRICAOPGTO"]').value,
+    "TARIFA <img src=x onerror=alert(1)>");
+  assert.equal(ctx.root().querySelector("[onerror]"), null);
+  assert.equal(ctx.root().querySelector('[data-action="details"]'), null);
+  ctx.root().querySelector('[data-form-cancel]').click();
 
   ctx.root().querySelector('.re-card[data-item-id="33"] [data-action="attachments"]').click();
   await settle();

@@ -106,10 +106,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   line-clamp: 4;
-  cursor: pointer;
+  cursor: default;
 }
 .tg-description--expanded { display: block; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
-.tg-description:focus-visible { outline: 3px solid #e3aa19; outline-offset: 3px; }
 .tg-attachment-retry {
   display: block;
   margin-top: 7px;

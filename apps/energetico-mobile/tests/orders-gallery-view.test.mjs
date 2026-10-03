@@ -57,6 +57,7 @@ test("orders gallery mirrors Screen10 actions, sorting, filters and page sizes",
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
   assert.equal(ctx.root().querySelectorAll('[data-action="edit"]').length, 3);
   assert.equal(ctx.root().querySelectorAll('[data-action="delete"]').length, 3);
+  assert.equal(ctx.root().querySelectorAll('[data-action="details"]').length, 0, "orders have no separate details shortcut");
   assert.equal(ctx.root().querySelectorAll('[data-action="mascot-details"] img').length, 3);
 });
 
@@ -100,18 +101,15 @@ test("Screen10 dates render as dd/mm/yyyy and untrusted SharePoint values stay t
   assert.equal(ctx.root().querySelector(".og-cards [onerror]"), null);
 });
 
-test("details open in a modal table with Screen10 fields and safely formatted values", async t => {
+test("orders show their data without a separate details control", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();
-  button(ctx.root(), "Detalhes").click();
-  await settle();
-  const panel = ctx.root().querySelector(".og-detail");
-  assert.equal(panel.getAttribute("role"), "dialog");
-  assert.ok(panel.querySelector("table.og-data-table"));
-  for (const name of ["ID", "FILIAL", "FORNECEDOR", "FORMAPGTO", "VALORTOTAL", "STATUS", "NOTA FISCAL"]) assert.match(panel.textContent, new RegExp(name));
-  assert.doesNotMatch(panel.innerHTML, /<img|onerror=/i);
-  button(panel, "Fechar detalhes").click();
-  assert.equal(panel.hidden, true);
+  const card = ctx.root().querySelector('.og-card[data-item-id="319"]');
+  assert.equal(card.querySelector('[data-action="details"]'), null);
+  assert.ok(card.querySelector('[data-gallery-action="edit"]'));
+  assert.match(card.textContent, /IMPERMATEX/);
+  assert.match(card.textContent, /Pedido <img src=x onerror=alert\(1\)>/);
+  assert.equal(card.querySelector('[onerror]'), null);
 });
 
 test("the Screen10 mascot opens the selected order details", async t => {
@@ -120,7 +118,7 @@ test("the Screen10 mascot opens the selected order details", async t => {
 
   const mascot = ctx.root().querySelector('.og-card[data-item-id="320"] [data-action="mascot-details"]');
   assert.ok(mascot);
-  assert.equal(mascot.getAttribute("aria-label"), "Abrir detalhes do pedido #320");
+  assert.equal(mascot.getAttribute("aria-label"), "Abrir relatório do pedido e lançamentos vinculados #320");
   assert.match(mascot.querySelector("img").src, /mascote\.png$/);
   mascot.click();
 
@@ -216,7 +214,8 @@ test("orders with attachments show a full-height attachment rail on the left, be
   assert.equal(rail.dataset.action, "attachments");
   assert.ok(main.querySelector(".og-card-heading"));
   assert.ok(main.querySelector(".og-card-fields"));
-  assert.ok(main.querySelector('[data-action="details"]'));
+  assert.equal(main.querySelector('[data-action="details"]'), null);
+  assert.ok(card.querySelector('[data-gallery-action="edit"]'));
   const withoutAttachments = ctx.root().querySelector('.og-card[data-item-id="320"]');
   assert.equal(withoutAttachments.querySelector(".og-card-attachment-rail"), null,
     "orders without attachments keep the full-width card layout");

@@ -380,12 +380,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const modified = field(fields, ["MODIFICADO", "MODIFIED"]) ?? row?.lastModifiedDateTime;
     if (created) times.append(el("span", "tg-created", `Criado em ${formatTimestamp(created)}`));
     if (modified) times.append(el("span", "tg-modified", `Mod. em ${formatTimestamp(modified)}`));
-    const description = el("button", "tg-description", task);
+    const description = el("p", "tg-description", task);
     description.id = `tg-description-${row.id}`;
-    description.type = "button";
-    description.dataset.action = "details";
-    description.setAttribute("aria-label", `Abrir detalhes da tarefa ${id}: ${task}`);
-    description.addEventListener("click", () => openDetails(row));
     main.append(heading, badges, times, description);
     if (hasAttachmentControl) card.append(renderAttachmentRail(row));
     const recordControls = recordActions.render(row);

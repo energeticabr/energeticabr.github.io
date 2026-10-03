@@ -198,19 +198,26 @@ test("toques em opções de ordenação e status aplicam os filtros da galeria",
   assert.equal(ctx.root().querySelector('[name="status"]').value, "EM ATENDIMENTO");
 });
 
-test("detalhes mostram os campos completos em tabela e anexos abrem no visualizador compartilhado", async t => {
+test("tarefa abre seus campos pelo lápis e anexos no visualizador compartilhado", async t => {
   const opened = [];
-  const ctx = await setup(t, { openMediaCollection: async items => opened.push(items) });
+  const ctx = await setup(t, { openMediaCollection: async items => opened.push(items), data: {
+    async loadEditor(id) {
+      return {
+        entity: { id: "tarefas", title: "Tarefa" },
+        item: { id, fields: { "OBSERVAÇÕES CONCLUSÃO": "Texto <img src=x onerror=alert(1)>" } },
+        columns: [{ name: "OBSERVAÇÕES CONCLUSÃO", label: "Observações conclusão", control: "textarea", editable: true }],
+        contract: { hasForm: true },
+      };
+    },
+  } });
   await ctx.gallery.open();
-  ctx.root().querySelector('.tg-card[data-item-id="176"] .tg-description').click();
-  const detail = ctx.root().querySelector(".tg-detail");
-  assert.equal(detail.getAttribute("role"), "dialog");
-  assert.ok(detail.querySelector("table"));
-  assert.match(detail.textContent, /OBSERVAÇÕES CONCLUSÃO/);
-  assert.match(detail.textContent, /Texto <img src=x onerror=alert\(1\)>/);
-  assert.equal(detail.querySelector("img, [onerror]"), null);
-  assert.match(detail.textContent, /23\/09\/2026/);
-  button(detail, "Fechar detalhes").click();
+  ctx.root().querySelector('.tg-card[data-item-id="176"] [data-gallery-action="edit"]').click();
+  for (let attempt = 0; attempt < 20 && !ctx.root().querySelector('[data-dynamic-form]'); attempt++) await settle();
+  assert.equal(ctx.root().querySelector('[data-dynamic-form] [name="OBSERVAÇÕES CONCLUSÃO"]').value,
+    "Texto <img src=x onerror=alert(1)>");
+  assert.equal(ctx.root().querySelector("[onerror]"), null);
+  assert.equal(ctx.root().querySelector('.tg-description[data-action="details"]'), null);
+  ctx.root().querySelector('[data-form-cancel]').click();
   await settle();
   ctx.root().querySelector('.tg-card[data-item-id="176"] [data-action="attachments"]').click();
   await settle();
@@ -288,7 +295,8 @@ test("G7 apresenta três indicadores, busca compacta e linhas alternadas com aç
   assert.match(shown[0].textContent, /ATIVIDADE EMERGENCIAL/);
   assert.match(shown[0].textContent, /COMPRAS E SUPRIMENTOS/);
   assert.match(shown[0].textContent, /05\/10\/2026/);
-  assert.ok(shown[0].querySelector('.tg-description[data-action="details"]'));
+  assert.equal(shown[0].querySelector('.tg-description[data-action="details"]'), null, "task description is not a separate details shortcut");
+  assert.equal(shown[0].querySelector('.tg-description').tagName, "P");
   assert.ok(shown[0].querySelector('.gallery-record-actions [data-gallery-action="edit"]'));
   assert.ok(shown[0].querySelector('.gallery-record-actions [data-gallery-action="delete"]'));
 });

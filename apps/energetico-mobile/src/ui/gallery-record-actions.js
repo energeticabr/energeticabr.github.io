@@ -297,7 +297,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         control.className = `gallery-record-action gallery-record-action--${action}`;
         control.setAttribute("aria-label", `${action === "edit" ? "Editar" : "Deletar"} item de ID ${row.id}`);
         control.disabled = disposed || mutationPending;
-        control.append(icon(action));
+        if (action === "edit") control.textContent = "✏️";
+        else control.append(icon(action));
         recordButtons.add(control);
         wrapper.append(control);
       }
