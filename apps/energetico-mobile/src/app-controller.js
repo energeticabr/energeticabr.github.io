@@ -60,6 +60,12 @@ async function defaultPresencePaymentReportDataFactory(options) {
   return createPresencePaymentReportData(options);
 }
 
+async function defaultExtraReportsFactory(options) {
+  if (!options.document?.createElement) return [];
+  const { createExtraReports } = await import("./ui/extra-reports-factory.js");
+  return createExtraReports(options);
+}
+
 async function defaultPaymentProgrammingGalleryFactory(options) {
   const { createPaymentProgrammingGallery } = await import("./ui/payment-programming-gallery-view.js");
   return createPaymentProgrammingGallery(options);
@@ -651,6 +657,7 @@ export function createAppController({
   contractorReportsFactory = defaultContractorReportsFactory,
   contractorReportDataFactory = defaultContractorReportDataFactory,
   presencePaymentReportDataFactory = defaultPresencePaymentReportDataFactory,
+  extraReportsFactory = defaultExtraReportsFactory,
   paymentProgrammingGalleryFactory = defaultPaymentProgrammingGalleryFactory,
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
@@ -4280,10 +4287,12 @@ export function createAppController({
           };
           const data = await contractorReportDataFactory({ tokenProvider });
           const presenceData = await presencePaymentReportDataFactory({ tokenProvider });
+          const extraReports = await extraReportsFactory({ tokenProvider, document: globalThis.document });
           assertSession();
           const panel = await contractorReportsFactory({
             data,
             presenceData,
+            extraReports,
             onHome: () => { assertSession(); return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID); },
           });
           if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }

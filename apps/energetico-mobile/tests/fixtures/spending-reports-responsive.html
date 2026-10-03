@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/src/ui/spending-reports.css">
+  <style>html,body { width: 100%; margin: 0; box-sizing: border-box; } body { padding: 10px; font-family: Arial, sans-serif; } main { width: 100%; min-width: 0; }</style>
+</head>
+<body>
+  <main id="host"></main>
+  <script type="module">
+    import { createSpendingReportsView } from "/src/ui/spending-reports-view.js";
+    const long = "FORNECEDOR-COM-NOME-ININTERRUPTO-MUITO-LONGO-".repeat(12);
+    const row = { id: "123", date: "2026-09-12", paymentDate: "2026-09-25", supplier: long,
+      product: long, branch: long, disbursement: "SIM", order: "42", stage: long, account: long,
+      description: long, unit: 20, quantity: 2, freight: 5, total: 45 };
+    const view = createSpendingReportsView({ document, data: { async loadSnapshot() {
+      return { launches: [row], productTypes: [{ product: long, expenseType: long }] };
+    } } });
+    document.querySelector("#host").append(view.element);
+    await view.open(Number(new URLSearchParams(location.search).get("report")));
+    document.documentElement.dataset.ready = "true";
+  </script>
+</body>
+</html>

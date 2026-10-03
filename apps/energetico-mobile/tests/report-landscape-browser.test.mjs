@@ -20,7 +20,7 @@ const browser = [
 ].find((path) => path && existsSync(path));
 
 test(
-  "Relatórios 1 e 2 não exigem rolagem lateral em telefone horizontal, mesmo com texto longo",
+  "menu com 17 relatórios e relatórios 1 e 2 não exigem rolagem lateral em telefone horizontal",
   { timeout: 90_000 },
   async (t) => {
     if (!browser) return t.skip("Chromium/Chrome indisponível neste ambiente");
@@ -128,7 +128,7 @@ test(
         return response.result.value;
       };
       for (const width of [667, 844])
-        for (const report of ["1", "2"]) {
+        for (const report of ["hub", "1", "2"]) {
           await send(
             "Emulation.setDeviceMetricsOverride",
             { width, height: 390, deviceScaleFactor: 1, mobile: false },
@@ -144,7 +144,7 @@ test(
           let ready = false;
           for (let i = 0; i < 200 && !ready; i++) {
             ready = await evaluate(
-              `location.search.includes("report=${report}") && document.documentElement?.dataset.viewportWidth === "${width}" && Boolean(document.querySelector('${report === "1" ? ".cr-main-table" : ".pp-order-card"}'))`,
+              `location.search.includes("report=${report}") && document.documentElement?.dataset.viewportWidth === "${width}" && Boolean(document.querySelector('${report === "hub" ? ".cr-hub-grid button:last-child" : report === "1" ? ".cr-main-table" : ".pp-order-card"}'))`,
             );
             if (!ready) await delay(100);
           }
@@ -173,9 +173,18 @@ test(
         await Promise.race([exited, delay(3000)]);
       }
       await server.close();
-      // No Windows o Chrome pode manter arquivos do perfil bloqueados por alguns instantes
-      // depois que o processo principal termina.
-      rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+      // O Chrome no Windows pode manter arquivos bloqueados após encerrar o processo principal.
+      let removed = false;
+      for (let attempt = 0; attempt < 12 && !removed; attempt++) {
+        try {
+          rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
+          removed = true;
+        } catch (error) {
+          if (error.code !== "EPERM" && error.code !== "EBUSY") throw error;
+          await delay(300);
+        }
+      }
+      if (!removed) t.diagnostic(`Chrome ainda mantinha o perfil temporário aberto: ${profile}`);
     }
   },
 );
