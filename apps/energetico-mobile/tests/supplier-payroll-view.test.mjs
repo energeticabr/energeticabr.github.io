@@ -14,7 +14,7 @@ async function harness() {
     accounts = [{ id: "3", label: "PIX" }],
     stages = [{ id: "4", label: "FUNDAÇÃO" }];
   const posts = [];
-  let closed = 0;
+  let closed = 0, home = 0;
   const data = {
     loadSuppliers: async () => suppliers,
     loadProducts: async () => products,
@@ -37,6 +37,7 @@ async function harness() {
     onClose: () => {
       closed++;
     },
+    onHome: () => { home++; },
   });
   await view.open();
   const click = async (selector) => {
@@ -59,6 +60,7 @@ async function harness() {
     get closed() {
       return closed;
     },
+    get home() { return home; },
   };
 }
 async function fillToSheet(h) {
@@ -108,6 +110,87 @@ test("IDFOLHA é escolhido antes do resumo e enviado na postagem obrigatória", 
   assert.match(doc.body.textContent, /postada e vinculada/);
   assert.match(doc.body.textContent, /IDFOLHA: 5/);
   assert.equal(doc.querySelector("[data-payroll-link-no]"), null);
+});
+
+test("cabeçalho da folha mantém seta e casinha em todas as etapas e volta sem perder rubricas", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  const doc = h.dom.window.document;
+  const navigation = () => {
+    const header = doc.querySelector('.supplier-payroll-header');
+    assert.ok(header.querySelector('[data-payroll-header-back] svg'), 'seta de retornar no cabeçalho');
+    assert.ok(header.querySelector('[data-payroll-home] svg'), 'casinha do menu principal no cabeçalho');
+    assert.equal(header.firstElementChild.dataset.payrollHeaderBack, '');
+    assert.equal(header.lastElementChild.dataset.payrollHome, '');
+  };
+  navigation();
+  await fill(h);
+  navigation();
+  const questions = [/Qual IDFOLHA/, /Indique a etapa/, /Informe os valores/, /Qual produto/, /QUAL FORNECEDOR/, /Qual é a data/];
+  for (const question of questions) {
+    await h.click('[data-payroll-header-back]');
+    navigation();
+    assert.match(doc.querySelector('.supplier-payroll-question').textContent, question);
+    if (/Informe os valores/.test(question.source)) assert.equal(doc.querySelector('[name=salary-value]').value, '100,50');
+  }
+  await h.click('[data-payroll-header-back]');
+  assert.equal(doc.querySelector('.supplier-payroll-page').hidden, true);
+  assert.equal(h.closed, 1);
+  assert.equal(h.home, 0);
+  assert.equal(h.posts.length, 0);
+});
+
+test("casinha sai diretamente para o menu e descarta a folha não postada", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await fill(h);
+  await h.click('[data-payroll-home]');
+  assert.equal(h.dom.window.document.querySelector('.supplier-payroll-page').hidden, true);
+  assert.equal(h.closed, 1);
+  assert.equal(h.home, 1);
+  assert.equal(h.posts.length, 0);
+  await h.view.open();
+  assert.equal(h.dom.window.document.querySelector('[name=date]').value, '');
+  assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual é a data/);
+});
+
+test("seta cancela consulta pendente sem deixar resposta antiga avançar a folha", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await fill(h);
+  for (let i = 0; i < 3; i++) await h.click('[data-payroll-back]');
+  let resolveStages;
+  h.data.loadStages = () => new Promise(resolve => { resolveStages = resolve; });
+  await h.click('[data-payroll-next]');
+  await h.click('[data-payroll-header-back]');
+  assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
+  resolveStages([{ id: '4', label: 'FUNDAÇÃO' }]);
+  await flush();
+  assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
+  assert.equal(h.posts.length, 0);
+});
+
+test("seta e casinha não interrompem uma gravação de folha já em andamento", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await fill(h);
+  const complete = h.data.post;
+  let finish;
+  h.data.post = async (draft, progress) => { await new Promise(resolve => { finish = resolve; }); return complete(draft, progress); };
+  await h.click('[data-payroll-post]');
+  const doc = h.dom.window.document;
+  assert.equal(doc.querySelector('[data-payroll-header-back]').disabled, true);
+  assert.equal(doc.querySelector('[data-payroll-home]').disabled, true);
+  await h.click('[data-payroll-header-back]');
+  await h.click('[data-payroll-home]');
+  assert.equal(h.closed, 0);
+  assert.equal(h.home, 0);
+  finish();
+  await flush();
+  assert.match(doc.querySelector('.supplier-payroll-question').textContent, /Folha postada/);
+  assert.equal(doc.querySelector('[data-payroll-home]').disabled, false);
+  await h.click('[data-payroll-home]');
+  assert.equal(h.home, 1);
 });
 test("sem IDFOLHA cadastrado não há como postar ou concluir sem vínculo", async (t) => {
   const h = await harness();
