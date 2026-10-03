@@ -171,6 +171,7 @@ export function createOrdersGallery({
   addControl("total", "Valor total", "input", "search").placeholder = "Valor ou faixa";
   addControl("id", "ID", "input", "search").inputMode = "numeric";
   const sort = addControl("sort", "Ordenação", "select", "text", false);
+  sort.setAttribute('aria-label', 'Ordenar pedidos por');
   for (const [value, label] of SORTS) { const option = el("option", "", label); option.value = value; sort.append(option); }
   sort.value = sortValue;
   const pageSizeControl = addControl("pageSize", "Itens por página", "select", "text", false);
@@ -222,8 +223,7 @@ export function createOrdersGallery({
       report.type = 'button';
       report.dataset.orderLinkedReport = '';
       report.addEventListener('click', () => {
-        recordActions.close();
-        void openLinkedDetails(row);
+        void openLinkedDetails(row, report);
       });
       return report;
     },
@@ -339,7 +339,9 @@ export function createOrdersGallery({
     const headingCopy = el('div', 'og-heading-copy');
     headingCopy.append(el('h2', '', text(field(fields, ['FORNECEDOR']) || 'Pedido')));
     const statusText = text(field(fields, FIELD_ALIASES.status)) || "Status não informado";
-    const status = el('span', `og-status${/pendente/i.test(statusText) ? ' og-status--pending' : ''}`, statusText);
+    const statusKind = /pendente/i.test(statusText) ? 'pending'
+      : /^(aprovado|pago)$/i.test(statusText.trim()) ? 'approved' : 'neutral';
+    const status = el('span', `og-status og-status--${statusKind}`, statusText);
     headingCopy.append(status);
     heading.append(el('span', 'og-card-id', text(field(fields, ['ID']) ?? row.id)), headingCopy);
     const cardFields = el("dl", "og-card-fields");
@@ -445,9 +447,9 @@ export function createOrdersGallery({
     return heading;
   }
 
-  async function openLinkedDetails(row) {
+  async function openLinkedDetails(row, trigger = null) {
     if (!opened || destroyed) return;
-    const origin = doc.activeElement;
+    const origin = trigger || doc.activeElement;
     closeDetails();
     detailReturnFocus = origin;
     const currentDetailsSession = ++detailsSession;

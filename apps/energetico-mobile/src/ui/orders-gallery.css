@@ -82,11 +82,6 @@
 .og-card-field { display: grid; grid-template-columns: minmax(100px, 38%) minmax(0, 1fr); gap: 7px; align-items: baseline; min-width: 0; }
 .og-card-field dt { color: #183b5e; font-size: .74rem; font-weight: 850; }
 .og-card-field dd { margin: 0; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
-.og-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.og-card-actions > .og-button--detail { flex: 1 1 140px; }
-.og-mascot-button { display: grid; flex: 0 0 48px; width: 48px; min-height: 44px; place-items: center; padding: 4px; border-color: #a9c5d1; background: #edf7fa; }
-.og-mascot-button img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.og-mascot-button:hover:not(:disabled) { background: #dceef4; }
 .og-button--edit { color: #0d3767; border-color: #6d91af; }
 .og-button--danger { color: #8e1f25; border-color: #c87c82; background: #fff5f5; }
 .og-button--danger:hover:not(:disabled) { background: #fde8e9; }
@@ -320,9 +315,10 @@
 .og-orders-overlay .og-heading-copy { display: grid; justify-items: start; align-content: start; gap: 4px; min-width: 0; }
 .og-orders-overlay .og-order-card .og-card-heading h2 { color: #103d72; font-size: .82rem; font-weight: 850; line-height: 1.12; }
 .og-orders-overlay .og-order-card .og-status { display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 3px 5px; border: 0; border-radius: 5px; color: #176439; background: #e4f6e9; font-size: .58rem; line-height: 1.15; }
-.og-orders-overlay .og-order-card .og-status::before { content: '✓'; font-size: .7rem; }
+.og-orders-overlay .og-order-card .og-status--approved::before { content: '✓'; font-size: .7rem; }
 .og-orders-overlay .og-order-card .og-status--pending { color: #a25a07; background: #fff1d9; }
 .og-orders-overlay .og-order-card .og-status--pending::before { content: '◷'; font-size: .8rem; }
+.og-orders-overlay .og-order-card .og-status--neutral { color: #536b7d; background: #edf2f6; }
 .og-orders-overlay .og-order-card > .gallery-record-actions { position: absolute; top: 7px; right: 7px; display: flex; flex-direction: row; gap: 5px; grid-column: auto; grid-row: auto; z-index: 1; }
 .og-orders-overlay .og-order-card .gallery-record-action { width: 36px; height: 36px; min-width: 36px; padding: 7px; border-radius: 6px; }
 .og-orders-overlay .og-order-card .gallery-record-action--delete { color: #be202d; background: #fdecef; }
@@ -335,6 +331,7 @@
 .og-orders-overlay .og-order-card .og-card-field dt { grid-column: 2; color: #607789; font-size: .56rem; font-weight: 750; line-height: 1.05; }
 .og-orders-overlay .og-order-card .og-card-field dd { grid-column: 2; color: #123d70; font-size: .67rem; font-weight: 800; line-height: 1.18; white-space: normal; overflow-wrap: anywhere; }
 .og-orders-overlay .og-editor-report { display: block; margin: 12px 0 0; color: #123d70; border-color: #a9c6d8; background: #eff7fb; }
+.og-orders-overlay .og-detail.olr-detail { z-index: 1901; }
 @media (max-width: 360px) {
   .og-orders-overlay .og-header { gap: 5px; }
   .og-orders-overlay .og-header .og-button { padding-inline: 6px; font-size: .7rem; }

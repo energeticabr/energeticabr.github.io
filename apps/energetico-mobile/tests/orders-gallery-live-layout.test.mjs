@@ -93,6 +93,26 @@ test('Galeria Pedidos keeps compact paired cards and reachable controls on mobil
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }, sessionId);
         writeFileSync(process.env.ORDERS_GALLERY_SCREENSHOT, Buffer.from(shot.data, 'base64'));
       }
+      if (width === 390) {
+        await evaluate(`document.querySelector('.og-order-card[data-item-id="353"] [data-gallery-action="edit"]').click()`);
+        let reportReady = false;
+        for (let attempt = 0; attempt < 30 && !reportReady; attempt++) {
+          reportReady = await evaluate(`Boolean(document.querySelector('[data-order-linked-report]'))`);
+          if (!reportReady) await delay(50);
+        }
+        assert.ok(reportReady, 'editor deve oferecer o relatório vinculado');
+        await evaluate(`document.querySelector('[data-order-linked-report]').click()`);
+        const modalLayout = await evaluate(`(() => {
+          const detail = document.querySelector('.og-detail');
+          const editor = document.querySelector('.gallery-record-overlay');
+          const top = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+          return { detailVisible: !detail.hidden, editorVisible: Boolean(editor),
+            detailZ: Number(getComputedStyle(detail).zIndex), editorZ: Number(getComputedStyle(editor).zIndex),
+            detailOnTop: detail === top || detail.contains(top) };
+        })()`);
+        assert.ok(modalLayout.detailVisible && modalLayout.editorVisible && modalLayout.detailZ > modalLayout.editorZ && modalLayout.detailOnTop,
+          `Relatório deve sobrepor o editor sem destruir o rascunho: ${JSON.stringify(modalLayout)}`);
+      }
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

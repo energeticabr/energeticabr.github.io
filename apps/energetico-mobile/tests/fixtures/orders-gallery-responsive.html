@@ -26,6 +26,9 @@
     const gallery = createOrdersGallery({ document, data: {
       async loadSnapshot() { return { rows }; },
       async listAttachments(id) { return id === '353' ? [{ fileName: 'pedido.pdf' }, { fileName: 'foto.jpg' }] : []; },
+      async loadEditor(id) { return { entity: { id: 'pedidos', title: 'Pedido' }, item: { id, fields: { FORNECEDOR: 'ISRAEL ESCORAMENTO E ARMAÇÕES' } },
+        columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control: 'text', editable: true }], contract: { hasForm: true } }; },
+      async loadLinkedReport() { return new Promise(() => {}); },
     } });
     await gallery.open();
     document.documentElement.dataset.ready = 'true';

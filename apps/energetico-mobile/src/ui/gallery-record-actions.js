@@ -76,6 +76,10 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     error.hidden = true;
     const body = element("div", "gallery-record-dialog-body");
     dialog.append(heading, error, body);
+    if (operation === 'edit') {
+      const extra = renderEditorExtra?.(row);
+      if (extra) dialog.append(extra);
+    }
     overlay.append(dialog);
     (host || document.body).append(overlay);
     const state = { epoch, row, operation, overlay, dialog, error, body, focus: trigger || document.activeElement, busy: false, controller: null, loadEpoch: 0 };
@@ -249,8 +253,6 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
           }));
         },
       });
-      const extra = renderEditorExtra?.(state.row);
-      if (extra) state.body.append(extra);
       state.fieldLocks = bindForm43FieldLocks(state.body, context, { isBusy: () => state.busy || state.persisted });
       (state.body.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || focusable(state)[0] || state.dialog).focus();
     } catch (error) {

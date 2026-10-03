@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createOrdersGallery } from '../src/ui/orders-gallery-view.js';
 
-async function gallery(t) {
+async function gallery(t, dataOverrides = {}) {
   const dom = new JSDOM('<button>Pedidos</button>', { url: 'https://example.test' });
   const rows = [
     { id: '353', hasAttachments: true, fields: {
@@ -19,6 +19,7 @@ async function gallery(t) {
     async listAttachments(id) { return id === '353' ? [{ fileName: 'pedido.pdf' }, { fileName: 'foto.jpg' }] : []; },
     async loadEditor(id) { return { entity: { id: 'pedidos', title: 'Pedido' }, item: { id, fields: { FORNECEDOR: 'CEMIG' } }, columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control: 'text', editable: true }], contract: { hasForm: true } }; },
     async loadLinkedReport(id) { return { orderId: id, order: { fields: {} }, active: [], deleted: [], summary: { activeCount: 0, deletedCount: 0 } }; },
+    ...dataOverrides,
   };
   const view = createOrdersGallery({ document: dom.window.document, data });
   t.after(() => { view.destroy(); dom.window.close(); });
@@ -75,7 +76,44 @@ test('the linked order report remains reachable from the pencil editor instead o
   assert.ok(report, 'the editor exposes the related report without a card details button');
   report.click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(root.querySelector('.gallery-record-dialog'), null);
+  assert.ok(root.querySelector('.gallery-record-dialog'), 'the editor remains under the linked report');
   assert.equal(root.querySelector('.og-detail').hidden, false);
   assert.match(root.querySelector('.og-detail').textContent, /Pedido #351/);
+});
+
+test('opening and closing the linked report preserves unsaved editor values', async t => {
+  const { root } = await gallery(t);
+  root.querySelector('.og-card[data-item-id="351"] [data-gallery-action="edit"]').click();
+  for (let attempt = 0; attempt < 20 && !root.querySelector('[data-dynamic-form]'); attempt++) await new Promise(resolve => setImmediate(resolve));
+  const supplier = root.querySelector('.gallery-record-dialog [name="FORNECEDOR"]');
+  assert.ok(supplier);
+  supplier.value = 'ALTERAÇÃO AINDA NÃO SALVA';
+  root.querySelector('[data-order-linked-report]').click();
+  assert.equal(root.querySelector('.og-detail').hidden, false);
+  root.querySelector('.og-detail-heading button').click();
+  assert.equal(root.querySelector('.og-detail').hidden, true);
+  assert.equal(root.querySelector('.gallery-record-dialog [name="FORNECEDOR"]').value, 'ALTERAÇÃO AINDA NÃO SALVA');
+});
+
+test('the linked report is still available when the editor metadata fails', async t => {
+  const { root } = await gallery(t, { async loadEditor() { throw new Error('Metadados indisponíveis'); } });
+  root.querySelector('.og-card[data-item-id="351"] [data-gallery-action="edit"]').click();
+  for (let attempt = 0; attempt < 20 && !root.querySelector('.gallery-record-dialog-error:not([hidden])'); attempt++) await new Promise(resolve => setImmediate(resolve));
+  assert.match(root.querySelector('.gallery-record-dialog-error').textContent, /Metadados indisponíveis/);
+  const report = root.querySelector('[data-order-linked-report]');
+  assert.ok(report);
+  report.click();
+  assert.equal(root.querySelector('.og-detail').hidden, false);
+});
+
+test('unknown and rejected statuses are neutral, not marked approved', async t => {
+  const { root } = await gallery(t, { async loadSnapshot() { return { rows: [
+    { id: '353', fields: { FORNECEDOR: 'A', STATUS: 'REJEITADO' } },
+    { id: '351', fields: { FORNECEDOR: 'B' } },
+  ] }; } });
+  for (const card of root.querySelectorAll('.og-order-card')) {
+    const status = card.querySelector('.og-status');
+    assert.ok(status.classList.contains('og-status--neutral'));
+    assert.equal(status.classList.contains('og-status--approved'), false);
+  }
 });

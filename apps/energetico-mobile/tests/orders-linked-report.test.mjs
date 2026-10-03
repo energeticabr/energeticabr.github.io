@@ -122,7 +122,7 @@ async function openReport(ctx, id) {
   const button = ctx.root.querySelector('[data-order-linked-report]');
   assert.ok(button, 'linked report is reachable through the pencil editor');
   button.click();
-  return ctx.root.querySelector(`.og-card[data-item-id="${id}"] [data-gallery-action="edit"]`);
+  return button;
 }
 
 test('pencil editor keeps the linked-order report while the separate Details action is absent', async t => {
@@ -181,14 +181,14 @@ test('report errors offer an exact-order retry and closing prevents late renderi
   assert.equal(ctx.panel.children.length, 0);
 });
 
-test('Escape closes the linked popup, aborts loading and restores focus to the selected pencil', async t => {
+test('Escape closes the linked popup, aborts loading and restores focus to its editor trigger', async t => {
   const pending = deferred();
   const ctx = await galleryHarness(t, () => pending.promise);
-  const pencil = await openReport(ctx, '319');
+  const reportButton = await openReport(ctx, '319');
   ctx.panel.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(ctx.panel.hidden, true);
   assert.equal(ctx.calls[0][1].signal.aborted, true);
-  assert.equal(ctx.dom.window.document.activeElement, pencil);
+  assert.equal(ctx.dom.window.document.activeElement, reportButton);
   pending.resolve(await report(harness())); await tick();
   assert.equal(ctx.panel.hidden, true);
 });
