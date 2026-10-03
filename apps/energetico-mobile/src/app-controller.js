@@ -5572,6 +5572,7 @@ export function createAppController({
       signaturePlacementOverride = {
         kind: "attachment",
         targetAttachmentId: String(item.id),
+        preserveSource: item.existing === true || item.readOnly === true || item.origin === "existing",
         messageId: `attachment:${item.id}`,
         stage: "document_signing_waiting_position",
         document: {
@@ -5650,11 +5651,11 @@ export function createAppController({
         configurable: true,
       });
 
-      // The generated PDF is the replacement artifact, not a second user
-      // attachment. Keep it out of the tray while the VM reconciles the
-      // upload and returns the final flow state.
+      // New source PDFs are replaced in the staged tray. An existing
+      // SharePoint PDF stays read-only; show its signed copy so the user
+      // can review and submit it with the pending document.
       const uploaded = await queueSelectedFiles(() => [signedFile], {
-        hideFromAttachmentTray: true,
+        hideFromAttachmentTray: placement.preserveSource !== true,
       });
       if (!uploaded) throw new Error("O PDF assinado foi preservado para nova tentativa, mas ainda não foi confirmado pela VM.");
 

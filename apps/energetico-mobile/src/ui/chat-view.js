@@ -1713,7 +1713,7 @@ function renderPendingFile(item) {
   </li>`;
 }
 
-function renderAttachments(attachments, busy = false, canTransfer = false, canBulkDelete = false) {
+function renderAttachments(attachments, busy = false, canTransfer = false, canBulkDelete = false, canSignExisting = false) {
   if (!attachments.length) return "";
   const hasNewAttachment = attachments.some(item => !(item.existing === true || item.readOnly === true || item.origin === "existing"));
   const bulkDelete = canBulkDelete && hasNewAttachment
@@ -1730,7 +1730,11 @@ function renderAttachments(attachments, busy = false, canTransfer = false, canBu
       const existing = item.existing === true || item.readOnly === true || item.origin === "existing";
       const label = existing ? "JÁ EXISTIA" : "NOVO";
       const share = `<button class="chat-attachment-share" type="button" data-action="share-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Encaminhar ${escapeHtml(item.fileName)}" title="Encaminhar anexo">${shareAttachmentIcon}</button>`;
-      const editActions = existing ? "" : `<button class="chat-attachment-sign" type="button" data-action="open-signature-pad" data-file-id="${escapeHtml(item.id)}" aria-label="Assinar documento: ${escapeHtml(item.fileName)}" title="Assinar documento"${busy ? " disabled" : ""}>✍️</button><button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button>`;
+      const isPdf = String(item.mimeType || "").toLowerCase() === "application/pdf" || /\.pdf$/i.test(item.fileName || "");
+      const sign = (!existing || (canSignExisting && isPdf))
+        ? `<button class="chat-attachment-sign" type="button" data-action="open-signature-pad" data-file-id="${escapeHtml(item.id)}" aria-label="Assinar documento: ${escapeHtml(item.fileName)}" title="Assinar documento"${busy ? " disabled" : ""}>✍️</button>`
+        : "";
+      const editActions = `${sign}${existing ? "" : `<button class="chat-attachment-compress" type="button" data-action="compress-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Comprimir anexo: ${escapeHtml(item.fileName)}" title="Comprimir anexo"${busy ? " disabled" : ""}>🗜️</button><button class="chat-attachment-delete" type="button" data-action="remove-attachment" data-file-id="${escapeHtml(item.id)}" aria-label="Excluir anexo: ${escapeHtml(item.fileName)}" title="Excluir anexo"${busy ? " disabled" : ""}>🗑️</button>`}`;
       const actions = `<span class="chat-attachment-actions">${share}${editActions}</span>`;
       const origin = existing ? "existing" : "new";
       const badge = `<span class="chat-attachment-badge chat-attachment-badge--${origin}">${label}</span>`;
@@ -2383,7 +2387,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
-    ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true)}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
+    ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
       ${generatedSignatureChoice ? "" : `<div class="attachment-actions" aria-label="Adicionar anexo">
