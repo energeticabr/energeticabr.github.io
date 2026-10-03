@@ -68,6 +68,20 @@ test("relatórios 11–13 cabem em 844×390 e 740×360 sem rolagem lateral ou co
       assert.ok(size.documentWidth <= width && size.reportWidth <= size.reportClientWidth && size.clipped.length === 0,
         `Relatório ${report}, ${width}×${height}: ${JSON.stringify(size)}`);
       assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ar-desktop-table')).display`), "none", `Tabela ${report} deve dar lugar aos cartões no telefone`);
+      const cue = await evaluate(`(() => {
+        if (${report} === 11) return { labelLayout: getComputedStyle(document.querySelector('.ar-quotation-facts .ar-field')).display,
+          labelBackground: getComputedStyle(document.querySelector('.ar-quotation-facts dt')).backgroundColor };
+        if (${report} === 12) return { branchBackground: getComputedStyle(document.querySelector('.ar-branch-heading')).backgroundColor,
+          periodAboveMetrics: document.querySelector('.ar-subtitle').getBoundingClientRect().bottom <= document.querySelector('.ar-metrics').getBoundingClientRect().top };
+        return { documentCardAccent: getComputedStyle(document.querySelector('.ar-content > .ar-card')).borderLeftWidth,
+          documentCardColor: getComputedStyle(document.querySelector('.ar-content > .ar-card')).borderLeftColor };
+      })()`);
+      if (report === 11) {
+        assert.deepEqual(cue, { labelLayout: "grid", labelBackground: "rgb(240, 242, 246)" }, `R11: ${JSON.stringify(cue)}`);
+        assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ar-brand')).display`), "none", "R11 deve começar pelo painel de título, como no Power Apps");
+      }
+      if (report === 12) assert.deepEqual(cue, { branchBackground: "rgb(6, 54, 102)", periodAboveMetrics: true }, `R12: ${JSON.stringify(cue)}`);
+      if (report === 13) assert.deepEqual(cue, { documentCardAccent: "3px", documentCardColor: "rgb(157, 0, 0)" }, `R13: ${JSON.stringify(cue)}`);
     }
     await send("Emulation.setDeviceMetricsOverride", { width: 1365, height: 768, deviceScaleFactor: 1, mobile: false }, sessionId);
     for (const report of [11, 12, 13]) {

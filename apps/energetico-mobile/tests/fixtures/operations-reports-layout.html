@@ -16,7 +16,22 @@
     7: { count: 1, rows: [{ id: "44", date: "2026-10-01", branch: long, status: "PENDENTE" }] },
     8: { summary: { pending: 1, completed: 0, total: 1 }, rows: [{ id: "7", identified: "2026-10-01", due: "2026-10-05", responsible: long, responsibleKey: long, status: "ATIVIDADE CRIADA", difficulty: long, association: long, priority: "ATIVIDADE EMERGENCIAL", task: long }] },
   };
-  for (const number of [6, 7, 8]) {
+  if (new URL(location.href).searchParams.has('visual')) {
+    snapshots[6].stages[0] = { branch: '004 - EDIFÍCIO XAVANTE', stage: 'ALVENARIA E ESTRUTURAS', start: '2026-08-10', end: '', status: 'INICIADO', percent: 0, activities: [
+      { id: '1', activity: 'EXECUÇÃO PAREDES ARRIMO', property: 'TODOS', supplier: 'EDGAR NELSON DA SILVA', start: '2026-06-19', end: '', status: 'ATIVIDADE INICIADA' },
+      { id: '2', activity: 'ARMAÇÃO FERRAGEM ARRIMO', property: 'TODOS', supplier: '—', start: '2026-08-10', end: '', status: 'ATIVIDADE INICIADA' },
+    ] };
+    snapshots[7] = { count: 2, rows: [
+      { id: '209', date: '2026-10-02', branch: '004 - EDIFÍCIO XAVANTE', status: 'PENDENTE' },
+      { id: '208', date: '2026-10-01', branch: '004 - EDIFÍCIO XAVANTE', status: 'PENDENTE' },
+    ] };
+    snapshots[8] = { summary: { pending: 4, completed: 15, total: 19 }, rows: [
+      { id: '47', identified: '2026-08-01', due: '2026-08-02', responsible: 'PLANALTO TINTAS', responsibleKey: 'PLANALTO TINTAS', status: 'ATIVIDADE CRIADA', difficulty: 'MÉDIA', association: 'FINANCEIRO E TRIBUTÁRIO', priority: 'NÃO PRIORITÁRIA', task: 'COBRAR NOTA FISCAL PLANALTO TINTAS' },
+      { id: '48', identified: '2026-08-03', due: '2026-08-14', responsible: '', responsibleKey: 'SEM RESPONSÁVEL', status: 'EM ATENDIMENTO', difficulty: 'BAIXA', association: '', priority: 'NÃO PRIORITÁRIA', task: 'VENDER 200 VALE PETROBRAS TODOS OS MESES' },
+    ] };
+  }
+  const selectedReport = Number(new URL(location.href).searchParams.get('report'));
+  for (const number of [6, 7, 8].filter(number => !selectedReport || number === selectedReport)) {
     const view = createOperationsReportsView({ document, data: { async loadReport(report) { return snapshots[report]; } } });
     document.getElementById("reports").append(view.element);
     await view.open(number);

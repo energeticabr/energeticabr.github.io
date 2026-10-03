@@ -100,7 +100,7 @@ const byValue = (left, right) => (right.total ?? -Infinity) - (left.total ?? -In
 
 function selectedRows(launches, filters, reportNumber) {
   return (launches || []).filter(row => {
-    for (const field of ["supplier", "product", "branch", "disbursement"]) {
+    for (const field of ["supplier", "product", "branch", "disbursement", "stage"]) {
       if (filters[field] && !equals(row[field], filters[field])) return false;
     }
     if (filters.order && !(equals(row.order, filters.order)

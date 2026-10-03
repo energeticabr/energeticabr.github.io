@@ -52,6 +52,12 @@
 .ar-report > .ar-pager { order: 7; }
 .ar-heading { border: 0; padding: 8px 0; margin: 0; justify-content: space-between; }
 .ar-title { color: #153c66; font-size: clamp(1.05rem, 2vw, 1.45rem); font-weight: 850; }
+.ar-heading-subtitle[hidden] { display: none; }
+.ar-report[data-report="11"] .ar-brand { display: none; }
+.ar-report[data-report="11"] .ar-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; margin: 0 0 14px; padding: 16px 18px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.ar-report[data-report="11"] .ar-title { grid-column: 1; color: #1e293b; font-size: clamp(1rem, 2vw, 1.35rem); }
+.ar-report[data-report="11"] .ar-heading-subtitle { grid-column: 1; margin: 0; color: #758397; font-size: .77rem; }
+.ar-report[data-report="11"] .ar-refresh { grid-column: 2; grid-row: 1 / 3; align-self: center; }
 .ar-report[data-report="12"] .ar-heading { justify-content: center; border: 1px solid #124577; background: #fff; }
 .ar-report[data-report="12"] .ar-title { text-align: center; }
 .ar-report[data-report="13"] .ar-heading { order: 0; }
@@ -83,15 +89,31 @@
 .ar-quotation-banner .ar-card-title { padding: 10px 12px; background: transparent; }
 .ar-budget-count { margin: 6px 12px; padding: 4px 10px; border-radius: 99px; background: #374151; font-size: .75rem; }
 .ar-section-label { margin: 0; padding: 8px 10px 0; color: #64748b; font-size: .72rem; font-weight: 800; }
-.ar-quotation-status-label { display: inline-block; margin: 0 0 0 10px; color: #64748b; font-size: .7rem; font-weight: 800; }
-.ar-card > .ar-status { margin: 0 10px 10px 5px; }
 .ar-list-title { padding: 7px 8px; background: #eef1f5; color: #1f2937; text-transform: uppercase; }
 .ar-report[data-report="11"] .ar-card { border-radius: 10px; }
 .ar-report[data-report="11"] .ar-card > .ar-fields { background: #edf5ff; }
 .ar-report[data-report="11"] .ar-card .ar-field:last-child { grid-column: 1 / -1; background: #fff9e8; }
+.ar-quotation-facts { gap: 0; border-bottom: 1px solid #dbe5ef; }
+.ar-quotation-facts .ar-field { display: grid; grid-template-columns: minmax(82px, 31%) minmax(0, 1fr); gap: 0; padding: 0; border-color: #dbe5ef; background: #edf5ff; }
+.ar-quotation-facts .ar-field dt { display: flex; align-items: center; min-width: 0; padding: 7px; background: #f0f2f6; color: #64748b; }
+.ar-quotation-facts .ar-field dd { min-width: 0; margin: 0; padding: 7px; background: #edf5ff; color: #263d59; }
+.ar-quotation-facts .ar-field[data-field="description"] { grid-column: 1 / -1; border-left: 3px solid #f4a113; }
+.ar-quotation-facts .ar-field[data-field="description"] dd { background: #fff9e8; }
+.ar-quotation-facts .ar-field[data-field="id"] dd { color: #174ce6; font-weight: 850; }
+.ar-report[data-report="11"] .ar-card-list { border-top: 0; }
+.ar-report[data-report="11"] .ar-card-list > .ar-list-title { margin: -10px -10px 10px; padding: 9px 10px; border-bottom: 1px solid #d9e2e9; background: #f0f2f6; color: #25344a; }
 .ar-report[data-report="12"] .ar-group-title { background: #063666; text-transform: uppercase; }
 .ar-report[data-report="12"] .ar-group-summary { padding: 0 10px; font-size: .78rem; font-weight: 800; }
+.ar-report[data-report="12"] .ar-metrics { gap: 0; margin-bottom: 10px; }
+.ar-report[data-report="12"] .ar-metric { min-width: 0; border-top-width: 5px; border-radius: 0; }
+.ar-report[data-report="12"] .ar-subtitle { margin: 0 0 10px; border: 1px solid #124577; border-top: 0; background: #d9ebfb; color: #073d70; }
+.ar-branch-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 8px 10px; background: #063666; color: #fff; }
+.ar-branch-heading .ar-group-title { padding: 0; background: transparent; }
+.ar-branch-heading .ar-group-summary { margin: 0; padding: 0; color: #fff; }
 .ar-report[data-report="13"] .ar-card-title { background: #9d0000; }
+.ar-report[data-report="13"] .ar-content > .ar-card { border-left: 3px solid #9d0000; }
+.ar-report[data-report="13"] .ar-card > .ar-fields { gap: 4px; padding: 7px; }
+.ar-report[data-report="13"] .ar-card .ar-field { border-color: #dce4ed; background: #f6f9fc; }
 .ar-subtitle { margin: 0 0 10px; border: 1px solid #245688; background: #d6eaff; color: #093c6c; text-transform: uppercase; font-size: .84rem; }
 .ar-desktop-table { display: table; width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .68rem; line-height: 1.3; }
 .ar-desktop-table th, .ar-desktop-table td { border: 1px solid #b7c5d3; padding: 6px 5px; text-align: left; vertical-align: middle; overflow-wrap: anywhere; word-break: break-word; }

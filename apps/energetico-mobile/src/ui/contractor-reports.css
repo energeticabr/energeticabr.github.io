@@ -10,6 +10,14 @@
 .cr-report-tile--active { border-color: #0c5c71; background: #dcefe4; color: #09512d; box-shadow: 0 2px 10px #0b523027; }
 .cr-report-tile--active:hover, .cr-report-tile--active:focus-visible { background: #c9e8d3; outline: 3px solid #e3aa19; outline-offset: 2px; }
 .cr-report-tile:disabled { color: #697d8b; background: #f1f4f6; cursor: not-allowed; font-weight: 600; }
+.cr-report-tile--mascot { gap: 7px; padding: 8px; background: #fff; border-color: color-mix(in srgb, var(--report-fill) 72%, #fff); color: #17324d; box-shadow: 0 2px 8px #14324b17; }
+.cr-report-tile--mascot.cr-report-tile--active { background: #fff; color: #17324d; }
+.cr-report-tile--mascot:hover, .cr-report-tile--mascot.cr-report-tile--active:hover { background: color-mix(in srgb, var(--report-fill) 10%, #fff); transform: translateY(-1px); }
+.cr-report-tile--mascot:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.cr-report-tile--mascot:disabled { opacity: .62; background: #f7f7f7; color: #485767; }
+.cr-report-tile-image { display: block; width: 76px; height: 76px; max-width: 100%; flex: none; border-radius: 7px; background: var(--report-fill); object-fit: contain; }
+.cr-report-tile-copy { min-width: 0; max-width: 100%; line-height: 1.25; overflow-wrap: anywhere; }
+.cr-report-tile--mascot .cr-report-tile-copy { font-size: clamp(.72rem, 1.2vw, .88rem); }
 .cr-hub-center { border-color: #163a5f; background: #0d3767; color: #fff; letter-spacing: .03em; }
 .cr-hub-center small { font-size: .65em; letter-spacing: .12em; }
 .cr-report { padding: clamp(12px, 1.5vw, 22px); border: 1px solid #c4d4df; border-radius: 12px; background: #fff; }

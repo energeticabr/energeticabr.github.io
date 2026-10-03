@@ -1,6 +1,7 @@
 import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 import { contractorReport, documentCell, formatReportDate, formatReportMoney } from "../chat/contractor-report-model.js";
 import { createPresencePaymentReportView } from "./presence-payment-report-view.js";
+import { REPORT_LAUNCH_BUTTONS } from "./report-launch-button-assets.js";
 
 const FILTERS = [
   ["id", "NÚMERO CONTRATO"], ["branch", "FILIAL"], ["supplier", "FORNECEDOR"],
@@ -72,8 +73,16 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   const hubGrid = make("div", "cr-hub-grid");
   for (let number = 1; number <= REPORT_NAMES.length; number++) {
     const available = number === 1 || (number === 2 && typeof presenceData?.loadSnapshot === "function") || extraViews.has(number);
-    const tile = button(`cr-report-tile ${available ? "cr-report-tile--active" : ""}`,
-      `${number} · ${REPORT_NAMES[number - 1]}`);
+    const mascot = REPORT_LAUNCH_BUTTONS[number];
+    const tile = button(`cr-report-tile ${available ? "cr-report-tile--active" : ""}${mascot ? " cr-report-tile--mascot" : ""}`);
+    if (mascot) {
+      tile.style.setProperty("--report-fill", mascot.color);
+      tile.dataset.reportGroup = mascot.group;
+      const image = make("img", "cr-report-tile-image");
+      image.src = mascot.imageUrl; image.alt = ""; image.loading = "lazy";
+      tile.append(image);
+    }
+    tile.append(make("span", "cr-report-tile-copy", `${number} · ${REPORT_NAMES[number - 1]}`));
     tile.dataset.reportId = String(number);
     tile.disabled = !available;
     if (!available) tile.title = "Relatório ainda não definido";

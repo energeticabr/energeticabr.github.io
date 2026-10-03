@@ -50,10 +50,10 @@ test("relatórios 9 e 10 cabem em 844x390 e 740x360 com texto longo", { timeout:
     };
     for (const [width, height] of [[844, 390], [740, 360]]) for (const report of [9, 10]) {
       await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
-      await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/spending-reports-responsive.html?report=${report}` }, sessionId);
+      await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/spending-reports-responsive.html?report=${report}&long=1` }, sessionId);
       let ready = false;
       for (let i = 0; i < 200 && !ready; i++) {
-        ready = await evaluate(`location.search === '?report=${report}' && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector('.sr-detail-card, .sr-provision-card'))`);
+        ready = await evaluate(`new URLSearchParams(location.search).get('report') === '${report}' && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector('.sr-category-table, .sr-provision-table'))`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Relatório ${report}, ${width}px não carregou`);

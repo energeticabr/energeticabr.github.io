@@ -43,7 +43,14 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
   const refresh = button("cdr-button cdr-refresh", "Atualizar");
   heading.append(logo, title, refresh);
   const filters = make("div", "cdr-filters"); element.append(filters, heading);
-  const metrics = make("dl", "cdr-metrics"); element.append(metrics);
+  const detailHint = make("p", "cdr-detail-hint", "🔎 SELECIONE UM NÚMERO DE CONTRATO, COMPRADOR OU IMÓVEL PARA DETALHAR POR IMÓVEL");
+  const metricsArea = make("div", "cdr-metrics-area");
+  const metricsTitle = make("h3", "cdr-metrics-title", "🆔 PENDÊNCIAS POR CAMPO DE ID");
+  const metrics = make("dl", "cdr-metrics");
+  const metricsFold = make("details", "cdr-metrics-fold");
+  metricsFold.append(make("summary", "", "Resumo dos aluguéis"));
+  metricsArea.append(metricsTitle, metrics);
+  element.append(detailHint, metricsArea);
   const notice = make("div", "cdr-notice"); notice.hidden = true; element.append(notice);
   const results = make("div", "cdr-results"); element.append(results);
   let number = null, snapshot = null, controller = null, revision = 0, active = false, destroyed = false;
@@ -114,7 +121,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
   }
 
   function buildFilters() {
-    filters.replaceChildren();
+    filters.replaceChildren(refresh);
     if (number === 16) {
       select("branch", "FILIAL", snapshot.rows.map(row => row.branch));
       select("property", "IMÓVEL", snapshot.rows.map(row => row.property));
@@ -206,7 +213,6 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
 
   function commercialSummary(result) {
     const wrapper = make("div", "cdr-commercial-summary");
-    wrapper.append(make("p", "cdr-detail-hint", "Selecione um imóvel, comprador ou número de contrato para detalhar por imóvel."));
     const totals = make("section", "cdr-overall-totals");
     totals.append(make("h3", "cdr-summary-title", "Pendências por campo"));
     fieldTotals(totals, result.summary.fieldTotals); wrapper.append(totals);
@@ -337,7 +343,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
     const current = ++revision, reportNumber = number;
     if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
     visibleCount = PAGE_SIZE;
-    snapshot = null; filters.replaceChildren(); render(); message("Carregando dados do SharePoint…");
+    snapshot = null; filters.replaceChildren(refresh); render(); message("Carregando dados do SharePoint…");
     element.setAttribute("aria-busy", "true");
     try {
       const result = await data.loadReport(reportNumber, { signal: controller.signal });
@@ -365,6 +371,17 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
       if (![16, 17].includes(reportNumber)) throw new RangeError("Escolha o relatório 16 ou 17.");
       if (number !== reportNumber) selected = Object.create(null);
       number = reportNumber; title.textContent = TITLES[number]; active = true; element.hidden = false;
+      detailHint.hidden = number !== 16;
+      metricsTitle.hidden = number !== 16;
+      if (number === 17) {
+        metricsFold.append(metrics);
+        metricsArea.append(metricsFold);
+        element.append(metricsArea);
+      } else {
+        metricsFold.remove();
+        metricsArea.append(metrics);
+        element.insertBefore(metricsArea, notice);
+      }
       return load();
     },
     close() { active = false; controller?.abort(); if (searchTimer) clearTimeout(searchTimer); searchTimer = null; revision++; element.hidden = true; element.setAttribute("aria-busy", "false"); },

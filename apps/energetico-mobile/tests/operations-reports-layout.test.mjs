@@ -42,7 +42,7 @@ test("relatórios 6–8 cabem em telefones horizontais sem rolagem lateral", { t
       assert.equal(layout.reportWidths[0].stageSummaryDisplay, 'flex', 'resumo da etapa perdeu o painel dedicado');
       assert.equal(layout.reportWidths[1].pendingColor, 'rgb(176, 0, 32)', 'PENDENTE não está vermelho');
       assert.equal(layout.reportWidths[1].footerBackground, 'rgb(230, 240, 255)', 'rodapé não está azul-claro');
-      assert.deepEqual(layout.reportWidths[2].metricBackgrounds, ['rgb(255, 225, 179)', 'rgb(200, 230, 201)', 'rgb(187, 222, 251)']);
+      assert.deepEqual(layout.reportWidths[2].metricBackgrounds, ['rgb(255, 224, 178)', 'rgb(200, 230, 201)', 'rgb(187, 222, 251)']);
       assert.equal(layout.reportWidths[2].dueSummaryDisplay, 'flex', 'data fatal perdeu o painel dedicado');
     }
   } finally { await server.close(); }

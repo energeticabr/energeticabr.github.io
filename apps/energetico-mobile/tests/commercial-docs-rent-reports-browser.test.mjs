@@ -42,7 +42,14 @@ test("relatórios 16 e 17 usam tabelas no desktop e cartões sem corte em telefo
       }
       if (scenario.startsWith("report=16")) {
         assert.notEqual(layout.report.pendingColor, layout.report.clearColor, "pendência e campo preenchido precisam de cores distintas");
+        assert.equal(layout.report.metricTitleVisible, true, "painel de IDs deve permanecer visível");
+      } else {
+        assert.equal(layout.report.metricTitleVisible, false, "aluguel não deve exibir painel de IDs");
+        assert.equal(layout.report.rentHeaderColor, "rgb(253, 236, 234)", "faixa de aluguéis em aberto deve preservar rosa suave do Power Apps");
+        if (width <= 900) assert.equal(layout.report.mobileRowDisplay, "grid", "linhas móveis devem manter estrutura tabular compacta");
       }
+      assert.equal(layout.report.brandColor, "rgb(230, 240, 255)");
+      assert.equal(layout.report.logoLoaded, true);
       assert.match(layout.report.filterColor, /^rgb\((?:153|176|183|198), 0, (?:0|20|28)\)$/, "filtros devem manter faixa vermelha");
       assert.ok(layout.document <= width + 1, `Documento transborda em ${width}px (${scenario}): ${JSON.stringify(layout)}`);
       assert.ok(layout.shell.scrollWidth <= layout.shell.width + 1, `Tela integrada exige rolagem lateral em ${width}px (${scenario})`);

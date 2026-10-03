@@ -27,16 +27,30 @@ test("9 preserva marca, período, faixas gerenciais, quantidades e cor de total;
   assert.equal(root.firstElementChild?.className, "sr-filters", "Filtros acima da marca, como no Power Apps");
   assert.match(root.textContent, /RESUMO GERENCIAL DE GASTOS/);
   assert.match(root.textContent, /PERÍODO/);
+  assert.equal(root.querySelector('[name="stage"]').parentElement.hidden, false);
   assert.match(root.textContent, /QTD TOTAL/);
   assert.ok(root.querySelector(".sr-category--products"));
   assert.ok(root.querySelector(".sr-field--money"));
   assert.match(root.textContent, /PERCENTUAL POR TIPO DE DESPESA/);
-  assert.equal(root.querySelectorAll("table").length, 0);
+  assert.ok(root.querySelector(".sr-category-table"), "o resumo 9 preserva a organização tabular do Power Apps");
+  assert.deepEqual([...root.querySelector(".sr-category-table thead").querySelectorAll("th")].map(cell => cell.textContent),
+    ["TIPO DE DESPESA", "QTDE. LINHAS", "QTD TOTAL", "TOTAL GASTO", "% DA FILIAL"]);
   await view.open(10);
+  assert.equal(root.querySelector(".sr-content").nextElementSibling, root.querySelector(".sr-metrics"),
+    "no relatório 10 a grade de provisões vem antes dos totais, como na referência");
+  assert.equal(root.querySelector('[name="stage"]').parentElement.hidden, true);
+  assert.deepEqual(["branch", "supplier", "product", "paymentStatus", "status"].map(name =>
+    root.querySelector(`[name="${name}"]`).parentElement.style.order), ["0", "1", "2", "3", "4"]);
   assert.match(root.textContent, /DESPESAS RECORRENTES/);
   assert.match(root.textContent, /04\/10\/2026/);
   assert.match(root.textContent, /AGENDAMENTO/);
   assert.match(root.textContent, /VIVO/);
+  const provisionTable = root.querySelector(".sr-provision-table");
+  assert.ok(provisionTable, "o relatório 10 conserva a grade do Power Apps em tela grande");
+  assert.deepEqual([...provisionTable.querySelectorAll("thead th")].map(cell => cell.textContent),
+    ["FILIAL", "FORNECEDOR", "PRODUTO", "DATA VENCIMENTO", "AGENDAMENTO", "VALOR", "STATUS"]);
+  assert.equal(provisionTable.querySelectorAll("tbody tr").length, 1);
+  assert.match(provisionTable.querySelector('[data-label="STATUS"]').textContent, /VENCE/);
   assert.doesNotMatch(root.textContent, /PEDIDO 42/);
   assert.deepEqual(calls, [9, 10]);
 });

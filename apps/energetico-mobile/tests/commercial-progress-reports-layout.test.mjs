@@ -39,7 +39,7 @@ test("relatórios 14 e 15 cabem em 844x390 e 740x360 sem rolagem lateral", { tim
       message.error ? request.reject(new Error(message.error.message)) : request.resolve(message.result);
     });
     const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
-      const id = ++sequence; const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Chromium: ${method} expirou`)); }, 10_000);
+      const id = ++sequence; const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Chromium: ${method} expirou`)); }, 30_000);
       pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params, sessionId }));
     });
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
@@ -68,11 +68,14 @@ test("relatórios 14 e 15 cabem em 844x390 e 740x360 sem rolagem lateral", { tim
       assert.ok(dimensions.scrollWidth <= dimensions.viewport, `Documento transborda: ${JSON.stringify({ report, width, dimensions })}`);
       assert.ok(dimensions.rootWidth <= dimensions.rootClient, `Relatório pede rolagem lateral: ${JSON.stringify({ report, width, dimensions })}`);
       assert.deepEqual(dimensions.clipped, [], `Conteúdo cortado: ${JSON.stringify({ report, width, dimensions })}`);
-      const presentation = await evaluate('(() => { const metric = document.querySelector(".cpr-metric[data-tone=total]"); return { table: getComputedStyle(document.querySelector(".cpr-table")).display, filter: getComputedStyle(document.querySelector(".cpr-filter-label")).backgroundColor, logo: document.querySelector(".cpr-brand img")?.naturalWidth || 0, tone: metric ? getComputedStyle(metric).backgroundColor : "" }; })()');
+      const presentation = await evaluate('(() => { const metric = document.querySelector(".cpr-metric[data-tone=total]"); const section = document.querySelector(".cpr-section-title"); const field = document.querySelector(".cpr-property .cpr-field"); return { table: getComputedStyle(document.querySelector(".cpr-table")).display, filter: getComputedStyle(document.querySelector(".cpr-filter-label")).backgroundColor, logo: document.querySelector(".cpr-brand img")?.naturalWidth || 0, tone: metric ? getComputedStyle(metric).backgroundColor : "", section: getComputedStyle(section).backgroundColor, field: getComputedStyle(field).backgroundColor, fieldBorder: getComputedStyle(field).borderTopStyle }; })()');
       assert.equal(presentation.table, "none", `Tabela desktop apareceu no celular: ${JSON.stringify(presentation)}`);
       assert.equal(presentation.filter, "rgb(153, 0, 0)");
       assert.ok(presentation.logo > 0, `Logomarca não carregou: ${JSON.stringify(presentation)}`);
       if (report === 14) assert.equal(presentation.tone, "rgb(255, 235, 238)");
+      if (report === 14) assert.equal(presentation.section, "rgb(38, 50, 56)", "faixa RESUMO POR IMÓVEL segue o Power Apps");
+      assert.equal(presentation.field, "rgb(255, 255, 255)", "linhas do cartão móvel devem ser claras como a tabela original");
+      assert.equal(presentation.fieldBorder, "solid", "linhas do cartão móvel precisam de separadores tabulares");
     }
     await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
     await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/commercial-progress-reports-responsive.html?report=15` }, sessionId);

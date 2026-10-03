@@ -191,3 +191,36 @@ test("menu oferece 17 relatórios e encaminha os novos módulos sem manter telas
   assert.equal(root.querySelector(".cr-hub").hidden, false);
   assert.ok(closed >= 1);
 });
+
+test("acessos 3 a 17 usam mascote e cor individuais do Power Apps sem alterar os dois primeiros", async t => {
+  const ids = Array.from({ length: 15 }, (_, index) => index + 3);
+  const element = new JSDOM("<main></main>").window.document.createElement("section");
+  const ctx = setup(t, {}, undefined, [{ ids, view: { element, async open() {}, close() {}, destroy() {} } }]);
+  await ctx.view.open();
+  const expected = [
+    [3, "#CB6666", "94fe28a6-5a08-42c5-b087-7f1d00d5b83a.png"],
+    [4, "#CB6666", "f67c9a15-5e41-4fc3-bf67-83acc0fa6367.png"],
+    [5, "#CB6666", "5939521a-e702-4fc5-8b64-db9463bd5e72.png"],
+    [6, "#CB6666", "3d6a6208-8a99-466f-a44f-fe33645e04ff.png"],
+    [7, "#CB6666", "82f1b4ce-b02d-404f-9105-4c2c09561238.png"],
+    [8, "#638B2C", "0ce5df1d-36c2-4289-b1c7-69e97134d47b.png"],
+    [9, "#000D4B", "de0153c5-7d90-41bc-8611-8c5b4f7a5b32.png"],
+    [10, "#000D4B", "3d6a6208-8a99-466f-a44f-fe33645e04ff.png"],
+    [11, "#001060", "46ea7418-ff9c-4964-8e10-8b978a771a3f.png"],
+    [12, "#959595", "7d1875e8-106a-438a-be5c-605c1d27f0f0.png"],
+    [13, "#88A0D1", "b0d592ed-8920-4fe7-8c0c-1169c0b6b4e6.png"],
+    [14, "#AC3E0B", "2c7eecf0-7c1d-46f1-9577-b455a0e4d225.png"],
+    [15, "#AC3E0B", "26adafd6-3b58-45c3-b4ad-152ec6d6e79e.png"],
+    [16, "#AC3E0B", "fd57f004-7139-4557-9dcd-0f310b870f45.png"],
+    [17, "#FBBC9F", "cdf75308-d0b7-4e02-860c-32943e5dece5.png"],
+  ];
+  for (const [id, color, filename] of expected) {
+    const tile = ctx.root().querySelector(`[data-report-id="${id}"]`);
+    assert.equal(tile.style.getPropertyValue("--report-fill"), color, `cor do relatório ${id}`);
+    assert.match(tile.querySelector(".cr-report-tile-image")?.src || "", new RegExp(filename.replaceAll(".", "\\.")), `mascote do relatório ${id}`);
+    assert.equal(tile.querySelector(".cr-report-tile-image")?.alt, "", `mascote decorativo do relatório ${id}`);
+    assert.match(tile.textContent, new RegExp(`^${id} · `));
+  }
+  assert.equal(ctx.root().querySelector('[data-report-id="1"] .cr-report-tile-image'), null);
+  assert.equal(ctx.root().querySelector('[data-report-id="2"] .cr-report-tile-image'), null);
+});

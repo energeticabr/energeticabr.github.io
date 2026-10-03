@@ -122,6 +122,11 @@ test("filtros de fornecedor, produto, desembolso e pedido selecionam apenas lan�
   assert.equal(model.buildSpendingReport9({ launches, productTypes: [] }, filters).count, 1);
 });
 
+test("filtro de etapa do relatório 9 reproduz o seletor do Power Apps", () => {
+  const launches = [row(1, { stage: "Fundação" }), row(2, { stage: "Alvenaria" })];
+  assert.equal(model.buildSpendingReport9({ launches, productTypes: [] }, { stage: "Alvenaria" }).count, 1);
+});
+
 test("classificação do produto usa a primeira correspondência do cadastro", () => {
   const report = model.buildSpendingReport9({ launches: [row(1)], productTypes: [
     { product: "Cimento", expenseType: "Material" }, { product: "Cimento", expenseType: "Duplicado" },

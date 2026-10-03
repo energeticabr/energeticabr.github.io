@@ -19,6 +19,7 @@ test("visualização alterna relatórios 14 e 15 e filtra imóveis com dados da 
   dom.window.document.body.append(view.element);
   await view.open(14);
   assert.equal(view.element.querySelector('.cpr-filters').nextElementSibling?.className, 'cpr-brand', 'Filtros acima do logo, como no Power Apps');
+  assert.ok(view.element.querySelector('.cpr-filters .cpr-refresh'), 'atualização deve integrar a barra de filtros acima do logo');
   assert.match(view.element.textContent, /INDICADORES|RESUMO POR IMÓVEL/i);
   assert.match(view.element.textContent, /Casa 1/);
   assert.match(view.element.textContent, /R\$\s*100,00/);
@@ -112,6 +113,51 @@ test("relatório 15 preserva subtítulo e grupos tabulares desktop com os mesmos
   const headings = [...view.element.querySelectorAll(".cpr-table thead th")].map(node => node.textContent.trim());
   assert.deepEqual(headings, ["FILIAL", "IMÓVEL", "COMPRADOR", "ID CONTRATO", "ÚLTIMO TIPO MARCO", "DESCRIÇÃO", "INÍCIO", "DATA FATAL", "STATUS"]);
   assert.match(view.element.querySelector(".cpr-table tbody")?.textContent || "", /Casa 1.*Ana.*10.*Assinatura/s);
+  assert.match(view.element.querySelector(".cpr-table tbody")?.textContent || "", /\d+ DIA\(S\) DE ANDAMENTO/);
   assert.match(view.element.querySelector(".cpr-property")?.textContent || "", /Casa 1.*Ana.*10.*Assinatura/s);
   assert.match(view.element.querySelector(".cpr-branch-footer")?.textContent || "", /TOTAL DE IMÓVEIS NA FILIAL: 1/);
+});
+
+test("14 reproduz aviso de seleção e troca contagem por status único ao filtrar imóvel", async () => {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return snapshot; } } });
+  await view.open(14);
+  assert.match(view.element.querySelector(".cpr-detail-hint")?.textContent || "", /SELECIONE UM NÚMERO DE CONTRATO, COMPRADOR OU IMÓVEL/);
+  assert.match(view.element.querySelector(".cpr-section-title")?.textContent || "", /🏠 RESUMO POR IMÓVEL/);
+  assert.match(view.element.querySelector(".cpr-status-counts")?.textContent || "", /ATIVOS: 1.*INATIVOS: 0/s);
+  assert.equal(view.element.querySelector('.cpr-property [data-field="PAGO"] .cpr-field-value')?.textContent, "R$ 0,00");
+  const property = view.element.querySelector('[name="property"]');
+  property.value = "Casa 1"; property.dispatchEvent(new dom.window.Event("change"));
+  assert.equal(view.element.querySelector(".cpr-detail-hint"), null);
+  assert.match(view.element.querySelector(".cpr-status-metric")?.textContent || "", /STATUS DO IMÓVEL.*ATIVO/s);
+  assert.equal(view.element.querySelector(".cpr-status-counts"), null);
+});
+
+test("14 mantém contagem de status quando comprador reúne imóveis diferentes", async () => {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const second = { ...snapshot.properties[0], id: "2", property: "Casa 2", visualStatus: "INATIVO" };
+  const data = {
+    ...snapshot,
+    properties: [...snapshot.properties, second],
+    contracts: [...snapshot.contracts, { ...snapshot.contracts[0], id: "11", property: "Casa 2" }],
+  };
+  const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return data; } } });
+  await view.open(14);
+  const buyer = view.element.querySelector('[name="buyer"]');
+  buyer.value = "Ana"; buyer.dispatchEvent(new dom.window.Event("change"));
+  assert.match(view.element.querySelector(".cpr-status-counts")?.textContent || "", /ATIVOS: 1.*INATIVOS: 1/s);
+  assert.equal(view.element.querySelector(".cpr-status-single"), null);
+});
+
+test("15 mantém título antes da explicação e revela histórico apenas com filtro específico", async () => {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return snapshot; } } });
+  await view.open(15);
+  const content = view.element.querySelector(".cpr-content");
+  assert.match(content.firstElementChild?.textContent || "", /ÚLTIMO ANDAMENTO POR IMÓVEL/);
+  assert.match(content.children[1]?.textContent || "", /UM REGISTRO POR IMÓVEL/);
+  assert.equal(content.querySelector(".cpr-detail"), null);
+  const property = view.element.querySelector('[name="property"]');
+  property.value = "Casa 1"; property.dispatchEvent(new dom.window.Event("change"));
+  assert.match(content.querySelector(".cpr-detail")?.textContent || "", /HISTÓRICO COMPLETO/);
 });

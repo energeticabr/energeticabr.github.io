@@ -18,7 +18,7 @@ const elapsed = (value, today) => {
   const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${value}T00:00:00Z`)) / 86400000);
   return Number.isFinite(days) && days >= 0 ? `${days} dia${days === 1 ? "" : "s"}` : "";
 };
-const statusTone = value => /ATIV|APROVAD|SUBMETIDO|CONCLU[IÍ]D|RECEBIDO/i.test(value || "") ? "success" : /INATIV|CANCELAD/i.test(value || "") ? "muted" : /PENDENT|VENCID/i.test(value || "") ? "danger" : "";
+const statusTone = value => /INATIV|CANCELAD/i.test(value || "") ? "muted" : /PENDENT|VENCID/i.test(value || "") ? "danger" : /ATIV|APROVAD|SUBMETIDO|CONCLU[IÍ]D|RECEBIDO/i.test(value || "") ? "success" : "";
 
 function safeError(error) {
   return String(error?.message || "Falha na consulta ao SharePoint.")
@@ -38,8 +38,10 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
   const section = make("section", "ar-report"); section.hidden = true;
   const heading = make("div", "ar-heading");
   const title = make("h2", "ar-title");
+  const headingSubtitle = make("p", "ar-heading-subtitle", "Acompanhamento geral das cotações e dos orçamentos vinculados");
+  headingSubtitle.hidden = true;
   const refresh = button("og-button ar-refresh", "Atualizar");
-  heading.append(title, refresh);
+  heading.append(title, headingSubtitle, refresh);
   const notice = make("div", "ar-notice"); notice.hidden = true;
   const filters = make("div", "ar-filters");
   const brand = make("div", "ar-brand");
@@ -54,15 +56,18 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
   let reportNumber = 0; let snapshot = null; let controller = null; let revision = 0; let destroyed = false; let page = 1;
   const controls = new Map();
 
-  function field(label, value, tone = "") {
+  function field(label, value, tone = "", name = "") {
     const wrapper = make("div", "ar-field");
     if (tone) wrapper.dataset.tone = tone;
-    wrapper.append(make("dt", "", label), make("dd", "", value === "" || value == null ? "—" : String(value)));
+    if (name) wrapper.dataset.field = name;
+    const detail = make("dd");
+    detail.append(value?.nodeType ? value : doc.createTextNode(value === "" || value == null ? "—" : String(value)));
+    wrapper.append(make("dt", "", label), detail);
     return wrapper;
   }
   function fields(entries) {
     const list = make("dl", "ar-fields");
-    for (const [label, value, tone] of entries) list.append(field(label, value, tone));
+    for (const [label, value, tone, name] of entries) list.append(field(label, value, tone, name));
     return list;
   }
   function status(value) {
@@ -136,9 +141,11 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
       const banner = make("div", "ar-quotation-banner");
       banner.append(make("h3", "ar-card-title", `COTAÇÃO Nº ${quote.id}`), make("span", "ar-budget-count", `${quote.budgetCount} orçamento(s)`));
       card.append(banner, make("p", "ar-section-label", "DADOS DA COTAÇÃO"));
-      card.append(fields([["Filial", quote.branch], ["Etapa", quote.stage], ["Fornecedores vinculados", quote.supplierCount],
-        ["Status", quote.status || "—"], ["Descrição", quote.description]]));
-      card.append(make("p", "ar-quotation-status-label", "STATUS"), status(quote.status));
+      const quoteFacts = fields([["ID", quote.id, "", "id"], ["Filial", quote.branch, "", "branch"],
+        ["Etapa", quote.stage, "", "stage"], ["Qtd. fornecedores", quote.supplierCount, "", "suppliers"],
+        ["Status", status(quote.status), "", "status"], ["Descrição", quote.description, "", "description"]]);
+      quoteFacts.classList.add("ar-quotation-facts");
+      card.append(quoteFacts);
       const list = make("div", "ar-card-list");
       list.append(make("h4", "ar-list-title", `ORÇAMENTOS VINCULADOS (${quote.budgetCount})`));
       if (!quote.groups.length) list.append(make("p", "ar-empty", "Nenhum orçamento vinculado."));
@@ -173,12 +180,14 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     metric("depreciated", "Valor depreciado", partial(report.metrics.depreciated, report.metrics.partialDepreciated), "danger");
     metric("current", "Valor atual", partial(report.metrics.current, report.metrics.partialCurrent), "success");
     const subtitle = make("p", "ar-subtitle", `ITENS COM DEPRECIAÇÃO PREVISTA ATÉ ${formatAuditDate(report.deadline)} | POSIÇÃO EM ${formatAuditDate(report.today)}`);
-    content.append(subtitle);
+    reportBanner.append(subtitle);
     if (!report.groups.length) { content.append(make("p", "ar-empty", "Nenhum item a depreciar até essa data com os filtros selecionados.")); return; }
     for (const branch of report.groups) {
       const group = make("section", "ar-group");
-      group.append(make("h3", "ar-group-title", `FILIAL: ${branch.branch} · ${branch.rows.length} registro(s)`));
-      group.append(make("p", "ar-group-summary", `Valor total: ${partial(branch.metrics.total, branch.metrics.partialTotal)}`));
+      const branchHeading = make("div", "ar-branch-heading");
+      branchHeading.append(make("h3", "ar-group-title", `FILIAL: ${branch.branch} · ${branch.rows.length} registro(s)`),
+        make("p", "ar-group-summary", `Valor total: ${partial(branch.metrics.total, branch.metrics.partialTotal)}`));
+      group.append(branchHeading);
       const list = make("div", "ar-card-list");
       const assetRows = [];
       for (const row of branch.rows) {
@@ -255,7 +264,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
     if (destroyed || !TITLES[number]) throw new RangeError("Relatório de auditoria desconhecido.");
     controller?.abort(); const current = ++revision; controller = new AbortController();
     reportNumber = number; snapshot = null; page = 1; section.hidden = false; section.dataset.report = String(number);
-    title.textContent = TITLES[number]; filters.replaceChildren(); emptyMetrics(); content.replaceChildren();
+    title.textContent = TITLES[number]; headingSubtitle.hidden = number !== 11; filters.replaceChildren(); emptyMetrics(); content.replaceChildren();
     setNotice("Carregando dados do SharePoint…"); section.setAttribute("aria-busy", "true");
     try {
       const loaded = await data.loadReport(number, { signal: controller.signal });
