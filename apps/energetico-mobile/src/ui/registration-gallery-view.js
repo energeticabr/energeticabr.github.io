@@ -549,17 +549,18 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
-        const fileRail = el("aside", "rg-row-file");
+        const fileRail = el(row.hasAttachments === false ? "aside" : "button", "rg-row-file");
         if (row.hasAttachments !== false) {
           const countLabel = attachmentCountLabel(row);
-          const attachments = el("button", "rg-button rg-row-attachment", "📎");
-          attachments.type = "button";
-          attachments.dataset.action = "registration-attachments";
-          attachments.setAttribute("aria-label", `Abrir anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}: ${countLabel}`);
-          attachments.title = "Abrir anexos";
-          attachments.disabled = attachmentLoading;
-          attachments.addEventListener("click", () => { void openAttachments(row); });
-          fileRail.append(attachments);
+          fileRail.type = "button";
+          fileRail.dataset.action = "registration-attachments";
+          fileRail.setAttribute("aria-label", `Abrir anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}: ${countLabel}`);
+          fileRail.title = "Abrir anexos";
+          fileRail.disabled = attachmentLoading;
+          fileRail.addEventListener("click", () => { void openAttachments(row); });
+          const icon = el("span", "rg-row-attachment", "📎");
+          icon.setAttribute("aria-hidden", "true");
+          fileRail.append(icon);
         }
         fileRail.append(
           el("span", "rg-row-file__label", row.hasAttachments === false ? "SEM ANEXOS" : "ANEXOS"),
