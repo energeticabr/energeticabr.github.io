@@ -31,7 +31,9 @@ async function setup(t, overrides = {}) {
     async downloadAttachment(id, name) { calls.push(["downloadAttachment", id, name]); return new Blob(["pdf"], { type: "application/pdf" }); },
     ...overrides.data,
   };
-  const gallery = module.createPaymentProgrammingGallery({ document, data, now: () => new Date("2026-09-23T12:00:00-03:00"), ...overrides });
+  const { data: dataOverrides = {}, ...galleryOverrides } = overrides;
+  const gallery = module.createPaymentProgrammingGallery({ document, data: { ...data, ...dataOverrides },
+    now: () => new Date("2026-09-23T12:00:00-03:00"), ...galleryOverrides });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   return { dom, document, gallery, data, calls, root: () => document.querySelector(".pg-overlay") };
 }
@@ -70,6 +72,8 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
   ]);
   assert.equal(order.value, "due-asc");
   assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["306"]);
+  assert.equal(ctx.root().querySelectorAll('.pg-card [data-action="details"]').length, 0, "payment data opens from its edit pencil");
+  assert.equal(ctx.root().querySelectorAll('.pg-card [data-gallery-action="edit"]').length, 1);
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /23\/09\/2026/);
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /DIBRITA/);
@@ -169,7 +173,7 @@ test("ordenar por continua disponível fora dos filtros e reorganiza os cartões
   assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["321", "322"]);
 });
 
-test("G28 segue o cartão compacto da referência, mantendo status, dados, observação e ação de detalhes", async t => {
+test("G28 segue o cartão compacto da referência sem atalho de detalhes", async t => {
   const rows = [{ id: "313", hasAttachments: false, fields: {
     ID: 313, FORNECEDOR: "ML COMERCIO CIMENTO", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": 1425, QTD: 50,
     "DATA PREVISTO PGTO": "2026-09-29", FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS",
@@ -186,7 +190,8 @@ test("G28 segue o cartão compacto da referência, mantendo status, dados, obser
   assert.match(card.querySelector('.pg-summary-field[data-field="DESCRIÇÃO"]').textContent, /Cimento entregue/);
   assert.match(card.querySelector(".pg-observation").textContent, /Pagamento de cimento para a obra/);
   assert.match(card.querySelector(".pg-deadline").textContent, /VENCERÁ EM 2 DIAS/);
-  assert.equal(button(card, "Ver detalhes").dataset.action, "details");
+  assert.equal(card.querySelector('[data-action="details"]'), null);
+  assert.ok(card.querySelector('[data-gallery-action="edit"]'));
 });
 
 test("G28 esconde o clipe se a contagem consultada confirmar que não há anexos", async t => {
@@ -210,7 +215,7 @@ test("G28 esconde o clipe se a contagem consultada confirmar que não há anexos
     "a later rerender keeps the confirmed empty rail free of the clip");
 });
 
-test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visualizador compartilhado", async t => {
+test("G28 mostra dados seguros no cartão e anexos usam o visualizador compartilhado", async t => {
   const rows = [{ id: "306", hasAttachments: true, fields: {
     ID: 306, FORNECEDOR: "DIBRITA", OBS: "texto <img src=x onerror=alert(1)>", "DATA PREVISTO PGTO": "2026-09-23T03:00:00Z",
     "DATA PGTO EFETUADO": "", STATUS: "PAGAMENTO PREVISTO", "VALOR TOTAL": "1.200,50", QTD: 10, FRETE: "50,00",
@@ -220,16 +225,13 @@ test("detalhes G28 apresentam os campos numa tabela segura e anexos usam o visua
   const opened = [];
   const ctx = await setup(t, { rows, openMediaCollection: async items => opened.push(items) });
   await ctx.gallery.open();
-  button(ctx.root(), "Ver detalhes").click();
-  const detail = ctx.root().querySelector(".pg-detail");
-  assert.equal(detail.getAttribute("role"), "dialog");
-  assert.ok(detail.querySelector("table"));
-  assert.match(detail.textContent, /23\/09\/2026/);
-  assert.match(detail.textContent, /texto <img src=x onerror=alert\(1\)>/);
-  assert.equal(detail.querySelector("img, [onerror]"), null);
-  assert.match(detail.textContent, /R\$\s?12\.055,00/);
-  assert.match(ctx.root().querySelector('.pg-card[data-item-id="306"]').textContent, /R\$\s?12\.055,00/);
-  button(detail, "Fechar detalhes").click();
+  const card = ctx.root().querySelector('.pg-card[data-item-id="306"]');
+  assert.equal(card.querySelector('[data-action="details"]'), null);
+  assert.ok(card.querySelector('[data-gallery-action="edit"]'));
+  assert.match(card.textContent, /23\/09\/2026/);
+  assert.match(card.textContent, /texto <img src=x onerror=alert\(1\)>/);
+  assert.equal(card.querySelector("img, [onerror]"), null);
+  assert.match(card.textContent, /R\$\s?12\.055,00/);
 
   ctx.root().querySelector('.pg-card[data-item-id="306"] [data-action="attachments"]').click();
   await settle();
@@ -258,15 +260,26 @@ test("vencimento ignora a data de agendamento e não marca pagamento sem vencime
   assert.equal(ctx.root().querySelector('.pg-card[data-item-id="401"] .pg-deadline'), null);
 });
 
-test("datas de criação e modificação mostram o dia local de São Paulo", async t => {
+test("G28 abre os dados originais pelo lápis sem depender de detalhes", async t => {
   const rows = [{ id: "500", hasAttachments: false, fields: {
     ID: 500, FORNECEDOR: "FORNECEDOR", STATUS: "PAGAMENTO PREVISTO",
     Criado: "2026-09-22T01:00:00Z", Modificado: "2026-09-22T01:00:00Z",
   } }];
-  const ctx = await setup(t, { rows });
+  const ctx = await setup(t, { rows, data: {
+    async loadEditor(id) {
+      return {
+        entity: { id: "provisao", title: "Pagamento" },
+        item: { id, fields: { FORNECEDOR: "FORNECEDOR", OBS: "Valor original" } },
+        columns: [{ name: "OBS", label: "Observação", control: "textarea", editable: true }],
+        contract: { hasForm: true },
+      };
+    },
+  } });
   await ctx.gallery.open();
-  button(ctx.root(), "Ver detalhes").click();
-  assert.match(ctx.root().querySelector(".pg-detail").textContent, /21\/09\/2026/);
+  ctx.root().querySelector('.pg-card[data-item-id="500"] [data-gallery-action="edit"]').click();
+  for (let attempt = 0; attempt < 20 && !ctx.root().querySelector('[data-dynamic-form]'); attempt++) await settle();
+  assert.equal(ctx.root().querySelector('[data-dynamic-form] [name="OBS"]').value, "Valor original");
+  assert.equal(ctx.root().querySelector('[data-action="details"]'), null);
 });
 
 test("PGTOAGENDADO=PAGO não é classificado como agendado e filtra como PAGO", async t => {

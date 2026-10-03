@@ -414,15 +414,8 @@ export function createPaymentProgrammingGallery({
     if (observation) appendSummaryField(summary, "OBS", observation, "▤", { wide: true });
     const timingText = paymentTiming(fields, now());
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
-    const actions = el("div", "og-card-actions pg-card-actions");
-    const detailsButton = el("button", "og-button og-button--detail pg-detail-button", "Ver detalhes");
-    detailsButton.type = "button";
-    detailsButton.dataset.action = "details";
-    detailsButton.addEventListener("click", () => openDetails(row));
-    actions.append(detailsButton);
     main.append(heading, summary);
     if (timing) main.append(timing);
-    main.append(actions);
     if (hasAttachmentControl) {
       const attachmentRail = el("button", "og-button og-card-attachment-rail pg-attachment-rail");
       attachmentRail.type = "button";

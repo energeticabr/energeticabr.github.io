@@ -114,7 +114,7 @@ async function galleryHarness(t, loadLinkedReport) {
   return { gallery, calls, dom, root: dom.window.document.querySelector('.og-overlay'), panel: dom.window.document.querySelector('.og-detail'), mascot(id) { return dom.window.document.querySelector(`.og-card[data-item-id="${id}"] [data-action="mascot-details"]`); } };
 }
 
-test('mascot shows the PowerApps linked report while ordinary Details keeps the field table', async t => {
+test('mascot keeps the linked-order report while the separate Details action is absent', async t => {
   const data = harness();
   const ctx = await galleryHarness(t, id => report(data, id));
   ctx.mascot('319').click();
@@ -132,9 +132,9 @@ test('mascot shows the PowerApps linked report while ordinary Details keeps the 
   assert.match(ctx.panel.querySelector('[data-report-field="FILIAL"]').textContent, /IDs com discrepância:.*15/);
   assert.match(ctx.panel.querySelector('[data-report-field="NOTA FISCAL"]').textContent, /Pendência para dar baixa/);
   assert.equal(ctx.panel.querySelector('[data-report-field="STATUS"] dd').textContent, 'APROVADO');
-  ctx.root.querySelector('.og-card[data-item-id="320"] [data-action="details"]').click();
-  assert.ok(ctx.panel.querySelector('.og-data-table'));
-  assert.equal(ctx.panel.querySelector('.olr-report'), null);
+  assert.equal(ctx.root.querySelector('[data-action="details"]'), null);
+  assert.ok(ctx.root.querySelector('.og-card[data-item-id="320"] [data-gallery-action="edit"]'));
+  assert.ok(ctx.panel.querySelector('.olr-report'));
 });
 
 test('switching selected orders aborts the previous report and ignores out-of-order responses', async t => {

@@ -42,7 +42,9 @@ test("record buttons have distinct accessible edit/delete icons", async t => {
   assert.equal(ctx.buttons.className, "gallery-record-actions");
   assert.equal(ctx.get('[data-gallery-action="edit"]').getAttribute("aria-label"), "Editar item de ID 42");
   assert.equal(ctx.get('[data-gallery-action="delete"]').getAttribute("aria-label"), "Deletar item de ID 42");
-  assert.equal(ctx.buttons.querySelectorAll('svg[aria-hidden="true"]').length, 2);
+  assert.equal(ctx.get('[data-gallery-action="edit"]').textContent, "✏️", "all gallery editors use the yellow pencil already present in chat");
+  assert.equal(ctx.get('[data-gallery-action="edit"]').querySelector("svg"), null, "the former blue SVG pencil is gone");
+  assert.equal(ctx.buttons.querySelectorAll('svg[aria-hidden="true"]').length, 1);
 });
 
 test("delete requires exact confirmation and Não closes without writes", async t => {

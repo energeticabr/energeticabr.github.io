@@ -328,8 +328,8 @@ export function createOrdersGallery({
     const mascot = el("button", "og-button og-mascot-button");
     mascot.type = "button";
     mascot.dataset.action = "mascot-details";
-    mascot.setAttribute("aria-label", `Abrir detalhes do pedido #${row.id}`);
-    mascot.title = "Conferir pedido e lançamentos vinculados";
+    mascot.setAttribute("aria-label", `Abrir relatório do pedido e lançamentos vinculados #${row.id}`);
+    mascot.title = "Relatório do pedido e lançamentos vinculados";
     const mascotImage = el("img");
     mascotImage.src = MASCOT_URL;
     mascotImage.alt = "";
@@ -337,13 +337,11 @@ export function createOrdersGallery({
     mascotImage.draggable = false;
     mascot.append(mascotImage);
     mascot.addEventListener("click", () => { void openLinkedDetails(row); });
-    const details = el("button", "og-button og-button--detail", "Detalhes"); details.type = "button"; details.addEventListener("click", () => openDetails(row));
-    details.dataset.action = "details";
     const recordControls = recordActions.render(row);
     for (const action of ['edit', 'delete']) {
       recordControls.querySelector(`[data-gallery-action="${action}"]`).dataset.action = action;
     }
-    actions.append(mascot, details);
+    actions.append(mascot);
     main.append(heading, status, cardFields, actions);
     if (hasAttachmentControl) {
       const attachments = el("button", "og-button og-card-attachment-rail");

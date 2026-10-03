@@ -390,15 +390,8 @@ export function createRecurringExpensesGallery({
     const meta = el("div", "re-metadata");
     for (const line of metadata(fields)) meta.append(el("p", "re-meta-line", line));
 
-    const actions = el("div", "og-card-actions re-card-actions");
-    const detailsButton = el("button", "og-button og-button--detail", "Detalhes");
-    detailsButton.type = "button";
-    detailsButton.dataset.action = "details";
-    detailsButton.addEventListener("click", () => openDetails(row));
-    actions.append(detailsButton);
     main.append(heading, status, summary);
     if (meta.childNodes.length) main.append(meta);
-    main.append(actions);
     if (hasAttachmentControl) {
       const attachmentButton = el("button", "og-button og-card-attachment-rail");
       attachmentButton.type = "button";

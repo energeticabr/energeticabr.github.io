@@ -65,6 +65,8 @@ for (const [kind, create, selector, options = {}] of cases) {
     const remove = card.querySelector('[data-gallery-action="delete"]');
     assert.ok(pencil, 'record has pencil edit action');
     assert.match(pencil.getAttribute('aria-label'), /3479/);
+    assert.equal(pencil.textContent, '✏️', `${kind} uses the shared yellow edit pencil`);
+    assert.equal(card.querySelector('[data-action="details"]'), null, `${kind} has no separate details action`);
     assert.ok(remove, 'record has red X delete action');
     assert.match(remove.getAttribute('aria-label'), /3479/);
 

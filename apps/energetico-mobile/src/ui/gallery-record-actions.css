@@ -56,7 +56,12 @@
 }
 
 .gallery-record-action svg { width: 24px; height: 24px; }
-.gallery-record-action--edit { color: #1565c0; background: #eaf3ff; }
+.gallery-record-action--edit {
+  border: 1px solid #e5bc65;
+  background: #fff8e1;
+  font-size: 24px;
+  line-height: 1;
+}
 .gallery-record-action--delete { color: #fff; background: #d32f2f; }
 .gallery-record-action:disabled { opacity: .55; cursor: wait; }
 .gallery-record-action:focus-visible,
