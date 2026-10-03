@@ -5950,6 +5950,39 @@ test("assina PDF da bandeja, abre o posicionamento e só substitui o original ap
   h.controller.stop();
 });
 
+test("assina PDF já existente no documento pendente sem excluir o original do SharePoint", async t => {
+  const signedCalls = [];
+  const h = makeHarness({ signPdfAttachment: async input => {
+    signedCalls.push(input);
+    return new Blob(["signed-pdf"], { type: "application/pdf" });
+  } });
+  t.after(() => h.controller.stop());
+  const activeFlow = { id: "pending_document_attachment", title: "DOCUMENTOS PENDENTES" };
+  const original = { id: "rhid", fileName: "PONTO-RHID-17-2026-09.pdf", mimeType: "application/pdf", mediaUrl: "/rhid", existing: true, readOnly: true };
+  const uploaded = { id: "signed", fileName: "PONTO-RHID-17-2026-09-assinado.pdf", mimeType: "application/pdf", mediaUrl: "/signed", size: 2400 };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow, attachments: [original, { ...uploaded, size: file.size }] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+  await h.view.emit("signature-captured", {
+    file: new File(["png"], "assinatura.png", { type: "image/png" }), fileId: "rhid",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.deepEqual(h.chatCalls, [["media", "rhid"]], "nenhum arquivo deve ser enviado antes da escolha do local");
+  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.72, y: 0.84, scale: 0.5 } });
+  assert.deepEqual(signedCalls[0].point, { page: 1, x: 0.72, y: 0.84, scale: 0.5 });
+  assert.deepEqual(h.chatCalls, [["media", "rhid"], ["file", "PONTO-RHID-17-2026-09-assinado.pdf"]]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["rhid", "signed"]);
+  assert.equal(h.store.getState().activeFlow.id, "pending_document_attachment");
+  assert.equal(h.view.renders.at(-1).signaturePlacement, null);
+  assert.equal(h.view.renders.at(-1).error, null);
+});
+
 test("substitui o PDF da bandeja incluindo o carimbo de Bernardo", async () => {
   const signedCalls = [];
   const h = makeHarness({

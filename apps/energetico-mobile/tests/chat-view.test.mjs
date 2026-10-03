@@ -7020,6 +7020,44 @@ test("exporta a assinatura redesenhando o traço em alta resolução e preto opa
   dom.window.close();
 });
 
+test("PDF existente de documentos pendentes abre a assinatura pela mãozinha da bandeja", () => {
+  const dom = new JSDOM('<main id="app"></main>');
+  dom.window.HTMLCanvasElement.prototype.getContext = () => null;
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  view.render(signedInState({
+    activeFlow: { id: "pending_document_attachment", title: "DOCUMENTOS PENDENTES" },
+    attachments: [{ id: "rhid", fileName: "PONTO-RHID-17-2026-09.pdf", mimeType: "application/pdf", existing: true, readOnly: true }],
+  }));
+  const sign = root.querySelector('[data-action="open-signature-pad"][data-file-id="rhid"]');
+  assert.ok(sign, "o PDF já anexado deve permitir assinatura");
+  assert.equal(root.querySelector('[data-action="remove-attachment"]'), null);
+  assert.equal(root.querySelector('[data-action="compress-attachment"]'), null);
+  sign.click();
+  assert.ok(root.querySelector('[data-role="signature-pad"]'), "a mãozinha abre o desenho existente");
+  view.destroy();
+  dom.window.close();
+});
+
+test("assinatura de PDF existente respeita o fluxo, o tipo de arquivo e o processamento", () => {
+  for (const [flowId, fileName, busy] of [
+    ["task", "contrato.pdf", false],
+    ["pending_document_attachment", "foto.jpg", false],
+    ["pending_document_attachment", "contrato.pdf", true],
+  ]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({
+      busy,
+      activeText: busy ? { id: "sending" } : null,
+      activeFlow: { id: flowId, title: "FLUXO" },
+      attachments: [{ id: "old", fileName, existing: true, readOnly: true }],
+    })));
+    const sign = dom.window.document.querySelector('[data-action="open-signature-pad"][data-file-id="old"]');
+    if (busy) assert.equal(sign?.disabled, true);
+    else assert.equal(sign, null);
+    dom.window.close();
+  }
+});
+
 test("anexos novos e existentes ficam visualmente identificados na bandeja", () => {
   const markup = renderChatMarkup(signedInState({ attachments: [
     { id: "old", fileName: "nota-existente.pdf", size: 1200, mediaUrl: "/api/portal-media/old", existing: true, readOnly: true },
