@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Total e frete dos lançamentos</title>
+  <link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <script type="module">
+    import { createLaunchGallery } from '../../src/ui/launch-gallery-view.js';
+    const rows = [
+      { id: 3489, total: 13040, hasAttachments: true, fields: {
+        PRODUTO: 'EXECUÇÃO DE FORMA PILAR/VIGA', FORNECEDOR: 'ISRAEL ESCORAMENTO E ARMAÇÕES',
+        AGRUPAR: 353, 'DATA PGTO EFETUADO': '2026-10-03',
+        'VALOR UNITÁRIO': 13000, QUANTIDADE: 1, UN: 'UN', FRETE: 40,
+        'VALOR TOTAL': 13040, CONCLUÍDO: 'PEDIDO FINALIZADO',
+      } },
+      { id: 3488, total: 123456789.99, hasAttachments: false, fields: {
+        PRODUTO: 'ARMADOR DE FERRAGENS', 'VALOR UNITÁRIO': 123456789.99,
+        QUANTIDADE: 1, FRETE: 0, 'VALOR TOTAL': 123456789.99, CONCLUÍDO: 'PEDIDO FINALIZADO',
+      } },
+    ];
+    const gallery = createLaunchGallery({ document, request: async (operation, payload) => {
+      if (operation === 'snapshot') return { rows, count: rows.length, page: 1, pages: 1,
+        totals: { paid: 2319389.28 }, filterOptions: {} };
+      if (operation === 'detail') return { item: rows.find(row => String(row.id) === String(payload.id)),
+        attachments: [{ fileName: 'nota.pdf' }, { fileName: 'comprovante.jpg' }], editFields: [] };
+      throw new Error(`Operação inesperada: ${operation}`);
+    } });
+    await gallery.open();
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>
