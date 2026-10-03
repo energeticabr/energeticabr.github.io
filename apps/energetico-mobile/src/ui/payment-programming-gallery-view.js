@@ -401,7 +401,8 @@ export function createPaymentProgrammingGallery({
     cards.replaceChildren(...visible.map(renderCard));
     for (const row of visible) if (attachmentCounts.hasError(row)) updateAttachmentCount(row);
     void attachmentCounts.request(visible);
-    listStatus.textContent = filteredRows.length ? `${filteredRows.length} pagamento(s) previsto(s)` : "Nenhum pagamento encontrado para estes filtros.";
+    const defaultStatusSelected = key(controls.get("status").value) === key(DEFAULT_STATUS);
+    listStatus.textContent = filteredRows.length ? `${filteredRows.length} pagamento(s)${defaultStatusSelected ? " previsto(s)" : ""}` : "Nenhum pagamento encontrado para estes filtros.";
     pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
     updateBusy();
   }
@@ -454,7 +455,7 @@ export function createPaymentProgrammingGallery({
     const timingText = paymentTiming(fields, now());
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
     if (timing) headingCopy.append(timing);
-    if (!pending || !timing) headingCopy.append(status);
+    if (!timing || key(statusText) !== key(DEFAULT_STATUS)) headingCopy.append(status);
     const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO", "PRODUTO"]) || "").trim();
     const descriptionBand = description ? el("div", "pg-description") : null;
     if (descriptionBand) descriptionBand.append(el("span", "pg-description-label", "Descrição"), el("strong", "", description));

@@ -85,6 +85,8 @@ test("G28 abre galeria somente de consulta com filtros, valores e datas em forma
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="306"]').textContent, /PGTO NÃO AGENDADO/);
   choose(ctx, "status", "PAGO");
   assert.deepEqual([...ctx.root().querySelectorAll(".pg-card")].map(card => card.dataset.itemId), ["310"]);
+  assert.equal(ctx.root().querySelector(".pg-list-status").textContent, "1 pagamento(s)",
+    "a contagem não chama pagamentos quitados de previstos");
   assert.match(ctx.root().querySelector(".pg-cards").textContent, /24\/09\/2026/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /Agendamento\s*PGTO PAGO/);
   assert.match(ctx.root().querySelector('.pg-card[data-item-id="310"]').textContent, /PAGO EM 24\/09\/2026/);
@@ -214,6 +216,18 @@ test("G28 apresenta provisão sem anexos no cartão compacto da segunda referên
   assert.equal(card.querySelector(".pg-card-heading .pg-status"), null, "o status previsto não duplica o aviso de prazo");
   assert.ok(card.querySelector('[data-gallery-action="edit"]'));
   assert.ok(card.querySelector('[data-gallery-action="delete"]'));
+});
+
+test("G28 mantém um status pendente específico mesmo quando o prazo é mostrado", async t => {
+  const rows = [{ id: "303", hasAttachments: false, fields: {
+    ID: 303, FORNECEDOR: "FORNECEDOR", STATUS: "PENDENTE APROVAÇÃO", "DATA PREVISTO PGTO": "2026-10-04",
+  } }];
+  const ctx = await setup(t, { rows, now: () => new Date("2026-10-03T12:00:00-03:00") });
+  await ctx.gallery.open();
+  choose(ctx, "status", "PENDENTE APROVAÇÃO");
+  const card = ctx.root().querySelector('.pg-card[data-item-id="303"]');
+  assert.match(card.querySelector(".pg-card-heading .pg-deadline").textContent, /VENCE EM 1 DIA/);
+  assert.equal(card.querySelector(".pg-card-heading .pg-status")?.textContent, "PENDENTE APROVAÇÃO");
 });
 
 test("G28 esconde o clipe se a contagem consultada confirmar que não há anexos", async t => {
