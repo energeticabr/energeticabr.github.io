@@ -124,6 +124,15 @@ test("quantidade padrão não ativa rubrica e pagamento só aparece com valor in
   assert.equal(row.dataset.payrollCompletion, "pending");
   h.input('[name=salary-quantity]', "2");
   assert.equal(row.dataset.payrollCompletion, "complete");
+  h.input('[name=salary-value]', "0,00");
+  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.required, false);
+  assert.equal(row.dataset.payrollCompletion, "pending");
+  assert.match(row.querySelector('[data-payroll-line-status]').textContent, /Valor zero.*não será enviada/);
+  h.input('[name=salary-value]', "150");
+  assert.equal(account.closest('label').hidden, false);
+  assert.equal(account.required, true);
+  assert.equal(row.dataset.payrollCompletion, "complete");
   h.input('[name=salary-value]', "abc");
   assert.equal(row.dataset.payrollCompletion, "pending");
   h.input('[name=salary-value]', "");

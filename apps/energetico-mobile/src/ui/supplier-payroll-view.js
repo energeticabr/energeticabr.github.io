@@ -291,9 +291,12 @@ export function createSupplierPayrollView({
       lineStatus.setAttribute("role", "status");
       function updateCompletion() {
         const hasValue = String(line.unitValue ?? "").trim() !== "";
-        accountField.hidden = !hasValue;
-        account.disabled = !hasValue;
-        account.required = hasValue;
+        let isZero = false;
+        try { isZero = hasValue && payrollDecimal(line.unitValue).isZero(); } catch { /* Invalid values remain pending. */ }
+        const needsPayment = hasValue && !isZero;
+        accountField.hidden = !needsPayment;
+        account.disabled = !needsPayment;
+        account.required = needsPayment;
         const started = hasValue || String(line.quantity).trim() !== "1" || line.account || line.files.length;
         let complete = false;
         if (hasValue) {
@@ -305,7 +308,9 @@ export function createSupplierPayrollView({
         }
         row.dataset.payrollCompletion = complete ? "complete" : started ? "pending" : "empty";
         lineStatus.hidden = !started;
-        lineStatus.textContent = complete ? "✓ Completa — será incluída na folha" : !hasValue
+        lineStatus.textContent = complete ? "✓ Completa — será incluída na folha" : isZero
+          ? "Valor zero: esta rubrica não será enviada."
+          : !hasValue
           ? "Pendente: sem valor unitário, esta rubrica não será enviada."
           : "Pendente: confira quantidade, valor unitário e forma de pagamento.";
       }
