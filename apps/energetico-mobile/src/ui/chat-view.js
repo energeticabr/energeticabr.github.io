@@ -1206,14 +1206,10 @@ function singleLaunchConfirmationMarkup(message, activeFlow) {
   const question = String(message?.question || message?.prompt || "").normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR");
   if (activeFlow?.id !== "launch" || !/CONFIRMA A CRIACAO DESTE LANCAMENTO\b/.test(question)) return "";
-  const rows = Array.isArray(activeFlow.rows) ? activeFlow.rows : [];
-  const field = (...names) => rows.find(row => names.includes(String(row?.label || "").normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/[^A-Z0-9]+/g, " ").trim()))?.value;
-  const unit = field("VALOR UNITARIO", "VALOR UN", "VLOR UN");
-  const quantity = field("QUANTIDADE", "QTD");
-  const freight = field("FRETE");
-  const statedTotal = field("VALOR TOTAL DO PEDIDO", "VALOR TOTAL", "TOTAL");
-  if (unit == null && quantity == null && freight == null && statedTotal == null) return "";
+  const launches = activeFlow.launches;
+  if (launches?.count !== 1 || !Array.isArray(launches.lines) || launches.lines.length !== 1) return "";
+  const line = launches.lines[0];
+  if (!line) return "";
   const parse = value => {
     const numeric = String(value ?? "").trim().replace(/^R\$\s*/i, "").replace(/\s/g, "");
     if (!/^-?[\d.,]+$/.test(numeric)) return null;
@@ -1225,10 +1221,10 @@ function singleLaunchConfirmationMarkup(message, activeFlow) {
     const [whole, fraction] = value.toFixed(preservePrecision ? Math.max(2, value.decimalPlaces()) : 2).split(".");
     return `R$ ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${fraction}`;
   };
-  const unitNumber = parse(unit);
-  const quantityNumber = parse(quantity);
-  const freightNumber = parse(freight);
-  const totalNumber = parse(statedTotal);
+  const unitNumber = parse(line.unitPrice);
+  const quantityNumber = parse(line.quantity);
+  const freightNumber = parse(line.freight);
+  const totalNumber = parse(line.total);
   const cells = [
     ["VLOR UN.", money(unitNumber, true)],
     ["QTD", quantityNumber ? quantityNumber.toString().replace(".", ",") : "—"],

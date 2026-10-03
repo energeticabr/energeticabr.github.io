@@ -6536,7 +6536,9 @@ test("confirmação de lançamento único mostra valores preenchidos antes das a
       { label: "QUANTIDADE", value: "3" },
       { label: "FRETE", value: "12,50" },
       { label: "VALOR TOTAL DO PEDIDO", value: "R$ 538,50" },
-    ] },
+    ], launches: { count: 1, lines: [
+      { unitPrice: "175.3333333", quantity: "3", freight: "12.50", total: "538.50" },
+    ] } },
     messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
       question: "✅ CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?",
       options: [{ id: "yes", label: "✅ SIM" }, { id: "edit", label: "✏️ EDITAR" }],
@@ -6568,6 +6570,53 @@ test("não mostra conferência de lançamento único na confirmação de múltip
   assert.doesNotMatch(markup, /Conferência do lançamento único/);
 });
 
+test("não mostra quadro de lançamento único quando a VM confirma duas linhas com pergunta no singular", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR TOTAL DO PEDIDO", value: "R$ 2.000,00" },
+    ], launches: { count: 2, lines: [
+      { unitPrice: "500", quantity: "2", freight: "0", total: "1000" },
+      { unitPrice: "250", quantity: "4", freight: "0", total: "1000" },
+    ] } },
+    messages: [{ id: "confirmar-lancamentos", role: "assistant", type: "poll",
+      question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?",
+      options: [{ id: "yes", label: "SIM" }],
+    }],
+  }));
+  assert.doesNotMatch(markup, /Conferência do lançamento único/);
+});
+
+test("confirmação de uma linha usa preço, quantidade e frete da linha mesmo quando rows só contém total", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR TOTAL DO PEDIDO", value: "R$ 2.000,00" },
+    ], launches: { count: 1, lines: [
+      { unitPrice: "1000", quantity: "2", freight: "0", total: "2000", totalDisplay: "R$ 2.000,00" },
+    ] } },
+    messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
+      question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?",
+      options: [{ id: "yes", label: "SIM" }],
+    }],
+  }));
+  const dom = new JSDOM(markup);
+  const values = [...dom.window.document.querySelectorAll(".chat-single-launch-confirmation dd")].map(node => node.textContent);
+  assert.deepEqual(values, ["R$ 1.000,00", "2", "R$ 0,00", "R$ 2.000,00"]);
+  dom.window.close();
+});
+
+test("não mostra quadro de lançamento único sem linha concluída na VM", () => {
+  const markup = renderChatMarkup(signedInState({
+    activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
+      { label: "VALOR TOTAL DO PEDIDO", value: "R$ 2.000,00" },
+    ], launches: { count: 0, lines: [] } },
+    messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
+      question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?",
+      options: [{ id: "yes", label: "SIM" }],
+    }],
+  }));
+  assert.doesNotMatch(markup, /Conferência do lançamento único/);
+});
+
 test("total da conferência usa o cálculo informado pela VM, não o valor unitário arredondado", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
@@ -6575,7 +6624,9 @@ test("total da conferência usa o cálculo informado pela VM, não o valor unit�
       { label: "QUANTIDADE", value: "3" },
       { label: "FRETE", value: "R$ 0,00" },
       { label: "VALOR TOTAL DO PEDIDO", value: "R$ 526,00" },
-    ] },
+    ], launches: { count: 1, lines: [
+      { unitPrice: "175.33", quantity: "3", freight: "0", total: "526" },
+    ] } },
     messages: [{ id: "confirmar-lancamento", role: "assistant", type: "poll",
       question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?", options: [{ id: "confirm_yes", label: "SIM" }],
     }],
@@ -6586,7 +6637,7 @@ test("total da conferência usa o cálculo informado pela VM, não o valor unit�
   dom.window.close();
 });
 
-test("não inventa total quando a VM ainda não o informou", () => {
+test("não exibe conferência sem linha confirmada pela VM", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
       { label: "VALOR UNITÁRIO", value: "100" }, { label: "QUANTIDADE", value: "2" },
@@ -6595,9 +6646,7 @@ test("não inventa total quando a VM ainda não o informou", () => {
       question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?", options: [{ id: "confirm_yes", label: "SIM" }],
     }],
   }));
-  const dom = new JSDOM(markup);
-  assert.equal(dom.window.document.querySelector(".chat-single-launch-confirmation > div:last-child dd")?.textContent, "—");
-  dom.window.close();
+  assert.doesNotMatch(markup, /Conferência do lançamento único/);
 });
 
 test("não reabre a tabela em uma confirmação antiga durante a edição", () => {
@@ -6605,7 +6654,9 @@ test("não reabre a tabela em uma confirmação antiga durante a edição", () =
     activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [
       { label: "VALOR UNITÁRIO", value: "100" },
       { label: "VALOR TOTAL DO PEDIDO", value: "R$ 100,00" },
-    ] },
+    ], launches: { count: 1, lines: [
+      { unitPrice: "100", quantity: "1", freight: "0", total: "100" },
+    ] } },
     messages: [
       { id: "confirmar-antigo", role: "assistant", type: "poll",
         question: "CONFIRMA A CRIAÇÃO DESTE LANÇAMENTO NO SHAREPOINT?", options: [{ id: "confirm_edit", label: "EDITAR" }] },
