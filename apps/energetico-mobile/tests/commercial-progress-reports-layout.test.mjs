@@ -14,7 +14,8 @@ const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\App
 
 test("relatórios 14 e 15 cabem em 844x390 e 740x360 sem rolagem lateral", { timeout: 90_000 }, async t => {
   if (!browser) return t.skip("Chromium/Chrome indisponível neste ambiente");
-  const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0 }, logLevel: "silent" });
+  const server = await createServer({ root: appRoot,
+    server: { host: "127.0.0.1", port: 0, fs: { allow: [appRoot, resolve(appRoot, "../..")] } }, logLevel: "silent" });
   const profile = mkdtempSync(join(tmpdir(), "energetico-commercial-layout-"));
   let child; let socket;
   const pending = new Map();
@@ -67,7 +68,24 @@ test("relatórios 14 e 15 cabem em 844x390 e 740x360 sem rolagem lateral", { tim
       assert.ok(dimensions.scrollWidth <= dimensions.viewport, `Documento transborda: ${JSON.stringify({ report, width, dimensions })}`);
       assert.ok(dimensions.rootWidth <= dimensions.rootClient, `Relatório pede rolagem lateral: ${JSON.stringify({ report, width, dimensions })}`);
       assert.deepEqual(dimensions.clipped, [], `Conteúdo cortado: ${JSON.stringify({ report, width, dimensions })}`);
+      const presentation = await evaluate('(() => { const metric = document.querySelector(".cpr-metric[data-tone=total]"); return { table: getComputedStyle(document.querySelector(".cpr-table")).display, filter: getComputedStyle(document.querySelector(".cpr-filter-label")).backgroundColor, logo: document.querySelector(".cpr-brand img")?.naturalWidth || 0, tone: metric ? getComputedStyle(metric).backgroundColor : "" }; })()');
+      assert.equal(presentation.table, "none", `Tabela desktop apareceu no celular: ${JSON.stringify(presentation)}`);
+      assert.equal(presentation.filter, "rgb(153, 0, 0)");
+      assert.ok(presentation.logo > 0, `Logomarca não carregou: ${JSON.stringify(presentation)}`);
+      if (report === 14) assert.equal(presentation.tone, "rgb(255, 235, 238)");
     }
+    await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/commercial-progress-reports-responsive.html?report=15` }, sessionId);
+    let desktopReady = false;
+    for (let i = 0; i < 200 && !desktopReady; i++) {
+      desktopReady = await evaluate('location.search === "?report=15" && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector(".cpr-table"))');
+      if (!desktopReady) await delay(100);
+    }
+    assert.ok(desktopReady, "Relatório 15 desktop não carregou");
+    const desktop = await evaluate('(() => ({ table: getComputedStyle(document.querySelector(".cpr-table")).display, cards: getComputedStyle(document.querySelector(".cpr-card-list")).display, overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth }))()');
+    assert.equal(desktop.table, "table");
+    assert.equal(desktop.cards, "none");
+    assert.equal(desktop.overflow, false);
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);
     socket?.close();

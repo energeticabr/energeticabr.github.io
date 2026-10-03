@@ -50,7 +50,15 @@ const inRange = (date, { startDate, endDate } = {}) => (!startDate || !!date && 
 const sortText = (a, b) => String(a).localeCompare(String(b), "pt-BR");
 const sumComplete = (rows, accessor = row => row.dailyValue) => rows.every(row => Number.isFinite(accessor(row)))
   ? rows.reduce((total, row) => total + accessor(row), 0) : null;
-const normalizePresenceKind = value => key(value);
+const percent = (part, whole) => whole ? Math.round(part / whole * 1000) / 10 : 0;
+const shiftMinutes = (start, finish) => {
+  if (!/^\d{2}:\d{2}$/.test(start || "") || !/^\d{2}:\d{2}$/.test(finish || "")) return null;
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = finish.split(":").map(Number);
+  if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) return null;
+  const minutes = endHour * 60 + endMinute - startHour * 60 - startMinute;
+  return minutes >= 0 ? minutes : null;
+};
 const localToday = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -116,16 +124,24 @@ export function buildRhReport3(snapshot, filters = {}, today = localToday()) {
     const properties = [...new Set(inBranch.map(row => row.property))].sort(sortText).map(property => {
       const rows = inBranch.filter(row => row.property === property);
       const daily = rows.filter(row => same(row.paymentMethod || row.paymentType, "DIÁRIA"));
-      const professions = [...new Set(rows.map(row => row.profession || "SEM PROFISSÃO"))].sort(sortText).map(name => ({
-        name, suppliers: rows.filter(row => (row.profession || "SEM PROFISSÃO") === name).map(row => {
+      const professions = [...new Set(rows.map(row => row.profession || "SEM PROFISSÃO"))].sort(sortText).map(name => {
+        const professionRows = rows.filter(row => (row.profession || "SEM PROFISSÃO") === name);
+        const professionDaily = professionRows.filter(row => same(row.paymentMethod || row.paymentType, "DIÁRIA"));
+        return { name, count: professionRows.length, dailyCount: professionDaily.length,
+          measurementCount: professionRows.filter(row => same(row.paymentMethod || row.paymentType, "MEDIÇÃO")).length,
+          globalCount: professionRows.filter(row => same(row.paymentMethod || row.paymentType, "VALOR GLOBAL")).length,
+          dailyAmount: sumComplete(professionDaily), suppliers: professionRows.map(row => {
           const history = presences.filter(presence => same(presence.supplier, row.name)).sort((a, b) => a.date.localeCompare(b.date));
           const present = history.filter(presence => same(presence.presence, "PRESENTE"));
           const last30 = present.filter(presence => presence.date >= cutoff);
+          const recentHistory = history.filter(presence => presence.date >= cutoff);
           return { ...row, firstDate: history[0]?.date || "", lastPresentDate: present.at(-1)?.date || "",
             presentCount: present.length, presenceCount: history.length,
-            attendance: { last30Present: last30.length, present: present.length, records: history.length } };
-        }),
-      }));
+            attendance: { last30Present: last30.length, last30Records: recentHistory.length,
+              last30Rate: percent(last30.length, recentHistory.length), historyRate: percent(present.length, history.length),
+              present: present.length, records: history.length } };
+        }) };
+      });
       return { name: property, count: rows.length, dailyCount: daily.length,
         measurementCount: rows.filter(row => same(row.paymentMethod || row.paymentType, "MEDIÇÃO")).length,
         globalCount: rows.filter(row => same(row.paymentMethod || row.paymentType, "VALOR GLOBAL")).length,
@@ -173,7 +189,11 @@ export function buildRhReport4(snapshot, filters = {}) {
     const onDate = rows.filter(row => row.date === date);
     return { date, branches: [...new Set(onDate.map(row => row.branch))].sort(sortText).map(name => {
       const group = onDate.filter(row => row.branch === name);
-      return { name, present: group.filter(row => same(row.presence, "PRESENTE")).length,
+      const presentRows = group.filter(row => same(row.presence, "PRESENTE"));
+      const professionCounts = [...new Set(presentRows.map(row => row.profession || "SEM PROFISSÃO"))]
+        .sort(sortText).map(profession => ({ name: profession,
+          count: presentRows.filter(row => (row.profession || "SEM PROFISSÃO") === profession).length }));
+      return { name, present: presentRows.length, dailyTotal: sumComplete(presentRows), professionCounts,
         pending: group.filter(row => same(row.presence, "PENDENTE")).length,
         absent: group.filter(row => same(row.presence, "AUSENTE")).length, rows: group };
     }) };
@@ -182,7 +202,10 @@ export function buildRhReport4(snapshot, filters = {}) {
     presentValue: sumComplete(present) }, professions, days };
 }
 
-export function buildRhReport5(snapshot, filters = {}) {
+export function buildRhReport5(snapshot, filters = {}, today = localToday()) {
+  const fourteenDaysAgo = new Date(`${today}T12:00:00Z`);
+  fourteenDaysAgo.setUTCDate(fourteenDaysAgo.getUTCDate() - 14);
+  const recentCutoff = fourteenDaysAgo.toISOString().slice(0, 10);
   const suppliers = (snapshot.suppliers || []).filter(row => (row.contractor === true || same(row.contractor, "SIM"))
     && selected(row.branch, filters.branch) && selected(row.name, filters.supplier));
   const inPeriod = row => inRange(row.date, filters) && selected(row.branch, filters.branch)
@@ -191,15 +214,25 @@ export function buildRhReport5(snapshot, filters = {}) {
   const details = suppliers.map(supplier => {
     const all = (snapshot.presences || []).filter(row => same(row.supplier, supplier.name));
     const approved = all.filter(row => same(row.presence, "PRESENTE") && same(row.status, "PENDENTE PGTO"));
-    const validation = all.filter(row => same(row.presence, "PENDENTE") && same(row.status, "PENDENTE PGTO"));
+    const validation = all.filter(row => same(row.presence, "PENDENTE"));
     const pendingRows = all.filter(row => same(row.status, "PENDENTE PGTO"));
+    const timelineRows = all.filter(row => same(row.status, "PENDENTE PGTO")
+      || (same(row.presence, "AUSENTE") && row.date >= recentCutoff)).sort((a, b) => a.date.localeCompare(b.date))
+      .map(row => {
+        const firstShift = shiftMinutes(row.entry1, row.exit1);
+        const secondShift = shiftMinutes(row.entry2, row.exit2);
+        const workedHours = firstShift == null || secondShift == null ? null : (firstShift + secondShift) / 60;
+        return { ...row, workedHours, hasDiscrepancy: Number.isFinite(workedHours)
+          && Number.isFinite(supplier.hours) && supplier.hours > 0 && workedHours < supplier.hours
+          || Number.isFinite(row.dailyValue) && Number.isFinite(supplier.dailyValue) && row.dailyValue !== supplier.dailyValue };
+      });
     const approvedValue = sumComplete(approved); const validationValue = sumComplete(validation);
     const occurrences = all.filter(inPeriod);
     const payments = (snapshot.launches || []).filter(row => same(row.supplier, supplier.name) && inRange(row.date, filters));
     const linkedElsewhere = (snapshot.launches || []).filter(row => occurrences.some(presence => presence.paymentId === row.id)
       && !same(row.supplier, supplier.name));
     return { ...supplier, occurrences: occurrences.length, presenceRows: occurrences,
-      pendingCount: pendingRows.length, pendingRows: pendingRows.slice().sort((a, b) => b.date.localeCompare(a.date)),
+      pendingCount: pendingRows.length, pendingRows: pendingRows.slice().sort((a, b) => b.date.localeCompare(a.date)), timelineRows,
       pendingDates: pendingRows.slice().sort((a, b) => a.date.localeCompare(b.date)),
       approved: approvedValue, validation: validationValue,
       approvedValue, validationValue, totalValue: approvedValue == null || validationValue == null ? null : approvedValue + validationValue,

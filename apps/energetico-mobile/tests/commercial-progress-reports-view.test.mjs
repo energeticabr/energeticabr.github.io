@@ -18,6 +18,7 @@ test("visualização alterna relatórios 14 e 15 e filtra imóveis com dados da 
   const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return snapshot; } } });
   dom.window.document.body.append(view.element);
   await view.open(14);
+  assert.equal(view.element.querySelector('.cpr-filters').nextElementSibling?.className, 'cpr-brand', 'Filtros acima do logo, como no Power Apps');
   assert.match(view.element.textContent, /INDICADORES|RESUMO POR IMÓVEL/i);
   assert.match(view.element.textContent, /Casa 1/);
   assert.match(view.element.textContent, /R\$\s*100,00/);
@@ -66,4 +67,51 @@ test("falha na fonte impede exibir totais antigos e oferece nova tentativa", asy
   assert.match(view.element.textContent, /Página incompleta/);
   assert.equal(view.element.querySelectorAll(".cpr-property").length, 0);
   assert.ok(view.element.querySelector(".cpr-retry"));
+});
+
+test("relatório 14 apresenta logo, indicadores de receitas e forma de pagamento/conta no detalhe", async () => {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const data = { ...snapshot, receipts: [{ ...snapshot.receipts[0], paymentMethod: "PIX", account: "Conta obra", amount: 70 }] };
+  const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return data; } } });
+  await view.open(14);
+  assert.match(view.element.querySelector(".cpr-brand img")?.getAttribute("src") || "", /assets\/logo-energetica-oficial\.png$/);
+  const cards = [...view.element.querySelectorAll(".cpr-metric")];
+  assert.deepEqual(cards.slice(0, 3).map(card => card.textContent), ["VALOR TOTALR$ 70,00", "VALOR PAGOR$ 0,00", "VALOR PENDENTER$ 70,00"]);
+  assert.deepEqual(cards.slice(0, 3).map(card => card.dataset.tone), ["total", "paid", "pending"]);
+  assert.equal(cards.length, 4);
+  assert.match(cards[3].textContent, /STATUS DOS IMÓVEIS.*ATIVOS: 1.*INATIVOS: 0/s);
+  view.element.querySelector('[name="property"]').value = "Casa 1";
+  view.element.querySelector('[name="property"]').dispatchEvent(new dom.window.Event("change"));
+  const receipt = view.element.querySelector(".cpr-receipt");
+  assert.match(receipt.textContent, /FORMA PGTO\s*PIX/);
+  assert.match(receipt.textContent, /CONTA\s*Conta obra/);
+});
+
+test("detalhe do relatório 14 inclui receita com FORNECEDOR vazio vinculada ao comprador pelo contrato", async () => {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const data = { ...snapshot, receipts: [
+    { ...snapshot.receipts[0], amount: 70, description: "Parcela Ana" },
+    { ...snapshot.receipts[0], id: "2", buyer: "", amount: 900, description: "Parcela sem fornecedor" },
+  ] };
+  const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return data; } } });
+  await view.open(14);
+  const buyer = view.element.querySelector('[name="buyer"]');
+  buyer.value = "Ana"; buyer.dispatchEvent(new dom.window.Event("change"));
+  assert.match(view.element.querySelector(".cpr-metric")?.textContent || "", /R\$\s*970,00/);
+  assert.equal(view.element.querySelectorAll(".cpr-detail .cpr-receipt").length, 2);
+  assert.match(view.element.querySelector(".cpr-detail")?.textContent || "", /Parcela Ana/);
+  assert.match(view.element.querySelector(".cpr-detail")?.textContent || "", /Parcela sem fornecedor/);
+});
+
+test("relatório 15 preserva subtítulo e grupos tabulares desktop com os mesmos dados dos cartões móveis", async () => {
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  const view = createCommercialProgressReportsView({ document: dom.window.document, data: { async loadSnapshot() { return snapshot; } } });
+  await view.open(15);
+  assert.equal(view.element.querySelectorAll(".cpr-metric").length, 0);
+  assert.match(view.element.querySelector(".cpr-intro")?.textContent || "", /DATA DE INÍCIO MAIS RECENTE/);
+  const headings = [...view.element.querySelectorAll(".cpr-table thead th")].map(node => node.textContent.trim());
+  assert.deepEqual(headings, ["FILIAL", "IMÓVEL", "COMPRADOR", "ID CONTRATO", "ÚLTIMO TIPO MARCO", "DESCRIÇÃO", "INÍCIO", "DATA FATAL", "STATUS"]);
+  assert.match(view.element.querySelector(".cpr-table tbody")?.textContent || "", /Casa 1.*Ana.*10.*Assinatura/s);
+  assert.match(view.element.querySelector(".cpr-property")?.textContent || "", /Casa 1.*Ana.*10.*Assinatura/s);
+  assert.match(view.element.querySelector(".cpr-branch-footer")?.textContent || "", /TOTAL DE IMÓVEIS NA FILIAL: 1/);
 });

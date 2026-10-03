@@ -21,11 +21,23 @@
     document.getElementById("reports").append(view.element);
     await view.open(number);
   }
+  await Promise.all([...document.querySelectorAll('.or-brand img')].map(image => image.decode().catch(() => {})));
   const reportWidths = [...document.querySelectorAll(".or-report")].map(node => ({
     report: node.querySelector("h2")?.textContent,
     width: node.getBoundingClientRect().width,
     scrollWidth: node.scrollWidth,
     childOverflow: [...node.querySelectorAll("*")].some(child => child.getBoundingClientRect().right > innerWidth + 1),
+    font: getComputedStyle(node).fontFamily,
+    logoLoaded: node.querySelector('.or-brand img')?.naturalWidth > 0,
+    logoSource: node.querySelector('.or-brand img')?.src,
+    brandBackground: getComputedStyle(node.querySelector('.or-brand')).backgroundColor,
+    filterBackground: node.querySelector('.or-filter-label') && getComputedStyle(node.querySelector('.or-filter-label')).backgroundColor,
+    stageBorder: node.querySelector('.or-stage-card') && getComputedStyle(node.querySelector('.or-stage-card')).borderTopColor,
+    stageSummaryDisplay: node.querySelector('.or-stage-summary') && getComputedStyle(node.querySelector('.or-stage-summary')).display,
+    dueSummaryDisplay: node.querySelector('.or-due-summary') && getComputedStyle(node.querySelector('.or-due-summary')).display,
+    pendingColor: node.querySelector('.or-diary-card [data-tone="danger"]') && getComputedStyle(node.querySelector('.or-diary-card [data-tone="danger"]')).color,
+    footerBackground: node.querySelector('.or-diary-footer') && getComputedStyle(node.querySelector('.or-diary-footer')).backgroundColor,
+    metricBackgrounds: [...node.querySelectorAll('.or-metric')].map(card => getComputedStyle(card).backgroundColor),
   }));
   document.documentElement.dataset.layout = JSON.stringify({ viewport: innerWidth, document: document.documentElement.scrollWidth, reportWidths });
 </script>

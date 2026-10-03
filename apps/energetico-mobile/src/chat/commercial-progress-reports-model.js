@@ -64,9 +64,7 @@ export function buildCommercialReport14(snapshot, filters = {}) {
     && selected(row.property, filters.property)
     && (!filters.contractId && !filters.buyer && !filters.contractStatus
       || selectedContracts.some(contract => propertyKey(contract) === propertyKey(row))));
-  const pendingPayments = allReceipts.filter(row => !text(row.paidDate) && selected(row.branch, filters.branch)
-    && selected(row.property, filters.property) && selected(row.contractId, filters.contractId)
-    && selected(row.buyer, filters.buyer)).sort((a, b) =>
+  const pendingPayments = receipts.filter(row => !text(row.paidDate)).sort((a, b) =>
     (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31") || Number(a.id) - Number(b.id));
   const summary = properties.map(property => {
     const propertyContracts = selectedContracts.filter(row => propertyKey(row) === propertyKey(property));
@@ -83,8 +81,9 @@ export function buildCommercialReport14(snapshot, filters = {}) {
     return Object.freeze({ ...property, buyer, paid: currentPaid, formerContracts, brokerPaid, pending, total,
       paidPercentage: total ? paidTotal / total * 100 : 0 });
   });
-  const indicators = { total: sum(summary, "total"),
-    paid: sum(receipts.filter(row => text(row.paidDate)), "amount"), pending: sum(summary, "pending"),
+  const indicators = { total: sum(receipts, "amount"),
+    paid: sum(receipts.filter(row => text(row.paidDate)), "amount"),
+    pending: sum(receipts.filter(row => !text(row.paidDate)), "amount"),
     active: properties.filter(row => same(row.visualStatus, "ATIVO")).length,
     inactive: properties.filter(row => same(row.visualStatus, "INATIVO")).length };
   const branches = groupBranches(summary).map(branch => {
@@ -95,7 +94,8 @@ export function buildCommercialReport14(snapshot, filters = {}) {
       paidPercentage: total ? (paid + formerContracts + brokerPaid) / total * 100 : 0 });
   });
   return Object.freeze({ indicators: Object.freeze(indicators), branches: Object.freeze(branches),
-    pendingPayments: Object.freeze(pendingPayments), contracts: Object.freeze(selectedContracts) });
+    pendingPayments: Object.freeze(pendingPayments), contracts: Object.freeze(selectedContracts),
+    receipts: Object.freeze(receipts) });
 }
 
 export function buildCommercialReport15(snapshot, filters = {}, today = new Date().toISOString().slice(0, 10)) {
@@ -108,7 +108,8 @@ export function buildCommercialReport15(snapshot, filters = {}, today = new Date
       daysInProgress: daysBetween(row.startDate, today), daysToDue: daysBetween(today, row.dueDate) };
   }).filter(row => selected(row.visualStatus, filters.visualStatus));
   if (rows.some(row => !/^[1-9]\d*$/.test(text(row.id)))) throw new Error("Apontamento comercial sem ID numérico válido.");
-  const ordered = rows.sort((a, b) => Number(b.id) - Number(a.id));
+  const ordered = rows.sort((a, b) => (b.startDate || "1900-01-01").localeCompare(a.startDate || "1900-01-01")
+    || Number(b.id) - Number(a.id));
   const latest = new Map();
   for (const row of ordered) if (!latest.has(propertyKey(row))) latest.set(propertyKey(row), Object.freeze(row));
   const branches = groupBranches([...latest.values()]).map(branch => Object.freeze({ ...branch, count: branch.properties.length }));

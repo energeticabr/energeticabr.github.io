@@ -15,7 +15,8 @@ const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\App
 
 test("relatórios de RH cabem em 844×390 e 740×360 sem rolagem lateral nem texto cortado", { timeout: 90_000 }, async t => {
   if (!browser) return t.skip("Chromium/Chrome indisponível");
-  const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0 }, logLevel: "silent" });
+  const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0,
+    fs: { allow: [resolve(appRoot, "../..")] } }, logLevel: "silent" });
   const profile = mkdtempSync(join(tmpdir(), "energetico-rh-layout-"));
   let child, socket, closeBrowser; const pending = new Map();
   try {
@@ -55,7 +56,7 @@ test("relatórios de RH cabem em 844×390 e 740×360 sem rolagem lateral nem tex
       await send("Page.navigate", { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/rh-reports-responsive.html?report=${report}` }, sessionId);
       let ready = false;
       for (let attempt = 0; attempt < 100 && !ready; attempt++) {
-        ready = await evaluate(`window.reportReady === ${report}`);
+        ready = await evaluate(`location.search === '?report=${report}' && window.reportReady === ${report}`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Relatório ${report}: prévia não carregou`);
@@ -71,6 +72,20 @@ test("relatórios de RH cabem em 844×390 e 740×360 sem rolagem lateral nem tex
       })()`);
       assert.ok(sizes.scroll <= sizes.viewport && sizes.rootScroll <= sizes.rootClient && sizes.clipped.length === 0,
         `Relatório ${report}, ${width}×${height}: ${JSON.stringify(sizes)}`);
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (await evaluate(`document.querySelector('.rh-reports-brand img')?.complete`)) break;
+        await delay(100);
+      }
+      const visual = await evaluate(`(() => {
+        const root = document.querySelector('.rh-reports');
+        const css = selector => getComputedStyle(root.querySelector(selector)).backgroundColor;
+        const logo = root.querySelector('.rh-reports-brand img');
+        return { logoLoaded: logo.complete && logo.naturalWidth > 0, logoSrc: logo.src, logoWidth: logo.naturalWidth,
+          color: css(${JSON.stringify(report === 3 ? ".rh-reports-branch > h3" : report === 4 ? '.rh-reports-metric[data-tone="pending"]' : ".rh-reports-block > h3")}) };
+      })()`);
+      assert.equal(visual.logoLoaded, true, `Relatório ${report}: logo oficial não carregou (${visual.logoSrc}, ${visual.logoWidth}px)`);
+      const expectedColors = { 3: "rgb(227, 242, 253)", 4: "rgb(255, 243, 224)", 5: "rgb(255, 243, 224)" };
+      assert.equal(visual.color, expectedColors[report], `Relatório ${report}: paleta visual do Power Apps`);
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

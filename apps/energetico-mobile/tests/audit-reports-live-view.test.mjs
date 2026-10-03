@@ -11,20 +11,59 @@ function setup(t, data) {
   return { dom, view, root: view.element };
 }
 
-test("abre cada relatório com dados atuais, cartões rotulados e sem tabela larga", async t => {
+test("abre cada relatório com dados atuais, cartões acessíveis e tabela para desktop", async t => {
   const called = [];
   const { view, root } = setup(t, { async loadReport(number) { called.push(number); if (number === 11) return { quotes: [{ id: "5", status: "ATIVA", description: "<img src=x onerror=alert(1)>" }], budgets: [] }; if (number === 12) return { rows: [{ id: "1", branch: "A", depreciationDate: "2026-10-02", estimated: 100, residual: 80, quantity: 1, percent: 10 }] }; return { rows: [{ id: "2", status: "PENDENTE", validityDate: "2026-10-05", branch: "A" }] }; } });
   assert.equal(root.tagName, "SECTION");
   await view.open(11);
   assert.match(root.textContent, /COTAÇÕES E ORÇAMENTOS/);
   assert.match(root.textContent, /<img src=x/);
-  assert.equal(root.querySelector("img"), null);
+  assert.match(root.querySelector(".ar-brand img")?.getAttribute("src") || "", /logo-energetica-oficial\.png/);
   await view.open(12);
   assert.match(root.textContent, /CONTROLE DE DEPRECIAÇÃO/);
   await view.open(13);
   assert.match(root.textContent, /CONTROLE DE DOCUMENTOS/);
   assert.deepEqual(called, [11, 12, 13]);
-  assert.equal(root.querySelector("table"), null);
+  assert.ok(root.querySelector(".ar-desktop-table"));
+});
+
+test("11 destaca o estado da cotação e reproduz a grade de orçamentos vinculados", async t => {
+  const { view, root } = setup(t, { async loadReport() { return {
+    quotes: [{ id: "5", branch: "004 - EDIFÍCIO XAVANTE", stage: "ALVENARIA", status: "ATIVA", description: "Material" }],
+    budgets: [{ id: "7", quotationId: "5", branch: "004 - EDIFÍCIO XAVANTE", stage: "ALVENARIA", supplier: "ABC", completedDate: "2026-10-01", total: 250, status: "APROVADO", observation: "Entrega" }],
+  }; } });
+  await view.open(11);
+  assert.equal(root.querySelector('[data-metric="active"]').textContent, "1");
+  assert.equal(root.querySelector('.ar-status[data-tone="success"]')?.textContent, "ATIVA");
+  assert.deepEqual([...root.querySelectorAll('.ar-budget-table th')].map(node => node.textContent),
+    ["ID", "ID COTAÇÃO", "FILIAL", "ETAPA", "FORNECEDOR", "DATA FINALIZADO", "VALOR TOTAL", "STATUS", "OBS"]);
+  assert.match(root.querySelector('.ar-budget-table').textContent, /R\$\s*250,00/);
+});
+
+test("12 mostra data de posição e os campos financeiros por filial em grade", async t => {
+  const { view, root } = setup(t, { async loadReport() { return { rows: [{ id: "1", assetNumber: "70", branch: "004 - EDIFÍCIO XAVANTE", asset: "MANGOTE", group: "FERRAMENTAS", depreciationDate: "2026-10-02", estimated: 100, residual: 80, quantity: 2, percent: 3 }] }; } });
+  await view.open(12);
+  assert.match(root.querySelector('.ar-subtitle').textContent, /POSIÇÃO EM \d{2}\/\d{2}\/\d{4}/);
+  assert.equal(root.querySelectorAll('.ar-metric').length, 7);
+  assert.deepEqual([...root.querySelectorAll('.ar-asset-table th')].map(node => node.textContent),
+    ["Nº PATRIM.", "DATA DEPREC.", "GRUPO", "IMOBILIZADO", "% DEPREC.", "VALOR UNIT.", "QTD.", "VALOR TOTAL", "VALOR DEPRECIADO", "VALOR ATUAL", "A DEPRECIAR"]);
+});
+
+test("13 inicia em maior ID e informa há quantos dias documento foi criado e emitido", async t => {
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const date = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+  const { view, root, dom } = setup(t, { async loadReport() { return { rows: [
+    { id: "1", submittedDate: date, issuedDate: date, status: "PENDENTE", documentType: "COMPROVANTE" },
+    { id: "9", submittedDate: date, issuedDate: date, status: "SUBMETIDO", documentType: "SEGURO" },
+  ] }; } });
+  await view.open(13);
+  assert.equal(root.querySelector('[name="order"]').value, "id");
+  assert.equal(root.querySelector('.ar-card').dataset.documentId, "9");
+  assert.ok(root.querySelector('.ar-documents-banner').compareDocumentPosition(root.querySelector('.ar-metrics')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.match(root.querySelector('.ar-card').textContent, /Criado há 1 dia/);
+  assert.match(root.querySelector('.ar-card').textContent, /Emitido há 1 dia/);
+  assert.deepEqual([...root.querySelectorAll('.ar-document-table th')].map(node => node.textContent),
+    ["ID", "DATA SUBMETIDO", "DATA EMITIDO", "DATA VENCIMENTO", "FILIAL", "HOMOLOGAÇÃO", "TIPO DOCUMENTO", "PESSOA RELACIONADA", "ETAPA", "IMÓVEL", "STATUS"]);
 });
 
 test("filtrar documentos recalcula indicadores; atualizar limpa totais durante erro", async t => {
