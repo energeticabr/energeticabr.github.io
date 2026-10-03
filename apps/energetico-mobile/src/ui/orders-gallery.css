@@ -217,6 +217,7 @@
 .re-card .og-card-attachment-icon { font-size: 1.7rem; }
 .re-card .og-card-attachment-label { font-size: .6rem; white-space: nowrap; }
 .re-card .og-card-attachment-count { font-size: .68rem; }
+.re-attachment-retry { width: 100%; margin-top: 10px; border-color: #b7cad9; color: #123e70; background: #f5f9fc; font-size: .78rem; }
 .re-notice { overflow-wrap: anywhere; }
 .re-detail { z-index: 13; }
 @media (max-width: 640px) {

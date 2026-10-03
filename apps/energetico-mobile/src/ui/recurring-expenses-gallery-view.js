@@ -318,6 +318,23 @@ export function createRecurringExpensesGallery({
     if (!opened || destroyed) return;
     const card = [...cards.children].find(node => String(node.dataset.itemId) === String(row.id));
     if (!card) return;
+    const main = card.querySelector(".og-card-main");
+    let retry = main.querySelector('[data-action="retry-attachments"]');
+    if (attachmentCounts.hasError(row) && actualAttachmentCount(row) < 1) {
+      if (!retry) {
+        retry = el("button", "og-button re-attachment-retry", "Falha ao consultar anexos. Tentar novamente");
+        retry.type = "button";
+        retry.dataset.action = "retry-attachments";
+        retry.addEventListener("click", () => {
+          retry.disabled = true;
+          retry.textContent = "Consultando anexos…";
+          void attachmentCounts.load(row, { force: true }).catch(() => null);
+        });
+        main.append(retry);
+      }
+      retry.textContent = "Falha ao consultar anexos. Tentar novamente";
+      retry.disabled = listLoading || attachmentLoading;
+    } else retry?.remove();
     let rail = card.querySelector('.og-card-attachment-rail');
     if (actualAttachmentCount(row) < 1) {
       rail?.remove();
@@ -333,6 +350,7 @@ export function createRecurringExpensesGallery({
     rail.querySelector('.og-card-attachment-count').textContent = label;
     const id = text(field(row.fields, ["ID"]) ?? row.id);
     rail.setAttribute("aria-label", `Abrir anexos da despesa recorrente ${id}: ${label}`);
+    rail.disabled = listLoading || attachmentLoading;
   }
 
   function updateBusy() {
@@ -401,6 +419,7 @@ export function createRecurringExpensesGallery({
     const start = (page - 1) * pageSize;
     const visible = filteredRows.slice(start, start + pageSize);
     cards.replaceChildren(...visible.map(renderCard));
+    for (const row of visible) if (attachmentCounts.hasError(row)) updateAttachmentCount(row);
     void attachmentCounts.request(visible);
     const count = filteredRows.length;
     listStatus.textContent = count
