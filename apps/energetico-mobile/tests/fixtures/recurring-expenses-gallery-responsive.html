@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Despesas recorrentes: ações lado a lado</title>
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <script type="module">
+    import { createRecurringExpensesGallery } from '../../src/ui/recurring-expenses-gallery-view.js';
+    const fields = {
+      EQUIPAMENTO: 'SEGURO DE VIDA COLETIVO',
+      DESCRICAOPGTO: 'SEGURO PARA 7 TRABALHADORES CONFORME CCT',
+      FORNECEDOR: 'ZURICH SEGUROS', IMOVEL: 'TODOS', FILIAL: '004 - EDIFÍCIO XAVANTE',
+      'VALOR MENSAL': '121,78', RECORRENCIA: 'Month', 'RESPONSAVEL LOCACAO': 'BERNARDO',
+      DATAINICIO: '2026-10-03T03:00:00Z', DATAFIM: '2026-10-11T03:00:00Z', STATUS: 'ATIVO',
+      Criado: '2026-10-03T03:24:00Z', 'Criado por': 'Usuário não identificado',
+    };
+    const rows = [
+      { id: '35', hasAttachments: false, fields: { ...fields, ID: 35 } },
+      { id: '34', hasAttachments: true, fields: { ...fields, ID: 34 } },
+    ];
+    const gallery = createRecurringExpensesGallery({ document, data: {
+      async loadSnapshot() { return { rows }; },
+      async listAttachments(id) { return id === '34' ? [{ fileName: 'seguro.pdf' }] : []; },
+    } });
+    await gallery.open();
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>
