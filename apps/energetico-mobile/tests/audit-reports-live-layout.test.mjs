@@ -53,7 +53,7 @@ test("relatórios 11–13 cabem em 844×390 e 740×360 sem rolagem lateral ou co
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/audit-reports-live-responsive.html?report=${report}` }, sessionId);
       let ready = false;
       for (let i = 0; i < 120 && !ready; i++) {
-        ready = await evaluate(`document.documentElement.dataset.ready === 'true' && Boolean(document.querySelector('${report === 12 ? ".ar-group" : ".ar-card"}'))`);
+        ready = await evaluate(`location.search === '?report=${report}' && document.documentElement?.dataset.ready === 'true' && Boolean(document.querySelector('${report === 12 ? ".ar-group" : ".ar-card"}'))`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Relatório ${report}, ${width}px não carregou`);

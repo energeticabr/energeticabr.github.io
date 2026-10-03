@@ -53,7 +53,7 @@ test("relatórios 9 e 10 cabem em 844x390 e 740x360 com texto longo", { timeout:
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/spending-reports-responsive.html?report=${report}` }, sessionId);
       let ready = false;
       for (let i = 0; i < 200 && !ready; i++) {
-        ready = await evaluate(`document.documentElement.dataset.ready === "true" && Boolean(document.querySelector('.sr-detail-card, .sr-launch-card'))`);
+        ready = await evaluate(`location.search === '?report=${report}' && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector('.sr-detail-card, .sr-launch-card'))`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Relatório ${report}, ${width}px não carregou`);
