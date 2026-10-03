@@ -3743,8 +3743,11 @@ test("Galeria Pgtos Previstos fica abaixo de Gal. Lançamentos e à direita da P
     ["action_recurring_expenses_gallery", "DESPESAS RECORRENTES"],
   ]);
   assert.equal(pairs[1].querySelector('[data-reply-id="payment"]').dataset.label, "💳 PROVISÃO DE PAGAMENTO E DESPESAS RECORRENTES");
-  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations", "data", "quote", "assets"]);
-  assert.equal(dom.window.document.querySelector(".chat-supplies-extras .chat-gallery-actions"), null);
+  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extras__primary [data-reply-id]")].map(button => button.dataset.replyId), ["registrations", "quote", "assets"]);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="data"]'), null);
+  assert.deepEqual([...dom.window.document.querySelectorAll(".chat-supplies-extra-pair")].map(pair => [...pair.querySelectorAll("[data-reply-id]")].map(button => button.dataset.replyId)), [
+    ["registrations"], ["quote", "action_quote_gallery"], ["assets"],
+  ]);
   dom.window.close();
 });
 

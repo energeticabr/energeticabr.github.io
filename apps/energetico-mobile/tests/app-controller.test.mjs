@@ -7730,3 +7730,177 @@ test("token da folha obtido depois de sair não permite enviar gravação", asyn
   await rejected;
   assert.deepEqual(writes, []);
 });
+
+test("doze novas galerias abrem localmente com anexos e preservam o menu", async t => {
+  const entries = [
+    ["action_asset_gallery", "asset"],
+    ["action_asset_function_gallery", "assetFunction"],
+    ["action_asset_product_gallery", "assetProduct"],
+    ["action_asset_group_gallery", "assetGroup"],
+    ["action_work_diary_gallery", "workDiary"],
+    ["action_quote_gallery", "quotes"],
+    ["action_contract_gallery", "contracts"],
+    ["action_contract_line_gallery", "contractLines"],
+    ["action_measurement_gallery", "measurements"],
+    ["action_measurement_line_gallery", "measurementLines"],
+    ["action_stage_demonstrative_gallery", "stageDemonstratives"],
+    ["action_construction_stage_gallery", "constructionStages"],
+  ];
+  const opened = [], destroyed = [], previews = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => ({ kind }),
+    registrationGalleryFactory: async ({ kind, data, openMediaCollection }) => {
+      assert.equal(data.kind, kind);
+      assert.equal(typeof openMediaCollection, "function");
+      await openMediaCollection([{ fileName: `${kind}.pdf`, source: "conteúdo" }]);
+      return { open() { opened.push(kind); }, destroy() { destroyed.push(kind); } };
+    },
+  });
+  h.native.previewMediaCollection = items => { previews.push(items); };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  for (const [replyId] of entries) assert.equal(await h.view.emit("select-reply", { replyId }), true);
+  assert.deepEqual(opened, entries.map(([, kind]) => kind));
+  assert.equal(previews.length, 12);
+  assert.equal(h.chatCalls.length, before);
+  h.controller.stop();
+  assert.deepEqual(destroyed.sort(), entries.map(([, kind]) => kind).sort());
+});
+
+test("cabeçalho Energético abre RHID de hoje em São Paulo com carregamento e sem PDF automático", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-03T01:30:00Z") });
+  const h = makeHarness();
+  const opened = [], requested = [], previews = [];
+  h.view.openRhidAttendanceToday = options => { opened.push(options); return true; };
+  h.client.getRhidAttendanceReport = async date => {
+    assert.deepEqual(opened, [{ date: "2026-10-02" }]);
+    requested.push(date);
+    return { date, rows: [] };
+  };
+  h.native.previewMedia = (...args) => previews.push(args);
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("open-rhid-attendance-today"), true);
+  assert.deepEqual(requested, ["2026-10-02"]);
+  assert.equal(h.store.getState().messages.at(-1).detail_table.reportDate, "2026-10-02");
+  assert.equal(previews.length, 0);
+});
+
+test("retorno da autenticação Microsoft reabre as doze novas galerias", async t => {
+  for (const [action, expectedKind] of [
+    ["action_asset_gallery", "asset"], ["action_asset_function_gallery", "assetFunction"],
+    ["action_asset_product_gallery", "assetProduct"], ["action_asset_group_gallery", "assetGroup"],
+    ["action_work_diary_gallery", "workDiary"], ["action_quote_gallery", "quotes"],
+    ["action_contract_gallery", "contracts"], ["action_contract_line_gallery", "contractLines"],
+    ["action_measurement_gallery", "measurements"], ["action_measurement_line_gallery", "measurementLines"],
+    ["action_stage_demonstrative_gallery", "stageDemonstratives"], ["action_construction_stage_gallery", "constructionStages"],
+  ]) {
+    const opened = [];
+    const h = makeHarness({
+      registrationGalleryDataFactory: async () => ({}),
+      registrationGalleryFactory: async ({ kind }) => ({ open() { opened.push(kind); }, destroy() {} }),
+    });
+    h.auth.consumePendingAction = () => action;
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.deepEqual(opened, [expectedKind]);
+    h.controller.stop();
+  }
+});
+
+test("atalho RHID mantém o erro na página sem substituir conversa quando consulta falha", async t => {
+  const h = makeHarness();
+  const states = [];
+  h.view.openRhidAttendanceToday = () => true;
+  h.view.setRhidAttendanceReportStatus = state => states.push(state);
+  h.client.getRhidAttendanceReport = async () => { throw new Error("consulta indisponível"); };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const messages = h.store.getState().messages;
+  assert.equal(await h.view.emit("open-rhid-attendance-today"), false);
+  assert.equal(h.store.getState().messages, messages);
+  assert.equal(states[0].busy, true);
+  assert.match(states.at(-1).error, /consulta indisponível/);
+});
+
+test("sair durante consulta RHID limpa carregamento e permite nova consulta sem resposta antiga", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  const h = makeHarness({ view });
+  const pending = [];
+  h.client.getRhidAttendanceReport = date => new Promise(resolve => pending.push({ date, resolve }));
+  t.after(() => { h.controller.stop(); view.destroy(); dom.window.close(); });
+  const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); };
+  await h.controller.start();
+  root.querySelector('.chat-header [data-action="open-rhid-attendance-today"]').click();
+  await settle();
+  assert.equal(pending.length, 1);
+  root.querySelector('[data-action="sign-out"]').click();
+  root.querySelector('[data-action="confirm-sign-out"]').click();
+  await settle();
+  root.querySelector('[data-action="sign-in"]').click();
+  await settle();
+  assert.equal(root.querySelector('.chat-rhid-report-loading'), null);
+  const shortcut = root.querySelector('.chat-header [data-action="open-rhid-attendance-today"]');
+  assert.equal(shortcut.disabled, false);
+  shortcut.click();
+  await settle();
+  assert.equal(pending.length, 2);
+  pending[0].resolve({ date: pending[0].date, rows: [{ NOME_COLABORADOR: "ANTIGO" }] });
+  await settle();
+  assert.ok(root.querySelector('.chat-rhid-report-loading'));
+  assert.doesNotMatch(root.textContent, /ANTIGO/);
+  pending[1].resolve({ date: pending[1].date, rows: [{ NOME_COLABORADOR: "ATUAL" }] });
+  await settle();
+  assert.ok(root.querySelector('.chat-rhid-attendance-report'));
+  assert.match(root.textContent, /ATUAL/);
+});
+
+test("galeria em criação não abre nem apaga nova requisição após reentrar na mesma conta", async t => {
+  const account = { homeAccountId: "same", name: "Bernardo" };
+  const factories = [], opened = [], destroyed = [];
+  const h = makeHarness({ account,
+    registrationGalleryDataFactory: async () => ({}),
+    registrationGalleryFactory: () => new Promise(resolve => factories.push(resolve)),
+  });
+  h.auth.signIn = async () => account;
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const first = h.view.emit("select-reply", { replyId: "action_asset_gallery" });
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("sign-out");
+  await h.view.emit("sign-in");
+  const second = h.view.emit("select-reply", { replyId: "action_asset_gallery" });
+  await new Promise(resolve => setImmediate(resolve));
+  factories[0]({ open() { opened.push("old"); }, destroy() { destroyed.push("old"); } });
+  assert.equal(await first, false);
+  const duplicate = h.view.emit("select-reply", { replyId: "action_asset_gallery" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(factories.length, 2, "a finalização antiga deve preservar a requisição nova");
+  factories[1]({ open() { opened.push("new"); }, destroy() { destroyed.push("new"); } });
+  assert.equal(await second, true);
+  assert.equal(await duplicate, true);
+  assert.deepEqual(opened, ["new"]);
+  assert.deepEqual(destroyed, ["old"]);
+});
+
+test("token de galeria recebido após sair não permite gravação com a sessão antiga", async t => {
+  let provider, resolveToken;
+  const h = makeHarness({
+    registrationGalleryDataFactory: async options => { provider = options.tokenProvider; return {}; },
+    registrationGalleryFactory: async () => ({ open() {}, destroy() {} }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("select-reply", { replyId: "action_contract_gallery" });
+  h.auth.getToken = () => new Promise(resolve => { resolveToken = resolve; });
+  const writes = [];
+  const pending = provider(["Sites.ReadWrite.All"]).then(token => writes.push(token));
+  const rejected = assert.rejects(pending, /sessão.*encerrada/i);
+  await h.view.emit("sign-out");
+  resolveToken("old-gallery-token");
+  await rejected;
+  assert.deepEqual(writes, []);
+});
