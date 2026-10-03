@@ -99,6 +99,42 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="2"]');
 }
 
+test("folha usa somente o Voltar do cabeçalho e esconde rodapés sem ações", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  const doc = h.dom.window.document;
+  const check = (action) => {
+    assert.equal(doc.querySelector('[data-payroll-back]'), null);
+    assert.equal([...doc.querySelectorAll('button')].filter(b => b.textContent === 'Voltar').length, 1);
+    assert.ok(doc.querySelector('[data-payroll-header-back] svg'));
+    assert.ok(doc.querySelector('[data-payroll-home] svg'));
+    const footer = doc.querySelector('.supplier-payroll-footer');
+    assert.equal(footer.hidden, !action);
+    assert.equal(footer.children.length, action ? 1 : 0);
+    if (action) assert.equal(footer.firstElementChild.textContent, action);
+  };
+  check('Continuar');
+  h.input('[name=date]', '2026-10-02');
+  await h.click('[data-payroll-next]');
+  check();
+  await h.click('[data-payroll-option="1"]');
+  check();
+  await h.click('[data-payroll-option="2"]');
+  check('Continuar');
+  h.input('[name=salary-value]', '100');
+  h.input('[name=salary-account]', '3');
+  await h.click('[data-payroll-next]');
+  check();
+  await h.click('[data-payroll-option="4"]');
+  check();
+  await h.click('[data-payroll-option="5"]');
+  check('Postar');
+  await h.click('[data-payroll-post]');
+  check('Concluir');
+  await h.click('[data-payroll-header-back]');
+  assert.equal(h.closed, 1);
+});
+
 test("quantidade padrão não ativa rubrica e pagamento só aparece com valor informado", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
@@ -227,10 +263,12 @@ test("seta cancela consulta pendente sem deixar resposta antiga avançar a folha
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   await fill(h);
-  for (let i = 0; i < 3; i++) await h.click('[data-payroll-back]');
+  for (let i = 0; i < 3; i++) await h.click('[data-payroll-header-back]');
   let resolveStages;
   h.data.loadStages = () => new Promise(resolve => { resolveStages = resolve; });
   await h.click('[data-payroll-next]');
+  assert.equal(h.dom.window.document.querySelector('.supplier-payroll-footer').hidden, true);
+  assert.equal(h.dom.window.document.querySelector('.supplier-payroll-footer').children.length, 0);
   await h.click('[data-payroll-header-back]');
   assert.match(h.dom.window.document.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
   resolveStages([{ id: '4', label: 'FUNDAÇÃO' }]);
@@ -278,7 +316,7 @@ test("sem IDFOLHA cadastrado não há como postar ou concluir sem vínculo", asy
     ),
   );
   assert.equal(h.posts.length, 0);
-  await h.click("[data-payroll-back]");
+  await h.click("[data-payroll-header-back]");
   assert.match(doc.body.textContent, /Indique a etapa/);
 });
 test("falha ao buscar IDFOLHA preserva etapa e permite repetir consulta", async (t) => {
@@ -353,9 +391,9 @@ test("comprovantes ficam associados à rubrica e são descartados ao destruir", 
   const h = await harness();
   t.after(() => h.dom.window.close());
   await fill(h);
-  await h.click("[data-payroll-back]");
-  await h.click("[data-payroll-back]");
-  await h.click("[data-payroll-back]");
+  await h.click("[data-payroll-header-back]");
+  await h.click("[data-payroll-header-back]");
+  await h.click("[data-payroll-header-back]");
   const file = new File(["a"], "salario.pdf", { type: "application/pdf" });
   const input = h.dom.window.document.querySelector('[name="salary-files"]');
   Object.defineProperty(input, "files", { value: [file], configurable: true });
