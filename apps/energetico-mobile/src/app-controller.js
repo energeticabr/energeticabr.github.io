@@ -4036,7 +4036,11 @@ export function createAppController({
           await data.prepare?.();
           assertSession();
           allowAuthorization = false;
-          const panel = await supplierPayrollFactory({ data, assertSession });
+          const panel = await supplierPayrollFactory({
+            data,
+            assertSession,
+            onHome: () => { assertSession(); return returnToMainMenu(); },
+          });
           if (stopped || account !== payrollAccount || sessionRevision !== payrollRevision) { panel.destroy?.(); return false; }
           supplierPayroll = panel;
         }

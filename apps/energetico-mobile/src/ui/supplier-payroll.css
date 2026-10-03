@@ -12,7 +12,8 @@
   display: none;
 }
 .supplier-payroll-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -21,9 +22,14 @@
   background: var(--brand);
 }
 .supplier-payroll-header h1 {
+  min-width: 0;
   margin: 0;
   font-size: clamp(1rem, 2vw, 1.4rem);
+  text-align: center;
+  overflow-wrap: anywhere;
 }
+.supplier-payroll-navigation { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding-inline: 10px; }
+.supplier-payroll-navigation svg { width: 20px; height: 20px; flex: none; }
 .supplier-payroll-button {
   min-height: 44px;
   border: 1px solid #aac4d2;
@@ -188,6 +194,8 @@
   }
 }
 @media (max-width: 480px) {
+  .supplier-payroll-header { gap: 7px; padding-inline: 10px; }
+  .supplier-payroll-navigation { font-size: .85rem; padding-inline: 7px; }
   .supplier-payroll-rubric {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 16px;

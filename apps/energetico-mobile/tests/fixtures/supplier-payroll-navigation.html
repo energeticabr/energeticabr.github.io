@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navegação da folha de pagamento</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/supplier-payroll.css">
+</head>
+<body>
+  <script type="module">
+    import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
+    const gallery = createSupplierPayrollView({ documentRef: document, data: {
+      async loadSuppliers() { return [{ id: '1', label: 'EDGAR NELSON DA SILVA', branch: '004 - EDIFÍCIO XAVANTE' }]; },
+      async loadProducts() { return [{ id: '2', label: 'MESTRE DE OBRAS' }]; },
+      async loadAccounts() { return [{ id: '3', label: 'PIX' }]; },
+    } });
+    await gallery.open();
+    const date = document.querySelector('[name=date]');
+    date.value = '2026-10-02';
+    date.dispatchEvent(new Event('input', { bubbles: true }));
+    const advance = async selector => {
+      document.querySelector(selector).click();
+      while (!document.querySelector('.supplier-payroll-question')) await new Promise(resolve => setTimeout(resolve, 10));
+    };
+    await advance('[data-payroll-next]');
+    await advance('[data-payroll-option="1"]');
+    await advance('[data-payroll-option="2"]');
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>

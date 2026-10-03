@@ -7950,6 +7950,32 @@ function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
 
+test("casinha da folha pede o menu principal pela navegação direta do aplicativo", async t => {
+  let home;
+  const h = makeHarness({
+    supplierPayrollDataFactory: async () => ({}),
+    supplierPayrollFactory: async options => {
+      home = options.onHome;
+      return { open() {}, destroy() {} };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  openPayrollMenu(h);
+  await h.view.emit('select-reply', { replyId: 'action_supplier_payroll_launch' });
+  assert.equal(typeof home, 'function', 'folha recebe o caminho real para o menu');
+  const replies = [];
+  h.client.sendText = async payload => {
+    replies.push(payload.replyId);
+    return { status: 'processed', returned_to_main_menu: true, resetConversation: true,
+      activeFlow: null, messages: [{ type: 'poll', question: 'MENU PRINCIPAL', options: [{ id: 'group_supplies', label: 'SUPRIMENTOS' }] }] };
+  };
+  assert.equal(await home(), true);
+  assert.deepEqual(replies, ['portal_confirm_main_menu']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.match(h.store.getState().messages.at(-1).question, /MENU PRINCIPAL/);
+});
+
 test("folha autoriza antes de abrir e não redireciona após iniciar preenchimento", async t => {
   let provider, prepared = false, grants = 0, expired = false;
   const h = makeHarness({
