@@ -480,6 +480,7 @@ export function createSupplierPayrollView({
   function render(loadingLabel) {
     content.replaceChildren();
     footer.replaceChildren();
+    footer.hidden = true;
     backButton.disabled = mutating;
     homeButton.disabled = mutating;
     if (busy) {
@@ -621,15 +622,9 @@ export function createSupplierPayrollView({
       );
       footer.append(button("Concluir", null, close));
     }
-    if (
-      ["supplier", "product", "rubrics", "stage", "sheet", "summary"].includes(
-        step,
-      ) &&
-      !progress.fingerprint
-    )
-      footer.prepend(button("Voltar", "data-payroll-back", back));
     if (["date", "rubrics"].includes(step))
       footer.append(button("Continuar", "data-payroll-next", next));
+    footer.hidden = footer.childElementCount === 0;
   }
   function close() {
     if (destroyed || !opened || mutating) return false;

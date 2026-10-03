@@ -8,7 +8,8 @@
   color: var(--text);
   background: #f2f7fb;
 }
-.supplier-payroll-page[hidden] {
+.supplier-payroll-page[hidden],
+.supplier-payroll-footer[hidden] {
   display: none;
 }
 .supplier-payroll-header {
