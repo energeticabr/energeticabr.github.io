@@ -42,3 +42,23 @@ test("informa quando a lista G7 não está acessível à conta SharePoint autent
   } });
   await assert.rejects(data.loadSnapshot(), error => error.code === "tasks_list_missing" && /LANCAMENTOTAREFAS/.test(error.message));
 });
+
+test('conclusão rápida usa contrato real e envia somente data e concluído com ETag', async t => {
+  const createTasksGalleryData = await taskGalleryDataFactory(t), writes = [];
+  const data = createTasksGalleryData({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'tasks' }; },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+    async getItem(_site, _list, id) { return { id, eTag: '"task-v1"', fields: { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição preservada' } }; },
+    async getColumns() { return [
+      { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
+      { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
+      { name: 'field_11', displayName: 'TAREFA', text: {}, required: true },
+    ]; },
+    async updateItem(site, list, id, fields, options) { writes.push({ site, list, id, fields, options }); return { id, fields }; },
+  } });
+  const context = await data.loadEditor('176');
+  assert.equal(context.contract.formVariant.formName, 'FORM.TAREFA_1');
+  await data.saveEditor(context, { field_8: '2026-10-03', field_12: 'CONCLUÍDA' });
+  assert.deepEqual(writes, [{ site: 'personal', list: 'tasks', id: '176',
+    fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' }, options: { eTag: '"task-v1"' } }]);
+});

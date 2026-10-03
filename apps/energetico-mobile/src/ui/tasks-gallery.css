@@ -128,6 +128,12 @@
 .tg-card > .gallery-record-actions { gap: 4px; }
 .tg-card .gallery-record-action { width: 40px; height: 40px; min-width: 40px; padding: 8px; border-radius: 7px; }
 .tg-expand { color: #fff; background: #f48027; font-size: 1.8rem; line-height: 1; }
+.tg-complete { color: #fff; background: #25a24e; font-size: 1.6rem; font-weight: 800; }
+.tg-completion-form { display: grid; gap: 16px; }
+.tg-completion-dialog .og-input { box-sizing: border-box; width: 100%; min-width: 0; }
+.tg-completion-dialog .gallery-record-dialog-buttons { flex-wrap: wrap; }
+.tg-completion-cancel { background: #c52e3a; border-color: #c52e3a; color: #fff; }
+.tg-completion-submit { background: #218443; border-color: #218443; color: #fff; }
 .tg-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
 .tg-expand:disabled { color: #7f8e9c; background: #e2e9ef; opacity: 1; cursor: default; }
 .tg-card .og-card-attachment-rail { min-height: 100%; padding: 7px 3px; border: 1px solid #c3d8e5; color: #0d3767; background: #e9f4fb; }
