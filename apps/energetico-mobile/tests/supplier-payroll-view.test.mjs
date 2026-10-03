@@ -99,19 +99,20 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="2"]');
 }
 
-test("folha usa somente o Voltar do cabeçalho e esconde rodapés sem ações", async t => {
+test("folha mantém Voltar inferior apenas nas rubricas e esconde rodapés sem ações", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   const doc = h.dom.window.document;
-  const check = (action) => {
-    assert.equal(doc.querySelector('[data-payroll-back]'), null);
-    assert.equal([...doc.querySelectorAll('button')].filter(b => b.textContent === 'Voltar').length, 1);
-    assert.ok(doc.querySelector('[data-payroll-header-back] svg'));
-    assert.ok(doc.querySelector('[data-payroll-home] svg'));
+  const check = (action, rubrics = false) => {
+    assert.equal(Boolean(doc.querySelector('[data-payroll-back]')), rubrics);
+    assert.equal(doc.querySelectorAll('.supplier-payroll-footer [data-payroll-back]').length, rubrics ? 1 : 0);
+    assert.equal(doc.querySelector('[data-payroll-header-back]').dataset.navigationIcon, '↩️');
+    assert.equal(doc.querySelector('[data-payroll-home]').dataset.navigationIcon, '🏠');
     const footer = doc.querySelector('.supplier-payroll-footer');
     assert.equal(footer.hidden, !action);
-    assert.equal(footer.children.length, action ? 1 : 0);
-    if (action) assert.equal(footer.firstElementChild.textContent, action);
+    assert.equal(footer.children.length, action ? rubrics ? 2 : 1 : 0);
+    if (action) assert.equal(footer.lastElementChild.textContent, action);
+    if (rubrics) assert.equal(footer.firstElementChild.textContent, 'Voltar');
   };
   check('Continuar');
   h.input('[name=date]', '2026-10-02');
@@ -120,7 +121,12 @@ test("folha usa somente o Voltar do cabeçalho e esconde rodapés sem ações", 
   await h.click('[data-payroll-option="1"]');
   check();
   await h.click('[data-payroll-option="2"]');
-  check('Continuar');
+  check('Continuar', true);
+  await h.click('[data-payroll-back]');
+  check();
+  assert.match(doc.querySelector('.supplier-payroll-question').textContent, /Qual produto/);
+  await h.click('[data-payroll-option="2"]');
+  check('Continuar', true);
   h.input('[name=salary-value]', '100');
   h.input('[name=salary-account]', '3');
   await h.click('[data-payroll-next]');
@@ -223,10 +229,12 @@ test("cabeçalho da folha mantém seta e casinha em todas as etapas e volta sem 
   const doc = h.dom.window.document;
   const navigation = () => {
     const header = doc.querySelector('.supplier-payroll-header');
-    assert.ok(header.querySelector('[data-payroll-header-back] svg'), 'seta de retornar no cabeçalho');
-    assert.ok(header.querySelector('[data-payroll-home] svg'), 'casinha do menu principal no cabeçalho');
-    assert.equal(header.firstElementChild.dataset.payrollHeaderBack, '');
-    assert.equal(header.lastElementChild.dataset.payrollHome, '');
+    const nav = header.querySelector('.screen-navigation');
+    assert.equal(header.firstElementChild, nav);
+    assert.equal(nav.firstElementChild.dataset.payrollHeaderBack, '');
+    assert.equal(nav.lastElementChild.dataset.payrollHome, '');
+    assert.equal(nav.firstElementChild.dataset.navigationIcon, '↩️');
+    assert.equal(nav.lastElementChild.dataset.navigationIcon, '🏠');
   };
   navigation();
   await fill(h);

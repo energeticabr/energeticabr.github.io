@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
@@ -33,7 +34,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, onClose } = {}) {
+  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, onClose, onHome } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -42,7 +43,8 @@ export function createHrPayrollGallery({ document: documentOption,
   }
   const doc = documentRef;
   const payrollReport = gallery === "IDFOLHA" && typeof requestReport === "function"
-    ? createHrPayrollReport({ document: doc, root: mountRoot, request: requestReport })
+    ? createHrPayrollReport({ document: doc, root: mountRoot, request: requestReport,
+      onHome: onHome ? () => { closeGallery(); onHome(); } : undefined })
     : null;
   let opened = false;
   let destroyed = false;
@@ -69,7 +71,8 @@ export function createHrPayrollGallery({ document: documentOption,
   const close = element("button", "hr-gallery-button hr-gallery-close", "Fechar");
   close.type = "button";
   close.dataset.action = "close-hr-gallery";
-  header.append(title, close);
+  const home = onHome ? element("button", "hr-gallery-button", "Início") : null;
+  applyScreenNavigation({ header, back: close, home, title });
   const content = element("div", "hr-gallery-content");
   const status = element("p", "hr-gallery-status", "");
   status.setAttribute("aria-live", "polite");
@@ -175,6 +178,7 @@ export function createHrPayrollGallery({ document: documentOption,
     onClose?.();
   }
   close.addEventListener("click", closeGallery);
+  home?.addEventListener("click", () => { closeGallery(); onHome(); });
   previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, pageCursors[page - 1] || null); });
   next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, pageCursors[page + 1]); });
 

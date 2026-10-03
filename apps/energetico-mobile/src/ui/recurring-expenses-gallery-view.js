@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -203,9 +204,7 @@ export function createRecurringExpensesGallery({
   const closeButton = el("button", "og-button", "Voltar"); closeButton.type = "button";
   const title = el("h1", "og-title", "GALERIA DESPESAS RECORRENTES");
   const homeButton = el("button", "og-button", "Início"); homeButton.type = "button";
-  closeButton.prepend(icon("back"));
-  homeButton.prepend(icon("home"));
-  header.append(closeButton, title, homeButton);
+  applyScreenNavigation({ header, back: closeButton, home: homeButton, title });
 
   const content = el("main", "og-content");
   const form = el("form", "og-filter-form re-filter-form");

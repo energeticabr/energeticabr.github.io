@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -147,13 +148,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   close.type = "button";
   close.dataset.action = "registration-close";
   const title = el("h1", "rg-title", model.title);
-  header.append(close, title);
+  let home;
   if (onHome) {
-    const home = el("button", "rg-button", "Início");
+    home = el("button", "rg-button", "Início");
     home.type = "button";
     home.addEventListener("click", async () => { hide(); await onHome(); });
-    header.append(home);
   }
+  applyScreenNavigation({ header, back: close, home, title });
   const filterDisclosure = el("details", "rg-filters");
   filterDisclosure.append(el("summary", "rg-filter-toggle", "Filtros"));
   const toolbar = el("div", "rg-toolbar");

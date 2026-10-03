@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 import { contractorReport, documentCell, formatReportDate, formatReportMoney } from "../chat/contractor-report-model.js";
 import { createPresencePaymentReportView } from "./presence-payment-report-view.js";
@@ -63,7 +64,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   const back = button("og-button", "Voltar");
   const title = make("h1", "og-title", "RELATÓRIOS");
   const home = button("og-button", "Início");
-  header.append(back, title, home);
+  applyScreenNavigation({ header, back: back, home: home, title });
   const content = make("main", "og-content cr-content");
   root.append(header, content);
 

@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -301,9 +302,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   root.tabIndex = -1;
   const header = element('header', 'lg-header');
   const back = button('Voltar', close, { locked: false });
-  header.append(back, element('h1', 'lg-title', 'Galeria lançamentos'), button('Início', () => {
+  const title = element('h1', 'lg-title', 'Galeria lançamentos');
+  const home = button('Início', () => {
     close(); onHome?.();
-  }, { locked: false }));
+  }, { locked: false });
+  applyScreenNavigation({ header, back, home, title });
   const content = element('div', 'lg-content');
   const filterDisclosure = element('details', 'lg-filters');
   filterDisclosure.append(element('summary', 'lg-filter-toggle', 'Filtros e ordenação'));

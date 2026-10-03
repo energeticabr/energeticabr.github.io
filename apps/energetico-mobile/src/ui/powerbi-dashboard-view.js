@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 export const POWERBI_REPORT_ID = "188c0311-65d4-40f8-9bb9-02090f44a0fb";
 export const POWERBI_EMBED_URL = `https://app.powerbi.com/reportEmbed?reportId=${POWERBI_REPORT_ID}`;
 export const POWERBI_REPORT_URL = `https://app.powerbi.com/groups/me/reports/${POWERBI_REPORT_ID}?experience=power-bi`;
@@ -153,7 +154,8 @@ export function createPowerBiDashboardView({
     reportContainer.className = "powerbi-dashboard__report";
     reportContainer.setAttribute("aria-label", "Relatório Power BI ENERGÉTICA com todas as abas");
     frameWrap.append(reportContainer);
-    header.append(closeButton, homeButton, heading, directLink);
+    applyScreenNavigation({ header, back: closeButton, home: homeButton, title: heading });
+    header.append(directLink);
     onHomeAction = typeof onHome === "function" ? onHome : null;
     dialog.append(header, hint, frameWrap);
     dialog.addEventListener("click", handleClick);

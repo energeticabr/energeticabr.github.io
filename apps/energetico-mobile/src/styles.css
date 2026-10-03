@@ -1229,3 +1229,52 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-pending-construction-diary__fill svg { width: 20px; height: 20px; flex-shrink: 0; }
 .chat-pending-construction-diary__fill:disabled { opacity: .55; cursor: default; }
 .chat-pending-construction-diary__error { color: #a32424; }
+/* Shared Power Apps-style navigation: both controls precede the screen title. */
+.screen-navigation-header.screen-navigation-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.screen-navigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.screen-navigation-header .screen-navigation button.screen-nav-button {
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 52px;
+  height: 52px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid #377b6b;
+  border-radius: 14px;
+  background: #fff;
+  color: #123d70;
+  font-size: 28px;
+  line-height: 1;
+  flex: none;
+}
+.screen-nav-button::before { content: attr(data-navigation-icon); }
+.screen-nav-button:focus-visible { outline: 3px solid #efc94c; outline-offset: 2px; }
+.screen-nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.screen-navigation-header .screen-navigation-title { min-width: 0; overflow-wrap: anywhere; }
+.powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr) auto; }
+@media (max-width: 480px) {
+  .screen-navigation-header.screen-navigation-header { gap: 8px; }
+  .powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr); }
+  .powerbi-dashboard__header.screen-navigation-header .powerbi-dashboard__direct-link { grid-column: 2; justify-self: start; }
+}

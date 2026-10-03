@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
@@ -194,7 +195,7 @@ export function createPaymentProgrammingGallery({
   const closeButton = el("button", "og-button", "Voltar"); closeButton.type = "button";
   const title = el("h1", "og-title", "GALERIA PROGRAMAÇÃO DE PAGAMENTOS");
   const homeButton = el("button", "og-button", "Início"); homeButton.type = "button";
-  header.append(closeButton, title, homeButton);
+  applyScreenNavigation({ header, back: closeButton, home: homeButton, title });
 
   const body = el("div", "pg-body");
   const content = el("main", "og-content");

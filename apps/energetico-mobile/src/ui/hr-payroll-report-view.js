@@ -1,3 +1,4 @@
+import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 function element(documentRef, tag, className, text) {
   const node = documentRef.createElement(tag);
@@ -52,7 +53,7 @@ function display(value) {
   return value == null || value === "" ? "—" : String(value);
 }
 
-export function createHrPayrollReport({ document: documentOption, root: mountRootOption, request, onClose } = {}) {
+export function createHrPayrollReport({ document: documentOption, root: mountRootOption, request, onClose, onHome } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   if (!documentRef?.createElement || !mountRoot?.append || typeof request !== "function") {
@@ -71,7 +72,8 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
   const close = element(doc, "button", "hr-gallery-button hr-payroll-report-close", "Voltar");
   close.type = "button";
   close.dataset.action = "close-hr-payroll-report";
-  header.append(title, close);
+  const home = onHome ? element(doc, "button", "hr-gallery-button", "Início") : null;
+  applyScreenNavigation({ header, back: close, home, title });
 
   const content = element(doc, "div", "hr-gallery-content");
   const body = element(doc, "div", "hr-payroll-report-body");
@@ -220,6 +222,7 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
   }
 
   close.addEventListener("click", closeReport);
+  home?.addEventListener("click", () => { closeReport(); onHome(); });
 
   return Object.freeze({
     async open(payroll) {
