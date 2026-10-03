@@ -19,7 +19,7 @@ test("relatórios 16 e 17 abrem no hub e cabem em 844×390 e 740×360", { timeou
     for (const [width, height] of [[844, 390], [740, 360]]) for (const scenario of ["report=16", "report=16&detail=1", "report=17"]) {
       const { stdout } = await run(browser, [
         "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--disable-dev-shm-usage",
-        `--window-size=${width + 26},${height}`, "--virtual-time-budget=3000", "--dump-dom",
+        `--window-size=${width + (process.platform === "win32" ? 26 : 0)},${height}`, "--virtual-time-budget=3000", "--dump-dom",
         `http://127.0.0.1:${port}/tests/fixtures/commercial-docs-rent-reports-responsive.html?${scenario}`,
       ], { timeout: 30_000, maxBuffer: 3_000_000 });
       const match = /data-layout="([^"]+)"/.exec(stdout);

@@ -19,7 +19,7 @@ test("relatórios 6–8 cabem em 844×390 e 740×360 sem rolagem horizontal", { 
     for (const [width, height] of [[844, 390], [740, 360]]) {
       const { stdout } = await run(browser, [
         "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--disable-dev-shm-usage",
-        `--window-size=${width + 26},${height}`, "--virtual-time-budget=3000", "--dump-dom",
+        `--window-size=${width + (process.platform === "win32" ? 26 : 0)},${height}`, "--virtual-time-budget=3000", "--dump-dom",
         `http://127.0.0.1:${port}/tests/fixtures/operations-reports-layout.html`,
       ], { timeout: 30_000, maxBuffer: 2_000_000 });
       const match = /data-layout="([^"]+)"/.exec(stdout);

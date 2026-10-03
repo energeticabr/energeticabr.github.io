@@ -52,7 +52,7 @@ test("relatórios 14 e 15 cabem em 844x390 e 740x360 sem rolagem lateral", { tim
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/commercial-progress-reports-responsive.html?report=${report}` }, sessionId);
       let ready = false;
       for (let i = 0; i < 200 && !ready; i++) {
-        ready = await evaluate(`document.documentElement.dataset.ready === "true" && Boolean(document.querySelector('.cpr-property'))`);
+        ready = await evaluate(`location.search === "?report=${report}" && document.documentElement?.dataset.ready === "true" && Boolean(document.querySelector('.cpr-property'))`);
         if (!ready) await delay(100);
       }
       assert.ok(ready, `Relatório ${report}, ${width}px não carregou`);
