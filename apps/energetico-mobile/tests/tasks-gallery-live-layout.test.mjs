@@ -52,7 +52,7 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
     for (const [width, height] of [[320, 740], [390, 844], [1365, 768], [844, 390]]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tasks-gallery-responsive.html?w=${width}` }, sessionId);
-      await waitFor(`location.search === '?w=${width}' && document.documentElement.dataset.ready === 'true'`);
+      await waitFor(`location.search === '?w=${width}' && document.documentElement?.dataset.ready === 'true'`);
       const layout = await evaluate(`(() => {
         const card = document.querySelector('.tg-card[data-item-id="176"]'), check = card.querySelector('[data-action="complete"]'), arrow = card.querySelector('[data-action="expand"]');
         const a = check.getBoundingClientRect(), b = arrow.getBoundingClientRect();
