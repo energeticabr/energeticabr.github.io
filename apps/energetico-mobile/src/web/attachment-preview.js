@@ -8,7 +8,7 @@ function previewKind(blob, fileName) {
   const extension = fileName.toLowerCase().split(".").at(-1);
   if (["html", "htm", "svg", "svgz", "xml"].includes(extension) || /html|svg|xml/.test(type)) return "unsupported";
   if (type === "application/pdf" || extension === "pdf") return "pdf";
-  if (/^image\/(jpeg|png|gif|webp|avif|heic|heif|bmp|tiff)$/.test(type)
+  if (/^image\/(jpeg|jpg|pjpeg|png|gif|webp|avif|heic|heif|bmp|tiff)$/.test(type)
     || ["jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "heif", "bmp", "tif", "tiff"].includes(extension)) return "image";
   if (/^video\//.test(type)
     || ["mp4", "mov", "m4v", "webm", "ogv", "avi", "mkv", "3gp"].includes(extension)) return "video";
@@ -16,6 +16,11 @@ function previewKind(blob, fileName) {
     || ["mp3", "m4a", "wav", "ogg", "oga", "aac", "flac"].includes(extension)) return "audio";
   if (["text/plain", "text/csv"].includes(type) || ["txt", "csv"].includes(extension)) return "text";
   return "unsupported";
+}
+
+async function hasJpegHeader(blob) {
+  const bytes = new Uint8Array(await blob.slice(0, 3).arrayBuffer());
+  return bytes.length === 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 }
 
 function desktopBrowserCanEmbedPdf(documentRef, navigatorRef) {
@@ -286,7 +291,16 @@ export function createAttachmentPreview({
       if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") throw new Error("Arquivo inválido.");
       session.blob = blob;
       exportButton.disabled = typeof exportMedia !== "function";
-      const kind = previewKind(blob, session.fileName);
+      let kind = previewKind(blob, session.fileName);
+      const type = String(blob.type || "").toLowerCase().split(";")[0].trim();
+      const extension = session.fileName.toLowerCase().split(".").at(-1);
+      const genericType = ["", "application/octet-stream", "binary/octet-stream"].includes(type);
+      let detectedJpeg = false;
+      if (kind === "unsupported" && genericType && !["html", "htm", "svg", "svgz", "xml"].includes(extension)) {
+        detectedJpeg = await hasJpegHeader(blob);
+        if (active !== session) return;
+        if (detectedJpeg) kind = "image";
+      }
       session.kind = kind;
       const canAddToTray = typeof addToTrayHandler === "function";
       addToTrayButton.hidden = !canAddToTray;
@@ -324,7 +338,11 @@ export function createAttachmentPreview({
           return true;
         };
         img.alt = session.fileName;
-        const href = urlApi.createObjectURL(blob);
+        // Only the display copy gets a canonical MIME; export retains the original.
+        const jpegType = ["image/jpg", "image/pjpeg"].includes(type)
+          || (genericType && ["jpg", "jpeg"].includes(extension)) || detectedJpeg;
+        const displayBlob = jpegType ? blob.slice(0, blob.size, "image/jpeg") : blob;
+        const href = urlApi.createObjectURL(displayBlob);
         session.urls.add(href);
         img.addEventListener("load", () => {
           if (active !== session) return;
