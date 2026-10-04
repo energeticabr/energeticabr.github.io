@@ -777,6 +777,7 @@ export function createAppController({
   let signaturePlacementOverride = null;
   let signaturePlacementGeneration = 0;
   let signaturePlacementEditPending = false;
+  let localSignatureEditSource = null;
   let signaturePlacementStamp = null;
   let attachmentSigningBusy = false;
   let draftEditRevision = 0;
@@ -1001,6 +1002,7 @@ export function createAppController({
   }
 
   function localPlacementForRequest(request) {
+    if (!request || !signaturePlacementData) return null;
     if (signaturePlacementOverride?.kind === "attachment") return signaturePlacementOverride;
     if (signaturePlacementData?.key !== request?.key
       || signaturePlacementData.status !== "ready") return null;
@@ -1028,7 +1030,8 @@ export function createAppController({
       signerName: request.signerName,
       signedAt: request.signedAt,
       preserveSource: request.preserveSource === true,
-      uploadMessageId: newUploadMessageId(),
+      signatureEvidence: signaturePlacementData.signatureEvidence,
+      uploadMessageId: signaturePlacementData.uploadMessageId,
     };
   }
 
@@ -1064,7 +1067,7 @@ export function createAppController({
     if (signaturePlacementLoad?.key === request.key) return signaturePlacementData;
 
     const generation = ++signaturePlacementGeneration;
-    const load = { key: request.key, generation };
+    const load = { key: request.key, generation, evidenceRequestId: newUploadMessageId() };
     signaturePlacementLoad = load;
     signaturePlacementData = {
       status: "loading",
@@ -1082,11 +1085,24 @@ export function createAppController({
       request.document.blob || fetchMediaWithTimeout(request.document, "o documento"),
       request.signature.blob || fetchMediaWithTimeout(request.signature, "a assinatura"),
     ])
-      .then(([documentBlob, signatureBlob]) => {
+      .then(async ([documentBlob, signatureBlob]) => {
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
         if (!documentBlob || typeof documentBlob.arrayBuffer !== "function"
           || !signatureBlob || typeof signatureBlob.arrayBuffer !== "function") {
           throw new Error("A VM não devolveu os arquivos para posicionar a assinatura.");
+        }
+        if (typeof client.prepareSignatureEvidence !== "function") {
+          throw new Error("O serviço de integridade da assinatura não está disponível.");
+        }
+        const signatureEvidence = await client.prepareSignatureEvidence({
+          documentBlob, fileName: request.document.fileName, documentId: request.document.id,
+          signerName: request.signerName, requestId: load.evidenceRequestId,
+        });
+        if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
+        Object.defineProperty(signatureBlob, "signatureEvidence", { value: signatureEvidence, configurable: true });
+        if (signaturePlacementOverride?.kind === "attachment") {
+          signaturePlacementOverride.signatureEvidence = signatureEvidence;
+          signaturePlacementOverride.signedAt = signatureEvidence.signedAt;
         }
         signaturePlacementData = {
           status: "ready",
@@ -1095,7 +1111,9 @@ export function createAppController({
           document: { fileName: request.document.fileName, blob: documentBlob },
           signature: { fileName: request.signature.fileName, blob: signatureBlob },
           signerName: request.signerName,
-          signedAt: request.signedAt,
+          signedAt: signatureEvidence.signedAt,
+          signatureEvidence,
+          uploadMessageId: newUploadMessageId(),
           selection: request.selection,
         };
       })
@@ -5630,7 +5648,16 @@ export function createAppController({
     if (signaturePlacementData) signaturePlacementData = { ...signaturePlacementData, status: "signing" };
     render();
     try {
-      const signedBlob = await signPdfAttachment({
+      const evidence = placement.signatureEvidence || previousPlacementData?.signatureEvidence;
+      if (!evidence?.id || typeof client.confirmSignatureEvidence !== "function") {
+        throw new Error("O registro de integridade deve estar pronto antes de confirmar a assinatura.");
+      }
+      const attemptKey = JSON.stringify([point, stamp?.point || null]);
+      const previousAttempt = previousPlacementData?.signedAttempt;
+      if (previousAttempt && previousAttempt.key !== attemptKey) {
+        throw new Error("Este PDF já possui um registro de confirmação. Toque em Editar assinatura para criar outra versão.");
+      }
+      const signedBlob = previousAttempt?.blob || await signPdfAttachment({
         documentBlob: placement.document.blob,
         documentFileName: placement.document.fileName,
         signatureBlob: placement.signature.blob,
@@ -5639,13 +5666,31 @@ export function createAppController({
           ? { stampBlob: stamp.blob, stampPoint: stamp.point }
           : {}),
         signerName: placement.signerName,
-        signedAt: placement.signedAt,
+        signedAt: evidence.signedAt,
+        integrityId: evidence.id,
       });
       if (!stillCurrent()) return false;
       if (!signedBlob || typeof signedBlob.arrayBuffer !== "function") {
         throw new Error("O PDF assinado não foi gerado corretamente.");
       }
       const fileName = signedPdfFileName(placement.document.fileName);
+      if (previousPlacementData) previousPlacementData.signedAttempt = { key: attemptKey, blob: signedBlob };
+      const confirmation = await client.confirmSignatureEvidence({ recordId: evidence.id, documentBlob: signedBlob, fileName });
+      if (!stillCurrent()) return false;
+      if (placement.kind === "document" && !store.getState().activeFlow) {
+        if (!confirmation?.mediaUrl) throw new Error("O servidor não devolveu a prévia do PDF confirmado.");
+        store.ingestRemoteMessages([{
+          id: `signature-evidence:${evidence.id}`, type: "document", fileName,
+          mimeType: "application/pdf", mediaUrl: confirmation.mediaUrl,
+          caption: "DOCUMENTO ASSINADO", signatureEdit: {
+            document: request.document, signature: request.signature,
+            signerName: placement.signerName, signedAt: evidence.signedAt,
+          },
+        }], { activeFlow: null, resetConversation: false });
+        invalidateSignaturePlacement({ clearOverride: true });
+        render();
+        return true;
+      }
       const FileCtor = globalThis.File;
       const signedFile = typeof FileCtor === "function"
         ? new FileCtor([signedBlob], fileName, { type: "application/pdf", lastModified: Date.now() })
@@ -6072,6 +6117,20 @@ export function createAppController({
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
+      if (command.fileId === "signature-local-document") {
+        const source = localSignatureEditSource;
+        localSignatureEditSource = null;
+        if (!source || source.account !== account || stopped) return false;
+        signaturePlacementEditPending = false;
+        signaturePlacementOverride = {
+          ...source.placement, kind: "document", messageId: `local-edit:${newUploadMessageId()}`,
+          signature: { id: newUploadMessageId(), fileName: file.name, mimeType: file.type, blob: file },
+          signedAt: null, signatureEvidence: null, uploadMessageId: newUploadMessageId(),
+        };
+        invalidateSignaturePlacement();
+        render();
+        return true;
+      }
       if (command.fileId === "launch-gallery") {
         gallerySignatureResolve?.(file);
         gallerySignatureResolve = null;
@@ -6083,6 +6142,16 @@ export function createAppController({
       return queueSelectedFiles(() => [file], { hideFromAttachmentTray: true });
     });
     bind("signature-cancelled", command => {
+      if (command.fileId === "signature-local-document") {
+        const source = localSignatureEditSource;
+        localSignatureEditSource = null;
+        if (source?.account === account && !stopped) {
+          signaturePlacementOverride = source.placement;
+          invalidateSignaturePlacement();
+          render();
+        }
+        return;
+      }
       if (command.fileId !== "launch-gallery") return;
       gallerySignatureResolve?.(null);
       gallerySignatureResolve = null;
@@ -6101,14 +6170,22 @@ export function createAppController({
         setSessionError(new Error("Este PDF ainda não está disponível localmente para receber a assinatura de Bernardo."));
         return false;
       }
-      if (signaturePlacementOverride?.kind === "attachment") return completeAttachmentSignature(point, stamp);
-      const { page, x, y, scale } = point;
-      const normalizedX = x.toFixed(6);
-      const normalizedY = y.toFixed(6);
-      const normalizedScale = scale.toFixed(6);
-      return sendText("Posicionar assinatura", `document_signing_position_point:${page}:${normalizedX}:${normalizedY}:${normalizedScale}`);
+      if (localPlacementForRequest(signaturePlacementRequest())) return completeAttachmentSignature(point, stamp);
+      setSessionError(new Error("Aguarde o carregamento do PDF e do registro de integridade antes de confirmar a assinatura."));
+      return false;
     });
     bind("signature-placement-edit", () => {
+      if (flowBusy()) return false;
+      if (!store.getState().activeFlow) {
+        const placement = localPlacementForRequest(signaturePlacementRequest());
+        if (!placement) return false;
+        localSignatureEditSource = { account, placement };
+        invalidateSignaturePlacement({ clearOverride: true });
+        render();
+        const opened = view.openSignaturePad?.("signature-local-document") ?? false;
+        if (!opened) localSignatureEditSource = null;
+        return opened;
+      }
       if (signaturePlacementOverride?.kind === "attachment") {
         const fileId = signaturePlacementOverride.targetAttachmentId;
         invalidateSignaturePlacement({ clearOverride: true });
@@ -6334,6 +6411,7 @@ export function createAppController({
     signaturePlacementData = null;
     signaturePlacementOverride = null;
     signaturePlacementEditPending = false;
+    localSignatureEditSource = null;
     native.closePreview?.();
     unsubscribeStore?.();
     unsubscribeStore = null;

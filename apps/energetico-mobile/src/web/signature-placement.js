@@ -803,6 +803,11 @@ export function createSignaturePlacement({
       if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
     }
     marker.append(caption);
+    const integrityId = String(signatureBlob?.signatureEvidence?.id || "");
+    if (/^[a-f0-9]{32}$/.test(integrityId)) {
+      marker.classList.add("signature-placement-marker--integrity");
+      caption.append(element(documentRef, "span", "signature-placement-marker__integrity", `REGISTRO: ${integrityId}`));
+    }
     // SIGNATURE_GESTURE_LOCK_START: signature-placement-marker-bindings
     marker.addEventListener("pointerdown", event => beginDrag(marker, event), { passive: false });
     marker.addEventListener("touchstart", event => beginDrag(marker, event), { passive: false });

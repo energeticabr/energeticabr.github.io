@@ -32,6 +32,12 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const view = suppliedView || makeView();
   const chatCalls = [];
   const client = {
+    async prepareSignatureEvidence() {
+      return { id: "0123456789abcdef0123456789abcdef", signedAt: "2026-10-03T23:00:00Z", sourceSha256: "a".repeat(64) };
+    },
+    async confirmSignatureEvidence({ recordId }) {
+      return { id: recordId, signedAt: "2026-10-03T23:00:00Z", sourceSha256: "a".repeat(64), finalSha256: "b".repeat(64), status: "confirmed", mediaUrl: "/api/portal-media/confirmed" };
+    },
     async sendText(payload) {
       chatCalls.push(["text", payload]);
       return { status: "processed", messages: [{ type: "text", text: "Confirmado" }] };
@@ -5983,6 +5989,98 @@ test("assina PDF já existente no documento pendente sem excluir o original do S
   assert.equal(h.view.renders.at(-1).error, null);
 });
 
+test("assinatura usa horário e protocolo do servidor e só envia PDF após preservar evidência", async t => {
+  const signedCalls = [];
+  const evidenceCalls = [];
+  const h = makeHarness({ signPdfAttachment: async input => {
+    signedCalls.push(input);
+    return new Blob(["signed-pdf"], { type: "application/pdf" });
+  } });
+  t.after(() => h.controller.stop());
+  const id = "fedcba9876543210fedcba9876543210";
+  const activeFlow = { id: "pending_document_attachment", title: "DOCUMENTOS PENDENTES" };
+  const original = { id: "rhid", fileName: "ponto.pdf", mimeType: "application/pdf", mediaUrl: "/rhid", existing: true };
+  h.client.prepareSignatureEvidence = async input => {
+    evidenceCalls.push(["prepare", input]);
+    return { id, signedAt: "2026-10-03T23:00:00Z", sourceSha256: "a".repeat(64) };
+  };
+  h.client.confirmSignatureEvidence = async input => {
+    evidenceCalls.push(["confirm", input]);
+    assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 0);
+    return { id, status: "confirmed", finalSha256: "b".repeat(64) };
+  };
+  h.client.sendFile = async file => {
+    h.chatCalls.push(["file", file.name]);
+    return { status: "processed", messages: [], activeFlow, attachments: [original, { id: "signed", fileName: file.name, size: file.size, mimeType: file.type }] };
+  };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  await h.view.emit("signature-captured", { file: new File(["png"], "assinatura.png", { type: "image/png" }), fileId: "rhid" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signedAt, "2026-10-03T23:00:00Z");
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signature.blob.signatureEvidence.id, id);
+  await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.6, y: 0.4, scale: 0.5 } });
+  assert.equal(signedCalls[0].integrityId, id);
+  assert.equal(signedCalls[0].signedAt, "2026-10-03T23:00:00Z");
+  assert.equal(evidenceCalls[1][1].documentBlob.size, 10);
+  assert.equal(evidenceCalls[1][1].recordId, id);
+  assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 1);
+});
+
+test("falha no registro de integridade conserva original e bloqueia envio da cópia", async t => {
+  const h = makeHarness({ signPdfAttachment: async () => new Blob(["signed-pdf"], { type: "application/pdf" }) });
+  t.after(() => h.controller.stop());
+  const original = { id: "rhid", fileName: "ponto.pdf", mimeType: "application/pdf", mediaUrl: "/rhid", existing: true };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow: { id: "pending_document_attachment" }, attachments: [original] });
+  await h.view.emit("signature-captured", { file: new File(["png"], "assinatura.png", { type: "image/png" }), fileId: "rhid" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  h.client.confirmSignatureEvidence = async () => { throw new Error("Registro de integridade indisponível"); };
+  assert.equal(await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.5, scale: 0.5 } }), false);
+  assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 0);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["rhid"]);
+  assert.match(h.view.renders.at(-1).error, /integridade/);
+});
+
+test("posição sem PDF pronto falha fechada e não assina pelo comando legado", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow: { id: "document_signing", documentSigningPlacement: { stage: "document_signing_waiting_position" } }, attachments: [] });
+  h.chatCalls.length = 0;
+  assert.equal(await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.5, y: 0.5, scale: 0.5 } }), false);
+  assert.deepEqual(h.chatCalls, []);
+  assert.match(h.view.renders.at(-1).error, /integridade|carregamento/);
+});
+
+test("editar assinatura de PDF concluído redesenha localmente sem reabrir workflow", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  let opened;
+  h.view.openSignaturePad = id => { opened = id; return true; };
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{
+    id: "old", type: "document", fileName: "contrato-assinado.pdf", mediaUrl: "/old",
+    signatureEdit: { document: { id: "source", fileName: "contrato.pdf", mediaUrl: "/source" }, signature: { id: "ink", fileName: "assinatura.png", mediaUrl: "/ink" } },
+  }], { activeFlow: null, attachments: [] });
+  await h.view.emit("resize-signature", { messageId: "old" });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  h.chatCalls.length = 0;
+  await h.view.emit("signature-placement-edit");
+  assert.equal(opened, "signature-local-document");
+  assert.deepEqual(h.chatCalls, []);
+  const ink = new File(["new-png"], "nova-assinatura.png", { type: "image/png" });
+  await h.view.emit("signature-captured", { file: ink, fileId: opened });
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signature.blob, ink);
+  assert.deepEqual(h.chatCalls, []);
+});
+
 test("substitui o PDF da bandeja incluindo o carimbo de Bernardo", async () => {
   const signedCalls = [];
   const h = makeHarness({
@@ -6141,7 +6239,11 @@ test("snapshot do fluxo de assinatura também oculta a assinatura na bandeja", a
 });
 
 test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da assinatura", async () => {
-  const h = makeHarness();
+  let signedInput;
+  const h = makeHarness({ signPdfAttachment: async input => {
+    signedInput = input;
+    return new Blob(["signed-pdf"], { type: "application/pdf" });
+  } });
   const fetched = [];
   h.client.fetchMedia = async item => {
     fetched.push(item.id);
@@ -6168,12 +6270,14 @@ test("carrega o PDF e envia a página e o ponto escolhido no posicionamento da a
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
 
   let request;
-  h.client.sendText = async payload => {
-    request = payload;
-    return { status: "processed", activeFlow, messages: [{ type: "text", text: "Assinatura posicionada" }] };
+  h.client.sendFile = async file => {
+    request = file;
+    return { status: "processed", activeFlow: { id: "document_signing" }, messages: [{ type: "text", text: "Assinatura posicionada" }], attachments: [{ id: "signed", fileName: file.name, size: file.size, mimeType: file.type }] };
   };
   await h.view.emit("signature-placement-position", { point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 } });
-  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
+  assert.equal(request.name, "contrato-assinado.pdf");
+  assert.deepEqual(signedInput.point, { page: 2, x: 0.25, y: 0.75, scale: 1.4 });
+  assert.equal(signedInput.integrityId, "0123456789abcdef0123456789abcdef");
   h.controller.stop();
 });
 
@@ -6564,7 +6668,11 @@ test("reabre o PDF gerado para alterar tamanho e posição sem voltar ao menu", 
 });
 
 test("voltar e ajustar assinatura do comprovante abre as fontes enviadas na lista de anexos", async () => {
-  const h = makeHarness();
+  let signedInput;
+  const h = makeHarness({ signPdfAttachment: async input => {
+    signedInput = input;
+    return new Blob(["signed-pdf"], { type: "application/pdf" });
+  } });
   const fetched = [];
   const replyIds = [];
   h.client.fetchMedia = async item => {
@@ -6652,14 +6760,17 @@ test("voltar e ajustar assinatura do comprovante abre as fontes enviadas na list
   assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
   assert.equal(h.view.renders.at(-1).error, null);
 
+  h.client.sendFile = async file => ({
+    status: "processed", messages: [{ type: "document", fileName: file.name, mimeType: file.type, mediaUrl: "/api/portal-media/payment-preview" }],
+    activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
+    attachments: [h.store.getState().attachments[0], { id: "signed", fileName: file.name, size: file.size, mimeType: file.type }],
+  });
   await h.view.emit("signature-placement-position", {
     point: { page: 1, x: 0.5, y: 0.7, scale: 0.8 },
   });
 
-  assert.deepEqual(replyIds, [
-    "document_signing_payment_adjust",
-    "document_signing_position_point:1:0.500000:0.700000:0.800000",
-  ]);
+  assert.deepEqual(replyIds, ["document_signing_payment_adjust"]);
+  assert.deepEqual(signedInput.point, { page: 1, x: 0.5, y: 0.7, scale: 0.8 });
   assert.equal(h.chatCalls.some(call => call[0] === "delete-attachment"), false);
   assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
   assert.equal(h.view.renders.at(-1).error, null);
@@ -6715,7 +6826,11 @@ test("não abre PDF homônimo quando a fonte declarada do reposicionamento é am
 });
 
 test("ao confirmar novo posicionamento, fecha o editor e mostra o documento gerado", async () => {
-  const h = makeHarness();
+  let signedInput;
+  const h = makeHarness({ signPdfAttachment: async input => {
+    signedInput = input;
+    return new Blob(["signed-pdf"], { type: "application/pdf" });
+  } });
   h.client.fetchMedia = async item => new Blob([String(item.mediaUrl || item.id)], {
     type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
   });
@@ -6760,9 +6875,12 @@ test("ao confirmar novo posicionamento, fecha o editor e mostra o documento gera
     point: { page: 2, x: 0.25, y: 0.75, scale: 1.4 },
   });
 
-  assert.equal(request.replyId, "document_signing_position_point:2:0.250000:0.750000:1.400000");
+  assert.equal(request, undefined, "editar PDF concluído não envia respostas ao workflow encerrado");
+  assert.deepEqual(signedInput.point, { page: 2, x: 0.25, y: 0.75, scale: 1.4 });
   assert.equal(h.view.renders.at(-1).signaturePlacement, null);
-  assert.equal(h.view.renders.at(-1).messages.at(-1).fileName, "contrato-NOVO-ASSINADO.pdf");
+  assert.equal(h.view.renders.at(-1).messages.at(-1).fileName, "contrato-assinado.pdf");
+  assert.equal(h.view.renders.at(-1).messages.at(-1).mediaUrl, "/api/portal-media/confirmed");
+  assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 0);
   h.controller.stop();
 });
 

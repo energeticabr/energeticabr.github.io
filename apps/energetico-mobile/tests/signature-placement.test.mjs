@@ -88,6 +88,19 @@ test("exibe o retângulo com nome e data abaixo da assinatura", async t => {
   assert.doesNotMatch(caption.textContent, /ASSINADO DIGITALMENTE POR/);
 });
 
+test("mostra o registro de integridade no quadro posicionável mantendo nome e data", async t => {
+  const signatureBlob = new Blob(["png"], { type: "image/png" });
+  signatureBlob.signatureEvidence = { id: "0123456789abcdef0123456789abcdef" };
+  const { viewer, container } = setup(t, {
+    signatureBlob, signatureDocumentLayout: "epi", signerName: "RAFAEL GONTIJO", signedAt: "2026-10-03T23:00:00Z",
+  });
+  await viewer.ready;
+  const marker = container.querySelector(".signature-placement-marker");
+  assert.match(marker.textContent, /RAFAEL GONTIJO/);
+  assert.match(marker.textContent, /REGISTRO: 0123456789abcdef0123456789abcdef/);
+  assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 3);
+});
+
 test("comprovante de pagamento usa bloco de assinatura com linha interna", async t => {
   const { viewer, container } = setup(t, {
     signatureDocumentLayout: "payment",
