@@ -90,10 +90,12 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
   const breakdownTitle = element(doc, "h2", "hr-payroll-report-section-title", "Totais por tipo de pagamento");
   const breakdownCards = element(doc, "div", "hr-payroll-report-type-cards");
   breakdown.append(breakdownTitle, breakdownCards);
-  const paymentsTitle = element(doc, "h2", "hr-payroll-report-section-title", "Pagamentos vinculados");
+  const paymentsSection = element(doc, "details", "hr-payroll-report-linked-section");
+  const paymentsTitle = element(doc, "summary", "hr-payroll-report-linked-toggle", "Pagamentos vinculados");
   const payments = element(doc, "div", "hr-payroll-report-payments");
   payments.setAttribute("role", "list");
-  body.append(identity, status, totals, breakdown, paymentsTitle, payments);
+  paymentsSection.append(paymentsTitle, payments);
+  body.append(identity, status, totals, breakdown, paymentsSection);
   content.append(body);
   overlay.append(header, content);
 
@@ -111,7 +113,8 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
       const cents = lineAmountCents(row);
       const label = String(row.TIPOPGTO ?? "").trim() || "Sem tipo";
       const key = typeKey(label);
-      const current = byType.get(key) || { label, cents: 0 };
+      const current = byType.get(key) || { label, cents: 0, payments: [] };
+      current.payments.push({ row, cents });
       if (cents === null) uncalculated += 1;
       else {
         totalCents += cents;
@@ -131,11 +134,18 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
 
     breakdownCards.replaceChildren();
     for (const [key, item] of [...byType.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "pt-BR"))) {
-      const card = element(doc, "article", "hr-payroll-report-total-card");
-      card.append(element(doc, "span", "hr-payroll-report-total-label", item.label));
+      const card = element(doc, "details", "hr-payroll-report-total-card hr-payroll-report-type-card");
+      const toggle = element(doc, "summary", "hr-payroll-report-type-toggle");
+      toggle.append(element(doc, "span", "hr-payroll-report-total-label", item.label));
       const value = element(doc, "strong", "hr-payroll-report-total-value", formatMoney(item.cents));
       value.dataset.reportTotalType = key;
-      card.append(value);
+      toggle.append(doc.createTextNode(" "), value);
+      const lines = element(doc, "ul", "hr-payroll-report-type-lines");
+      for (const { row, cents } of item.payments) {
+        lines.append(element(doc, "li", "hr-payroll-report-type-line",
+          `${display(row.id)} - ${cents === null ? "Não calculado" : formatMoney(cents)} (${formatDate(row.DATA)})`));
+      }
+      card.append(toggle, lines);
       breakdownCards.append(card);
     }
 
@@ -172,10 +182,11 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     if (uncalculated) {
       const note = element(doc, "p", "hr-payroll-report-warning",
         `${uncalculated} pagamento(s) sem valor ou quantidade numérica não entraram nos totais.`);
-      payments.prepend(note);
+      totals.append(note);
     }
     if (!rows.length) status.textContent = "Nenhum pagamento vinculado a esta folha.";
     else status.textContent = `${rows.length} pagamento(s) vinculado(s) a esta folha.`;
+    paymentsSection.hidden = !rows.length;
   }
 
   async function loadPayments() {
@@ -188,6 +199,8 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     totals.replaceChildren();
     breakdownCards.replaceChildren();
     payments.replaceChildren();
+    paymentsSection.open = false;
+    paymentsSection.hidden = true;
     try {
       const rows = await request(currentPayroll.id, { signal: controller.signal });
       if (!opened || destroyed || requestEpoch !== epoch) return;
@@ -201,7 +214,7 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
       retry.type = "button";
       retry.dataset.action = "retry-hr-payroll-report";
       retry.addEventListener("click", () => { void loadPayments(); });
-      payments.append(retry);
+      status.append(retry);
     } finally {
       if (opened && !destroyed && requestEpoch === epoch) {
         overlay.setAttribute("aria-busy", "false");
