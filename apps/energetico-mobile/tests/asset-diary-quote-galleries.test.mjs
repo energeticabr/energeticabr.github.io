@@ -159,6 +159,48 @@ test("work diary observations never use stock situation even when it comes first
   assert.equal(notes("3"), "—");
 });
 
+test("work diary keeps stage visible and discloses every field below it only on request", async t => {
+  const { doc, gallery } = openGallery(t, "workDiary", [{ id: "209", hasAttachments: false,
+    fields: { DATA: "2026-10-02", ETAPA: "ALVENARIA E ESTRUTURAS", "ATIVIDADES EXECUTADAS": "1. Execução alvenaria\n2. Impermeabilização", OCORR_x00ca_NCIASEIMPREVISTOS: "Sem intercorrências", Created: "2026-10-02" } }]);
+  await gallery.open();
+  const card = doc.querySelector('[data-registration-row="209"]');
+  const toggle = [...card.querySelectorAll('button')].find(node => node.textContent === 'Ver mais informações');
+  assert.ok(toggle, "o cartão precisa oferecer o suspenso após Etapa");
+  const extra = doc.getElementById(toggle.getAttribute('aria-controls'));
+  assert.ok(extra);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(extra.hidden, true);
+  assert.deepEqual([...card.querySelector('.rg-row-main > .rg-diary-table').children].map(node => node.dataset.field), ['FILIAL', 'STATUS', 'INFORMAÇÕES CLIMÁTICAS', 'TIPO', 'ETAPA']);
+  assert.equal(card.querySelector('[data-field="ETAPA"]').closest('[hidden]'), null);
+  for (const field of ['ATIVIDADES EXECUTADAS', 'OBSERVAÇÕES', 'Criado por', 'Criado', 'Modificado', 'Modificado por']) {
+    assert.ok(extra.contains(card.querySelector(`[data-field="${field}"]`)), `${field} deve ficar no suspenso`);
+  }
+  assert.equal(toggle.previousElementSibling.lastElementChild.dataset.field, 'ETAPA');
+  toggle.click();
+  assert.equal(extra.hidden, false);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(toggle.textContent, 'Ver menos informações');
+  assert.equal(extra.querySelector('[data-field="ATIVIDADES EXECUTADAS"] dd').textContent, '1. Execução alvenaria\n2. Impermeabilização');
+  toggle.click();
+  assert.equal(extra.hidden, true);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(toggle.textContent, 'Ver mais informações');
+});
+
+test("work diary disclosures are independent per card and start closed after reopening", async t => {
+  const { doc, gallery } = openGallery(t, "workDiary", ['209', '208'].map(id => ({ id, hasAttachments: false, fields: { DATA: '2026-10-02' } })));
+  await gallery.open();
+  const toggles = [...doc.querySelectorAll('.rg-diary-expand')];
+  assert.equal(toggles.length, 2);
+  assert.notEqual(toggles[0].getAttribute('aria-controls'), toggles[1].getAttribute('aria-controls'));
+  toggles[0].click();
+  assert.equal(doc.getElementById(toggles[0].getAttribute('aria-controls')).hidden, false);
+  assert.equal(doc.getElementById(toggles[1].getAttribute('aria-controls')).hidden, true);
+  gallery.close();
+  await gallery.open();
+  assert.ok([...doc.querySelectorAll('.rg-diary-expand')].every(toggle => toggle.getAttribute('aria-expanded') === 'false' && doc.getElementById(toggle.getAttribute('aria-controls')).hidden));
+});
+
 test("work diary climate clusters distinguish sun, rain and unknown conditions without changing the source labels", async t => {
   const { doc, gallery } = openGallery(t, "workDiary", [
     ["1", " ENSOLARADO ", "sun", "☀️"], ["2", "CHUVOSO", "rain", "🌧️"],
@@ -278,6 +320,30 @@ test("new gallery snapshots reject incomplete pagination rather than showing a p
     async getItemsPage() { return { items: [{ id: "5", fields: { ITEM: "BETONEIRA" } }], hasMore: true }; },
   } });
   await assert.rejects(data.loadSnapshot(), /paginação|cursor/i);
+});
+
+test("work diary background attachment counts preserve open details and focus", async t => {
+  const pending = new Map();
+  const { doc, gallery } = openGallery(t, "workDiary", ["209", "208"].map(id => ({ id, hasAttachments: true, fields: { DATA: "2026-10-02" } })), {
+    data: { listAttachments(id) { return new Promise((resolve, reject) => pending.set(String(id), { resolve, reject })); } },
+  });
+  await gallery.open();
+  const button = doc.querySelector('[data-registration-row="209"] .rg-diary-expand');
+  button.click(); button.focus();
+  const extra = doc.getElementById(button.getAttribute("aria-controls"));
+  pending.get("208").resolve([{ fileName: "foto.jpg" }]);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(doc.querySelector('[data-registration-row="209"] .rg-diary-expand'), button);
+  assert.equal(doc.activeElement, button);
+  assert.equal(extra.hidden, false);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.equal(doc.querySelector('[data-registration-row="208"] .rg-row-file__count').textContent, "1 anexo");
+  pending.get("209").reject(new Error("count unavailable"));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(doc.querySelector('[data-registration-row="209"] .rg-diary-expand'), button);
+  assert.equal(doc.activeElement, button);
+  assert.equal(extra.hidden, false);
+  assert.equal(doc.querySelector('[data-registration-row="209"] .rg-row-file__count').textContent, "Quantidade indisponível");
 });
 
 test("quote attachment feedback identifies a cotação", async t => {

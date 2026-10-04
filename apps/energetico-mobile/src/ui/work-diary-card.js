@@ -1,5 +1,7 @@
 import { registrationFieldKey } from '../chat/registration-gallery-data.js';
 
+let nextDiaryDetailsId = 0;
+
 const ICONS = Object.freeze({
   branch: ['M4 21V3h12v18', 'M16 9h4v12', 'M2 21h20', 'M8 7h4', 'M8 11h4', 'M8 15h4'],
   status: ['M9 3h6v4H9z', 'M9 5H5v16h14V5h-4', 'm8 14 3 3 5-6'],
@@ -50,13 +52,27 @@ export function renderWorkDiaryCardDetails({ document: doc, container, rowId, ti
   if (emoji) { const symbol = el('span', 'rg-diary-weather__icon', emoji); symbol.setAttribute('aria-hidden', 'true'); weather.append(symbol); }
   weather.append(el('span', 'rg-diary-weather__label', label));
   pair(table, 'TIPO', 'Tipo', 'type');
-  pair(table, 'ETAPA', 'Etapa', 'stage');
-  pair(table, 'ATIVIDADES EXECUTADAS', 'Atividade executada', 'activity');
-  pair(table, 'OBSERVAÇÕES', 'Observações', 'notes');
+  pair(table, 'ETAPA', 'Etapa', 'stage').parentElement.classList.add('rg-diary-detail--stacked');
+  const supplemental = el('dl', 'rg-diary-table');
+  pair(supplemental, 'ATIVIDADES EXECUTADAS', 'Atividade executada', 'activity').parentElement.classList.add('rg-diary-detail--stacked');
+  pair(supplemental, 'OBSERVAÇÕES', 'Observações', 'notes').parentElement.classList.add('rg-diary-detail--stacked');
   const audit = el('dl', 'rg-diary-audit');
   pair(audit, 'Criado por', 'Criado por', 'person', 'Usuário não identificado');
   pair(audit, 'Criado', 'Criado em', 'calendar');
   pair(audit, 'Modificado', 'Modificado em', 'clock');
   pair(audit, 'Modificado por', 'Modificado por', 'person', 'Usuário não identificado');
-  container.append(table, audit);
+  const extra = el('section', 'rg-diary-more');
+  extra.id = `rg-diary-more-${++nextDiaryDetailsId}`;
+  extra.hidden = true;
+  extra.append(supplemental, audit);
+  const expand = el('button', 'rg-diary-expand', 'Ver mais informações');
+  expand.type = 'button';
+  expand.setAttribute('aria-expanded', 'false');
+  expand.setAttribute('aria-controls', extra.id);
+  expand.addEventListener('click', () => {
+    extra.hidden = !extra.hidden;
+    expand.setAttribute('aria-expanded', String(!extra.hidden));
+    expand.textContent = extra.hidden ? 'Ver mais informações' : 'Ver menos informações';
+  });
+  container.append(table, expand, extra);
 }

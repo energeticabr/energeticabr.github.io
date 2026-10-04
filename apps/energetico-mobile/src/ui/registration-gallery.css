@@ -81,6 +81,15 @@
 .rg-diary-icon { display: block; width: 22px; height: 22px; color: #597187; }
 .rg-diary-detail dt { min-width: 0; color: #607583; font-size: .7rem; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 .rg-diary-detail dd { min-width: 0; margin: 0; font-size: .82rem; line-height: 1.3; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rg-diary-detail--stacked { grid-template-columns: 22px minmax(0, 1fr); align-items: start; }
+.rg-diary-detail--stacked dd { grid-column: 1 / -1; }
+.rg-diary-expand { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin: 12px 0 0; padding: 7px 10px; border: 0; border-top: 1px solid #dce6ec; border-radius: 0; color: #597187; background: transparent; font: inherit; font-weight: 750; cursor: pointer; }
+.rg-diary-expand::after { content: '⌄'; color: #123b77; font-size: 1.35rem; line-height: 1; }
+.rg-diary-expand[aria-expanded="true"]::after { content: '⌃'; }
+.rg-diary-expand:hover { background: #e6f0f7; }
+.rg-diary-expand:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.rg-diary-more { min-width: 0; margin-top: 10px; }
+.rg-diary-more[hidden] { display: none; }
 .rg-diary-status { justify-self: start; padding: 3px 8px; border-radius: 12px; color: #5c6d74; background: #f0f4f6; }
 .rg-diary-status--complete { color: #216340; background: #d7f2da; }
 .rg-diary-weather { display: inline-flex; align-items: center; justify-self: start; gap: 4px; max-width: 100%; box-sizing: border-box; padding: 4px 5px; border-radius: 8px; background: #f0f4f6; }

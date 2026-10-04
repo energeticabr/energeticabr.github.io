@@ -303,16 +303,27 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       void Promise.resolve().then(() => data.listAttachments(row.id, { refresh: true })).then(items => {
         if (destroyed || epoch !== attachmentCountEpoch) return;
         attachmentCounts.set(id, { state: "ready", count: Array.isArray(items) ? items.length : 0 });
-        if (!root.hidden) render();
+        if (!root.hidden) refreshAttachmentCount(row);
       }).catch(() => {
         if (destroyed || epoch !== attachmentCountEpoch) return;
         attachmentCounts.set(id, { state: "error" });
-        if (!root.hidden) render();
+        if (!root.hidden) refreshAttachmentCount(row);
       }).finally(() => {
         attachmentCountWorkers -= 1;
         pumpAttachmentCountQueue();
       });
     }
+  }
+
+  function refreshAttachmentCount(row) {
+    if (kind !== "workDiary") { render(); return; }
+    // Background counts must not replace the disclosure or interrupt its focus.
+    const card = [...list.children].find(node => node.dataset.registrationRow === String(row.id));
+    const rail = card?.querySelector(".rg-row-file");
+    if (!rail) return;
+    const label = attachmentCountLabel(row);
+    rail.querySelector(".rg-row-file__count").textContent = label;
+    if (rail.tagName === "BUTTON") rail.setAttribute("aria-label", `Abrir anexos d${model.recordArticle || "o"} ${model.recordLabel || "documento"} ${row.id}: ${label}`);
   }
 
   function appendDocumentDetail(details, field, label, value, className = "", icon = "") {
