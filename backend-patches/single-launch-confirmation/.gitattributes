@@ -1,0 +1,2 @@
+# Unified diffs require a single-space context marker on empty source lines.
+single-confirmation.patch whitespace=-blank-at-eol
