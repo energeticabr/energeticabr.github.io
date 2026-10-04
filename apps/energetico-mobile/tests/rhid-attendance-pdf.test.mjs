@@ -57,6 +57,23 @@ test("gera PDF vertical com horários efetivos e preserva batidas RHID incongrue
   }
 });
 
+test("PDF mantém a batida provisória no cluster com asterisco e usa as horas efetivas", async () => {
+  for (const adjusted of [false, true]) {
+    const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "MAURICIO", BATIDAS_RHID: "08:35; 12:03; 13:00; 17:00",
+      ...(adjusted ? { ADMIN_AJUSTES: { entry1: { time: "07:00", reason: "Conferido" } } } : {}) }]);
+    const { loadingTask, pages } = await inspect(await buildPdf(table, { dateLabel: "02/10/2026" }));
+    try {
+      const items = pages.flatMap(page => page.items), text = items.map(item => item.str).join(" ");
+      assert.ok(items.some(item => item.str === (adjusted ? "07:00" : "08:35*")));
+      assert.ok(text.includes(adjusted ? "09:03" : "07:28"));
+      assert.ok(text.includes("08:35"), "original continua na auditoria");
+      assert.equal(text.includes("PARCIAL"), false);
+      if (!adjusted) assert.match(text, /fora das faixas/i);
+      for (const item of items) assert.ok(item.transform[4] >= 28 && item.transform[4] + item.width <= 567);
+    } finally { await loadingTask.destroy(); }
+  }
+});
+
 test("gera PDF RHID no layout diário com indicadores e cartões", async () => {
   const table = {
     kind: "rhid_attendance",
@@ -333,6 +350,21 @@ test("pinta de laranja no PDF o cadastro sem nenhuma batida", async () => {
       return components.length === 3 && components[0] > 245 && components[1] >= 180 && components[1] <= 235
         && components[2] >= 180 && components[2] < 220 && components[1] > components[2];
     }), "linha sem batidas deve receber preenchimento laranja");
+  } finally {
+    await loadingTask.destroy();
+  }
+});
+
+test("PDF não sinaliza como horário provisório uma lacuna com batidas concorrentes", async () => {
+  const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00;09:00;10:55;13:00;17:00" }]);
+  const { loadingTask, pages } = await inspect(await buildPdf(table));
+  try {
+    const text = pages.flatMap(({ items }) => items.map(item => item.str)).join(" ");
+    assert.doesNotMatch(text, /—\*/);
+    assert.doesNotMatch(text, /usada provisoriamente/);
+    assert.match(text, /04:00 PARCIAL/);
+    assert.match(text, /09:00/);
+    assert.match(text, /10:55/);
   } finally {
     await loadingTask.destroy();
   }

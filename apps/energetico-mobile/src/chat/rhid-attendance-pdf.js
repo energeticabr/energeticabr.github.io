@@ -177,6 +177,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     const rawLines = detail?.issues?.length
       ? wrapLiteralText(`Batidas RHID: ${(detail.rawPunches || []).join(", ")}`, regular, 7, INNER_WIDTH - 32)
       : [];
+    if (slots.some(slot => slot.outOfRange)) rawLines.push(...wrapLiteralText("* Batida fora das faixas usada provisoriamente até correção.", regular, 7, INNER_WIDTH - 32));
     const auditHeight = rawLines.length ? 8 + rawLines.length * 10 : 0;
     const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight + auditHeight);
     ensureSpace(cardHeight + 4);
@@ -210,7 +211,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
       const textColor = isTime ? clusterText : muted;
       const clusterY = slotStartY - rowIndex * (slotHeight + 7) - slotHeight;
       page.drawRectangle({ x, y: clusterY, width: slotWidth, height: slotHeight, color: clusterFill, borderRadius: 5 });
-      const valueText = String(slot.value ?? "");
+      const valueText = String(slot.value ?? "") + (slot.outOfRange ? "*" : "");
       const valueWidth = bold.widthOfTextAtSize(valueText, 9.5);
       drawText(slot.label, x + 6, clusterY + 8, bold, 6.5, textColor);
       drawText(valueText, x + slotWidth - 6 - valueWidth, clusterY + 8, bold, 9.5, textColor);
@@ -236,9 +237,11 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
       const discrepant = isRhidAttendanceRowDiscrepant(row, table.reportDate);
       const rowFill = isMissing ? noPunchFill : discrepant || detail?.issues?.length ? discrepancyFill : null;
       const slots = [];
+      const provisional = slot => detail?.slots?.[slot]?.outOfRange === true && !detail.slots[slot].adjustment
+        && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(detail.slots[slot].effective || "");
       for (let index = 0; index < pairCount; index += 1) {
-        slots.push({ label: String(table.headers[1 + index * 2] ?? `Entrada ${index + 1}`), value: String(row[1 + index * 2] ?? "—"), kind: "entry" });
-        slots.push({ label: String(table.headers[2 + index * 2] ?? `Saída ${index + 1}`), value: String(row[2 + index * 2] ?? "—"), kind: "exit" });
+        slots.push({ label: String(table.headers[1 + index * 2] ?? `Entrada ${index + 1}`), value: String(row[1 + index * 2] ?? "—"), kind: "entry", outOfRange: provisional(`entry${index + 1}`) });
+        slots.push({ label: String(table.headers[2 + index * 2] ?? `Saída ${index + 1}`), value: String(row[2 + index * 2] ?? "—"), kind: "exit", outOfRange: provisional(`exit${index + 1}`) });
       }
       const total = String(row[row.length - 1] ?? "—");
       const slotsPerCard = 12;

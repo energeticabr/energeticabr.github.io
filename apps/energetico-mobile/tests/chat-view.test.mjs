@@ -1194,6 +1194,30 @@ test("tocar em horário corrigido mostra RHID e ajuste e exige motivo para salva
   dom.window.close();
 });
 
+test("correção RHID preserva horário e motivo durante envio e após falha para nova tentativa", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const submitted = [];
+  view.on("rhid-attendance-adjust-save", event => submitted.push(event));
+  const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "08:35;12:03;13:00;17:00" }]);
+  view.render(signedInState({ messages: [{ id: "rhid-retry", role: "assistant", type: "poll", question: "RELATÓRIO RHID",
+    options: [], detail_table: { ...table, reportDate: "2026-09-25" } }] }));
+  root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="entry1"]').click();
+  root.querySelector('[data-role="rhid-adjustment-time"]').value = "07:00";
+  root.querySelector('[data-role="rhid-adjustment-reason"]').value = "Horário conferido";
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, "07:00");
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "Horário conferido");
+  view.setRhidAttendanceAdjustmentStatus({ busy: false, error: "Falha temporária" });
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-time"]').value, "07:00");
+  assert.equal(root.querySelector('[data-role="rhid-adjustment-reason"]').value, "Horário conferido");
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+  assert.equal(submitted.length, 2);
+  assert.ok(submitted.every(event => event.time === "07:00" && event.reason === "Horário conferido"));
+});
+
 test("relatório RHID exibe a ressincronização no próprio cabeçalho", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "rhid-inline-refresh",
@@ -1548,6 +1572,26 @@ test("relatório RHID segue o layout diário com indicadores e cartões individu
   assert.match(report.querySelector(".chat-rhid-attendance-card--no-punches")?.textContent || "", /SEM MARCAÇÃO/);
   assert.equal(report.querySelector("table"), null, "a apresentação não deve voltar à tabela horizontal");
   dom.window.close();
+});
+
+test("relatório RHID mostra horário fora da faixa no cluster com asterisco e total efetivo", () => {
+  for (const adjusted of [false, true]) {
+    const table = buildRhidAttendanceTable([{ ID_PESSOA_RHID: "9", NOME_COLABORADOR: "MAURICIO",
+      BATIDAS_RHID: "08:35; 12:03; 13:00; 17:00",
+      ...(adjusted ? { ADMIN_AJUSTES: { entry1: { time: "07:00", reason: "Conferido" } } } : {}) }]);
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{ id: "rhid-outside", role: "assistant", type: "poll",
+      question: "RHID", options: [], detail_table: { ...table, reportDate: "2026-10-02" } }] })));
+    const card = dom.window.document.querySelector(".chat-rhid-attendance-card");
+    const entry = card.querySelector('[data-slot="entry1"]');
+    assert.equal(entry.querySelector("strong").textContent, adjusted ? "07:00" : "08:35*");
+    assert.ok(entry.classList.contains(`chat-rhid-attendance-card__cluster--${adjusted ? "corrected" : "entry"}`));
+    assert.equal(entry.querySelector("sup")?.textContent || "", adjusted ? "" : "*");
+    if (!adjusted) assert.match(entry.getAttribute("aria-label"), /fora das faixas/i);
+    assert.equal(card.querySelector(".chat-rhid-attendance-card__total strong").textContent, adjusted ? "09:03" : "07:28");
+    assert.equal(card.querySelector(".chat-rhid-attendance-card__total small"), null);
+    assert.match(card.querySelector(".chat-rhid-attendance-card__issues").textContent, /08:35/);
+    dom.window.close();
+  }
 });
 
 test("relatório RHID distingue entradas e saídas preenchidas sem destacar horários ausentes", () => {

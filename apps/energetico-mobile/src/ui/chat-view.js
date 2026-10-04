@@ -1052,12 +1052,16 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
           const editable = person?.personKey && messageId && isRhidAttendanceDayFinalized(table.reportDate)
             && (discrepant || person.issues?.length || Object.values(person.slots || {}).some(item => !item.effective || item.adjustment));
           const cluster = (slot, label, value, valueClass, isTime) => {
-            const source = person?.slots?.[slot]?.source;
+            const slotDetail = person?.slots?.[slot];
+            const source = slotDetail?.source;
+            const provisional = isTime && slotDetail?.outOfRange === true && !slotDetail.adjustment;
+            const warning = "Batida fora das faixas, usada provisoriamente até correção";
+            const marker = provisional ? `<sup class="chat-rhid-attendance-card__out-of-range" title="${warning}" aria-label="${warning}">*</sup>` : "";
             const tone = source === "added" ? "added" : source === "corrected" ? "corrected" : isTime ? slot.startsWith("entry") ? "entry" : "exit" : "empty";
             const className = `chat-rhid-attendance-card__cluster chat-rhid-attendance-card__cluster--${tone}`;
-            const content = `<span>${escapeHtml(label)}</span><strong class="${valueClass}">${escapeHtml(value)}</strong>`;
+            const content = `<span>${escapeHtml(label)}</span><strong class="${valueClass}">${escapeHtml(value)}${marker}</strong>`;
             return editable
-              ? `<button class="${className}" type="button" data-action="rhid-attendance-adjust-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-slot="${slot}" aria-label="Editar ${escapeHtml(label)} de ${escapeHtml(name)}: ${escapeHtml(value)}">${content}</button>`
+              ? `<button class="${className}" type="button" data-action="rhid-attendance-adjust-open" data-message-id="${escapeHtml(messageId)}" data-person-key="${escapeHtml(person.personKey)}" data-slot="${slot}" aria-label="Editar ${escapeHtml(label)} de ${escapeHtml(name)}: ${escapeHtml(value)}${provisional ? ` (${warning})` : ""}">${content}</button>`
               : `<div class="${className}">${content}</div>`;
           };
           return `<div class="chat-rhid-attendance-card__slot">${cluster(`entry${index + 1}`, entryLabel, entry, entryClass, entryIsTime)}${cluster(`exit${index + 1}`, exitLabel, exit, exitClass, exitIsTime)}</div>`;
@@ -3995,7 +3999,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (banner) banner.textContent = error;
         return;
       }
-      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, busy: true, error: "" };
+      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, effective: time, reason, busy: true, error: "" };
       const { messageId, personKey, slot } = rhidAttendanceAdjustment;
       if (lastState) { const state = lastState; lastState = null; render(state); }
       emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason });
