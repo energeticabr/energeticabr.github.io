@@ -1,0 +1,13 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Folha expansível</title></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/hr-payroll-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
+window.gallery = createHrPayrollGallery({root:document.querySelector('#app'),gallery:'IDFOLHA',onHome:()=>{},request:async()=>({gallery:'IDFOLHA',page:1,rows:[{id:'5',FORNECEDOR:'FELICIANO ROGÉRIO DA SILVA',MESREFERENCIA:'09/2026'}]}),requestReport:async()=>[
+{id:'2',TIPOPGTO:'SALÁRIO',VALORUNITARIO:250,QTD:2,DATA:'2026-09-28',IDLANCAMENTO:3456},
+{id:'3',TIPOPGTO:'SALÁRIO',VALORUNITARIO:506.40,QTD:1,DATA:'2026-09-29'},
+{id:'4',TIPOPGTO:'VALE REFEIÇÃO',VALORUNITARIO:109,QTD:1,DATA:'2026-09-30'}]});
+await window.gallery.open();
+await Promise.all([...document.images].map(img=>img.decode()));
+document.documentElement.dataset.ready='true';
+</script></body></html>

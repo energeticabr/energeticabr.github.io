@@ -102,13 +102,6 @@ export function createHrPayrollGallery({ document: documentOption,
       card.setAttribute("role", "listitem");
       const cardHeader = element("header", "hr-gallery-card-header");
       cardHeader.append(element("strong", "hr-gallery-id", `ID ${row.id || "—"}`));
-      if (payrollReport) {
-        cardHeader.append(createMascotReportButton(doc, {
-          label: `Consultar pagamentos da folha ID ${row.id || ""}`,
-          action: "open-payroll-report",
-          onActivate: () => { void payrollReport.open(row); },
-        }));
-      }
       const fields = element("dl", "hr-gallery-fields");
       for (const [key, label] of config.fields) {
         const pair = element("div", "hr-gallery-field");
@@ -118,7 +111,15 @@ export function createHrPayrollGallery({ document: documentOption,
       const recordMain = element('div', 'gallery-record-main');
       recordMain.append(cardHeader, fields);
       card.classList.add('gallery-record-card');
-      card.append(recordMain, recordActions.render(row));
+      const actions = recordActions.render(row);
+      if (payrollReport) {
+        actions.append(createMascotReportButton(doc, {
+          label: `Consultar pagamentos da folha ID ${row.id || ""}`,
+          action: "open-payroll-report",
+          onActivate: () => { void payrollReport.open(row); },
+        }));
+      }
+      card.append(recordMain, actions);
       cards.append(card);
     }
     if (!rows.length) status.textContent = "Nenhum registro encontrado nesta página.";

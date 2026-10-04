@@ -127,10 +127,10 @@ test("IDFOLHA mostra o atalho de relatório à direita e abre a folha daquele ca
   });
 
   await gallery.open();
-  const cardHeader = root.querySelector(".hr-gallery-card-header");
-  const button = cardHeader.querySelector('[data-action="open-payroll-report"]');
+  const actions = root.querySelector(".hr-gallery-card .gallery-record-actions");
+  const button = actions.querySelector('[data-action="open-payroll-report"]');
   assert.ok(button);
-  assert.equal(button.parentElement, cardHeader);
+  assert.equal(button.parentElement, actions);
   assert.equal(button.querySelector("img")?.alt, "");
   button.click();
   await new Promise(resolve => setTimeout(resolve, 0));
