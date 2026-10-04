@@ -200,6 +200,7 @@ export function createConversationStore({
         mediaUrl: String(item.mediaUrl),
         ...(item.existing === true ? { existing: true } : {}),
         ...(item.readOnly === true ? { readOnly: true } : {}),
+        ...(item.signerName ? { signerName: String(item.signerName).trim() } : {}),
         ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
         }));
     }
@@ -333,10 +334,11 @@ export function createConversationStore({
       mediaUrl: String(item.mediaUrl),
       ...(item.existing === true ? { existing: true } : {}),
       ...(item.readOnly === true ? { readOnly: true } : {}),
+      ...(item.signerName ? { signerName: String(item.signerName).trim() } : {}),
       ...(item.previewUrl ? { previewUrl: String(item.previewUrl) } : {}),
     }));
     const unchanged = normalized.length === state.attachments.length
-      && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "existing", "readOnly", "file"]
+      && normalized.every((item, index) => ["id", "fileName", "mimeType", "size", "mediaUrl", "existing", "readOnly", "signerName", "file"]
         .every(key => item[key] === state.attachments[index][key]));
     if (!unchanged) publish({ ...state, attachments: normalized });
     return true;

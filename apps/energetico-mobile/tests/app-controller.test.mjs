@@ -5964,7 +5964,7 @@ test("assina PDF já existente no documento pendente sem excluir o original do S
   } });
   t.after(() => h.controller.stop());
   const activeFlow = { id: "pending_document_attachment", title: "DOCUMENTOS PENDENTES" };
-  const original = { id: "rhid", fileName: "PONTO-RHID-17-2026-09.pdf", mimeType: "application/pdf", mediaUrl: "/rhid", existing: true, readOnly: true };
+  const original = { id: "rhid", fileName: "PONTO-RHID-17-2026-09.pdf", mimeType: "application/pdf", mediaUrl: "/rhid", existing: true, readOnly: true, signerName: "CLEITON CESAR NONATO" };
   const uploaded = { id: "signed", fileName: "PONTO-RHID-17-2026-09-assinado.pdf", mimeType: "application/pdf", mediaUrl: "/signed", size: 2400 };
   h.client.sendFile = async file => {
     h.chatCalls.push(["file", file.name]);
@@ -5979,9 +5979,11 @@ test("assina PDF já existente no documento pendente sem excluir o original do S
   await new Promise(resolve => setImmediate(resolve));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
+  assert.equal(h.view.renders.at(-1).signaturePlacement.signerName, "CLEITON CESAR NONATO");
   assert.deepEqual(h.chatCalls, [["media", "rhid"]], "nenhum arquivo deve ser enviado antes da escolha do local");
   await h.view.emit("signature-placement-position", { point: { page: 1, x: 0.72, y: 0.84, scale: 0.5 } });
   assert.deepEqual(signedCalls[0].point, { page: 1, x: 0.72, y: 0.84, scale: 0.5 });
+  assert.equal(signedCalls[0].signerName, "CLEITON CESAR NONATO");
   assert.deepEqual(h.chatCalls, [["media", "rhid"], ["file", "PONTO-RHID-17-2026-09-assinado.pdf"]]);
   assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["rhid", "signed"]);
   assert.equal(h.store.getState().activeFlow.id, "pending_document_attachment");
