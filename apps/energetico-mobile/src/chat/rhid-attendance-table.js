@@ -175,6 +175,26 @@ export function suggestedRhidAdjustmentTime(slot, reportDate) {
   return { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: day === 5 ? "16:00" : "17:00" }[slot] || "";
 }
 
+export function rhidIrregularCountsByDate(rows = [], month = "") {
+  const days = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const day = String(row?.DATA_REFERENCIA ?? "").slice(0, 10);
+    if (!isValidRhidReportDate(day) || day.slice(0, 7) !== month) continue;
+    if (!days.has(day)) days.set(day, []);
+    days.get(day).push(row);
+  }
+  const counts = {};
+  for (const [day, dailyRows] of days) {
+    const count = buildRhidAttendanceTable(dailyRows).people.filter(person => {
+      const times = RHID_SLOTS.map(([slot]) => person.slots[slot].effective);
+      // Absence is not an incomplete recorded presence.
+      return (person.rawPunches.length || times.some(Boolean)) && times.some(time => !time);
+    }).length;
+    if (count) counts[day] = count;
+  }
+  return counts;
+}
+
 export function buildRhidAttendanceTable(rows = []) {
   const people = new Map();
   for (const row of rows) {

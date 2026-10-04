@@ -1980,7 +1980,7 @@ function datePickerMarkup(value = "") {
   </div>`;
 }
 
-function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth = false) {
+function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth = false, irregularCounts = {}) {
   const [year, monthNumber] = month.split("-").map(Number);
   const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
   const monthName = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(monthStart);
@@ -1994,7 +1994,9 @@ function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth =
   for (let day = 1; day <= daysInMonth; day += 1) {
     const iso = `${month}-${String(day).padStart(2, "0")}`;
     const status = knownMonth && iso <= today ? (known.has(iso) ? "present" : "absent") : "unknown";
-    days.push(`<button type="button" class="chat-rhid-calendar__day chat-rhid-calendar__day--${status}${iso === selectedDate ? " chat-rhid-calendar__day--selected" : ""}" data-action="rhid-calendar-select-day" data-role="rhid-calendar-day" data-value="${iso}" aria-label="${day} de ${monthName}${status === "present" ? ", com presença" : status === "absent" ? ", sem presença" : ""}" aria-pressed="${iso === selectedDate}">${day}</button>`);
+    const count = knownMonth && iso <= today && Number.isSafeInteger(irregularCounts?.[iso]) && irregularCounts[iso] > 0 ? irregularCounts[iso] : 0;
+    const warning = count ? `${count} irreg.` : "";
+    days.push(`<button type="button" class="chat-rhid-calendar__day chat-rhid-calendar__day--${status}${iso === selectedDate ? " chat-rhid-calendar__day--selected" : ""}" data-action="rhid-calendar-select-day" data-role="rhid-calendar-day" data-value="${iso}" aria-label="${day} de ${monthName}${status === "present" ? ", com presença" : status === "absent" ? ", sem presença" : ""}${count ? `, ${count} ${count === 1 ? "apuração irregular" : "apurações irregulares"} após ajustes do administrador` : ""}" aria-pressed="${iso === selectedDate}"><span>${day}</span>${count ? `<small class="chat-rhid-calendar__irregular">${warning}</small>` : ""}</button>`);
   }
   return `<div class="chat-rhid-calendar" aria-label="Calendário de presenças RHID">
     <div class="chat-rhid-calendar__heading"><button type="button" data-action="rhid-calendar-change-month" data-value="-1" aria-label="Mês anterior">←</button><strong>${escapeHtml(monthLabel)}</strong><button type="button" data-action="rhid-calendar-change-month" data-value="1" aria-label="Próximo mês">→</button></div>
@@ -2003,7 +2005,7 @@ function rhidCalendarMarkup(month, selectedDate, presentDates = [], knownMonth =
   </div>`;
 }
 
-function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", directToday = false, month = "", monthLoading = false, monthKnown = false, monthPresentDates = [] } = {}) {
+function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", busy = false, error = "", directToday = false, month = "", monthLoading = false, monthKnown = false, monthPresentDates = [], monthIrregularCounts = {} } = {}) {
   if (!open || busy) return "";
   const changingExistingReport = Boolean(messageId);
   return `<section class="chat-confirmation chat-date-picker chat-rhid-report-page" data-rhid-attendance-report-dialog role="dialog" aria-modal="false" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
@@ -2012,7 +2014,7 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
       <p>${directToday ? `Presenças de hoje: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong>` : changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
-      ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown)}
+      ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown, monthIrregularCounts)}
       ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
@@ -2491,6 +2493,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceMonthLoading = false;
   let rhidAttendanceMonthKnown = false;
   let rhidAttendanceMonthPresentDates = [];
+  let rhidAttendanceMonthIrregularCounts = {};
   let rhidAttendanceAdjustment = null;
   let rhidRefresh = { busy: false, message: "", error: false };
   let pendingDateSeparatorDeletion = null;
@@ -4020,6 +4023,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthLoading = true;
       rhidAttendanceMonthKnown = false;
       rhidAttendanceMonthPresentDates = [];
+      rhidAttendanceMonthIrregularCounts = {};
       rhidAttendanceReportBusy = false;
       rhidAttendanceReportError = "";
       rhidAttendanceMonthError = "";
@@ -4035,6 +4039,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       rhidAttendanceMonthLoading = true;
       rhidAttendanceMonthKnown = false;
       rhidAttendanceMonthPresentDates = [];
+      rhidAttendanceMonthIrregularCounts = {};
       rhidAttendanceReportError = "";
       rhidAttendanceMonthError = "";
       if (lastState) { const state = lastState; lastState = null; render(state); }
@@ -4985,6 +4990,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         monthLoading: rhidAttendanceMonthLoading,
         monthKnown: rhidAttendanceMonthKnown,
         monthPresentDates: rhidAttendanceMonthPresentDates,
+        monthIrregularCounts: rhidAttendanceMonthIrregularCounts,
       },
       rhidAttendanceAdjustment,
       rhidRefresh,
@@ -5092,11 +5098,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
-  function setRhidAttendanceMonthStatus({ month, presentDates = [], error = "" } = {}) {
+  function setRhidAttendanceMonthStatus({ month, presentDates = [], irregularCounts = {}, error = "" } = {}) {
     if (!rhidAttendanceReportOpen || month !== rhidAttendanceMonth) return false;
     rhidAttendanceMonthLoading = false;
     rhidAttendanceMonthKnown = !error;
     rhidAttendanceMonthPresentDates = Array.isArray(presentDates) ? presentDates : [];
+    rhidAttendanceMonthIrregularCounts = !error && irregularCounts && typeof irregularCounts === "object" ? irregularCounts : {};
     rhidAttendanceMonthError = String(error || "");
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;
