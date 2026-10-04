@@ -163,7 +163,8 @@ export function createSearchableSelect(root, config = {}) {
   function openOptions() {
     const clearEmptyLabel = config.clearEmptyLabelOnOpen === true
       && selectedOption
-      && String(selectedOption.value ?? "") === "";
+      && String(selectedOption.value ?? "") === ""
+      && input.value === selectedOption.label;
     if (clearEmptyLabel) input.value = "";
     const query = selectedOption && (clearEmptyLabel || input.value === selectedOption.label) ? "" : input.value;
     filterOptions(query);

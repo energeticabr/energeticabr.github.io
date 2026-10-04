@@ -71,6 +71,8 @@ test('dropdown search stays in the original field on phone, desktop and shipped 
         await send('Input.dispatchMouseEvent',{type:'mousePressed',x:stageRect.x+20,y:stageRect.y+20,button:'left',clickCount:1},sessionId);
         await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:stageRect.x+20,y:stageRect.y+20,button:'left',clickCount:1},sessionId);
         await send('Input.insertText',{text:'liquidado hoje'},sessionId);
+        await send('Input.dispatchMouseEvent',{type:'mousePressed',x:stageRect.x+25,y:stageRect.y+20,button:'left',clickCount:1},sessionId);
+        await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:stageRect.x+25,y:stageRect.y+20,button:'left',clickCount:1},sessionId);
         assert.ok(await evaluate(`document.querySelector('#stage [role=combobox]').value==='liquidado hoje'&&document.querySelector('#stage [data-provisao-payment-stage]').value===''&&document.querySelector('#stage [role=listbox]').querySelectorAll('input').length===0`));
         await key('ArrowDown','ArrowDown',40);
         await key('Enter','Enter',13);

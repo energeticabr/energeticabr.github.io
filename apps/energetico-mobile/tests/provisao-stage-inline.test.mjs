@@ -24,6 +24,10 @@ test('payment stage is typed in the same field and applies dates only after a re
   input.focus();
   assert.equal(input.value, '', 'Selecione must be a prompt, never part of the typed query');
   input.value += 'liquidado hoje'; input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const labels = [...field.querySelectorAll('[role=option]')].map(n => n.textContent);
+  input.click();
+  assert.equal(input.value, 'liquidado hoje', 'repositioning the cursor must preserve the query');
+  assert.deepEqual([...field.querySelectorAll('[role=option]')].map(n => n.textContent), labels);
   assert.equal(native.value, '');
   const option = [...field.querySelectorAll('[role=option]')].find(n => n.textContent === 'LIQUIDADO HOJE');
   assert.ok(option); option.click();
