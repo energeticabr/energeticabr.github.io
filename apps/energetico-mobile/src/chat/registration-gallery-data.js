@@ -50,8 +50,10 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   }),
   workDiary: Object.freeze({
     title: "GALERIA DE DIÁRIO DE OBRAS", screen: "G39- HISTÓRICO DIÁRIO DE OBRAS", listName: "DIÁRIO DE OBRAS", aliases: ["DIÁRIO DE OBRAS", "DIARIO DE OBRAS"],
-    nativeCard: true, showAttachments: true, recordLabel: "diário de obras", fields: ["DATA", "FILIAL", "STATUS", "INFORMAÇÕES CLIMÁTICAS", "TIPO", "ETAPA", ...AUDIT_FIELDS], filterFields: ["FILIAL", "STATUS", "INFORMAÇÕES CLIMÁTICAS", "ID", "TIPO", "ETAPA"],
-    fieldAliases: { ...AUDIT_ALIASES, "INFORMAÇÕES CLIMÁTICAS": ["INFORMA_x00c7__x00d5_ESCLIM_x00c"] }, fieldTypes: { DATA: "weekday-date" }, substringFilters: ["ETAPA"], dateRangeField: "DATA", sourceSort: { field: "ID", direction: "desc", type: "number" },
+    nativeCard: true, showAttachments: true, recordLabel: "diário de obras", fields: ["DATA", "FILIAL", "STATUS", "INFORMAÇÕES CLIMÁTICAS", "TIPO", "ETAPA", "ATIVIDADES EXECUTADAS", "OBSERVAÇÕES", ...AUDIT_FIELDS], filterFields: ["FILIAL", "STATUS", "INFORMAÇÕES CLIMÁTICAS", "ID", "TIPO", "ETAPA"],
+    fieldAliases: { ...AUDIT_ALIASES, "INFORMAÇÕES CLIMÁTICAS": ["INFORMA_x00c7__x00d5_ESCLIM_x00c"], "ATIVIDADES EXECUTADAS": ["ATIVIDADEEXECUTADA"], "OBSERVAÇÕES": ["OCORR_x00ca_NCIASEIMPREVISTOS", "OCORRÊNCIAS E IMPREVISTOS", "OBSERVACOES", "OBS"] },
+    fieldLabels: { "ATIVIDADES EXECUTADAS": "Atividade executada", "OBSERVAÇÕES": "Observações" },
+    fieldTypes: { DATA: "weekday-date" }, substringFilters: ["ETAPA"], dateRangeField: "DATA", sourceSort: { field: "ID", direction: "desc", type: "number" },
   }),
   quotes: Object.freeze({
     title: "GALERIA DE NOVA COTAÇÃO", screen: "G19- HISTÓRICOLOCACOES_2", listName: "NOVACOTACAO", aliases: ["NOVACOTACAO", "NOVA COTACAO"],

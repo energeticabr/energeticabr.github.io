@@ -126,6 +126,57 @@ test("work diary uses encoded climate metadata, descending IDs, inclusive date b
   assert.deepEqual(ids(doc), ["5", "4"]);
 });
 
+test("work diary shows activities, observations and audit data in the redesigned card without treating text as markup", async t => {
+  const { doc, gallery } = openGallery(t, "workDiary", [{ id: "209", attachmentCount: 1, hasAttachments: true,
+    createdBy: { user: { displayName: "Bernardo notini" } }, lastModifiedBy: { user: { displayName: "Maria" } },
+    fields: { DATA: "2026-10-02", FILIAL: "004 - EDIFÍCIO XAVANTE", STATUS: "CONCLUÍDO", TIPO: "REMOTO", ETAPA: "ALVENARIA E ESTRUTURAS",
+      "ATIVIDADES EXECUTADAS": "1. Levantamento de alvenaria\n2. Conferência do 2º pavimento",
+      OCORR_x00ca_NCIASEIMPREVISTOS: "Sem intercorrências. <img src=x onerror=alert(1)>", Created: "2026-10-02", Modified: "2026-10-03" } }]);
+  await gallery.open();
+  const card = doc.querySelector('[data-registration-row="209"]');
+  assert.ok(card.querySelector('.rg-diary-table'));
+  assert.match(card.querySelector('[data-field="ATIVIDADES EXECUTADAS"] dd').textContent, /1\. Levantamento.*\n2\. Conferência/);
+  assert.equal(card.querySelector('[data-field="OBSERVAÇÕES"] dt').textContent, "Observações");
+  assert.match(card.querySelector('[data-field="OBSERVAÇÕES"] dd').textContent, /<img/);
+  assert.equal(card.querySelector('img'), null);
+  assert.equal(card.querySelector('.rg-diary-status--complete').textContent, "CONCLUÍDO");
+  assert.equal(card.querySelector('.rg-diary-audit [data-field="Criado por"] dd').textContent, "Bernardo notini");
+  assert.equal(card.querySelector('.rg-diary-audit [data-field="Modificado por"] dd').textContent, "Maria");
+  assert.equal(card.querySelector('.rg-diary-audit [data-field="Criado"] dd').textContent, "02/10/2026");
+  assert.match(card.querySelector('[data-action="registration-attachments"]').textContent, /1 anexo/);
+});
+
+test("work diary observations never use stock situation even when it comes first or occurrences are missing", async t => {
+  const { doc, gallery } = openGallery(t, "workDiary", [
+    { id: "1", hasAttachments: false, fields: { DATA: "2026-10-02", DESCRI_x00c7__x00c3_O: "ESTOQUE BAIXO", OCORR_x00ca_NCIASEIMPREVISTOS: "Atraso na concretagem" } },
+    { id: "2", hasAttachments: false, fields: { DATA: "2026-10-02", DESCRI_x00c7__x00c3_O: "ESTOQUE BAIXO", OCORR_x00ca_NCIASEIMPREVISTOS: null } },
+    { id: "3", hasAttachments: false, fields: { DATA: "2026-10-02", DESCRI_x00c7__x00c3_O: "ESTOQUE BAIXO" } },
+  ]);
+  await gallery.open();
+  const notes = id => doc.querySelector(`[data-registration-row="${id}"] [data-field="OBSERVAÇÕES"] dd`).textContent;
+  assert.equal(notes("1"), "Atraso na concretagem");
+  assert.equal(notes("2"), "—");
+  assert.equal(notes("3"), "—");
+});
+
+test("work diary climate clusters distinguish sun, rain and unknown conditions without changing the source labels", async t => {
+  const { doc, gallery } = openGallery(t, "workDiary", [
+    ["1", " ENSOLARADO ", "sun", "☀️"], ["2", "CHUVOSO", "rain", "🌧️"],
+    ["3", "pouco chuvoso", "rain", "🌧️"], ["4", "MUITO CHUVOSO", "rain", "🌧️"],
+    ["5", "NUBLADO", "neutral", "☁️"], ["6", "", "neutral", ""],
+  ].map(([id, climate]) => ({ id, hasAttachments: false, fields: { DATA: "2026-10-02", INFORMA_x00c7__x00d5_ESCLIM_x00c: climate, STATUS: "NÃO CONCLUÍDO" } })));
+  await gallery.open();
+  for (const [id, label, tone, emoji] of [["1", "ENSOLARADO", "sun", "☀️"], ["2", "CHUVOSO", "rain", "🌧️"],
+    ["3", "pouco chuvoso", "rain", "🌧️"], ["4", "MUITO CHUVOSO", "rain", "🌧️"], ["5", "NUBLADO", "neutral", "☁️"], ["6", "—", "neutral", ""]]) {
+    const card = doc.querySelector(`[data-registration-row="${id}"]`);
+    const weather = card.querySelector('[data-field="INFORMAÇÕES CLIMÁTICAS"] dd');
+    assert.equal(weather.dataset.weather, tone);
+    assert.equal(weather.querySelector('.rg-diary-weather__label').textContent, label);
+    assert.equal(weather.querySelector('.rg-diary-weather__icon')?.textContent || "", emoji);
+    assert.equal(card.querySelector('.rg-diary-status--complete'), null);
+  }
+});
+
 test("quote search matches description only and starts active with the actual source ID sort selection", async t => {
   const { dom, doc, gallery } = openGallery(t, "quotes", [
     { id: "9", hasAttachments: false, fields: { DESCRICAO: "Concreto armado", FORNECEDOR: "CABOS LTDA", FILIAL: "CENTRAL", ETAPA: "ESTRUTURA", STATUS: "ATIVO", Created: "2026-09-20T12:00:00Z", DATAFINALIZADO: "2026-09-24", COTACOESVINCULADAS: "12; 14", ORCAMENTOESCOLHIDO: "14" } },
