@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const state = {sessionStatus:'authenticated',account:{name:'Bernardo'},activeFlow:{id:'launch',title:'EFETUAR LANÇAMENTO'},draft:'',pendingFiles:[],
+  messages:[{role:'assistant',type:'poll',question:'💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.',options:[{id:'yes',label:'SIM'},{id:'no',label:'NÃO'}]}]};
+const view=createChatView(document.querySelector('#app'));
+window.sent=[];
+view.on('draft-changed', e=>{state.draft=e.value;view.render(state);});
+view.on('send-text', ()=>{window.sent.push(state.draft);state.draft='';view.render(state);});
+window.changeQuestion=()=>{state.messages.push({role:'assistant',type:'poll',question:'QUAL É O PRODUTO?'});view.render(state);};
+view.render(state);
+document.documentElement.dataset.ready='true';
+</script></body></html>
