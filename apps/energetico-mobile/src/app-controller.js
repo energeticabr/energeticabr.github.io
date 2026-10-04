@@ -916,6 +916,8 @@ export function createAppController({
   let pendingProvisionReminderOpen = false;
   let pendingProvisionReminderError = "";
   let pendingProvisionRequest = null;
+  let pendingProvisionSnapshotRevision = 0;
+  let pendingProvisionOpenRequest = null;
   let pendingProvisionSessionDismissed = false;
   let pendingProvisionReminderTimer = null;
   let pendingProvisionReminderRevision = 0;
@@ -1718,7 +1720,7 @@ export function createAppController({
     if (schedule !== undefined) void Promise.resolve(schedule).catch(() => {});
   }
 
-  async function refreshPendingProvisionSnapshot() {
+  async function refreshPendingProvisionSnapshot({ manual = false, isCurrent = () => true } = {}) {
     if (!account || stopped || typeof client.getPendingProvisionSnapshot !== "function") return false;
     if (pendingProvisionReminderOpen || pendingProvisionSnapshot) {
       const today = provisionDateKey();
@@ -1728,15 +1730,20 @@ export function createAppController({
       }
       return true;
     }
-    if (pendingProvisionSessionDismissed) return false;
+    if (!manual && pendingProvisionSessionDismissed) return false;
     if (pendingProvisionRequest) return pendingProvisionRequest;
     const snapshotAccount = account;
     const snapshotRevision = sessionRevision;
+    const snapshotGeneration = ++pendingProvisionSnapshotRevision;
+    const snapshotPoll = manual ? latestAssistantPoll() : null;
+    const current = () => !stopped && account === snapshotAccount && sessionRevision === snapshotRevision
+      && pendingProvisionSnapshotRevision === snapshotGeneration && isCurrent()
+      && (!manual || (!flowBusy() && !store.getState().activeFlow && latestAssistantPoll() === snapshotPoll));
+    const suppressed = () => !manual && pendingProvisionReminderSuppressed();
     pendingProvisionRequest = Promise.resolve().then(async () => {
       try {
         const original = await client.getPendingProvisionSnapshot();
-        if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
-        if (pendingProvisionReminderSuppressed()) return false;
+        if (!current() || suppressed()) return false;
         let upcoming = [];
         let upcomingUnavailable = false;
         try {
@@ -1754,7 +1761,7 @@ export function createAppController({
             finally { clearTimeout(timer); }
           }
         } catch { upcomingUnavailable = true; }
-        if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision || pendingProvisionReminderSuppressed()) return false;
+        if (!current() || suppressed()) return false;
         const rowsById = new Map();
         for (const row of Array.isArray(original?.rows) ? original.rows : []) {
           const id = String(row?.id ?? "").trim();
@@ -1771,7 +1778,7 @@ export function createAppController({
         const totalsUnavailable = rows.some(row => row.total == null || row.total === "");
         const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
-        if (!due) {
+        if (!due && !manual) {
           cancelScheduledPendingProvisionReminder();
           pendingProvisionSnapshot = null;
           pendingProvisionReminderOpen = false;
@@ -1780,23 +1787,57 @@ export function createAppController({
           render();
           return false;
         }
-        if (!pendingProvisionReminderSuppressed()) {
-          cancelScheduledPendingProvisionReminder();
+        if (!suppressed()) {
+          if (!manual) cancelScheduledPendingProvisionReminder();
+          snapshot.due = due || manual;
           pendingProvisionSnapshot = snapshot;
           pendingProvisionReminderOpen = false;
           pendingProvisionReminderError = "";
           beginPendingProvisionAttachmentDiscovery(snapshot);
         }
-        return due;
+        return due || manual;
       } catch {
+        if (manual && current()) setSessionError(new Error("Não foi possível consultar as provisões de pagamento. Toque no mascote para tentar novamente."));
         // A temporary network failure must not hide the normal chat. The next
         // foreground event retries the read-only check.
         return false;
       } finally {
-        pendingProvisionRequest = null;
+        if (pendingProvisionSnapshotRevision === snapshotGeneration) pendingProvisionRequest = null;
       }
     });
     return pendingProvisionRequest;
+  }
+
+  async function openPendingProvisions() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (pendingProvisionOpenRequest) return pendingProvisionOpenRequest;
+    const targetAccount = account, targetRevision = sessionRevision;
+    const targetPoll = latestAssistantPoll();
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision;
+    const openingCurrent = () => current() && pendingProvisionOpenRequest === request
+      && latestAssistantPoll() === targetPoll;
+    const work = Promise.resolve().then(async () => {
+      if (pendingProvisionRequest) await pendingProvisionRequest;
+      if (!openingCurrent() || flowBusy() || store.getState().activeFlow) return false;
+      sessionError = "";
+      return refreshPendingProvisionSnapshot({ manual: true, isCurrent: openingCurrent });
+    });
+    const request = withTimeout(work, 15_000,
+      "A consulta das provisões demorou demais. Toque no mascote para tentar novamente.").catch(error => {
+      if (current() && pendingProvisionOpenRequest === request) {
+        pendingProvisionSnapshotRevision += 1;
+        pendingProvisionRequest = null;
+        if (openingCurrent() && !flowBusy() && !store.getState().activeFlow) setSessionError(error);
+      }
+      return false;
+    });
+    pendingProvisionOpenRequest = request;
+    render();
+    try { return await request; }
+    finally {
+      if (pendingProvisionOpenRequest === request) pendingProvisionOpenRequest = null;
+      if (current()) render();
+    }
   }
 
   async function refreshPendingNotesSnapshot() {
@@ -3558,6 +3599,7 @@ export function createAppController({
       recoveryBlocked: Boolean(recoveryAccountId && !recoveryVerified),
       recoveryUncertain,
       pendingProvisions: pendingProvisionSnapshot,
+      pendingProvisionOpening: Boolean(account && pendingProvisionOpenRequest),
       pendingNotes: pendingNotesSnapshot,
       pendingConstructionDiaries: pendingProvisionSnapshot || !pendingConstructionDiaryTime()
         ? null : pendingConstructionDiarySnapshot,
@@ -5398,6 +5440,8 @@ export function createAppController({
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
     pendingProvisionRequest = null;
+    pendingProvisionSnapshotRevision += 1;
+    pendingProvisionOpenRequest = null;
     pendingProvisionSessionDismissed = false;
     clearPendingProvisionAttachmentState({ clearData: true });
     pendingProvisionSharePointAuthorization = null;
@@ -6231,6 +6275,7 @@ export function createAppController({
     bind("open-file", command => openFile(command.fileId));
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
+    bind("open-pending-provisions", openPendingProvisions);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6404,6 +6449,9 @@ export function createAppController({
     cancelResponseTransition();
     cancelDatabaseFilter({ resetLast: true });
     stopped = true;
+    pendingProvisionSnapshotRevision += 1;
+    pendingProvisionRequest = null;
+    pendingProvisionOpenRequest = null;
     sharedResumeRequested = false;
     idleWaiters.forEach(resolve => resolve());
     idleWaiters.clear();

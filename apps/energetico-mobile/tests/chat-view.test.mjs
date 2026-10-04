@@ -44,6 +44,55 @@ test("cancelar assinatura da galeria devolve contexto ao chamador", () => {
   dom.window.close();
 });
 
+test("atalho do mascote fica à esquerda de Pendências e abre provisões sem selecionar o menu", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const opened = [], selected = [];
+  view.on('open-pending-provisions', event => opened.push(event));
+  view.on('select-reply', event => selected.push(event));
+  const menu = { id: 'home-shortcut', role: 'assistant', type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
+    { id: 'group_pending', reply: 'group_pending', label: '⏳ PENDÊNCIAS (47)', tone: 'danger' },
+    { id: 'group_supplies', reply: 'group_supplies', label: '📦 SUPRIMENTOS' },
+  ] };
+  view.render(signedInState({ messages: [menu] }));
+  const shortcut = root.querySelector('[data-action="open-pending-provisions"]');
+  assert.ok(shortcut, 'o menu inicial precisa oferecer o atalho');
+  assert.match(shortcut.getAttribute('aria-label'), /provisões.*pagamento.*pendentes/i);
+  assert.ok(shortcut.querySelector('img[alt="Mascote Energético"]'));
+  const pending = root.querySelector('[data-reply-id="group_pending"]');
+  assert.equal(shortcut.nextElementSibling, pending);
+  assert.match(pending.textContent, /PENDÊNCIAS \(47\)/);
+  assert.ok(pending.classList.contains('chat-choice-button--danger'));
+  shortcut.querySelector('img').click();
+  assert.equal(opened.length, 1);
+  assert.equal(selected.length, 0);
+  pending.click();
+  assert.equal(selected[0].replyId, 'group_pending');
+});
+
+test("atalho das provisões não aparece em submenus nem em menus antigos e desativa durante leitura", () => {
+  const menu = { id: 'home-shortcut', role: 'assistant', type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
+    { id: 'group_pending', label: 'PENDÊNCIAS' },
+  ] };
+  for (const state of [
+    { messages: [{ ...menu, question: 'PENDÊNCIAS — ESCOLHA O TIPO' }] },
+    { messages: [menu, { id: 'later', role: 'assistant', type: 'poll', question: 'ESCOLHA', options: [{ id: 'next', label: 'Próximo' }] }] },
+  ]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState(state)));
+    assert.equal(dom.window.document.querySelector('[data-action="open-pending-provisions"]'), null);
+    dom.window.close();
+  }
+  for (const busy of [{ pendingProvisionOpening: true }, { activeText: { id: 'sending' } }]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [menu], ...busy })));
+    const shortcut = dom.window.document.querySelector('[data-action="open-pending-provisions"]');
+    assert.ok(shortcut);
+    assert.equal(shortcut.disabled, true);
+    dom.window.close();
+  }
+});
+
 test("mostra somente a entrada Microsoft quando não há sessão", () => {
   const markup = renderChatMarkup({ sessionStatus: "signed-out" });
 
