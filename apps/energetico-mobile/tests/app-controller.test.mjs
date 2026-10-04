@@ -437,6 +437,49 @@ test("calendário RHID carrega o resumo mensal e informa falha sem inventar aus�
   assert.match(statuses[1].error, /não foi possível consultar/i);
 });
 
+test("calendário RHID conta horários efetivos do snapshot mensal após correções", async t => {
+  const h = makeHarness();
+  const statuses = [];
+  h.view.setRhidAttendanceMonthStatus = value => statuses.push(value);
+  h.client.getRhidAttendanceMonth = async month => ({ month, presentDates: ["2026-09-28"], rows: [
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: "Teste", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "07:00; 12:00" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "Corrigido", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "12:00; 13:00; 17:00", ADMIN_AJUSTES: { entry1: { time: "07:00" } } },
+  ] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
+  assert.deepEqual(statuses[0].irregularCounts, { "2026-09-28": 1 });
+});
+
+for (const staleError of [false, true]) {
+  test(`calendário RHID rejeita ${staleError ? "erro" : "sucesso"} antigo após A-B-A ou reabrir A`, async t => {
+    const h = makeHarness();
+    const statuses = [], requests = [];
+    h.view.setRhidAttendanceMonthStatus = value => statuses.push(value);
+    h.client.getRhidAttendanceMonth = month => new Promise((resolve, reject) => requests.push({ month, resolve, reject }));
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const old = h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
+    const middle = h.view.emit("rhid-attendance-month-load", { value: "2026-10" });
+    const latest = h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
+    requests[2].resolve({ month: "2026-09", presentDates: [], rows: [] });
+    await latest;
+    if (staleError) requests[0].reject(new Error("Old offline response"));
+    else requests[0].resolve({ month: "2026-09", presentDates: ["2026-09-28"], rows: [{ ID_PESSOA_RHID: "1", NOME_COLABORADOR: "Teste", DATA_REFERENCIA: "2026-09-28", BATIDAS_RHID: "07:00" }] });
+    requests[1].resolve({ month: "2026-10", presentDates: [] });
+    await Promise.all([old, middle]);
+    assert.deepEqual(statuses, [{ month: "2026-09", presentDates: [], irregularCounts: {} }]);
+    const closedRequest = h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
+    const reopenedRequest = h.view.emit("rhid-attendance-month-load", { value: "2026-09" });
+    requests[4].resolve({ month: "2026-09", presentDates: [], rows: [] });
+    await reopenedRequest;
+    requests[3].reject(new Error("Request before reopening"));
+    await closedRequest;
+    assert.equal(statuses.length, 2);
+    assert.deepEqual(statuses[1].irregularCounts, {});
+  });
+}
+
 test("falha ao trocar data pelo calendário libera o popup e preserva o relatório atual", async t => {
   const h = makeHarness();
   const statuses = [];

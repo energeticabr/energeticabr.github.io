@@ -590,7 +590,8 @@ button { touch-action: manipulation; }
 .chat-rhid-calendar__heading button { min-width: 40px; min-height: 40px; border: 1px solid #0c5f4d; border-radius: 8px; color: #0c5f4d; background: #f4faf8; font: inherit; cursor: pointer; }
 .chat-rhid-calendar__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
 .chat-rhid-calendar__weekday { padding: 5px 0; color: #496372; font-size: 11px; font-weight: 800; }
-.chat-rhid-calendar__day { min-width: 0; min-height: 39px; padding: 0; border: 1px solid transparent; border-radius: 7px; color: #173042; background: #f1f4f6; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+.chat-rhid-calendar__day { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; min-height: 48px; padding: 4px 1px; border: 1px solid transparent; border-radius: 7px; color: #173042; background: #f1f4f6; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+.chat-rhid-calendar__irregular { max-width: 100%; color: #b4232d; font-size: 9px; line-height: 1.15; font-weight: 750; }
 .chat-rhid-calendar__day--present { background: #d6f3df; border-color: #9bd5ac; }
 .chat-rhid-calendar__day--absent { background: #fbe0e0; border-color: #eeb9b9; }
 .chat-rhid-calendar__day--selected { outline: 3px solid #0c5f4d; outline-offset: -3px; }
