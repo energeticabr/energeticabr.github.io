@@ -97,7 +97,7 @@ test("mostra o registro de integridade no quadro posicionável mantendo nome e d
   await viewer.ready;
   const marker = container.querySelector(".signature-placement-marker");
   assert.match(marker.textContent, /RAFAEL GONTIJO/);
-  assert.match(marker.textContent, /REGISTRO: 0123456789abcdef0123456789abcdef/);
+  assert.match(marker.textContent, /REGISTRO: 0123456789abcdef\n0123456789abcdef/);
   assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 3);
 });
 

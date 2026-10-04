@@ -1,0 +1,28 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../../src/styles.css"><title>Legenda da assinatura - teste</title></head><body>
+<script type="module">
+import { createSignaturePlacement } from '../../src/web/signature-placement.js';
+const ink = new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="300" height="70"><text x="20" y="50" font-size="40">Exemplo</text></svg>'], {type:'image/svg+xml'});
+ink.signatureEvidence = {id:'0123456789abcdef0123456789abcdef'};
+const layouts = [];
+for (const kind of ['', 'payment', 'epi']) {
+  const container = document.createElement('div');
+  container.className = 'signature-placement-document';
+  container.dataset.signatureDocumentLayout = kind;
+  container.style.cssText = `width:min(100%,${innerWidth<=600?390:595}px);height:850px;margin:auto`;
+  document.body.append(container);
+  const viewer = createSignaturePlacement({container, signatureBlob:ink,
+    documentBlob:new Blob(['%PDF'],{type:'application/pdf'}), signerName:'CLEITON CESAR NONATO',
+    signedAt:'2026-10-04T02:58:00Z',selection:{page:1,x:.5,y:.3,scale:.5},
+    loadPdfJs:async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,
+      getPage:async()=>({getViewport:({scale})=>({width:595*scale,height:842*scale}),
+        render:()=>({promise:Promise.resolve(),cancel(){}}),cleanup(){}})}),destroy(){}})})});
+  await viewer.ready;
+  const marker=container.querySelector('.signature-placement-marker');
+  const caption=marker.querySelector('.signature-placement-marker__caption');
+  const grid=getComputedStyle(marker).gridTemplateRows.split(' ').map(parseFloat);
+  layouts.push({kind,grid,rows:[...caption.children].map(n=>({text:n.textContent,
+    height:n.clientHeight,scrollHeight:n.scrollHeight,width:n.clientWidth,scrollWidth:n.scrollWidth})),
+    captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
+}
+document.documentElement.dataset.layout = JSON.stringify({viewport:innerWidth,layouts});
+</script></body></html>
