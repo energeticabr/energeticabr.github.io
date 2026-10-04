@@ -1,0 +1,56 @@
+--- a/worker/launch_preview.py
++++ b/worker/launch_preview.py
+@@ -1,4 +1,4 @@
+-"""Read-only projection of the lines already included in a multiple launch."""
++"""Read-only projection of saved multiple lines or a single confirmation."""
+ import hashlib
+ import json
+ from decimal import Decimal, ROUND_HALF_UP
+@@ -26,9 +26,15 @@
+         state = (state.get("embedded_return") or {}).get("state")
+     else:
+         return None
+-    if not engine.active_flow_status(state) or (state.get("answers") or {}).get("tipo_lancamento") != "LANÇAMENTO MÚLTIPLO":
++    if not engine.active_flow_status(state):
+         return None
+-    snapshots = list(state.get("launch_lines") or [])
++    mode = (state.get("answers") or {}).get("tipo_lancamento")
++    single_confirmation = mode == "LANÇAMENTO ÚNICO" and state.get("stage") == "awaiting_confirmation"
++    if mode != "LANÇAMENTO MÚLTIPLO" and not single_confirmation:
++        return None
++    if single_confirmation and state.get("launch_lines"):
++        return None  # Do not present stale multiple-line data as a single launch.
++    snapshots = [state] if single_confirmation else list(state.get("launch_lines") or [])
+     if not snapshots and not state.get("current_launch_line_saved") and state.get("stage") == "selecting_fields":
+         steps = engine.config["sharepoint"]["launch_flow"]["steps"]
+         index = int(state.get("step_index", 0))
+@@ -42,6 +48,10 @@
+         if not all(value.is_finite() for value in (quantity, unit_price, freight)):
+             raise ValueError("Invalid launch amount")
+         total = quantity * unit_price + freight
++        if single_confirmation:
++            # The confirmation summary is a payable BRL amount rounded to cents.
++            # Preserve unit precision; round only the final monetary total.
++            total = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+         aggregate += total
+         fields, display = snapshot.get("fields") or {}, snapshot.get("display_values") or {}
+         lines.append({"index": index, "product": str(display.get("PRODUTO") or fields.get("PRODUTO") or "Produto"),
+@@ -51,7 +61,7 @@
+                       "freightDisplay": currency(freight), "total": canonical(total), "totalDisplay": currency(total)})
+         lines[-1]["details"] = {name: str(display.get(field) or fields.get(field) or "Em branco")
+                                for name, field in (("supplier", "FORNECEDOR"), ("stage", "ETAPA"), ("branch", "FILIAL"), ("account", "CONTA"))}
+-        if root_state is state and can_act(state):
++        if not single_confirmation and root_state is state and can_act(state):
+             revision = action_revision(state)
+             lines[-1]["editReply"] = f"launch_line:edit:{revision}:{index}"
+             lines[-1]["deleteReply"] = f"launch_line:delete:{revision}:{index}"
+--- a/worker/launch_line_controls.py
++++ b/worker/launch_line_controls.py
+@@ -19,6 +19,7 @@
+ 
+ def can_act(state):
+     return bool(state and state.get("flow") == "launch" and state.get("stage") in STAGES
++                and (state.get("answers") or {}).get("tipo_lancamento") == "LANÇAMENTO MÚLTIPLO"
+                 and state.get("editing_launch_line_index") is None
+                 and not state.get("portal_launch_line_return")
+                 and not state.get("portal_attachment_compression")
