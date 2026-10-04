@@ -4,6 +4,17 @@ const SIGNATURE_LAYOUTS = Object.freeze({
   epi: Object.freeze({ widthRatio: 0.42, aspectRatio: 2.1, captionRatio: 0.32 }),
 });
 
+const INTEGRITY_LAYOUTS = Object.freeze({
+  generic: Object.freeze({ widthRatio: 0.64, aspectRatio: 2, captionRatio: 0.5 }),
+  payment: Object.freeze({ widthRatio: 0.54, aspectRatio: 1.5, captionRatio: 0.5 }),
+  epi: Object.freeze({ widthRatio: 0.42, aspectRatio: 1.4, captionRatio: 0.5 }),
+});
+
+export function signatureRecordLines(value) {
+  const id = String(value || "");
+  return /^[a-f0-9]{32}$/.test(id) ? [`REGISTRO: ${id.slice(0, 16)}`, id.slice(16)] : [];
+}
+
 function normalizedDocumentName(value) {
   return String(value || "")
     .normalize("NFD")
@@ -19,11 +30,12 @@ export function signatureDocumentLayout(value) {
   return "";
 }
 
-export function signatureLayoutGeometry(layout, { pageWidth, pageHeight, scale = 1 } = {}) {
+export function signatureLayoutGeometry(layout, { pageWidth, pageHeight, scale = 1, integrity = false } = {}) {
   const width = Math.max(1, Number(pageWidth) || 1);
   const height = Math.max(1, Number(pageHeight) || 1);
   const factor = Math.max(0.2, Math.min(2, Number(scale) || 0.5));
-  const config = SIGNATURE_LAYOUTS[layout] || SIGNATURE_LAYOUTS.generic;
+  const layouts = integrity ? INTEGRITY_LAYOUTS : SIGNATURE_LAYOUTS;
+  const config = layouts[layout] || layouts.generic;
   const markerWidth = Math.min(
     width * config.widthRatio * factor,
     Math.max(1, width - 4),
@@ -38,10 +50,10 @@ export function signatureLayoutGeometry(layout, { pageWidth, pageHeight, scale =
   };
 }
 
-export function constrainSignaturePoint(point, { layout = "", pageWidth, pageHeight, scale = 1 } = {}) {
+export function constrainSignaturePoint(point, { layout = "", pageWidth, pageHeight, scale = 1, integrity = false } = {}) {
   const width = Math.max(1, Number(pageWidth) || 1);
   const height = Math.max(1, Number(pageHeight) || 1);
-  const geometry = signatureLayoutGeometry(layout, { pageWidth: width, pageHeight: height, scale });
+  const geometry = signatureLayoutGeometry(layout, { pageWidth: width, pageHeight: height, scale, integrity });
   const halfX = geometry.width / (2 * width);
   const halfY = geometry.height / (2 * height);
   const rawX = Number(point?.x);

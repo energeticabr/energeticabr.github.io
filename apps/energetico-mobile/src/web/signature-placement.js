@@ -1,5 +1,5 @@
 import { loadBernardoStamp } from "./signature-stamp.js";
-import { constrainSignaturePoint } from "./signature-document-layout.js";
+import { constrainSignaturePoint, signatureRecordLines } from "./signature-document-layout.js";
 
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
@@ -232,6 +232,7 @@ export function createSignaturePlacement({
         pageWidth: entry.pageWidth,
         pageHeight: entry.pageHeight,
         scale: signatureScale,
+        integrity: signatureRecordLines(signatureBlob?.signatureEvidence?.id).length === 2,
       })
       : requested;
     if (activeMarker) {
@@ -806,7 +807,7 @@ export function createSignaturePlacement({
     const integrityId = String(signatureBlob?.signatureEvidence?.id || "");
     if (/^[a-f0-9]{32}$/.test(integrityId)) {
       marker.classList.add("signature-placement-marker--integrity");
-      caption.append(element(documentRef, "span", "signature-placement-marker__integrity", `REGISTRO: ${integrityId}`));
+      caption.append(element(documentRef, "span", "signature-placement-marker__integrity", signatureRecordLines(integrityId).join("\n")));
     }
     // SIGNATURE_GESTURE_LOCK_START: signature-placement-marker-bindings
     marker.addEventListener("pointerdown", event => beginDrag(marker, event), { passive: false });
