@@ -99,6 +99,59 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="2"]');
 }
 
+test("resumo associa contexto e valores a cabeçalhos de tabela sem alterar a postagem", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await fill(h);
+  const doc = h.dom.window.document;
+  const context = doc.querySelector('table[aria-label="Referência da folha"]');
+  assert.ok(context, "etapa e referência devem estar estruturadas");
+  assert.deepEqual([...context.rows].map(row => [...row.cells].map(cell => cell.textContent)), [
+    ["Etapa", "FUNDAÇÃO"], ["IDFOLHA", "5"], ["Referência", "10/2026"],
+  ]);
+  const details = doc.querySelector('table[aria-label="Detalhes de Salário"]');
+  assert.ok(details);
+  assert.deepEqual([...details.rows].map(row => [...row.cells].map(cell => cell.textContent)), [
+    ["Quantidade", "2"], ["Valor unitário", "R$\u00a0100,50"], ["Subtotal", "R$\u00a0201,00"],
+    ["Forma de pagamento", "PIX"], ["Comprovantes", "Sem comprovantes"],
+  ]);
+  for (const table of [context, details]) {
+    assert.ok([...table.rows].every(row => row.cells[0].tagName === "TH" && row.cells[0].scope === "row"));
+  }
+  const total = doc.querySelector('[data-payroll-summary-total]');
+  assert.match(total.textContent, /Total pago.*201,00/);
+  await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].total, 201);
+  assert.equal(h.posts[0].sheet.id, "5");
+});
+
+test("resumo separa rubricas ativas e lista comprovantes como texto seguro", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  h.input('[name=salary-value]', "3");
+  h.input('[name=salary-account]', "3");
+  h.input('[name=allowance-value]', "10,25");
+  h.input('[name=allowance-quantity]', "2");
+  h.input('[name=allowance-account]', "3");
+  const names = ['salario & <img src=x>.pdf', 'comprovante-extra.pdf'];
+  const files = names.map(name => new File(["a"], name, { type: "application/pdf" }));
+  const input = h.dom.window.document.querySelector('[name=salary-files]');
+  Object.defineProperty(input, "files", { value: files, configurable: true });
+  input.dispatchEvent(new h.dom.window.Event('change', { bubbles: true }));
+  await h.click('[data-payroll-next]');
+  await h.click('[data-payroll-option="4"]');
+  await h.click('[data-payroll-option="5"]');
+  const doc = h.dom.window.document;
+  assert.equal(doc.querySelectorAll('.supplier-payroll-summary article').length, 2);
+  const table = doc.querySelector('table[aria-label="Detalhes de Salário"]');
+  assert.ok(table);
+  assert.deepEqual([...table.querySelectorAll('li')].map(el => el.textContent), names);
+  assert.equal(table.querySelector('img'), null);
+  assert.match(doc.querySelector('table[aria-label="Detalhes de Ajuda de custo"]').textContent, /20,50/);
+  assert.match(doc.querySelector('[data-payroll-summary-total]').textContent, /23,50/);
+});
+
 test("resumo da folha separa os quatro dados em tabela nas rubricas, etapa e confirmação", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
@@ -267,7 +320,7 @@ test("IDFOLHA é escolhido antes do resumo e enviado na postagem obrigatória", 
   assert.equal(h.posts.length, 0);
   await h.click('[data-payroll-option="5"]');
   assert.match(doc.body.textContent, /Resumo da folha/);
-  assert.match(doc.body.textContent, /IDFOLHA: 5.*10\/2026/);
+  assert.deepEqual([...doc.querySelector('table[aria-label="Referência da folha"]').rows].map(row => row.cells[1].textContent), ["FUNDAÇÃO", "5", "10/2026"]);
   await h.click("[data-payroll-post]");
   assert.equal(h.posts[0].sheet.id, "5");
   assert.match(doc.body.textContent, /postada e vinculada/);
@@ -513,7 +566,7 @@ test("erro no vínculo conserva o IDFOLHA e exige retomada antes da conclusão",
   await h.click("[data-payroll-post]");
   const doc = h.dom.window.document;
   assert.match(doc.body.textContent, /Resumo da folha/);
-  assert.match(doc.body.textContent, /IDFOLHA: 5/);
+  assert.equal(doc.querySelector('table[aria-label="Referência da folha"]').rows[1].cells[1].textContent, "5");
   assert.match(doc.querySelector("[data-payroll-post]").textContent, /Retomar/);
   assert.equal(doc.querySelector("[data-payroll-back]"), null);
   assert.ok(

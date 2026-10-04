@@ -45,7 +45,7 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
       const response = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
       assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails)); return response.result.value;
     };
-    for (const screen of ['launches','orders','tasks','payments','recurring','reports','registration','hr','hrreport','payroll','payroll-stage','powerbi']) {
+    for (const screen of ['launches','orders','tasks','payments','recurring','reports','registration','hr','hrreport','payroll','payroll-stage','payroll-summary','payroll-summary-long','powerbi']) {
       for (const [width, height] of [[320,740],[390,844],[1365,768],[844,390]]) {
         await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false},sessionId);
         const query = '?screen='+screen+'&w='+width;
@@ -88,6 +88,39 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
           if(width===390 && process.env.PAYROLL_TABLE_SCREENSHOT) {
             const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);
             writeFileSync(process.env.PAYROLL_TABLE_SCREENSHOT,Buffer.from(shot.data,'base64'));
+          }
+        }
+        if(screen.startsWith('payroll-summary')) {
+          const summary=await evaluate(`(() => {
+            const tables=[...document.querySelectorAll('.supplier-payroll-summary-table')];
+            return {tables:tables.map(table=>({label:table.getAttribute('aria-label'),
+              rows:[...table.rows].map(row=>[...row.cells].map(cell=>cell.textContent)),
+              overflow:table.scrollWidth > table.clientWidth+1 || [...table.querySelectorAll('th,td')].some(cell=>cell.scrollWidth > cell.clientWidth+1)})),
+              total:document.querySelector('[data-payroll-summary-total]')?.textContent,
+              files:[...document.querySelectorAll('.supplier-payroll-summary-files li')].map(file=>file.textContent),
+              bodyOverflow:document.querySelector('.supplier-payroll-body').scrollWidth > document.querySelector('.supplier-payroll-body').clientWidth+1,
+              post:document.querySelector('[data-payroll-post]')?.textContent};
+          })()`);
+          assert.equal(summary.tables.length, screen==='payroll-summary-long' ? 3 : 2);
+          assert.ok(!summary.bodyOverflow && summary.tables.every(table=>!table.overflow), 'resumo sem corte ou rolagem lateral em '+width);
+          assert.deepEqual(summary.tables[0].rows, [['Etapa','ALVENARIA E ESTRUTURAS'],['IDFOLHA','5'],['Referência','10/2026']]);
+          if(screen==='payroll-summary-long') {
+            assert.deepEqual(summary.files, ['comprovante-de-pagamento-'+'referencia'.repeat(16)+'.pdf','segundo-comprovante.pdf']);
+            assert.match(summary.tables[1].rows[3][1],/DESCRIÇÃO EXTENSA/);
+            assert.equal(summary.tables[2].rows[2][1],'R$\u00a020,50');
+            assert.match(summary.total,/120,50/);
+          } else {
+            assert.deepEqual(summary.tables[1].rows, [['Quantidade','1'],['Valor unitário','R$\u00a0100,00'],['Subtotal','R$\u00a0100,00'],['Forma de pagamento','PIX'],['Comprovantes','Sem comprovantes']]);
+            assert.match(summary.total,/100,00/);
+          }
+          assert.equal(summary.post,'Postar');
+          if(screen==='payroll-summary' && width===390 && process.env.PAYROLL_SUMMARY_SCREENSHOT) {
+            const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);
+            writeFileSync(process.env.PAYROLL_SUMMARY_SCREENSHOT,Buffer.from(shot.data,'base64'));
+            await evaluate("document.querySelector('.supplier-payroll-body').scrollTop=10000");
+            await delay(100);
+            const bottom=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);
+            writeFileSync(process.env.PAYROLL_SUMMARY_SCREENSHOT.replace(/\.png$/, '-bottom.png'),Buffer.from(bottom.data,'base64'));
           }
         }
         if(screen==='payroll') {
