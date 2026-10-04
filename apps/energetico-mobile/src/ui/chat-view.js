@@ -1390,8 +1390,12 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
+  const initialAreaMenu = isInitialAreaSelectionMenu(message);
   const choices = orderedChoiceOptions.flatMap(option => {
     const replyId = draftReplyId(option);
+    if (initialAreaMenu && currentPoll && !activeFlow && replyId.trim().toLowerCase() === "group_pending") {
+      return [`<div class="chat-main-pending-row"><button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || option.disabled ? " disabled" : ""}><img src="${MASCOT_URL}" alt="Mascote Energético"></button>${pollButton(option, busy)}</div>`];
+    }
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
       const draftId = replyId.slice("draft_resume:".length);
@@ -1433,7 +1437,6 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const isLaunchPayrollMultiSelect = message?.presentation === "launch_payroll_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
-  const initialAreaMenu = isInitialAreaSelectionMenu(message);
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
@@ -1917,6 +1920,7 @@ function pendingProvisionsMarkup(
         <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
         <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Vencidas ou com vencimento em até 2 dias (${rows.length}).</p></div>
       </div>
+      ${!rows.length ? '<p class="chat-pending-provisions__empty" role="status">Nenhuma provisão vencida ou com vencimento em até 2 dias.</p>' : ""}
       ${snapshot.upcomingUnavailable || snapshot.totalsUnavailable ? '<p class="chat-pending-provision__error" role="status">Não foi possível conferir todos os valores e vencimentos. Valores não conferidos aparecem como —.</p>' : ""}
       <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou com vencimento em até 2 dias">
         ${rows.map(row => {
@@ -2362,7 +2366,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
   const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
-    || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true;
+    || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
   const signaturePrompt = isSignaturePrompt(state);
@@ -2392,7 +2396,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
+    ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
@@ -3593,7 +3597,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
-         "delegatedTasks", "pendingProvisions", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
+         "delegatedTasks", "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",

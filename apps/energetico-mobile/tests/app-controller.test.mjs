@@ -4774,6 +4774,182 @@ test("o check não escolhe quando a VM devolve IDs de pagamento ambíguos", asyn
   assert.match(h.view.renders.at(-1).error, /não encontrei o pagamento 306/i);
 });
 
+test("mascote do menu reabre provisões pelo popup real após fechar o lembrete sem navegar na VM", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ view: createChatView(root), pendingProvisionAttachmentsDataFactory: async () => ({
+    loadUpcomingPayments: async () => [{ id: '306', supplier: 'VIVO', product: 'TARIFA DE INTERNET', dueDate: '2026-10-04', total: 89.99 }],
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+  }) });
+  t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
+  let reads = 0;
+  h.client.getPendingProvisionSnapshot = async () => { reads++; return { due: true, rows: [{ id: '306', supplier: 'VIVO' }] }; };
+  await h.controller.start();
+  root.querySelector('[data-action="dismiss-pending-provisions"]').click();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
+    { id: 'group_pending', reply: 'group_pending', label: '⏳ PENDÊNCIAS (47)' },
+  ] }], { activeFlow: null });
+  const before = h.chatCalls.length;
+  const shortcut = root.querySelector('[data-action="open-pending-provisions"]');
+  assert.ok(shortcut);
+  shortcut.click();
+  assert.equal(root.querySelector('[data-action="open-pending-provisions"]').disabled, true);
+  for (let attempt = 0; attempt < 50 && !root.querySelector('[data-pending-provisions-dialog]'); attempt++) await new Promise(resolve => setImmediate(resolve));
+  const popup = root.querySelector('[data-pending-provisions-dialog]');
+  assert.ok(popup);
+  assert.match(popup.textContent, /Provisões de pagamento pendentes/);
+  assert.match(popup.textContent, /VIVO/);
+  assert.match(popup.textContent, /89,99/);
+  assert.equal(reads, 2);
+  assert.equal(h.chatCalls.length, before);
+});
+
+test("abertura manual ignora adiamento sem alterar a preferência e deduplica cliques concorrentes", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  const scheduled = [];
+  h.native.scheduleProvisionReminder = async details => { scheduled.push(details); return true; };
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', supplier: 'VIVO' }] });
+  await h.controller.start();
+  await h.view.emit('close-pending-provisions');
+  await h.view.emit('pending-provisions-reminder-choice', { value: '2h' });
+  const read = deferred();
+  let reads = 0;
+  h.client.getPendingProvisionSnapshot = () => { reads++; return read.promise; };
+  const first = h.view.emit('open-pending-provisions');
+  const second = h.view.emit('open-pending-provisions');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionOpening, true);
+  assert.equal(reads, 1);
+  read.resolve({ due: true, rows: [{ id: '307', supplier: 'PETRANET' }] });
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].supplier, 'PETRANET');
+  assert.equal(h.view.renders.at(-1).pendingProvisionOpening, false);
+  await h.view.emit('dismiss-pending-provisions');
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(reads, 1);
+  assert.equal(scheduled.length, 1);
+});
+
+test("abertura manual sem pendências mostra popup vazio e falha de consulta permite tentar novamente", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.client.getPendingProvisionSnapshot = async () => { throw new Error('Offline'); };
+  assert.equal(await h.view.emit('open-pending-provisions'), false);
+  assert.match(h.view.renders.at(-1).error, /não foi possível consultar.*provisões/i);
+  h.client.getPendingProvisionSnapshot = async () => ({ due: false, rows: [] });
+  assert.equal(await h.view.emit('open-pending-provisions'), true);
+  const state = h.view.renders.at(-1);
+  assert.equal(state.error, null);
+  const dom = new JSDOM(renderChatMarkup(state));
+  t.after(() => dom.window.close());
+  const popup = dom.window.document.querySelector('[data-pending-provisions-dialog]');
+  assert.ok(popup);
+  assert.match(popup.textContent, /nenhuma provisão/i);
+});
+
+for (const end of ['stop', 'sign-out']) test(`consulta manual atrasada não reabre provisões após ${end}`, async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const read = deferred();
+  h.client.getPendingProvisionSnapshot = () => read.promise;
+  const opening = h.view.emit('open-pending-provisions');
+  await new Promise(resolve => setImmediate(resolve));
+  if (end === 'stop') h.controller.stop(); else await h.view.emit('sign-out');
+  const renderCount = h.view.renders.length;
+  read.resolve({ due: true, rows: [{ id: '306', supplier: 'OUTRA SESSÃO' }] });
+  assert.equal(await opening, false);
+  assert.equal(h.view.renders.length, renderCount);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+});
+
+test("nova sessão não herda o indicador ocupado da consulta manual anterior", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const oldRead = deferred();
+  h.client.getPendingProvisionSnapshot = () => oldRead.promise;
+  const opening = h.view.emit('open-pending-provisions');
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit('sign-out');
+  h.client.getPendingProvisionSnapshot = async () => ({ due: false, rows: [] });
+  await h.view.emit('sign-in');
+  assert.equal(h.view.renders.at(-1).pendingProvisionOpening, false);
+  oldRead.resolve({ due: true, rows: [{ id: 'old', supplier: 'CONTA ANTIGA' }] });
+  assert.equal(await opening, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(await h.view.emit('open-pending-provisions'), true);
+});
+
+test("atalho captura o menu no clique e não abre após navegação durante a consulta automática", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }], { activeFlow: null });
+  const autoRead = deferred();
+  let reads = 0;
+  h.client.getPendingProvisionSnapshot = () => { reads++; return autoRead.promise; };
+  const foreground = h.controller.handleForeground();
+  await new Promise(resolve => setImmediate(resolve));
+  const opening = h.view.emit('open-pending-provisions');
+  await new Promise(resolve => setImmediate(resolve));
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'OUTRO MENU', options: [] }], { activeFlow: null });
+  autoRead.resolve({ due: false, rows: [] });
+  await foreground;
+  assert.equal(await opening, false);
+  assert.equal(reads, 1);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(h.view.renders.at(-1).pendingProvisionOpening, false);
+});
+
+for (const waitingAuto of [false, true]) test(`consulta manual tem prazo, libera retry e ignora resposta tardia (automática=${waitingAuto})`, async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const oldRead = deferred();
+  h.client.getPendingProvisionSnapshot = () => oldRead.promise;
+  const foreground = waitingAuto ? h.controller.handleForeground() : null;
+  await new Promise(resolve => setImmediate(resolve));
+  const opening = h.view.emit('open-pending-provisions');
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(30_000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionOpening, false);
+  assert.equal(await opening, false);
+  assert.match(h.view.renders.at(-1).error, /demorou.*tentar novamente/i);
+  h.client.getPendingProvisionSnapshot = async () => ({ due: false, rows: [] });
+  assert.equal(await h.view.emit('open-pending-provisions'), true);
+  await h.view.emit('dismiss-pending-provisions');
+  oldRead.resolve({ due: true, rows: [{ id: 'old', supplier: 'RESPOSTA ATRASADA' }] });
+  await foreground;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+});
+
+test("timeout de provisões após navegar libera a espera sem inserir erro na nova tela", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }], { activeFlow: null });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const oldRead = deferred();
+  h.client.getPendingProvisionSnapshot = () => oldRead.promise;
+  const opening = h.view.emit('open-pending-provisions');
+  await new Promise(resolve => setImmediate(resolve));
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'OUTRO MENU', options: [] }], { activeFlow: null });
+  t.mock.timers.tick(30_000);
+  assert.equal(await opening, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisionOpening, false);
+  assert.equal(h.view.renders.at(-1).error, null);
+  oldRead.resolve({ due: true, rows: [{ id: 'old' }] });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+});
+
 test("o X fecha provisões sem perguntar o intervalo nem reabrir nesta sessão", async () => {
   const h = makeHarness();
   let snapshotReads = 0;

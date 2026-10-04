@@ -516,6 +516,12 @@ button { touch-action: manipulation; }
 .chat-message--initial-area-menu { position: relative; justify-content: center; }
 .chat-message.chat-message--initial-area-menu .chat-avatar { position: absolute; left: 0; bottom: 0; }
 .chat-message.chat-message--initial-area-menu .chat-bubble { flex: 0 1 min(82%, 640px); width: min(82%, 640px); max-width: 640px; min-width: 0; }
+.chat-main-pending-row { display: grid; grid-template-columns: var(--compact-control-size) minmax(0, 1fr); align-items: stretch; gap: 8px; min-width: 0; }
+.chat-main-pending-row > .chat-main-provisions-shortcut { display: grid; place-items: center; padding: 3px; min-height: var(--compact-control-size); border: 1px solid #0d3562; border-radius: 12px; background: #103b6b; }
+.chat-main-provisions-shortcut img { display: block; width: 100%; height: var(--compact-control-size); object-fit: contain; border-radius: 9px; }
+.chat-main-provisions-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.chat-main-pending-row > .chat-choice-button { min-width: 0; width: 100%; }
+.chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {
   max-width: min(82%, 640px);
   padding: 12px 14px;
