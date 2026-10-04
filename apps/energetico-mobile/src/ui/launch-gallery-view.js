@@ -1200,7 +1200,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     actions.append(cancel, reviewButton);
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
     panel.insertBefore(form, reviewHost);
-    editor = { operation, form, controls, schemaState, pickers: bindSearchableFilterSelects(form) };
+    editor = { operation, form, controls, schemaState, attachmentsAdded: [], pickers: bindSearchableFilterSelects(form) };
     focus(form.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? form);
   }
   function reviewEditor() {
@@ -1217,6 +1217,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return;
     }
     if (editor.schemaState?.loading) { notify('Aguarde a atualização das opções relacionadas.', true); return; }
+    const fieldsChanged = editor.controls.some(({ control, initial }) =>
+      (control.type === 'checkbox' ? control.checked : control.value) !== initial);
+    if (editor.operation === 'update' && !fieldsChanged) {
+      const file = editor.form.querySelector('.lg-attachment-picker')?.files?.[0];
+      if (file) { reviewAttachment(file, { completeEditing: true }); return; }
+      if (editor.attachmentsAdded.length) {
+        showReview('Confirme as alterações', editor.attachmentsAdded.map(fileName => ({
+          label: 'Anexo adicionado', before: '—', after: fileName,
+        })), 'Confirmar alterações', 'attachment_finish', { id: current.item.id });
+        return;
+      }
+      notify('Nenhuma alteração foi feita no lançamento.', true); return;
+    }
     if (!editor.form.reportValidity()) return;
     const fields = {}, changes = [];
     for (const { definition, control, initial } of editor.controls) {
@@ -1327,6 +1340,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (destroyed) return;
     if (pending.key) { retryIds.delete(pending.key); uncertainAttachments.delete(pending.key); }
     clearReview();
+    if (editor && !editor.attachmentsAdded.includes(fileName)) editor.attachmentsAdded.push(fileName);
     pendingAttachmentName = fileName; needsDetailRefresh = true;
     if (!(current.attachments ?? []).some(file => attachmentFileName(file) === fileName)) {
       current.attachments = [...(current.attachments ?? []), { fileName }];
@@ -1340,7 +1354,25 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       notify(failure(error, uncertain ? 'Arquivo encontrado; confirme o conteúdo e atualize os dados'
         : 'Anexo enviado, mas não foi possível atualizar os dados'), true);
     }
+    if (pending.completeEditing && !uncertain && !needsDetailRefresh) {
+      await finishAttachmentEditing(pending.payload.id);
+      return;
+    }
     if (opened) await loadSnapshot(applied);
+  }
+  async function finishAttachmentEditing(id) {
+    const epoch = session;
+    clearReview(); clearEditor();
+    ++detailVersion; detailLoading = false; current = null; selectedId = null;
+    pendingAttachmentName = null; needsDetailRefresh = false;
+    panel.hidden = true; panel.replaceChildren();
+    notify('Anexos salvos. Edição concluída.');
+    if (active(epoch)) focus(back);
+    if (opened) await loadSnapshot(applied);
+    if (active(epoch) && doc.activeElement === back) {
+      const card = [...cards.children].find(item => item.dataset.itemId === String(id));
+      focus(card?.querySelector('[data-gallery-action="edit"]') ?? back);
+    }
   }
   async function commitReview() {
     if (!review || busy || !opened) return;
@@ -1349,6 +1381,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (reviewError) { reviewError.textContent = ''; reviewError.hidden = true; }
     busy = true; notify('Salvando…'); updateBusy();
     try {
+      if (pending.operation === 'attachment_finish') {
+        await finishAttachmentEditing(pending.payload.id);
+        return;
+      }
       if (pending.file) {
         if (typeof upload !== 'function') throw new Error('Envio de arquivo indisponível');
         if (pending.operation === 'attachment_add' && pending.uncertain) {
@@ -1410,6 +1446,25 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       }
     } finally { busy = false; if (!destroyed) updateBusy(); }
   }
+  function reviewAttachment(file, { completeEditing = false } = {}) {
+    if (!file || busy || !editor) return;
+    if (review) { notify('Conclua ou cancele a confirmação aberta antes de adicionar um anexo.', true); return; }
+    if (needsDetailRefresh) { notify('Atualize os dados do lançamento antes de adicionar outro anexo.', true); return; }
+    if ((current.attachments ?? []).some(attachment => attachmentFileName(attachment).toLocaleLowerCase() === file.name.toLocaleLowerCase())) {
+      notify('Já existe um anexo com esse nome neste lançamento. Escolha outro nome.', true); return;
+    }
+    if (!file.size || file.size > MAX_GALLERY_ATTACHMENT_BYTES) {
+      notify('Selecione um arquivo não vazio de até 20 MB.', true); return;
+    }
+    const key = JSON.stringify(['attachment_add', current.item.id, file.name, file.size, file.lastModified ?? null]);
+    let requestId;
+    try { if (!retryIds.has(key)) retryIds.set(key, uuid()); requestId = retryIds.get(key); }
+    catch (error) { notify(failure(error, 'Não foi possível preparar o anexo'), true); return; }
+    showReview('Confirme o novo anexo', [{label: 'Arquivo', before: '—', after: file.name}],
+      'Enviar anexo', 'attachment_add', { id: current.item.id, expectedModified: modified(), requestId }, file, key);
+    review.uncertain = uncertainAttachments.has(key);
+    review.completeEditing = completeEditing;
+  }
   function renderAttachments() {
     const section = element('section', 'lg-attachments');
     const attachments = current.attachments ?? [];
@@ -1435,23 +1490,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     picker.dataset.lgLock = 'true';
     const selectedName = element('p', 'lg-file-name', 'Nenhum arquivo selecionado.');
     const addButton = button('Adicionar anexo', () => {
-      const file = picker.files?.[0];
-      if (!file) return;
-      if (review) { notify('Conclua ou cancele a confirmação aberta antes de adicionar um anexo.', true); return; }
-      if (needsDetailRefresh) { notify('Atualize os dados do lançamento antes de adicionar outro anexo.', true); return; }
-      if ((current.attachments ?? []).some(attachment => attachmentFileName(attachment).toLocaleLowerCase() === file.name.toLocaleLowerCase())) {
-        notify('Já existe um anexo com esse nome neste lançamento. Escolha outro nome.', true); return;
-      }
-      if (!file.size || file.size > MAX_GALLERY_ATTACHMENT_BYTES) {
-        notify('Selecione um arquivo não vazio de até 20 MB.', true); return;
-      }
-      const key = JSON.stringify(['attachment_add', current.item.id, file.name, file.size, file.lastModified ?? null]);
-      let requestId;
-      try { if (!retryIds.has(key)) retryIds.set(key, uuid()); requestId = retryIds.get(key); }
-      catch (error) { notify(failure(error, 'Não foi possível preparar o anexo'), true); return; }
-      showReview('Confirme o novo anexo', [{label: 'Arquivo', before: '—', after: file.name}],
-        'Enviar anexo', 'attachment_add', { id: current.item.id, expectedModified: modified(), requestId }, file, key);
-      review.uncertain = uncertainAttachments.has(key);
+      reviewAttachment(picker.files?.[0]);
     }, { disabled: true });
     picker.addEventListener('change', () => {
       if (review?.operation === 'attachment_add') clearReview();

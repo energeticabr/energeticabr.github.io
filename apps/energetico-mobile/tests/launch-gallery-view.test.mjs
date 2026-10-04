@@ -1727,6 +1727,154 @@ test('new attachment is confirmed, uploaded to the selected launch and shown bel
     ['📎 um.pdf', '📎 dois.png', '📎 novo.pdf', '📎 outro.pdf']);
 });
 
+for (const alreadyUploaded of [false, true]) for (const legacyBlank of [false, true]) {
+  test(`attachment-only SUBMETER confirms and finishes without changing fields (uploaded=${alreadyUploaded}, blank=${legacyBlank})`, async t => {
+    const uploads = [];
+    let attachments = [];
+    const item = row();
+    if (legacyBlank) item.fields.QUANTIDADE = '';
+    const ctx = await setup(t, {
+      request: async op => op === 'snapshot' ? snapshot({ rows: [{ ...item, hasAttachments: false }] })
+        : detail({ item, attachments }),
+      upload: async (id, file, options) => {
+        uploads.push({ id, file, options });
+        attachments = [{ fileName: file.name }];
+        return { fileName: file.name };
+      },
+    });
+    await ctx.gallery.open(); await showDetail(ctx);
+    const file = new ctx.dom.window.File(['foto'], 'IMG_4722.jpeg', { type: 'image/jpeg' });
+    selectAttachment(ctx, file);
+    if (alreadyUploaded) {
+      button(ctx.root(), 'Adicionar anexo').click();
+      button(ctx.root(), 'Enviar anexo').click(); await settle();
+    }
+    button(ctx.root(), 'SUBMETER').click();
+    const popup = ctx.root().querySelector('.lg-review');
+    assert.equal(popup.hidden, false, 'attachments count as a change without unrelated field edits');
+    assert.match(popup.textContent, /IMG_4722\.jpeg/);
+    assert.equal(uploads.length, alreadyUploaded ? 1 : 0, 'SUBMETER waits for confirmation');
+    button(popup, alreadyUploaded ? 'Confirmar alterações' : 'Enviar anexo').click(); await settle();
+    assert.equal(uploads.length, 1, 'finishing never reuploads a saved file');
+    assert.equal(uploads[0].id, 17);
+    assert.equal(uploads[0].file, file);
+    assert.equal(uploads[0].options.confirm, true);
+    assert.equal(mutations(ctx).length, 0, 'no empty update or unrelated record mutation');
+    assert.equal(ctx.root().querySelector('.lg-editor'), null);
+    assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+    assert.equal(popup.hidden, true);
+    assert.ok(ctx.root().querySelector('.lg-record'), 'returns to the gallery');
+  });
+}
+
+test('canceling attachment-only SUBMETER preserves the selected file and never uploads it', async t => {
+  const uploads = [];
+  const ctx = await setup(t, { upload: async (...args) => uploads.push(args) });
+  await ctx.gallery.open(); await showDetail(ctx);
+  const file = new ctx.dom.window.File(['foto'], 'nova.jpeg', { type: 'image/jpeg' });
+  selectAttachment(ctx, file);
+  button(ctx.root(), 'SUBMETER').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Cancelar confirmação').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.equal(ctx.root().querySelector('.lg-attachment-picker').files[0], file);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(uploads.length, 0);
+});
+
+test('attachment-only lost upload response keeps its reconciliation warning visible before finishing', async t => {
+  let attachments = [], uploads = 0;
+  const ctx = await setup(t, {
+    request: async op => op === 'snapshot' ? snapshot({ rows: [{ ...row(), hasAttachments: false }] }) : detail({ attachments }),
+    upload: async (id, file) => {
+      uploads++; attachments = [{ fileName: file.name }]; throw new Error('Resposta perdida');
+    },
+  });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['foto'], 'nova.jpeg'));
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false, 'uncertain content remains available for inspection');
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /arquivo com esse nome.*verifique/i);
+  assert.equal(uploads, 1);
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(uploads, 1);
+  assert.equal(mutations(ctx).length, 0);
+});
+
+test('attachment-only finish waits for detail refresh and confirmed presence of the stored file', async t => {
+  let uploaded = false, visible = false, fail = true, uploads = 0;
+  const ctx = await setup(t, {
+    request: async op => {
+      if (op === 'snapshot') return snapshot({ rows: [{ ...row(), hasAttachments: false }] });
+      if (uploaded && fail) throw new Error('Consulta indisponível');
+      return detail({ attachments: visible ? [{ fileName: 'nova.jpeg' }] : [] });
+    },
+    upload: async () => { uploaded = true; uploads++; return { fileName: 'nova.jpeg' }; },
+  });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, new ctx.dom.window.File(['foto'], 'nova.jpeg'));
+  button(ctx.root(), 'SUBMETER').click();
+  button(ctx.root(), 'Enviar anexo').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /anexo enviado.*atualiza/i);
+  button(ctx.root(), 'SUBMETER').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  fail = false;
+  button(ctx.root(), 'SUBMETER').click(); await settle();
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /novo anexo ainda não aparece/i);
+  visible = true;
+  button(ctx.root(), 'SUBMETER').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, false);
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  assert.equal(uploads, 1);
+  assert.equal(mutations(ctx).length, 0);
+});
+
+for (const [file, message] of [
+  [{ name: 'vazio.pdf', size: 0 }, /não vazio/i],
+  [{ name: 'grande.pdf', size: 20 * 1024 * 1024 + 1 }, /20 MB/i],
+  [{ name: 'UM.PDF', size: 1 }, /já existe/i],
+]) test(`attachment-only SUBMETER rejects invalid selection ${file.name}`, async t => {
+  let uploads = 0;
+  const ctx = await setup(t, { upload: async () => { uploads++; } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  selectAttachment(ctx, file);
+  button(ctx.root(), 'SUBMETER').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true);
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, message);
+  assert.equal(uploads, 0);
+  assert.equal(mutations(ctx).length, 0);
+});
+
+test('attachment-only summary lists each uploaded file and does not leak into a reopened editor', async t => {
+  let attachments = [], uploads = 0;
+  const ctx = await setup(t, {
+    request: async op => op === 'snapshot' ? snapshot({ rows: [{ ...row(), hasAttachments: false }] }) : detail({ attachments }),
+    upload: async (id, file) => { uploads++; attachments.push({ fileName: file.name }); return { fileName: file.name }; },
+  });
+  await ctx.gallery.open(); await showDetail(ctx);
+  for (const name of ['um-novo.jpeg', 'outro.pdf']) {
+    selectAttachment(ctx, new ctx.dom.window.File(['arquivo'], name));
+    button(ctx.root(), 'Adicionar anexo').click();
+    button(ctx.root(), 'Enviar anexo').click(); await settle();
+  }
+  button(ctx.root(), 'SUBMETER').click();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-review tbody tr')].map(tr => [...tr.cells].map(td => td.textContent)), [
+    ['Anexo adicionado', '—', 'um-novo.jpeg'], ['Anexo adicionado', '—', 'outro.pdf'],
+  ]);
+  button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  await showDetail(ctx);
+  button(ctx.root(), 'SUBMETER').click();
+  assert.equal(ctx.root().querySelector('.lg-review').hidden, true, 'old uploads do not create changes in another edit');
+  assert.match(ctx.root().querySelector('[role="alert"]').textContent, /nenhuma alteração/i);
+  assert.equal(uploads, 2);
+  assert.equal(mutations(ctx).length, 0);
+});
+
 test('adding an attachment preserves unsaved fields and refreshes the SharePoint version', async t => {
   const uploads = []; let attachments = []; let modified = '2026-09-18T12:34:56Z';
   let remoteDescription = row().fields.DESCRIÇÃO;
