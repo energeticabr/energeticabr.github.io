@@ -1,4 +1,5 @@
 import { buildQuotationReport, buildDepreciationReport, buildDocumentReport, formatAuditDate, formatAuditMoney } from "../chat/audit-reports-live-model.js";
+import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
 
 const TITLES = Object.freeze({
@@ -54,6 +55,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
   pager.append(previous, pageLabel, next);
   section.append(heading, notice, filters, brand, reportBanner, metrics, content, pager);
   let reportNumber = 0; let snapshot = null; let controller = null; let revision = 0; let destroyed = false; let page = 1;
+  let searchableFilters = null;
   const controls = new Map();
 
   function field(label, value, tone = "", name = "") {
@@ -108,6 +110,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
   function option(value, label = value) { const node = make("option", "", label); node.value = value; return node; }
   function currentFilters() { return Object.fromEntries([...controls].map(([name, select]) => [name, select.value])); }
   function updateFilters() {
+    searchableFilters?.destroy(); searchableFilters = null;
     filters.replaceChildren(); controls.clear();
     const rows = reportNumber === 11 ? [] : snapshot?.rows || [];
     for (const [name, label] of FILTERS[reportNumber]) {
@@ -127,6 +130,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
       wrapper.append(select); filters.append(wrapper); controls.set("order", select);
     }
     filters.hidden = !controls.size;
+    searchableFilters = bindSearchableFilterSelects(filters);
   }
   function renderQuotations() {
     const report = buildQuotationReport(snapshot);
@@ -262,6 +266,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
   async function open(number) {
     number = Number(number);
     if (destroyed || !TITLES[number]) throw new RangeError("Relatório de auditoria desconhecido.");
+    searchableFilters?.destroy(); searchableFilters = null;
     controller?.abort(); const current = ++revision; controller = new AbortController();
     reportNumber = number; snapshot = null; page = 1; section.hidden = false; section.dataset.report = String(number);
     title.textContent = TITLES[number]; headingSubtitle.hidden = number !== 11; filters.replaceChildren(); emptyMetrics(); content.replaceChildren();
@@ -277,8 +282,8 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
       if (current === revision) section.setAttribute("aria-busy", "false");
     }
   }
-  function close() { controller?.abort(); revision++; snapshot = null; metrics.replaceChildren(); content.replaceChildren(); section.hidden = true; section.setAttribute("aria-busy", "false"); }
-  function destroy() { if (destroyed) return; close(); destroyed = true; section.remove(); }
+  function close() { searchableFilters?.close(); controller?.abort(); revision++; snapshot = null; metrics.replaceChildren(); content.replaceChildren(); section.hidden = true; section.setAttribute("aria-busy", "false"); }
+  function destroy() { if (destroyed) return; close(); searchableFilters?.destroy(); searchableFilters = null; destroyed = true; section.remove(); }
   refresh.addEventListener("click", () => { if (reportNumber) void open(reportNumber); });
   previous.addEventListener("click", () => { if (page > 1) { page--; render(); } });
   next.addEventListener("click", () => { page++; render(); });

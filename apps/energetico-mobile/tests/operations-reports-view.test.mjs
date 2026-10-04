@@ -64,7 +64,7 @@ test("relatórios 6–8 exibem o logo oficial e filtros com rótulos do Power Ap
     assert.match(logo.src, /logo-energetica-oficial\.png/);
   }
   await view.open(6);
-  assert.equal(root.querySelector('[name="supplier"]').closest('label').querySelector('.or-filter-label').textContent, 'COLABORADOR');
+  assert.equal(root.querySelector('[name="supplier"]').closest('.or-filter').querySelector('.or-filter-label').textContent, 'COLABORADOR');
   await view.open(8);
   assert.match(root.textContent, /ETAPA OBRA/);
 });
@@ -192,27 +192,33 @@ test("painéis 6 e 8 mantêm os ícones de contexto dos indicadores originais", 
 test("relatório 8 aceita múltiplos status simultâneos como o filtro Power Apps", async t => {
   const { dom, view, root } = setup(t);
   await view.open(8);
-  const statusBoxes = [...root.querySelectorAll('.or-status-options input[type="checkbox"]')];
-  assert.equal(statusBoxes.length, 3);
-  for (const box of statusBoxes.filter(box => ["ATIVIDADE CRIADA", "CONCLUÍDO"].includes(box.value))) {
-    box.checked = true;
-    box.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  const status = root.querySelector('select[name="status"]');
+  assert.equal(status.multiple, true);
+  assert.equal([...status.options].filter(option => option.value).length, 3);
+  const input = status.nextElementSibling.querySelector('.sfs-search');
+  input.focus();
+  for (const value of ["ATIVIDADE CRIADA", "CONCLUÍDO"]) {
+    [...status.nextElementSibling.querySelectorAll('[role="option"]')].find(option => option.textContent === value).click();
   }
   assert.equal(root.querySelectorAll('.or-task-card').length, 2);
-  assert.match(root.querySelector('.or-status-summary').textContent, /2 itens/);
+  assert.deepEqual([...status.selectedOptions].map(option => option.value), ["ATIVIDADE CRIADA", "CONCLUÍDO"]);
+  assert.match(input.placeholder, /ATIVIDADE CRIADA.*CONCLUÍDO/);
   assert.equal(root.querySelector('[data-metric="total"]').textContent, '3');
 });
 
 test("filtro de status do relatório 8 permanece recolhido e mostra a seleção", async t => {
   const { dom, view, root } = setup(t);
   await view.open(8);
-  const details = root.querySelector('.or-status-details');
-  assert.ok(details);
-  assert.equal(details.open, false);
-  const box = root.querySelector('.or-status-options input[value="ATIVIDADE CRIADA"]');
-  box.checked = true;
-  box.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-  assert.match(details.querySelector('summary').textContent, /1 item selecionado/);
+  const status = root.querySelector('select[name="status"]');
+  const picker = status.nextElementSibling;
+  const input = picker.querySelector('.sfs-search');
+  const popup = picker.querySelector('.sfs-popup');
+  assert.equal(popup.hidden, true);
+  input.focus();
+  [...picker.querySelectorAll('[role="option"]')].find(option => option.textContent === 'ATIVIDADE CRIADA').click();
+  input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(popup.hidden, true);
+  assert.equal(input.value, 'ATIVIDADE CRIADA');
 });
 
 test("relatório 8 só marca prazo vencido quando há atividade criada ou em atendimento", async t => {

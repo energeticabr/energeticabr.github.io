@@ -99,6 +99,28 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="2"]');
 }
 
+test('payment account can be searched in its original payroll field', async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  h.input('[name=salary-value]', '100');
+  const row = h.dom.window.document.querySelector('[data-payroll-rubric=salary]');
+  const input = row.querySelector('[role=combobox]');
+  assert.ok(input, 'payment selector itself must accept typing');
+  input.focus(); input.value = 'pix';
+  input.dispatchEvent(new h.dom.window.Event('input', { bubbles: true }));
+  assert.equal(row.querySelector('.sfs-popup input'), null);
+  assert.equal(row.querySelector('[name=salary-account]').value, '');
+  row.querySelector('[role=option]').click();
+  assert.equal(row.querySelector('[name=salary-account]').value, '3');
+  assert.equal(row.dataset.payrollCompletion, 'complete');
+  h.input('[name=salary-value]', '');
+  await flush();
+  assert.equal(input.disabled, true);
+  assert.equal(input.closest('.supplier-payroll-field').hidden, true);
+  assert.equal(row.querySelector('.sfs-popup').hidden, true);
+});
+
 test("resumo associa contexto e valores a cabeçalhos de tabela sem alterar a postagem", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
@@ -255,11 +277,11 @@ test("quantidade padrão não ativa rubrica e pagamento só aparece com valor in
   const account = row.querySelector('[name=salary-account]');
   assert.equal(row.querySelector('[name=salary-quantity]').value, "1");
   assert.equal(row.dataset.payrollCompletion, "empty");
-  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.closest('.supplier-payroll-field').hidden, true);
   assert.equal(account.disabled, true);
   assert.equal(account.required, false);
   h.input('[name=salary-value]', "100,50");
-  assert.equal(account.closest('label').hidden, false);
+  assert.equal(account.closest('.supplier-payroll-field').hidden, false);
   assert.equal(account.disabled, false);
   assert.equal(account.required, true);
   assert.equal(row.dataset.payrollCompletion, "pending");
@@ -272,18 +294,18 @@ test("quantidade padrão não ativa rubrica e pagamento só aparece com valor in
   h.input('[name=salary-quantity]', "2");
   assert.equal(row.dataset.payrollCompletion, "complete");
   h.input('[name=salary-value]', "0,00");
-  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.closest('.supplier-payroll-field').hidden, true);
   assert.equal(account.required, false);
   assert.equal(row.dataset.payrollCompletion, "pending");
   assert.match(row.querySelector('[data-payroll-line-status]').textContent, /Valor zero.*não será enviada/);
   h.input('[name=salary-value]', "150");
-  assert.equal(account.closest('label').hidden, false);
+  assert.equal(account.closest('.supplier-payroll-field').hidden, false);
   assert.equal(account.required, true);
   assert.equal(row.dataset.payrollCompletion, "complete");
   h.input('[name=salary-value]', "abc");
   assert.equal(row.dataset.payrollCompletion, "pending");
   h.input('[name=salary-value]', "");
-  assert.equal(account.closest('label').hidden, true);
+  assert.equal(account.closest('.supplier-payroll-field').hidden, true);
   assert.equal(account.required, false);
   assert.equal(row.dataset.payrollCompletion, "pending");
 });

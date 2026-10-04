@@ -1,4 +1,5 @@
 import { selectStageLaunch } from "../chat/operations-reports-model.js";
+import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 
 const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
 const TITLES = { 6: "ETAPAS E ATIVIDADES", 7: "DIÁRIOS PENDENTES", 8: "TAREFAS PESSOAIS" };
@@ -58,6 +59,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   const results = make("div", "or-results"); element.append(results);
   let number = null, snapshot = null, controller = null, revision = 0, active = false, destroyed = false;
   let selected = Object.create(null);
+  let searchableFilters = null;
 
   function message(text, error = false) {
     notice.replaceChildren(); notice.hidden = !text;
@@ -122,25 +124,25 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   function statusSelector(values) {
     const wrapper = make("fieldset", "or-filter or-status-filter");
     wrapper.append(make("legend", "or-filter-label", "STATUS"));
-    const details = make("details", "or-status-details");
-    const summary = make("summary", "or-status-summary");
-    const options = make("div", "or-status-options");
+    const control = make("select", "og-input or-filter-input"); control.name = "status"; control.multiple = true;
+    control.setAttribute("aria-label", "STATUS");
     const statuses = [...new Set(values.map(String).map(value => value.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-    const updateSummary = () => { const count = selected.status?.length || 0; summary.textContent = count ? `${count} ${count === 1 ? "item selecionado" : "itens selecionados"}` : "Todos"; };
     if (!Array.isArray(selected.status)) selected.status = [];
+    const all = make("option", "", "Todos"); all.value = ""; control.append(all);
     for (const value of statuses) {
-      const label = make("label", "or-status-option");
-      const checkbox = make("input"); checkbox.type = "checkbox"; checkbox.value = value; checkbox.checked = selected.status.some(status => normalize(status) === normalize(value));
-      checkbox.addEventListener("change", () => {
-        selected.status = [...options.querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value);
-        updateSummary(); render();
-      });
-      label.append(checkbox, make("span", "", value)); options.append(label);
+      const option = make("option", "", value); option.value = value;
+      option.selected = selected.status.some(status => normalize(status) === normalize(value)); control.append(option);
     }
-    updateSummary(); details.append(summary, options); wrapper.append(details); filters.append(wrapper);
+    all.selected = !control.selectedOptions.length;
+    control.addEventListener("change", () => {
+      selected.status = [...control.selectedOptions].map(option => option.value).filter(Boolean);
+      render();
+    });
+    wrapper.append(control); filters.append(wrapper);
   }
 
   function buildFilters() {
+    searchableFilters?.destroy(); searchableFilters = null;
     filters.replaceChildren();
     if (number === 6) {
       const stages = snapshot.stages;
@@ -163,6 +165,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       for (const [name, label] of Object.entries(LABELS_8)) selector(name, label, snapshot.rows.map(row => row[name]));
       statusSelector(snapshot.rows.map(row => row.status));
     }
+    searchableFilters = bindSearchableFilterSelects(filters);
   }
 
   function renderStageActivity(row, index) {
@@ -303,6 +306,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
   }
 
   async function load() {
+    searchableFilters?.destroy(); searchableFilters = null;
     controller?.abort();
     const current = ++revision; controller = new AbortController();
     snapshot = null; filters.replaceChildren(); metricSkeleton(); render();
@@ -329,7 +333,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       number = reportNumber; element.dataset.report = String(number); title.textContent = TITLES[number]; active = true; element.hidden = false;
       return load();
     },
-    close() { active = false; controller?.abort(); revision++; element.hidden = true; element.setAttribute("aria-busy", "false"); },
-    destroy() { if (destroyed) return; active = false; controller?.abort(); revision++; destroyed = true; element.remove(); },
+    close() { searchableFilters?.close(); active = false; controller?.abort(); revision++; element.hidden = true; element.setAttribute("aria-busy", "false"); },
+    destroy() { if (destroyed) return; this.close(); searchableFilters?.destroy(); searchableFilters = null; destroyed = true; element.remove(); },
   });
 }

@@ -230,7 +230,11 @@ test("ambiguous Power Apps forms require a known variant before editing", async 
   click(ctx, "edit"); await settle();
   const select = ctx.get('[data-gallery-form-variant]');
   assert.ok(select); assert.equal(ctx.get('[data-dynamic-form]'), null);
-  select.value = "form1"; select.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true })); await settle(); await settle();
+  const input = ctx.get('[role=combobox]');
+  assert.ok(input, 'form variant is searchable in the original field');
+  input.focus(); input.value = 'comprovado'; input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  assert.equal(select.value, '', 'typing alone cannot switch forms');
+  ctx.get('[role=option]').click(); await settle(); await settle();
   assert.equal(loads.at(-1).formVariantId, "form1");
   assert.ok(ctx.get('[data-dynamic-form]'));
 });

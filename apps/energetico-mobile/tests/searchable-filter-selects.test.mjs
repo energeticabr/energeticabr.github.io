@@ -26,7 +26,7 @@ test('searched multi-selection keeps both chosen statuses and clears them throug
   search.value = ''; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   [...doc.querySelectorAll('[role="option"]')].find(option => option.textContent === 'Todos').click();
   assert.deepEqual([...select.selectedOptions].map(option => option.value), ['']);
-  assert.match(trigger.textContent, /Todos/);
+  assert.equal(search.placeholder, 'Todos');
 });
 
 function fixture(t, { auto = false } = {}) {
@@ -65,14 +65,16 @@ test('multiselect touch selection releases gesture state so outside focus and an
   assert.equal(ctx.popup().hidden, true);
 });
 
-test('opens an internal search while retaining the native form control and safe option labels', t => {
+test('typing happens in the original field with only options in the popup', t => {
   const ctx = fixture(t);
   assert.equal(ctx.select.hidden, true);
-  assert.equal(ctx.trigger().textContent.includes('Todos'), true);
+  assert.equal(ctx.trigger().value, 'Todos');
   assert.equal(ctx.popup().hidden, true);
   ctx.trigger().click();
   assert.equal(ctx.popup().hidden, false);
-  assert.equal(ctx.popup().contains(ctx.search()), true);
+  assert.equal(ctx.trigger(), ctx.search(), 'the displayed field is the editable combobox');
+  assert.equal(ctx.popup().querySelector('input'), null, 'no second search field above or below');
+  assert.equal(ctx.search().placeholder, 'Todos');
   assert.equal(ctx.search().closest('label'), null);
   assert.equal(ctx.document.activeElement, ctx.search());
   assert.equal(ctx.options().length, 5);
@@ -93,7 +95,7 @@ test('typing matches accents and case without changing the value or applying gal
   assert.equal(ctx.select.value, 'steel');
   assert.equal(ctx.applies(), 1);
   assert.equal(ctx.popup().hidden, true);
-  assert.equal(ctx.trigger().textContent.includes('Aço estrutural'), true);
+  assert.equal(ctx.trigger().value, 'Aço estrutural');
   assert.equal(new ctx.FormData(ctx.form).get('product'), 'steel');
 });
 
@@ -129,7 +131,7 @@ test('iOS option tap commits on pointerup before a delayed synthetic click', t =
   // Mobile Safari can dismiss the keyboard and reflow the page before firing
   // its click. The choice must already be committed at pointerup.
   assert.equal(ctx.select.value, 'concrete');
-  assert.equal(ctx.trigger().textContent.includes('Concreto'), true);
+  assert.equal(ctx.trigger().value, 'Concreto');
   assert.equal(new ctx.FormData(ctx.form).get('product'), 'concrete');
 });
 
@@ -250,7 +252,7 @@ test('options added after binding and disabled state refresh automatically', asy
   ctx.select.replaceChildren(new ctx.dom.window.Option('Todos', ''), new ctx.dom.window.Option('Café', 'coffee'));
   ctx.select.value = 'coffee';
   await settle();
-  assert.equal(ctx.trigger().textContent.includes('Café'), true);
+  assert.equal(ctx.trigger().value, 'Café');
   ctx.trigger().click(); ctx.type('cafe');
   assert.deepEqual(ctx.options().map(option => option.textContent), ['Café']);
   ctx.select.disabled = true;
@@ -265,19 +267,19 @@ test('options added after binding and disabled state refresh automatically', asy
 test('sync and apply reflect programmatic resets without an extra native change', t => {
   const ctx = fixture(t, { auto: true });
   ctx.select.value = 'steel'; ctx.binding.sync();
-  assert.match(ctx.trigger().textContent, /Aço/);
+  assert.match(ctx.trigger().value, /Aço/);
   assert.equal(ctx.applies(), 0);
   ctx.select.value = ''; ctx.binding.apply();
-  assert.match(ctx.trigger().textContent, /Todos/);
+  assert.match(ctx.trigger().value, /Todos/);
   assert.equal(ctx.applies(), 1);
 });
 
 test('native reset, external change and destroy restore native presentation', async t => {
   const ctx = fixture(t);
   ctx.select.value = 'concrete'; ctx.select.dispatchEvent(new ctx.Event('change', { bubbles: true }));
-  assert.match(ctx.trigger().textContent, /Concreto/);
+  assert.match(ctx.trigger().value, /Concreto/);
   ctx.form.reset(); await settle();
-  assert.match(ctx.trigger().textContent, /Todos/);
+  assert.match(ctx.trigger().value, /Todos/);
   ctx.binding.destroy();
   assert.equal(ctx.select.hidden, false);
   assert.equal(ctx.select.closest('label')?.textContent.includes('Produto'), true);
@@ -312,6 +314,51 @@ function viewport(ctx, { top = 0, height = 800, triggerTop = 120, triggerBottom 
   return visualViewport;
 }
 
+test('focus permits direct typing and Escape restores the committed selection in the same field', t => {
+  const ctx = fixture(t);
+  ctx.select.value = 'steel'; ctx.binding.sync();
+  ctx.search().focus();
+  assert.equal(ctx.popup().hidden, false);
+  assert.equal(ctx.search().value, '');
+  assert.equal(ctx.search().placeholder, 'Aço estrutural');
+  ctx.type('concreto');
+  assert.equal(ctx.select.value, 'steel');
+  ctx.search().click();
+  assert.equal(ctx.search().value, 'concreto', 'moving the caret must not reset the query');
+  ctx.key('Escape');
+  assert.equal(ctx.search().value, 'Aço estrutural');
+  assert.equal(ctx.popup().hidden, true);
+  ctx.search().dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: ctx.document.querySelector('#outside') }));
+  assert.equal(ctx.popup().hidden, true);
+});
+
+test('Enter during IME composition does not commit an option or submit the form', t => {
+  const ctx = fixture(t, { auto: true });
+  ctx.search().focus(); ctx.type('concreto');
+  ctx.search().dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+  assert.equal(ctx.select.value, '');
+  assert.equal(ctx.applies(), 0);
+  ctx.key('Enter');
+  assert.equal(ctx.select.value, 'concrete');
+  assert.equal(ctx.applies(), 1);
+});
+
+test('the arrow opens and closes the original editable field without reopening on restored focus', t => {
+  const ctx = fixture(t);
+  const arrow = ctx.form.querySelector('.sfs-arrow');
+  arrow.focus(); arrow.click();
+  assert.equal(ctx.popup().hidden, false);
+  assert.equal(ctx.document.activeElement, ctx.search());
+  ctx.type('concreto');
+  arrow.focus(); arrow.click();
+  assert.equal(ctx.popup().hidden, true);
+  assert.equal(ctx.document.activeElement, ctx.search());
+  assert.equal(ctx.search().value, 'Todos');
+  ctx.type('aco');
+  assert.equal(ctx.popup().hidden, false);
+  assert.deepEqual(ctx.options().map(n => n.textContent), ['Aço estrutural']);
+});
+
 test('dropdown opens below a trigger with room and keeps option height bounded', t => {
   const ctx = fixture(t);
   viewport(ctx);
@@ -330,7 +377,7 @@ test('dropdown opens above near the viewport bottom and remains inside the viewp
   assert.equal(ctx.popup().style.bottom, 'calc(100% + 5px)');
   assert.equal(ctx.popup().style.top, 'auto');
   assert.ok(parseFloat(ctx.popup().style.maxHeight) <= 287);
-  assert.ok(parseFloat(ctx.form.querySelector('.sfs-list').style.maxHeight) < 240);
+  assert.ok(parseFloat(ctx.form.querySelector('.sfs-list').style.maxHeight) <= parseFloat(ctx.popup().style.maxHeight) - 14);
 });
 
 test('visual viewport resize repositions the open dropdown for the mobile keyboard', t => {
