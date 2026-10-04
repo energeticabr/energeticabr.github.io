@@ -35,7 +35,7 @@ test('RHID calendar warnings stay red, under dates and inside cells on phone and
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/rhid-calendar-responsive.html?width=${width}`},sessionId);
       let ready=false;
-      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}' && document.documentElement.dataset.ready==='true'`);if(!ready)await delay(100);}
+      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}' && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
       assert.ok(ready);
       const layout=await evaluate(`(()=>{const warnings=[...document.querySelectorAll('.chat-rhid-calendar__irregular')];return {width:document.documentElement.scrollWidth,warnings:warnings.map(n=>{const r=n.getBoundingClientRect(),d=n.parentElement.getBoundingClientRect(),number=n.previousElementSibling.getBoundingClientRect();return {text:n.textContent,color:getComputedStyle(n).color,font:parseFloat(getComputedStyle(n).fontSize),below:r.top>=number.bottom,inside:r.left>=d.left&&r.right<=d.right&&r.bottom<=d.bottom,overflow:n.scrollWidth>n.clientWidth+1};})};})()`);
       assert.ok(layout.width<=width,JSON.stringify(layout));

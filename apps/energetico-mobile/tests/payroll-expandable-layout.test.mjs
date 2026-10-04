@@ -41,7 +41,7 @@ test('payroll mascot fits below delete and collapsed reports work on phone and d
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-expandable.html?width=${width}`},sessionId);
       let ready=false;
-      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}' && document.documentElement.dataset.ready==='true'`);if(!ready)await delay(100);}
+      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}' && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
       assert.ok(ready);
       if(pwaStyles) await evaluate(`(()=>{document.querySelectorAll('style,link[rel="stylesheet"]').forEach(n=>n.remove());const s=document.createElement('style');s.textContent=${JSON.stringify(pwaCss)};document.head.append(s);})()`);
       const layout=await evaluate(`(()=>{const b=document.querySelector('[data-action="open-payroll-report"]'),i=b.querySelector('img'),x=document.querySelector('[data-gallery-action="delete"]'),r=b.getBoundingClientRect(),p=i.getBoundingClientRect(),d=x.getBoundingClientRect();return {width:document.documentElement.scrollWidth,below:r.top>=d.bottom,aligned:Math.abs(r.left-d.left)<1,inside:p.left>=r.left&&p.right<=r.right&&p.top>=r.top&&p.bottom<=r.bottom,overflow:b.scrollHeight>b.clientHeight+1,loaded:i.complete&&i.naturalHeight>0};})()`);
