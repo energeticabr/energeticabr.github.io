@@ -5,7 +5,7 @@ import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt } from "./chat/attachment-finish.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
-import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
+import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -2086,7 +2086,9 @@ export function createAppController({
     }
   }
 
+  let rhidAttendanceMonthGeneration = 0;
   async function loadRhidAttendanceMonth({ value } = {}) {
+    const generation = ++rhidAttendanceMonthGeneration;
     const month = String(value || "");
     if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month) || !account || stopped || typeof client.getRhidAttendanceMonth !== "function") {
       view.setRhidAttendanceMonthStatus?.({ month, error: "Calendário RHID indisponível nesta sessão." });
@@ -2096,11 +2098,13 @@ export function createAppController({
     const reportRevision = sessionRevision;
     try {
       const summary = await client.getRhidAttendanceMonth(month);
-      if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
-      view.setRhidAttendanceMonthStatus?.({ month, presentDates: summary.presentDates });
+      if (stopped || account !== reportAccount || sessionRevision !== reportRevision || generation !== rhidAttendanceMonthGeneration) return false;
+      view.setRhidAttendanceMonthStatus?.({ month, presentDates: summary.presentDates,
+        ...(Array.isArray(summary.rows) ? { irregularCounts: rhidIrregularCountsByDate(summary.rows, month) } : {}),
+      });
       return true;
     } catch (error) {
-      if (!stopped && account === reportAccount && sessionRevision === reportRevision) {
+      if (!stopped && account === reportAccount && sessionRevision === reportRevision && generation === rhidAttendanceMonthGeneration) {
         view.setRhidAttendanceMonthStatus?.({ month, error: "Não foi possível consultar as presenças do mês. Tente novamente." });
       }
       return false;

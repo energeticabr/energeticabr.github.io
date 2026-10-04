@@ -1,0 +1,8 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../../src/styles.css"><title>Calendário RHID</title></head><body><main id="app"></main><script type="module">
+import { createChatView } from '../../src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],messages:[{id:'rhid',role:'assistant',type:'poll',question:'RHID',options:[],detail_table:{kind:'rhid_attendance',reportDate:'2026-09-28',headers:['Nome'],rows:[]}}]});
+document.querySelector('.chat-rhid-date-navigation [data-action="open-rhid-attendance-report"]').click();
+view.setRhidAttendanceMonthStatus({month:'2026-09',presentDates:['2026-09-28','2026-09-29'],irregularCounts:{'2026-09-28':1,'2026-09-29':12}});
+document.documentElement.dataset.ready='true';
+</script></body></html>

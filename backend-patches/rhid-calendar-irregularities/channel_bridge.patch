@@ -1,0 +1,32 @@
+diff --git a/.superpowers/rhid-calendar/backend/channel_bridge.latest.py b/.superpowers/rhid-calendar/backend/channel_bridge.next.py
+index 7924efd..88d2b51 100644
+--- a/.superpowers/rhid-calendar/backend/channel_bridge.latest.py
++++ b/.superpowers/rhid-calendar/backend/channel_bridge.next.py
+@@ -1373,7 +1373,9 @@ class ChannelBridge:
+         flow = {
+             "target_list": "RHID PRESENÇAS",
+             "date_field": "DATA_REFERENCIA",
+-            "columns": [{"field": "DATA_REFERENCIA"}, {"field": "BATIDAS_RHID"}],
++            "columns": [{"field": field} for field in (
++                "DATA_REFERENCIA", "BATIDAS_RHID", "ID_PESSOA_RHID", "NOME_COLABORADOR", "STATUS_RHID",
++            )],
+             "sort_direction": "asc",
+         }
+         rows = self.engine.sharepoint.get_report_rows(flow, {
+@@ -1394,11 +1396,13 @@ class ChannelBridge:
+             if day >= first_day.isoformat() and day <= last_day.isoformat():
+                 present_dates.add(day)
+         store = getattr(self, "rhid_attendance_adjustments", None)
+-        if store is not None:
+-            present_dates.update(store.dates_with_adjustments(first_day, next_month))
++        from rhid_calendar_snapshot import monthly_effective_rows
++        effective_rows = monthly_effective_rows(rows, store, first_day, next_month)
++        present_dates.update(str(row.get("DATA_REFERENCIA") or "")[:10]
++                             for row in effective_rows if row.get("ADMIN_AJUSTES"))
+         return {
+             "status": "processed", "messages": [],
+-            "attendanceMonth": {"month": month, "presentDates": sorted(present_dates)},
++            "attendanceMonth": {"month": month, "presentDates": sorted(present_dates), "rows": effective_rows},
+         }
+ 
+     def portal_rhid_attendance_adjust(
