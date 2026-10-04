@@ -28,6 +28,27 @@ function boldTextPlacement(content, label, occurrence = 0) {
   return { size: Number(match[1]), x: Number(match[2]), y: Number(match[3]) };
 }
 
+test("protocolo de integridade fica dentro do quadro EPI e na identificação do PDF", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const id = "0123456789abcdef0123456789abcdef";
+  const result = await signPdfAttachment({
+    documentBlob: new Blob([await source.save()], { type: "application/pdf" }),
+    documentFileName: "comprovante-entrega-epi.pdf",
+    signatureBlob: new Blob([PNG_1X1], { type: "image/png" }),
+    point: { page: 1, x: 0.5, y: 0.3, scale: 0.5 },
+    signerName: "RAFAEL GONTIJO", signedAt: "2026-10-03T23:00:00Z", integrityId: id,
+  });
+  const signed = await PDFDocument.load(await result.arrayBuffer());
+  const content = pageContent(signed);
+  const protocol = boldTextPlacement(content, `REGISTRO: ${id}`);
+  const geometry = signatureLayoutGeometry("epi", { pageWidth: 595, pageHeight: 842, scale: 0.5 });
+  const bottom = 842 * 0.3 - geometry.height / 2;
+  assert.ok(protocol.y > bottom && protocol.y < bottom + geometry.height * geometry.captionRatio);
+  assert.ok(protocol.x >= 595 * 0.5 - geometry.width / 2);
+  assert.match(signed.getKeywords(), new RegExp(id));
+});
+
 test("reserva a maior parte do cartão de comprovante para o traço", () => {
   const epi = signatureLayoutGeometry("epi", { pageWidth: 595, pageHeight: 842, scale: 1 });
   const payment = signatureLayoutGeometry("payment", { pageWidth: 595, pageHeight: 842, scale: 1 });

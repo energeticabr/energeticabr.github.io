@@ -184,6 +184,7 @@ export async function signPdfAttachment({
   stampPoint = null,
   signerName = "USUÁRIO",
   signedAt = new Date(),
+  integrityId = "",
 } = {}) {
   if (!documentBlob || typeof documentBlob.arrayBuffer !== "function") throw new TypeError("PDF de origem inválido.");
   if (!signatureBlob || typeof signatureBlob.arrayBuffer !== "function") throw new TypeError("Imagem de assinatura inválida.");
@@ -285,6 +286,7 @@ export async function signPdfAttachment({
   const captionColor = cardCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
   const name = fitText(printableText(signerName) || "USUÁRIO", font, fontSize, textWidth);
   const nameWidth = font.widthOfTextAtSize(name, fontSize);
+  if (!/^[a-f0-9]{32}$/.test(String(integrityId))) {
   if (paymentCaption || epiCaption) {
     page.drawLine({
       start: { x: left + inset, y: bottom + captionHeight },
@@ -351,6 +353,36 @@ export async function signPdfAttachment({
       font,
       color: captionColor,
     });
+  }
+
+  }
+  if (/^[a-f0-9]{32}$/.test(String(integrityId))) {
+    // Keep the existing movable card dimensions; distribute its caption into
+    // three rows. The final hash is stored externally, after these bytes exist.
+    const recordLabel = `REGISTRO: ${integrityId}`;
+    const nameLabel = printableText(signerName) || "USUÁRIO";
+    const timeLabel = `DATA/HORA: ${epiDateLabel(signedAt)}`;
+    page.drawRectangle({ x: left + inset, y: bottom + 1,
+      width: markerWidth - inset * 2, height: captionHeight - 2, color: rgb(1, 1, 1) });
+    const recordFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+    if (cardCaption) page.drawLine({
+      start: { x: left + inset, y: bottom + captionHeight },
+      end: { x: left + markerWidth - inset, y: bottom + captionHeight },
+      color: paymentBorderColor, thickness: 1.2,
+    });
+    const rowHeight = (captionHeight - 2) / 3;
+    const rowSize = Math.min(fontSize, rowHeight * 0.7);
+    for (const [index, label] of [recordLabel, timeLabel, nameLabel].entries()) {
+      const size = Math.min(index === 0 ? rowSize * 0.72 : rowSize,
+        (markerWidth - inset * 2) / Math.max(1, recordFont.widthOfTextAtSize(label, 1)));
+      page.drawText(label, {
+        x: left + (markerWidth - recordFont.widthOfTextAtSize(label, size)) / 2,
+        y: bottom + 1 + index * rowHeight + (rowHeight - size) / 2,
+        size, font: recordFont, color: captionColor,
+      });
+    }
+    const existingKeywords = pdf.getKeywords();
+    pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
   }
 
   const bytes = await pdf.save();
