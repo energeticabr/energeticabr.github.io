@@ -5614,7 +5614,10 @@ export function createAppController({
           mimeType: String(signatureFile.type || "image/png"),
           blob: signatureFile,
         },
-        signerName: String(account.displayName || account.name || "USUÁRIO").trim() || "USUÁRIO",
+        signerName: String(item.signerName || (
+          /^pending_document/.test(String(store.getState().activeFlow?.id || ""))
+            ? "SIGNATÁRIO" : account.displayName || account.name || "USUÁRIO"
+        )).trim() || "SIGNATÁRIO",
         signedAt: new Date().toISOString(),
         uploadMessageId: newUploadMessageId(),
       };

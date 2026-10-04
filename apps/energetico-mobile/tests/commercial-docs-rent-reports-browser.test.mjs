@@ -1,12 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { runBrowserLayout } from "./helpers/browser-layout-runner.mjs";
 import { createServer } from "vite";
 import { fileURLToPath } from "node:url";
 
-const run = promisify(execFile);
 const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"].find(path => path && existsSync(path));
 const appRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -17,11 +15,8 @@ test("relatórios 16 e 17 usam tabelas no desktop e cartões sem corte em telefo
     await server.listen();
     const port = server.httpServer.address().port;
     for (const [width, height] of [[1280, 720], [844, 390], [740, 360]]) for (const scenario of ["report=16", "report=16&detail=1", "report=17"]) {
-      const { stdout } = await run(browser, [
-        "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--disable-dev-shm-usage",
-        `--window-size=${width + (process.platform === "win32" ? 26 : 0)},${height}`, "--virtual-time-budget=3000", "--dump-dom",
-        `http://127.0.0.1:${port}/tests/fixtures/commercial-docs-rent-reports-responsive.html?${scenario}`,
-      ], { timeout: 30_000, maxBuffer: 3_000_000 });
+      const { stdout } = await runBrowserLayout(browser, { width, height, maxBuffer: 3_000_000,
+        url: `http://127.0.0.1:${port}/tests/fixtures/commercial-docs-rent-reports-responsive.html?${scenario}` });
       const match = /data-layout="([^"]+)"/.exec(stdout);
       assert.ok(match, `Medição não concluída em ${width}px`);
       const layout = JSON.parse(match[1].replaceAll("&quot;", '"').replaceAll("&amp;", "&"));

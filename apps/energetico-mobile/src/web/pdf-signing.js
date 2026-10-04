@@ -385,6 +385,15 @@ export async function signPdfAttachment({
     pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
   }
 
+  if (!cardCaption) {
+    // Match the movable preview card while keeping the PDF content under the
+    // handwritten image visible. Paint the outline last so captions cannot hide it.
+    page.drawRectangle({ x: left, y: bottom, width: markerWidth, height: markerHeight,
+      borderColor: paymentBorderColor, borderWidth: 1.2 });
+    page.drawLine({ start: { x: left, y: bottom + captionHeight },
+      end: { x: left + markerWidth, y: bottom + captionHeight },
+      color: paymentBorderColor, thickness: 1.2 });
+  }
   const bytes = await pdf.save();
   return new Blob([bytes], { type: "application/pdf" });
 }

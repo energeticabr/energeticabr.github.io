@@ -3,6 +3,15 @@ import assert from "node:assert/strict";
 
 import { createConversationStore } from "../src/chat/conversation-store.js";
 
+test("nome do signatário acompanha o documento no snapshot e na atualização da bandeja", () => {
+  const store = createConversationStore();
+  const document = { id: "rhid", fileName: "ponto.pdf", mediaUrl: "/ponto", signerName: "CLEITON CESAR NONATO" };
+  store.ingestRemoteMessages([], { attachments: [document] });
+  assert.equal(store.getState().attachments[0].signerName, document.signerName);
+  store.syncAttachments([{ ...document, signerName: "OUTRO FORNECEDOR" }]);
+  assert.equal(store.getState().attachments[0].signerName, "OUTRO FORNECEDOR");
+});
+
 const editResponse = (value = "Texto anterior\ncom acentuação") => ({
   messages: [{ type: "text", text: "Altere a descrição" }],
   results: [{ status: "awaiting_field", field: "descricao", inputPrefill: { field: "descricao", value } }],

@@ -11,6 +11,24 @@ const PNG_1X1 = Buffer.from(
   "base64",
 );
 
+test("PDF de ponto imprime retângulo externo envolvendo assinatura e registro", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const result = await signPdfAttachment({
+    documentBlob: new Blob([await source.save()], { type: "application/pdf" }),
+    documentFileName: "PONTO-RHID-17-2026-09.pdf",
+    signatureBlob: new Blob([PNG_1X1], { type: "image/png" }),
+    point: { page: 1, x: 0.7, y: 0.2, scale: 0.5 },
+    signerName: "CLEITON CESAR NONATO", signedAt: "2026-10-03T23:00:00Z",
+    integrityId: "0123456789abcdef0123456789abcdef",
+  });
+  const signed = await PDFDocument.load(await result.arrayBuffer());
+  const content = pageContent(signed);
+  assert.match(content, /0\.08 0\.18 0\.34 RG[\s\S]*0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/);
+  assert.ok(boldTextPlacement(content, "CLEITON CESAR NONATO"));
+  assert.ok(boldTextPlacement(content, "REGISTRO: 0123456789abcdef0123456789abcdef"));
+});
+
 function pageContent(pdf, pageNumber = 1) {
   const page = pdf.getPages()[pageNumber - 1];
   const streams = page.node.Contents();
