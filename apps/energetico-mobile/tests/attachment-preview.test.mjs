@@ -76,6 +76,50 @@ test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", asy
   assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
+for (const type of ["", "application/octet-stream", "binary/octet-stream", "image/jpg", "image/pjpeg"]) {
+  test(`JPEG com nome genérico e tipo ${type || "ausente"} abre como imagem e preserva o original`, async t => {
+    const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])], { type });
+    let displayed;
+    let exported;
+    const { preview, documentRef, revoked } = setup(t, {
+      urlApi: { createObjectURL: blob => { displayed = blob; return "blob:jpeg"; }, revokeObjectURL: url => revoked.push(url) },
+      exportMedia: (blob, name) => { exported = { blob, name }; },
+    });
+    await preview.open(jpeg, "imagem");
+    assert.ok(documentRef.querySelector("dialog img"), "JPEG não deve cair na mensagem de formato não suportado");
+    assert.equal(displayed.type, "image/jpeg");
+    assert.deepEqual(new Uint8Array(await displayed.arrayBuffer()), new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70]));
+    documentRef.querySelector(".attachment-preview-export").click();
+    assert.deepEqual(exported, { blob: jpeg, name: "imagem" });
+    preview.close();
+    assert.deepEqual(revoked, ["blob:jpeg"]);
+  });
+}
+
+test("JPEG identificado só pela extensão recebe MIME de imagem para a prévia", async t => {
+  let displayed;
+  const { preview, documentRef } = setup(t, { urlApi: {
+    createObjectURL: blob => { displayed = blob; return "blob:jpeg"; }, revokeObjectURL() {},
+  } });
+  await preview.open(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], { type: "application/octet-stream" }), "IMG_4722.JPEG");
+  assert.ok(documentRef.querySelector("dialog img"));
+  assert.equal(displayed.type, "image/jpeg");
+});
+
+test("detecção JPEG não promove conteúdo arbitrário nem formatos ativos a imagem", async t => {
+  const { preview, documentRef } = setup(t);
+  for (const [bytes, type, name] of [
+    [[0xff, 0xd8], "application/octet-stream", "imagem"],
+    [[0xff, 0xd8, 0, 0xe0], "", "imagem"],
+    [[0xff, 0xd8, 0xff, 0xe0], "text/html", "imagem"],
+    [[0xff, 0xd8, 0xff, 0xe0], "application/octet-stream", "arquivo.svg"],
+  ]) {
+    await preview.open(new Blob([new Uint8Array(bytes)], { type }), name);
+    assert.equal(documentRef.querySelector("dialog img, dialog iframe"), null);
+    assert.match(documentRef.querySelector(".attachment-preview-content").textContent, /outro app/);
+  }
+});
+
 test("imagem amplia a partir de dimensões-base fixas sem acumular escala", async t => {
   const { preview, documentRef } = setup(t);
   const content = documentRef.querySelector(".attachment-preview-content");
