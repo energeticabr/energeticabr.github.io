@@ -383,41 +383,54 @@ export function createSupplierPayrollView({
   function summary() {
     heading("Resumo da folha");
     identity();
+    const detailsTable = (label, entries) => {
+      const table = element("table", "supplier-payroll-summary-table");
+      table.setAttribute("aria-label", label);
+      const body = element("tbody");
+      for (const [label, value] of entries) {
+        const row = element("tr");
+        const field = element("th", "", label);
+        field.scope = "row";
+        row.append(field, typeof value === "string" ? element("td", "", value) : value);
+        body.append(row);
+      }
+      table.append(body);
+      return table;
+    };
+    const context = element("div", "supplier-payroll-summary-context");
+    context.append(detailsTable("Referência da folha", [
+      ["Etapa", draft.stage.label],
+      ["IDFOLHA", String(draft.sheet.id)],
+      ["Referência", draft.sheet.label],
+    ]));
     const list = element("div", "supplier-payroll-summary");
     for (const line of validatePayrollDraft(draft).lines) {
       const row = element("article");
+      const receipts = element("td");
+      if (line.files.length) {
+        const files = element("ul", "supplier-payroll-summary-files");
+        for (const file of line.files) files.append(element("li", "", file.name));
+        receipts.append(files);
+      } else receipts.textContent = "Sem comprovantes";
       row.append(
-        element("strong", "", line.label),
-        element(
-          "p",
-          "",
-          `${line.quantity} × ${money(line.unitValue)} = ${money(payrollTotal([line]))}`,
-        ),
-        element("p", "", `Forma de pagamento: ${line.account.label}`),
-        element(
-          "small",
-          "",
-          line.files.length
-            ? `Comprovantes: ${line.files.map((f) => f.name).join(", ")}`
-            : "Sem comprovantes",
-        ),
+        element("h3", "", line.label),
+        detailsTable(`Detalhes de ${line.label}`, [
+          ["Quantidade", String(line.quantity)],
+          ["Valor unitário", money(line.unitValue)],
+          ["Subtotal", money(payrollTotal([line]))],
+          ["Forma de pagamento", line.account.label],
+          ["Comprovantes", receipts],
+        ]),
       );
       list.append(row);
     }
-    content.append(
-      element("p", "", `Etapa: ${draft.stage.label}`),
-      element(
-        "p",
-        "",
-        `IDFOLHA: ${draft.sheet.id} · Referência: ${draft.sheet.label}`,
-      ),
-      list,
-      element(
-        "p",
-        "supplier-payroll-total",
-        `Total pago: ${money(payrollTotal(draft.lines))}`,
-      ),
+    const total = element("div", "supplier-payroll-summary-total");
+    total.setAttribute("data-payroll-summary-total", "");
+    total.append(
+      element("span", "", "Total pago"),
+      element("strong", "", money(payrollTotal(draft.lines))),
     );
+    content.append(context, list, total);
   }
   async function next() {
     error.hidden = true;
