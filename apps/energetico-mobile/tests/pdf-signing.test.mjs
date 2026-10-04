@@ -26,7 +26,30 @@ test("PDF de ponto imprime retângulo externo envolvendo assinatura e registro",
   const content = pageContent(signed);
   assert.match(content, /0\.08 0\.18 0\.34 RG[\s\S]*0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/);
   assert.ok(boldTextPlacement(content, "CLEITON CESAR NONATO"));
-  assert.ok(boldTextPlacement(content, "REGISTRO: 0123456789abcdef0123456789abcdef"));
+  assert.ok(boldTextPlacement(content, "REGISTRO: 0123456789abcdef"));
+  assert.ok(boldTextPlacement(content, "0123456789abcdef"));
+});
+
+test("identificação do ponto mantém letras legíveis no tamanho padrão de 50%", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([595, 842]);
+  const id = "0123456789abcdeffedcba9876543210";
+  const result = await signPdfAttachment({
+    documentBlob: new Blob([await source.save()], { type: "application/pdf" }),
+    documentFileName: "PONTO-RHID-17-2026-09.pdf",
+    signatureBlob: new Blob([PNG_1X1], { type: "image/png" }),
+    point: { page: 1, x: 0.7, y: 0.2, scale: 0.5 },
+    signerName: "CLEITON CESAR NONATO", signedAt: "2026-10-04T02:58:00Z", integrityId: id,
+  });
+  const signed = await PDFDocument.load(await result.arrayBuffer());
+  const content = pageContent(signed);
+  for (const label of ["CLEITON CESAR NONATO", "DATA/HORA: 03/10/2026 às 23:58",
+    "REGISTRO: 0123456789abcdef", "fedcba9876543210"]) {
+    assert.ok(boldTextPlacement(content, label).size >= 8, `${label} precisa ser legível`);
+  }
+  assert.match(signed.getKeywords(), new RegExp(id));
+  const geometry = signatureLayoutGeometry("", { pageWidth: 595, pageHeight: 842, scale: 0.5, integrity: true });
+  assert.ok(geometry.height * (1 - geometry.captionRatio) >= 45, "não comprimir o traço para acomodar as letras");
 });
 
 function pageContent(pdf, pageNumber = 1) {
@@ -59,8 +82,8 @@ test("protocolo de integridade fica dentro do quadro EPI e na identificação do
   });
   const signed = await PDFDocument.load(await result.arrayBuffer());
   const content = pageContent(signed);
-  const protocol = boldTextPlacement(content, `REGISTRO: ${id}`);
-  const geometry = signatureLayoutGeometry("epi", { pageWidth: 595, pageHeight: 842, scale: 0.5 });
+  const protocol = boldTextPlacement(content, `REGISTRO: ${id.slice(0,16)}`);
+  const geometry = signatureLayoutGeometry("epi", { pageWidth: 595, pageHeight: 842, scale: 0.5, integrity: true });
   const bottom = 842 * 0.3 - geometry.height / 2;
   assert.ok(protocol.y > bottom && protocol.y < bottom + geometry.height * geometry.captionRatio);
   assert.ok(protocol.x >= 595 * 0.5 - geometry.width / 2);

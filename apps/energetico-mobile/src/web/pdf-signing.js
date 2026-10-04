@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { signatureDocumentLayout, signatureLayoutGeometry } from "./signature-document-layout.js";
+import { signatureDocumentLayout, signatureLayoutGeometry, signatureRecordLines } from "./signature-document-layout.js";
 
 const DEFAULT_SCALE = 0.5;
 const MIN_SCALE = 0.2;
@@ -219,10 +219,12 @@ export async function signPdfAttachment({
   const epiCaption = documentLayout === "epi";
   const paymentCaption = documentLayout === "payment";
   const cardCaption = epiCaption || paymentCaption;
-  const markerGeometry = signatureLayoutGeometry(documentLayout, { pageWidth, pageHeight, scale });
+  const recordLines = signatureRecordLines(integrityId);
+  const hasIntegrity = recordLines.length === 2;
+  const markerGeometry = signatureLayoutGeometry(documentLayout, { pageWidth, pageHeight, scale, integrity: hasIntegrity });
   const markerWidth = markerGeometry.width;
   const markerHeight = markerGeometry.height;
-  const captionHeight = cardCaption
+  const captionHeight = cardCaption || hasIntegrity
     ? markerHeight * markerGeometry.captionRatio
     : Math.max(14, Math.min(26, markerHeight * markerGeometry.captionRatio));
   const signatureHeight = markerHeight - captionHeight;
@@ -357,9 +359,8 @@ export async function signPdfAttachment({
 
   }
   if (/^[a-f0-9]{32}$/.test(String(integrityId))) {
-    // Keep the existing movable card dimensions; distribute its caption into
-    // three rows. The final hash is stored externally, after these bytes exist.
-    const recordLabel = `REGISTRO: ${integrityId}`;
+    // Reserve four readable rows instead of shrinking the entire protocol into
+    // one tiny line. The complete id remains in the PDF metadata and evidence.
     const nameLabel = printableText(signerName) || "USUÁRIO";
     const timeLabel = `DATA/HORA: ${epiDateLabel(signedAt)}`;
     page.drawRectangle({ x: left + inset, y: bottom + 1,
@@ -370,14 +371,14 @@ export async function signPdfAttachment({
       end: { x: left + markerWidth - inset, y: bottom + captionHeight },
       color: paymentBorderColor, thickness: 1.2,
     });
-    const rowHeight = (captionHeight - 2) / 3;
-    const rowSize = Math.min(fontSize, rowHeight * 0.7);
-    for (const [index, label] of [recordLabel, timeLabel, nameLabel].entries()) {
-      const size = Math.min(index === 0 ? rowSize * 0.72 : rowSize,
+    const rowHeight = (captionHeight - 4) / 4;
+    const rowSize = Math.min(markerWidth / 20, rowHeight * 0.85);
+    for (const [index, label] of [recordLines[1], recordLines[0], timeLabel, nameLabel].entries()) {
+      const size = Math.min(rowSize,
         (markerWidth - inset * 2) / Math.max(1, recordFont.widthOfTextAtSize(label, 1)));
       page.drawText(label, {
         x: left + (markerWidth - recordFont.widthOfTextAtSize(label, size)) / 2,
-        y: bottom + 1 + index * rowHeight + (rowHeight - size) / 2,
+        y: bottom + 2 + index * rowHeight + (rowHeight - size) / 2,
         size, font: recordFont, color: captionColor,
       });
     }
