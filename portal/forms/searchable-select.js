@@ -171,6 +171,7 @@ export function createSearchableSelect(root, config = {}) {
   }
 
   function onKeyDown(event) {
+    if (event?.isComposing || event?.keyCode === 229) return;
     if (event?.key === "ArrowDown") {
       if (!open) {
         filterOptions(input.value);

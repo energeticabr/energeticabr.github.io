@@ -61,6 +61,21 @@ test('dropdown search stays in the original field on phone, desktop and shipped 
       assert.ok(await evaluate(`window.original.value==='004 - EDIFÍCIO XAVANTE'&&document.querySelector('[name=branch]').value==='004'`));
       const multi=await evaluate(`(()=>{const s=document.querySelector('[name=status]'),i=s.nextElementSibling.querySelector('input');i.focus();i.value='inativo';i.dispatchEvent(new Event('input',{bubbles:true}));i.closest('.sfs').querySelector('[role=option]').click();document.querySelector('#outside').focus();return [...s.selectedOptions].map(n=>n.value);})()`);
       assert.deepEqual(multi,['active','inactive']);
+      // Actual typing must replace the empty prompt, including after native form reset.
+      for(let attempt=0;attempt<2;attempt++) {
+        if(attempt) {
+          await evaluate(`document.querySelector('#stage [data-form-clear]').click()`);
+          assert.ok(await evaluate(`document.querySelector('#stage [data-provisao-payment-stage]').value===''&&document.querySelector('#stage [role=combobox]').value==='Selecione'&&document.querySelector('#stage [name=DATAPREVISTOPGTO]').value===''`));
+        }
+        const stageRect=await evaluate(`(()=>{const i=document.querySelector('#stage [role=combobox]');i.scrollIntoView({block:'center'});const r=i.getBoundingClientRect();return {x:r.x,y:r.y};})()`);
+        await send('Input.dispatchMouseEvent',{type:'mousePressed',x:stageRect.x+20,y:stageRect.y+20,button:'left',clickCount:1},sessionId);
+        await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:stageRect.x+20,y:stageRect.y+20,button:'left',clickCount:1},sessionId);
+        await send('Input.insertText',{text:'liquidado hoje'},sessionId);
+        assert.ok(await evaluate(`document.querySelector('#stage [role=combobox]').value==='liquidado hoje'&&document.querySelector('#stage [data-provisao-payment-stage]').value===''&&document.querySelector('#stage [role=listbox]').querySelectorAll('input').length===0`));
+        await key('ArrowDown','ArrowDown',40);
+        await key('Enter','Enter',13);
+        assert.ok(await evaluate(`document.querySelector('#stage [data-provisao-payment-stage]').value==='EMPENHADO E LIQUIDADO HOJE'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(document.querySelector('#stage [name=DATAPREVISTOPGTO]').value)`));
+      }
       assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1&&[...document.querySelectorAll('.supplier-payroll-body,.sfs')].every(n=>n.scrollWidth<=n.clientWidth+1)`));
     }
   } finally {

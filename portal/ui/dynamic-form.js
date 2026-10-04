@@ -1675,7 +1675,8 @@ function bindProvisaoPaymentStage(form, options = {}) {
   const mount = form.querySelector('[data-provisao-payment-stage-root]');
   let syncing = false;
   const picker = mount ? createSearchableSelect(mount, {
-    label: 'ETAPA DO PAGAMENTO', placeholder: 'Selecione', allowEmpty: true, value: select.value,
+      label: 'ETAPA DO PAGAMENTO', placeholder: 'Selecione', allowEmpty: true,
+      clearEmptyLabelOnOpen: true, value: select.value,
     options: [...select.options].map(option => ({ value: option.value, label: option.label })),
     onChange(value) {
       if (syncing) return;
@@ -1694,14 +1695,27 @@ function bindProvisaoPaymentStage(form, options = {}) {
       picker.listbox.hidden = true; picker.input.setAttribute('aria-expanded', 'false');
     }
   };
-  const change = () => { apply(); sync(); };
-  select.addEventListener?.("change", change);
+    const change = () => { apply(); sync(); };
+    select.addEventListener?.("change", change);
+    let disposed = false;
+    const reset = () => queueMicrotask(() => {
+      if (disposed) return;
+      previousAutomaticValues = null;
+      sync();
+      apply();
+    });
+    form.addEventListener('reset', reset);
   const Observer = select.ownerDocument?.defaultView?.MutationObserver;
   const observer = picker && Observer ? new Observer(sync) : null;
   observer?.observe(form, { subtree: true, attributes: true, attributeFilter: ['disabled'] });
   sync();
   apply();
-  return Object.freeze({ cleanup() { observer?.disconnect(); picker?.destroy(); field?.removeAttribute('data-combobox-field'); select.removeEventListener?.("change", change); } });
+    return Object.freeze({ cleanup() {
+      disposed = true;
+      form.removeEventListener('reset', reset);
+      observer?.disconnect(); picker?.destroy(); field?.removeAttribute('data-combobox-field');
+      select.removeEventListener?.("change", change);
+    } });
 }
 
 function bindRecurringExpenseRules(form, options = {}) {
