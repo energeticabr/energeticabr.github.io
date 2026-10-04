@@ -1,4 +1,5 @@
 import { buildCommercialReport14, buildCommercialReport15 } from "../chat/commercial-progress-reports-model.js";
+import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 
 const FILTERS = [
   ["branch", "FILIAL", [14, 15]], ["property", "IMÓVEL", [14, 15]],
@@ -54,6 +55,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
   const previous = button("cpr-button cpr-previous", "Anterior"); const pageLabel = make("span", "cpr-page-label");
   const next = button("cpr-button cpr-next", "Próxima"); pager.append(previous, pageLabel, next); element.append(pager);
   let snapshot = null; let controller = null; let revision = 0; let page = 1; let reportNumber = null; let destroyed = false;
+  let searchableFilters = null;
 
   function showNotice(message, retry = false) {
     notice.replaceChildren(); notice.hidden = !message;
@@ -111,6 +113,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
     return (reportNumber === 14 ? snapshot.contracts : snapshot.milestones).map(row => row.buyer);
   }
   function populateFilters() {
+    searchableFilters?.destroy(); searchableFilters = null;
     for (const [name] of FILTERS) {
       const control = controls.get(name); const current = control.value;
       const values = [...new Set(options(name).map(value => String(value ?? "").trim()).filter(Boolean))]
@@ -119,6 +122,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
       for (const value of values) control.append(Object.assign(make("option", "", value), { value }));
       control.value = values.includes(current) ? current : "";
     }
+    searchableFilters = bindSearchableFilterSelects(filters);
   }
   const selectedFilters = () => Object.fromEntries([...controls].map(([name, control]) => [name, control.value]));
 
@@ -255,6 +259,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
     }
   }
   async function load() {
+    searchableFilters?.close();
     controller?.abort(); const current = ++revision; controller = new AbortController();
     snapshot = null; render(); showNotice("Carregando dados do SharePoint…"); element.setAttribute("aria-busy", "true");
     try {
@@ -277,6 +282,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
     open(number) {
       if (destroyed) throw new Error("A visualização comercial foi encerrada.");
       if (number !== 14 && number !== 15) throw new RangeError("Relatório comercial desconhecido.");
+      searchableFilters?.destroy(); searchableFilters = null;
       reportNumber = number; page = 1; element.hidden = false;
       element.dataset.report = String(number);
       title.textContent = number === 14 ? "INDICADORES COMERCIAIS POR IMÓVEL" : "ÚLTIMO ANDAMENTO POR IMÓVEL";
@@ -284,8 +290,8 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
       for (const wrapper of filters.querySelectorAll(".cpr-filter")) wrapper.hidden = !wrapper.dataset.reports.split(",").includes(String(number));
       return load();
     },
-    close() { controller?.abort(); revision++; snapshot = null; reportNumber = null; element.hidden = true;
+    close() { searchableFilters?.close(); controller?.abort(); revision++; snapshot = null; reportNumber = null; element.hidden = true;
       metrics.replaceChildren(); content.replaceChildren(); showNotice(""); pager.hidden = true; element.setAttribute("aria-busy", "false"); },
-    destroy() { if (destroyed) return; this.close(); destroyed = true; element.remove(); },
+    destroy() { if (destroyed) return; this.close(); searchableFilters?.destroy(); searchableFilters = null; destroyed = true; element.remove(); },
   });
 }

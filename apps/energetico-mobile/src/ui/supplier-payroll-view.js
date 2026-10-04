@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import {
   PAYROLL_RUBRICS,
   payrollTotal,
@@ -73,6 +74,7 @@ export function createSupplierPayrollView({
     progress,
     result = null,
     previousFocus = null;
+  let accountPickers = null;
   let suppliers = [],
     products = [],
     accounts = [],
@@ -294,7 +296,7 @@ export function createSupplierPayrollView({
         let isZero = false;
         try { isZero = hasValue && payrollDecimal(line.unitValue).isZero(); } catch { /* Invalid values remain pending. */ }
         const needsPayment = hasValue && !isZero;
-        accountField.hidden = !needsPayment;
+        (account.closest('.supplier-payroll-field') || accountField).hidden = !needsPayment;
         account.disabled = !needsPayment;
         account.required = needsPayment;
         const started = hasValue || String(line.quantity).trim() !== "1" || line.account || line.files.length;
@@ -374,6 +376,7 @@ export function createSupplierPayrollView({
       grid.append(row);
     }
     content.append(grid);
+    accountPickers = bindSearchableFilterSelects(grid);
     const total = element("p", "supplier-payroll-total");
     total.setAttribute("data-payroll-total", "");
     total.setAttribute("aria-live", "polite");
@@ -491,6 +494,7 @@ export function createSupplierPayrollView({
     back();
   }
   function render(loadingLabel) {
+    accountPickers?.destroy(); accountPickers = null;
     content.replaceChildren();
     footer.replaceChildren();
     footer.classList.toggle("supplier-payroll-footer--rubrics", step === "rubrics");
@@ -648,6 +652,7 @@ export function createSupplierPayrollView({
     epoch++;
     busy = false;
     page.hidden = true;
+    accountPickers?.close();
     previousFocus?.focus?.();
     onClose();
     return true;
@@ -699,6 +704,7 @@ export function createSupplierPayrollView({
     },
     close,
     destroy() {
+      accountPickers?.destroy(); accountPickers = null;
       destroyed = true;
       opened = false;
       epoch++;

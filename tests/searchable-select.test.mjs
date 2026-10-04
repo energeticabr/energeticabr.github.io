@@ -192,6 +192,22 @@ test("teclado navega, seleciona uma única opção e fecha a lista", () => {
   assert.deepEqual(changes, [{ value: "ana", option: OPTIONS[0] }]);
 });
 
+test("Enter de composição IME não confirma uma opção nem interrompe a digitação", () => {
+  const { control, changes } = fixture();
+  type(control, "almeida");
+  control.input.dispatch("keydown", { key: "ArrowDown" });
+  for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
+    const event = control.input.dispatch("keydown", { key: "Enter", ...composition });
+    assert.equal(event.defaultPrevented, false);
+    assert.equal(control.getValue(), "");
+    assert.equal(control.input.getAttribute("aria-expanded"), "true");
+    assert.deepEqual(changes, []);
+  }
+  control.input.dispatch("keydown", { key: "Enter" });
+  assert.equal(control.getValue(), "ana");
+  assert.equal(changes.length, 1);
+});
+
 test("Escape fecha a lista, preserva a seleção e não aceita o texto pesquisado como valor", () => {
   const { control, changes } = fixture({ value: "carla" });
   type(control, "texto inexistente");

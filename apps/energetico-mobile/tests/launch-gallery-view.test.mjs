@@ -129,7 +129,7 @@ test('editing a launch replaces a selected option and submits the replacement', 
   search.dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
   replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
   assert.equal(stage.value, 'CONTABILIDADE');
-  assert.match(editor.querySelector('.sfs-trigger').textContent, /Contabilidade/);
+  assert.match(editor.querySelector('.sfs-trigger').value, /Contabilidade/);
   button(ctx.root(), 'SUBMETER').click();
   assert.match(ctx.root().querySelector('.lg-review').textContent, /Contabilidade/);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
@@ -1755,7 +1755,7 @@ test('adding an attachment preserves unsaved fields and refreshes the SharePoint
   assert.equal(ctx.root().querySelector('[name="QUANTIDADE"]').value, '3');
   assert.equal(ctx.root().querySelector('[name="DESCRIÇÃO"]').value, 'Alterado por colega');
   assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').value, 'PEDIDO FINALIZADO');
-  assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').nextElementSibling.querySelector('.sfs-value').textContent, 'Finalizado');
+  assert.equal(ctx.root().querySelector('[name="CONCLUÍDO"]').nextElementSibling.querySelector('.sfs-value').value, 'Finalizado');
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-attachment-item')].map(node => node.textContent), ['📎 novo.pdf']);
   button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, false);

@@ -1,5 +1,6 @@
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindForm43FieldLocks } from './orders-form43-locks-view.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
@@ -39,6 +40,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     session = null;
     previous?.controller?.cleanup?.();
     previous?.fieldLocks?.cleanup?.();
+    previous?.variantPicker?.destroy();
     previous?.overlay.remove();
     if (previous?.focus?.isConnected) previous.focus.focus();
   }
@@ -180,6 +182,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     const current = () => active(state) && state.loadEpoch === loadEpoch;
     state.controller?.cleanup?.();
     state.fieldLocks?.cleanup?.();
+    state.variantPicker?.destroy(); state.variantPicker = null;
     state.fieldLocks = null;
     state.controller = null;
     state.error.hidden = true;
@@ -208,7 +211,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         });
         label.append(select);
         state.body.replaceChildren(label, button("Cancelar", "data-gallery-editor-cancel", "", close));
-        select.focus();
+        state.variantPicker = bindSearchableFilterSelects(state.body);
+        state.body.querySelector('[role=combobox]').focus();
         return;
       }
       if (!context?.entity || !context?.item?.fields || !context?.contract?.hasForm || context.contract.readOnly === true

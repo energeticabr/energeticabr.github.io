@@ -1,4 +1,5 @@
 import { selectCommercialDocsReport, selectRentDashboard } from "../chat/commercial-docs-rent-reports-data.js";
+import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 
 const TITLES = { 16: "DOCUMENTOS COMERCIAIS POR IMÓVEL", 17: "ALUGUÉIS EM ABERTO" };
 const EMPTY = "—";
@@ -55,6 +56,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
   const results = make("div", "cdr-results"); element.append(results);
   let number = null, snapshot = null, controller = null, revision = 0, active = false, destroyed = false;
   let selected = Object.create(null);
+  let searchableFilters = null;
   let visibleCount = PAGE_SIZE, searchTimer = null;
 
   function message(value, error = false) {
@@ -121,6 +123,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
   }
 
   function buildFilters() {
+    searchableFilters?.destroy(); searchableFilters = null;
     filters.replaceChildren(refresh);
     if (number === 16) {
       select("branch", "FILIAL", snapshot.rows.map(row => row.branch));
@@ -142,6 +145,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
         if (option.value === "upcoming") option.textContent = "A vencer";
       }
     }
+    searchableFilters = bindSearchableFilterSelects(filters);
   }
 
   function field(parent, label, value) {
@@ -339,6 +343,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
   }
 
   async function load() {
+    searchableFilters?.destroy(); searchableFilters = null;
     controller?.abort(); controller = new AbortController();
     const current = ++revision, reportNumber = number;
     if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
@@ -384,7 +389,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
       }
       return load();
     },
-    close() { active = false; controller?.abort(); if (searchTimer) clearTimeout(searchTimer); searchTimer = null; revision++; element.hidden = true; element.setAttribute("aria-busy", "false"); },
-    destroy() { if (destroyed) return; active = false; controller?.abort(); if (searchTimer) clearTimeout(searchTimer); searchTimer = null; revision++; destroyed = true; element.remove(); },
+    close() { searchableFilters?.close(); active = false; controller?.abort(); if (searchTimer) clearTimeout(searchTimer); searchTimer = null; revision++; element.hidden = true; element.setAttribute("aria-busy", "false"); },
+    destroy() { if (destroyed) return; this.close(); searchableFilters?.destroy(); searchableFilters = null; destroyed = true; element.remove(); },
   });
 }

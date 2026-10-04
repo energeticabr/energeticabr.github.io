@@ -1,5 +1,6 @@
 import { buildPresencePaymentReport } from "../chat/presence-payment-report-model.js";
 import { formatReportDate, formatReportMoney } from "../chat/contractor-report-model.js";
+import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 
 const FILTERS = [
   ["branch", "FILIAL"], ["property", "IMÓVEL"], ["supplier", "FORNECEDOR"],
@@ -59,6 +60,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
   const next = button("og-button pp-next", "Próxima"); pager.append(previous, pageLabel, next); element.append(pager);
   let snapshot = null; let controller = null; let revision = 0; let page = 1; let destroyed = false; let open = false;
   let defaultStatusApplied = false;
+  let searchableFilters = null;
 
   function showNotice(message, retry = false) {
     notice.replaceChildren(); notice.hidden = !message;
@@ -80,6 +82,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
   }
 
   function populateFilters() {
+    searchableFilters?.destroy(); searchableFilters = null;
     for (const [name] of FILTERS) {
       const control = controls.get(name); const current = control.value;
       const values = [...new Set(valuesFor(name).map(value => String(value || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -90,6 +93,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
         : values.includes(current) ? current : "";
       if (name === "status") defaultStatusApplied = true;
     }
+    searchableFilters = bindSearchableFilterSelects(filters);
   }
 
   function renderPresence(row) {
@@ -162,6 +166,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
   }
 
   async function load() {
+    searchableFilters?.close();
     controller?.abort(); revision++;
     const current = revision; controller = new AbortController(); snapshot = null;
     showNotice("Carregando presenças vinculadas…"); render(); element.setAttribute("aria-busy", "true");
@@ -184,7 +189,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
   render();
   return Object.freeze({ element,
     open() { if (destroyed) throw new Error("O Relatório 2 foi encerrado."); open = true; element.hidden = false; return load(); },
-    close() { open = false; controller?.abort(); revision++; element.hidden = true; },
-    destroy() { if (destroyed) return; open = false; controller?.abort(); revision++; destroyed = true; element.remove(); },
+    close() { searchableFilters?.close(); open = false; controller?.abort(); revision++; element.hidden = true; },
+    destroy() { if (destroyed) return; this.close(); searchableFilters?.destroy(); searchableFilters = null; destroyed = true; element.remove(); },
   });
 }

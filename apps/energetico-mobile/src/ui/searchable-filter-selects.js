@@ -26,17 +26,15 @@ function createPicker(select, closeOthers) {
 
   const id = `searchable-filter-${++nextId}`;
   const wrapper = doc.createElement('div'); wrapper.className = 'sfs';
-  const trigger = doc.createElement('button'); trigger.type = 'button'; trigger.className = 'sfs-trigger';
-  trigger.setAttribute('aria-label', labelText);
-  trigger.setAttribute('aria-haspopup', 'listbox'); trigger.setAttribute('aria-expanded', 'false');
-  trigger.setAttribute('aria-controls', `${id}-list`);
-  const valueLabel = doc.createElement('span'); valueLabel.className = 'sfs-value';
-  const arrow = doc.createElement('span'); arrow.className = 'sfs-arrow'; arrow.textContent = '▾'; arrow.setAttribute('aria-hidden', 'true');
-  trigger.append(valueLabel, arrow);
+  const fieldBox = doc.createElement('div'); fieldBox.className = 'sfs-field';
+  const arrow = doc.createElement('button'); arrow.type = 'button'; arrow.className = 'sfs-arrow'; arrow.textContent = '▾';
+  arrow.tabIndex = -1; arrow.setAttribute('aria-label', `Abrir opções de ${labelText}`);
   const popup = doc.createElement('div'); popup.className = 'sfs-popup'; popup.hidden = true;
-  const search = doc.createElement('input'); search.type = 'search'; search.className = 'sfs-search';
-  search.dataset.filterOptionSearch = 'true'; search.placeholder = 'Pesquisar opções…'; search.autocomplete = 'off';
-  search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', `Pesquisar opções de ${labelText}`);
+  const search = doc.createElement('input'); search.type = 'search'; search.className = 'sfs-trigger sfs-search sfs-value';
+  const trigger = search;
+  search.dataset.filterOptionSearch = 'true'; search.autocomplete = 'off';
+  search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', labelText);
+  search.setAttribute('aria-haspopup', 'listbox');
   search.setAttribute('aria-autocomplete', 'list'); search.setAttribute('aria-expanded', 'false');
   search.setAttribute('aria-controls', `${id}-list`);
   const list = doc.createElement('div'); list.className = 'sfs-list'; list.id = `${id}-list`;
@@ -44,7 +42,8 @@ function createPicker(select, closeOthers) {
   if (select.multiple) list.setAttribute('aria-multiselectable', 'true');
   const empty = doc.createElement('p'); empty.className = 'sfs-empty'; empty.textContent = 'Nenhuma opção encontrada.';
   empty.setAttribute('role', 'status'); empty.hidden = true;
-  popup.append(search, list, empty); wrapper.append(trigger, popup); select.after(wrapper);
+  fieldBox.append(search, arrow);
+  popup.append(list, empty); wrapper.append(fieldBox, popup); select.after(wrapper);
   select.hidden = true; select.setAttribute('aria-hidden', 'true'); select.tabIndex = -1;
   let candidates = [];
   let active = -1;
@@ -55,6 +54,11 @@ function createPicker(select, closeOthers) {
   let pressedAt = null;
   let pointerSeen = false;
   let selectionReset = null;
+  let restoringFocus = false;
+
+  function selectionLabel() {
+    return [...select.options].filter(option => option.selected).map(option => option.label).join(', ') || 'Todos';
+  }
 
   function disabled(option) {
     return select.matches(':disabled') || option.disabled || option.parentElement?.tagName === 'OPTGROUP' && option.parentElement.disabled;
@@ -86,8 +90,7 @@ function createPicker(select, closeOthers) {
     popup.style.top = placement === 'below' ? 'calc(100% + 5px)' : 'auto';
     popup.style.bottom = placement === 'above' ? 'calc(100% + 5px)' : 'auto';
     popup.style.maxHeight = `${height}px`;
-    const searchHeight = search.getBoundingClientRect().height || 44;
-    list.style.maxHeight = `${Math.max(0, Math.min(240, height - searchHeight - 19))}px`;
+    list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14))}px`;
   }
   function render() {
     const query = searchableText(search.value);
@@ -119,21 +122,27 @@ function createPicker(select, closeOthers) {
     selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
     trigger.setAttribute('aria-expanded', 'false'); search.setAttribute('aria-expanded', 'false');
-    search.value = ''; highlight(-1);
-    if (focus && !trigger.disabled) trigger.focus({ preventScroll: true });
+    search.value = selectionLabel(); highlight(-1);
+    if (focus && !trigger.disabled) {
+      restoringFocus = true;
+      trigger.focus({ preventScroll: true });
+      restoringFocus = false;
+    }
   }
   function sync() {
     if (destroyed) return;
-    const selection = [...select.options].filter(option => option.selected).map(option => option.label).join(', ');
-    valueLabel.textContent = selection || 'Todos';
-    trigger.setAttribute('aria-label', `${labelText}: ${selection || 'Todos'}`);
+    const selection = selectionLabel();
+    search.placeholder = selection;
+    if (popup.hidden) search.value = selection;
     const isDisabled = select.matches(':disabled');
     if (trigger.disabled !== isDisabled) trigger.disabled = isDisabled;
     if (search.disabled !== isDisabled) search.disabled = isDisabled;
+    if (arrow.disabled !== isDisabled) arrow.disabled = isDisabled;
     if (trigger.disabled) close();
     else if (!popup.hidden) render();
   }
   function open() {
+    if (destroyed || restoringFocus || !popup.hidden) return;
     sync();
     if (trigger.disabled) return;
     closeOthers();
@@ -163,19 +172,27 @@ function createPicker(select, closeOthers) {
     sync();
     if (changed) select.dispatchEvent(new view.Event('change', { bubbles: true }));
   }
-  function onTriggerClick() { if (popup.hidden) open(); else close(); }
-  function onTriggerKey(event) {
-    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
-    event.preventDefault(); event.stopPropagation(); open();
+  function onTriggerClick() { if (popup.hidden) open(); }
+  function onArrowClick() { if (popup.hidden) open(); else close({ focus: true }); }
+  function onSearchInput(event) {
+    event.stopPropagation();
+    if (popup.hidden) {
+      const query = search.value;
+      open(); search.value = query;
+    }
+    render();
   }
-  function onSearchInput(event) { event.stopPropagation(); render(); }
   function onSearchChange(event) { event.stopPropagation(); }
   function onKey(event) {
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape' && !popup.hidden) {
       event.preventDefault(); event.stopPropagation(); close({ focus: true }); return;
     }
     if (event.target !== search) return;
-    if (event.key === 'Enter') {
+    if (popup.hidden && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault(); event.stopPropagation(); open(); return;
+    }
+    if (event.key === 'Enter' && !popup.hidden) {
       event.preventDefault(); event.stopPropagation();
       if (candidates[active]) choose(candidates[active]);
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -233,7 +250,8 @@ function createPicker(select, closeOthers) {
     sync();
   }
   trigger.addEventListener('click', onTriggerClick);
-  trigger.addEventListener('keydown', onTriggerKey);
+  trigger.addEventListener('focus', open);
+  arrow.addEventListener('click', onArrowClick);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
   wrapper.addEventListener('keydown', onKey); wrapper.addEventListener('focusout', onFocusOut);
   list.addEventListener('pointerdown', onOptionPointerDown);
@@ -255,7 +273,8 @@ function createPicker(select, closeOthers) {
       if (destroyed) return;
       destroyed = true; optionObserver.disconnect(); visibilityObserver.disconnect();
       if (selectionReset !== null) view.clearTimeout(selectionReset);
-      trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('keydown', onTriggerKey);
+      trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
+      arrow.removeEventListener('click', onArrowClick);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
       list.removeEventListener('pointerdown', onOptionPointerDown);

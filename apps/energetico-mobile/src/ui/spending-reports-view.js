@@ -1,6 +1,7 @@
 import { buildSpendingReport9, buildSpendingReport10 } from "../chat/spending-reports-model.js";
 import { formatReportDate, formatReportMoney } from "../chat/contractor-report-model.js";
 import { provisionDueState } from "../chat/pending-provision-dates.js";
+import { bindSearchableFilterSelects } from "./searchable-filter-selects.js";
 
 const LOGO_URL = new URL("../../../../assets/logo-energetica-oficial.png", import.meta.url).href;
 
@@ -56,6 +57,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   const previous = button("og-button sr-previous", "Anterior"); const pageLabel = make("span", "sr-page-label");
   const next = button("og-button sr-next", "Próxima"); pager.append(previous, pageLabel, next); element.append(pager);
   let snapshot = null; let controller = null; let revision = 0; let page = 1; let reportNumber = null; let destroyed = false;
+  let searchableFilters = null;
 
   function showNotice(message, retry = false) {
     notice.replaceChildren(); notice.hidden = !message;
@@ -79,6 +81,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   }
 
   function populateFilters() {
+    searchableFilters?.destroy(); searchableFilters = null;
     for (const [name, , type] of FILTERS) {
       if (type !== "select") continue;
       const control = controls.get(name); const current = control.value;
@@ -95,6 +98,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
         ? unique.find(value => value.toLocaleUpperCase("pt-BR") === "PAGAMENTO PREVISTO") || ""
         : reportNumber === 10 && name === "status" ? unique.find(value => value.toLocaleUpperCase("pt-BR") === "ATIVO") || "" : "";
     }
+    searchableFilters = bindSearchableFilterSelects(filters);
   }
 
   function category(titleText, groups, percentageLabel, variant) {
@@ -191,6 +195,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
   }
 
   async function load() {
+    searchableFilters?.close();
     controller?.abort(); revision++;
     const current = revision; controller = new AbortController(); snapshot = null;
     render(); showNotice(reportNumber === 10 ? "Carregando despesas recorrentes e provisões do SharePoint…" : "Carregando lançamentos do SharePoint…"); element.setAttribute("aria-busy", "true");
@@ -215,6 +220,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
     open(number) {
       if (destroyed) throw new Error("A visualização de gastos foi encerrada.");
       if (number !== 9 && number !== 10) throw new RangeError("Relatório de gastos desconhecido.");
+      searchableFilters?.destroy(); searchableFilters = null;
       reportNumber = number; page = 1; element.hidden = false;
       element.classList.toggle("sr-report--ten", number === 10);
       element.insertBefore(metrics, number === 10 ? pager : notice);
@@ -227,8 +233,8 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
       } else for (const wrapper of filters.children) wrapper.style.order = "";
       return load();
     },
-    close() { controller?.abort(); revision++; snapshot = null; reportNumber = null; element.hidden = true;
+    close() { searchableFilters?.close(); controller?.abort(); revision++; snapshot = null; reportNumber = null; element.hidden = true;
       metrics.replaceChildren(); content.replaceChildren(); showNotice(""); element.setAttribute("aria-busy", "false"); },
-    destroy() { if (destroyed) return; this.close(); destroyed = true; element.remove(); },
+    destroy() { if (destroyed) return; this.close(); searchableFilters?.destroy(); searchableFilters = null; destroyed = true; element.remove(); },
   });
 }

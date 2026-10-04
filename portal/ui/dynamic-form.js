@@ -677,7 +677,7 @@ function conflictMarkup(conflict, columns, disabled = false) {
 
 function provisaoPaymentStageMarkup(entity, mode, disabled = false) {
   if (entity?.id !== "provisoes-de-pagamento" || mode !== "create") return "";
-  return `<label class="dynamic-field dynamic-payment-stage"><span>ETAPA DO PAGAMENTO</span><select data-provisao-payment-stage${disabled ? " disabled" : ""}><option value="">Selecione</option>${PROVISAO_PAYMENT_STAGE_LABELS.map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join("")}</select></label>`;
+  return `<label class="dynamic-field dynamic-payment-stage"><span>ETAPA DO PAGAMENTO</span><select data-provisao-payment-stage${disabled ? " disabled" : ""}><option value="">Selecione</option>${PROVISAO_PAYMENT_STAGE_LABELS.map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join("")}</select><span data-provisao-payment-stage-root></span></label>`;
 }
 
 export function formMarkup({ entity, columns = [], mode = "create", values = {}, defaultContext = {}, relationshipLabels = {}, retryState = null, error = "", conflict = null, submitting = false, submitLabel = "", attachments = {} } = {}) {
@@ -1672,9 +1672,50 @@ function bindProvisaoPaymentStage(form, options = {}) {
       Object.entries(defaults).map(([name, value]) => [name, value ?? ""]),
     ));
   };
-  select.addEventListener?.("change", apply);
+  const mount = form.querySelector('[data-provisao-payment-stage-root]');
+  let syncing = false;
+  const picker = mount ? createSearchableSelect(mount, {
+      label: 'ETAPA DO PAGAMENTO', placeholder: 'Selecione', allowEmpty: true,
+      clearEmptyLabelOnOpen: true, value: select.value,
+    options: [...select.options].map(option => ({ value: option.value, label: option.label })),
+    onChange(value) {
+      if (syncing) return;
+      select.value = value;
+      select.dispatchEvent(new select.ownerDocument.defaultView.Event('change', { bubbles: true }));
+    },
+  }) : null;
+  const field = select.closest?.('.dynamic-payment-stage');
+  if (picker) field?.setAttribute('data-combobox-field', 'payment-stage');
+  const sync = () => {
+    if (!picker) return;
+    syncing = true; picker.setValue(select.value); syncing = false;
+    const disabled = select.matches(':disabled');
+    if (picker.input.disabled !== disabled) picker.input.disabled = disabled;
+    if (picker.input.disabled) {
+      picker.listbox.hidden = true; picker.input.setAttribute('aria-expanded', 'false');
+    }
+  };
+    const change = () => { apply(); sync(); };
+    select.addEventListener?.("change", change);
+    let disposed = false;
+    const reset = () => queueMicrotask(() => {
+      if (disposed) return;
+      previousAutomaticValues = null;
+      sync();
+      apply();
+    });
+    form.addEventListener('reset', reset);
+  const Observer = select.ownerDocument?.defaultView?.MutationObserver;
+  const observer = picker && Observer ? new Observer(sync) : null;
+  observer?.observe(form, { subtree: true, attributes: true, attributeFilter: ['disabled'] });
+  sync();
   apply();
-  return Object.freeze({ cleanup() { select.removeEventListener?.("change", apply); } });
+    return Object.freeze({ cleanup() {
+      disposed = true;
+      form.removeEventListener('reset', reset);
+      observer?.disconnect(); picker?.destroy(); field?.removeAttribute('data-combobox-field');
+      select.removeEventListener?.("change", change);
+    } });
 }
 
 function bindRecurringExpenseRules(form, options = {}) {

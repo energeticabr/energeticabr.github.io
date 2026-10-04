@@ -1,0 +1,21 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pesquisa no próprio campo</title></head><body>
+<main class="supplier-payroll-page"><header class="supplier-payroll-header"><h1>Filtros</h1></header><section class="supplier-payroll-body"><form>
+<label class="supplier-payroll-field"><span>Filial</span><select name="branch"><option value="">Todos</option><option value="001">001 - OURO PRETO</option><option value="004">004 - EDIFÍCIO XAVANTE</option></select></label>
+<label class="supplier-payroll-field"><span>Status</span><select name="status" multiple><option value="">Todos</option><option selected value="active">ATIVO</option><option value="inactive">INATIVO</option></select></label>
+<button type="button" id="outside">Fora</button></form><div class="gallery-record-dialog" id="dynamic"></div><div class="gallery-record-dialog" id="stage"></div></section></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/supplier-payroll.css';
+import '../../src/ui/launch-gallery.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/orders-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import { bindSearchableFilterSelects } from '../../src/ui/searchable-filter-selects.js';
+import { renderDynamicForm } from '../../../../portal/ui/dynamic-form.js';
+const form=document.querySelector('form');
+window.binding=bindSearchableFilterSelects(form);
+window.changes=0;form.querySelector('[name=branch]').addEventListener('change',()=>window.changes++);
+renderDynamicForm(document.querySelector('#dynamic'),{entity:{title:'Editar'},mode:'edit',values:{STATUS:'ATIVO'},columns:[{name:'STATUS',label:'Status de edição',control:'select',choices:['ATIVO','INATIVO'],editable:true,hidden:false}]});
+renderDynamicForm(document.querySelector('#stage'),{entity:{id:'provisoes-de-pagamento',title:'Provisões'},mode:'create',columns:[{name:'DATAPREVISTOPGTO',label:'Previsão',control:'date',editable:true}]});
+document.documentElement.dataset.ready='true';
+</script></body></html>
