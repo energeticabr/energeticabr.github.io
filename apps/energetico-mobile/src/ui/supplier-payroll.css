@@ -303,3 +303,43 @@
   }
 }
 .supplier-payroll-footer.supplier-payroll-footer--rubrics { justify-content: space-between; }
+.payroll-receipt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: #102b46a6;
+}
+.payroll-receipt-dialog {
+  width: min(100%, 560px);
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 20px;
+  padding: 20px;
+  background: white;
+  overflow-wrap: anywhere;
+  box-shadow: 0 16px 48px #102b4640;
+}
+.payroll-receipt-dialog h2 { margin: 0; font-size: 1.2rem; }
+.payroll-receipt-options { display: grid; gap: 10px; margin-block: 16px; }
+.payroll-receipt-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  min-height: 48px;
+  border: 1px solid #c7dce9;
+  border-radius: 12px;
+  background: #f2f7fb;
+}
+.payroll-receipt-option input { flex: none; width: 20px; height: 20px; margin: 0; }
+.payroll-receipt-option span { min-width: 0; }
+.payroll-receipt-actions { display: flex; justify-content: space-between; gap: 24px; }
+.payroll-receipt-actions [data-receipt-cancel] { background: #be2435; color: white; }
+.payroll-receipt-actions [data-receipt-confirm] { background: #198348; color: white; }
+.payroll-receipt-actions button { min-width: 0; padding-inline: 12px; }
+.payroll-receipt-dialog [hidden] { display: none; }

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/supplier-payroll.css">
+<title>Comprovantes da bandeja</title>
+</head>
+<body><script type="module">
+import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
+const tray = [
+  { id: '1', file: new File(['pdf'], 'Comprovante de pagamento salário & férias setembro 2026.pdf', {type:'application/pdf'}) },
+  { id: '2', file: new File(['jpg'], 'recibo-transporte.jpeg', {type:'image/jpeg'}) },
+];
+const view = createSupplierPayrollView({
+  getReceiptAttachments: () => tray.map(item => ({id:item.id,fileName:item.file.name})),
+  readReceiptAttachment: async id => tray.find(item => item.id === id).file,
+  data: {
+    loadSuppliers: async () => [{id:'1',label:'MAURICIO HONORATO DE SOUZA',branch:'004 - EDIFÍCIO XAVANTE'}],
+    loadProducts: async () => [{id:'2',label:'SERVENTE DE PEDREIRO'}],
+    loadAccounts: async () => [{id:'3',label:'AMAEL PF - CAIXA'}],
+  },
+});
+await view.open();
+const date = document.querySelector('[name=date]');
+date.value='2026-10-02';date.dispatchEvent(new Event('input',{bubbles:true}));
+for(const selector of ['[data-payroll-next]','[data-payroll-option="1"]','[data-payroll-option="2"]']){
+  document.querySelector(selector).click();
+  while(!document.querySelector('.supplier-payroll-question'))await new Promise(r=>setTimeout(r,10));
+}
+document.querySelector('[data-payroll-receipts="salary"]').click();
+document.documentElement.dataset.ready='true';
+</script></body></html>

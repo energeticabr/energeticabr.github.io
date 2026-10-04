@@ -3,6 +3,89 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
 const flush = () => new Promise((r) => setTimeout(r, 5));
+test("comprovante oferece somente bandeja atual, cancela sem vínculo e seleciona por rubrica", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  assert.equal(doc.querySelector('input[type=file]'), null);
+  await h.click('[data-payroll-receipts="salary"]');
+  assert.match(doc.querySelector('[data-receipt-picker]').textContent, /bandeja.*vazia/i);
+  assert.equal(doc.querySelector('[data-receipt-confirm]').disabled, true);
+  await h.click('[data-receipt-cancel]');
+  const file = new File(["pdf"], "recibo & <img>.pdf", { type: "application/pdf" });
+  h.tray.push({ id: "one", fileName: file.name, file });
+  await h.click('[data-payroll-receipts="salary"]');
+  assert.equal(doc.querySelector('[data-receipt-picker] img'), null);
+  doc.querySelector('[data-receipt-id="one"]').checked = true;
+  await h.click('[data-receipt-cancel]');
+  assert.deepEqual(h.reads, []);
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  await h.click('[data-payroll-receipts="salary"]');
+  doc.querySelector('[data-receipt-id="one"]').checked = true;
+  await h.click('[data-receipt-confirm]');
+  assert.equal(doc.querySelector('[data-receipt-picker]'), null);
+  assert.equal(doc.querySelector('[data-payroll-rubric=salary] .supplier-payroll-file-list').textContent, file.name + "×");
+  assert.equal(doc.querySelector('[data-payroll-rubric=allowance] .supplier-payroll-file-list').textContent, "");
+  assert.equal(h.tray.length, 1);
+  await h.click('[data-payroll-receipts="salary"]');
+  assert.equal(doc.querySelector('[data-receipt-id="one"]').disabled, true);
+  doc.querySelector('[data-receipt-picker]').dispatchEvent(new h.dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(h.closed, 0);
+  assert.equal(doc.activeElement.dataset.payrollReceipts, "salary");
+});
+
+test("comprovantes falhos não vinculam lote parcial e cancelamento descarta download tardio", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  h.tray.push({ id: "a", fileName: "a.pdf", file: new File(["a"], "a.pdf") },
+    { id: "b", fileName: "b.pdf", file: new File(["b"], "b.pdf") });
+  h.receipts.readReceiptAttachment = async id => {
+    if (id === "b") throw new Error("Sem conexão");
+    return h.tray[0].file;
+  };
+  await h.click('[data-payroll-receipts="salary"]');
+  for (const cb of doc.querySelectorAll('[data-receipt-id]')) cb.checked = true;
+  await h.click('[data-receipt-confirm]');
+  assert.match(doc.querySelector('[data-receipt-error]').textContent, /Sem conexão/);
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  let resolve;
+  h.receipts.readReceiptAttachment = () => new Promise(r => { resolve = r; });
+  doc.querySelector('[data-receipt-id="b"]').checked = false;
+  await h.click('[data-receipt-confirm]');
+  await h.click('[data-receipt-cancel]');
+  resolve(h.tray[0].file);
+  await flush();
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  assert.equal(doc.querySelector('[data-receipt-picker]'), null);
+});
+
+test("fechar folha descarta comprovante tardio e nomes duplicados não vinculam lote", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  h.tray.push({ id: "a", fileName: "igual.pdf", file: new File(["a"], "igual.pdf") },
+    { id: "b", fileName: "igual.pdf", file: new File(["b"], "igual.pdf") });
+  await h.click('[data-payroll-receipts="salary"]');
+  for (const cb of doc.querySelectorAll('[data-receipt-id]')) cb.checked = true;
+  await h.click('[data-receipt-confirm]');
+  assert.match(doc.querySelector('[data-receipt-error]').textContent, /esse nome/);
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  let resolve;
+  h.receipts.readReceiptAttachment = () => new Promise(r => { resolve = r; });
+  doc.querySelector('[data-receipt-id="b"]').checked = false;
+  await h.click('[data-receipt-confirm]');
+  h.view.close();
+  await h.view.open();
+  resolve(h.tray[0].file);
+  await flush();
+  assert.equal(doc.querySelector('[data-receipt-picker]'), null);
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  assert.equal(doc.querySelector('.supplier-payroll-body').inert, undefined);
+});
 async function harness() {
   const dom = new JSDOM(
     '<button id="start">Abrir</button><main id="app"></main>',
@@ -31,9 +114,20 @@ async function harness() {
       };
     },
   };
+  const tray = [];
+  const reads = [];
+  const receipts = {
+    getReceiptAttachments: () => tray,
+    readReceiptAttachment: async id => {
+      reads.push(id);
+      return tray.find(item => item.id === id).file;
+    },
+  };
   const view = module.createSupplierPayrollView({
     documentRef: dom.window.document,
     data,
+    getReceiptAttachments: () => receipts.getReceiptAttachments(),
+    readReceiptAttachment: id => receipts.readReceiptAttachment(id),
     onClose: () => {
       closed++;
     },
@@ -55,6 +149,7 @@ async function harness() {
     view,
     data,
     posts,
+    tray, reads, receipts,
     input,
     click,
     get closed() {
@@ -63,6 +158,23 @@ async function harness() {
     get home() { return home; },
   };
 }
+test("anexo removido enquanto outro baixa impede confirmação do lote", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const files = [new File(["a"], "a.pdf"), new File(["b"], "b.pdf")];
+  h.tray.push(...files.map((file, index) => ({id: String(index), fileName:file.name, file})));
+  h.receipts.readReceiptAttachment = async id => {
+    if (id === "1") h.tray.splice(0, 1);
+    return files[Number(id)];
+  };
+  await h.click('[data-payroll-receipts="salary"]');
+  const doc = h.dom.window.document;
+  for (const cb of doc.querySelectorAll('[data-receipt-id]')) cb.checked = true;
+  await h.click('[data-receipt-confirm]');
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  assert.match(doc.querySelector('[data-receipt-error]').textContent, /bandeja/i);
+});
 async function fillToSheet(h) {
   h.input("[name=date]", "2026-10-02");
   await h.click("[data-payroll-next]");
@@ -158,9 +270,10 @@ test("resumo separa rubricas ativas e lista comprovantes como texto seguro", asy
   h.input('[name=allowance-account]', "3");
   const names = ['salario & <img src=x>.pdf', 'comprovante-extra.pdf'];
   const files = names.map(name => new File(["a"], name, { type: "application/pdf" }));
-  const input = h.dom.window.document.querySelector('[name=salary-files]');
-  Object.defineProperty(input, "files", { value: files, configurable: true });
-  input.dispatchEvent(new h.dom.window.Event('change', { bubbles: true }));
+  h.tray.push(...files.map((file, i) => ({ id: String(i), fileName: file.name, file })));
+  await h.click('[data-payroll-receipts="salary"]');
+  for (const checkbox of h.dom.window.document.querySelectorAll('[data-receipt-id]')) checkbox.checked = true;
+  await h.click('[data-receipt-confirm]');
   await h.click('[data-payroll-next]');
   await h.click('[data-payroll-option="4"]');
   await h.click('[data-payroll-option="5"]');
@@ -530,9 +643,10 @@ test("comprovantes ficam associados à rubrica e são descartados ao destruir", 
   await h.click("[data-payroll-header-back]");
   await h.click("[data-payroll-header-back]");
   const file = new File(["a"], "salario.pdf", { type: "application/pdf" });
-  const input = h.dom.window.document.querySelector('[name="salary-files"]');
-  Object.defineProperty(input, "files", { value: [file], configurable: true });
-  input.dispatchEvent(new h.dom.window.Event("change", { bubbles: true }));
+  h.tray.push({ id: "a", fileName: file.name, file });
+  await h.click('[data-payroll-receipts="salary"]');
+  h.dom.window.document.querySelector('[data-receipt-id="a"]').checked = true;
+  await h.click('[data-receipt-confirm]');
   assert.match(h.dom.window.document.body.textContent, /salario.pdf/);
   await h.click("[data-payroll-next]");
   await h.click('[data-payroll-option="4"]');
