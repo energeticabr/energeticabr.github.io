@@ -1,0 +1,15 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Diário de obras</title></head><body>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+const rows = ['ENSOLARADO', 'POUCO CHUVOSO', 'CHUVOSO'].map((climate, index) => ({ id: String(209-index), hasAttachments: true, attachmentCount: 1,
+  createdBy: {user:{displayName:'Bernardo notini'}}, lastModifiedBy: {user:{displayName:'Usuário não identificado'}},
+  fields: {DATA:'2026-10-02',FILIAL:'004 - EDIFÍCIO XAVANTE',STATUS:'CONCLUÍDO',INFORMA_x00c7__x00d5_ESCLIM_x00c:climate,
+    TIPO: index ? 'EM LOCO' : 'REMOTO', ETAPA:'ALVENARIA E ESTRUTURAS', 'ATIVIDADES EXECUTADAS':'1. Levantamento de alvenaria do 2º pavimento.\n2. Conferência dos blocos.',
+    OCORR_x00ca_NCIASEIMPREVISTOS:'Sem intercorrências. Aguardando cura para a próxima etapa.',Created:'2026-10-02',Modified:'2026-10-03'}}));
+window.gallery = createRegistrationGallery({document,kind:'workDiary',onHome(){},data:{async loadSnapshot(){return{rows};}}});
+await window.gallery.open(); document.documentElement.dataset.ready='true';
+</script></body></html>

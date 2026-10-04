@@ -4,6 +4,7 @@ import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
 import Decimal from "decimal.js";
+import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 
 const PAGE_SIZE = 20;
 
@@ -138,6 +139,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     return node;
   };
   const root = el("section", "rg-overlay");
+  root.dataset.galleryKind = kind;
   root.hidden = true;
   root.tabIndex = -1;
   root.setAttribute("role", "dialog");
@@ -546,6 +548,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     for (const row of visibleRows) {
       const card = el("article", model.nativeCard ? "rg-row rg-row--native" : model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
       card.dataset.registrationRow = row.id;
+      if (kind === 'workDiary') card.classList.add('rg-row--work-diary');
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
       if (model.showAttachments) {
@@ -568,7 +571,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           el("span", "rg-row-file__count", attachmentCountLabel(row)),
         );
         const main = el("div", "rg-row-main");
-        if (model.nativeCard) renderNativeDetails(main, row, primary);
+        if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
+        else if (model.nativeCard) renderNativeDetails(main, row, primary);
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
         card.append(layout);
