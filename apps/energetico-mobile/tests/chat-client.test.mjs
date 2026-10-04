@@ -22,6 +22,36 @@ function clientWith(fetchImpl, overrides = {}) {
   });
 }
 
+test("prepara e confirma integridade com PDFs reais no canal autenticado separado", async () => {
+  const requests = [];
+  const id = "0123456789abcdef0123456789abcdef";
+  const client = clientWith(async (url, options) => {
+    requests.push({ url: new URL(url), ...options });
+    return jsonResponse({ id, signedAt: "2026-10-03T23:00:00Z", sourceSha256: "a".repeat(64),
+      ...(new URL(url).searchParams.get("operation") === "finalize" ? { finalSha256: "b".repeat(64), status: "confirmed" } : {}) });
+  });
+  const source = new Blob(["%PDF-original"], { type: "application/pdf" });
+  const final = new Blob(["%PDF-assinado"], { type: "application/pdf" });
+  const prepared = await client.prepareSignatureEvidence({ documentBlob: source, fileName: "ponto.pdf", documentId: "294", signerName: "CLEITON", requestId: "retry-id" });
+  assert.equal(prepared.id, id);
+  assert.equal(requests[0].url.pathname, "/api/portal-signature-evidence");
+  assert.equal(requests[0].url.searchParams.get("operation"), "prepare");
+  assert.equal(requests[0].url.searchParams.get("document_id"), "294");
+  assert.equal(requests[0].headers.Authorization, "Bearer graph-token");
+  assert.equal(requests[0].headers["X-Portal-Message-Id"], "retry-id");
+  assert.equal(requests[0].body, source);
+  const confirmed = await client.confirmSignatureEvidence({ recordId: id, documentBlob: final, fileName: "ponto-assinado.pdf" });
+  assert.equal(confirmed.finalSha256, "b".repeat(64));
+  assert.equal(requests[1].url.searchParams.get("record_id"), id);
+  assert.equal(requests[1].body, final);
+});
+
+test("integridade recusa confirmação incompleta e erros de autorização", async () => {
+  const documentBlob = new Blob(["%PDF"], { type: "application/pdf" });
+  await assert.rejects(clientWith(async () => jsonResponse({ id: "x" })).prepareSignatureEvidence({ documentBlob, fileName: "p.pdf" }), /integridade/i);
+  await assert.rejects(clientWith(async () => jsonResponse({ error: "Conta não autorizada" }, 403)).confirmSignatureEvidence({ recordId: "0".repeat(32), documentBlob, fileName: "p.pdf" }), /Conta não autorizada/);
+});
+
 test("galeria consulta dados autenticados sem responder ao formulário", async () => {
   let sent;
   const client = clientWith(async (url, options) => {
