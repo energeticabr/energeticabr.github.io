@@ -168,6 +168,66 @@ test("classifica as batidas nas quatro faixas sem confundir a fronteira de 12:30
   assert.equal(rhid.classifyRhidPunch("14:30"), null);
 });
 
+test("batida 08:35 ocupa Entrada 1 provisoriamente e participa das horas sem ocultar o erro RHID", () => {
+  const input = Object.freeze({ ID_PESSOA_RHID: "9", NOME_COLABORADOR: "MAURICIO", BATIDAS_RHID: "08:35; 12:03; 13:00; 17:00" });
+  const table = buildRhidAttendanceTable([input]);
+  assert.deepEqual(table.rows[0], ["MAURICIO", "08:35", "12:03", "13:00", "17:00", "07:28"]);
+  assert.equal(table.people[0].slots.entry1.rhid, "08:35");
+  assert.equal(table.people[0].slots.entry1.source, "rhid");
+  assert.equal(table.people[0].slots.entry1.outOfRange, true);
+  assert.deepEqual(table.people[0].slots.entry1.rhidCandidates, ["08:35"]);
+  assert.deepEqual(table.people[0].issues, ["Batida fora das faixas: 08:35"]);
+  assert.deepEqual(table.people[0].rawPunches, ["08:35", "12:03", "13:00", "17:00"]);
+  assert.equal(input.BATIDAS_RHID, "08:35; 12:03; 13:00; 17:00");
+});
+
+test("batidas fora das faixas preenchem lacunas cronológicas de entrada e saída", () => {
+  for (const [punches, slot, value, total] of [
+    ["04:35; 12:00; 13:00; 17:00", "entry1", "04:35", "11:25"],
+    ["07:00; 10:30; 13:00; 17:00", "exit1", "10:30", "07:30"],
+    ["07:00; 12:00; 14:30; 17:00", "entry2", "14:30", "07:30"],
+    ["07:00; 12:00; 13:00; 14:30", "exit2", "14:30", "06:30"],
+    ["08:35; 10:30; 14:00; 14:30", "exit2", "14:30", "02:25"],
+  ]) {
+    const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: punches }]);
+    assert.equal(table.people[0].slots[slot].effective, value, punches);
+    assert.equal(table.people[0].slots[slot].outOfRange, true, punches);
+    assert.equal(table.rows[0][5], total, punches);
+    assert.ok(table.people[0].issues.some(issue => issue.includes(value)));
+  }
+});
+
+test("batida extra fora da faixa não substitui horário normal nem resolve duplicatas ou lacuna incompatível", () => {
+  for (const punches of ["07:00; 08:35; 12:00; 13:00; 17:00", "07:00; 08:35; 12:00; 17:00", "07:00; 07:10; 08:35; 12:00; 13:00; 17:00"]) {
+    const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: punches }]);
+    assert.equal(table.people[0].slots.entry1.effective, punches.includes("07:10") ? null : "07:00");
+    assert.equal(table.people[0].slots.entry2.effective, punches.includes("13:00") ? "13:00" : null);
+    assert.deepEqual(table.people[0].slots.entry1.rhidCandidates, punches.includes("07:10") ? ["07:00", "07:10"] : ["07:00"]);
+    assert.ok(table.people[0].issues.includes("Batida fora das faixas: 08:35"));
+  }
+});
+
+test("batidas fora da faixa concorrentes para uma única lacuna exigem revisão sem escolher silenciosamente", () => {
+  for (const times of [["09:00", "10:55"], ["10:10", "10:30"]]) {
+    const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: ["07:00", ...times, "13:00", "17:00"].join(";") }]);
+    assert.deepEqual(table.people[0].slots.exit1.rhidCandidates, times);
+    assert.equal(table.people[0].slots.exit1.effective, null);
+    assert.equal(table.rows[0][5], "04:00 (parcial)");
+    assert.ok(table.people[0].issues.some(issue => issue.includes("Batidas duplicadas em Saída 1")));
+    for (const time of times) assert.ok(table.people[0].issues.includes(`Batida fora das faixas: ${time}`));
+  }
+});
+
+test("correção do administrador prevalece sobre batida provisória e preserva original e auditoria", () => {
+  const adjustment = { time: "07:00", reason: "Horário conferido", actorName: "Bernardo", adjustedAt: "2026-10-04T02:00:00Z" };
+  const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "08:35; 12:03; 13:00; 17:00", ADMIN_AJUSTES: { entry1: adjustment } }]);
+  assert.deepEqual(table.rows[0], ["ANA", "07:00", "12:03", "13:00", "17:00", "09:03"]);
+  assert.equal(table.people[0].slots.entry1.rhid, "08:35");
+  assert.equal(table.people[0].slots.entry1.source, "corrected");
+  assert.deepEqual(table.people[0].slots.entry1.adjustment, adjustment);
+  assert.ok(table.people[0].issues.includes("Batida fora das faixas: 08:35"));
+});
+
 test("não desloca a última saída para o horário de almoço quando falta uma batida", () => {
   const table = buildRhidAttendanceTable([{
     Id: 71, ID_PESSOA_RHID: "r-71", NOME_COLABORADOR: "ANA",

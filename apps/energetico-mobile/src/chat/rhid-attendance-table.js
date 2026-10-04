@@ -107,19 +107,42 @@ function punchTimes(value) {
 }
 
 const RHID_SLOTS = [
-  ["entry1", "Entrada 1"], ["exit1", "Saída 1"],
-  ["entry2", "Entrada 2"], ["exit2", "Saída 2"],
+  ["entry1", "Entrada 1", 5 * 60, 8 * 60], ["exit1", "Saída 1", 11 * 60, 12 * 60 + 29],
+  ["entry2", "Entrada 2", 12 * 60 + 30, 13 * 60 + 30], ["exit2", "Saída 2", 15 * 60 + 30, 23 * 60 + 59],
 ];
 
 export function classifyRhidPunch(value) {
   const text = String(value ?? "").trim();
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text)) return null;
   const minutes = Number(text.slice(0, 2)) * 60 + Number(text.slice(3));
-  if (minutes >= 5 * 60 && minutes <= 8 * 60) return "entry1";
-  if (minutes >= 11 * 60 && minutes < 12 * 60 + 30) return "exit1";
-  if (minutes >= 12 * 60 + 30 && minutes <= 13 * 60 + 30) return "entry2";
-  if (minutes >= 15 * 60 + 30) return "exit2";
-  return null;
+  return RHID_SLOTS.find(([, , start, end]) => minutes >= start && minutes <= end)?.[0] || null;
+}
+
+// Only fill genuinely empty raw slots. Keep in-range punches/duplicates in place,
+// respect chronological neighbours and retain the outside-range warning for audit.
+function assignOutsideRhidPunches(candidates, outside, adjustments) {
+  const assigned = new Set();
+  const anchors = ([slot]) => adjustments[slot]?.time ? [adjustments[slot].time] : candidates[slot];
+  const compatibleSlots = time => RHID_SLOTS.filter(([slot], index) => !candidates[slot].length
+    && RHID_SLOTS.slice(0, index).flatMap(anchors).every(anchor => anchor < time)
+    && RHID_SLOTS.slice(index + 1).flatMap(anchors).every(anchor => anchor > time));
+  const forced = outside.map(time => ({ time, slots: compatibleSlots(time) })).filter(item => item.slots.length === 1);
+  // Retain competing punches together so the existing duplicate policy applies;
+  // never silently choose the first punch when only one chronological gap exists.
+  for (const { time, slots } of forced) {
+    const slot = slots[0][0];
+    candidates[slot].push(time);
+    assigned.add(slot);
+  }
+  const forcedTimes = new Set(forced.map(item => item.time));
+  for (const time of outside.filter(time => !forcedTimes.has(time))) {
+    const minutes = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+    const distance = ([, , start, end]) => Math.max(start - minutes, minutes - end, 0);
+    const compatible = compatibleSlots(time).sort((left, right) => distance(left) - distance(right));
+    const slot = compatible[0]?.[0];
+    if (slot) { candidates[slot].push(time); assigned.add(slot); }
+  }
+  return assigned;
 }
 
 function malformedPunchTimes(value) {
@@ -251,6 +274,7 @@ export function buildRhidAttendanceTable(rows = []) {
       if (slot) candidates[slot].push(time);
       else outside.push(time);
     }
+    const outsideSlots = assignOutsideRhidPunches(candidates, outside, person.adjustments);
     const issues = [];
     const slots = {};
     for (const [slot, label] of RHID_SLOTS) {
@@ -264,7 +288,7 @@ export function buildRhidAttendanceTable(rows = []) {
       slots[slot] = {
         rhid, rhidCandidates, effective: adjustment?.time || rhid || null,
         source: adjustment ? rhidCandidates.length ? "corrected" : "added" : rhid ? "rhid" : "empty",
-        adjustment,
+        adjustment, outOfRange: outsideSlots.has(slot),
       };
     }
     for (const time of outside) issues.push(`Batida fora das faixas: ${time}`);
