@@ -4831,6 +4831,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     emit({ type: "delegated-tasks-reordered", order });
   }
 
+  function observationKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
+      || composing || event.isComposing || event.keyCode === 229
+      || event.target !== composerControls.draft || lastState?.activeFlow?.id !== "launch") return;
+    const message = [...(lastState.messages || [])].reverse()
+      .find(item => item?.role !== "user" && (item?.type === "poll" || item?.type === "text"));
+    const question = String(message?.question || message?.prompt || message?.text || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!/(?:deseja fazer alguma observacao|digite (?:diretamente )?a observacao)/i.test(question)) return;
+    event.preventDefault();
+    // Reuse the button's submit path and all its busy/attachment/empty guards.
+    const send = composerControls["send-text"];
+    if (!event.repeat && !event.target.disabled && send && !send.disabled) send.click();
+  }
+
   function submit(event) {
     if (!event.target?.matches?.("[data-chat-form]")) return;
     event.preventDefault?.();
@@ -5183,6 +5198,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("compositionstart", compositionStart);
   root.addEventListener("compositionend", compositionEnd);
   root.addEventListener("keydown", voiceKeyDown);
+  root.addEventListener("keydown", observationKeyDown);
   root.addEventListener("keyup", voiceKeyUp);
 
   return Object.freeze({
@@ -5239,6 +5255,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("compositionstart", compositionStart);
       root.removeEventListener("compositionend", compositionEnd);
       root.removeEventListener("keydown", voiceKeyDown);
+      root.removeEventListener("keydown", observationKeyDown);
       root.removeEventListener("keyup", voiceKeyUp);
       voiceInput?.destroy();
       voiceInput = null;
