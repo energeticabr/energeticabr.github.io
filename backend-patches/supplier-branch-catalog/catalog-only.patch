@@ -1,0 +1,81 @@
+--- a/worker/clients.py
++++ b/worker/clients.py
+@@ -1373,7 +1373,10 @@
+ 
+         # Se os filtros da fonte removerem a unidade padrão, a regra pode
+         # reinseri-la. A ordenação final prioriza o padrão e depois aplica o ID.
+-        if recommended_option is None and recommended.get("ensure_option"):
++        # A supplier default is a recommendation, never proof of a branch
++        # existing in FILIAIS. Keep the authoritative catalog unchanged.
++        if (recommended_option is None and recommended.get("ensure_option")
++                and normalize_text(str(source.get("list") or "")) != "filiais"):
+             recommended_option = {
+                 "id": recommended.get("fallback_id", "PADRÃO"),
+                 "title": f"⭐ {preferred} ({marker})",
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -21110,6 +21110,24 @@
+             self._save(state, etag)
+             return {"status": "invalid_option", "field": step["key"]}
+ 
++        if (state.get("flow") == "launch"
++                and step.get("key") == "filial_lancamento"
++                and not selected.get("action")):
++            # Old sessions can still contain a supplier-only synthetic branch.
++            # Check the current catalog before accepting it, never by code/ID alone.
++            fresh_options = self._selection_options(state, step)
++            selected_value = normalize_text(str(selected.get("value") or ""))
++            official = next((option for option in fresh_options
++                if not option.get("action") and
++                normalize_text(str(option.get("value") or "")) == selected_value), None)
++            if official is None:
++                state["options"] = fresh_options
++                self._send_text(state, "❌ ESSA FILIAL NÃO EXISTE NO CADASTRO ATUAL. ESCOLHA UMA FILIAL DA LISTA.")
++                self._send_options(state, step, fresh_options)
++                self._save(state, etag)
++                return {"status": "invalid_option", "field": step["key"]}
++            selected = official
++
+         if selected.get("disabled"):
+             disabled_message = (
+                 "⚠️ ESTE FORNECEDOR AINDA NÃO POSSUI PRESENÇA PRESENTE "
+@@ -24921,7 +24939,6 @@
+ 
+         branch_normalized = normalize_text(str(branch))
+         updated = []
+-        matched = False
+         for option in options:
+             item = copy.deepcopy(option)
+             clean_title = str(item.get("title", item.get("value", ""))).strip()
+@@ -24933,31 +24950,9 @@
+             item["title"] = clean_title
+             item.pop("recommended", None)
+             if normalize_text(str(item.get("value", clean_title))) == branch_normalized:
+-                matched = True
+                 item["recommended"] = True
+                 item["title"] = f"⭐ {clean_title} (PADRÃO DO FORNECEDOR)"
+             updated.append(item)
+-        if not matched:
+-            inserted = (
+-                copy.deepcopy(override)
+-                if isinstance(override, dict)
+-                else {
+-                    "id": (
+-                        f"FILIAL_PADRAO_FORNECEDOR_{supplier_item_id}"
+-                        if supplier_item_id is not None
+-                        else "FILIAL_PADRAO_FORNECEDOR"
+-                    ),
+-                    "title": str(branch),
+-                    "value": branch,
+-                }
+-            )
+-            clean_title = str(inserted.get("title") or branch).strip()
+-            if clean_title.startswith("⭐"):
+-                clean_title = clean_title[1:].strip()
+-            inserted["title"] = f"⭐ {clean_title} (PADRÃO DO FORNECEDOR)"
+-            inserted["value"] = branch
+-            inserted["recommended"] = True
+-            updated.append(inserted)
+         return updated
+ 
+     def _start_launch_supplier_default_branch_edit(
