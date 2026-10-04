@@ -9,7 +9,7 @@ import {
   validatePayrollLines,
 } from "../chat/supplier-payroll.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
-import { validateAttachment } from "../../../../portal/data/attachments.js";
+import { openPayrollReceiptPicker } from "./payroll-receipt-picker.js";
 const money = (value) =>
   Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 let sequence = 0;
@@ -20,6 +20,8 @@ export function createSupplierPayrollView({
   onClose = () => {},
   onHome = () => {},
   assertSession = () => {},
+  getReceiptAttachments = () => [],
+  readReceiptAttachment = async () => { throw new Error("O comprovante não está disponível na bandeja."); },
 } = {}) {
   if (!documentRef?.createElement || !data)
     throw new TypeError("A página de folha requer dados e documento.");
@@ -75,6 +77,7 @@ export function createSupplierPayrollView({
     result = null,
     previousFocus = null;
   let accountPickers = null;
+  let receiptPicker = null;
   let suppliers = [],
     products = [],
     accounts = [],
@@ -322,11 +325,6 @@ export function createSupplierPayrollView({
         accountField,
       );
       const attachments = element("div", "supplier-payroll-attachments");
-      const fileInput = element("input", "sr-only");
-      fileInput.type = "file";
-      fileInput.multiple = true;
-      fileInput.name = `${rubric.id}-files`;
-      fileInput.setAttribute("aria-label", `Comprovantes de ${rubric.label}`);
       const fileList = element("ul", "supplier-payroll-file-list");
       const drawFiles = () => {
         fileList.replaceChildren();
@@ -344,32 +342,27 @@ export function createSupplierPayrollView({
         }
       };
       drawFiles();
-      fileInput.addEventListener("change", () => {
-        try {
-          const candidates = [...fileInput.files];
-          for (const file of candidates) {
-            const valid = validateAttachment(file);
-            if (!valid.valid) throw new Error(valid.message);
-            if (
-              [...line.files, ...candidates.filter((f) => f !== file)].some(
-                (f) => f.name === file.name,
-              )
-            )
-              throw new Error(
-                "Já existe um comprovante com esse nome na rubrica.",
-              );
-          }
-          line.files.push(...candidates);
-          error.hidden = true;
-          drawFiles();
-          updateCompletion();
-        } catch (cause) {
-          showError(cause);
-        }
-        fileInput.value = "";
+      const upload = button("📎 Comprovante", null, () => {
+        if (receiptPicker) return;
+        upload.focus();
+        const attempt = epoch;
+        receiptPicker = openPayrollReceiptPicker({
+          root: page, label: rubric.label, files: line.files,
+          getReceiptAttachments, readReceiptAttachment,
+          onConfirm: candidates => {
+            assertSession();
+            if (!opened || destroyed || attempt !== epoch || step !== "rubrics")
+              throw new Error("Esta edição da folha foi encerrada.");
+            line.files.push(...candidates);
+            error.hidden = true;
+            drawFiles();
+            updateCompletion();
+          },
+          onClose: () => { receiptPicker = null; },
+        });
       });
-      const upload = button("📎 Comprovante", null, () => fileInput.click());
-      attachments.append(upload, fileInput, fileList);
+      upload.dataset.payrollReceipts = rubric.id;
+      attachments.append(upload, fileList);
       row.append(attachments);
       row.append(lineStatus);
       updateCompletion();
@@ -494,6 +487,7 @@ export function createSupplierPayrollView({
     back();
   }
   function render(loadingLabel) {
+    receiptPicker?.close();
     accountPickers?.destroy(); accountPickers = null;
     content.replaceChildren();
     footer.replaceChildren();
@@ -652,6 +646,7 @@ export function createSupplierPayrollView({
     epoch++;
     busy = false;
     page.hidden = true;
+    receiptPicker?.close();
     accountPickers?.close();
     previousFocus?.focus?.();
     onClose();
@@ -704,6 +699,7 @@ export function createSupplierPayrollView({
     },
     close,
     destroy() {
+      receiptPicker?.close();
       accountPickers?.destroy(); accountPickers = null;
       destroyed = true;
       opened = false;

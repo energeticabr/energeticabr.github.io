@@ -8,6 +8,7 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
+import { validateAttachment } from "../../../portal/data/attachments.js";
 import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
 
 function makeView() {
@@ -8321,6 +8322,57 @@ test("folha não abre fora de Novo Pedido",async t=>{
 function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
+
+test("folha lê comprovantes apenas da bandeja vigente sem consumir anexos", async t => {
+  let options;
+  const h = makeHarness({
+    supplierPayrollDataFactory: async () => ({}),
+    supplierPayrollFactory: async value => { options = value; return { open() {}, destroy() {} }; },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  openPayrollMenu(h);
+  h.store.syncAttachments([{ id: "remote", fileName: "recibo.jpeg", mimeType: "image/jpeg", mediaUrl: "/api/portal-media/remote" }]);
+  await h.view.emit("select-reply", { replyId: "action_supplier_payroll_launch" });
+  assert.equal(typeof options.getReceiptAttachments, "function");
+  assert.equal(typeof options.readReceiptAttachment, "function");
+  assert.deepEqual(options.getReceiptAttachments().map(a => a.id), ["attachment:remote"]);
+  h.client.fetchMedia = async () => new Blob(["jpeg"], { type: "image/jpeg" });
+  const file = await options.readReceiptAttachment("attachment:remote");
+  assert.equal(file.name, "recibo.jpeg");
+  assert.equal(file.type, "image/jpeg");
+  assert.equal(await file.text(), "jpeg");
+  assert.equal(h.store.getState().attachments.length, 1);
+  const local = new File(["local"], "local.pdf", { type: "application/pdf" });
+  h.store.queueFiles([local]);
+  h.store.queueFiles([new File(["secret"], "hidden.pdf")], { hideFromAttachmentTray: true });
+  const available = options.getReceiptAttachments();
+  assert.deepEqual(available.map(a => a.fileName), ["recibo.jpeg", "local.pdf"]);
+  const localFile = await options.readReceiptAttachment(available[1].id);
+  assert.equal(await localFile.text(), "local");
+  assert.equal(h.store.getState().pendingFiles.length, 2);
+  h.client.fetchMedia = async () => new Blob(["jpeg"], { type: "application/octet-stream" });
+  const generic = await options.readReceiptAttachment("attachment:remote");
+  assert.equal(generic.type, "image/jpeg");
+  assert.equal(validateAttachment(generic).valid, true);
+  h.store.syncAttachments([{ id: "remote", fileName: "recibo.jpeg", mediaUrl: "/api/portal-media/remote" }]);
+  assert.equal(validateAttachment(await options.readReceiptAttachment("attachment:remote")).valid, true);
+  h.client.fetchMedia = async () => new Blob(["html"], { type: "text/html" });
+  assert.equal(validateAttachment(await options.readReceiptAttachment("attachment:remote")).valid, false);
+  await assert.rejects(options.readReceiptAttachment("external"), /bandeja/i);
+  let resolve;
+  h.client.fetchMedia = () => new Promise(r => { resolve = r; });
+  const pending = options.readReceiptAttachment("attachment:remote");
+  h.store.syncAttachments([]);
+  resolve(new Blob(["old"]));
+  await assert.rejects(pending, /bandeja/i);
+  h.store.syncAttachments([{ id: "other", fileName: "outro.pdf", mediaUrl: "/api/portal-media/other" }]);
+  const afterLogout = options.readReceiptAttachment("attachment:other");
+  h.controller.stop();
+  resolve(new Blob(["late"]));
+  await assert.rejects(afterLogout, /sessão/i);
+  assert.throws(options.getReceiptAttachments, /sessão/i);
+});
 
 test("casinha da folha pede o menu principal pela navegação direta do aplicativo", async t => {
   let home;

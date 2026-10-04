@@ -4075,6 +4075,15 @@ export function createAppController({
     const assertSession = () => {
       if (stopped || account !== payrollAccount || sessionRevision !== payrollRevision) throw new Error("A sessão da folha de pagamento foi encerrada.");
     };
+    const receiptTray = () => {
+      assertSession();
+      const current = store.getState();
+      return [
+        ...current.attachments.map(item => ({ ...item, receiptId: `attachment:${item.id}` })),
+        ...current.pendingFiles.filter(item => item.status !== "failed" && !item.hideFromAttachmentTray)
+          .map(item => ({ ...item, fileName: item.file.name, receiptId: `pending:${item.id}` })),
+      ];
+    };
     const tokenProvider = async scopes => {
       assertSession();
       let token;
@@ -4103,6 +4112,31 @@ export function createAppController({
           const panel = await supplierPayrollFactory({
             data,
             assertSession,
+            getReceiptAttachments: () => {
+              return receiptTray().map(item => ({
+                id: item.receiptId, fileName: item.fileName, source: item.file || item.mediaUrl,
+              }));
+            },
+            readReceiptAttachment: async (fileId, reference) => {
+              assertSession();
+              const find = () => receiptTray().find(item => item.receiptId === String(fileId));
+              const item = find();
+              if (!item) throw new Error("Este comprovante não está mais na bandeja de anexos.");
+              if (reference && (reference.fileName !== item.fileName || reference.source !== (item.file || item.mediaUrl)))
+                throw new Error("Este comprovante foi alterado na bandeja de anexos. Abra a seleção novamente.");
+              const blob = await loadAttachment(item);
+              assertSession();
+              const current = find();
+              if (!current || current.fileName !== item.fileName || current.file !== item.file
+                || current.mediaUrl !== item.mediaUrl) throw new Error("Este comprovante foi alterado ou removido da bandeja de anexos.");
+              const normalizeType = value => String(value || "").split(";", 1)[0].trim().toLowerCase();
+              const specificType = value => !["", "application/octet-stream", "binary/octet-stream"].includes(value);
+              const downloadedType = normalizeType(blob.type), metadataType = normalizeType(item.mimeType || item.file?.type);
+              return new File([blob], item.fileName, {
+                type: specificType(downloadedType) ? downloadedType : specificType(metadataType) ? metadataType : "",
+                lastModified: Number(item.file?.lastModified) || 0,
+              });
+            },
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (stopped || account !== payrollAccount || sessionRevision !== payrollRevision) { panel.destroy?.(); return false; }
