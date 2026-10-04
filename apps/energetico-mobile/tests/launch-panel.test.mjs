@@ -18,6 +18,36 @@ function snapshot(overrides = {}) {
 const flow = launches => ({ id: 'launch', title: 'LANÇAMENTO MÚLTIPLO', contextId: 'question-one', launches });
 const question = text => [{ type: 'poll', question: text, options: [{ id: 'continue', label: 'Continuar' }] }];
 
+test('linha compacta identifica o fornecedor e mantém produto no início do suspenso', t => {
+  const {root, store} = setup(t);
+  const source = snapshot({count: 2, total: '170.00', totalDisplay: 'R$ 170,00'});
+  source.lines = [
+    {...source.lines[0], product: '⭐ ENGENHEIRO (PROFISSÃO DO FORNECEDOR)', details: {supplier: 'RAFAEL GONTIJO'}},
+    {...source.lines[0], index: 2, product: 'SERVENTE', details: {supplier: 'ISRAEL ESCORAMENTO E ARMAÇÕES'}},
+  ];
+  store.ingestRemoteMessages(question('Próximo produto'), {activeFlow: flow(source)});
+  const header = root.querySelector('.chat-launch-row--header');
+  assert.equal(header.firstElementChild.textContent, 'Fornecedor');
+  const entries = [...root.querySelectorAll('.chat-launch-entry')];
+  assert.deepEqual(entries.map(entry => entry.querySelector('.chat-launch-row > strong').textContent),
+    ['1. RAFAEL GONTIJO', '2. ISRAEL ESCORAMENTO E ARMAÇÕES']);
+  assert.deepEqual(entries.map(entry => entry.querySelector('.chat-launch-row > strong').title),
+    ['RAFAEL GONTIJO', 'ISRAEL ESCORAMENTO E ARMAÇÕES']);
+  assert.deepEqual(entries.map(entry => entry.querySelector('.chat-launch-details').firstElementChild.textContent),
+    ['1. ⭐ ENGENHEIRO (PROFISSÃO DO FORNECEDOR)', '2. SERVENTE']);
+  entries[0].querySelector('[data-action="toggle-launch-details"]').click();
+  assert.equal(entries[0].querySelector('.chat-launch-details').hidden, false);
+  assert.equal(entries[1].querySelector('.chat-launch-details').hidden, true);
+});
+
+test('fornecedor ausente mostra Em branco sem usar o produto como fornecedor', t => {
+  const {root} = setup(t);
+  const row = root.querySelector('.chat-launch-row:not(.chat-launch-row--header)');
+  assert.equal(row.firstElementChild.textContent, '1. Em branco');
+  assert.equal(row.firstElementChild.title, 'Em branco');
+  assert.equal(root.querySelector('.chat-launch-details > strong').textContent, '1. Cimento');
+});
+
 test('seta abre detalhes e os controles enviam somente o comando da linha escolhida', async t => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector('#app');
@@ -93,6 +123,7 @@ test('fechado mostra só total da VM; aberto exibe os campos escapados com os fo
   const { root, store } = setup(t);
   const source = snapshot({ total: '9007199254740993.01', totalDisplay: 'R$ 9.007.199.254.740.993,01' });
   source.lines[0] = { ...source.lines[0], product: '<img src=x onerror=alert(1)>',
+    details: {supplier: '<script>alert("fornecedor")</script>'},
     quantity: '12345678901234567890.123456789', totalDisplay: 'R$ 84,99' };
   store.ingestRemoteMessages(question('Pergunta atual'), { activeFlow: flow(source) });
   const panel = root.querySelector('.chat-launches');
@@ -102,11 +133,13 @@ test('fechado mostra só total da VM; aberto exibe os campos escapados com os fo
   panel.querySelector('summary').click();
   assert.equal(panel.open, true);
   const row = panel.querySelector('.chat-launch-row:not(.chat-launch-row--header)');
-  assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/);
+  assert.match(row.firstElementChild.textContent, /<script>alert\("fornecedor"\)<\/script>/);
+  assert.equal(panel.querySelector('.chat-launch-details > strong').textContent, '1. <img src=x onerror=alert(1)>');
   assert.equal(panel.querySelector('img'), null);
+  assert.equal(panel.querySelector('script'), null);
   assert.match(row.textContent, /12\.345\.678\.901\.234\.567\.890,1/);
-  assert.doesNotMatch(row.textContent, /SC|Padrão do produto|⭐/i);
-  assert.deepEqual([...panel.querySelectorAll('.chat-launch-row--header span')].map(node => node.textContent), ['Produto', 'Unit.', 'Qtd.', 'Frete', 'Total R$', 'Ações']);
+  assert.doesNotMatch(row.textContent, /\bSC\b|Padrão do produto|⭐/i);
+  assert.deepEqual([...panel.querySelectorAll('.chat-launch-row--header span')].map(node => node.textContent), ['Fornecedor', 'Unit.', 'Qtd.', 'Frete', 'Total R$', 'Ações']);
   assert.equal(row.querySelectorAll('.chat-launch-amount')[0].textContent, '30,0');
   assert.equal(row.querySelectorAll('.chat-launch-amount')[2].textContent, '10,0');
   assert.equal(row.querySelector('.chat-launch-total').textContent, '84,99');

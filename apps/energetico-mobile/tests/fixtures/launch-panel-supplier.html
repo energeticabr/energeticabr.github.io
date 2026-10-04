@@ -1,0 +1,18 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fornecedores nas linhas</title></head><body><main id="app"></main>
+<script type="module">
+import '../../src/styles.css';
+import {createChatView} from '../../src/ui/chat-view.js';
+import {createConversationStore} from '../../src/chat/conversation-store.js';
+const store=createConversationStore({historyMode:'current-step'});
+const view=createChatView(document.querySelector('#app'));
+const lines=['RAFAEL GONTIJO','ISRAEL ESCORAMENTO E ARMAÇÕES'].map((supplier,i)=>({index:i+1,
+  product:i?'⭐ SERVENTE (PROFISSÃO DO FORNECEDOR)':'⭐ ENGENHEIRO (PROFISSÃO DO FORNECEDOR)',unit:'UN',
+  unitPrice:'150',unitPriceDisplay:'R$ 150,00',quantity:'5',freight:'0',freightDisplay:'R$ 0,00',total:'750',totalDisplay:'R$ 750,00',
+  editReply:`launch_line:edit:abcdef123456abcdef123456:${i+1}`,deleteReply:`launch_line:delete:abcdef123456abcdef123456:${i+1}`,
+  details:{supplier,stage:'ALVENARIA E ESTRUTURAS',branch:'004 - EDIFÍCIO XAVANTE',account:'ENERGÉTICA - CAIXA'}}));
+store.ingestRemoteMessages([{type:'poll',question:'QUAL É O PRODUTO?',options:[{id:'656',label:'656 - SEGURO DE VIDA COLETIVO'}]}],{
+  activeFlow:{id:'launch',title:'EFETUAR LANÇAMENTO',launches:{id:'supplier-fixture',currency:'BRL',count:2,total:'1500',totalDisplay:'R$ 1.500,00',lines}}});
+view.render({...store.getState(),sessionStatus:'authenticated',account:{name:'Teste'}});
+document.querySelector('.chat-launches').open=true;
+document.documentElement.dataset.ready='true';
+</script></body></html>
