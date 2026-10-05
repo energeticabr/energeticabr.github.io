@@ -55,7 +55,48 @@ test('rotation to portrait returns focus to a visible control', async t => {
   await view.open(); root.querySelector('.sfs-search').focus();
   rotate(true);
   assert.equal(root.querySelector('.pl-report').hidden, true);
-  assert.equal(dom.window.document.activeElement, root.querySelector('.pl-close'));
+  assert.equal(dom.window.document.activeElement, root.querySelector('.pl-dialog'));
+});
+
+test('landscape is report-only, includes the logo and open-ended Brazilian date fields', async t => {
+  const calls = [];
+  const { view, root, dom } = setup(t, async options => { calls.push(options.filters); return { launches: [row, {...row, id:'3500',paymentDate:'2027-01-10'}] }; });
+  await view.open();
+  assert.equal(root.querySelector('.pl-heading'), null);
+  assert.equal(root.querySelector('.pl-close'), null);
+  assert.equal(root.querySelector('.pl-summary'), null);
+  assert.equal(root.querySelector('.pl-scroll-hint'), null);
+  assert.ok(root.querySelector('img[alt="Logo Energética"]').src.includes('logo-energetica-oficial'));
+  assert.equal(calls[0].startDate, ''); assert.equal(calls[0].endDate, '');
+  assert.equal(root.querySelectorAll('tbody tr').length, 2);
+  const text = root.querySelector('[data-date-display="startDate"]');
+  assert.equal(text.placeholder, 'Desde o início');
+  assert.equal(root.querySelector('[data-date-display="endDate"]').placeholder, 'Até o fim');
+  text.value = '02/10/2026'; text.dispatchEvent(new dom.window.Event('change'));
+  await new Promise(r => setImmediate(r));
+  assert.equal(calls.at(-1).startDate, '2026-10-02');
+  text.value = ''; text.dispatchEvent(new dom.window.Event('change'));
+  await new Promise(r => setImmediate(r)); assert.equal(calls.at(-1).startDate, '');
+  text.value = '31/02/2026'; text.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(root.querySelectorAll('tbody tr').length, 0);
+  assert.match(root.querySelector('.pl-notice').textContent, /data inválida/i);
+  text.value = '02/13/2026'; text.dispatchEvent(new dom.window.Event('change'));
+  const before=calls.length; root.querySelector('.pl-refresh').click();
+  await new Promise(r => setImmediate(r));
+  assert.equal(calls.length,before,'data inválida não deve consultar com o período anterior');
+  assert.equal(root.querySelectorAll('tbody tr').length,0);
+});
+
+test('reference merges equal branch/account/order cells without merging distinct values', async t => {
+  const { view, root } = setup(t, async () => ({launches:[row, {...row,id:'3500'}, {...row,id:'3501',account:'Outra',order:'359'}]}));
+  await view.open();
+  assert.equal(root.querySelectorAll('[data-column="branch"]').length, 1);
+  assert.equal(root.querySelector('[data-column="branch"]').rowSpan, 3);
+  assert.equal(root.querySelectorAll('[data-column="account"]').length, 2);
+  assert.equal(root.querySelector('[data-column="account"]').rowSpan, 2);
+  assert.equal(root.querySelectorAll('[data-column="order"]').length, 2);
+  assert.equal(root.querySelector('[data-column="order"]').rowSpan, 2);
+  assert.equal(root.querySelector('[data-column="product"] strong').textContent, row.product);
 });
 
 test('narrowing date range retries the query even after a pagination limit error', async t => {

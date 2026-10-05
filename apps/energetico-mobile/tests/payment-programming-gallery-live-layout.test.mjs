@@ -14,10 +14,12 @@ const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\App
 
 test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", { timeout: 90_000 }, async t => {
   if (!browser) return t.skip("Chrome/Edge indisponível");
-  const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 0,
-    fs: { allow: [resolve(appRoot, "../..")], }, }, logLevel: "silent" });
   const profile = mkdtempSync(join(tmpdir(), "payment-gallery-layout-"));
+  // Parallel Vite fixtures must not invalidate each other's optimized modules.
+  const server = await createServer({ root: appRoot, cacheDir:join(profile,'vite-cache'), server: { host: "127.0.0.1", port: 0,
+    fs: { allow: [resolve(appRoot, "../..")], }, }, logLevel: "silent" });
   const pending = new Map();
+  const diagnostics = [];
   let child, socket;
   try {
     await server.listen();
@@ -32,6 +34,8 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
     let sequence = 0;
     socket.addEventListener("message", event => {
       const response = JSON.parse(event.data), request = pending.get(response.id);
+      if (response.method === 'Runtime.exceptionThrown') diagnostics.push(response.params.exceptionDetails);
+      if (response.method === 'Network.responseReceived' && response.params.response.status >= 400) diagnostics.push({url:response.params.response.url,status:response.params.response.status});
       if (!request) return;
       pending.delete(response.id); clearTimeout(request.timer);
       response.error ? request.fail(new Error(response.error.message)) : request.done(response.result);
@@ -44,6 +48,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
     });
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
+    await send('Runtime.enable', {}, sessionId); await send('Network.enable', {}, sessionId);
     const evaluate = async expression => {
       const response = await send("Runtime.evaluate", { expression, returnByValue: true }, sessionId);
       assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails));
@@ -58,7 +63,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
         ready = await evaluate(`location.search === '?width=${width}' && document.documentElement?.dataset.ready === 'true' && document.querySelectorAll('.pg-card').length === 3`);
         if (!ready) await delay(100);
       }
-      assert.ok(ready, `Galeria G28 não carregou em ${width}px`);
+      assert.ok(ready, `Galeria G28 não carregou em ${width}px: ${JSON.stringify(diagnostics)}`);
       const layout = await evaluate(`(() => {
         const card = document.querySelector('.pg-card[data-item-id="300"]');
         const attached = document.querySelector('.pg-card[data-item-id="301"]');

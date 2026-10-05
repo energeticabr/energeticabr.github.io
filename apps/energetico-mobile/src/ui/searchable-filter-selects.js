@@ -5,7 +5,7 @@ function searchableText(value) {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
 }
 
-function createPicker(select, closeOthers) {
+function createPicker(select, closeOthers, options = {}) {
   const doc = select.ownerDocument;
   const view = doc.defaultView;
   const original = { hidden: select.hidden, ariaHidden: select.getAttribute('aria-hidden'), tabIndex: select.getAttribute('tabindex') };
@@ -84,7 +84,7 @@ function createPicker(select, closeOthers) {
     const bounds = trigger.getBoundingClientRect();
     const below = Math.max(0, bottom - bounds.bottom - 13);
     const above = Math.max(0, bounds.top - top - 13);
-    const placement = below < 180 && above > below ? 'above' : 'below';
+    const placement = options.placement === 'below' ? 'below' : below < 180 && above > below ? 'above' : 'below';
     const height = Math.max(0, Math.min(320, placement === 'above' ? above : below));
     popup.dataset.placement = placement;
     popup.style.top = placement === 'below' ? 'calc(100% + 5px)' : 'auto';
@@ -294,12 +294,12 @@ function createPicker(select, closeOthers) {
   };
 }
 
-export function bindSearchableFilterSelects(container) {
+export function bindSearchableFilterSelects(container, options = {}) {
   const pickers = [];
   function close() { for (const picker of pickers) picker.close(); }
   for (const select of container.querySelectorAll('select')) {
     if (enhanced.has(select)) continue;
-    const picker = createPicker(select, close);
+    const picker = createPicker(select, close, options);
     enhanced.set(select, picker); pickers.push(picker);
   }
   return Object.freeze({ sync() { for (const picker of pickers) picker.sync(); }, close, destroy() { for (const picker of pickers) picker.destroy(); } });
