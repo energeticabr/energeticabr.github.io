@@ -4,6 +4,7 @@ import { mapSharePointColumns, validateFormValues } from "../../../../portal/dat
 import { createForm43StatusPolicy } from './orders-form43-locks.js';
 import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
 import { createPayrollSheetReader } from './payroll-sheet-options.js';
+import { createPayrollLaunchReader } from './payroll-launch-options.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -120,6 +121,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
   const isPayroll = key(listName) === 'FOLHAPGTO';
   const readPayrollSource = isPayroll ? createPayrollSourceReader(repository, siteKey) : null;
   const payrollSheets=isPayroll?createPayrollSheetReader(repository,siteKey,now):null;
+  const payrollLaunches=isPayroll?createPayrollLaunchReader(repository,siteKey):null;
 
   async function currentItem(list, id, signal) {
     if (typeof repository.getItem !== "function") throw new Error("A consulta segura do registro não está disponível.");
@@ -155,8 +157,10 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const sheetColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDFOLHA'):null;
     const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
     const sheetOptions=sheetColumn?await payrollSheets.options(sheetSupplier,{signal}):[];
+    const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
+    const launchOptions=launchColumn?await payrollLaunches.options({signal}):[];
     abort(signal);
-    const columns = frozenCopy(isPayroll ? payrollEditorColumns(contract.formColumns,sheetOptions) : contract.formColumns);
+    const columns = frozenCopy(isPayroll ? payrollEditorColumns(contract.formColumns,sheetOptions,launchOptions) : contract.formColumns);
     contract = frozenCopy({ ...contract, formColumns: columns });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
@@ -187,7 +191,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
       ...(refreshDerivedValues ? { refreshDerivedValues } : {}),
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
-    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier });
+    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn });
     return context;
   }
 
@@ -255,8 +259,15 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       idValue(normalized[baseline.sheetColumn.name]);
       if(baseline.sheetColumn.number)normalized[baseline.sheetColumn.name]=Number(normalized[baseline.sheetColumn.name]);
     }
+    if(baseline.launchColumn&&Object.hasOwn(normalized,baseline.launchColumn.name)) {
+      // Select controls serialize strings; preserve the actual SharePoint numeric type.
+      const id=String(normalized[baseline.launchColumn.name]??'').trim();
+      if(!/^[1-9]\d{0,14}$/.test(id))throw new Error('O vínculo IDLANCAMENTO é inválido.');
+      if(baseline.launchColumn.number)normalized[baseline.launchColumn.name]=Number(id);
+    }
     const merged = { ...item.fields, ...normalized }, changed = {};
     if(baseline.sheetColumn)await payrollSheets.assertSheet(merged[baseline.sheetColumn.name],baseline.sheetSupplier);
+    if(baseline.launchColumn)await payrollLaunches.assertLaunch(merged[baseline.launchColumn.name]);
     if (isPayroll) await readPayrollSource(merged);
     for (const [name, value] of Object.entries(normalized)) {
       const column = allowed.get(name);

@@ -49,6 +49,8 @@ test('payroll editor fills phone and desktop viewports with locked financial val
       assert.deepEqual(await evaluate(`[...document.querySelector('.dynamic-form-grid').children].map(n=>n.querySelector('[name]')?.name).slice(0,6)`),['DATA','IDFOLHA','FORNECEDOR','IDLANCAMENTO','VALORUNITARIO','QTD']);
       assert.deepEqual(await evaluate(`[...document.querySelector('[data-gallery-record-screen] [name=IDFOLHA]').options].filter(o=>o.value).map(o=>({value:o.value,label:o.textContent}))`),[{value:'5',label:'5-09/2026 (FORNECEDOR DE TESTE)'},{value:'15',label:'15-10/2026 (FORNECEDOR DE TESTE)'}]);
       assert.equal(await evaluate(`document.querySelector('[data-combobox-root=IDFOLHA] input, [data-searchable-root=IDFOLHA] input').value`),'5-09/2026 (FORNECEDOR DE TESTE)');
+      assert.deepEqual(await evaluate(`[...document.querySelector('[data-gallery-record-screen] [name=IDLANCAMENTO]').options].filter(o=>o.value).map(o=>({value:o.value,label:o.textContent}))`),[{value:'3460',label:'3460 - OUTRO EMPREITEIRO'},{value:'3457',label:'3457 - FORNECEDOR DE TESTE'}]);
+      assert.equal(await evaluate(`document.querySelector('[data-searchable-root=IDLANCAMENTO] input').value`),'3457 - FORNECEDOR DE TESTE');
       const actions=await evaluate(`(()=>{const f=document.querySelector('[data-edit-form]'),cancel=f.querySelector('[data-form-cancel]'),submit=f.querySelector('[data-form-save]');return {labels:[...f.querySelectorAll('.dynamic-form-actions button')].map(b=>b.textContent),clear:!!f.querySelector('[data-form-clear]'),cancelColor:getComputedStyle(cancel).backgroundColor,submitColor:getComputedStyle(submit).backgroundColor,ordered:cancel.getBoundingClientRect().right<submit.getBoundingClientRect().left};})()`);
       assert.deepEqual(actions,{labels:['CANCELAR','SUBMETER'],clear:false,cancelColor:'rgb(185, 28, 36)',submitColor:'rgb(22, 112, 68)',ordered:true});
       await evaluate(`document.querySelector('[data-searchable-root=IDFOLHA] input').focus()`);
@@ -60,7 +62,13 @@ test('payroll editor fills phone and desktop viewports with locked financial val
       for(let n=0;n<50 && !(await evaluate(`document.querySelector('[name=VALORUNITARIO]').value==='250'`));n++) await delay(100);
       assert.equal(await evaluate(`document.querySelector('[name=VALORUNITARIO]').value`),'250');
       if(width===390&&!pwaStyles&&process.env.PAYROLL_EDITOR_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);writeFileSync(process.env.PAYROLL_EDITOR_SCREENSHOT,Buffer.from(shot.data,'base64'));}
-
+      await evaluate(`document.querySelector('[data-searchable-root=IDLANCAMENTO] input').click()`);
+      await evaluate(`[...document.querySelectorAll('[data-searchable-root=IDLANCAMENTO] [role=option]')].find(n=>n.textContent==='3460 - OUTRO EMPREITEIRO').click()`);
+      assert.equal(await evaluate(`document.querySelector('[data-gallery-record-screen] [name=IDLANCAMENTO]').value`),'3460');
+      assert.equal(await evaluate(`document.querySelector('[data-searchable-root=IDLANCAMENTO] input').value`),'3460 - OUTRO EMPREITEIRO');
+      await evaluate(`document.querySelector('[data-form-save]').click()`);
+      for(let n=0;n<100&&!(await evaluate(`window.savedFields.length===1`));n++)await delay(100);
+      assert.deepEqual(await evaluate(`window.savedFields`),[{IDLANCAMENTO:3460}],await evaluate(`document.querySelector('[data-edit-form]')?.textContent`));
     }
   } finally {
     for(const p of pending.values()) clearTimeout(p.timer);
