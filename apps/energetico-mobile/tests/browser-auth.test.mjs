@@ -218,9 +218,9 @@ test("retoma a abertura da Galeria de Despesas Recorrentes após consentimento M
   assert.equal(values.size, 0);
 });
 
-test("preserva e retoma a galeria IDFOLHA e FOLHAPGTO após consentimento Microsoft", async () => {
+test("preserva e retoma IDFOLHA, FOLHAPGTO e cargos após consentimento Microsoft", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
-  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto"]) {
+  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto", "action_cargos_table"]) {
     const values = new Map();
     const storage = {
       getItem(key) { return values.get(key) ?? null; },

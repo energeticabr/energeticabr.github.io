@@ -4012,6 +4012,9 @@ export function createAppController({
   }
 
   function disposeContractorReports() {
+    cargosTableOpening = null;
+    cargosTable?.destroy?.();
+    cargosTable = null;
     orderValidationReportOpening = null;
     orderValidationReport?.destroy?.();
     orderValidationReport = null;
@@ -4066,6 +4069,7 @@ export function createAppController({
       contractorReports,
       paymentLedger,
       managementReport,
+      cargosTable,
       provisionReport,
       orderValidationReport,
       cargosTable,
@@ -4812,7 +4816,6 @@ export function createAppController({
     attendanceSummaryOpening = request;
     return request;
   }
-
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
@@ -6443,6 +6446,7 @@ export function createAppController({
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === CONTRACTOR_REPORTS_ID) return openContractorReports();
       if (command.replyId === PAYMENT_LEDGER_ID) return openPaymentLedger();
+      if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
       if (command.replyId === MANAGEMENT_REPORT_ID) return openPaymentLedger('management');
       if (command.replyId === PROVISION_REPORT_ID) return openPaymentLedger('provision');
       if (command.replyId === ORDER_VALIDATION_REPORT_ID) return openPaymentLedger('validation');
@@ -6674,6 +6678,7 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-pending-provisions", openPendingProvisions);
     bind('open-payment-ledger', () => openPaymentLedger());
+    bind('open-cargos-table', openCargosTable);
     bind('open-management-report', () => openPaymentLedger('management'));
     bind('open-provision-report', () => openPaymentLedger('provision'));
     bind('open-order-validation-report', () => openPaymentLedger('validation'));
@@ -6821,6 +6826,7 @@ export function createAppController({
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
     else if (pendingAction === PAYMENT_LEDGER_ID) await openPaymentLedger();
+    else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === MANAGEMENT_REPORT_ID) await openPaymentLedger('management');
     else if (pendingAction === PROVISION_REPORT_ID) await openPaymentLedger('provision');
     else if (pendingAction === ORDER_VALIDATION_REPORT_ID) await openPaymentLedger('validation');
