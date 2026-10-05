@@ -21,7 +21,7 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
   try {
     await server.listen();
     child = spawn(browser, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-sandbox',
-      '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+      '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore', windowsHide: true });
     const portFile = join(profile, 'DevToolsActivePort');
     for (let attempt = 0; attempt < 200 && !existsSync(portFile); attempt++) await delay(100);
     assert.ok(existsSync(portFile), 'Chrome não iniciou');
@@ -53,6 +53,21 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tasks-gallery-responsive.html?w=${width}` }, sessionId);
       await waitFor(`location.search === '?w=${width}' && document.documentElement?.dataset.ready === 'true'`);
+      const toolbar = await evaluate(`(() => {
+        const search = document.querySelector('.tg-search-field'), filter = document.querySelector('.tg-filter-toggle'), add = document.querySelector('[data-action="create-task"]');
+        const a = search.getBoundingClientRect(), b = filter.getBoundingClientRect(), c = add.getBoundingClientRect(), style = getComputedStyle(add);
+        return { aligned: Math.abs(a.bottom - b.bottom) < 1 && Math.abs(b.bottom - c.bottom) < 1,
+          ordered: a.right <= b.left && b.right <= c.left, fits: c.right <= innerWidth && a.width > 0,
+          color: style.color, background: style.backgroundColor, enabled: !add.disabled,
+          overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+      })()`);
+      assert.ok(toolbar.aligned && toolbar.ordered && toolbar.fits && toolbar.enabled && !toolbar.overflow, JSON.stringify(toolbar));
+      assert.equal(toolbar.color, 'rgb(33, 132, 67)');
+      assert.equal(toolbar.background, 'rgb(255, 255, 255)');
+      if (width === 390 && process.env.TASK_GALLERY_SCREENSHOT) {
+        const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+        writeFileSync(process.env.TASK_GALLERY_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+      }
       const layout = await evaluate(`(() => {
         const card = document.querySelector('.tg-card[data-item-id="176"]'), check = card.querySelector('[data-action="complete"]'), arrow = card.querySelector('[data-action="expand"]');
         const a = check.getBoundingClientRect(), b = arrow.getBoundingClientRect();
@@ -86,6 +101,9 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       await waitFor(`!document.querySelector('.tg-completion-dialog') && window.writes.length === 1`);
       assert.deepEqual(await evaluate('window.writes'), [{ id: '176', fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' } }]);
       assert.equal(await evaluate('document.querySelectorAll(".tg-card").length'), 1);
+      await evaluate(`const add = document.querySelector('[data-action="create-task"]'); add.click(); add.click();`);
+      assert.equal(await evaluate('window.createdTasks'), 1);
+      assert.equal(await evaluate('document.querySelector(".tg-overlay").hidden'), true);
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

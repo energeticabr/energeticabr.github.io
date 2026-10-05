@@ -4407,6 +4407,7 @@ export function createAppController({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
+            onCreate: () => { assertSession(); return sendText("ADICIONAR UMA NOVA TAREFA", "action_task"); },
           });
           if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
           tasksGallery = panel;

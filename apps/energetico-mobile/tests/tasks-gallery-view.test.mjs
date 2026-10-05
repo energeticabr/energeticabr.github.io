@@ -26,6 +26,27 @@ async function setup(t, overrides = {}) {
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test('mais à direita dos filtros inicia uma nova tarefa e fecha a galeria uma única vez', async t => {
+  let creates = 0;
+  const ctx = await setup(t, { onCreate: () => { creates++; } });
+  await ctx.gallery.open();
+  const toolbar = ctx.root().querySelector('.tg-toolbar');
+  const button = toolbar.querySelector('[data-action="create-task"]');
+  assert.ok(button, 'atalho de nova tarefa presente');
+  assert.equal(button.previousElementSibling, toolbar.querySelector('.tg-filter-toggle'));
+  assert.equal(button.textContent, '+');
+  assert.equal(button.type, 'button');
+  assert.equal(button.getAttribute('aria-label'), 'Adicionar uma nova tarefa');
+  const style = ctx.document.createElement('style');
+  style.textContent = await readFile(new URL('../src/ui/tasks-gallery.css', import.meta.url), 'utf8');
+  ctx.document.head.append(style);
+  assert.equal(ctx.dom.window.getComputedStyle(button).backgroundColor, 'rgb(255, 255, 255)');
+  assert.equal(ctx.dom.window.getComputedStyle(button).color, 'rgb(33, 132, 67)');
+  button.click(); button.click();
+  assert.equal(creates, 1);
+  assert.equal(ctx.root().hidden, true);
+});
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const completionContext = id => ({
   entity: { id: 'lancamentos-de-tarefas', title: 'Tarefa' },

@@ -16,7 +16,8 @@
       field_7: '2026-10-05', Criado: '2026-10-03T10:00:00Z', field_10: 'OBRA',
     } }, { id: '175', hasAttachments: false, fields: { TAREFA: 'Tarefa curta', STATUS: 'EM ATENDIMENTO' } }];
     window.writes = [];
-    const gallery = createTasksGallery({ document, now: () => new Date('2026-10-04T01:30:00Z'), data: {
+    window.createdTasks = 0;
+    const gallery = createTasksGallery({ document, onCreate: () => { window.createdTasks++; }, now: () => new Date('2026-10-04T01:30:00Z'), data: {
       async loadSnapshot() { return { rows }; },
       async listAttachments(id) { return id === '176' ? [{ fileName: 'tarefa.pdf' }] : []; },
       async loadEditor(id) { return { entity: { id: 'lancamentos-de-tarefas' }, item: { id, fields: {} },
