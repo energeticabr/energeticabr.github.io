@@ -4,6 +4,8 @@ import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
 import { createMascotReportButton } from "./report-action-button.js";
 import { createPayrollPaymentComposer } from './payroll-payment-view.js';
+import { bindAutoFilterForm } from './auto-filter-form.js';
+import { payrollFilterOptions, validatePayrollFilters } from '../chat/payroll-gallery-filters.js';
 
 const GALLERIES = {
   IDFOLHA: {
@@ -75,6 +77,41 @@ export function createHrPayrollGallery({ document: documentOption,
   const home = onHome ? element("button", "hr-gallery-button", "Início") : null;
   applyScreenNavigation({ header, back: close, home, title });
   const content = element("div", "hr-gallery-content");
+  const filterForm = element('form', 'hr-gallery-filter-form');
+  filterForm.setAttribute('aria-label', `Filtros de ${config.title}`);
+  const toolbar = element('div', 'hr-gallery-toolbar');
+  const search = element('input', 'hr-gallery-search');
+  search.type='search'; search.name='search';
+  search.placeholder=gallery==='IDFOLHA' ? 'Pesquisar folhas (fornecedor, mês, ID…)': 'Pesquisar pagamentos (fornecedor, tipo, ID…)';
+  search.setAttribute('aria-label', 'Pesquisar registros');
+  const toggle = element('button','hr-gallery-button hr-gallery-filter-toggle','⚲ Filtros');
+  toggle.type='button'; toggle.dataset.action='toggle-payroll-filters'; toggle.setAttribute('aria-expanded','false');
+  const filterPanel = element('section','hr-gallery-filter-panel');
+  filterPanel.hidden=true; filterPanel.id=`hr-payroll-filters-${gallery}`;
+  toggle.setAttribute('aria-controls',filterPanel.id);
+  toggle.addEventListener('click',()=>{filterPanel.hidden=!filterPanel.hidden;toggle.setAttribute('aria-expanded',String(!filterPanel.hidden));});
+  const filterGrid=element('div','hr-gallery-filter-grid'), filterControls=new Map();
+  function addFilter(name, label, type='text') {
+    const wrapper=element('label','hr-gallery-filter-field'); wrapper.append(element('span','',label));
+    const control=element(type==='select'?'select':'input','hr-gallery-filter-input');
+    control.name=name;
+    if(type==='select') control.append(Object.assign(element('option','','Todos'),{value:''}));
+    else {control.type=type;if(type==='number'){control.step='any';control.inputMode='decimal';}}
+    wrapper.append(control);filterGrid.append(wrapper);filterControls.set(name,control);
+  }
+  addFilter('id','ID','number');
+  addFilter('FORNECEDOR','Fornecedor','select');
+  if(gallery==='IDFOLHA') addFilter('MESREFERENCIA','Mês de referência','select');
+  else {
+    addFilter('TIPOPGTO','Tipo de pagamento','select');
+    addFilter('VALORUNITARIOmin','Valor unitário mínimo','number');addFilter('VALORUNITARIOmax','Valor unitário máximo','number');
+    addFilter('QTDmin','Quantidade mínima','number');addFilter('QTDmax','Quantidade máxima','number');
+    addFilter('DATAfrom','Data inicial','date');addFilter('DATAto','Data final','date');
+    addFilter('IDFOLHA','IDFOLHA','number');addFilter('IDLANCAMENTO','ID do lançamento','number');
+  }
+  const clearFilters=element('button','hr-gallery-button','Limpar filtros');
+  clearFilters.type='button';clearFilters.dataset.action='clear-payroll-filters';
+  filterPanel.append(filterGrid,clearFilters);toolbar.append(search,toggle);filterForm.append(toolbar,filterPanel);
   const status = element("p", "hr-gallery-status", "");
   status.setAttribute("aria-live", "polite");
   const cards = element("div", "hr-gallery-cards");
@@ -89,7 +126,7 @@ export function createHrPayrollGallery({ document: documentOption,
   next.type = "button";
   next.dataset.action = "next-page";
   pagination.append(previous, pageLabel, next);
-  content.append(status, cards, pagination);
+  content.append(filterForm, status, cards, pagination);
   root.append(header, content);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root, loadEditor, saveEditor, deleteItem,
@@ -97,18 +134,43 @@ export function createHrPayrollGallery({ document: documentOption,
       // A pre-save background response must never replace the saved record.
       session += 1;
       busy = false;
-      return loadPage(page, pageCursors[page] || null);
+      return loadPage(page, pageCursors[page] || null, false, true);
     },
   });
   const paymentComposer = gallery === 'FOLHAPGTO' && typeof loadPaymentOptions === 'function' && typeof savePayment === 'function'
     ? createPayrollPaymentComposer({document:doc,host:root,loadOptions:loadPaymentOptions,save:savePayment,onSaved:async()=>{
       session += 1;busy=false;
-      await loadPage(1,null);
+      await loadPage(1,null,false,true);
     }}) : null;
   if(paymentComposer) {
     const add=element('button','hr-gallery-button hr-gallery-add-payment','+');
     add.type='button';add.dataset.action='add-payroll-payment';add.setAttribute('aria-label','Acrescentar pagamento');add.title='Acrescentar pagamento';
-    header.append(add);add.addEventListener('click',()=>{recordActions.close();void paymentComposer.open(add);});
+    toolbar.append(add);add.addEventListener('click',()=>{recordActions.close();void paymentComposer.open(add);});
+  }
+
+  function selectedFilters() { return {search:search.value.trim(),...Object.fromEntries([...filterControls].map(([name,control])=>[name,control.value.trim()]))}; }
+  function applyFilters() {
+    if(!opened || destroyed) return;
+    const filters=selectedFilters();
+    try {validatePayrollFilters(gallery,filters);}
+    catch(error) {session+=1;busy=false;status.textContent=error.message;cards.replaceChildren();hasMore=false;updateControls();return;}
+    session+=1;busy=false;pageCursors.splice(0,pageCursors.length,null,null);
+    void loadPage(1,null);
+  }
+  const autoFilters=bindAutoFilterForm(filterForm,applyFilters);
+  clearFilters.addEventListener('click',()=>{filterForm.reset();autoFilters.sync();applyFilters();});
+  function syncFilterOptions(result) {
+    const options=result.filterOptions || payrollFilterOptions(gallery,result.rows);
+    for(const [key,values] of Object.entries(options)) {
+      const control=filterControls.get(key);
+      if(control?.tagName!=='SELECT' || !Array.isArray(values)) continue;
+      const selected=control.value;
+      const choices=selected && !values.includes(selected) ? [...values,selected]:values;
+      control.replaceChildren(Object.assign(element('option','','Todos'),{value:''}),
+        ...choices.map(value=>Object.assign(element('option','',value),{value})));
+      control.value=selected;
+    }
+    autoFilters.sync();
   }
 
   function drawRows(rows) {
@@ -150,7 +212,7 @@ export function createHrPayrollGallery({ document: documentOption,
     close.disabled = false;
   }
 
-  async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false) {
+  async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false, refresh = false) {
     if (!opened || destroyed || busy) return;
     busy = true;
     if (!quiet) {
@@ -159,9 +221,11 @@ export function createHrPayrollGallery({ document: documentOption,
     }
     updateControls();
     const epoch = session;
+    const filters = selectedFilters();
     try {
-      const result = await request(gallery, targetPage, 25, cursor);
+      const result = await request(gallery, targetPage, 25, cursor, {filters,refresh});
       if (!opened || destroyed || epoch !== session) return;
+      if(JSON.stringify(filters)!==JSON.stringify(selectedFilters())) return;
       if (result?.gallery !== gallery || !Array.isArray(result.rows)) {
         throw new Error("Resposta da galeria inválida.");
       }
@@ -169,14 +233,16 @@ export function createHrPayrollGallery({ document: documentOption,
       pageCursors[page] = cursor;
       pageCursors[page + 1] = result.nextCursor || null;
       hasMore = result.hasMore === true && Boolean(result.nextCursor);
+      if(!quiet || !filterForm.contains(doc.activeElement)) syncFilterOptions(result);
       drawRows(result.rows);
-    } catch {
+      if(Number.isInteger(result.count)) status.textContent=`${result.count} registro(s) encontrado(s) · ${result.rows.length} nesta página.`;
+    } catch(error) {
       if (opened && !destroyed && epoch === session) {
-        status.textContent = "Não foi possível carregar os registros. Tente novamente.";
+        status.textContent = `Não foi possível carregar os registros. ${error?.message || 'Tente novamente.'}`;
         cards.replaceChildren();
         const retry = element("button", "hr-gallery-button hr-gallery-retry", "Tentar novamente");
         retry.type = "button";
-        retry.addEventListener("click", () => { void loadPage(targetPage, cursor); });
+        retry.addEventListener("click", () => { void loadPage(targetPage, cursor, false, refresh); });
         cards.append(retry);
       }
     } finally {
@@ -190,6 +256,7 @@ export function createHrPayrollGallery({ document: documentOption,
   function closeGallery() {
     if (!opened || destroyed) return;
     recordActions.close();
+    autoFilters.cancelPending();
     paymentComposer?.close();
     opened = false;
     session += 1;
@@ -203,7 +270,7 @@ export function createHrPayrollGallery({ document: documentOption,
   next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, pageCursors[page + 1]); });
   const refreshSource = () => {
     if (gallery === 'FOLHAPGTO' && opened && !destroyed && doc.visibilityState !== 'hidden' && !recordActions.isEditing() && !paymentComposer?.isOpen()) {
-      void loadPage(page, pageCursors[page] || null, true);
+      void loadPage(page, pageCursors[page] || null, true, true);
     }
   };
   doc.defaultView?.addEventListener('focus', refreshSource);
@@ -214,13 +281,14 @@ export function createHrPayrollGallery({ document: documentOption,
     async open() {
       if (destroyed) return false;
       opened = true;
+      busy = false;
       session += 1;
       if (!root.isConnected) mountRoot.append(root);
       root.hidden = false;
       page = 1;
       hasMore = false;
       pageCursors.splice(0, pageCursors.length, null, null);
-      await loadPage(1);
+      await loadPage(1,null,false,true);
       return true;
     },
     close: closeGallery,
@@ -229,6 +297,7 @@ export function createHrPayrollGallery({ document: documentOption,
       doc.defaultView?.removeEventListener('focus', refreshSource);
       doc.removeEventListener('visibilitychange', refreshSource);
       recordActions.destroy();
+      autoFilters.destroy();
       paymentComposer?.close();
       destroyed = true;
       opened = false;

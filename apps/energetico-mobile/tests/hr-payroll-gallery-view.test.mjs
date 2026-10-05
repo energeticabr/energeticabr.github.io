@@ -29,7 +29,7 @@ test('payroll mutation invalidates a pending background snapshot and refreshes s
   document.querySelector('[data-gallery-action="edit"]').click();
   await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve));
   document.querySelector('[name=DATA]').value = '2026-09-29';
-  document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  document.querySelector('.gallery-record-dialog form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reads, 3);
   resolveOld(response('FOLHAPGTO', 1, [{ id: '3', DATA: '2026-09-28' }]));
@@ -73,7 +73,8 @@ test("galeria FOLHAPGTO mostra campos previstos e navega páginas sem editar", a
   root.querySelector('[data-action="next-page"]').click();
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.deepEqual(requests, [["FOLHAPGTO", 1, 25, null], ["FOLHAPGTO", 2, 25, "opaque-next-page"]]);
-  assert.equal(root.querySelector("input"), null);
+  assert.equal(root.querySelector('.gallery-record-dialog'), null);
+  assert.ok(root.querySelector('input[type="search"]'));
   gallery.destroy();
   dom.window.close();
 });

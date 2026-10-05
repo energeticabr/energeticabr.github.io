@@ -5,7 +5,8 @@ import '../../src/ui/gallery-record-actions.css';
 import '../../src/ui/searchable-filter-selects.css';
 import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
 window.saved=[];
+const galleryName=new URLSearchParams(location.search).get('gallery') || 'FOLHAPGTO';
 const options={launches:[{id:'3457',supplier:'FORNECEDOR DE TESTE COM NOME LONGO',description:'MÃO DE OBRA',date:'2026-10-04',unitValue:168.8,quantity:3},{id:'3499',supplier:'OUTRO FORNECEDOR',date:'2026-10-04',unitValue:200,quantity:5}],paymentTypes:['SALÁRIO','AJUDA DE CUSTO'],sheets:[{id:'9',supplier:'FORNECEDOR DE TESTE COM NOME LONGO',label:'09/2026'},{id:'19',supplier:'FORNECEDOR DE TESTE COM NOME LONGO',label:'10/2026'},{id:'29',supplier:'FORNECEDOR DE TESTE COM NOME LONGO',label:'11/2026'},{id:'8',supplier:'OUTRO FORNECEDOR',label:'10/2026'}]};
-window.gallery=createHrPayrollGallery({document,root:document.querySelector('#app'),gallery:'FOLHAPGTO',request:async()=>({gallery:'FOLHAPGTO',page:1,rows:window.saved.map((draft,i)=>({id:String(i+1),IDLANCAMENTO:draft.launchId,IDFOLHA:draft.sheetId,TIPOPGTO:draft.paymentType})),hasMore:false}),loadPaymentOptions:async()=>options,savePayment:async draft=>{window.saved.push(draft);return {id:'1'};}});
+window.gallery=createHrPayrollGallery({document,root:document.querySelector('#app'),gallery:galleryName,request:async()=>({gallery:galleryName,page:1,rows:window.saved.map((draft,i)=>({id:String(i+1),IDLANCAMENTO:draft.launchId,IDFOLHA:draft.sheetId,TIPOPGTO:draft.paymentType})),hasMore:false}),loadPaymentOptions:async()=>options,savePayment:async draft=>{window.saved.push(draft);return {id:'1'};}});
 await window.gallery.open();document.documentElement.dataset.ready='true';
 </script></body></html>
