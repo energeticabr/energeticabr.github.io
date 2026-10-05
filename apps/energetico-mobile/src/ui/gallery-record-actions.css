@@ -106,7 +106,8 @@
   padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
   overscroll-behavior: contain;
 }
-.gallery-record-screen .dynamic-field input[readonly] { background: #eef3f5; color: #455a64; }
+.gallery-record-screen .dynamic-field input[readonly]:not([data-select-only]),
+.gallery-record-screen .dynamic-field input[readonly]:disabled { background: #eef3f5; color: #455a64; }
 .gallery-record-dialog-title { margin: 0 0 20px; font-size: 1.2rem; line-height: 1.4; }
 .gallery-record-dialog-error { color: #a61b1b; background: #fff0f0; padding: 12px; border-radius: 8px; }
 .gallery-record-dialog-buttons { display: flex; justify-content: flex-end; gap: 12px; }
