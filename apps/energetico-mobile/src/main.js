@@ -22,7 +22,6 @@ import "./ui/management-report.css";
 import "./ui/cargos.css";
 import "./ui/provision-report.css";
 import "./ui/order-validation-report.css";
-import "./ui/cargos.css";
 import "./ui/attendance-summary.css";
 import "./ui/audit-reports-live.css";
 import "./ui/commercial-progress-reports.css";
