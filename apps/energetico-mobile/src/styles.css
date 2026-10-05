@@ -1294,8 +1294,10 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr) auto; }
 @media (max-width: 480px) {
   .screen-navigation-header.screen-navigation-header { gap: 8px; }
-  .powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr); }
-  .powerbi-dashboard__header.screen-navigation-header .powerbi-dashboard__direct-link { grid-column: 2; justify-self: start; }
+  .powerbi-dashboard__header.screen-navigation-header { gap: 6px; }
+  .powerbi-dashboard__header.screen-navigation-header .screen-navigation button.screen-nav-button { width: 44px; height: 44px; }
+  .powerbi-dashboard__heading h1 { font-size: clamp(13px, 3.5vw, 17px); white-space: nowrap; }
+  .powerbi-dashboard__header.screen-navigation-header .powerbi-dashboard__direct-link { max-width: clamp(88px, calc(100vw - 250px), 128px); min-height: 44px; box-sizing: border-box; padding: 6px 8px; font-size: clamp(11px, 3vw, 12px); line-height: 1.2; text-align: center; }
 }
 
 .chat-message--external-cargos { display: grid; grid-template-columns: 44px minmax(0, 640px) 44px; gap: 8px; align-items: start; }
