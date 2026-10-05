@@ -1,0 +1,29 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edição de galerias em tela inteira</title></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/orders-gallery.css';
+import '../../src/ui/tasks-gallery.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/hr-payroll-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createOrdersGallery } from '../../src/ui/orders-gallery-view.js';
+import { createTasksGallery } from '../../src/ui/tasks-gallery-view.js';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+import { createPaymentProgrammingGallery } from '../../src/ui/payment-programming-gallery-view.js';
+import { createRecurringExpensesGallery } from '../../src/ui/recurring-expenses-gallery-view.js';
+import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
+const kind = new URLSearchParams(location.search).get('gallery');
+const fields = { FORNECEDOR:'FORNECEDOR DE TESTE',TAREFA:'Tarefa de teste',DATA:'2026-10-05',FILIAL:'FILIAL DE TESTE',STATUS:kind==='tasks'?'EM ATENDIMENTO':kind==='registration'?'CONCLUÍDO':kind==='recurring'?'ATIVO':kind==='programming'?'PAGAMENTO PREVISTO':'PENDENTE AUDITORIA' };
+const values = Object.fromEntries(Array.from({length:16},(_,i)=>['CAMPO'+i,'Conteúdo de teste '+i]));
+const data = {
+  async loadSnapshot() { return { rows:[{id:'42',fields,hasAttachments:false}] }; },
+  async listAttachments() { return []; },
+  async loadEditor(id) { return { entity:{id:'test',title:'Editar registro'},item:{id,fields:values},contract:{hasForm:true},columns:Object.keys(values).map(name=>({name,label:name,editable:true,control:'text'})) }; },
+  async saveEditor() { throw new Error('Prévia sem gravações.'); },
+};
+const factories = { orders:createOrdersGallery,tasks:createTasksGallery,registration:createRegistrationGallery,programming:createPaymentProgrammingGallery,recurring:createRecurringExpensesGallery };
+window.gallery = factories[kind] ? factories[kind]({document,kind:'workDiary',data}) : createHrPayrollGallery({document,root:document.querySelector('#app'),gallery:kind==='idfolha'?'IDFOLHA':'FOLHAPGTO',request:async gallery=>({gallery,page:1,rows:[{id:'42',...fields}]}),loadEditor:data.loadEditor,saveEditor:data.saveEditor});
+await window.gallery.open();
+document.querySelector('[data-gallery-action="edit"]').click();
+while (!document.querySelector('[name=CAMPO0]')) await new Promise(resolve=>setTimeout(resolve,10));
+document.documentElement.dataset.ready='true';
+</script></body></html>

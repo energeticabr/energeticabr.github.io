@@ -8,7 +8,7 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([di
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
 export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra,
-  actions = ["edit", "delete"], presentation = 'dialog' } = {}) {
+  actions = ["edit", "delete"] } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
   let epoch = 0;
@@ -74,7 +74,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     dialog.setAttribute("aria-modal", "true");
     dialog.setAttribute("aria-labelledby", heading.id);
     dialog.setAttribute("data-gallery-record-dialog", "");
-    if (operation === 'edit' && presentation === 'screen') {
+    if (operation === 'edit') {
       overlay.classList.add('gallery-record-overlay--screen');
       dialog.classList.add('gallery-record-screen');
       dialog.setAttribute('data-gallery-record-screen', '');
