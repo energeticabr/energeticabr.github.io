@@ -33,9 +33,13 @@ function abortable(operation, signal) {
 
 function validateSchema(columns, kind) {
   if (!Array.isArray(columns)) throw new TypeError("Esquema de colunas SharePoint inválido.");
+  // A renamed Title also renames the computed LinkTitle display labels. These
+  // presentation-only fields are not item data; Graph may omit their type facet.
+  const dataColumns = columns.filter(column => column?.computed !== true
+    && !/^LinkTitle(?:NoMenu|2)?$/i.test(String(column?.name ?? "")));
   const resolved = SCHEMA[kind].map(aliases => {
     const wanted = new Set(aliases.map(columnKey));
-    const matches = columns.filter(column => wanted.has(columnKey(column?.name)) || wanted.has(columnKey(column?.displayName)));
+    const matches = dataColumns.filter(column => wanted.has(columnKey(column?.name)) || wanted.has(columnKey(column?.displayName)));
     if (matches.length !== 1 || !matches[0].name) throw new TypeError(`Coluna ${aliases[0]} ausente ou ambígua na lista ${LISTS[kind][0]}.`);
     return matches[0];
   });

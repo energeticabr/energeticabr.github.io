@@ -47,6 +47,30 @@ test("loadSnapshot returns complete frozen RH-normalized supplier and presence d
   assert.deepEqual(calls.filter(call => call[0] === "resolve").map(call => call[1]).sort(), ["DESCRITIVOPRESENCA", "FORNECEDORES"]);
 });
 
+test("renamed Title resolves CADASTRO without confusing SharePoint computed title links", async () => {
+  const { repository } = fixture({
+    async getColumns(_site, list) {
+      if (list !== "FORNECEDORES") return columns(list);
+      return [
+        { name: "LinkTitleNoMenu", displayName: "CADASTRO", readOnly: true },
+        { name: "LinkTitle", displayName: "CADASTRO" },
+        { name: "LinkTitle2", displayName: "CADASTRO", computed: true },
+        { name: "Title", displayName: "CADASTRO", text: {} },
+        { name: "STATUS", displayName: "STATUS", text: {} },
+      ];
+    },
+    async getItemsPage(_site, list) {
+      return { items: list === "FORNECEDORES"
+        ? [{ id: "1", fields: { Title: "Ana", STATUS: "ATIVO" } }]
+        : [presence()], hasMore: false };
+    },
+  });
+  const snapshot = await create({ repository }).loadSnapshot();
+  assert.equal(snapshot.complete, true);
+  assert.equal(snapshot.suppliers[0].name, "Ana");
+  assert.equal(snapshot.suppliers[0].status, "ATIVO");
+});
+
 test("pagination traverses beyond 2000 records and beyond the repository's 100-page window", async () => {
   let pages = 0;
   const { repository } = fixture({ async getItemsPage(_site, list, _query, options) {
