@@ -37,7 +37,20 @@
 .tg-metric--done dd { color: #166336; }
 .tg-metric--pending dd { color: #ac2731; }
 .tg-filter-form { padding: 0; }
-.tg-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.tg-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: end; }
+.tg-toolbar .tg-add-task {
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 9px;
+  border-color: #218443;
+  color: #218443;
+  background: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
 .tg-search-field .og-label {
   position: absolute;
   width: 1px;
