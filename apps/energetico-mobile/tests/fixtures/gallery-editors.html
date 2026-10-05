@@ -13,7 +13,7 @@ import { createRecurringExpensesGallery } from '../../src/ui/recurring-expenses-
 import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
 const kind = new URLSearchParams(location.search).get('gallery');
 const fields = { FORNECEDOR:'FORNECEDOR DE TESTE',TAREFA:'Tarefa de teste',DATA:'2026-10-05',FILIAL:'FILIAL DE TESTE',STATUS:kind==='tasks'?'EM ATENDIMENTO':kind==='registration'?'CONCLUÍDO':kind==='recurring'?'ATIVO':kind==='programming'?'PAGAMENTO PREVISTO':'PENDENTE AUDITORIA' };
-const values = Object.fromEntries(Array.from({length:16},(_,i)=>['CAMPO'+i,'Conteúdo de teste '+i]));
+const values = Object.fromEntries(Array.from({length:32},(_,i)=>['CAMPO'+i,'Conteúdo de teste '+i]));
 const data = {
   async loadSnapshot() { return { rows:[{id:'42',fields,hasAttachments:false}] }; },
   async listAttachments() { return []; },
