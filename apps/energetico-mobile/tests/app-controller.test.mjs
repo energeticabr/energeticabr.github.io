@@ -27,7 +27,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -74,7 +74,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -8891,4 +8891,12 @@ test("token de galeria recebido após sair não permite gravação com a sessão
   resolveToken("old-gallery-token");
   await rejected;
   assert.deepEqual(writes, []);
+});
+
+test('cargos abre uma vez, consulta na sessão e destrói ao sair',async t=>{
+ let opens=0,destroys=0,token;const h=makeHarness({cargosDataFactory:async({tokenProvider})=>({loadSnapshot:async()=>{token=await tokenProvider(['Sites.Read.All']);return {rows:[]};}}),cargosFactory:async({data})=>({open:async()=>{opens++;await data.loadSnapshot();},destroy(){destroys++;}})});
+ t.after(()=>h.controller.stop());await h.controller.start();await Promise.all([h.view.emit('open-cargos-table'),h.view.emit('open-cargos-table')]);assert.equal(opens,1);assert.ok(token);h.controller.stop();assert.equal(destroys,1);
+});
+test('cargos não ressuscita depois de encerrar a sessão',async()=>{
+ let finish,opens=0,destroys=0;const h=makeHarness({cargosDataFactory:async()=>({}),cargosFactory:()=>new Promise(r=>{finish=r;})});await h.controller.start();const pending=h.view.emit('open-cargos-table');await new Promise(r=>setImmediate(r));h.controller.stop();finish({open(){opens++;},destroy(){destroys++;}});await pending;assert.equal(opens,0);assert.equal(destroys,1);
 });

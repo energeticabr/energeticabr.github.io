@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHrPayrollGalleryData } from '../src/chat/orders-gallery-data.js';
+import { createPayrollLaunchReader } from '../src/chat/payroll-launch-options.js';
 
 function fixture() {
   let amount = 200, quantity = 4;
@@ -104,6 +105,30 @@ test('payroll rechecks EMPREITEIRO before accepting a formerly valid launch sele
   const {data,writes,changeContractor}=fixture(),context=await data.loadEditor('FOLHAPGTO','3');changeContractor();
   await assert.rejects(data.saveEditor(context,{IDLANCAMENTO:'3460'}),/empreiteiro|lançamento/i);
   assert.deepEqual(writes,[]);
+});
+
+test('payroll launch dropdown reads contractor eligibility from FORNECEDORES when launches have no contractor column',async()=>{
+  const suppliers=[{id:'1',fields:{CADASTRO:'CLEITON',EMPREITEIRO:'SIM',STATUS:'ATIVO'}},{id:'2',fields:{CADASTRO:'INATIVO',EMPREITEIRO:'SIM',STATUS:'INATIVO'}},{id:'3',fields:{CADASTRO:'NÃO EMPREITEIRO',EMPREITEIRO:'NÃO',STATUS:'ATIVO'}}];
+  const launches=['CLEITON','INATIVO','NÃO EMPREITEIRO'].map((FORNECEDOR,i)=>({id:String(10+i),fields:{field_5:FORNECEDOR}}));
+  const repository={
+    async resolveList(_site,names){return {status:'resolved',id:names[0]};},
+    async getColumns(_site,list){return list==='LANCAMENTOS'?[{name:'field_5',displayName:'FORNECEDOR'}]:['CADASTRO','EMPREITEIRO','STATUS'].map(name=>({name}));},
+    async getItemsPage(_site,list,_query,options){const rows=list==='LANCAMENTOS'?launches:suppliers;return {items:options.cursor?rows.slice(1):rows.slice(0,1),hasMore:!options.cursor,...(!options.cursor?{nextLink:'next'}:{})};},
+    async getItem(_site,_list,id){return launches.find(row=>row.id===id);},
+  };
+  const reader=createPayrollLaunchReader(repository,'personal');
+  assert.deepEqual(await reader.options(),[{value:'10',label:'10 - CLEITON'}]);
+  await reader.assertLaunch('10');
+  await assert.rejects(reader.assertLaunch('11'),/empreiteiro|lançamento/i);
+  suppliers[0].fields.STATUS='INATIVO';
+  await assert.rejects(reader.assertLaunch('10'),/empreiteiro|lançamento/i);
+  suppliers[0].fields.STATUS='ATIVO';
+  suppliers.push({id:'4',fields:{...suppliers[0].fields}});
+  assert.deepEqual(await reader.options(),[]);
+  await assert.rejects(reader.assertLaunch('10'),/empreiteiro|lançamento/i);
+  const complete=repository.getItemsPage;
+  repository.getItemsPage=async(...args)=>args[1]==='FORNECEDORES'?{items:[suppliers[0]],hasMore:true}:complete(...args);
+  await assert.rejects(reader.options(),/consulta/i);
 });
 
 test('payroll launch options fail closed when contractor metadata or pagination is incomplete',async()=>{

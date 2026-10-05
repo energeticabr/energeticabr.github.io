@@ -2,6 +2,8 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
+import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence } from './provision-report-model.js';
+import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOrderValidationSource } from './order-validation-report-model.js';
 
 const SITE = "personal";
 const MAX_PAGES = 100;
@@ -26,14 +28,16 @@ export function createSpendingReportsData({
     return list.id;
   }
 
-  async function allItems(list, signal, filter = '') {
+  async function allItems(list, signal, filter = '', completeTraversal = false) {
     const query = new URLSearchParams({ $expand: "fields", $top: "100", ...(filter ? { $filter: filter } : {}) }).toString();
     const items = [];
-    let cursor = "";
-    for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
+    let cursor = ""; const seenCursors = new Set();
+    // Match the established commercial-report cursor-window pattern without changing the repository guard.
+    const maximum = completeTraversal ? 1000 : MAX_PAGES;
+    for (let pageIndex = 1; pageIndex <= maximum; pageIndex++) {
       abortIfNeeded(signal);
       const page = await repository.getItemsPage(SITE, list, query, {
-        ...(signal ? { signal } : {}), pageNumber, maxPages: MAX_PAGES,
+        ...(signal ? { signal } : {}), pageNumber: (pageIndex - 1) % MAX_PAGES + 1, maxPages: MAX_PAGES,
         headers: { Prefer: PREFER }, ...(cursor ? { cursor } : {}),
       });
       abortIfNeeded(signal);
@@ -42,9 +46,11 @@ export function createSpendingReportsData({
       items.push(...page.items);
       if (!page.hasMore) return items;
       if (!page.nextLink) throw new Error("A paginação do relatório não informou a próxima página.");
+      if (completeTraversal && seenCursors.has(page.nextLink)) throw new Error('A paginação retornou cursor repetido; nenhum total parcial foi exibido.');
+      seenCursors.add(page.nextLink);
       cursor = page.nextLink;
     }
-    throw new Error("A lista excedeu o limite seguro de paginação; reduza o período. Os totais não foram exibidos parcialmente.");
+    throw new Error("A lista excedeu o limite seguro de paginação. Os totais não foram exibidos parcialmente.");
   }
 
   async function loadSnapshot({ reportNumber, signal } = {}) {
@@ -106,5 +112,40 @@ export function createSpendingReportsData({
     })) });
   }
 
-  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot });
+  async function loadProvisionReportSnapshot({ signal } = {}) {
+    const [recurrenceList, provisionList] = await Promise.all([
+      resolve(['DESPESASRECORRENTES', 'DESPESAS RECORRENTES'], signal),
+      resolve(['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS'], signal),
+    ]);
+    const [recurrenceColumns, recurrenceItems, provisionColumns, provisionItems] = await Promise.all([
+      repository.getColumns(SITE, recurrenceList, signal ? { signal } : {}), allItems(recurrenceList, signal),
+      repository.getColumns(SITE, provisionList, signal ? { signal } : {}), allItems(provisionList, signal),
+    ]);
+    abortIfNeeded(signal);
+    if (!Array.isArray(recurrenceColumns) || !Array.isArray(provisionColumns)) throw new Error('O SharePoint retornou colunas inválidas.');
+    return Object.freeze({
+      recurrences: Object.freeze(recurrenceItems.map(item => normalizeProvisionReportRecurrence(item, recurrenceColumns))),
+      provisions: Object.freeze(provisionItems.map(item => normalizeProvisionReportRow(item, provisionColumns))),
+    });
+  }
+
+  async function loadOrderValidationSnapshot({ signal } = {}) {
+    const [orderList, launchList] = await Promise.all([
+      resolve('NOTASPENDENTES', signal), resolve('LANCAMENTOS', signal),
+    ]);
+    const [orderColumns, orderItems, launchColumns, launchItems] = await Promise.all([
+      repository.getColumns(SITE, orderList, signal ? { signal } : {}), allItems(orderList, signal, '', true),
+      repository.getColumns(SITE, launchList, signal ? { signal } : {}), allItems(launchList, signal, '', true),
+    ]);
+    abortIfNeeded(signal);
+    if (!Array.isArray(orderColumns) || !Array.isArray(launchColumns)) throw new Error('O SharePoint retornou colunas inválidas.');
+    assertOrderValidationSource(orderItems, orderColumns, 'orders');
+    assertOrderValidationSource(launchItems, launchColumns, 'launches');
+    return Object.freeze({
+      orders: Object.freeze(orderItems.map(item => normalizeOrderValidationOrder(item, orderColumns))),
+      launches: Object.freeze(launchItems.map(item => normalizeOrderValidationLaunch(item, launchColumns))),
+    });
+  }
+
+  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot, loadProvisionReportSnapshot, loadOrderValidationSnapshot });
 }

@@ -1,0 +1,33 @@
+.pr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.pr-filters { grid-template-columns:4fr 5fr 15fr 18fr 24fr 19fr 15fr; }
+.pr-content { color:black; font-family:Arial,sans-serif; }
+.pr-logo { display:grid; place-items:center; border:2px solid black; background:#e6f0ff; margin-bottom:6px; padding:4px; }
+.pr-logo img { display:block; height:clamp(32px,5.5vw,80px); max-width:40%; object-fit:contain; }
+.pr-table { width:100%; table-layout:fixed; border-collapse:collapse; margin-bottom:12px; background:white; color:black; font:normal clamp(7px,1vw,13px)/1.18 Arial,sans-serif; }
+.pr-table th,.pr-table td { border:1px solid #b00020; padding:clamp(2px,.4vw,6px); vertical-align:middle; overflow-wrap:anywhere; }
+.pr-table th { background:#f8d7da; font-weight:700; text-align:left; }
+.pr-table .pr-section-title { background:#fdecea; color:#b00020; font-size:clamp(9px,1.3vw,17px); font-weight:700; }
+.pr-table td[data-column=schedule],.pr-table td[data-column=dueDate],.pr-table td[data-column=status] { font-weight:700; }
+.pr-table td[data-column=schedule] { text-align:center; }
+.pr-table--annual { font-size:clamp(6px,.9vw,12px); }
+.pr-table--annual th,.pr-table--annual td { border-color:black; }
+.pr-table--annual th { background:#f2f2f2; text-align:center; }
+.pr-table--annual .pr-section-title { color:black; background:white; text-align:left; }
+.pr-table--annual td[data-column=month] { text-align:left; }
+.pr-table--inactive td[data-column=id],.pr-table--inactive td[data-column=days],.pr-table--inactive td[data-column=modified] { text-align:center; }
+.pr-table .pr-bold { font-weight:700; }
+.pr-table .pr-money { text-align:right; }
+.pr-table .pr-red { color:#b00020; }
+.pr-table .pr-orange { color:#f57c00; }
+.pr-table .pr-green { color:#2e7d32; }
+.pr-table .pr-yellow { color:#b78000; }
+.pr-table .pr-muted { color:#616161; }
+.pr-table .pr-badge { display:inline-block; padding:2px 3px; margin-top:3px; border-radius:4px; font-size:clamp(6px,.8vw,10px); font-weight:700; }
+.pr-badge--red { color:#b00020; background:#ffcdd2; }
+.pr-badge--orange { color:#e65100; background:#ffe0b2; }
+.pr-badge--green { color:#2e7d32; background:#c8e6c9; }
+.pr-badge--purple { color:#6a1b9a; background:#f3e5f5; }
+.pr-badge--blue { color:#1565c0; background:#e3f2fd; }
+.pr-table .pr-total td { border:2px solid #b00020; background:#fdecea; color:#b00020; font-weight:700; text-align:right; }
+.pr-table .pr-empty { background:#e8f5e9; text-align:center; font-weight:700; }
+@media print { body.pr-printing>*:not(.pr-overlay) { display:none!important; } body.pr-printing .pr-overlay { position:static; display:block; padding:0; background:white; } body.pr-printing .pr-dialog,body.pr-printing .pr-report,body.pr-printing .pr-content { display:block; height:auto; max-height:none; overflow:visible; width:100%; padding:0; } body.pr-printing .pr-filters { display:none; } body.pr-printing .pr-table { break-inside:auto; } body.pr-printing tr { break-inside:avoid; } }

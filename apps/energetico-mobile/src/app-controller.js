@@ -55,6 +55,16 @@ async function defaultPaymentLedgerFactory(options) {
   return createPaymentLedgerView(options);
 }
 
+async function defaultProvisionReportFactory(options) {
+  const { createProvisionReportView } = await import('./ui/provision-report-view.js');
+  return createProvisionReportView(options);
+}
+
+async function defaultOrderValidationReportFactory(options) {
+  const { createOrderValidationReportView } = await import('./ui/order-validation-report-view.js');
+  return createOrderValidationReportView(options);
+}
+
 async function defaultManagementReportFactory(options) {
   const { createManagementReportView } = await import('./ui/management-report-view.js');
   return createManagementReportView(options);
@@ -186,7 +196,10 @@ const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
 const PAYMENT_LEDGER_ID = 'action_payment_ledger';
+const CARGOS_TABLE_ID = 'action_cargos_table';
 const MANAGEMENT_REPORT_ID = 'action_management_report';
+const PROVISION_REPORT_ID = 'provision-report';
+const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
@@ -675,8 +688,12 @@ export function createAppController({
   tasksGalleryFactory = defaultTasksGalleryFactory,
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
   contractorReportsFactory = defaultContractorReportsFactory,
+  cargosFactory = async options => (await import('./ui/cargos-view.js')).createCargosView(options),
+  cargosDataFactory = async options => (await import('./chat/cargos-data.js')).createCargosData(options),
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
+  provisionReportFactory = defaultProvisionReportFactory,
+  orderValidationReportFactory = defaultOrderValidationReportFactory,
   paymentLedgerDataFactory = defaultPaymentLedgerDataFactory,
   contractorReportDataFactory = defaultContractorReportDataFactory,
   presencePaymentReportDataFactory = defaultPresencePaymentReportDataFactory,
@@ -732,8 +749,14 @@ export function createAppController({
   let contractorReportsOpening = null;
   let paymentLedger = null;
   let paymentLedgerOpening = null;
+  let cargosTable = null;
+  let cargosTableOpening = null;
   let managementReport = null;
   let managementReportOpening = null;
+  let provisionReport = null;
+  let provisionReportOpening = null;
+  let orderValidationReport = null;
+  let orderValidationReportOpening = null;
   let paymentProgrammingGallery = null;
   let paymentProgrammingGalleryOpening = null;
   let recurringExpensesGallery = null;
@@ -3973,8 +3996,17 @@ export function createAppController({
   }
 
   function disposeContractorReports() {
+    cargosTableOpening = null;
+    cargosTable?.destroy?.();
+    cargosTable = null;
+    orderValidationReportOpening = null;
+    orderValidationReport?.destroy?.();
+    orderValidationReport = null;
+    provisionReportOpening = null;
     managementReportOpening = null;
     paymentLedgerOpening = null;
+    provisionReport?.destroy?.();
+    provisionReport = null;
     managementReport?.destroy?.();
     managementReport = null;
     paymentLedger?.destroy?.();
@@ -4007,6 +4039,9 @@ export function createAppController({
       contractorReports,
       paymentLedger,
       managementReport,
+      cargosTable,
+      provisionReport,
+      orderValidationReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4509,12 +4544,16 @@ export function createAppController({
     return contractorReportsOpening;
   }
 
-  async function openPaymentLedger(management = false) {
+  async function openPaymentLedger(kind = 'payments') {
     if (!account || stopped || flowBusy()) return false;
-    const opening = management ? managementReportOpening : paymentLedgerOpening;
+    const validation = kind === 'validation';
+    if (validation && store.getState().activeFlow) return false;
+    const provision = kind === 'provision';
+    const management = kind === 'management';
+    const opening = validation ? orderValidationReportOpening : provision ? provisionReportOpening : management ? managementReportOpening : paymentLedgerOpening;
     if (opening) return opening;
-    const reportId = management ? MANAGEMENT_REPORT_ID : PAYMENT_LEDGER_ID;
-    const method = management ? 'loadSnapshot' : 'loadPaymentsSnapshot';
+    const reportId = validation ? ORDER_VALIDATION_REPORT_ID : provision ? PROVISION_REPORT_ID : management ? MANAGEMENT_REPORT_ID : PAYMENT_LEDGER_ID;
+    const method = validation ? 'loadOrderValidationSnapshot' : provision ? 'loadProvisionReportSnapshot' : management ? 'loadSnapshot' : 'loadPaymentsSnapshot';
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
     let requestSignal, requestGeneration = 0;
@@ -4523,7 +4562,7 @@ export function createAppController({
     };
     const request = Promise.resolve().then(async () => {
       try {
-        let report = management ? managementReport : paymentLedger;
+        let report = validation ? orderValidationReport : provision ? provisionReport : management ? managementReport : paymentLedger;
         if (!report) {
           const tokenProvider = scopes => {
             assertSession();
@@ -4540,30 +4579,110 @@ export function createAppController({
             });
           };
           const source = await paymentLedgerDataFactory({ tokenProvider });
+          const data = { async [method](options = {}) {
+            assertSession();
+            requestSignal = options.signal; requestGeneration++;
+            if (!validation) return source[method](options);
+            const signal = requestSignal, generation = requestGeneration;
+            const assertQuery = () => {
+              assertSession();
+              if (signal?.aborted || generation !== requestGeneration) throw new DOMException('Consulta cancelada.', 'AbortError');
+            };
+            assertQuery();
+            try {
+              const snapshot = await source[method](options);
+              assertQuery();
+              return snapshot;
+            } catch (error) {
+              assertQuery();
+              throw error;
+            }
+          } };
+          assertSession();
+          if (validation && (flowBusy() || store.getState().activeFlow)) return false;
+          const factory = validation ? orderValidationReportFactory : provision ? provisionReportFactory : management ? managementReportFactory : paymentLedgerFactory;
+          const panel = await factory({ data, document: globalThis.document });
+          if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+            || (validation && (flowBusy() || store.getState().activeFlow))) { panel.destroy?.(); return false; }
+          report = panel;
+          if (validation) orderValidationReport = panel;
+          else if (provision) provisionReport = panel;
+          else if (management) managementReport = panel;
+          else paymentLedger = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && !(validation && error?.name === 'AbortError')) setSessionError(error, validation ? 'Não foi possível abrir o relatório de validação de pedidos.' : provision ? 'Não foi possível abrir o relatório de provisões.' : management ? 'Não foi possível abrir o resumo gerencial de gastos.' : 'Não foi possível abrir o relatório de pagamentos.');
+        return false;
+      } finally {
+        if (validation && orderValidationReportOpening === request) orderValidationReportOpening = null;
+        else if (provision && provisionReportOpening === request) provisionReportOpening = null;
+        else if (management && managementReportOpening === request) managementReportOpening = null;
+        else if (!validation && !provision && !management && paymentLedgerOpening === request) paymentLedgerOpening = null;
+      }
+    });
+    if (validation) orderValidationReportOpening = request;
+    else if (provision) provisionReportOpening = request;
+    else if (management) managementReportOpening = request;
+    else paymentLedgerOpening = request;
+    return request;
+  }
+
+  async function openCargosTable() {
+    if (!account || stopped || flowBusy()) return false;
+    const opening = cargosTableOpening;
+    if (opening) return opening;
+    const reportId = CARGOS_TABLE_ID;
+    const method = 'loadSnapshot';
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    let requestSignal, requestGeneration = 0;
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) throw new Error('A sessão do relatório foi encerrada.');
+    };
+    const request = Promise.resolve().then(async () => {
+      try {
+        let report = cargosTable;
+        if (!report) {
+          const tokenProvider = scopes => {
+            assertSession();
+            const signal = requestSignal, generation = requestGeneration;
+            const assertRequest = () => {
+              assertSession();
+              if (signal?.aborted || generation !== requestGeneration) throw new DOMException('Consulta cancelada.', 'AbortError');
+            };
+            return auth.getToken(scopes).then(token => { assertRequest(); return token; }).catch(async error => {
+              assertRequest();
+              if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+              await auth.authorize(scopes, { resumeAction: reportId });
+              assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
+            });
+          };
+          const source = await cargosDataFactory({ tokenProvider });
           const data = { [method](options = {}) {
             requestSignal = options.signal; requestGeneration++;
             return source[method](options);
           } };
           assertSession();
-          const factory = management ? managementReportFactory : paymentLedgerFactory;
+          const factory = cargosFactory;
           const panel = await factory({ data, document: globalThis.document });
           if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) { panel.destroy?.(); return false; }
           report = panel;
-          if (management) managementReport = panel;
-          else paymentLedger = panel;
+          cargosTable = panel;
         }
         await report.open();
         return true;
       } catch (error) {
-        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision) setSessionError(error, management ? 'Não foi possível abrir o resumo gerencial de gastos.' : 'Não foi possível abrir o relatório de pagamentos.');
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision) setSessionError(error, 'Não foi possível abrir a tabela de cargos.');
         return false;
       } finally {
-        if (management && managementReportOpening === request) managementReportOpening = null;
-        else if (!management && paymentLedgerOpening === request) paymentLedgerOpening = null;
+        if (cargosTableOpening === request) cargosTableOpening = null;
       }
     });
-    if (management) managementReportOpening = request;
-    else paymentLedgerOpening = request;
+    cargosTableOpening = request;
     return request;
   }
 
@@ -6195,7 +6314,10 @@ export function createAppController({
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === CONTRACTOR_REPORTS_ID) return openContractorReports();
       if (command.replyId === PAYMENT_LEDGER_ID) return openPaymentLedger();
-      if (command.replyId === MANAGEMENT_REPORT_ID) return openPaymentLedger(true);
+      if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
+      if (command.replyId === MANAGEMENT_REPORT_ID) return openPaymentLedger('management');
+      if (command.replyId === PROVISION_REPORT_ID) return openPaymentLedger('provision');
+      if (command.replyId === ORDER_VALIDATION_REPORT_ID) return openPaymentLedger('validation');
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6422,7 +6544,10 @@ export function createAppController({
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-pending-provisions", openPendingProvisions);
     bind('open-payment-ledger', () => openPaymentLedger());
-    bind('open-management-report', () => openPaymentLedger(true));
+    bind('open-cargos-table', openCargosTable);
+    bind('open-management-report', () => openPaymentLedger('management'));
+    bind('open-provision-report', () => openPaymentLedger('provision'));
+    bind('open-order-validation-report', () => openPaymentLedger('validation'));
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6564,7 +6689,10 @@ export function createAppController({
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
     else if (pendingAction === PAYMENT_LEDGER_ID) await openPaymentLedger();
-    else if (pendingAction === MANAGEMENT_REPORT_ID) await openPaymentLedger(true);
+    else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
+    else if (pendingAction === MANAGEMENT_REPORT_ID) await openPaymentLedger('management');
+    else if (pendingAction === PROVISION_REPORT_ID) await openPaymentLedger('provision');
+    else if (pendingAction === ORDER_VALIDATION_REPORT_ID) await openPaymentLedger('validation');
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();

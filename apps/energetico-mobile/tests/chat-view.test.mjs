@@ -57,6 +57,8 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
     { id: 'group_supplies', reply: 'group_supplies', label: '📦 SUPRIMENTOS' },
   ] };
   view.render(signedInState({ messages: [menu] }));
+  const cargos = root.querySelector('[data-action="open-cargos-table"]');
+  assert.ok(cargos);let cargosOpened=0;view.on('open-cargos-table',()=>cargosOpened++);cargos.click();assert.equal(cargosOpened,1);assert.equal(cargos.closest('.chat-bubble'),null);
   const shortcut = root.querySelector('[data-action="open-pending-provisions"]');
   assert.ok(shortcut, 'o menu inicial precisa oferecer o atalho');
   assert.match(shortcut.getAttribute('aria-label'), /provisões.*pagamento.*pendentes/i);
@@ -65,11 +67,26 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const bubble = pending.closest('.chat-bubble');
   assert.equal(bubble.contains(shortcut), false, 'o mascote não ocupa a coluna dos botões');
   const paymentShortcut = root.querySelector('[data-action="open-payment-ledger"]');
-  assert.equal(shortcut.nextElementSibling, paymentShortcut);
+  const provisionReport = root.querySelector('[data-action="open-provision-report"]');
+  assert.ok(provisionReport, 'o segundo mascote abre o relatório de provisões');
+  assert.equal(shortcut.nextElementSibling, provisionReport);
+  assert.equal(provisionReport.nextElementSibling, paymentShortcut);
+  assert.equal(bubble.contains(provisionReport), false);
+  assert.notEqual(provisionReport.querySelector('img').src, shortcut.querySelector('img').src);
+  let provisionReportOpened=0; view.on('open-provision-report',()=>provisionReportOpened++);
+  provisionReport.querySelector('img').click();
+  assert.equal(provisionReportOpened,1);
   const managementShortcut = root.querySelector('[data-action="open-management-report"]');
   assert.ok(managementShortcut, 'resumo gerencial deve ter seu próprio mascote');
   assert.equal(paymentShortcut.nextElementSibling, managementShortcut);
-  assert.equal(managementShortcut.nextElementSibling, bubble);
+  const validationShortcut=root.querySelector('[data-action="open-order-validation-report"]');
+  assert.ok(validationShortcut,'validação de notas deve ser o quinto mascote');
+  assert.equal(managementShortcut.nextElementSibling, validationShortcut);
+  assert.equal(validationShortcut.nextElementSibling, bubble);
+  assert.equal(bubble.contains(validationShortcut),false);
+  assert.notEqual(validationShortcut.querySelector('img').src,paymentShortcut.querySelector('img').src);
+  let validationOpened=0;view.on('open-order-validation-report',()=>validationOpened++);
+  validationShortcut.querySelector('img').click();assert.equal(validationOpened,1);
   assert.equal(bubble.contains(managementShortcut), false);
   let managementOpened=0; view.on('open-management-report',()=>managementOpened++);
   managementShortcut.querySelector('img').click();

@@ -521,11 +521,15 @@ button { touch-action: manipulation; }
 .chat-main-provisions-shortcut { box-sizing: border-box; grid-column: 1; grid-row: 1; display: grid; place-items: center; width: 44px; height: 44px; margin-top: 12px; padding: 3px; border: 1px solid #0d3562; border-radius: 12px; background: #103b6b; }
 .chat-main-provisions-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 9px; }
 .chat-main-provisions-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:calc(20px + max(44px,var(--compact-control-height))); padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
+.chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:124px; padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
 .chat-main-payment-ledger-shortcut img { display:block; width:100%; height:100%; object-fit:cover; transform:scale(1.55); mix-blend-mode:lighten; }
 .chat-main-payment-ledger-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-management-shortcut { margin-top:calc(28px + max(44px,var(--compact-control-height)) + max(44px,var(--compact-control-height))); }
+.chat-main-provision-report-shortcut { margin-top:68px; padding:2px; }
+.chat-main-provision-report-shortcut img { object-fit:contain; transform:none; mix-blend-mode:normal; }
+.chat-main-management-shortcut { margin-top:180px; }
 .chat-main-management-shortcut img { transform:scale(1.25); }
+.chat-main-order-validation-shortcut { margin-top:236px; }
+.chat-main-order-validation-shortcut img { transform:scale(1.06); mix-blend-mode:normal; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {
   max-width: min(82%, 640px);
@@ -1294,6 +1298,13 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr) auto; }
 @media (max-width: 480px) {
   .screen-navigation-header.screen-navigation-header { gap: 8px; }
-  .powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr); }
-  .powerbi-dashboard__header.screen-navigation-header .powerbi-dashboard__direct-link { grid-column: 2; justify-self: start; }
+  .powerbi-dashboard__header.screen-navigation-header { gap: 6px; }
+  .powerbi-dashboard__header.screen-navigation-header .screen-navigation button.screen-nav-button { width: 44px; height: 44px; }
+  .powerbi-dashboard__heading h1 { font-size: clamp(13px, 3.5vw, 17px); white-space: nowrap; }
+  .powerbi-dashboard__header.screen-navigation-header .powerbi-dashboard__direct-link { max-width: clamp(88px, calc(100vw - 250px), 128px); min-height: 44px; box-sizing: border-box; padding: 6px 8px; font-size: clamp(11px, 3vw, 12px); line-height: 1.2; text-align: center; }
 }
+
+.chat-message--external-cargos { display: grid; grid-template-columns: 44px minmax(0, 640px) 44px; gap: 8px; align-items: start; }
+.chat-message--external-cargos .chat-bubble { grid-column: 2; grid-row: 1; width: 100%; max-width: 640px; box-sizing: border-box; }
+.chat-main-cargos-shortcut { grid-column: 3; grid-row: 1; margin-top: 12px; width: 44px; height: 44px; padding: 0; border: 1px solid #bf6165; border-radius: 10px; background: #cf757a; overflow: hidden; cursor: pointer; }
+.chat-main-cargos-shortcut img { width: 100%; height: 100%; object-fit: contain; }

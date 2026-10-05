@@ -1,9 +1,14 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"><link rel="stylesheet" href="/src/ui/cargos.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
+import { createCargosView } from '/src/ui/cargos-view.js';
 import { createManagementReportView } from '/src/ui/management-report-view.js';
+import '/src/ui/provision-report.css';
+import { createProvisionReportView } from '/src/ui/provision-report-view.js';
+import '/src/ui/order-validation-report.css';
+import { createOrderValidationReportView } from '/src/ui/order-validation-report-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -20,8 +25,17 @@ const report=createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(
 view.on('open-payment-ledger',()=>{window.reportOpened++;void report.open();});
 const management=createManagementReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {launches:launches.map(row=>({...row,date:'2026-10-02',stage:'ALVENARIA E ESTRUTURAS'})),productTypes:[{product:'SERVENTE DE PEDREIRO',expenseType:'MÃO DE OBRA'}]};}}});
 view.on('open-management-report',()=>void management.open());
+const provision=createProvisionReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadProvisionReportSnapshot(){return {provisions:Array.from({length:12},(_,i)=>({id:String(i+1),recurrenceId:'7',supplier:`Fornecedor ${i}`,branch:'004 - EDIFÍCIO XAVANTE',product:'LOCAÇÃO CONTAINER',observation:'Conferir quantidade',property:'Obra',dueDate:'2026-10-08',paidDate:'',status:'PAGAMENTO PREVISTO',total:200})),recurrences:[{id:'7',status:'ATIVO',startDate:'2026-01-08'}]};}}});
+view.on('open-provision-report',()=>void provision.open());
+const validation=createOrderValidationReportView({document,data:{async loadOrderValidationSnapshot(){return {
+  orders:Array.from({length:12},(_,i)=>({id:String(362-i),branch:'004 - EDIFÍCIO XAVANTE',supplier:`Fornecedor ${i}`,invoice:'PENDENTE',status:'PENDENTE AUDITORIA',total:99.8,created:'2026-10-05T12:00:00Z'})),
+  launches:Array.from({length:12},(_,i)=>({id:String(3505-i),orderId:String(362-i),branch:'004 - EDIFÍCIO XAVANTE',supplier:`Fornecedor ${i}`,product:'TARIFA DE INTERNET',description:'Conferir nota fiscal',total:99.8}))
+};}}});
+view.on('open-order-validation-report',()=>void validation.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
+const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});
+view.on('open-cargos-table',()=>void cargos.open());
 view.render(state);
 await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
 document.documentElement.dataset.ready='true';

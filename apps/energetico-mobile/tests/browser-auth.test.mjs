@@ -218,9 +218,9 @@ test("retoma a abertura da Galeria de Despesas Recorrentes após consentimento M
   assert.equal(values.size, 0);
 });
 
-test("preserva e retoma a galeria IDFOLHA e FOLHAPGTO após consentimento Microsoft", async () => {
+test("preserva e retoma IDFOLHA, FOLHAPGTO e cargos após consentimento Microsoft", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
-  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto"]) {
+  for (const action of ["action_hr_gallery_idfolha", "action_hr_gallery_folhapgto", "action_cargos_table"]) {
     const values = new Map();
     const storage = {
       getItem(key) { return values.get(key) ?? null; },
@@ -359,7 +359,7 @@ test("não retoma pedidos usando conta em cache quando o retorno não identifica
 
 test("consentimento Microsoft retoma cada nova galeria local", async () => {
   const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
-  for (const action of ["action_asset_gallery", "action_asset_function_gallery", "action_asset_product_gallery", "action_asset_group_gallery", "action_work_diary_gallery", "action_quote_gallery", "action_contract_gallery", "action_contract_line_gallery", "action_measurement_gallery", "action_measurement_line_gallery", "action_stage_demonstrative_gallery", "action_construction_stage_gallery"]) {
+  for (const action of ["provision-report", "action_asset_gallery", "action_asset_function_gallery", "action_asset_product_gallery", "action_asset_group_gallery", "action_work_diary_gallery", "action_quote_gallery", "action_contract_gallery", "action_contract_line_gallery", "action_measurement_gallery", "action_measurement_line_gallery", "action_stage_demonstrative_gallery", "action_construction_stage_gallery"]) {
     const values = new Map();
     const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
     const first = createBrowserAuth({ storage, config, client: {
@@ -375,6 +375,35 @@ test("consentimento Microsoft retoma cada nova galeria local", async () => {
     } });
     await resumed.initialize();
     assert.equal(resumed.consumePendingAction(), action);
+    assert.equal(resumed.consumePendingAction(), null);
+    assert.equal(values.size, 0);
+  }
+});
+
+test("retoma validação de pedidos apenas com conta e escopos confirmados pelo retorno Microsoft", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  for (const [redirect, expected] of [
+    [{ account, accessToken: "report-token", scopes: ["Sites.Read.All"] }, "order-validation-report"],
+    [{ account: { ...account, homeAccountId: "other-account" }, accessToken: "report-token", scopes: ["Sites.Read.All"] }, null],
+    [{ account, accessToken: "report-token", scopes: ["User.Read"] }, null],
+    [{ account, scopes: ["Sites.Read.All"] }, null],
+    [null, null],
+  ]) {
+    const values = new Map();
+    const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+    const first = createBrowserAuth({ storage, config, client: {
+      async initialize() {}, async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; }, async acquireTokenRedirect() {},
+    } });
+    await first.initialize();
+    await first.authorize(["Sites.Read.All"], { resumeAction: "order-validation-report" });
+    assert.equal(values.size, 1, "a ação precisa ser preservada antes do redirecionamento");
+    const resumed = createBrowserAuth({ storage, config, client: {
+      async initialize() {}, async handleRedirectPromise() { return redirect; },
+      getAllAccounts() { return [account]; },
+    } });
+    await resumed.initialize();
+    assert.equal(resumed.consumePendingAction(), expected);
     assert.equal(resumed.consumePendingAction(), null);
     assert.equal(values.size, 0);
   }
