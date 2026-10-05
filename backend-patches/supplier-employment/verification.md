@@ -16,3 +16,5 @@ Hashes publicados:
 - worker/workflow_config.json: a879e92f54d5cf43e31bc07190dd557a91659ebdd6bd9478b07c44f872066ccb
 
 A verificação da trava de gestos confirmou os 14 blocos intactos.
+
+No aplicativo real conectado à VM, a 390 × 844, EMPREITEIRO = SIM apresentou os três vínculos e CLT apresentou os sete cargos. TERCEIRIZADO e INFORMAL avançaram para homologação sem cargo; NÃO avançou sem vínculo e sem cargo. O teste foi encerrado antes da confirmação, sem cadastrar fornecedor no SharePoint. Capturas locais de vínculo e cargo foram preservadas para o usuário.
