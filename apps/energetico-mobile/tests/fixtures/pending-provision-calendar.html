@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const state = { sessionStatus: 'authenticated', account: { name: 'Teste' }, draft: '', messages: [], pendingFiles: [],
+  pendingProvisions: { due: true, rows: [{ id: '314', supplier: 'Fornecedor de teste', dueDate: '2026-10-05', total: 1500 }] } };
+const view = createChatView(document.querySelector('#app'));
+window.saved = [];
+window.cancelled = 0;
+view.on('edit-pending-provision-due-date', ({ paymentId }) => {
+  state.pendingProvisionDateEditPaymentId = paymentId;
+  state.pendingProvisionDateEditValue = '05/10/2026';
+  view.render({ ...state });
+});
+view.on('save-pending-provision-due-date', ({ paymentId, value }) => window.saved.push({ paymentId, value }));
+view.on('cancel-pending-provision-date-edit', () => {
+  window.cancelled++;
+  state.pendingProvisionDateEditPaymentId = '';
+  view.render({ ...state });
+});
+view.render({ ...state });
+document.documentElement.dataset.ready = 'true';
+</script></body></html>

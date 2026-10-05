@@ -2148,7 +2148,7 @@ test("edição preenche o mesmo dia brasileiro exibido no cartão para timestamp
   const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
     due: true, rows: [{ id: "306", dueDate: "2026-10-02T01:00:00Z" }],
   }, pendingProvisionDateEditPaymentId: "306" })));
-  assert.equal(dom.window.document.querySelector('[data-role="pending-provision-due-date"]').value, "01/10/2026");
+  assert.equal(dom.window.document.querySelector('[data-role="pending-provision-due-date"]').value, "2026-10-01");
   dom.window.close();
 });
 
@@ -2345,7 +2345,7 @@ test("oferece lápis de edição de vencimento antes do check da provisão", () 
   dom.window.close();
 });
 
-test("tela de vencimento preenche DD/MM/AAAA, mascara a digitação e envia o pagamento correto", () => {
+test("tela de vencimento preenche calendário e envia DD/MM/AAAA para o pagamento correto", () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
@@ -2358,11 +2358,11 @@ test("tela de vencimento preenche DD/MM/AAAA, mascara a digitação e envia o pa
   }));
 
   const input = root.querySelector('[data-role="pending-provision-due-date"]');
-  assert.equal(input.value, "23/09/2026");
-  assert.equal(input.placeholder, "DD/MM/AAAA");
-  input.value = "24102026";
+  assert.equal(input.type, "date");
+  assert.equal(input.value, "2026-09-23");
+  input.value = "2026-10-24";
   input.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
-  assert.equal(input.value, "24/10/2026");
+  assert.equal(input.value, "2026-10-24");
   const save = root.querySelector('[data-action="save-pending-provision-due-date"]');
   save.click();
   assert.deepEqual(commands.map(({ paymentId, value }) => ({ paymentId, value })), [
