@@ -80,6 +80,16 @@ async function defaultAttendanceSummaryDataFactory(options) {
   return createAttendanceSummaryData(options);
 }
 
+async function defaultStageProgressFactory(options) {
+  const { createStageProgressReportView } = await import('./ui/stage-progress-view.js');
+  return createStageProgressReportView(options);
+}
+
+async function defaultStageProgressDataFactory(options) {
+  const { createStageProgressData } = await import('./chat/stage-progress-data.js');
+  return createStageProgressData(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -208,6 +218,8 @@ const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
 const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
+const STAGE_PROGRESS_ID = 'action_stage_progress';
+const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -703,6 +715,8 @@ export function createAppController({
   cargosDataFactory = async options => (await import('./chat/cargos-data.js')).createCargosData(options),
   attendanceSummaryFactory = defaultAttendanceSummaryFactory,
   attendanceSummaryDataFactory = defaultAttendanceSummaryDataFactory,
+  stageProgressFactory = defaultStageProgressFactory,
+  stageProgressDataFactory = defaultStageProgressDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -767,6 +781,9 @@ export function createAppController({
   let attendanceSummaryReport = null;
   let attendanceSummaryOpening = null;
   let attendanceSummarySession = null;
+  let stageProgressReport = null;
+  let stageProgressOpening = null;
+  let stageProgressSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -4042,6 +4059,17 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  function disposeStageProgressReport() {
+    const session = stageProgressSession;
+    const panel = stageProgressReport;
+    stageProgressSession = null;
+    stageProgressOpening = null;
+    stageProgressReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
   function disposePaymentProgrammingGallery() {
     paymentProgrammingGallery?.destroy?.();
     paymentProgrammingGallery = null;
@@ -4070,6 +4098,7 @@ export function createAppController({
       provisionReport,
       orderValidationReport,
       attendanceSummaryReport,
+      stageProgressReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4812,6 +4841,106 @@ export function createAppController({
     attendanceSummaryOpening = request;
     return request;
   }
+  async function openStageProgress() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (stageProgressOpening) return stageProgressOpening;
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = stageProgressSession || {
+      lifetime: new AbortController(), loadController: null, generation: 0,
+    };
+    stageProgressSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || stageProgressSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = STAGE_PROGRESS_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          await auth.authorize(scopes, { resumeAction: STAGE_PROGRESS_ID });
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await stageProgressDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    const request = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = stageProgressReport;
+        if (!report) {
+          const panel = await stageProgressFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          stageProgressReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && stageProgressSession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir o progresso das etapas.');
+        }
+        if (stageProgressSession === session && !stageProgressReport) disposeStageProgressReport();
+        return false;
+      } finally {
+        if (stageProgressOpening === request) stageProgressOpening = null;
+      }
+    });
+    stageProgressOpening = request;
+    return request;
+  }
+
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
@@ -5704,6 +5833,7 @@ export function createAppController({
   async function signIn() {
     const signInRevision = ++sessionRevision;
     disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -5793,6 +5923,7 @@ export function createAppController({
     disposeTasksGallery();
     disposeContractorReports();
     disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -6448,6 +6579,7 @@ export function createAppController({
       if (command.replyId === ORDER_VALIDATION_REPORT_ID) return openPaymentLedger('validation');
       if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
       if (command.replyId === ATTENDANCE_SUMMARY_ID) return openAttendanceSummary();
+      if (command.replyId === STAGE_PROGRESS_ID) return openStageProgress();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6680,6 +6812,7 @@ export function createAppController({
     bind('open-order-validation-report', () => openPaymentLedger('validation'));
     bind('open-cargos-table', openCargosTable);
     bind('open-attendance-summary', openAttendanceSummary);
+    bind('open-stage-progress', openStageProgress);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6763,6 +6896,7 @@ export function createAppController({
     });
     unsubscribeStore = store.subscribe(() => {
       if (attendanceSummarySession && (flowBusy() || store.getState().activeFlow)) disposeAttendanceSummaryReport();
+      if (stageProgressSession && (flowBusy() || store.getState().activeFlow)) disposeStageProgressReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -6828,6 +6962,7 @@ export function createAppController({
     else if (pendingAction === ORDER_VALIDATION_REPORT_ID) await openPaymentLedger('validation');
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
+    else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -6846,6 +6981,7 @@ export function createAppController({
     disposeTasksGallery();
     disposeContractorReports();
     disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
