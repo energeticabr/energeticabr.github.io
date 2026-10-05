@@ -1,0 +1,13 @@
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -14417,9 +14417,9 @@
+           "key": "fornecedor_pagamento",
+           "kind": "selection",
+           "target_field": "FORNECEDOR",
+           "prompt": "QUAL É O FORNECEDOR?",
+           "button_label": "ESCOLHER FORNECEDOR",
+-          "allow_blank": true,
++          "allow_blank": false,
+           "terminal_option": {
+             "id": "payment_supplier_registration",
+             "title": "➕ CADASTRAR NOVO FORNECEDOR",
