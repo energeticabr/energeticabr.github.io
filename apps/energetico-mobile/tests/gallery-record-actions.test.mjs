@@ -37,6 +37,50 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('payroll screen preserves edits while source values refresh and omits read-only fields on save', async t => {
+  let source = 200;
+  const ctx = await setup(t, { presentation: 'screen', loadEditor: async id => ({
+    ...context(id),
+    columns: [
+      { name: 'DATA', label: 'Data', control: 'date', editable: true },
+      { name: 'VALORUNITARIO', label: 'Valor unitário', control: 'number', editable: true, readOnly: true },
+      { name: 'QTD', label: 'Quantidade', control: 'number', editable: true, readOnly: true },
+    ],
+    item: { id, fields: { DATA: '2026-09-28', VALORUNITARIO: 200, QTD: 4 } },
+    refreshDerivedValues: async () => ({ VALORUNITARIO: source, QTD: 5 }),
+  }) });
+  click(ctx, 'edit'); await settle(); await settle();
+  assert.equal(ctx.get('[data-gallery-record-screen]').getAttribute('role'), 'region');
+  assert.equal(ctx.get('[data-gallery-record-screen]').hasAttribute('aria-modal'), false);
+  const date = ctx.get('[name=DATA]'); date.value = '2026-09-29';
+  assert.equal(ctx.get('[name=VALORUNITARIO]').readOnly, true);
+  source = 300;
+  ctx.dom.window.dispatchEvent(new ctx.dom.window.Event('focus'));
+  await settle();
+  assert.equal(ctx.get('[name=VALORUNITARIO]').value, '300');
+  assert.equal(date.value, '2026-09-29');
+  ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  assert.deepEqual(ctx.writes[0][2], { DATA: '2026-09-29' });
+});
+
+test('resetting payroll form refreshes the financial values of its restored launch', async t => {
+  const ctx = await setup(t, { loadEditor: async id => ({
+    ...context(id), columns: [
+      { name: 'IDLANCAMENTO', label: 'Lançamento', control: 'number', editable: true },
+      { name: 'VALORUNITARIO', label: 'Valor', control: 'number', editable: true, readOnly: true },
+    ], item: { id, fields: { IDLANCAMENTO: 1, VALORUNITARIO: 100 } },
+    refreshDerivedValues: async draft => ({ VALORUNITARIO: Number(draft.IDLANCAMENTO) * 100 }),
+  }) });
+  click(ctx, 'edit'); await settle(); await settle();
+  const link = ctx.get('[name=IDLANCAMENTO]'); link.value = '2';
+  link.dispatchEvent(new ctx.dom.window.Event('change')); await settle();
+  assert.equal(ctx.get('[name=VALORUNITARIO]').value, '200');
+  ctx.get('form').reset(); await settle();
+  assert.equal(link.value, '1');
+  assert.equal(ctx.get('[name=VALORUNITARIO]').value, '100');
+});
+
 test("record buttons have distinct accessible edit/delete icons", async t => {
   const ctx = await setup(t);
   assert.equal(ctx.buttons.className, "gallery-record-actions");

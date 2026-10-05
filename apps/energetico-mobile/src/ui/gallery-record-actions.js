@@ -1,13 +1,14 @@
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindForm43FieldLocks } from './orders-form43-locks-view.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { bindPayrollEditorSource } from './payroll-editor-source.js';
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
 export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra,
-  actions = ["edit", "delete"] } = {}) {
+  actions = ["edit", "delete"], presentation = 'dialog' } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
   let epoch = 0;
@@ -40,6 +41,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     session = null;
     previous?.controller?.cleanup?.();
     previous?.fieldLocks?.cleanup?.();
+    previous?.sourceBinding?.cleanup?.();
     previous?.variantPicker?.destroy();
     previous?.overlay.remove();
     if (previous?.focus?.isConnected) previous.focus.focus();
@@ -72,6 +74,13 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     dialog.setAttribute("aria-modal", "true");
     dialog.setAttribute("aria-labelledby", heading.id);
     dialog.setAttribute("data-gallery-record-dialog", "");
+    if (operation === 'edit' && presentation === 'screen') {
+      overlay.classList.add('gallery-record-overlay--screen');
+      dialog.classList.add('gallery-record-screen');
+      dialog.setAttribute('data-gallery-record-screen', '');
+      dialog.setAttribute('role', 'region');
+      dialog.removeAttribute('aria-modal');
+    }
     dialog.tabIndex = -1;
     const error = element("p", "gallery-record-dialog-error");
     error.setAttribute("role", "alert");
@@ -182,6 +191,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     const current = () => active(state) && state.loadEpoch === loadEpoch;
     state.controller?.cleanup?.();
     state.fieldLocks?.cleanup?.();
+    state.sourceBinding?.cleanup?.();
     state.variantPicker?.destroy(); state.variantPicker = null;
     state.fieldLocks = null;
     state.controller = null;
@@ -242,7 +252,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         onSubmit: async fields => {
           await mutate(state, () => {
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
-            return saveEditor(context, fields);
+            const readOnly = new Set(context.columns.filter(c => c.readOnly).map(c => c.name));
+            return saveEditor(context, Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name))));
           });
           // Re-evaluate conditional locks after a rejected save, once the
           // renderer has restored its own disabled-state snapshot.
@@ -258,6 +269,11 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         },
       });
       state.fieldLocks = bindForm43FieldLocks(state.body, context, { isBusy: () => state.busy || state.persisted });
+      state.sourceBinding = bindPayrollEditorSource(state.body.querySelector('form'), context, {
+        isBusy: () => state.busy || state.persisted,
+        onError: error => showError(state, error),
+        onRecovered: () => { if (active(state)) state.error.hidden = true; },
+      });
       (state.body.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])') || focusable(state)[0] || state.dialog).focus();
     } catch (error) {
       if (!current()) return;
@@ -295,6 +311,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   }
 
   return Object.freeze({
+    isEditing: () => session?.operation === 'edit',
     render(row) {
       const wrapper = element("div", "gallery-record-actions");
       for (const action of actions) {

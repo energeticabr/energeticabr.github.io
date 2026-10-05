@@ -117,6 +117,8 @@ test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalizaçã
   assert.equal(typeof galleryData.createHrPayrollGalleryData, "function", "a leitura direta SharePoint da folha precisa estar disponível");
   const calls = [];
   const repository = {
+    async getColumns() { return [{ name: 'VALORUNITARIO', number: {} }, { name: 'QUANTIDADE', number: {} }]; },
+    async getItem(_site, _list, id) { return { id, fields: { VALORUNITARIO: 1200, QUANTIDADE: 1 } }; },
     async resolveList(siteKey, aliases) {
       calls.push(["resolveList", siteKey, aliases]);
       return { status: "resolved", id: `list-${aliases[0]}` };
@@ -156,6 +158,7 @@ test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalizaçã
     ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 2, maxPages: 100, cursor: "idfolha-next" }],
     ["resolveList", "personal", ["FOLHAPGTO"]],
     ["getItemsPage", "personal", "list-FOLHAPGTO", "$select=id&$expand=fields($select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO)&$top=25", { pageNumber: 1, maxPages: 100 }],
+    ["resolveList", "personal", ["LANCAMENTOS", "LANÇAMENTOS"]],
   ]);
 });
 
@@ -173,6 +176,8 @@ test("galeria de folha recusa lista e parâmetros fora da allowlist", async () =
 test("relatório da folha percorre páginas e vincula somente o IDFOLHA escolhido sem filtro não indexado", async () => {
   const calls = [];
   const repository = {
+    async getColumns() { return [{ name: 'VALORUNITARIO', number: {} }, { name: 'QUANTIDADE', number: {} }]; },
+    async getItem(_site, _list, id) { return { id, fields: { VALORUNITARIO: id === '3456' ? 1200 : 50, QUANTIDADE: id === '3456' ? 1 : 2 } }; },
     async resolveList(siteKey, aliases) {
       calls.push(["resolveList", siteKey, aliases]);
       return { status: "resolved", id: "list-FOLHAPGTO" };
@@ -226,6 +231,8 @@ test("relatório da folha percorre páginas e vincula somente o IDFOLHA escolhid
 test("relatório usa consulta filtrada quando disponível sem percorrer uma lista grande", async () => {
   const calls = [];
   const data = galleryData.createHrPayrollGalleryData({ repository: {
+    async getColumns() { return [{ name: 'VALORUNITARIO', number: {} }, { name: 'QUANTIDADE', number: {} }]; },
+    async getItem(_site, _list, id) { return { id, fields: { VALORUNITARIO: 1200, QUANTIDADE: 1 } }; },
     async resolveList() { return { status: "resolved", id: "list-FOLHAPGTO" }; },
     async getItemsPage(_site, _list, query, options) {
       calls.push({ query, options });
