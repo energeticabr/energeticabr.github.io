@@ -21,10 +21,13 @@ test("relatórios 11–13 cabem em 844×390 e 740×360 sem rolagem lateral ou co
   try {
     await server.listen();
     const port = server.httpServer.address().port;
-    child = spawn(browser, ["--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank"], { stdio: "ignore" });
+    let startupOutput = '', startupError;
+    child = spawn(browser, ["--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+    child.stderr.on('data', chunk => { startupOutput = (startupOutput + chunk.toString()).slice(-8000); });
+    child.on('error', error => { startupError = error; });
     const portFile = join(profile, "DevToolsActivePort");
-    for (let i = 0; i < 200 && !existsSync(portFile); i++) await delay(100);
-    assert.ok(existsSync(portFile), "Chrome não iniciou protocolo de inspeção");
+    for (let i = 0; i < 200 && !existsSync(portFile) && child.exitCode === null && !startupError; i++) await delay(100);
+    assert.ok(existsSync(portFile), `Chrome não iniciou protocolo de inspeção: exit=${child.exitCode}, signal=${child.signalCode}, erro=${startupError?.message || 'nenhum'}\n${startupOutput}`);
     const [debugPort, path] = readFileSync(portFile, "utf8").trim().split(/\r?\n/);
     socket = new WebSocket(`ws://127.0.0.1:${debugPort}${path}`);
     await new Promise((resolve, reject) => { socket.addEventListener("open", resolve, { once: true }); socket.addEventListener("error", reject, { once: true }); });
