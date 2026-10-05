@@ -214,6 +214,7 @@ const AUTH_INITIALIZE_TIMEOUT_MS = 15_000;
 // can expire while the user is still completing the browser step.
 const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
+const PENDING_PROVISION_AUTO_INTERVAL_MS = 30 * 60 * 1000;
 const PENDING_PROVISION_ATTACHMENT_CONCURRENCY = 4;
 const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
@@ -918,7 +919,7 @@ export function createAppController({
   let pendingProvisionRequest = null;
   let pendingProvisionSnapshotRevision = 0;
   let pendingProvisionOpenRequest = null;
-  let pendingProvisionSessionDismissed = false;
+  let pendingProvisionLastAutoShownAt = null;
   let pendingProvisionReminderTimer = null;
   let pendingProvisionReminderRevision = 0;
   let pendingProvisionAttachmentsData = null;
@@ -1686,8 +1687,10 @@ export function createAppController({
   }
 
   function pendingProvisionReminderSuppressed() {
-    if (pendingProvisionSessionDismissed) return true;
     const saved = readPendingProvisionReminder(account);
+    const lastAutoShownAt = pendingProvisionLastAutoShownAt ?? saved?.lastAutoShownAt;
+    if (typeof lastAutoShownAt === "number" && Number.isFinite(lastAutoShownAt)
+      && Date.now() - lastAutoShownAt < PENDING_PROVISION_AUTO_INTERVAL_MS) return true;
     if (!saved) return false;
     if (saved.mode === "always") return false;
     if (saved.mode === "today") return saved.date === localDateIso();
@@ -1730,7 +1733,7 @@ export function createAppController({
       }
       return true;
     }
-    if (!manual && pendingProvisionSessionDismissed) return false;
+    if (!manual && pendingProvisionReminderSuppressed()) return false;
     if (pendingProvisionRequest) return pendingProvisionRequest;
     const snapshotAccount = account;
     const snapshotRevision = sessionRevision;
@@ -1791,6 +1794,13 @@ export function createAppController({
           if (!manual) cancelScheduledPendingProvisionReminder();
           snapshot.due = due || manual;
           pendingProvisionSnapshot = snapshot;
+          if (!manual) {
+            pendingProvisionLastAutoShownAt = Date.now();
+            writePendingProvisionReminder(snapshotAccount, {
+              ...readPendingProvisionReminder(snapshotAccount),
+              lastAutoShownAt: pendingProvisionLastAutoShownAt,
+            });
+          }
           pendingProvisionReminderOpen = false;
           pendingProvisionReminderError = "";
           beginPendingProvisionAttachmentDiscovery(snapshot);
@@ -2289,7 +2299,6 @@ export function createAppController({
 
   function dismissPendingProvisions() {
     if (!pendingProvisionSnapshot) return false;
-    pendingProvisionSessionDismissed = true;
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
     pendingProvisionReminderError = "";
@@ -2313,7 +2322,6 @@ export function createAppController({
     let delayMs = 0;
     if (choice === "always") {
       saved = { mode: "always" };
-      pendingProvisionSessionDismissed = true;
     } else if (choice === "2h") {
       delayMs = 2 * 60 * 60 * 1000;
       saved = { mode: "hours", until: Date.now() + delayMs };
@@ -2329,7 +2337,7 @@ export function createAppController({
       delayMs = Math.round(hours * 60 * 60 * 1000);
       saved = { mode: "hours", until: Date.now() + delayMs };
     }
-    writePendingProvisionReminder(account, saved);
+    writePendingProvisionReminder(account, { ...readPendingProvisionReminder(account), ...saved });
     if (delayMs) schedulePendingProvisionReminder(delayMs);
     else cancelScheduledPendingProvisionReminder();
     pendingProvisionSnapshot = null;
@@ -5374,7 +5382,7 @@ export function createAppController({
       lastPresenceValidationDate = "";
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
-      pendingProvisionSessionDismissed = false;
+      pendingProvisionLastAutoShownAt = null;
       pendingNotesSessionDismissed = false;
       pendingConstructionDiarySnapshot = null;
       pendingConstructionDiarySessionDismissed = false;
@@ -5476,7 +5484,7 @@ export function createAppController({
     pendingProvisionRequest = null;
     pendingProvisionSnapshotRevision += 1;
     pendingProvisionOpenRequest = null;
-    pendingProvisionSessionDismissed = false;
+    pendingProvisionLastAutoShownAt = null;
     clearPendingProvisionAttachmentState({ clearData: true });
     pendingProvisionSharePointAuthorization = null;
     lastPresenceValidationDate = "";
@@ -6416,7 +6424,7 @@ export function createAppController({
     }
 
     sessionStatus = account ? "authenticated" : "signed-out";
-    pendingProvisionSessionDismissed = false;
+    pendingProvisionLastAutoShownAt = null;
     pendingNotesSessionDismissed = false;
     pendingConstructionDiarySnapshot = null;
     pendingConstructionDiarySessionDismissed = false;
