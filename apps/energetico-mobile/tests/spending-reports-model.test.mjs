@@ -7,6 +7,20 @@ const row = (id, changes = {}) => ({ id: String(id), date: "2026-09-12", payment
   supplier: "Alfa", product: "Cimento", branch: "Filial A", disbursement: "SIM", order: "42",
   stage: "Fundação", account: "Obra", description: "Entrega", unit: 20, quantity: 2, freight: 5, total: 45, ...changes });
 
+test('management totals use exact decimal sums without truncating over 2000 rows',()=>{
+  const exact=model.buildSpendingReport9({launches:[row(1,{total:.1}),row(2,{total:.2})],productTypes:[]});
+  assert.equal(exact.total,.3);assert.equal(exact.branches[0].total,.3);
+  const many=model.buildSpendingReport9({launches:Array.from({length:2001},(_,i)=>row(i,{total:1})),productTypes:[]});
+  assert.equal(many.count,2001);assert.equal(many.total,2001);
+});
+
+test('management line multiplication preserves half-cent amounts before Brazilian money rounding',async()=>{
+  const normalized=model.normalizeSpendingLaunch({id:'1',fields:{DATA:'2026-10-02',FILIAL:'Xavante',FORNECEDOR:'Alfa',PRODUTO:'Cimento',VALORUNITARIO:'2,30',QUANTIDADE:'0,05',FRETE:'0'}});
+  assert.equal(normalized.total,.115);
+  const {formatReportMoney}=await import('../src/chat/contractor-report-model.js');
+  assert.match(formatReportMoney(model.buildSpendingReport9({launches:[normalized],productTypes:[]}).total),/0,12/);
+});
+
 test("normaliza colunas SharePoint e preserva valor ausente como incompleto", () => {
   assert.equal(typeof model.normalizeSpendingLaunch, "function");
   const columns = [

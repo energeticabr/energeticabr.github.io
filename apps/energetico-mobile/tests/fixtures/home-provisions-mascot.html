@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
+import { createManagementReportView } from '/src/ui/management-report-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -17,6 +18,8 @@ const launches=[{id:'3498',paymentDate:'2026-10-02',supplier:'Alfa',branch:'004 
 launches.push(...Array.from({length:8},(_,i)=>({...launches[0],id:String(4000+i),branch:`Filial de teste ${i}`,unit:0,quantity:1,total:0})));
 const report=createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){window.reportLoads++;return {launches};}}});
 view.on('open-payment-ledger',()=>{window.reportOpened++;void report.open();});
+const management=createManagementReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {launches:launches.map(row=>({...row,date:'2026-10-02',stage:'ALVENARIA E ESTRUTURAS'})),productTypes:[{product:'SERVENTE DE PEDREIRO',expenseType:'MÃO DE OBRA'}]};}}});
+view.on('open-management-report',()=>void management.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 view.render(state);

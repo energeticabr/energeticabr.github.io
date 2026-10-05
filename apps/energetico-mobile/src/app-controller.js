@@ -55,6 +55,11 @@ async function defaultPaymentLedgerFactory(options) {
   return createPaymentLedgerView(options);
 }
 
+async function defaultManagementReportFactory(options) {
+  const { createManagementReportView } = await import('./ui/management-report-view.js');
+  return createManagementReportView(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -181,6 +186,7 @@ const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
 const PAYMENT_LEDGER_ID = 'action_payment_ledger';
+const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
@@ -670,6 +676,7 @@ export function createAppController({
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
   contractorReportsFactory = defaultContractorReportsFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
+  managementReportFactory = defaultManagementReportFactory,
   paymentLedgerDataFactory = defaultPaymentLedgerDataFactory,
   contractorReportDataFactory = defaultContractorReportDataFactory,
   presencePaymentReportDataFactory = defaultPresencePaymentReportDataFactory,
@@ -725,6 +732,8 @@ export function createAppController({
   let contractorReportsOpening = null;
   let paymentLedger = null;
   let paymentLedgerOpening = null;
+  let managementReport = null;
+  let managementReportOpening = null;
   let paymentProgrammingGallery = null;
   let paymentProgrammingGalleryOpening = null;
   let recurringExpensesGallery = null;
@@ -3964,6 +3973,10 @@ export function createAppController({
   }
 
   function disposeContractorReports() {
+    managementReportOpening = null;
+    paymentLedgerOpening = null;
+    managementReport?.destroy?.();
+    managementReport = null;
     paymentLedger?.destroy?.();
     paymentLedger = null;
     contractorReports?.destroy?.();
@@ -3993,6 +4006,7 @@ export function createAppController({
       tasksGallery,
       contractorReports,
       paymentLedger,
+      managementReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4495,18 +4509,22 @@ export function createAppController({
     return contractorReportsOpening;
   }
 
-  async function openPaymentLedger() {
+  async function openPaymentLedger(management = false) {
     if (!account || stopped || flowBusy()) return false;
-    if (paymentLedgerOpening) return paymentLedgerOpening;
+    const opening = management ? managementReportOpening : paymentLedgerOpening;
+    if (opening) return opening;
+    const reportId = management ? MANAGEMENT_REPORT_ID : PAYMENT_LEDGER_ID;
+    const method = management ? 'loadSnapshot' : 'loadPaymentsSnapshot';
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
     let requestSignal, requestGeneration = 0;
     const assertSession = () => {
       if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) throw new Error('A sessão do relatório foi encerrada.');
     };
-    paymentLedgerOpening = (async () => {
+    const request = Promise.resolve().then(async () => {
       try {
-        if (!paymentLedger) {
+        let report = management ? managementReport : paymentLedger;
+        if (!report) {
           const tokenProvider = scopes => {
             assertSession();
             const signal = requestSignal, generation = requestGeneration;
@@ -4517,28 +4535,36 @@ export function createAppController({
             return auth.getToken(scopes).then(token => { assertRequest(); return token; }).catch(async error => {
               assertRequest();
               if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-              await auth.authorize(scopes, { resumeAction: PAYMENT_LEDGER_ID });
+              await auth.authorize(scopes, { resumeAction: reportId });
               assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
             });
           };
           const source = await paymentLedgerDataFactory({ tokenProvider });
-          const data = { loadPaymentsSnapshot(options = {}) {
+          const data = { [method](options = {}) {
             requestSignal = options.signal; requestGeneration++;
-            return source.loadPaymentsSnapshot(options);
+            return source[method](options);
           } };
           assertSession();
-          const panel = await paymentLedgerFactory({ data, document: globalThis.document });
-          if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }
-          paymentLedger = panel;
+          const factory = management ? managementReportFactory : paymentLedgerFactory;
+          const panel = await factory({ data, document: globalThis.document });
+          if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) { panel.destroy?.(); return false; }
+          report = panel;
+          if (management) managementReport = panel;
+          else paymentLedger = panel;
         }
-        await paymentLedger.open();
+        await report.open();
         return true;
       } catch (error) {
-        if (!stopped && account === reportsAccount) setSessionError(error, 'Não foi possível abrir o relatório de pagamentos.');
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision) setSessionError(error, management ? 'Não foi possível abrir o resumo gerencial de gastos.' : 'Não foi possível abrir o relatório de pagamentos.');
         return false;
-      } finally { paymentLedgerOpening = null; }
-    })();
-    return paymentLedgerOpening;
+      } finally {
+        if (management && managementReportOpening === request) managementReportOpening = null;
+        else if (!management && paymentLedgerOpening === request) paymentLedgerOpening = null;
+      }
+    });
+    if (management) managementReportOpening = request;
+    else paymentLedgerOpening = request;
+    return request;
   }
 
   async function openPaymentProgrammingGallery() {
@@ -6169,6 +6195,7 @@ export function createAppController({
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === CONTRACTOR_REPORTS_ID) return openContractorReports();
       if (command.replyId === PAYMENT_LEDGER_ID) return openPaymentLedger();
+      if (command.replyId === MANAGEMENT_REPORT_ID) return openPaymentLedger(true);
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6394,7 +6421,8 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-pending-provisions", openPendingProvisions);
-    bind('open-payment-ledger', openPaymentLedger);
+    bind('open-payment-ledger', () => openPaymentLedger());
+    bind('open-management-report', () => openPaymentLedger(true));
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6536,6 +6564,7 @@ export function createAppController({
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
     else if (pendingAction === PAYMENT_LEDGER_ID) await openPaymentLedger();
+    else if (pendingAction === MANAGEMENT_REPORT_ID) await openPaymentLedger(true);
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
