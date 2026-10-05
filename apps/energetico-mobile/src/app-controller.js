@@ -4238,9 +4238,11 @@ export function createAppController({
               assertSession();
               return result;
             },
-            request: async (selectedGallery, page, pageSize, cursor) => {
+            request: async (selectedGallery, page, pageSize, cursor, options) => {
               assertSession();
-              const result = await hrPayrollGalleryData.loadPage(selectedGallery, { page, pageSize, cursor });
+              const result = options && typeof hrPayrollGalleryData.loadFilteredPage === 'function'
+                ? await hrPayrollGalleryData.loadFilteredPage(selectedGallery, {page,pageSize,...options})
+                : await hrPayrollGalleryData.loadPage(selectedGallery, { page, pageSize, cursor });
               assertSession();
               return result;
             },

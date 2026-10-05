@@ -5,6 +5,7 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 import { provisionDateKey, provisionDayOffset, provisionDueState, provisionTotal } from "./pending-provision-dates.js";
 import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
 import { createPayrollSourceReader } from './payroll-editor-policy.js';
+import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters } from './payroll-gallery-filters.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -368,12 +369,18 @@ export function createHrPayrollGalleryData({
 
   const listRequests = new Map();
   const readPayrollSource = createPayrollSourceReader(repository, SITE_KEY);
-  async function currentPayrollRows(rows, signal) {
+  async function currentPayrollRows(rows, signal, sourceCache) {
     const result = [];
     // Limit concurrent SharePoint requests for larger payroll reports.
     for (let start = 0; start < rows.length; start += 4) {
-      result.push(...await Promise.all(rows.slice(start, start + 4).map(async row =>
-        Object.freeze({ ...row, ...await readPayrollSource(row, signal) }))));
+      result.push(...await Promise.all(rows.slice(start, start + 4).map(async row => {
+        let source = sourceCache?.get(row.id);
+        if(!source) {
+          source=readPayrollSource(row,signal).catch(error=>{sourceCache?.delete(row.id);throw error;});
+          sourceCache?.set(row.id,source);
+        }
+        return Object.freeze({...row,...await source});
+      })));
     }
     return Object.freeze(result);
   }
@@ -395,7 +402,7 @@ export function createHrPayrollGalleryData({
     return listRequests.get(gallery);
   }
 
-  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null } = {}) {
+  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null, hydrateSource = true } = {}) {
     const config = HR_PAYROLL_GALLERIES[gallery];
     if (!config) throw new RangeError("Galeria de folha inválida.");
     if (!Number.isInteger(page) || page < 1 || page > HR_PAYROLL_PAGE_COUNT_MAX
@@ -425,16 +432,58 @@ export function createHrPayrollGalleryData({
     const nextCursor = result?.hasMore === true && typeof result?.nextLink === "string" && result.nextLink
       ? result.nextLink
       : null;
+    if(result?.hasMore === true && !nextCursor) throw new Error('A paginação da galeria não retornou o próximo cursor.');
     return Object.freeze({
       gallery,
       listName: config.listName,
       page,
       pageSize,
       fields: Object.freeze(config.fields.map(([key]) => key)),
-      rows: gallery === 'FOLHAPGTO' ? await currentPayrollRows(rows) : Object.freeze(rows),
+      rows: gallery === 'FOLHAPGTO' && hydrateSource ? await currentPayrollRows(rows) : Object.freeze(rows),
       hasMore: Boolean(nextCursor),
       nextCursor,
     });
+  }
+
+  const filterSnapshots = new Map();
+  async function loadFilteredPage(gallery, { page = 1, pageSize = 25, filters = {}, refresh = false } = {}) {
+    validatePayrollFilters(gallery, filters);
+    if (!Number.isInteger(page) || page < 1 || page > 5000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > HR_PAYROLL_PAGE_SIZE_MAX) {
+      throw new RangeError('Página da galeria inválida.');
+    }
+    assertSession();
+    let cached = filterSnapshots.get(gallery);
+    if (refresh || !cached || (cached.completedAt != null && now().getTime() - cached.completedAt >= 15000)) {
+      cached = { completedAt: null, sources: new Map() };
+      filterSnapshots.set(gallery, cached);
+      cached.promise = (async () => {
+        const rows = [], seen = new Set(); let cursor = null;
+        for (let number=1; number<=HR_PAYROLL_PAGE_COUNT_MAX; number++) {
+          assertSession();
+          const result = await loadPage(gallery, {page:number,pageSize:HR_PAYROLL_PAGE_SIZE_MAX,cursor,hydrateSource:false});
+          assertSession();
+          rows.push(...result.rows);
+          if (!result.hasMore) { cached.completedAt=now().getTime(); return rows; }
+          if (!result.nextCursor || seen.has(result.nextCursor)) throw new Error('A paginação dos filtros não retornou um cursor válido.');
+          seen.add(result.nextCursor); cursor=result.nextCursor;
+        }
+        throw new Error('A galeria excedeu o limite seguro de páginas; os filtros não foram truncados.');
+      })().catch(error=>{if(filterSnapshots.get(gallery)===cached) filterSnapshots.delete(gallery); throw error;});
+    }
+    const all = await cached.promise;
+    assertSession();
+    // Text/identity/date filters use the payroll rows; financial ranges use current launch values.
+    const baseFilters=Object.fromEntries(Object.entries(filters).filter(([key])=>!key.startsWith('VALORUNITARIO')&&!key.startsWith('QTD')));
+    let candidates=filterPayrollRows(gallery,all,baseFilters);
+    const financialFilters=Object.entries(filters).some(([key,value])=>value && (key.startsWith('VALORUNITARIO')||key.startsWith('QTD')));
+    if(gallery==='FOLHAPGTO' && financialFilters) candidates=await currentPayrollRows(candidates,undefined,cached.sources);
+    const filtered=filterPayrollRows(gallery,candidates,filters), offset=(page-1)*pageSize;
+    const hasMore=offset+pageSize<filtered.length;
+    const pageRows=filtered.slice(offset,offset+pageSize);
+    const rows=gallery==='FOLHAPGTO' ? await currentPayrollRows(pageRows,undefined,cached.sources) : Object.freeze(pageRows);
+    assertSession();
+    return Object.freeze({gallery,page,pageSize,rows,
+      count:filtered.length,totalCount:all.length,filterOptions:payrollFilterOptions(gallery,all),hasMore,nextCursor:hasMore?String(page+1):null});
   }
 
   async function loadPaymentsForPayrollId(rawId, { signal } = {}) {
@@ -525,7 +574,7 @@ export function createHrPayrollGalleryData({
   async function payments() {
     return paymentData ||= import('./payroll-payment-data.js').then(({createPayrollPaymentData})=>createPayrollPaymentData({repository,siteKey:SITE_KEY,now,assertSession}));
   }
-  return Object.freeze({ loadPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
+  return Object.freeze({ loadPage, loadFilteredPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),
     deleteItem: async (gallery, id, options) => (await editor(gallery)).deleteItem(id, options) });

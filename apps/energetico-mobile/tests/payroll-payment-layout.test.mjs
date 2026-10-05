@@ -33,24 +33,31 @@ test('white payroll add action and closed create form fill phone and desktop vie
     const {targetId}=await send('Target.createTarget',{url:'about:blank'});
     const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
     const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
-    for(const [width,height,pwaStyles] of [[320,740,false],[390,844,false],[1365,900,false],[320,740,true],[390,844,true]]) {
+    for(const [width,height,pwaStyles,gallery='FOLHAPGTO'] of [[320,740,false],[390,844,false],[1365,900,false],[320,740,true],[390,844,true],[320,740,false,'IDFOLHA'],[390,844,true,'IDFOLHA'],[1365,900,true,'IDFOLHA']]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},sessionId);
-      await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-payment.html?width=${width}`},sessionId);
+      const query=`?width=${width}&gallery=${gallery}`;
+      await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-payment.html${query}`},sessionId);
       let ready=false;
-      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}' && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
+      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search===${JSON.stringify(query)} && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
       assert.ok(ready);
       if(pwaStyles) await evaluate(`(()=>{document.querySelectorAll('style,link[rel="stylesheet"]').forEach(n=>n.remove());const s=document.createElement('style');s.textContent=${JSON.stringify(pwaCss)};document.head.append(s);})()`);
+      const toolbar=await evaluate(`(()=>{const t=document.querySelector('.hr-gallery-toolbar'),s=t.querySelector('input'),f=t.querySelector('[data-action=toggle-payroll-filters]');const a=s.getBoundingClientRect(),b=f.getBoundingClientRect();return {sameRow:Math.abs(a.top-b.top)<1,ordered:a.right<=b.left,usable:a.width>=100&&a.height>=44&&b.height>=44,fits:t.scrollWidth<=t.clientWidth+1};})()`);
+      assert.deepEqual(toolbar,{sameRow:true,ordered:true,usable:true,fits:true},JSON.stringify({width,pwaStyles,gallery,toolbar}));
+      await evaluate(`document.querySelector('[data-action=toggle-payroll-filters]').click()`);
+      assert.equal(await evaluate(`(()=>{const e=document.querySelector('.hr-gallery-filter-panel');return !e.hidden&&e.scrollWidth<=e.clientWidth+1&&[...e.querySelectorAll('input,.sfs-trigger')].every(n=>{const r=n.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;});})()`),true);
+      await evaluate(`document.querySelector('[data-action=toggle-payroll-filters]').click()`);
+      if(gallery==='IDFOLHA') continue;
       const add=await evaluate(`(()=>{const e=document.querySelector('[data-action="add-payroll-payment"]'),r=e.getBoundingClientRect();return {fill:getComputedStyle(e).backgroundColor,fits:r.left>=0&&r.right<=innerWidth&&r.width>=44&&r.height>=44};})()`);
       assert.deepEqual(add,{fill:'rgb(255, 255, 255)',fits:true});
       await evaluate(`document.querySelector('[data-action="add-payroll-payment"]').click()`);
-      for(let n=0;n<100;n++){if(await evaluate(`Boolean(document.querySelector('[name=IDLANCAMENTO]'))`))break;await delay(50);}
+      for(let n=0;n<100;n++){if(await evaluate(`Boolean(document.querySelector('[data-payroll-payment-screen] [name=IDLANCAMENTO]'))`))break;await delay(50);}
       const layout=await evaluate(`(()=>{const e=document.querySelector('[data-payroll-payment-screen]'),r=e.getBoundingClientRect();return {left:r.left,top:r.top,width:r.width,height:r.height,overflow:e.scrollWidth>e.clientWidth,modal:e.hasAttribute('aria-modal'),columns:getComputedStyle(e.querySelector('.dynamic-form-grid')).gridTemplateColumns.split(' ').length};})()`);
       assert.deepEqual(layout,{left:0,top:0,width,height,overflow:false,modal:false,columns:width<=600?1:2},JSON.stringify({width,pwaStyles,layout}));
       assert.equal(await evaluate(`[...document.querySelectorAll('.sfs-field')].every(field=>{const r=field.getBoundingClientRect(),a=field.querySelector('.sfs-arrow').getBoundingClientRect();return a.left>=r.left&&a.right<=r.right+1&&a.top>=r.top&&a.bottom<=r.bottom+1;})`),true);
-      await evaluate(`(()=>{const launch=document.querySelector('[name=IDLANCAMENTO]');launch.value='3457';launch.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-      assert.deepEqual(await evaluate(`[...document.querySelector('[name=IDFOLHA]').options].filter(o=>o.value).map(o=>o.value)`),['9','19','29']);
+      await evaluate(`(()=>{const launch=document.querySelector('[data-payroll-payment-screen] [name=IDLANCAMENTO]');launch.value='3457';launch.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      assert.deepEqual(await evaluate(`[...document.querySelector('[data-payroll-payment-screen] [name=IDFOLHA]').options].filter(o=>o.value).map(o=>o.value)`),['9','19','29']);
       if(width===390&&!pwaStyles&&process.env.PAYROLL_PAYMENT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);writeFileSync(process.env.PAYROLL_PAYMENT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
-      await evaluate(`(()=>{document.querySelector('[name=IDFOLHA]').value='19';document.querySelector('[name=TIPOPGTO]').value='SALÁRIO';document.querySelector('[data-payroll-payment-screen] form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));})()`);
+      await evaluate(`(()=>{document.querySelector('[data-payroll-payment-screen] [name=IDFOLHA]').value='19';document.querySelector('[data-payroll-payment-screen] [name=TIPOPGTO]').value='SALÁRIO';document.querySelector('[data-payroll-payment-screen] form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));})()`);
       for(let n=0;n<100;n++){if(await evaluate(`!document.querySelector('[data-payroll-payment-screen]')`))break;await delay(50);}
       assert.equal(await evaluate(`document.querySelector('[data-payroll-payment-screen]')`),null);
       assert.deepEqual(await evaluate(`window.saved`),[{launchId:'3457',sheetId:'19',paymentType:'SALÁRIO'}]);

@@ -24,7 +24,8 @@ test('white add-payment action opens a full screen with dependent closed selecti
 });
 test('switching launch clears incompatible sheet and cancel performs no writes',async t=>{
   const f=setup(t);await f.panel.open();f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
-  const launch=f.doc.querySelector('[name=IDLANCAMENTO]'),sheet=f.doc.querySelector('[name=IDFOLHA]');launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change'));sheet.value='21';launch.value='11';launch.dispatchEvent(new f.dom.window.Event('change'));
+  const screen=f.doc.querySelector('[data-payroll-payment-screen]');
+  const launch=screen.querySelector('[name=IDLANCAMENTO]'),sheet=screen.querySelector('[name=IDFOLHA]');launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change'));sheet.value='21';launch.value='11';launch.dispatchEvent(new f.dom.window.Event('change'));
   assert.equal(sheet.value,'');assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['30']);
   f.doc.querySelector('[data-payment-cancel]').click();assert.equal(f.saves.length,0);assert.equal(f.doc.querySelector('[data-payroll-payment-screen]'),null);
 });
