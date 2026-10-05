@@ -287,6 +287,12 @@
 .lg-record-finance .lg-record-value { color: var(--lg-navy); font-size: .9rem; font-weight: 900; }
 .lg-cluster-trigger { align-self: flex-start; max-width: 100%; margin: 0; padding: 0; border: 0; color: var(--lg-navy); background: transparent; font: inherit; font-size: .79rem; font-weight: 800; text-align: left; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer; }
 .lg-cluster-trigger:focus-visible { outline: 3px solid #f0b323; outline-offset: 2px; }
+.lg-record-order-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.lg-record-order-actions .lg-cluster-trigger { align-self: center; }
+.lg-record-order-actions .report-mascot-button { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 3px; border: 1px solid #a9c5d1; border-radius: 10px; background: #edf7fa; cursor: pointer; touch-action: manipulation; }
+.lg-record-order-actions .report-mascot-button img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+.lg-record-order-actions .report-mascot-button:hover { background: #dceef4; }
+.lg-record-order-actions .report-mascot-button:focus-visible { outline: 3px solid #e6a929; outline-offset: 2px; }
 .lg-record-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; padding: 7px; border: 1px solid #d9e6ef; border-radius: 7px; background: #f1f7fb; }
 .lg-record-section-title { grid-column: 1 / -1; margin: 0; padding: 0 3px 4px; color: #3a657e; font-size: .72rem; font-weight: 850; text-transform: uppercase; }
 .lg-record-dates .lg-record-field { padding: 6px; border: 1px solid #e0eaf1; border-radius: 5px; background: #fff; margin-bottom: 5px; }

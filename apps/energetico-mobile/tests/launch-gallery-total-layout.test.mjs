@@ -59,7 +59,12 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
         if (!total) return { missingTotal: true };
         const box = total.getBoundingClientRect(), heading = card.querySelector('.lg-record-heading').getBoundingClientRect();
         const status = card.querySelector('.lg-record-status').getBoundingClientRect(), actions = card.querySelector('.gallery-record-actions').getBoundingClientRect();
+        const mascot = card.querySelector('.report-mascot-button'), order = card.querySelector('.lg-record-order');
+        const mascotBox = mascot?.getBoundingClientRect(), orderBox = order?.getBoundingClientRect();
         return { text: total.textContent.replace(/\u00a0/g, ' '), color: getComputedStyle(total.querySelector('.lg-record-value')).color,
+          mascot: mascot ? { width: mascotBox.width, height: mascotBox.height,
+            fits: mascotBox.left >= orderBox.left && mascotBox.right <= orderBox.right + 1,
+            loaded: mascot.querySelector('img').complete && mascot.querySelector('img').naturalWidth > 0 } : null,
           belowActions: box.top >= actions.bottom, aboveDivider: box.bottom <= heading.bottom - 2,
           alignedRight: Math.abs(box.right - heading.right) < 1,
           noStatusOverlap: box.left >= status.right || box.top >= status.bottom,
@@ -78,6 +83,8 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
         assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
       }
       assert.equal(layouts[0].text, 'VALOR TOTALR$ 13.040,00');
+      assert.deepEqual(layouts[0].mascot, { width: 44, height: 44, fits: true, loaded: true }, `Mascote em ${width}px`);
+      assert.equal(layouts[1].mascot, null);
       assert.equal(layouts[0].freight, 'R$ 40,00');
       assert.equal(layouts[1].text, 'VALOR TOTALR$ 123.456.789,99');
       assert.equal(layouts[1].freight, 'R$ 0,00');
