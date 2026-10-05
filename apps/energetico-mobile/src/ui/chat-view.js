@@ -21,6 +21,7 @@ import { provisionDateKey, provisionDueState, provisionNumericValue } from "../c
 import Decimal from "decimal.js";
 
 const MASCOT_URL = new URL("../../pwa/icons/mascote-192.png", import.meta.url).href;
+const PAYMENT_LEDGER_MASCOT_URL = new URL("../../../../assets/report-mascots/payment-ledger.png", import.meta.url).href;
 const TAP_MOVE_TOLERANCE_PX = 8;
 const RELEASE_CLICK_COMMAND = Symbol("chat-release-click-command");
 const VOICE_INPUT_FLOW_PATTERN = /^construction_diary_(?:create|fill)$/;
@@ -1662,7 +1663,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
     const provisionOption = initialAreaMenu && currentPoll && !activeFlow
       ? (message.options || []).find(option => draftReplyId(option).trim().toLowerCase() === "group_pending") : null;
-    const provisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${MASCOT_URL}" alt="Mascote Energético"></button>` : "";
+    const provisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${MASCOT_URL}" alt="Mascote Energético"></button><button class="chat-main-payment-ledger-shortcut" type="button" data-action="open-payment-ledger" aria-label="Abrir relatório de pagamentos" title="Relatório de pagamentos"${busy ? " disabled" : ""}><img src="${PAYMENT_LEDGER_MASCOT_URL}" alt="Mascote do relatório de pagamentos"></button>` : "";
     return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {

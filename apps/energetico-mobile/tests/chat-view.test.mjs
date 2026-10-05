@@ -64,7 +64,10 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const pending = root.querySelector('[data-reply-id="group_pending"]');
   const bubble = pending.closest('.chat-bubble');
   assert.equal(bubble.contains(shortcut), false, 'o mascote não ocupa a coluna dos botões');
-  assert.equal(shortcut.nextElementSibling, bubble);
+  const paymentShortcut = root.querySelector('[data-action="open-payment-ledger"]');
+  assert.equal(shortcut.nextElementSibling, paymentShortcut);
+  assert.equal(paymentShortcut.nextElementSibling, bubble);
+  assert.equal(bubble.contains(paymentShortcut), false);
   assert.equal(shortcut.parentElement, bubble.parentElement);
   assert.match(pending.textContent, /PENDÊNCIAS \(47\)/);
   assert.ok(pending.classList.contains('chat-choice-button--danger'));

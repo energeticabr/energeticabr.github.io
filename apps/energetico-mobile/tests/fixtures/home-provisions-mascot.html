@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
+import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -10,6 +11,10 @@ const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pe
 ]}]};
 const view=createChatView(document.querySelector('#app'));
 window.opened=0;window.selected=[];
+window.reportOpened=0;
+window.reportLoads=0;
+const report=createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){window.reportLoads++;return {launches:[{id:'3498',paymentDate:'2026-10-02',supplier:'Alfa',branch:'004 - EDIFÍCIO XAVANTE',product:'SERVENTE DE PEDREIRO',description:'Observação',order:'358',disbursement:'SIM',account:'AMAEL PF - CAIXA',unit:11,quantity:3,freight:0,total:33},{id:'3502',paymentDate:'2026-10-02',supplier:'Alfa',branch:'004 - EDIFÍCIO XAVANTE',product:'SERVENTE DE PEDREIRO',order:'359',disbursement:'SIM',account:'AMAEL PF - CAIXA',unit:510.23,quantity:1,freight:0,total:510.23}]};}}});
+view.on('open-payment-ledger',()=>{window.reportOpened++;void report.open();});
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 view.render(state);

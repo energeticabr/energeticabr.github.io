@@ -27,7 +27,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -74,7 +74,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -1544,6 +1544,42 @@ test("Relatórios abre localmente com token Microsoft e não envia a escolha par
   assert.equal(extraToken, "sharepoint-token");
   assert.equal(callbacks.extraReports, extraReports);
   assert.equal(typeof callbacks.onHome, "function");
+});
+
+test('home payment shortcut uses authenticated SharePoint session, stays local and disposes on logout', async t => {
+  let opens = 0, destroys = 0, token;
+  const h = makeHarness({
+    paymentLedgerDataFactory: async ({ tokenProvider }) => ({ async loadPaymentsSnapshot() { token = await tokenProvider(['Sites.Read.All']); return { launches: [] }; } }),
+    paymentLedgerFactory: async ({ data }) => ({ async open() { opens++; await data.loadPaymentsSnapshot(); }, destroy() { destroys++; } }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start(); const before = h.chatCalls.length;
+  await Promise.all([h.view.emit('open-payment-ledger'), h.view.emit('open-payment-ledger')]);
+  assert.equal(opens, 1); assert.equal(token, 'token'); assert.equal(h.chatCalls.length, before);
+  await h.view.emit('sign-out'); assert.equal(destroys, 1);
+});
+
+test('payment report factory response after stop cannot resurrect an overlay', async t => {
+  let finish, opens = 0, destroys = 0;
+  const h = makeHarness({ paymentLedgerDataFactory: async () => ({}), paymentLedgerFactory: () => new Promise(done => { finish = done; }) });
+  t.after(() => h.controller.stop()); await h.controller.start();
+  const pending = h.view.emit('open-payment-ledger'); await new Promise(done => setImmediate(done));
+  h.controller.stop(); finish({ open() { opens++; }, destroy() { destroys++; } }); await pending;
+  assert.equal(opens, 0); assert.equal(destroys, 1);
+});
+
+test('late AUTH_REQUIRED after logout cannot start report authorization', async t => {
+  let rejectToken, authorizations = 0;
+  const h = makeHarness({
+    paymentLedgerDataFactory: async ({ tokenProvider }) => ({ loadPaymentsSnapshot: () => tokenProvider(['Sites.Read.All']) }),
+    paymentLedgerFactory: async ({ data }) => ({ open: () => data.loadPaymentsSnapshot(), destroy() {} }),
+  });
+  t.after(() => h.controller.stop()); await h.controller.start();
+  h.auth.getToken = () => new Promise((_, reject) => { rejectToken = reject; });
+  h.auth.authorize = async () => { authorizations++; };
+  const pending = h.view.emit('open-payment-ledger'); await new Promise(r => setImmediate(r));
+  await h.view.emit('sign-out'); rejectToken(Object.assign(new Error('Expired'), { code: 'AUTH_REQUIRED' }));
+  await pending; assert.equal(authorizations, 0);
 });
 
 test("Relatórios retoma após consentimento Microsoft e descarta a tela ao encerrar a sessão", async t => {

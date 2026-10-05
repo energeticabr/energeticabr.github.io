@@ -50,6 +50,16 @@ async function defaultContractorReportsFactory(options) {
   return createContractorReportsView(options);
 }
 
+async function defaultPaymentLedgerFactory(options) {
+  const { createPaymentLedgerView } = await import('./ui/payment-ledger-view.js');
+  return createPaymentLedgerView(options);
+}
+
+async function defaultPaymentLedgerDataFactory(options) {
+  const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
+  return createSpendingReportsData(options);
+}
+
 async function defaultContractorReportDataFactory(options) {
   const { createContractorReportData } = await import("./chat/contractor-report-data.js");
   return createContractorReportData(options);
@@ -170,6 +180,7 @@ const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
 const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
+const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const PAYMENT_PROGRAMMING_GALLERY_ID = "action_payment_programming_gallery";
 const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
@@ -658,6 +669,8 @@ export function createAppController({
   tasksGalleryFactory = defaultTasksGalleryFactory,
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
   contractorReportsFactory = defaultContractorReportsFactory,
+  paymentLedgerFactory = defaultPaymentLedgerFactory,
+  paymentLedgerDataFactory = defaultPaymentLedgerDataFactory,
   contractorReportDataFactory = defaultContractorReportDataFactory,
   presencePaymentReportDataFactory = defaultPresencePaymentReportDataFactory,
   extraReportsFactory = defaultExtraReportsFactory,
@@ -710,6 +723,8 @@ export function createAppController({
   let tasksGalleryOpening = null;
   let contractorReports = null;
   let contractorReportsOpening = null;
+  let paymentLedger = null;
+  let paymentLedgerOpening = null;
   let paymentProgrammingGallery = null;
   let paymentProgrammingGalleryOpening = null;
   let recurringExpensesGallery = null;
@@ -3949,6 +3964,8 @@ export function createAppController({
   }
 
   function disposeContractorReports() {
+    paymentLedger?.destroy?.();
+    paymentLedger = null;
     contractorReports?.destroy?.();
     contractorReports = null;
   }
@@ -3975,6 +3992,7 @@ export function createAppController({
       ordersGallery,
       tasksGallery,
       contractorReports,
+      paymentLedger,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4473,6 +4491,52 @@ export function createAppController({
       }
     })();
     return contractorReportsOpening;
+  }
+
+  async function openPaymentLedger() {
+    if (!account || stopped || flowBusy()) return false;
+    if (paymentLedgerOpening) return paymentLedgerOpening;
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    let requestSignal, requestGeneration = 0;
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) throw new Error('A sessão do relatório foi encerrada.');
+    };
+    paymentLedgerOpening = (async () => {
+      try {
+        if (!paymentLedger) {
+          const tokenProvider = scopes => {
+            assertSession();
+            const signal = requestSignal, generation = requestGeneration;
+            const assertRequest = () => {
+              assertSession();
+              if (signal?.aborted || generation !== requestGeneration) throw new DOMException('Consulta cancelada.', 'AbortError');
+            };
+            return auth.getToken(scopes).then(token => { assertRequest(); return token; }).catch(async error => {
+              assertRequest();
+              if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+              await auth.authorize(scopes, { resumeAction: PAYMENT_LEDGER_ID });
+              assertRequest(); const token = await auth.getToken(scopes); assertRequest(); return token;
+            });
+          };
+          const source = await paymentLedgerDataFactory({ tokenProvider });
+          const data = { loadPaymentsSnapshot(options = {}) {
+            requestSignal = options.signal; requestGeneration++;
+            return source.loadPaymentsSnapshot(options);
+          } };
+          assertSession();
+          const panel = await paymentLedgerFactory({ data, document: globalThis.document });
+          if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }
+          paymentLedger = panel;
+        }
+        await paymentLedger.open();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount) setSessionError(error, 'Não foi possível abrir o relatório de pagamentos.');
+        return false;
+      } finally { paymentLedgerOpening = null; }
+    })();
+    return paymentLedgerOpening;
   }
 
   async function openPaymentProgrammingGallery() {
@@ -6102,6 +6166,7 @@ export function createAppController({
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
       if (command.replyId === CONTRACTOR_REPORTS_ID) return openContractorReports();
+      if (command.replyId === PAYMENT_LEDGER_ID) return openPaymentLedger();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6327,6 +6392,7 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-pending-provisions", openPendingProvisions);
+    bind('open-payment-ledger', openPaymentLedger);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6467,6 +6533,7 @@ export function createAppController({
     else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
     else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
+    else if (pendingAction === PAYMENT_LEDGER_ID) await openPaymentLedger();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
