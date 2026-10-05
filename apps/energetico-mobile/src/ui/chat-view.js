@@ -1904,7 +1904,7 @@ function pendingProvisionsMarkup(
         </div>
         <p><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong> · ID ${escapeHtml(paymentId)}</p>
         <label class="chat-pending-provision-date-edit__label" for="pending-provision-due-date">Nova data de vencimento</label>
-        <input id="pending-provision-due-date" class="chat-date-picker__input" type="text" data-role="pending-provision-due-date" data-date-input="true" inputmode="numeric" maxlength="10" autocomplete="off" placeholder="DD/MM/AAAA" aria-label="Nova data de vencimento" value="${escapeHtml(dateEditValue || pendingProvisionDateInputValue(row.dueDate))}"${dateEditBusy ? " disabled" : ""}>
+        <input id="pending-provision-due-date" class="chat-date-picker__input" type="date" data-role="pending-provision-due-date" aria-label="Nova data de vencimento" value="${escapeHtml(provisionDateKey(dateEditValue || row.dueDate))}"${dateEditBusy ? " disabled" : ""}>
         ${dateEditError ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(dateEditError)}</p>` : ""}
         <div class="chat-confirmation__actions">
           <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-provision-date-edit"${dateEditBusy ? " disabled" : ""}>Cancelar</button>
@@ -3867,9 +3867,17 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       || commandFromTarget(clickedAction)
       || (backdrop?.dataset.popupCloseAction ? { type: backdrop.dataset.popupCloseAction } : null);
     const command = rawCommand?.type === "save-pending-provision-due-date"
-      ? { ...rawCommand, value: String(root.querySelector('[data-role="pending-provision-due-date"]')?.value || "") }
+      ? { ...rawCommand, value: pendingProvisionDateInputValue(root.querySelector('[data-role="pending-provision-due-date"]')?.value || "") }
       : rawCommand;
-    if (!command) return;
+    if (!command) {
+      const dueDate = event.target?.closest?.('[data-role="pending-provision-due-date"][type="date"]');
+      if (dueDate && !dueDate.disabled) {
+        // Open from the user's tap, not a timer: showPicker needs user activation.
+        // Keep the default tap for WebViews whose native picker has no showPicker API.
+        try { dueDate.showPicker?.(); } catch { /* native date input remains usable */ }
+      }
+      return;
+    }
     if (command.type === "send-text") return;
     event.preventDefault?.();
     if (command.type === "attendance-select-proceed") {
@@ -4384,22 +4392,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           value: event.target.value,
           filterKey: event.target.dataset.databaseFilterKey,
         });
-      }
-    } else if (event.target?.dataset?.role === "pending-provision-due-date") {
-      const field = event.target;
-      const separatorDeletion = pendingDateSeparatorDeletion?.target === field
-        ? pendingDateSeparatorDeletion
-        : null;
-      pendingDateSeparatorDeletion = null;
-      const rawValue = field.value;
-      let formatted = formatDateDraft(rawValue, /^delete/i.test(event.inputType || ""));
-      if (separatorDeletion && formatted[separatorDeletion.separatorIndex] === "/") {
-        formatted = `${formatted.slice(0, separatorDeletion.separatorIndex)}${formatted.slice(separatorDeletion.separatorIndex + 1)}`;
-      }
-      const caret = dateDraftCaret(rawValue, field.selectionStart, formatted);
-      if (formatted !== rawValue) {
-        field.value = formatted;
-        field.setSelectionRange?.(caret, caret);
       }
     } else if (event.target?.dataset?.role === "date-picker") {
       datePickerValue = event.target.value;
