@@ -2,6 +2,7 @@ import { ENTITIES } from "../../../../portal/catalog/entities.js";
 import { resolvePowerAppsUiContract } from "../../../../portal/catalog/powerapps-ui-contract.js";
 import { mapSharePointColumns, validateFormValues } from "../../../../portal/data/column-mapper.js";
 import { createForm43StatusPolicy } from './orders-form43-locks.js';
+import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -115,6 +116,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
   const entity = suppliedEntity || ENTITIES.find(candidate => candidate.listNames.some(name => aliases.has(key(name))))
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
   const contexts = new WeakMap();
+  const isPayroll = key(listName) === 'FOLHAPGTO';
+  const readPayrollSource = isPayroll ? createPayrollSourceReader(repository, siteKey) : null;
 
   async function currentItem(list, id, signal) {
     if (typeof repository.getItem !== "function") throw new Error("A consulta segura do registro não está disponível.");
@@ -130,7 +133,14 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (!entity) throw new Error("Não foi possível identificar o formulário seguro desta lista.");
     if (typeof repository.getColumns !== "function") throw new Error("Os metadados do formulário não estão disponíveis.");
     const id = idValue(rawId), list = frozenCopy(await resolveList(signal));
-    const [item, rawColumns] = await Promise.all([currentItem(list, id, signal), repository.getColumns(siteKey, list.id, signal ? { signal } : {})]);
+    let [item, rawColumns] = await Promise.all([currentItem(list, id, signal), repository.getColumns(siteKey, list.id, signal ? { signal } : {})]);
+    const refreshDerivedValues = isPayroll ? async (draft = {}, options = {}) => {
+      const derived = await readPayrollSource({ ...item.fields, ...draft }, options.signal);
+      return Object.fromEntries(Object.entries(derived).map(([name, value]) => [
+        rawColumns.find(c => payrollFieldKey(c.name) === name)?.name || name, value,
+      ]));
+    } : undefined;
+    if (isPayroll) item = frozenCopy({ ...item, fields: { ...item.fields, ...await refreshDerivedValues({}, { signal }) } });
     abort(signal);
     const mapped = typedColumns(Array.isArray(rawColumns) ? rawColumns : [], entity, metadataOnly);
     let contract = resolvePowerAppsUiContract(entity, mapped, { mode: "edit", ...(formVariantId ? { formVariantId } : {}) });
@@ -140,7 +150,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       contract = Object.freeze({ ...contract, hasForm: safeColumns.length > 0, readOnly: safeColumns.length === 0,
         metadataOnly: true, formColumns: safeColumns });
     }
-    const columns = frozenCopy(contract.formColumns);
+    const columns = frozenCopy(isPayroll ? payrollEditorColumns(contract.formColumns) : contract.formColumns);
     contract = frozenCopy({ ...contract, formColumns: columns });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
@@ -169,6 +179,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       ? createForm43StatusPolicy({ repository, siteKey, orderId: id, orderColumns: rawColumns, statusFieldName: inputName(statusColumn), orderListId: list.id }) : null;
     const evaluateFieldLocks = form43 ? (draft = {}, options = {}) => form43.evaluate({ ...item.fields, ...draft }, options) : undefined;
     const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
+      ...(refreshDerivedValues ? { refreshDerivedValues } : {}),
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
     contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn });
     return context;
@@ -234,6 +245,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const validation = validateFormValues(raw, columns, entity, { mode: "edit" });
     if (Object.keys(validation.errors).length) throw new Error(Object.values(validation.errors).join(" "));
     const normalized = { ...validation.fields, ...direct }, merged = { ...item.fields, ...normalized }, changed = {};
+    if (isPayroll) await readPayrollSource(merged);
     for (const [name, value] of Object.entries(normalized)) {
       const column = allowed.get(name);
       if (comparable(value, column) !== comparable(item.fields[name], column)) changed[name] = value;

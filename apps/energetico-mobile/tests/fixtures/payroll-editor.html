@@ -1,0 +1,23 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Editar folha de pagamento</title></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/hr-payroll-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
+import { createHrPayrollGalleryData } from '../../src/chat/orders-gallery-data.js';
+window.unitValue = 168.8;
+const fields = { Title:'interno',FORNECEDOR:'FELICIANO ROGÉRIO DA SILVA',TIPOPGTO:'SALÁRIO',VALORUNITARIO:168.8,QTD:3,DATA:'2026-09-28',IDFOLHA:5,IDLANCAMENTO:3457 };
+const repository = {
+  async resolveList(_site,names) { return {status:'resolved',id:names[0]}; },
+  async getColumns(_site,list) { return list==='LANCAMENTOS' ? [{name:'VALORUNITARIO',number:{}},{name:'QUANTIDADE',number:{}}] : Object.keys(fields).map(name=>({name,...(['VALORUNITARIO','QTD','IDFOLHA','IDLANCAMENTO'].includes(name)?{number:{}}:name==='DATA'?{dateTime:{format:'dateOnly'}}:{text:{}})})); },
+  async getItem(_site,list,id) { return {id,eTag:'"v1"',fields:list==='LANCAMENTOS'?{VALORUNITARIO:window.unitValue,QUANTIDADE:3}:fields}; },
+  async getItemsPage() { return {items:[{id:'3',fields}],hasMore:false}; },
+  async searchPowerAppsOptions() { return [{value:fields.FORNECEDOR,label:fields.FORNECEDOR},{value:'CLEITON CESAR NONATO',label:'CLEITON CESAR NONATO'}]; },
+  async updateItem() { throw new Error('Prévia de teste, sem gravações.'); },
+};
+const data = createHrPayrollGalleryData({repository});
+window.gallery = createHrPayrollGallery({root:document.querySelector('#app'),gallery:'FOLHAPGTO',request:()=>data.loadPage('FOLHAPGTO'),loadEditor:(id)=>data.loadEditor('FOLHAPGTO',id),saveEditor:data.saveEditor});
+await window.gallery.open();
+document.querySelector('[data-gallery-action="edit"]').click();
+while (!document.querySelector('[name=VALORUNITARIO]')) await new Promise(resolve=>setTimeout(resolve,10));
+document.documentElement.dataset.ready='true';
+</script></body></html>

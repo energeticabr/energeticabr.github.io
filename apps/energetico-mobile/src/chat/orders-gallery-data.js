@@ -4,6 +4,7 @@ import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { provisionDateKey, provisionDayOffset, provisionDueState, provisionTotal } from "./pending-provision-dates.js";
 import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
+import { createPayrollSourceReader } from './payroll-editor-policy.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -364,6 +365,16 @@ export function createHrPayrollGalleryData({
   }
 
   const listRequests = new Map();
+  const readPayrollSource = createPayrollSourceReader(repository, SITE_KEY);
+  async function currentPayrollRows(rows, signal) {
+    const result = [];
+    // Limit concurrent SharePoint requests for larger payroll reports.
+    for (let start = 0; start < rows.length; start += 4) {
+      result.push(...await Promise.all(rows.slice(start, start + 4).map(async row =>
+        Object.freeze({ ...row, ...await readPayrollSource(row, signal) }))));
+    }
+    return Object.freeze(result);
+  }
   async function resolveList(gallery) {
     const config = HR_PAYROLL_GALLERIES[gallery];
     if (!config) throw new RangeError("Galeria de folha inválida.");
@@ -418,7 +429,7 @@ export function createHrPayrollGalleryData({
       page,
       pageSize,
       fields: Object.freeze(config.fields.map(([key]) => key)),
-      rows: Object.freeze(rows),
+      rows: gallery === 'FOLHAPGTO' ? await currentPayrollRows(rows) : Object.freeze(rows),
       hasMore: Boolean(nextCursor),
       nextCursor,
     });
@@ -468,7 +479,7 @@ export function createHrPayrollGalleryData({
             rows.push(Object.freeze(row));
           }
         }
-        if (result?.hasMore !== true) return Object.freeze(rows);
+        if (result?.hasMore !== true) return currentPayrollRows(rows, signal);
         if (typeof result.nextLink !== "string" || !result.nextLink) {
           throw new Error("A paginação dos pagamentos da folha não retornou o próximo cursor.");
         }

@@ -8,6 +8,35 @@ function response(gallery, page = 1, rows = [], hasMore = false) {
   return { gallery, page, pageSize: 25, fields: [], rows, hasMore, nextCursor: hasMore ? "opaque-next-page" : null };
 }
 
+test('payroll mutation invalidates a pending background snapshot and refreshes saved values', async t => {
+  const dom = new JSDOM('<main id="root"></main>');
+  const document = dom.window.document;
+  const oldFormData = globalThis.FormData; globalThis.FormData = dom.window.FormData;
+  let reads = 0, resolveOld, date = '2026-09-28';
+  const gallery = createHrPayrollGallery({ root: document.querySelector('#root'), gallery: 'FOLHAPGTO',
+    request: async () => {
+      reads++;
+      if (reads === 2) return new Promise(resolve => { resolveOld = resolve; });
+      return response('FOLHAPGTO', 1, [{ id: '3', DATA: date }]);
+    },
+    loadEditor: async id => ({ entity: { id: 'test', title: 'Folha' }, contract: { hasForm: true },
+      columns: [{ name: 'DATA', label: 'Data', control: 'date', editable: true }], item: { id, fields: { DATA: date } } }),
+    saveEditor: async (_context, fields) => { date = fields.DATA; return { id: '3', fields }; },
+  });
+  t.after(() => { gallery.destroy(); dom.window.close(); globalThis.FormData = oldFormData; });
+  await gallery.open();
+  dom.window.dispatchEvent(new dom.window.Event('focus'));
+  document.querySelector('[data-gallery-action="edit"]').click();
+  await new Promise(resolve => setImmediate(resolve)); await new Promise(resolve => setImmediate(resolve));
+  document.querySelector('[name=DATA]').value = '2026-09-29';
+  document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads, 3);
+  resolveOld(response('FOLHAPGTO', 1, [{ id: '3', DATA: '2026-09-28' }]));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(document.querySelector('.hr-gallery-cards').textContent, /29\/09\/2026/);
+});
+
 test("galeria IDFOLHA apresenta mês e fornecedor e escapa os dados", async () => {
   const dom = new JSDOM("<main id='root'></main>");
   const root = dom.window.document.querySelector("#root");
