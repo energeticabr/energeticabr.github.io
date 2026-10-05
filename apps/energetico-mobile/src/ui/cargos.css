@@ -1,0 +1,17 @@
+.cargos-screen { position: fixed; inset: 0; z-index: 1500; box-sizing: border-box; display: flex; flex-direction: column; background: #f3f8fa; color: #10375d; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); height: 100dvh; }
+.cargos-screen[hidden] { display: none; }
+.cargos-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.cargos-header h1 { flex: 1; font-size: clamp(16px, 3vw, 24px); margin: 0; }
+.cargos-header button { min-width: 44px; height: 44px; background: white; color: #10375d; border: 1px solid #99afc1; border-radius: 12px; font-size: 24px; cursor: pointer; }
+.cargos-status, .cargos-hint { font-size: 14px; margin: 10px 0; }
+.cargos-status:empty { display: none; }
+.cargos-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; border-radius: 10px; border: 1px solid #c1d2df; background: white; }
+.cargos-table { width: 100%; min-width: 870px; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+.cargos-table th, .cargos-table td { padding: 15px 12px; border-bottom: 1px solid #d6e2e9; text-align: right; white-space: nowrap; }
+.cargos-table thead th { position: sticky; top: 0; z-index: 2; background: #10375d; color: white; font-size: 12px; }
+.cargos-table tr > :first-child { position: sticky; left: 0; text-align: left; z-index: 1; background: #fff; max-width: 225px; white-space: normal; min-width: 180px; }
+.cargos-table thead tr > :first-child { z-index: 3; background: #10375d; }
+.cargos-table .cargos-group th { background: #dcebf1; color: #10375d; font-weight: 800; }
+.cargos-table .cargos-level { padding-left: 22px; }
+.cargos-table [data-column="total"] { font-weight: 800; color: #16733d; }
+@media (min-width: 900px) { .cargos-hint { display: none; } }

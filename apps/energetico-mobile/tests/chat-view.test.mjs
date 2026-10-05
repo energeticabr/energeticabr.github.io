@@ -57,6 +57,8 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
     { id: 'group_supplies', reply: 'group_supplies', label: '📦 SUPRIMENTOS' },
   ] };
   view.render(signedInState({ messages: [menu] }));
+  const cargos = root.querySelector('[data-action="open-cargos-table"]');
+  assert.ok(cargos);let cargosOpened=0;view.on('open-cargos-table',()=>cargosOpened++);cargos.click();assert.equal(cargosOpened,1);assert.equal(cargos.closest('.chat-bubble'),null);
   const shortcut = root.querySelector('[data-action="open-pending-provisions"]');
   assert.ok(shortcut, 'o menu inicial precisa oferecer o atalho');
   assert.match(shortcut.getAttribute('aria-label'), /provisões.*pagamento.*pendentes/i);

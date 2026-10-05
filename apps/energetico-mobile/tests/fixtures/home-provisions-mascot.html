@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"><link rel="stylesheet" href="/src/ui/cargos.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
 import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
+import { createCargosView } from '/src/ui/cargos-view.js';
 import { createManagementReportView } from '/src/ui/management-report-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
@@ -22,6 +23,8 @@ const management=createManagementReportView({document,now:()=>new Date('2026-10-
 view.on('open-management-report',()=>void management.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
+const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});
+view.on('open-cargos-table',()=>void cargos.open());
 view.render(state);
 await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
 document.documentElement.dataset.ready='true';

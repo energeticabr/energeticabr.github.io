@@ -106,6 +106,16 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.gm-overlay').hidden`),true,'clique fora fecha novo relatório');
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
+      const cargosShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-cargos-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=b.getBoundingClientRect();return {right:r.right,x:r.x,cardRight:q.right,image:m.querySelector('img').naturalWidth>0,fill:getComputedStyle(m).backgroundColor};})()`);
+      assert.ok(cargosShortcut.x>=cargosShortcut.cardRight+4&&cargosShortcut.right<=width&&cargosShortcut.image,JSON.stringify(cargosShortcut));
+      assert.equal(cargosShortcut.fill,'rgb(207, 117, 122)');
+      await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
+      const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
+      assert.ok(cargosFit.top===0&&cargosFit.bottom===844&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);
+      if(width<870)assert.ok(cargosFit.pan);
+      await evaluate(`document.querySelector('.cargos-scroll').scrollLeft=600`);
+      assert.ok(await evaluate(`(()=>{const th=document.querySelector('.cargos-table tbody tr[data-cargo] th').getBoundingClientRect(),s=document.querySelector('.cargos-scroll').getBoundingClientRect();return Math.abs(th.left-s.left)<=2;})()`),'cargo permanece fixo durante a rolagem');
+      await evaluate(`document.querySelector('[aria-label="Voltar ao menu inicial"]').click()`);
       if(width===390&&!pwa&&process.env.HOME_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.HOME_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);

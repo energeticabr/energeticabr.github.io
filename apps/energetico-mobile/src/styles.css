@@ -1297,3 +1297,8 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   .powerbi-dashboard__header.screen-navigation-header { grid-template-columns: auto minmax(0, 1fr); }
   .powerbi-dashboard__header.screen-navigation-header .powerbi-dashboard__direct-link { grid-column: 2; justify-self: start; }
 }
+
+.chat-message--external-cargos { display: grid; grid-template-columns: 44px minmax(0, 640px) 44px; gap: 8px; align-items: start; }
+.chat-message--external-cargos .chat-bubble { grid-column: 2; grid-row: 1; width: 100%; max-width: 640px; box-sizing: border-box; }
+.chat-main-cargos-shortcut { grid-column: 3; grid-row: 1; margin-top: 12px; width: 44px; height: 44px; padding: 0; border: 1px solid #bf6165; border-radius: 10px; background: #cf757a; overflow: hidden; cursor: pointer; }
+.chat-main-cargos-shortcut img { width: 100%; height: 100%; object-fit: contain; }
