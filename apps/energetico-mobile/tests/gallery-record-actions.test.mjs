@@ -37,6 +37,21 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('every gallery editor opens as a full screen by default and cancel returns focus to its record', async t => {
+  const ctx = await setup(t);
+  const trigger = ctx.get('[data-gallery-action="edit"]'); trigger.focus(); trigger.click();
+  await settle(); await settle();
+  const screen = ctx.get('[data-gallery-record-screen]');
+  assert.ok(screen, 'gallery editing must always use the full-screen presentation');
+  assert.equal(screen.getAttribute('role'), 'region');
+  assert.equal(screen.hasAttribute('aria-modal'), false);
+  assert.equal(screen.parentElement.classList.contains('gallery-record-overlay--screen'), true);
+  assert.equal(ctx.get('[name=Title]').value, 'Original');
+  ctx.get('[data-form-cancel]').click();
+  assert.equal(ctx.get('[data-gallery-record-screen]'), null);
+  assert.equal(ctx.document.activeElement, trigger);
+});
+
 test('payroll screen preserves edits while source values refresh and omits read-only fields on save', async t => {
   let source = 200;
   const ctx = await setup(t, { presentation: 'screen', loadEditor: async id => ({

@@ -92,7 +92,6 @@ export function createHrPayrollGallery({ document: documentOption,
   root.append(header, content);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root, loadEditor, saveEditor, deleteItem,
-    presentation: gallery === 'FOLHAPGTO' ? 'screen' : 'dialog',
     onChanged: () => {
       // A pre-save background response must never replace the saved record.
       session += 1;
