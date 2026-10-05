@@ -4,12 +4,13 @@ export const payrollFieldKey = value => String(value || '')
   .replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-export function payrollEditorColumns(columns, sheetOptions=[]) {
+export function payrollEditorColumns(columns, sheetOptions=[], launchOptions=[]) {
   return columns.filter(c => payrollFieldKey(c.name) !== 'TITLE').map(column => {
     const name = payrollFieldKey(column.name);
     if (['VALORUNITARIO', 'QTD'].includes(name)) return { ...column, readOnly: true, required: false };
     if(name==='FORNECEDOR') return {...column,readOnly:true,disabled:true,required:false};
     if(name==='IDFOLHA') return {...column,control:'select',required:true,allowMultipleValues:false,choices:sheetOptions.map(option=>option.value),optionLabels:Object.fromEntries(sheetOptions.map(option=>[option.value,option.label])),powerApps:{closed:true,preserveCurrentValue:false}};
+    if(name==='IDLANCAMENTO') return {...column,control:'select',required:true,allowMultipleValues:false,choices:launchOptions.map(option=>option.value),optionLabels:Object.fromEntries(launchOptions.map(option=>[option.value,option.label])),powerApps:{closed:true,preserveCurrentValue:false}};
     if (name!=='TIPOPGTO' || ['lookup', 'person'].includes(column.control)) return column;
     const choices = column.choices?.length ? column.choices : PAYROLL_RUBRICS.map(r => r.payrollType);
     return { ...column, control: 'select', allowMultipleValues: false, choices,

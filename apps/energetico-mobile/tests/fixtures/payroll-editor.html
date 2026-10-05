@@ -5,14 +5,16 @@ import '../../src/ui/gallery-record-actions.css';
 import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
 import { createHrPayrollGalleryData } from '../../src/chat/orders-gallery-data.js';
 window.unitValue = 100;
+window.savedFields = [];
 const fields = { Title:'interno',FORNECEDOR:'FORNECEDOR DE TESTE',TIPOPGTO:'SALÁRIO',VALORUNITARIO:100,QTD:3,DATA:'2026-09-28',IDFOLHA:5,IDLANCAMENTO:3457 };
+const launches=[{id:'3457',fields:{FORNECEDOR:fields.FORNECEDOR,EMPREITEIRO:'SIM'}},{id:'3460',fields:{FORNECEDOR:'OUTRO EMPREITEIRO',EMPREITEIRO:'SIM'}},{id:'3461',fields:{FORNECEDOR:'NÃO EMPREITEIRO',EMPREITEIRO:'NÃO'}}];
 const repository = {
   async resolveList(_site,names) { return {status:'resolved',id:names[0]}; },
-  async getColumns(_site,list) { return list==='LANCAMENTOS' ? [{name:'VALORUNITARIO',number:{}},{name:'QUANTIDADE',number:{}}] : list==='IDFOLHA'?[{name:'FORNECEDOR',text:{}},{name:'MESREFERENCIA',text:{}}]:Object.keys(fields).map(name=>({name,...(['VALORUNITARIO','QTD','IDFOLHA','IDLANCAMENTO'].includes(name)?{number:{}}:name==='DATA'?{dateTime:{format:'dateOnly'}}:{text:{}})})); },
-  async getItem(_site,list,id) { return {id,eTag:'"v1"',fields:list==='LANCAMENTOS'?{VALORUNITARIO:window.unitValue,QUANTIDADE:3}:fields}; },
-  async getItemsPage(_site,list) { return {items:list==='IDFOLHA'?[{id:'5',fields:{FORNECEDOR:fields.FORNECEDOR,MESREFERENCIA:'09/2026'}},{id:'15',fields:{FORNECEDOR:fields.FORNECEDOR,MESREFERENCIA:'10/2026'}},{id:'25',fields:{FORNECEDOR:'OUTRO',MESREFERENCIA:'10/2026'}}]:[{id:'3',fields}],hasMore:false}; },
+  async getColumns(_site,list) { return list==='LANCAMENTOS' ? [{name:'VALORUNITARIO',number:{}},{name:'QUANTIDADE',number:{}},{name:'FORNECEDOR',text:{}},{name:'EMPREITEIRO',choice:{choices:['SIM','NÃO']}}] : list==='IDFOLHA'?[{name:'FORNECEDOR',text:{}},{name:'MESREFERENCIA',text:{}}]:Object.keys(fields).map(name=>({name,...(['VALORUNITARIO','QTD','IDFOLHA','IDLANCAMENTO'].includes(name)?{number:{}}:name==='DATA'?{dateTime:{format:'dateOnly'}}:{text:{}})})); },
+  async getItem(_site,list,id) { return {id,eTag:'"v1"',fields:list==='LANCAMENTOS'?{...launches.find(row=>row.id===id)?.fields,VALORUNITARIO:window.unitValue,QUANTIDADE:3}:list==='IDFOLHA'?{FORNECEDOR:fields.FORNECEDOR,MESREFERENCIA:id==='5'?'09/2026':'10/2026'}:fields}; },
+  async getItemsPage(_site,list) { return {items:list==='LANCAMENTOS'?launches:list==='IDFOLHA'?[{id:'5',fields:{FORNECEDOR:fields.FORNECEDOR,MESREFERENCIA:'09/2026'}},{id:'15',fields:{FORNECEDOR:fields.FORNECEDOR,MESREFERENCIA:'10/2026'}},{id:'25',fields:{FORNECEDOR:'OUTRO',MESREFERENCIA:'10/2026'}}]:[{id:'3',fields}],hasMore:false}; },
   async searchPowerAppsOptions() { return [{value:fields.FORNECEDOR,label:fields.FORNECEDOR},{value:'OUTRO FORNECEDOR DE TESTE',label:'OUTRO FORNECEDOR DE TESTE'}]; },
-  async updateItem() { throw new Error('Prévia de teste, sem gravações.'); },
+  async updateItem(_site,_list,id,values) { window.savedFields.push(values);return {id,fields:{...fields,...values}}; },
 };
 const data = createHrPayrollGalleryData({repository,now:()=>new Date('2026-10-05T12:00:00Z')});
 window.gallery = createHrPayrollGallery({root:document.querySelector('#app'),gallery:'FOLHAPGTO',request:()=>data.loadPage('FOLHAPGTO'),loadEditor:(id)=>data.loadEditor('FOLHAPGTO',id),saveEditor:data.saveEditor});
