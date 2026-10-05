@@ -4019,9 +4019,6 @@ export function createAppController({
     orderValidationReport?.destroy?.();
     orderValidationReport = null;
     provisionReportOpening = null;
-    cargosTableOpening = null;
-    cargosTable?.destroy?.();
-    cargosTable = null;
     managementReportOpening = null;
     paymentLedgerOpening = null;
     provisionReport?.destroy?.();
@@ -4072,7 +4069,6 @@ export function createAppController({
       cargosTable,
       provisionReport,
       orderValidationReport,
-      cargosTable,
       attendanceSummaryReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
