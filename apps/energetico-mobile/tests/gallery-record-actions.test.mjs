@@ -96,6 +96,16 @@ test('resetting payroll form refreshes the financial values of its restored laun
   assert.equal(ctx.get('[name=VALORUNITARIO]').value, '100');
 });
 
+for(const withLabel of [true,false]) test(`locked supplier lookup is omitted from UI validation and submission (label ${withLabel})`,async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[
+    {name:'DATA',label:'Data',control:'date',editable:true},
+    {name:'FORNECEDOR',label:'Fornecedor',control:'lookup',editable:true,readOnly:true,disabled:true,relation:{kind:'lookup',listId:'suppliers',displayField:'Title',resolvable:true,multiple:false}},
+  ],item:{id,fields:{DATA:'2026-09-28',FORNECEDORLookupId:3,...(withLabel?{FORNECEDOR:'CLEITON'}:{})}},relationshipSearch:async()=>{throw new Error('Fornecedor bloqueado não deve pesquisar');}})});
+  click(ctx,'edit');await settle();await settle();ctx.get('[name=DATA]').value='2026-09-29';
+  ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.deepEqual(ctx.writes.map(row=>row[2]),[{DATA:'2026-09-29'}]);
+});
+
 test("record buttons have distinct accessible edit/delete icons", async t => {
   const ctx = await setup(t);
   assert.equal(ctx.buttons.className, "gallery-record-actions");

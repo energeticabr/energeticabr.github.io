@@ -131,11 +131,11 @@ test("HR metadata keeps typed native choices and isolates contexts between payro
   assert.ok(!context.columns.some(c => ["Created", "UNKNOWN", "COMPUTED"].includes(c.name)));
   assert.equal(context.columns.find(c => c.name === "TIPOPGTO").control, "select");
   const relation = context.columns.find(c => c.name === "FORNECEDOR");
-  await context.relationshipSearch(relation, "Rela", { limit: 20 });
-  assert.equal(f.searches[0][1], "FOLHAPGTO");
+  assert.equal(relation.readOnly,true);
+  await assert.rejects(context.relationshipSearch(relation, "Rela", { limit: 20 }),/editável/i);
   await assert.rejects(createHrPayrollGalleryData(f).saveEditor(context, { VALORUNITARIO: 2 }), /contexto/i);
   await assert.rejects(data.saveEditor(context, { TIPOPGTO: "SPOOF" }), /opção/i);
-  await data.saveEditor(context, { TIPOPGTO: "FÉRIAS", FORNECEDORLookupId: 3 });
+  await data.saveEditor(context, { TIPOPGTO: "FÉRIAS" });
   assert.equal(f.writes[0].list, "FOLHAPGTO");
   assert.deepEqual(f.writes[0].values, { TIPOPGTO: "FÉRIAS" });
   await data.deleteItem("IDFOLHA", "8", { eTag: '"shown"' });
@@ -178,7 +178,7 @@ test("native relationships validate selected IDs using labels returned by the tr
     f.searches.push({ site, list, relation, term });
     return term.startsWith("Rela") ? [{ id: 3, label: "Relacionada", secondary: "" }] : [];
   };
-  const data = createHrPayrollGalleryData(f), context = await data.loadEditor("FOLHAPGTO", "2"), column = context.columns[0];
+  const data = createHrPayrollGalleryData(f), context = await data.loadEditor("IDFOLHA", "2"), column = context.columns[0];
   await context.relationshipSearch(column, "Rela");
   await data.saveEditor(context, { FORNECEDORLookupId: 3 });
   assert.equal(f.searches.at(-1).term, "Relacionada");
@@ -224,7 +224,7 @@ for (const [control, metadata] of [
     f.searches.push({ site, list, relation, term });
     return [{ id: 3, label: "Relacionada", secondary: "" }];
   };
-  const data = createHrPayrollGalleryData(f), context = await data.loadEditor("FOLHAPGTO", "2"), column = context.columns[0];
+  const data = createHrPayrollGalleryData(f), context = await data.loadEditor("IDFOLHA", "2"), column = context.columns[0];
   assert.equal(column.relation.multiple, true);
   assert.equal(column.relation.resolvable, false);
   const rendererSearchColumn = { ...column, relation: { ...column.relation, multiple: false, resolvable: true, listId: "spoofed-list" } };

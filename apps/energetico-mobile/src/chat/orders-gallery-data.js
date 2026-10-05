@@ -554,7 +554,7 @@ export function createHrPayrollGalleryData({
     if (!config) throw new RangeError("Galeria de folha inválida.");
     if (!editors.has(gallery)) {
       editors.set(gallery, import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
-        createGalleryRecordData({ repository, siteKey: SITE_KEY, listName: config.listName,
+        createGalleryRecordData({ repository, siteKey: SITE_KEY, listName: config.listName, now,
           listAliases: [config.listName], metadataOnly: true, resolveList: () => resolveList(gallery) })));
     }
     return editors.get(gallery);

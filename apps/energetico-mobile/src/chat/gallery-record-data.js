@@ -3,6 +3,7 @@ import { resolvePowerAppsUiContract } from "../../../../portal/catalog/powerapps
 import { mapSharePointColumns, validateFormValues } from "../../../../portal/data/column-mapper.js";
 import { createForm43StatusPolicy } from './orders-form43-locks.js';
 import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
+import { createPayrollSheetReader } from './payroll-sheet-options.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -111,13 +112,14 @@ function typedColumns(rawColumns, entity, metadataOnly) {
 }
 
 /** Edit contexts belong to one service instance; their loaded ETag is never refreshed on save. */
-export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity } = {}) {
+export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date() } = {}) {
   const aliases = new Set([listName, ...listAliases].map(key));
   const entity = suppliedEntity || ENTITIES.find(candidate => candidate.listNames.some(name => aliases.has(key(name))))
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
   const contexts = new WeakMap();
   const isPayroll = key(listName) === 'FOLHAPGTO';
   const readPayrollSource = isPayroll ? createPayrollSourceReader(repository, siteKey) : null;
+  const payrollSheets=isPayroll?createPayrollSheetReader(repository,siteKey,now):null;
 
   async function currentItem(list, id, signal) {
     if (typeof repository.getItem !== "function") throw new Error("A consulta segura do registro não está disponível.");
@@ -150,7 +152,11 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       contract = Object.freeze({ ...contract, hasForm: safeColumns.length > 0, readOnly: safeColumns.length === 0,
         metadataOnly: true, formColumns: safeColumns });
     }
-    const columns = frozenCopy(isPayroll ? payrollEditorColumns(contract.formColumns) : contract.formColumns);
+    const sheetColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDFOLHA'):null;
+    const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
+    const sheetOptions=sheetColumn?await payrollSheets.options(sheetSupplier,{signal}):[];
+    abort(signal);
+    const columns = frozenCopy(isPayroll ? payrollEditorColumns(contract.formColumns,sheetOptions) : contract.formColumns);
     contract = frozenCopy({ ...contract, formColumns: columns });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
@@ -181,7 +187,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
       ...(refreshDerivedValues ? { refreshDerivedValues } : {}),
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
-    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn });
+    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier });
     return context;
   }
 
@@ -244,7 +250,13 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     }
     const validation = validateFormValues(raw, columns, entity, { mode: "edit" });
     if (Object.keys(validation.errors).length) throw new Error(Object.values(validation.errors).join(" "));
-    const normalized = { ...validation.fields, ...direct }, merged = { ...item.fields, ...normalized }, changed = {};
+    const normalized = { ...validation.fields, ...direct };
+    if(baseline.sheetColumn&&Object.hasOwn(normalized,baseline.sheetColumn.name)) {
+      idValue(normalized[baseline.sheetColumn.name]);
+      if(baseline.sheetColumn.number)normalized[baseline.sheetColumn.name]=Number(normalized[baseline.sheetColumn.name]);
+    }
+    const merged = { ...item.fields, ...normalized }, changed = {};
+    if(baseline.sheetColumn)await payrollSheets.assertSheet(merged[baseline.sheetColumn.name],baseline.sheetSupplier);
     if (isPayroll) await readPayrollSource(merged);
     for (const [name, value] of Object.entries(normalized)) {
       const column = allowed.get(name);

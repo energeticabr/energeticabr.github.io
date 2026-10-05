@@ -420,6 +420,7 @@ function multipleRelationshipOptions(column, values = {}, relationshipLabels = {
 }
 
 function relationshipControlMarkup(column, values = {}, disabled = false, relationshipLabels = {}) {
+  disabled ||= column.disabled===true;
   const name = escapeHtml(column.name);
   const label = escapeHtml(column.label);
   const domId = relationshipDomId(column.name);
@@ -628,6 +629,7 @@ export function createPowerAppsOptionSearchController(options = {}) {
 }
 
 function controlMarkup(column, value, disabled = false, valueIsDisplay = false) {
+  disabled ||= column.disabled===true;
   const name = escapeHtml(column.name);
   const label = escapeHtml(column.label);
   const required = column.required ? " required" : "";
@@ -648,7 +650,7 @@ function controlMarkup(column, value, disabled = false, valueIsDisplay = false) 
       && !remoteSource;
     const selectedValues = new Set((multiple ? normalizedValue : [normalizedValue]).map(item => String(item ?? "")));
     const selectDisabled = disabled || unresolvedClosedSource ? " disabled" : "";
-    const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${selectDisabled}>${multiple ? "" : '<option value="">Selecione</option>'}${availableChoices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(choice)}</option>`).join("")}</select>`;
+    const select = `<select name="${name}"${multiple ? " multiple" : ""}${required}${readOnly}${selectDisabled}>${multiple ? "" : '<option value="">Selecione</option>'}${availableChoices.map(choice => `<option value="${escapeHtml(choice)}"${selectedValues.has(String(choice)) ? " selected" : ""}>${escapeHtml(column.optionLabels?.[choice]??choice)}</option>`).join("")}</select>`;
     if (!(column.choices || []).length && !remoteSource) {
       return `<label class="dynamic-field"><span>${label}${column.required ? " *" : ""}</span>${select}</label>`;
     }
@@ -874,7 +876,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       : multiple ? multipleChoiceValues(currentValue, column) : displayChoiceValue(currentValue, column);
     if (!multiple) native.value = String(normalizedCurrent ?? "");
     const choicesByValue = new Map(choiceValues(column, normalizedCurrent)
-      .map(choice => Object.freeze({ value: String(choice), label: String(choice) }))
+      .map(choice => Object.freeze({ value: String(choice), label: String(column.optionLabels?.[choice]??choice) }))
       .map(option => [option.value, option]));
     retrySelection.options.forEach(option => choicesByValue.set(option.value, option));
     const choices = [...choicesByValue.values()];
@@ -1171,6 +1173,11 @@ function bindRelationshipSelectors(form, columns, options = {}) {
     const mount = container?.querySelector?.("[data-relation-searchable-root]");
     const selectedItems = container?.querySelector?.("[data-selected-items]");
     if (!column || !input || !hidden || !status || !listbox) continue;
+    if(column.readOnly) {
+      input.disabled=true;hidden.disabled=true;status.textContent='';
+      if(!input.value)input.value=String(options.values?.[`${name}LookupId`]??'');
+      continue;
+    }
     if (!relationshipIsSelectable(column) || typeof options.relationshipSearch !== "function") {
       hidden.value = RELATIONSHIP_UNRESOLVED;
       input.disabled = true;
