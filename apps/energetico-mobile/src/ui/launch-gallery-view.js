@@ -1,6 +1,7 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { createMascotReportButton } from './report-action-button.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -589,7 +590,23 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     trigger.classList.add('lg-cluster-trigger', 'lg-record-value');
     trigger.dataset.clusterKind = kind;
     trigger.setAttribute('aria-label', `${kind === 'supplier' ? 'Ver lançamentos do fornecedor' : 'Ver pedido agrupado'}: ${display(value)}`);
-    pair.append(element('span', 'lg-record-label', labelText), trigger);
+    pair.append(element('span', 'lg-record-label', labelText));
+    if (kind === 'order') {
+      const actions = element('div', 'lg-record-order-actions');
+      const mascot = createMascotReportButton(doc, {
+        label: `Ver itens vinculados ao pedido ${display(value)}`,
+        action: 'open-launch-order',
+        onActivate: () => {
+          if (!opened || destroyed || !canChangeDetail()) return;
+          void openCluster('order', value);
+        },
+      });
+      mascot.dataset.lgLock = 'true';
+      mascot.dataset.lgDisabled = 'false';
+      mascot.disabled = busy;
+      actions.append(trigger, mascot);
+      pair.append(actions);
+    } else pair.append(trigger);
     return pair;
   }
   async function fetchLaunchRows(filters = {}, { signal, parallelPages = 1 } = {}) {

@@ -538,6 +538,39 @@ test('launch card presents AGRUPAR and supplier as cluster actions while preserv
   assert.equal(card.querySelector('.lg-record-dates .lg-record-label')?.textContent, 'DATA DE COMPRA');
 });
 
+test('launch mascot opens all items of its own order and restores focus without editing the record', async t => {
+  const first = row(3505), second = row(3504), unrelated = row(3503);
+  first.fields.AGRUPAR = second.fields.AGRUPAR = 362;
+  unrelated.fields.AGRUPAR = 361;
+  const orderIds = [], groupIds = [];
+  const ctx = await setup(t, {
+    request: async () => snapshot({ rows: [first, unrelated] }),
+    loadOrderSnapshot: async ({ id }) => { orderIds.push(id); return { rows: [{ id, fields: {} }] }; },
+    loadLaunchGroup: async id => { groupIds.push(id); return [first, second]; },
+  });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('[data-item-id="3505"]');
+  const mascot = card.querySelector('.report-mascot-button');
+  assert.ok(mascot, 'the mascot is visible on the launch card');
+  assert.equal(mascot.getAttribute('aria-label'), 'Ver itens vinculados ao pedido 362');
+  assert.match(mascot.querySelector('img').src, /mascote\.png$/);
+  mascot.focus(); mascot.click(); await settle(); await settle();
+  const modal = ctx.root().querySelector('.lg-cluster-modal');
+  assert.equal(modal.hidden, false);
+  assert.deepEqual(orderIds, ['362']);
+  assert.deepEqual(groupIds, ['362']);
+  assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3505', '3504']);
+  assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
+  button(modal, 'Fechar').click();
+  assert.equal(ctx.document.activeElement, mascot);
+});
+
+test('launch without a linked order does not show an unusable mascot', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  assert.equal(ctx.root().querySelector('.lg-record .report-mascot-button'), null);
+});
+
 test('launch card keeps a compact summary and reveals secondary fields without hiding supplier or order actions', async t => {
   const item = row(3451);
   item.fields = { ...item.fields, AGRUPAR: 334, 'VALOR UNITÁRIO': 'R$ 30,00',
