@@ -92,7 +92,13 @@ export function createHrPayrollGallery({ document: documentOption,
   root.append(header, content);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root, loadEditor, saveEditor, deleteItem,
-    onChanged: () => loadPage(page, pageCursors[page] || null),
+    presentation: gallery === 'FOLHAPGTO' ? 'screen' : 'dialog',
+    onChanged: () => {
+      // A pre-save background response must never replace the saved record.
+      session += 1;
+      busy = false;
+      return loadPage(page, pageCursors[page] || null);
+    },
   });
 
   function drawRows(rows) {
@@ -134,11 +140,13 @@ export function createHrPayrollGallery({ document: documentOption,
     close.disabled = false;
   }
 
-  async function loadPage(targetPage, cursor = pageCursors[targetPage] || null) {
+  async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false) {
     if (!opened || destroyed || busy) return;
     busy = true;
-    status.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
-    cards.replaceChildren();
+    if (!quiet) {
+      status.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
+      cards.replaceChildren();
+    }
     updateControls();
     const epoch = session;
     try {
@@ -182,6 +190,14 @@ export function createHrPayrollGallery({ document: documentOption,
   home?.addEventListener("click", () => { closeGallery(); onHome(); });
   previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, pageCursors[page - 1] || null); });
   next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, pageCursors[page + 1]); });
+  const refreshSource = () => {
+    if (gallery === 'FOLHAPGTO' && opened && !destroyed && doc.visibilityState !== 'hidden' && !recordActions.isEditing()) {
+      void loadPage(page, pageCursors[page] || null, true);
+    }
+  };
+  doc.defaultView?.addEventListener('focus', refreshSource);
+  doc.addEventListener('visibilitychange', refreshSource);
+  const refreshTimer = gallery === 'FOLHAPGTO' ? doc.defaultView?.setInterval(refreshSource, 15000) : null;
 
   return Object.freeze({
     async open() {
@@ -198,6 +214,9 @@ export function createHrPayrollGallery({ document: documentOption,
     },
     close: closeGallery,
     destroy() {
+      doc.defaultView?.clearInterval(refreshTimer);
+      doc.defaultView?.removeEventListener('focus', refreshSource);
+      doc.removeEventListener('visibilitychange', refreshSource);
       recordActions.destroy();
       destroyed = true;
       opened = false;
