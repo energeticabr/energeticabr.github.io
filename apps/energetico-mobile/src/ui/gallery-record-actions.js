@@ -252,7 +252,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         onSubmit: async fields => {
           await mutate(state, () => {
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
-            const readOnly = new Set(context.columns.filter(c => c.readOnly).map(c => c.name));
+            const readOnly = new Set(context.columns.filter(c => c.readOnly).flatMap(c => [c.name,...(['lookup','person'].includes(c.control)?[`${c.name}LookupId`]:[])]));
             return saveEditor(context, Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name))));
           });
           // Re-evaluate conditional locks after a rejected save, once the

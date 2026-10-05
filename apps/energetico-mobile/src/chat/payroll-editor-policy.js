@@ -4,16 +4,17 @@ export const payrollFieldKey = value => String(value || '')
   .replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-export function payrollEditorColumns(columns) {
+export function payrollEditorColumns(columns, sheetOptions=[]) {
   return columns.filter(c => payrollFieldKey(c.name) !== 'TITLE').map(column => {
     const name = payrollFieldKey(column.name);
     if (['VALORUNITARIO', 'QTD'].includes(name)) return { ...column, readOnly: true, required: false };
-    if (!['FORNECEDOR', 'TIPOPGTO'].includes(name) || ['lookup', 'person'].includes(column.control)) return column;
-    const choices = name === 'TIPOPGTO' ? (column.choices?.length ? column.choices : PAYROLL_RUBRICS.map(r => r.payrollType)) : [];
-    const optionSources = name === 'FORNECEDOR' ? [{ kind: 'related', listName: 'FORNECEDORES', valueField: 'CADASTRO', displayFields: ['CADASTRO'], searchFields: ['CADASTRO'] }] : [];
+    if(name==='FORNECEDOR') return {...column,readOnly:true,disabled:true,required:false};
+    if(name==='IDFOLHA') return {...column,control:'select',required:true,allowMultipleValues:false,choices:sheetOptions.map(option=>option.value),optionLabels:Object.fromEntries(sheetOptions.map(option=>[option.value,option.label])),powerApps:{closed:true,preserveCurrentValue:false}};
+    if (name!=='TIPOPGTO' || ['lookup', 'person'].includes(column.control)) return column;
+    const choices = column.choices?.length ? column.choices : PAYROLL_RUBRICS.map(r => r.payrollType);
     return { ...column, control: 'select', allowMultipleValues: false, choices,
-      powerApps: { closed: true, choices, optionSources, preserveCurrentValue: true } };
-  });
+      powerApps: { closed: true, choices, optionSources:[], preserveCurrentValue: true } };
+  }).sort((a,b)=>{const order=['DATA','IDFOLHA','FORNECEDOR','IDLANCAMENTO','VALORUNITARIO','QTD'];const rank=c=>order.indexOf(payrollFieldKey(c.name));return (rank(a)<0?order.length:rank(a))-(rank(b)<0?order.length:rank(b));});
 }
 
 /** Re-read linked financial values on every refresh; never write copied values back. */
