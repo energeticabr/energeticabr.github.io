@@ -453,12 +453,12 @@ function mountedPresenceStageChoice(fixture) {
   return { input: container.children[0], listbox: container.children[1] };
 }
 
-test("trocar IDDESCRITIVOETAPA atualiza DESCRITIVO ETAPA antes de salvar", async () => {
+test("Na criação: trocar IDDESCRITIVOETAPA atualiza DESCRITIVO ETAPA antes de salvar", async () => {
   const fixture = presenceEditFormFixture();
   const submissions = [];
   const controller = renderDynamicForm(fixture.root, {
     entity: { id: "descricoes-de-presenca", title: "Descrições de presença" },
-    mode: "edit",
+    mode: "create",
     values: {
       IDDESCRITIVOETAPA: "125",
       OBSERVA_x00c7__x00c3_O: "EXECUÇÃO PAREDES ARRIMO",
@@ -509,12 +509,12 @@ test("trocar IDDESCRITIVOETAPA atualiza DESCRITIVO ETAPA antes de salvar", async
   controller.cleanup();
 });
 
-test("Choice usa o seletor existente com foco estavel, teclado, ARIA e valor fechado", async () => {
+test("Na criação: Choice usa o seletor existente com foco estavel, teclado, ARIA e valor fechado", async () => {
   const fixture = choiceFormFixture();
   const submissions = [];
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     columns: [{
       name: "STATUS",
       label: "Status",
@@ -559,13 +559,13 @@ test("Choice usa o seletor existente com foco estavel, teclado, ARIA e valor fec
   controller.cleanup();
 });
 
-test("Choice multipla adiciona e remove pelo teclado sem perder SelectedItems", async () => {
+test("Na criação: Choice multipla adiciona e remove pelo teclado sem perder SelectedItems", async () => {
   const fixture = choiceFormFixture(["OBRA CIVIL"], { multiple: true });
   fixture.native.name = "CATEGORIAS";
   const submissions = [];
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { CATEGORIAS: ["OBRA CIVIL"] },
     columns: [{
       name: "CATEGORIAS",
@@ -722,7 +722,7 @@ test("retry do ComboBox percentual preserva 50 na tela e reenvia 0.5", async () 
   retryController.cleanup();
 });
 
-test("retry preserva os dados da opcao que atomiza CONTRATO e MEDICAOPARCIAL", async () => {
+test("Na criação: retry preserva os dados da opcao que atomiza CONTRATO e MEDICAOPARCIAL", async () => {
   const source = Object.freeze({
     kind: "related",
     listName: "DESCRICAOMEDICOES",
@@ -753,7 +753,7 @@ test("retry preserva os dados da opcao que atomiza CONTRATO e MEDICAOPARCIAL", a
   let retryState;
   const firstController = renderDynamicForm(first.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { CONTRATO: "", MEDICAOPARCIAL: "" },
     powerAppsOptionDebounceMs: 0,
     columns: [column],
@@ -782,7 +782,7 @@ test("retry preserva os dados da opcao que atomiza CONTRATO e MEDICAOPARCIAL", a
   const retried = [];
   const retryController = renderDynamicForm(retry.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: failedRawValues,
     retryState,
     columns: [column],
@@ -953,7 +953,7 @@ test("ComboBox percentual mostra a escala visual e grava a fracao do Power Apps"
   controller.cleanup();
 });
 
-test("um seletor Power Apps grava todos os campos produzidos pelo mesmo ComboBox", async () => {
+test("Na criação: um seletor Power Apps grava todos os campos produzidos pelo mesmo ComboBox", async () => {
   const fixture = choiceFormFixture("", { name: "CONTRATO" });
   const submissions = [];
   const source = Object.freeze({
@@ -964,7 +964,7 @@ test("um seletor Power Apps grava todos os campos produzidos pelo mesmo ComboBox
   });
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { CONTRATO: "", MEDICAOPARCIAL: "" },
     powerAppsOptionDebounceMs: 0,
     columns: [{
@@ -1007,7 +1007,7 @@ test("um seletor Power Apps grava todos os campos produzidos pelo mesmo ComboBox
   controller.cleanup();
 });
 
-test("FILIAL de lancamentos pesquisa no provider com uma letra e preserva a preseleção", async () => {
+test("Na criação: FILIAL de lancamentos pesquisa no provider com uma letra e preserva a preseleção", async () => {
   const fixture = choiceFormFixture("MATRIZ", { name: "Title" });
   const searches = [];
   const submissions = [];
@@ -1020,7 +1020,7 @@ test("FILIAL de lancamentos pesquisa no provider com uma letra e preserva a pres
   });
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { Title: "MATRIZ" },
     powerAppsOptionDebounceMs: 0,
     columns: [{
@@ -1135,7 +1135,7 @@ test("ETAPA de lancamentos envia a FILIAL selecionada como dependência comprova
   controller.cleanup();
 });
 
-test("trocar o ComboBox pai invalida o filho e a próxima pesquisa lê o valor atual", async () => {
+test("Na criação: trocar o ComboBox pai invalida o filho e a próxima pesquisa lê o valor atual", async () => {
   const fixture = dependentChoiceFormFixture();
   const calls = [];
   const filialSource = Object.freeze({
@@ -1151,7 +1151,7 @@ test("trocar o ComboBox pai invalida o filho e a próxima pesquisa lê o valor a
   });
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { Title: "MATRIZ", field_6: "FUNDAÇÃO" },
     powerAppsOptionDebounceMs: 0,
     columns: [
@@ -1208,7 +1208,7 @@ test("trocar o ComboBox pai invalida o filho e a próxima pesquisa lê o valor a
   controller.cleanup();
 });
 
-test("origem conditional escolhe a branch concreta e reage à troca do seletor", async () => {
+test("Na criação: origem conditional escolhe a branch concreta e reage à troca do seletor", async () => {
   const fixture = choiceFormFixture("FORNECEDOR ATUAL", {
     name: "PESSOARELACIONADA",
     dependencies: { TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL", FILIAL: "MATRIZ" },
@@ -1242,7 +1242,7 @@ test("origem conditional escolhe a branch concreta e reage à troca do seletor",
   });
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: {
       PESSOARELACIONADA: "FORNECEDOR ATUAL",
       TIPOHOMOLOGACAO: "HOMOLOGAÇÃO FILIAL",
@@ -1343,7 +1343,7 @@ test("origem conditional com fallback vazio permanece fechada sem consultar outr
   controller.cleanup();
 });
 
-test("ComboBox conditional múltiplo preserva os IDs atuais ao pesquisar e adicionar", async () => {
+test("Na criação: ComboBox conditional múltiplo preserva os IDs atuais ao pesquisar e adicionar", async () => {
   const fixture = choiceFormFixture("17, 29", {
     multiple: true,
     name: "IDPGTOCORRETAGEM",
@@ -1370,7 +1370,7 @@ test("ComboBox conditional múltiplo preserva os IDs atuais ao pesquisar e adici
   const submissions = [];
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { IDPGTOCORRETAGEM: "17, 29", CORRETAGEM: "PAGO CLIENTE" },
     powerAppsOptionDebounceMs: 0,
     columns: [{
@@ -1763,7 +1763,7 @@ test("Form20_3 falha fechado quando a dependência exigida do registro está aus
   controller.cleanup();
 });
 
-test("Form25 transforma o contrato antes do lookup transitivo e reage à troca local", async () => {
+test("Na criação: Form25 transforma o contrato antes do lookup transitivo e reage à troca local", async () => {
   const fixture = choiceFormFixture("APTO 101", {
     name: "IMOVEL",
     dependencies: { NUMEROCONTRATO: "17 - FORNECEDOR A" },
@@ -1797,7 +1797,7 @@ test("Form25 transforma o contrato antes do lookup transitivo e reage à troca l
   });
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { IMOVEL: "APTO 101", NUMEROCONTRATO: "17 - FORNECEDOR A" },
     powerAppsOptionDebounceMs: 0,
     columns: [{
@@ -1925,7 +1925,7 @@ test("provider Power Apps indisponível mantém o campo fechado e recusa texto l
   controller.cleanup();
 });
 
-test("contrato real de lancamentos monta FILIAL remoto e ETAPA dependente sem origem manual", async () => {
+test("contrato real de lancamentos monta opções remotas na criação e opções sem digitação na edição", async () => {
   const lancamentos = ENTITIES.find(candidate => candidate.id === "lancamentos");
   const columns = [
     {
@@ -1965,7 +1965,7 @@ test("contrato real de lancamentos monta FILIAL remoto e ETAPA dependente sem or
   const filialCalls = [];
   const filialController = renderDynamicForm(filialFixture.root, {
     entity: lancamentos,
-    mode: "edit",
+    mode: "create",
     values: { Title: "MATRIZ" },
     columns: [filial],
     powerAppsOptionDebounceMs: 0,
@@ -1989,7 +1989,7 @@ test("contrato real de lancamentos monta FILIAL remoto e ETAPA dependente sem or
   const etapaCalls = [];
   const etapaController = renderDynamicForm(etapaFixture.root, {
     entity: lancamentos,
-    mode: "edit",
+    mode: "create",
     values: { Title: "MATRIZ", field_6: "FUNDAÇÃO" },
     columns: [etapa],
     powerAppsOptionDebounceMs: 0,
@@ -2028,8 +2028,8 @@ test("contrato real de lancamentos monta FILIAL remoto e ETAPA dependente sem or
       },
     });
     const input = mountedSearchable(fixture).input;
-    input.value = fieldName === "Title" ? "ma" : "fu";
-    input.dispatch("input");
+    assert.equal(input.readOnly, true);
+    input.dispatch('focus');
     await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(input.disabled, false);
     assert.equal(calls.length, 1);
@@ -2111,13 +2111,13 @@ function relationshipFormFixture(initial = { id: 42, label: "CLIENTE ATUAL" }, {
   };
 }
 
-test("Lookup remoto reutiliza o mesmo input e envia apenas a opcao pesquisada", async () => {
+test("Na criação: Lookup remoto reutiliza o mesmo input e envia apenas a opcao pesquisada", async () => {
   const fixture = relationshipFormFixture();
   const submissions = [];
   const searches = [];
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: { CLIENTELookupId: 42, CLIENTELookupValue: "CLIENTE ATUAL" },
     relationshipLabels: { CLIENTE: "CLIENTE ATUAL" },
     relationshipDebounceMs: 0,
@@ -2164,13 +2164,13 @@ test("Lookup remoto reutiliza o mesmo input e envia apenas a opcao pesquisada", 
   controller.cleanup();
 });
 
-test("Lookup multiplo preserva IDs e rotulos atuais como listas fechadas", async () => {
+test("Na criação: Lookup multiplo preserva IDs e rotulos atuais como listas fechadas", async () => {
   const fixture = relationshipFormFixture({ ids: [7, 9] }, { multiple: true, name: "EQUIPES" });
   const submissions = [];
   const searchedRelations = [];
   const controller = renderDynamicForm(fixture.root, {
     entity,
-    mode: "edit",
+    mode: "create",
     values: {
       EQUIPESLookupId: [7, 9],
       EQUIPESLookupValue: ["ANA ALMEIDA", "BRUNO COSTA"],

@@ -20,6 +20,37 @@ const personalSite = Object.freeze({
   writeTransport: "rest",
 });
 
+for (const kind of ['lookup','powerapps']) test(`select-only ${kind} follows all Graph pages instead of truncating the options`, async () => {
+  const next=`https://graph.microsoft.com/v1.0/sites/company-site/lists/${lookupListId}/items?$skiptoken=next`;
+  const rows=(start,count)=>Array.from({length:count},(_,n)=>({id:String(start+n),fields:{Title:`Opção ${start+n}`}}));
+  const graph=graphResponseSequence([
+    {id:'company-site'},
+    ...(kind==='powerapps'?[{value:[{id:lookupListId,displayName:'CLIENTES',list:{template:'genericList'}}]}]:[]),
+    {value:[{name:'Title',indexed:true,text:{}}]},
+    {value:rows(1,20),'@odata.nextLink':next},{value:rows(21,12)},
+  ]);
+  const repository=createSharePointRepository(graph,{company:site});
+  const values=kind==='lookup'
+    ? await repository.searchRelationshipOptions('company',sourceListId,{kind:'lookup',listId:lookupListId,displayField:'Title',multiple:false,resolvable:true},'',{browse:true})
+    : await repository.searchPowerAppsOptions('company',{kind:'related',listName:'CLIENTES',valueField:'Title'},'',{}, {browse:true});
+  assert.equal(values.length,32); assert.equal(values.at(-1).label,'Opção 32');
+  assert.equal(graph.calls.at(-1)[0],next);
+});
+
+for(const kind of ['lookup','person']) test(`select-only ${kind} follows authorized REST pages`,async()=>{
+  const collection=kind==='lookup'?`/_api/web/lists(guid'${lookupListId}')/items`:'/_api/web/siteusers';
+  const next=`https://${personalSite.host}${personalSite.path}${collection}?$skiptoken=next`;
+  const calls=[];
+  const repository=createSharePointRepository(graphResponseSequence([]),{personal:personalSite},{restTransport:{async request(_config,path){
+    calls.push(path);
+    if(path.includes('/fields?'))return {value:[{InternalName:'Title',Title:'Nome',TypeAsString:'Text',Indexed:true}]};
+    if(path===next)return {value:[kind==='lookup'?{ID:2,Title:'B'}:{Id:2,Title:'B',Email:'b@example.test'}]};
+    return {value:[kind==='lookup'?{ID:1,Title:'A'}:{Id:1,Title:'A',Email:'a@example.test'}],'odata.nextLink':next};
+  }}});
+  const values=await repository.searchRelationshipOptions('personal',sourceListId,{kind,listId:lookupListId,displayField:'Title',multiple:false,resolvable:true,principalType:'peopleOnly'},'',{browse:true});
+  assert.deepEqual(values.map(v=>v.id),[1,2]); assert.equal(calls.at(-1),next);
+});
+
 function graphResponseSequence(responses) {
   const calls = [];
   return {

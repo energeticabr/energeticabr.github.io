@@ -80,7 +80,7 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
-test('the launch pencil opens a searchable editing form without a separate details action', async t => {
+test('the launch pencil opens a selection-only editing form without a separate details action', async t => {
   const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot() : detail({
     editFields: [
       { name: 'FORNECEDOR', label: 'Fornecedor', type: 'select', options: [
@@ -103,10 +103,9 @@ test('the launch pencil opens a searchable editing form without a separate detai
   assert.equal(supplier.tagName, 'SELECT');
   editor.querySelector('.sfs-trigger').click();
   const search = editor.querySelector('.sfs-search');
-  search.value = 'fornecedor b';
-  search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
-  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Fornecedor B']);
-  editor.querySelector('.sfs-option').click();
+  assert.equal(search.readOnly, true);
+  assert.deepEqual([...editor.querySelectorAll('.sfs-option')].map(option => option.textContent), ['Fornecedor A','Fornecedor B']);
+  [...editor.querySelectorAll('.sfs-option')].find(option=>option.textContent==='Fornecedor B').click();
   assert.equal(supplier.value, 'Fornecedor B');
 });
 
@@ -122,9 +121,8 @@ test('editing a launch replaces a selected option and submits the replacement', 
   const stage = editor.querySelector('[name="ETAPA"]');
   editor.querySelector('.sfs-trigger').click();
   const search = editor.querySelector('.sfs-search');
-  search.value = 'contabilidade';
-  search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
-  const replacement = editor.querySelector('.sfs-option');
+  assert.equal(search.readOnly, true);
+  const replacement = [...editor.querySelectorAll('.sfs-option')].find(option=>option.textContent==='Contabilidade');
   replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerdown', { bubbles: true }));
   search.dispatchEvent(new ctx.dom.window.FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
   replacement.dispatchEvent(new ctx.dom.window.MouseEvent('pointerup', { bubbles: true }));
@@ -149,7 +147,7 @@ test('SUBMETER opens a modal table with only changed fields and saves only after
   const editor = ctx.root().querySelector('.lg-editor');
   const submit = button(editor, 'SUBMETER');
   assert.deepEqual([...editor.querySelectorAll('.lg-editor-actions button')].map(node => node.textContent),
-    ['Cancelar edição', 'SUBMETER']);
+    ['CANCELAR', 'SUBMETER']);
   submit.click();
   const popup = ctx.root().querySelector('.lg-review');
   assert.equal(popup.hidden, false);
@@ -368,7 +366,7 @@ test('edit modal shows compact dates and an attachment picker below the current 
     assert.equal([...ctx.root().querySelectorAll('.lg-detail button')].some(node => node.textContent === text), false);
   }
   const buttons = [...form.querySelectorAll('.lg-editor-actions > button')];
-  assert.deepEqual(buttons.map(node => node.textContent), ['Cancelar edição', 'SUBMETER']);
+  assert.deepEqual(buttons.map(node => node.textContent), ['CANCELAR', 'SUBMETER']);
   input(ctx, 'DATA', '18/09/2026');
   button(ctx.root(), 'SUBMETER').click();
   assert.deepEqual(ctx.root().querySelector('.lg-review')?.hidden, false);
