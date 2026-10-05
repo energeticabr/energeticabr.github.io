@@ -1,0 +1,33 @@
+.ov-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.ov-filters { grid-template-columns:12fr 15fr 19fr 21fr 13fr 17fr 6fr; }
+.ov-content { font-family:Arial,sans-serif; color:#003366; }
+.ov-logo { background:#e6f0ff; border:2px solid #003366; text-align:center; margin-bottom:7px; }
+.ov-logo img { display:block; margin:4px auto; height:clamp(32px,5vw,70px); max-width:40%; object-fit:contain; }
+.ov-logo h1 { border-top:2px solid #003366; padding:5px; margin:0; font-size:clamp(9px,1.25vw,16px); font-weight:900; }
+.ov-section { border:2px solid #003366; background:white; margin-bottom:8px; }
+.ov-section-title { display:flex; justify-content:space-between; align-items:center; gap:4px; background:#003366; color:white; margin:0; padding:5px 6px; font-size:clamp(8px,1vw,14px); font-weight:900; }
+.ov-cards { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:5px; background:#f8fbff; padding:7px; }
+.ov-card { padding:7px 2px; border:1px solid #7f9db9; border-left:4px solid #003366; background:#eef5ff; text-align:center; min-width:0; }
+.ov-card span { display:block; font-size:clamp(6px,.75vw,10px); font-weight:900; }
+.ov-card strong { display:block; margin-top:5px; font-size:clamp(11px,1.5vw,22px); overflow-wrap:anywhere; }
+.ov-card--1 { background:#eaf6ea; border-color:#6aa84f; color:#274e13; }
+.ov-card--2 { background:#fff2f2; border-color:#990000; color:#990000; }
+.ov-card--3 { background:#f3e8ff; border-color:#7030a0; color:#7030a0; }
+.ov-card--4 { background:#fff2cc; border-color:#806000; color:#806000; }
+.ov-card--5 { background:#fce4d6; border-color:#c65911; color:#c65911; }
+.ov-hint { text-align:center; border-top:1px solid #7f9db9; padding:6px; background:#eef5ff; font-size:clamp(6px,.8vw,11px); font-weight:900; margin:0; }
+.ov-detail-badge { font-size:clamp(6px,.75vw,11px); border-radius:10px; background:white; color:#003366; padding:2px 5px; white-space:nowrap; }
+.ov-table { width:100%; table-layout:fixed; border-collapse:collapse; font:700 clamp(6px,.8vw,11px)/1.2 Arial,sans-serif; color:black; }
+.ov-table td,.ov-table th { border:1px solid #7f9db9; padding:clamp(2px,.4vw,7px); text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
+.ov-table th { background:#d9eaf7; color:#003366; }
+.ov-table td[data-column=supplier],.ov-table td[data-column=product],.ov-table td[data-column=description],.ov-table td[data-column=issues] { text-align:left; }
+.ov-row-good { background:#f3fbf3; }.ov-row-bad { background:#fff2f2; }
+.ov-table .ov-good { background:#eaf6ea; color:#274e13; }.ov-table .ov-bad { background:#fff2f2; color:#990000; }.ov-id-ok { color:#003366; }
+.ov-tag { display:inline-block; margin:1px; padding:2px 4px; border:1px solid #990000; border-radius:10px; background:#f4cccc; color:#990000; font-size:clamp(6px,.75vw,10px); font-weight:900; }
+.ov-tag[data-issue=FORNECEDOR] { color:#c65911; border-color:#c65911; background:#fce4d6; }.ov-tag[data-issue=FILIAL] { color:#1f4e79; border-color:#1f4e79; background:#ddebf7; }
+.ov-tag[data-issue=VALOR] { color:#806000; border-color:#806000; background:#fff2cc; }.ov-tag[data-issue="SEM LANÇAMENTO"] { color:#7030a0; border-color:#7030a0; background:#f3e8ff; }
+.ov-tag--ok { color:#274e13; border-color:#6aa84f; background:#eaf6ea; }
+.ov-table .ov-total td { background:#8b0000; color:white; font-weight:900; border-color:#5a0000; padding:7px; }
+.ov-alerts,.ov-linked { padding:6px; font-size:clamp(7px,.85vw,12px); }
+.ov-alerts { background:#fff8f8; color:#990000; }.ov-alerts h3,.ov-linked h3 { margin:3px 0 6px; font-size:inherit; }
+.ov-alert { margin:4px 0; padding:5px; border:1px solid #c00; border-left-width:4px; background:white; }.ov-alert p { margin:3px 0 0; color:#333; }

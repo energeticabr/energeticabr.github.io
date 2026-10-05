@@ -30,6 +30,8 @@ import "../ui/rh-reports.css";
 import "../ui/operations-reports.css";
 import "../ui/spending-reports.css";
 import "../ui/payment-ledger.css";
+import "../ui/provision-report.css";
+import "../ui/order-validation-report.css";
 import "../ui/management-report.css";
 import "../ui/cargos.css";
 import "../ui/audit-reports-live.css";

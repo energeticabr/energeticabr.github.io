@@ -79,7 +79,14 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const managementShortcut = root.querySelector('[data-action="open-management-report"]');
   assert.ok(managementShortcut, 'resumo gerencial deve ter seu próprio mascote');
   assert.equal(paymentShortcut.nextElementSibling, managementShortcut);
-  assert.equal(managementShortcut.nextElementSibling, bubble);
+  const validationShortcut=root.querySelector('[data-action="open-order-validation-report"]');
+  assert.ok(validationShortcut,'validação de notas deve ser o quinto mascote');
+  assert.equal(managementShortcut.nextElementSibling, validationShortcut);
+  assert.equal(validationShortcut.nextElementSibling, bubble);
+  assert.equal(bubble.contains(validationShortcut),false);
+  assert.notEqual(validationShortcut.querySelector('img').src,paymentShortcut.querySelector('img').src);
+  let validationOpened=0;view.on('open-order-validation-report',()=>validationOpened++);
+  validationShortcut.querySelector('img').click();assert.equal(validationOpened,1);
   assert.equal(bubble.contains(managementShortcut), false);
   let managementOpened=0; view.on('open-management-report',()=>managementOpened++);
   managementShortcut.querySelector('img').click();
