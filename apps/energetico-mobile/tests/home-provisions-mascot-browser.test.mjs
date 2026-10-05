@@ -47,13 +47,16 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.ok(layout.m.x>=0&&layout.m.width>=44&&layout.m.height>=44&&!layout.overflow,JSON.stringify(layout));
       assert.equal(layout.transcriptOverflow,false,'área rolável sem overflow lateral');
       assert.ok(layout.image&&layout.i.x>=layout.m.x&&layout.i.right<=layout.m.right&&layout.i.bottom<=layout.m.bottom);
-      const reportLayout=await evaluate(`(()=>{const r=document.querySelector('.chat-main-payment-ledger-shortcut'),m=document.querySelector('.chat-main-provisions-shortcut'),b=document.querySelector('.chat-message--external-provisions .chat-bubble');if(!r)return null;const rr=r.getBoundingClientRect(),mr=m.getBoundingClientRect(),br=b.getBoundingClientRect(),i=r.querySelector('img');return {x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height,mascotBottom:mr.bottom,cardLeft:br.x,external:!b.contains(r),image:i.naturalWidth>0,fill:getComputedStyle(r).backgroundColor};})()`);
+      const shortcuts=await evaluate(`(()=>{const buttons=[...document.querySelectorAll('.chat-main-provisions-shortcut,.chat-main-payment-ledger-shortcut')];return buttons.map(b=>{const r=b.getBoundingClientRect();return {action:b.dataset.action,y:r.y,bottom:r.bottom,image:b.querySelector('img').naturalWidth>0};});})()`);
+      assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report']);
+      assert.ok(shortcuts.every((s,i)=>s.image&&(!i||s.y>=shortcuts[i-1].bottom+4)),JSON.stringify(shortcuts));
+      const reportLayout=await evaluate(`(()=>{const r=document.querySelector('[data-action=open-payment-ledger]'),m=document.querySelector('.chat-main-provisions-shortcut'),b=document.querySelector('.chat-message--external-provisions .chat-bubble');if(!r)return null;const rr=r.getBoundingClientRect(),mr=m.getBoundingClientRect(),br=b.getBoundingClientRect(),i=r.querySelector('img');return {x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height,mascotBottom:mr.bottom,cardLeft:br.x,external:!b.contains(r),image:i.naturalWidth>0,fill:getComputedStyle(r).backgroundColor};})()`);
       assert.ok(reportLayout, 'novo relatório acessível na tela inicial');
       assert.ok(reportLayout.external&&reportLayout.y>=reportLayout.mascotBottom+4&&reportLayout.right<=reportLayout.cardLeft-4,JSON.stringify(reportLayout));
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
-      assert.equal(await evaluate(`(()=>{const b=document.querySelector('.chat-main-payment-ledger-shortcut'),i=b.querySelector('img');return getComputedStyle(b).overflow==='hidden'&&i.getBoundingClientRect().width>b.getBoundingClientRect().width*1.4;})()`),true,'mascote ampliado, bordas internas recortadas');
-      await evaluate(`document.querySelector('.chat-main-payment-ledger-shortcut').click()`);
+      assert.equal(await evaluate(`(()=>{const b=document.querySelector('[data-action=open-payment-ledger]'),i=b.querySelector('img');return getComputedStyle(b).overflow==='hidden'&&i.getBoundingClientRect().width>b.getBoundingClientRect().width*1.4;})()`),true,'mascote ampliado, bordas internas recortadas');
+      await evaluate(`document.querySelector('[data-action=open-payment-ledger]').click()`);
       assert.equal(await evaluate('window.reportOpened'),1);
       if(width<844){
         assert.equal(await evaluate('window.reportLoads'),0,'vertical não consulta dados');
@@ -105,6 +108,18 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.gm-overlay').hidden`),true,'clique fora fecha novo relatório');
+      await evaluate(`document.querySelector('[data-action=open-provision-report]').click()`);
+      let provisionReady=false;for(let n=0;n<80&&!provisionReady;n++){provisionReady=await evaluate(`document.querySelectorAll('.pr-table').length===3`);if(!provisionReady)await delay(100);}
+      assert.ok(provisionReady,'segundo mascote abre as três tabelas de provisões');
+      const provisionFit=await evaluate(`(()=>{const c=document.querySelector('.pr-content'),f=[...document.querySelectorAll('.pr-filters .pl-filter')].map(n=>n.getBoundingClientRect()),p=document.querySelector('.pr-dialog').getBoundingClientRect();return {aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),fits:c.scrollWidth<=c.clientWidth+1,logo:document.querySelector('.pr-logo img').naturalWidth>0,columns:document.querySelector('[data-section=provisions] thead tr:last-child').children.length,fullHeight:p.top<=1&&p.bottom>=innerHeight-1,status:document.querySelector('.pr-filters [name=paymentStatus]').value};})()`);
+      assert.ok(provisionFit.aligned&&provisionFit.fits&&provisionFit.logo&&provisionFit.fullHeight,JSON.stringify(provisionFit));
+      assert.equal(provisionFit.columns,7);assert.equal(provisionFit.status,'PAGAMENTO PREVISTO');
+      await evaluate(`document.querySelector('.pr-filters .sfs-arrow[aria-label="Abrir opções de FORNECEDOR"]').click()`);
+      const provisionDropdown=await evaluate(`(()=>{const p=document.querySelector('.pr-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
+      assert.equal(provisionDropdown.placement,'below');assert.ok(provisionDropdown.visible>=7,JSON.stringify(provisionDropdown));
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
+      await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
+      assert.equal(await evaluate(`document.querySelector('.pr-overlay').hidden`),true,'clique fora fecha provisões');
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       if(width===390&&!pwa&&process.env.HOME_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.HOME_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);

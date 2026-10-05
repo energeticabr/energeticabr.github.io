@@ -2,6 +2,7 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
+import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence } from './provision-report-model.js';
 
 const SITE = "personal";
 const MAX_PAGES = 100;
@@ -106,5 +107,22 @@ export function createSpendingReportsData({
     })) });
   }
 
-  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot });
+  async function loadProvisionReportSnapshot({ signal } = {}) {
+    const [recurrenceList, provisionList] = await Promise.all([
+      resolve(['DESPESASRECORRENTES', 'DESPESAS RECORRENTES'], signal),
+      resolve(['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS'], signal),
+    ]);
+    const [recurrenceColumns, recurrenceItems, provisionColumns, provisionItems] = await Promise.all([
+      repository.getColumns(SITE, recurrenceList, signal ? { signal } : {}), allItems(recurrenceList, signal),
+      repository.getColumns(SITE, provisionList, signal ? { signal } : {}), allItems(provisionList, signal),
+    ]);
+    abortIfNeeded(signal);
+    if (!Array.isArray(recurrenceColumns) || !Array.isArray(provisionColumns)) throw new Error('O SharePoint retornou colunas inválidas.');
+    return Object.freeze({
+      recurrences: Object.freeze(recurrenceItems.map(item => normalizeProvisionReportRecurrence(item, recurrenceColumns))),
+      provisions: Object.freeze(provisionItems.map(item => normalizeProvisionReportRow(item, provisionColumns))),
+    });
+  }
+
+  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot, loadProvisionReportSnapshot });
 }

@@ -521,10 +521,12 @@ button { touch-action: manipulation; }
 .chat-main-provisions-shortcut { box-sizing: border-box; grid-column: 1; grid-row: 1; display: grid; place-items: center; width: 44px; height: 44px; margin-top: 12px; padding: 3px; border: 1px solid #0d3562; border-radius: 12px; background: #103b6b; }
 .chat-main-provisions-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 9px; }
 .chat-main-provisions-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:calc(20px + max(44px,var(--compact-control-height))); padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
+.chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:124px; padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
 .chat-main-payment-ledger-shortcut img { display:block; width:100%; height:100%; object-fit:cover; transform:scale(1.55); mix-blend-mode:lighten; }
 .chat-main-payment-ledger-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-management-shortcut { margin-top:calc(28px + max(44px,var(--compact-control-height)) + max(44px,var(--compact-control-height))); }
+.chat-main-provision-report-shortcut { margin-top:68px; padding:2px; }
+.chat-main-provision-report-shortcut img { object-fit:contain; transform:none; mix-blend-mode:normal; }
+.chat-main-management-shortcut { margin-top:180px; }
 .chat-main-management-shortcut img { transform:scale(1.25); }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {

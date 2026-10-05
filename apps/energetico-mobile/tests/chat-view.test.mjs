@@ -65,7 +65,15 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const bubble = pending.closest('.chat-bubble');
   assert.equal(bubble.contains(shortcut), false, 'o mascote não ocupa a coluna dos botões');
   const paymentShortcut = root.querySelector('[data-action="open-payment-ledger"]');
-  assert.equal(shortcut.nextElementSibling, paymentShortcut);
+  const provisionReport = root.querySelector('[data-action="open-provision-report"]');
+  assert.ok(provisionReport, 'o segundo mascote abre o relatório de provisões');
+  assert.equal(shortcut.nextElementSibling, provisionReport);
+  assert.equal(provisionReport.nextElementSibling, paymentShortcut);
+  assert.equal(bubble.contains(provisionReport), false);
+  assert.notEqual(provisionReport.querySelector('img').src, shortcut.querySelector('img').src);
+  let provisionReportOpened=0; view.on('open-provision-report',()=>provisionReportOpened++);
+  provisionReport.querySelector('img').click();
+  assert.equal(provisionReportOpened,1);
   const managementShortcut = root.querySelector('[data-action="open-management-report"]');
   assert.ok(managementShortcut, 'resumo gerencial deve ter seu próprio mascote');
   assert.equal(paymentShortcut.nextElementSibling, managementShortcut);
