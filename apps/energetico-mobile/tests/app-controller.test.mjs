@@ -3642,6 +3642,196 @@ test("fluxo ativo agenda lembrete nativo ao sair do aplicativo", async () => {
   h.controller.stop();
 });
 
+function provisionCooldownHarness(t, values = new Map()) {
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value) },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+    else delete globalThis.localStorage;
+  });
+  return (accountId = 'cooldown-user', view) => {
+    const h = makeHarness({ account: { homeAccountId: accountId, name: 'Bernardo' }, view });
+    h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', supplier: 'VIVO' }] });
+    t.after(() => h.controller.stop());
+    return h;
+  };
+}
+
+test('provisões automáticas persistem o intervalo de 30 minutos ao reiniciar o app', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const first = create();
+  await first.controller.start();
+  assert.equal(first.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  first.controller.stop();
+
+  t.mock.timers.setTime(new Date('2026-10-05T12:29:59.999Z').getTime());
+  const before = create();
+  await before.controller.start();
+  assert.equal(before.view.renders.at(-1).pendingProvisions, null);
+  before.controller.stop();
+
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  const boundary = create();
+  await boundary.controller.start();
+  assert.equal(boundary.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  boundary.controller.stop();
+  const immediate = create();
+  await immediate.controller.start();
+  assert.equal(immediate.view.renders.at(-1).pendingProvisions, null);
+});
+
+test('provisões voltam no retorno ao app após 30 minutos mesmo depois do X', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const h = provisionCooldownHarness(t)();
+  await h.controller.start();
+  await h.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(new Date('2026-10-05T12:29:59Z').getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+test('mascote abre provisões durante o intervalo sem adiar a próxima abertura automática', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const first = create();
+  await first.controller.start();
+  first.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T12:20:00Z').getTime());
+  const manual = create();
+  await manual.controller.start();
+  assert.equal(manual.view.renders.at(-1).pendingProvisions, null);
+  assert.equal(await manual.view.emit('open-pending-provisions'), true);
+  assert.equal(manual.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  manual.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  const automatic = create();
+  await automatic.controller.start();
+  assert.equal(automatic.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+for (const choice of ['always', '2h', 'today']) test(`intervalo automático preserva a escolha de lembrete ${choice}`, async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const first = create();
+  await first.controller.start();
+  await first.view.emit('close-pending-provisions');
+  await first.view.emit('pending-provisions-reminder-choice', { value: choice });
+  first.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T12:10:00Z').getTime());
+  const early = create();
+  await early.controller.start();
+  assert.equal(early.view.renders.at(-1).pendingProvisions, null);
+  early.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  const later = create();
+  await later.controller.start();
+  if (choice === 'always') assert.equal(later.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  else assert.equal(later.view.renders.at(-1).pendingProvisions, null);
+});
+
+test('intervalo de provisões não é compartilhado entre contas', async t => {
+  const create = provisionCooldownHarness(t);
+  const first = create('account-one');
+  await first.controller.start();
+  first.controller.stop();
+  const second = create('account-two');
+  await second.controller.start();
+  assert.equal(second.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+test('consulta vazia ou falha não consome o intervalo automático de provisões', async t => {
+  const create = provisionCooldownHarness(t);
+  for (const result of [() => ({ due: false, rows: [] }), () => { throw new Error('Offline'); }]) {
+    const h = create();
+    h.client.getPendingProvisionSnapshot = async () => result();
+    await h.controller.start();
+    assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+    h.controller.stop();
+  }
+  const success = create();
+  await success.controller.start();
+  assert.equal(success.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+test('armazenamento bloqueado não impede início nem intervalo de provisões na mesma sessão', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() { throw new DOMException('Storage blocked', 'SecurityError'); },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+    else delete globalThis.localStorage;
+  });
+  const h = makeHarness();
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', supplier: 'VIVO' }] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  await h.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(new Date('2026-10-05T12:29:59Z').getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+test('retorno respeita abertura automática mais recente de outra janela da mesma conta', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const first = create();
+  await first.controller.start();
+  await first.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(new Date('2026-10-05T12:31:00Z').getTime());
+  const second = create();
+  await second.controller.start();
+  assert.equal(second.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  second.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T13:00:00Z').getTime());
+  await first.controller.handleForeground();
+  assert.equal(first.view.renders.at(-1).pendingProvisions, null);
+  t.mock.timers.setTime(new Date('2026-10-05T13:01:00Z').getTime());
+  await first.controller.handleForeground();
+  assert.equal(first.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+test('popup real fica fechado após reiniciar no intervalo e o mascote continua funcionando', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const first = create();
+  await first.controller.start();
+  first.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T12:01:00Z').getTime());
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  const h = create('cooldown-user', view);
+  t.after(() => { h.controller.stop(); view.destroy(); dom.window.close(); });
+  await h.controller.start();
+  assert.equal(root.querySelector('[data-pending-provisions-dialog]'), null);
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
+    { id: 'group_pending', reply: 'group_pending', label: '⏳ PENDÊNCIAS (47)' },
+  ] }], { activeFlow: null });
+  root.querySelector('[data-action="open-pending-provisions"]').click();
+  for (let attempt = 0; attempt < 50 && !root.querySelector('[data-pending-provisions-dialog]'); attempt++)
+    await new Promise(resolve => setImmediate(resolve));
+  assert.match(root.querySelector('[data-pending-provisions-dialog]').textContent, /VIVO/);
+  root.querySelector('[data-action="dismiss-pending-provisions"]').click();
+  assert.equal(root.querySelector('[data-pending-provisions-dialog]'), null);
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  await h.controller.handleForeground();
+  assert.match(root.querySelector('[data-pending-provisions-dialog]').textContent, /VIVO/);
+});
+
 test("abre provisões vencidas e aplica o adiamento de duas horas ao fechar", async () => {
   const h = makeHarness();
   const scheduled = [];
@@ -5080,7 +5270,8 @@ test("cancelar o lembrete de provisões fecha somente a escolha e preserva a lis
   h.controller.stop();
 });
 
-test("a opção de não lembrar hoje expira quando muda a data local", async () => {
+test("a opção de não lembrar hoje expira quando muda a data local", async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
   const previousStorage = globalThis.localStorage;
   const values = new Map();
   Object.defineProperty(globalThis, "localStorage", {
@@ -5094,8 +5285,7 @@ test("a opção de não lembrar hoje expira quando muda a data local", async () 
     await h.view.emit("close-pending-provisions");
     await h.view.emit("pending-provisions-reminder-choice", { value: "today" });
     assert.equal(h.view.renders.at(-1).pendingProvisions, null);
-    const key = [...values.keys()][0];
-    values.set(key, JSON.stringify({ mode: "today", date: "2000-01-01" }));
+    t.mock.timers.setTime(new Date('2026-10-06T12:00:00Z').getTime());
     await h.controller.handleForeground();
     assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
     h.controller.stop();
