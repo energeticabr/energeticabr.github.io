@@ -1,0 +1,52 @@
+.as-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.as-filters { grid-template-columns:4fr 26fr 14fr 14fr 25fr 14fr; }
+.as-filters .pl-filter-label { height:28px; min-height:28px; display:grid; place-items:center; white-space:normal; }
+.as-filters .pl-date-display { font-size:clamp(7px,1.1vw,14px); }
+.as-heading { border:2px solid #455a64; padding:9px 3px; margin:2px 0 8px; text-align:center; background:#e3f2fd; }
+.as-heading h1 { margin:0; font-size:clamp(10px,1.4vw,18px); }
+.as-heading p { margin:5px 0 0; font-size:clamp(7px,1vw,12px); }
+.as-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:0 2.5%; margin-bottom:12px; }
+.as-metric { border:2px solid; border-radius:6px; padding:8px 2px; display:grid; gap:4px; text-align:center; font-size:clamp(7px,1vw,13px); font-weight:700; min-width:0; }
+.as-metric strong { font-size:clamp(15px,2vw,24px); }
+.as-metric--pending { color:#e65100; border-color:#fb8c00; background:#fff3e0; }
+.as-metric--present { color:#1b5e20; border-color:#2e7d32; background:#e8f5e9; }
+.as-metric--absent { color:#b71c1c; border-color:#e53935; background:#ffebee; }
+.as-metric--total { color:#0d47a1; border-color:#1976d2; background:#e3f2fd; }
+.as-professions { background:#fffde7; border:2px solid #8d6e63; border-radius:5px; padding:9px 3%; margin-bottom:10px; }
+.as-professions h2 { font-size:clamp(9px,1.3vw,16px); color:#5d4037; text-align:center; margin:0 0 8px; }
+.as-profession-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:start; }
+.as-profession,.as-provider { border:2px solid var(--as-border,#ff9800); color:var(--as-text,#e65100); background:var(--as-fill,#fff3e0); border-radius:7px; padding:7px; min-width:0; }
+.as-tone--PENDENTE,.as-tone--pending { --as-border:#ff5252; --as-text:#b71c1c; --as-fill:#ffebee; }
+.as-tone--PAGO,.as-tone--paid { --as-border:#66bb6a; --as-text:#1b5e20; --as-fill:#e8f5e9; }
+.as-tone--MISTO,.as-tone--mixed { --as-border:#ffa726; --as-text:#e65100; --as-fill:#fff3e0; }
+.as-profession h3 { font-size:clamp(8px,1.1vw,14px); color:#5d4037; text-align:center; margin:0 0 5px; padding-bottom:5px; border-bottom:1px solid #d7ccc8; overflow-wrap:anywhere; }
+.as-count-label { text-align:center; font-size:clamp(6px,.75vw,10px); font-weight:700; margin:3px 0 6px; color:#6d4c41; }
+.as-provider { padding:6px; margin-bottom:6px; border-width:1px; }
+.as-provider h4 { display:flex; gap:3px; justify-content:space-between; align-items:start; margin:0 0 5px; font-size:clamp(7px,.86vw,11px); overflow-wrap:anywhere; }
+.as-count { display:inline-block; border-radius:999px; padding:3px 5px; color:white; background:var(--as-border,#c62828); white-space:nowrap; font-size:clamp(6px,.8vw,10px); }
+.as-presence-counts { font-size:clamp(6px,.7vw,9px); font-weight:700; margin:0 0 4px; }
+.as-financial { width:100%; border-collapse:collapse; font-size:clamp(6px,.75vw,10px); font-weight:700; }
+.as-financial td { padding:2px 0; }
+.as-financial td:last-child { text-align:right; white-space:nowrap; }
+.as-financial--pendingApproval { color:#b71c1c; }
+.as-financial--approvedPayment { color:#e65100; }
+.as-financial--paid { color:#1b5e20; }
+.as-financial--total { border-top:1px solid var(--as-border,#8d6e63); color:#3e2723; }
+.as-profession-total { margin:8px 0 4px; border-top:2px solid #8d6e63; padding-top:5px; text-align:center; color:#5d4037; font-size:clamp(6px,.75vw,10px); }
+.as-daily { width:100%; table-layout:fixed; border-collapse:collapse; border:2px solid #263238; font-size:clamp(7px,.95vw,13px); color:#263238; }
+.as-daily th,.as-daily td { border:1px solid #b0bec5; padding:5px 3px; overflow-wrap:anywhere; vertical-align:top; }
+.as-daily thead { background:#e3f2fd; }
+.as-daily th { text-align:center; }
+.as-day-heading { border-top:4px solid #263238; background:#eceff1; }
+.as-day-heading th { padding:7px; font-size:clamp(10px,1.3vw,15px); }
+.as-date,.as-branch,.as-weekend,.as-day-total { text-align:center; font-weight:700; vertical-align:middle!important; }
+.as-date { background:#f5f5f5; }.as-weekend { background:#fff3e0; }
+.as-category--pending { background:#fff3e0; color:#e65100; }
+.as-category--present,.as-day-total { background:#e8f5e9; color:#1b5e20; }
+.as-category--absent { background:#ffebee; color:#b71c1c; }
+.as-daily-professions { background:#fffde7; color:#4e342e; font-weight:700; }
+.as-person { padding:4px 0; border-bottom:1px solid currentColor; }
+.as-duplicate { border:3px solid #c62828; border-radius:15px; padding:4px; background:#ffebee; color:#b71c1c; }
+.as-badge { display:inline-block; padding:2px 4px; margin:3px 2px 0 0; border:1px solid; border-radius:999px; font-size:clamp(6px,.8vw,10px); font-weight:700; }
+.as-badge--pending { background:#fff3e0; color:#e65100; }.as-badge--paid { background:#e8f5e9; color:#1b5e20; }
+.as-empty { color:#777; text-align:center; }

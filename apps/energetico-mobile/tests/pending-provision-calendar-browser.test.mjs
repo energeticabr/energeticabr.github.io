@@ -41,7 +41,7 @@ test('clique real abre calendário e teclado seleciona nova data em telas estrei
       await send('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/pending-provision-calendar.html?w=${width}` }, sessionId);
       let ready = false;
-      for (let n = 0; n < 200 && !ready; n++) { ready = await evaluate(`location.search==='?w=${width}'&&document.documentElement.dataset.ready==='true'`); if (!ready) await delay(100); }
+      for (let n = 0; n < 200 && !ready; n++) { ready = await evaluate(`location.search==='?w=${width}'&&document.documentElement?.dataset.ready==='true'`); if (!ready) await delay(100); }
       assert.ok(ready, 'fixture carregada');
       await tap('[data-action="edit-pending-provision-due-date"]');
       const layout = await evaluate(`(()=>{const f=document.querySelector('[data-role="pending-provision-due-date"]'),r=f.getBoundingClientRect();return {type:f.type,value:f.value,fits:r.x>=0&&r.right<=innerWidth&&r.width>0,overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);

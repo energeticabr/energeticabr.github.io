@@ -17,6 +17,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
   assert.match(css,/\.ov-table/,'PWA delivers validation table styles');
   assert.match(css,/\.ov-cards/,'PWA delivers six-card summary layout');
   assert.match(css,/\.pr-table/,'PWA preserves second provision report styles');
+  assert.match(css,/\.as-daily/,'PWA delivers attendance summary table styles');
   const server=await createServer({root:app,server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   const profile=mkdtempSync(join(tmpdir(),'home-provisions-'));
   const pending=new Map();let child,socket;
@@ -79,7 +80,8 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.ok(fit.aligned&&fit.fits&&fit.logo,JSON.stringify(fit));
       if(await evaluate('innerHeight<=500'))assert.ok(fit.top<=1&&fit.bottom>=fit.vh-1,'relatório ocupa altura toda');
       assert.equal(fit.red,'rgb(255, 0, 0)'); assert.ok(Number(fit.bold)>=700);
-      assert.ok(await evaluate(`(()=>{const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');return [...document.querySelectorAll('.pl-date-display')].every(n=>{n.value='02/10/2026';const s=getComputedStyle(n);ctx.font=s.font;return ctx.measureText(n.value).width<=n.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight);});})()`),'datas dd/mm/yyyy preenchidas cabem integralmente');
+      const dateFits=await evaluate(`(()=>{const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');return [...document.querySelectorAll('.pl-overlay:not([hidden]) .pl-date-display')].map(n=>{n.value='02/10/2026';const s=getComputedStyle(n);ctx.font=s.font;return {text:ctx.measureText(n.value).width,available:n.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight),font:s.font,width:innerWidth};});})()`);
+      assert.ok(dateFits.every(n=>n.text<=n.available),'datas dd/mm/yyyy preenchidas cabem integralmente: '+JSON.stringify(dateFits));
       await evaluate(`document.querySelector('.pl-date-display').focus()`);
       for(let tab=0;tab<2;tab++)for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab',windowsVirtualKeyCode:9},sessionId);
       assert.equal(await evaluate(`document.activeElement.dataset.dateDisplay`),'endDate','Tab segue para a próxima data sem parada invisível');
@@ -142,10 +144,24 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.ov-overlay').hidden`),true,'clique fora fecha validação');
+      await evaluate(`document.querySelector('[data-action=open-attendance-summary]').click()`);
+      let attendanceReady=false;for(let n=0;n<80&&!attendanceReady;n++){attendanceReady=await evaluate(`document.querySelectorAll('.as-profession').length===4`);if(!attendanceReady)await delay(100);}
+      assert.ok(attendanceReady,'segundo mascote da direita abre resumo por profissão');
+      const attendanceFit=await evaluate(`(()=>{const c=document.querySelector('.as-content'),f=[...document.querySelectorAll('.as-filters>.pl-filter,.as-filters>.pl-dates')].map(n=>n.getBoundingClientRect()),p=document.querySelector('.as-dialog').getBoundingClientRect();return {aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),fits:c.scrollWidth<=c.clientWidth+1,columns:document.querySelector('.as-daily thead tr').children.length,cards:document.querySelectorAll('.as-metric').length,fullHeight:p.top<=1&&p.bottom>=innerHeight-1,status:document.querySelector('.as-filters [name=supplierStatus]').value};})()`);
+      assert.ok(attendanceFit.aligned&&attendanceFit.fits&&attendanceFit.fullHeight,JSON.stringify(attendanceFit));
+      assert.equal(attendanceFit.cards,4);assert.equal(attendanceFit.columns,7);assert.equal(attendanceFit.status,'ATIVO');
+      await evaluate(`document.querySelector('.as-filters [aria-label="Abrir opções de FORNECEDOR"]').click()`);
+      const attendanceDropdown=await evaluate(`(()=>{const p=document.querySelector('.as-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
+      assert.equal(attendanceDropdown.placement,'below');assert.ok(attendanceDropdown.visible>=7,JSON.stringify(attendanceDropdown));
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
+      await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
+      assert.equal(await evaluate(`document.querySelector('.as-overlay').hidden`),true,'clique fora fecha presenças');
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       const cargosShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-cargos-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=b.getBoundingClientRect();return {right:r.right,x:r.x,cardRight:q.right,image:m.querySelector('img').naturalWidth>0,fill:getComputedStyle(m).backgroundColor};})()`);
       assert.ok(cargosShortcut.x>=cargosShortcut.cardRight+4&&cargosShortcut.right<=width&&cargosShortcut.image,JSON.stringify(cargosShortcut));
       assert.equal(cargosShortcut.fill,'rgb(207, 117, 122)');
+      const attendanceShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-attendance-summary-shortcut'),c=document.querySelector('.chat-main-cargos-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=c.getBoundingClientRect(),s=b.getBoundingClientRect();return {right:r.right,x:r.x,y:r.y,cargoBottom:q.bottom,cargoX:q.x,cardRight:s.right,image:m.querySelector('img').naturalWidth>0};})()`);
+      assert.ok(attendanceShortcut.x>=attendanceShortcut.cardRight+4&&attendanceShortcut.right<=width&&attendanceShortcut.image&&attendanceShortcut.y>=attendanceShortcut.cargoBottom+4&&Math.abs(attendanceShortcut.x-attendanceShortcut.cargoX)<1,JSON.stringify(attendanceShortcut));
       await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
       const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
       assert.ok(cargosFit.top===0&&cargosFit.bottom===844&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);
