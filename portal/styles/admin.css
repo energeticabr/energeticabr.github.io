@@ -928,6 +928,9 @@ noscript {
 
 .entity-actions,
 .dynamic-form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+[data-edit-form] .dynamic-form-actions { flex-wrap: nowrap; justify-content: space-between; }
+[data-edit-form] [data-form-cancel] { background: #b91c24; border-color: #b91c24; color: #fff; }
+[data-edit-form] [data-form-save] { margin-left: auto; background: #167044; border-color: #167044; color: #fff; }
 .button-primary,
 .button-secondary,
 .button-danger,

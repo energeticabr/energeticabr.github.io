@@ -32,10 +32,12 @@ function createPicker(select, closeOthers, options = {}) {
   const popup = doc.createElement('div'); popup.className = 'sfs-popup'; popup.hidden = true;
   const search = doc.createElement('input'); search.type = 'search'; search.className = 'sfs-trigger sfs-search sfs-value';
   const trigger = search;
+  const selectionOnly = options.selectionOnly === true;
+  if (selectionOnly) { search.type = 'text'; search.readOnly = true; search.setAttribute('data-select-only',''); }
   search.dataset.filterOptionSearch = 'true'; search.autocomplete = 'off';
   search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', labelText);
   search.setAttribute('aria-haspopup', 'listbox');
-  search.setAttribute('aria-autocomplete', 'list'); search.setAttribute('aria-expanded', 'false');
+  search.setAttribute('aria-autocomplete', selectionOnly ? 'none' : 'list'); search.setAttribute('aria-expanded', 'false');
   search.setAttribute('aria-controls', `${id}-list`);
   const list = doc.createElement('div'); list.className = 'sfs-list'; list.id = `${id}-list`;
   list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', labelText);
@@ -93,8 +95,8 @@ function createPicker(select, closeOthers, options = {}) {
     list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14))}px`;
   }
   function render() {
-    const query = searchableText(search.value);
-    candidates = [...select.options].filter(option => !option.hidden && (!query || searchableText(option.label).includes(query)));
+    const query = selectionOnly ? '' : searchableText(search.value);
+    candidates = [...select.options].filter(option => !option.hidden && (!selectionOnly || option.value !== '') && (!query || searchableText(option.label).includes(query)));
     list.replaceChildren(...candidates.map((option, index) => {
       const item = doc.createElement('div'); item.className = 'sfs-option'; item.id = `${id}-option-${index}`;
       item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.selected));
@@ -146,7 +148,7 @@ function createPicker(select, closeOthers, options = {}) {
     sync();
     if (trigger.disabled) return;
     closeOthers();
-    search.value = ''; popup.hidden = false;
+    search.value = selectionOnly ? selectionLabel() : ''; popup.hidden = false;
     trigger.setAttribute('aria-expanded', 'true'); search.setAttribute('aria-expanded', 'true');
     if (observedViewport !== view.visualViewport) {
       observedViewport?.removeEventListener('resize', positionPopup);
@@ -176,6 +178,7 @@ function createPicker(select, closeOthers, options = {}) {
   function onArrowClick() { if (popup.hidden) open(); else close({ focus: true }); }
   function onSearchInput(event) {
     event.stopPropagation();
+    if (selectionOnly) { search.value = selectionLabel(); return; }
     if (popup.hidden) {
       const query = search.value;
       open(); search.value = query;
@@ -184,6 +187,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function onSearchChange(event) { event.stopPropagation(); }
   function onKey(event) {
+    if (selectionOnly && event.target === search && (event.key?.length === 1 || ['Backspace','Delete'].includes(event.key))) { event.preventDefault(); if(event.key===' ')open(); return; }
     if (event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape' && !popup.hidden) {
       event.preventDefault(); event.stopPropagation(); close({ focus: true }); return;
@@ -253,6 +257,9 @@ function createPicker(select, closeOthers, options = {}) {
   trigger.addEventListener('focus', open);
   arrow.addEventListener('click', onArrowClick);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
+  const blockEditing = event => event.preventDefault();
+  const editEvents = ['beforeinput','paste','cut','drop'];
+  if (selectionOnly) editEvents.forEach(name=>search.addEventListener(name,blockEditing));
   wrapper.addEventListener('keydown', onKey); wrapper.addEventListener('focusout', onFocusOut);
   list.addEventListener('pointerdown', onOptionPointerDown);
   doc.addEventListener('pointerup', onOptionPointerUp);
@@ -276,6 +283,7 @@ function createPicker(select, closeOthers, options = {}) {
       trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
       arrow.removeEventListener('click', onArrowClick);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
+      if (selectionOnly) editEvents.forEach(name=>search.removeEventListener(name,blockEditing));
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
       list.removeEventListener('pointerdown', onOptionPointerDown);
       doc.removeEventListener('pointerup', onOptionPointerUp);

@@ -69,13 +69,19 @@ export function createSearchableSelect(root, config = {}) {
   container.className = "searchable-select";
   input.className = "searchable-select-input";
   input.setAttribute("type", "search");
+  const selectionOnly = config.selectionOnly === true;
+  if (selectionOnly) {
+    input.setAttribute('type', 'text');
+    input.readOnly = true;
+    input.setAttribute('data-select-only', '');
+  }
   input.setAttribute("autocomplete", "off");
   input.setAttribute("role", "combobox");
-  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-autocomplete", selectionOnly ? "none" : "list");
   input.setAttribute("aria-controls", `${id}-listbox`);
   input.setAttribute("aria-expanded", "false");
   input.setAttribute("aria-label", String(config.label || "Selecionar opção"));
-  input.setAttribute("placeholder", String(config.placeholder || "Pesquisar e selecionar"));
+  input.setAttribute("placeholder", String(config.placeholder || (selectionOnly ? 'Selecione uma opção' : 'Pesquisar e selecionar')));
   listbox.className = "searchable-select-options";
   listbox.setAttribute("id", `${id}-listbox`);
   listbox.setAttribute("role", "listbox");
@@ -156,26 +162,33 @@ export function createSearchableSelect(root, config = {}) {
   }
 
   function onInput() {
+    if (selectionOnly) { input.value = selectedOption?.label || ''; return; }
     filterOptions(input.value);
     renderOptions();
   }
 
   function openOptions() {
-    const clearEmptyLabel = config.clearEmptyLabelOnOpen === true
+    const clearEmptyLabel = !selectionOnly && config.clearEmptyLabelOnOpen === true
       && selectedOption
       && String(selectedOption.value ?? "") === ""
       && input.value === selectedOption.label;
     if (clearEmptyLabel) input.value = "";
-    const query = selectedOption && (clearEmptyLabel || input.value === selectedOption.label) ? "" : input.value;
+    const query = selectionOnly || selectedOption && (clearEmptyLabel || input.value === selectedOption.label) ? "" : input.value;
     filterOptions(query);
     renderOptions();
   }
 
   function onKeyDown(event) {
+    if (selectionOnly && (event?.key?.length === 1 || ['Backspace', 'Delete'].includes(event?.key))) {
+      event.preventDefault?.();
+      if (event.key === ' ') openOptions();
+      return;
+    }
+    if (selectionOnly && event?.key === 'Enter' && !open) { event.preventDefault?.(); openOptions(); return; }
     if (event?.isComposing || event?.keyCode === 229) return;
     if (event?.key === "ArrowDown") {
       if (!open) {
-        filterOptions(input.value);
+        filterOptions(selectionOnly ? '' : input.value);
         renderOptions();
       }
       if (!filteredOptions.length) return;
@@ -184,7 +197,7 @@ export function createSearchableSelect(root, config = {}) {
       setActive(activeIndex < 0 ? 0 : activeIndex + 1);
     } else if (event?.key === "ArrowUp") {
       if (!open) {
-        filterOptions(input.value);
+        filterOptions(selectionOnly ? '' : input.value);
         renderOptions();
       }
       if (!filteredOptions.length) return;
@@ -211,6 +224,9 @@ export function createSearchableSelect(root, config = {}) {
   input.addEventListener("click", openOptions);
   input.addEventListener("keydown", onKeyDown);
   input.addEventListener("blur", onBlur);
+  const blockEditing = event => event.preventDefault?.();
+  const editEvents = ['beforeinput', 'paste', 'cut', 'drop'];
+  if (selectionOnly) editEvents.forEach(name => input.addEventListener(name, blockEditing));
 
   const initial = findOption(config.value);
   if (initial) choose(initial, false);
@@ -256,8 +272,8 @@ export function createSearchableSelect(root, config = {}) {
     },
     search(query) {
       if (destroyed) return Object.freeze([]);
-      input.value = String(query ?? "");
-      const matches = filterOptions(input.value);
+      if (!selectionOnly) input.value = String(query ?? "");
+      const matches = filterOptions(selectionOnly ? '' : input.value);
       renderOptions();
       return matches;
     },
@@ -272,6 +288,7 @@ export function createSearchableSelect(root, config = {}) {
       input.removeEventListener("click", openOptions);
       input.removeEventListener("keydown", onKeyDown);
       input.removeEventListener("blur", onBlur);
+      if (selectionOnly) editEvents.forEach(name => input.removeEventListener(name, blockEditing));
       root.replaceChildren();
     },
   });

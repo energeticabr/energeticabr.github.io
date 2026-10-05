@@ -142,6 +142,10 @@
 .gallery-record-dialog .dynamic-form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #cbd5e1; }
 .gallery-record-dialog .dynamic-form button { min-height: 44px; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #172033; font: inherit; cursor: pointer; }
 .gallery-record-dialog .dynamic-form .button-primary { background: #1565c0; border-color: #1565c0; color: #fff; }
+.gallery-record-dialog [data-edit-form] .dynamic-form-actions { flex-wrap: nowrap; justify-content: space-between; }
+.gallery-record-dialog [data-edit-form] [data-form-cancel] { background: #b91c24; border-color: #b91c24; color: #fff; }
+.gallery-record-dialog [data-edit-form] [data-form-save] { margin-left: auto; background: #167044; border-color: #167044; color: #fff; }
+.gallery-record-dialog input[data-select-only] { background: #fff; color: #172033; cursor: pointer; }
 .gallery-record-dialog .dynamic-form-errors { color: #a61b1b; }
 .gallery-record-dialog .dynamic-field[data-combobox-field] > select { display: none; }
 .gallery-record-dialog [data-combobox-root],

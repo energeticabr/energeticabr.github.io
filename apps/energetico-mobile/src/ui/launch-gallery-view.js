@@ -1210,14 +1210,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     if (operation === 'update' && !attachmentPlaced) grid.append(renderAttachments());
     const actions = element('div', 'lg-actions lg-editor-actions');
-    const cancel = button('Cancelar edição', dismissDetail, { danger: true });
+    const cancel = button('CANCELAR', dismissDetail, { danger: true });
     cancel.classList.add('lg-editor-cancel');
     const reviewButton = button('SUBMETER', () => reviewEditor());
     reviewButton.classList.add('lg-editor-review');
     actions.append(cancel, reviewButton);
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
     panel.insertBefore(form, reviewHost);
-    editor = { operation, form, controls, schemaState, attachmentsAdded: [], pickers: bindSearchableFilterSelects(form) };
+    editor = { operation, form, controls, schemaState, attachmentsAdded: [], pickers: bindSearchableFilterSelects(form, {selectionOnly:operation === 'update'}) };
     focus(form.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? form);
   }
   function reviewEditor() {

@@ -9,6 +9,18 @@ const module = await import('../src/ui/searchable-filter-selects.js').catch(erro
 });
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test('selection-only edit picker cannot erase or type and allows choosing another option',t=>{
+  const dom=new JSDOM('<form><label>Status<select><option selected>ATIVO</option><option>PENDENTE</option></select></label></form>');
+  const doc=dom.window.document,select=doc.querySelector('select');
+  const binding=module.bindSearchableFilterSelects(doc.querySelector('form'),{selectionOnly:true});
+  t.after(()=>{binding.destroy();dom.window.close();});
+  const input=doc.querySelector('[role=combobox]'); assert.equal(input.readOnly,true); assert.equal(input.type,'text');
+  input.click(); assert.equal(input.value,'ATIVO');
+  for(const key of ['a','Backspace','Delete']){const event=new dom.window.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true});input.dispatchEvent(event);assert.equal(event.defaultPrevented,true);}
+  input.value='Other';input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));assert.equal(input.value,'ATIVO');
+  doc.querySelectorAll('[role=option]')[1].click(); assert.equal(select.value,'PENDENTE');assert.equal(input.value,'PENDENTE');
+});
+
 test('searched multi-selection keeps both chosen statuses and clears them through Todos', t => {
   const dom = new JSDOM('<section><label>Status<select multiple><option value="">Todos</option><option selected>ATIVIDADE CRIADA</option><option selected>EM ATENDIMENTO</option><option>CONCLUÍDO</option></select></label></section>');
   const doc = dom.window.document, select = doc.querySelector('select');

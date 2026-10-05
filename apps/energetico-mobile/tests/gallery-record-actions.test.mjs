@@ -52,6 +52,66 @@ test('every gallery editor opens as a full screen by default and cancel returns 
   assert.equal(ctx.document.activeElement, trigger);
 });
 
+test('gallery edit offers only cancel and submit, and cancel discards the draft', async t => {
+  const ctx = await setup(t);
+  click(ctx, 'edit'); await settle(); await settle();
+  const form = ctx.get('[data-dynamic-form]');
+  assert.deepEqual([...form.querySelectorAll('.dynamic-form-actions button')].map(b => b.textContent), ['CANCELAR', 'SUBMETER']);
+  assert.equal(form.querySelectorAll('[data-form-cancel]').length, 1);
+  assert.equal(form.querySelector('[data-form-clear]'), null);
+  ctx.get('[name=Title]').value = 'Draft';
+  ctx.get('[data-form-cancel]').click();
+  assert.deepEqual(ctx.writes, []); assert.deepEqual(ctx.changes, []);
+  click(ctx, 'edit'); await settle(); await settle();
+  assert.equal(ctx.get('[name=Title]').value, 'Original');
+});
+
+test('editing dropdowns preserve labels under typing, deletion and paste but accept another option', async t => {
+  const ctx = await setup(t, {loadEditor: async id => ({...context(id), columns: [
+    {name:'STATUS', label:'Status', control:'select', editable:true, choices:['ATIVO','PENDENTE']},
+  ], item:{id,fields:{STATUS:'ATIVO'}}})});
+  click(ctx,'edit'); await settle(); await settle();
+  const input=ctx.get('[role=combobox]');
+  assert.equal(input.readOnly,true); assert.equal(input.type,'text');
+  for(const name of ['a','Backspace','Delete']) {
+    const event=new ctx.dom.window.KeyboardEvent('keydown',{key:name,bubbles:true,cancelable:true});
+    input.dispatchEvent(event); assert.equal(event.defaultPrevented,true);
+  }
+  const paste=new ctx.dom.window.Event('paste',{bubbles:true,cancelable:true});
+  input.dispatchEvent(paste); assert.equal(paste.defaultPrevented,true);
+  input.value='Tampered'; input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  assert.equal(input.value,'ATIVO'); assert.equal(ctx.get('[name=STATUS]').value,'ATIVO');
+  input.click();
+  ctx.get('[role=option]').parentElement.querySelectorAll('[role=option]')[1].click();
+  assert.equal(input.value,'PENDENTE');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+  assert.equal(ctx.writes[0][2].STATUS,'PENDENTE');
+});
+
+test('editing a remote relationship browses options beyond the first search batch without changing the selected label', async t => {
+  const calls=[];
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[
+    {name:'CLIENTE',label:'Cliente',control:'lookup',editable:true,relation:{kind:'lookup',listId:'clients',displayField:'Title',resolvable:true,multiple:false}},
+  ],item:{id,fields:{CLIENTELookupId:1,CLIENTE:'Cliente 1'}},relationshipSearch:async(column,term,options)=>{calls.push({term,browse:options.browse});return Array.from({length:32},(_,n)=>({id:n+1,label:`Cliente ${n+1}`}));}})});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[data-relation-searchable-root] [role=combobox]'); assert.equal(input.readOnly,true); input.click();
+  await new Promise(r=>setTimeout(r,360));
+  assert.ok(calls.every(c=>c.term===''&&c.browse===true));
+  assert.equal(input.value,'Cliente 1');
+  assert.equal(ctx.get('[data-relation-searchable-root] [role=listbox]').querySelectorAll('[role=option]').length,32);
+  ctx.get('[data-relation-searchable-root] [role=listbox]').querySelectorAll('[role=option]')[31].click();
+  assert.equal(input.value,'Cliente 32');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2].CLIENTELookupId,32);
+});
+
+test('remote dropdown read errors do not erase the current edit selection',async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[{name:'CLIENTE',label:'Cliente',control:'lookup',editable:true,relation:{kind:'lookup',listId:'clients',displayField:'Title',resolvable:true,multiple:false}}],item:{id,fields:{CLIENTELookupId:1,CLIENTE:'Cliente 1'}},relationshipSearch:async()=>{throw new Error('Sem conexão');}})});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[data-relation-searchable-root] input');input.click();await new Promise(r=>setTimeout(r,360));
+  assert.equal(input.value,'Cliente 1');assert.equal(ctx.get('[data-relation-value=CLIENTE]').value,'1');
+});
+
 test('payroll screen preserves edits while source values refresh and omits read-only fields on save', async t => {
   let source = 200;
   const ctx = await setup(t, { presentation: 'screen', loadEditor: async id => ({
@@ -300,10 +360,9 @@ test("ambiguous Power Apps forms require a known variant before editing", async 
   const select = ctx.get('[data-gallery-form-variant]');
   assert.ok(select); assert.equal(ctx.get('[data-dynamic-form]'), null);
   const input = ctx.get('[role=combobox]');
-  assert.ok(input, 'form variant is searchable in the original field');
-  input.focus(); input.value = 'comprovado'; input.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
-  assert.equal(select.value, '', 'typing alone cannot switch forms');
-  ctx.get('[role=option]').click(); await settle(); await settle();
+  assert.ok(input); assert.equal(input.readOnly, true);
+  input.focus();
+  [...ctx.document.querySelectorAll('[role=option]')].find(option=>option.textContent==='Formulário comprovado').click(); await settle(); await settle();
   assert.equal(loads.at(-1).formVariantId, "form1");
   assert.ok(ctx.get('[data-dynamic-form]'));
 });
@@ -317,15 +376,13 @@ test("Power Apps choice keyboard selection stays inside editor and rejects arbit
   const input = ctx.get('[role="combobox"]');
   input.value = "Inventado";
   input.dispatchEvent(new ctx.dom.window.Event("input", { bubbles: true }));
-  ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
+  assert.equal(input.value, 'ABERTO');
   assert.equal(ctx.writes.length, 0);
   input.value = "FECHADO";
   input.dispatchEvent(new ctx.dom.window.Event("input", { bubbles: true }));
   key(ctx, input, "ArrowDown"); key(ctx, input, "Escape");
   assert.ok(ctx.get('[data-gallery-record-dialog]'), "Escape closes the nested choices first");
-  input.value = "FECHADO";
-  input.dispatchEvent(new ctx.dom.window.Event("input", { bubbles: true }));
-  key(ctx, input, "ArrowDown"); key(ctx, input, "Enter");
+  key(ctx, input, "ArrowDown"); key(ctx, input, "ArrowDown"); key(ctx, input, "Enter");
   assert.equal(ctx.writes.length, 0, "choice Enter does not submit the form");
   ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
   assert.equal(ctx.writes[0][2].Status, "FECHADO");
