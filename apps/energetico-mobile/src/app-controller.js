@@ -536,9 +536,9 @@ function pendingProvisionStorageKey(account) {
 
 function readPendingProvisionReminder(account) {
   const key = pendingProvisionStorageKey(account);
-  if (!key || !globalThis.localStorage) return null;
+  if (!key) return null;
   try {
-    const value = JSON.parse(globalThis.localStorage.getItem(key) || "null");
+    const value = JSON.parse(globalThis.localStorage?.getItem(key) || "null");
     return value && typeof value === "object" ? value : null;
   } catch {
     return null;
@@ -547,9 +547,9 @@ function readPendingProvisionReminder(account) {
 
 function writePendingProvisionReminder(account, value) {
   const key = pendingProvisionStorageKey(account);
-  if (!key || !globalThis.localStorage) return;
+  if (!key) return;
   try {
-    globalThis.localStorage.setItem(key, JSON.stringify(value));
+    globalThis.localStorage?.setItem(key, JSON.stringify(value));
   } catch {
     // A private browsing quota failure should not block the reminder screen.
   }
@@ -1688,9 +1688,10 @@ export function createAppController({
 
   function pendingProvisionReminderSuppressed() {
     const saved = readPendingProvisionReminder(account);
-    const lastAutoShownAt = pendingProvisionLastAutoShownAt ?? saved?.lastAutoShownAt;
-    if (typeof lastAutoShownAt === "number" && Number.isFinite(lastAutoShownAt)
-      && Date.now() - lastAutoShownAt < PENDING_PROVISION_AUTO_INTERVAL_MS) return true;
+    const recentAutomaticOpening = [pendingProvisionLastAutoShownAt, saved?.lastAutoShownAt]
+      .some(timestamp => typeof timestamp === "number" && Number.isFinite(timestamp)
+        && Date.now() - timestamp < PENDING_PROVISION_AUTO_INTERVAL_MS);
+    if (recentAutomaticOpening) return true;
     if (!saved) return false;
     if (saved.mode === "always") return false;
     if (saved.mode === "today") return saved.date === localDateIso();

@@ -3760,6 +3760,50 @@ test('consulta vazia ou falha não consome o intervalo automático de provisões
   assert.equal(success.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
 });
 
+test('armazenamento bloqueado não impede início nem intervalo de provisões na mesma sessão', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() { throw new DOMException('Storage blocked', 'SecurityError'); },
+  });
+  t.after(() => {
+    if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage);
+    else delete globalThis.localStorage;
+  });
+  const h = makeHarness();
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', supplier: 'VIVO' }] });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  await h.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(new Date('2026-10-05T12:29:59Z').getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  t.mock.timers.setTime(new Date('2026-10-05T12:30:00Z').getTime());
+  await h.controller.handleForeground();
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
+test('retorno respeita abertura automática mais recente de outra janela da mesma conta', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
+  const create = provisionCooldownHarness(t);
+  const first = create();
+  await first.controller.start();
+  await first.view.emit('dismiss-pending-provisions');
+  t.mock.timers.setTime(new Date('2026-10-05T12:31:00Z').getTime());
+  const second = create();
+  await second.controller.start();
+  assert.equal(second.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+  second.controller.stop();
+  t.mock.timers.setTime(new Date('2026-10-05T13:00:00Z').getTime());
+  await first.controller.handleForeground();
+  assert.equal(first.view.renders.at(-1).pendingProvisions, null);
+  t.mock.timers.setTime(new Date('2026-10-05T13:01:00Z').getTime());
+  await first.controller.handleForeground();
+  assert.equal(first.view.renders.at(-1).pendingProvisions.rows[0].id, '306');
+});
+
 test('popup real fica fechado após reiniciar no intervalo e o mascote continua funcionando', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-05T12:00:00Z') });
   const create = provisionCooldownHarness(t);
