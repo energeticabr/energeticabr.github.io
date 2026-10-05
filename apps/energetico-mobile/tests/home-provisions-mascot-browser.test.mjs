@@ -18,6 +18,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
   assert.match(css,/\.ov-cards/,'PWA delivers six-card summary layout');
   assert.match(css,/\.pr-table/,'PWA preserves second provision report styles');
   assert.match(css,/\.as-daily/,'PWA delivers attendance summary table styles');
+  assert.match(css,/\.sp-activities/,'PWA delivers stage activity table styles');
   const server=await createServer({root:app,server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   const profile=mkdtempSync(join(tmpdir(),'home-provisions-'));
   const pending=new Map();let child,socket;
@@ -156,12 +157,26 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.as-overlay').hidden`),true,'clique fora fecha presenças');
+      await evaluate(`document.querySelector('[data-action=open-stage-progress]').click()`);
+      let stageReady=false;for(let n=0;n<80&&!stageReady;n++){stageReady=await evaluate(`document.querySelectorAll('.sp-activities tbody tr').length===12`);if(!stageReady)await delay(100);}
+      assert.ok(stageReady,'terceiro mascote da direita abre etapas e atividades');
+      const stageFit=await evaluate(`(()=>{const c=document.querySelector('.sp-content'),f=[...document.querySelectorAll('.sp-filters>.pl-filter')].map(n=>n.getBoundingClientRect()),p=document.querySelector('.sp-dialog').getBoundingClientRect(),s=document.querySelector('.sp-stage-summary').getBoundingClientRect(),d=document.querySelector('.sp-details').getBoundingClientRect();return {aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),fits:c.scrollWidth<=c.clientWidth+1,columns:document.querySelector('.sp-activities thead tr').children.length,fullHeight:p.top<=1&&p.bottom>=innerHeight-1,sideBySide:s.right<=d.left+1,logo:document.querySelector('.sp-brand img').naturalWidth>0,status:document.querySelector('.sp-filters [name=status]').value,red:getComputedStyle(document.querySelector('.sp-start')).color,bold:getComputedStyle(document.querySelector('.sp-activities tbody td:nth-child(2)')).fontWeight};})()`);
+      assert.ok(stageFit.aligned&&stageFit.fits&&stageFit.fullHeight&&stageFit.sideBySide&&stageFit.logo,JSON.stringify(stageFit));
+      assert.equal(stageFit.columns,8);assert.equal(stageFit.status,'ATIVIDADE INICIADA');assert.equal(stageFit.red,'rgb(255, 0, 0)');assert.ok(Number(stageFit.bold)>=700);
+      await evaluate(`document.querySelector('.sp-filters [aria-label="Abrir opções de COLABORADOR"]').click()`);
+      const stageDropdown=await evaluate(`(()=>{const p=document.querySelector('.sp-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
+      assert.equal(stageDropdown.placement,'below');assert.ok(stageDropdown.visible>=7,JSON.stringify(stageDropdown));
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
+      await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
+      assert.equal(await evaluate(`document.querySelector('.sp-overlay').hidden`),true,'clique fora fecha etapas');
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       const cargosShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-cargos-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=b.getBoundingClientRect();return {right:r.right,x:r.x,cardRight:q.right,image:m.querySelector('img').naturalWidth>0,fill:getComputedStyle(m).backgroundColor};})()`);
       assert.ok(cargosShortcut.x>=cargosShortcut.cardRight+4&&cargosShortcut.right<=width&&cargosShortcut.image,JSON.stringify(cargosShortcut));
       assert.equal(cargosShortcut.fill,'rgb(207, 117, 122)');
       const attendanceShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-attendance-summary-shortcut'),c=document.querySelector('.chat-main-cargos-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=c.getBoundingClientRect(),s=b.getBoundingClientRect();return {right:r.right,x:r.x,y:r.y,cargoBottom:q.bottom,cargoX:q.x,cardRight:s.right,image:m.querySelector('img').naturalWidth>0};})()`);
       assert.ok(attendanceShortcut.x>=attendanceShortcut.cardRight+4&&attendanceShortcut.right<=width&&attendanceShortcut.image&&attendanceShortcut.y>=attendanceShortcut.cargoBottom+4&&Math.abs(attendanceShortcut.x-attendanceShortcut.cargoX)<1,JSON.stringify(attendanceShortcut));
+      const stageShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-stage-progress-shortcut'),a=document.querySelector('.chat-main-attendance-summary-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=a.getBoundingClientRect(),s=b.getBoundingClientRect();return {right:r.right,x:r.x,y:r.y,previousBottom:q.bottom,previousX:q.x,cardRight:s.right,image:m.querySelector('img').naturalWidth>0};})()`);
+      assert.ok(stageShortcut.x>=stageShortcut.cardRight+4&&stageShortcut.right<=width&&stageShortcut.image&&stageShortcut.y>=stageShortcut.previousBottom+4&&Math.abs(stageShortcut.x-stageShortcut.previousX)<1,JSON.stringify(stageShortcut));
       await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
       const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
       assert.ok(cargosFit.top===0&&cargosFit.bottom===844&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);

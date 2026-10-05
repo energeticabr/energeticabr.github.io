@@ -35,6 +35,7 @@ import "../ui/order-validation-report.css";
 import "../ui/management-report.css";
 import "../ui/cargos.css";
 import "../ui/attendance-summary.css";
+import "../ui/stage-progress.css";
 import "../ui/audit-reports-live.css";
 import "../ui/commercial-progress-reports.css";
 import "../ui/commercial-docs-rent-reports-style.css";
