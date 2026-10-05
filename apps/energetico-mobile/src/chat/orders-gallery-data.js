@@ -353,6 +353,8 @@ export function createHrPayrollGalleryData({
   repository: suppliedRepository,
   siteConfig = SHAREPOINT_SITES,
   fetchImpl = globalThis.fetch,
+  now = () => new Date(),
+  assertSession = () => {},
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
@@ -519,7 +521,13 @@ export function createHrPayrollGalleryData({
     if (!service) throw new Error("O contexto de edição não pertence a esta galeria de folha.");
     return service.saveEditor(context, fields);
   }
+  let paymentData;
+  async function payments() {
+    return paymentData ||= import('./payroll-payment-data.js').then(({createPayrollPaymentData})=>createPayrollPaymentData({repository,siteKey:SITE_KEY,now,assertSession}));
+  }
   return Object.freeze({ loadPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
+    loadPaymentOptions: async options => (await payments()).loadOptions(options),
+    savePayment: async (draft, options) => (await payments()).save(draft, options),
     deleteItem: async (gallery, id, options) => (await editor(gallery)).deleteItem(id, options) });
 }
 

@@ -4185,6 +4185,7 @@ export function createAppController({
           const resumeAction = gallery === "IDFOLHA" ? "action_hr_gallery_idfolha" : "action_hr_gallery_folhapgto";
           const data = await hrPayrollGalleryDataFactory({
             tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
+            assertSession,
           });
           assertSession();
           if (typeof data?.loadPage !== "function"
@@ -4195,6 +4196,12 @@ export function createAppController({
           let panel;
           panel = await hrPayrollGalleryFactory({
             gallery,
+            loadPaymentOptions: gallery === 'FOLHAPGTO' ? async options => {
+              assertSession();const result=await data.loadPaymentOptions(options);assertSession();return result;
+            } : undefined,
+            savePayment: gallery === 'FOLHAPGTO' ? async (draft, options) => {
+              assertSession();const result=await data.savePayment(draft,options);assertSession();return result;
+            } : undefined,
             loadEditor: async (id, options = {}) => {
               assertSession();
               const result = await data.loadEditor(gallery, id, options);

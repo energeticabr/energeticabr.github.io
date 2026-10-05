@@ -3,6 +3,7 @@ import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
 import { createMascotReportButton } from "./report-action-button.js";
+import { createPayrollPaymentComposer } from './payroll-payment-view.js';
 
 const GALLERIES = {
   IDFOLHA: {
@@ -34,7 +35,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, onClose, onHome } = {}) {
+  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -99,6 +100,16 @@ export function createHrPayrollGallery({ document: documentOption,
       return loadPage(page, pageCursors[page] || null);
     },
   });
+  const paymentComposer = gallery === 'FOLHAPGTO' && typeof loadPaymentOptions === 'function' && typeof savePayment === 'function'
+    ? createPayrollPaymentComposer({document:doc,host:root,loadOptions:loadPaymentOptions,save:savePayment,onSaved:async()=>{
+      session += 1;busy=false;
+      await loadPage(1,null);
+    }}) : null;
+  if(paymentComposer) {
+    const add=element('button','hr-gallery-button hr-gallery-add-payment','+');
+    add.type='button';add.dataset.action='add-payroll-payment';add.setAttribute('aria-label','Acrescentar pagamento');add.title='Acrescentar pagamento';
+    header.append(add);add.addEventListener('click',()=>{recordActions.close();void paymentComposer.open(add);});
+  }
 
   function drawRows(rows) {
     cards.replaceChildren();
@@ -179,6 +190,7 @@ export function createHrPayrollGallery({ document: documentOption,
   function closeGallery() {
     if (!opened || destroyed) return;
     recordActions.close();
+    paymentComposer?.close();
     opened = false;
     session += 1;
     busy = false;
@@ -190,7 +202,7 @@ export function createHrPayrollGallery({ document: documentOption,
   previous.addEventListener("click", () => { if (page > 1) void loadPage(page - 1, pageCursors[page - 1] || null); });
   next.addEventListener("click", () => { if (hasMore) void loadPage(page + 1, pageCursors[page + 1]); });
   const refreshSource = () => {
-    if (gallery === 'FOLHAPGTO' && opened && !destroyed && doc.visibilityState !== 'hidden' && !recordActions.isEditing()) {
+    if (gallery === 'FOLHAPGTO' && opened && !destroyed && doc.visibilityState !== 'hidden' && !recordActions.isEditing() && !paymentComposer?.isOpen()) {
       void loadPage(page, pageCursors[page] || null, true);
     }
   };
@@ -217,6 +229,7 @@ export function createHrPayrollGallery({ document: documentOption,
       doc.defaultView?.removeEventListener('focus', refreshSource);
       doc.removeEventListener('visibilitychange', refreshSource);
       recordActions.destroy();
+      paymentComposer?.close();
       destroyed = true;
       opened = false;
       session += 1;

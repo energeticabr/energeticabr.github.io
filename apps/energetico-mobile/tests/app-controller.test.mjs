@@ -1156,6 +1156,18 @@ test("galeria de folha usa leitura SharePoint Graph autenticada sem chamar rota 
   assert.equal(reportRows[0].IDFOLHA, 12);
   assert.deepEqual(serverCalls, []);
 });
+test('FOLHAPGTO creation callbacks use authenticated gallery data and reject a stopped session', async t => {
+  let options; const calls=[];
+  const h=makeHarness({hrPayrollGalleryDataFactory:async()=>({loadPage:async()=>({}),loadPaymentOptions:async arg=>{calls.push(['options',arg]);return {launches:[]};},savePayment:async(...args)=>{calls.push(['save',...args]);return {id:'101'};}}),hrPayrollGalleryFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();
+  await h.view.emit('select-reply',{replyId:'action_hr_gallery_folhapgto',label:'GALERIA FOLHA PGTO'});
+  const signal=new AbortController().signal;
+  assert.deepEqual(await options.loadPaymentOptions({signal}),{launches:[]});
+  assert.equal((await options.savePayment({launchId:'10'},{operationId:'test'})).id,'101');
+  assert.deepEqual(calls,[['options',{signal}],['save',{launchId:'10'},{operationId:'test'}]]);
+  h.controller.stop();await assert.rejects(options.savePayment({launchId:'10'},{operationId:'test'}));assert.equal(calls.length,2);
+});
+
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
   let callbacks;
   let opens = 0;

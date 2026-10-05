@@ -35,6 +35,10 @@
 .hr-gallery-button:hover:not(:disabled) { background: #eaf4f8; }
 .hr-gallery-button:disabled { opacity: .5; cursor: default; }
 .hr-gallery-header .hr-gallery-button { color: #fff; background: transparent; border-color: #ffffff85; }
+.hr-gallery-header .hr-gallery-add-payment { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; background: #fff; color: #123c68; border-color: #fff; font-size: 2rem; line-height: 1; }
+.payroll-payment-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.payroll-payment-header h2 { margin: 0; }
+.payroll-payment-summary { overflow-wrap: anywhere; color: #173042; font-size: 1rem; line-height: 1.6; }
 .hr-gallery-retry { justify-self: start; }
 .report-mascot-button { display: grid; place-items: center; flex: 0 0 50px; width: 50px; height: 50px; padding: 3px; border: 1px solid #a9c5d1; border-radius: 13px; color: #123c68; background: #edf7fa; cursor: pointer; touch-action: manipulation; }
 .report-mascot-button { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
