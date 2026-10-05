@@ -14,14 +14,13 @@ export function buildPaymentLedger(launches = [], filters = {}) {
     return ['branch', 'order', 'product', 'supplier', 'disbursement'].every(name => !filters[name]
       || folded(filters[name]) === folded(row[name]));
   }).sort((a, b) => compare(b.paymentDate, a.paymentDate) || compare(a.supplier, b.supplier)
-    || compare(a.order, b.order) || compare(a.id, b.id));
-  const limited = selected.length >= 2000;
+    || compare(a.branch, b.branch) || compare(a.account, b.account) || compare(a.order, b.order) || compare(b.id, a.id));
   const grouped = new Map();
-  for (const row of selected.slice(0, 2000)) {
+  for (const row of selected) {
     const key = JSON.stringify([row.paymentDate, folded(row.supplier)]);
     if (!grouped.has(key)) grouped.set(key, { date: row.paymentDate, supplier: row.supplier, rows: [] });
     grouped.get(key).rows.push(row);
   }
-  return { count: selected.length, limited, total: limited ? null : sum(selected),
-    groups: [...grouped.values()].map(group => ({ ...group, total: limited ? null : sum(group.rows) })) };
+  return { count: selected.length, total: sum(selected),
+    groups: [...grouped.values()].map(group => ({ ...group, total: sum(group.rows) })) };
 }

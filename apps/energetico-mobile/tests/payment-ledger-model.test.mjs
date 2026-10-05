@@ -15,15 +15,15 @@ test('date filters use payment date inclusively, plus all five reference dimensi
   const rows = [row(1), row(2, { paymentDate: '2026-10-05' }), row(3, { supplier: 'Beta' }), row(4, { order: '1' }), row(5, { branch: 'Outra' }), row(6, { product: 'Água' }), row(7, { disbursement: 'NÃO' })];
   assert.deepEqual(buildPaymentLedger(rows, { startDate: '2026-10-02', endDate: '2026-10-02', supplier: 'Alfa', order: '358', branch: 'Xavante', product: 'Servente', disbursement: 'SIM' }).groups.flatMap(g => g.rows.map(r => r.id)), ['1']);
 });
-test('limits after filtering and never presents partial totals as complete', () => {
+test('all matching rows and full supplier totals remain available beyond 2000 records', () => {
   assert.equal(typeof buildPaymentLedger, 'function');
   const rows = Array.from({ length: 2001 }, (_, i) => row(i, { supplier: i === 2000 ? 'Beta' : 'Alfa', total: 0.1 }));
   const result = buildPaymentLedger(rows);
-  assert.equal(result.limited, true); assert.equal(result.total, null); assert.equal(result.count, 2001);
-  assert.equal(result.groups.reduce((n, g) => n + g.rows.length, 0), 2000);
-  assert.equal(result.groups[0].total, null);
+  assert.equal(result.total, 200.1); assert.equal(result.count, 2001);
+  assert.equal(result.groups.reduce((n, g) => n + g.rows.length, 0), 2001);
+  assert.equal(result.groups[0].total, 200);
   const filtered = buildPaymentLedger(rows, { supplier: 'Beta' });
-  assert.equal(filtered.limited, false); assert.equal(filtered.total, 0.1);
+  assert.equal(filtered.total, 0.1);
   assert.equal(buildPaymentLedger([row(1, { total: null })]).total, null);
 });
 

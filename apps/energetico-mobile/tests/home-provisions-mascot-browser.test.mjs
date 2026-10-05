@@ -52,21 +52,35 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.ok(reportLayout.external&&reportLayout.y>=reportLayout.mascotBottom+4&&reportLayout.right<=reportLayout.cardLeft-4,JSON.stringify(reportLayout));
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
+      assert.equal(await evaluate(`(()=>{const b=document.querySelector('.chat-main-payment-ledger-shortcut'),i=b.querySelector('img');return getComputedStyle(b).overflow==='hidden'&&i.getBoundingClientRect().width>b.getBoundingClientRect().width*1.4;})()`),true,'mascote ampliado, bordas internas recortadas');
       await evaluate(`document.querySelector('.chat-main-payment-ledger-shortcut').click()`);
       assert.equal(await evaluate('window.reportOpened'),1);
       if(width<844){
         assert.equal(await evaluate('window.reportLoads'),0,'vertical não consulta dados');
         assert.equal(await evaluate(`document.querySelector('.pl-orientation').hidden`),false);
         assert.equal(await evaluate(`document.querySelector('.pl-report').hidden`),true);
-        await send('Emulation.setDeviceMetricsOverride',{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
+        const landscape=width===320?{width:568,height:320}:width===768?{width:1024,height:768}:{width:844,height:390};
+        await send('Emulation.setDeviceMetricsOverride',{...landscape,deviceScaleFactor:1,mobile:false},sessionId);
       }
-      let loaded=false;for(let n=0;n<80&&!loaded;n++){loaded=await evaluate(`document.querySelectorAll('.pl-table tbody tr').length===2`);if(!loaded)await delay(100);}
+      let loaded=false;for(let n=0;n<80&&!loaded;n++){loaded=await evaluate(`document.querySelectorAll('.pl-table tbody tr').length===10`);if(!loaded)await delay(100);}
       assert.ok(loaded,'horizontal carrega relatório real');
       assert.equal(await evaluate('window.reportLoads'),1);
       assert.equal(await evaluate(`document.querySelector('.pl-table [data-column="supplierTotal"]').textContent.includes('543,23')`),true);
       const modal=await evaluate(`(()=>{const p=document.querySelector('.pl-dialog').getBoundingClientRect();return {x:p.x,right:p.right,y:p.y,bottom:p.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
       assert.ok(modal.x>=8&&modal.right<=await evaluate('innerWidth')-8&&!modal.overflow,JSON.stringify(modal));
       assert.equal(await evaluate(`(()=>{const p=document.querySelector('.pl-dialog').getBoundingClientRect(),h=document.querySelector('.pl-table thead').getBoundingClientRect();return h.top>=p.top&&h.bottom<p.bottom;})()`),true,'cabeçalho da tabela visível sem rolar o relatório na horizontal');
+      const fit=await evaluate(`(()=>{const p=document.querySelector('.pl-dialog').getBoundingClientRect(),f=[...document.querySelectorAll('.pl-dates,.pl-filter')].map(n=>n.getBoundingClientRect()),s=document.querySelector('.pl-table-scroll'),t=document.querySelector('.pl-table'),logo=document.querySelector('.pl-logo');return {aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),fits:s.scrollWidth<=s.clientWidth+1,top:p.top,bottom:p.bottom,vh:innerHeight,logo:logo?.naturalWidth>0,red:getComputedStyle(t.querySelector('[data-column=supplierTotal]')).color,bold:getComputedStyle(t.querySelector('[data-column=total]')).fontWeight};})()`);
+      assert.ok(fit.aligned&&fit.fits&&fit.logo,JSON.stringify(fit));
+      if(await evaluate('innerHeight<=500'))assert.ok(fit.top<=1&&fit.bottom>=fit.vh-1,'relatório ocupa altura toda');
+      assert.equal(fit.red,'rgb(255, 0, 0)'); assert.ok(Number(fit.bold)>=700);
+      assert.ok(await evaluate(`(()=>{const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');return [...document.querySelectorAll('.pl-date-display')].every(n=>{n.value='02/10/2026';const s=getComputedStyle(n);ctx.font=s.font;return ctx.measureText(n.value).width<=n.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight);});})()`),'datas dd/mm/yyyy preenchidas cabem integralmente');
+      await evaluate(`document.querySelector('.pl-date-display').focus()`);
+      for(let tab=0;tab<2;tab++)for(const type of ['keyDown','keyUp'])await send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab',windowsVirtualKeyCode:9},sessionId);
+      assert.equal(await evaluate(`document.activeElement.dataset.dateDisplay`),'endDate','Tab segue para a próxima data sem parada invisível');
+      await evaluate(`document.querySelector('.pl-filter .sfs-arrow').click()`);
+      const dropdown=await evaluate(`(()=>{const p=document.querySelector('.pl-filter .sfs-popup'),l=p.querySelector('.sfs-list'),o=[...l.children],r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:o.filter(x=>{const q=x.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
+      assert.equal(dropdown.placement,'below');assert.ok(dropdown.visible>=7,JSON.stringify(dropdown));
+      await evaluate(`document.querySelector('.pl-filter .sfs-arrow').click()`);
       await evaluate(`document.querySelector('.pl-table td').click()`);
       assert.equal(await evaluate(`document.querySelector('.pl-overlay').hidden`),false,'clicar dentro preserva popup');
       if(width===390&&!pwa&&process.env.PAYMENT_LEDGER_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.PAYMENT_LEDGER_SCREENSHOT,Buffer.from(shot.data,'base64'));}
