@@ -44,7 +44,7 @@ test("cancelar assinatura da galeria devolve contexto ao chamador", () => {
   dom.window.close();
 });
 
-test("atalho do mascote fica à esquerda de Pendências e abre provisões sem selecionar o menu", t => {
+test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pendências", t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
   const view = createChatView(root);
@@ -62,7 +62,10 @@ test("atalho do mascote fica à esquerda de Pendências e abre provisões sem se
   assert.match(shortcut.getAttribute('aria-label'), /provisões.*pagamento.*pendentes/i);
   assert.ok(shortcut.querySelector('img[alt="Mascote Energético"]'));
   const pending = root.querySelector('[data-reply-id="group_pending"]');
-  assert.equal(shortcut.nextElementSibling, pending);
+  const bubble = pending.closest('.chat-bubble');
+  assert.equal(bubble.contains(shortcut), false, 'o mascote não ocupa a coluna dos botões');
+  assert.equal(shortcut.nextElementSibling, bubble);
+  assert.equal(shortcut.parentElement, bubble.parentElement);
   assert.match(pending.textContent, /PENDÊNCIAS \(47\)/);
   assert.ok(pending.classList.contains('chat-choice-button--danger'));
   shortcut.querySelector('img').click();

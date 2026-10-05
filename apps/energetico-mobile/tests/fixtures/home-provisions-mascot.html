@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
+  {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
+  ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
+  {id:'action_powerbi_dashboard',reply:'action_powerbi_dashboard',label:'📊 POWER BI'},
+  {id:'action_contractor_reports',reply:'action_contractor_reports',label:'📑 RELATÓRIOS'}
+]}]};
+const view=createChatView(document.querySelector('#app'));
+window.opened=0;window.selected=[];
+view.on('open-pending-provisions',()=>window.opened++);
+view.on('select-reply',event=>window.selected.push(event.replyId));
+view.render(state);
+await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
+document.documentElement.dataset.ready='true';
+</script></body></html>
