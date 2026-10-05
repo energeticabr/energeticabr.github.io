@@ -1,0 +1,30 @@
+.gm-period-fields { display:grid; grid-template-columns:1fr 1.2fr; min-width:0; }
+.gm-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.gm-period-filter { display:block; min-width:0; }
+.gm-dialog .gm-period-filter select { height:27px; min-height:0; width:100%; }
+.gm-content { font-family:Arial,sans-serif; color:black; }
+.gm-logo { display:grid; place-items:center; border:2px solid black; background:#e6f0ff; margin-bottom:8px; padding:6px; }
+.gm-logo img { display:block; height:clamp(36px,6vw,80px); max-width:45%; object-fit:contain; }
+.gm-table { border-collapse:collapse; table-layout:fixed; width:100%; margin-bottom:10px; font:600 clamp(7px,1.05vw,13px)/1.18 Arial,sans-serif; background:white; color:black; }
+.gm-table th,.gm-table td { border:clamp(1px,.23vw,3px) solid black; padding:clamp(3px,.45vw,6px); text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
+.gm-table th { background:#d9eaf7; font-weight:700; }
+.gm-table .gm-section-title { background:#305496; color:white; font-size:clamp(9px,1.4vw,18px); padding:clamp(4px,.6vw,8px); font-weight:700; }
+.gm-table--summary .gm-section-title { background:#1f4e79; }
+.gm-table--products .gm-section-title { background:#548235; }
+.gm-table--stages .gm-section-title { background:#7030a0; }
+.gm-table--suppliers .gm-section-title { background:#bf9000; }
+.gm-table--accounts .gm-section-title { background:#c00000; }
+.gm-table--products th:not(.gm-section-title) { background:#e2f0d9; }
+.gm-table--stages th:not(.gm-section-title) { background:#eadcf8; }
+.gm-table--suppliers th:not(.gm-section-title) { background:#fff2cc; }
+.gm-table--accounts th:not(.gm-section-title) { background:#f4cccc; }
+.gm-table .gm-label { background:#d9eaf7; font-weight:700; }
+.gm-table td[data-column=branch],.gm-table td[data-column=name],.gm-table td[data-column=period] { font-weight:700; }
+.gm-table .gm-money { color:red; font-weight:700; }
+.gm-table .gm-branch { background:#eef4fb; }
+.gm-table--products .gm-branch { background:#f3f8ef; }
+.gm-table--stages .gm-branch { background:#f5eefc; }
+.gm-table--suppliers .gm-branch { background:#fff8dc; }
+.gm-table--accounts .gm-branch { background:#fff0f0; }
+.gm-table .gm-total td { border-color:#c00000; background:#fff2cc; font-weight:700; }
+.gm-total td:first-child { text-align:right; }

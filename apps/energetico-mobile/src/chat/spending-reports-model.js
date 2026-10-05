@@ -1,4 +1,5 @@
 import { provisionDateKey } from "./pending-provision-dates.js";
+import Decimal from 'decimal.js';
 
 function key(value) {
   return String(value ?? "").replace(/_x([0-9a-f]{4})_/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
@@ -58,7 +59,7 @@ export function normalizeSpendingLaunch(item, columns = []) {
     order: get("AGRUPAR"), stage: get("ETAPA", "field_6"), account: get("CONTA", "field_14"),
     description: get("DESCRIÇÃO", "DESCRICAO", "field_16"),
     unit, quantity, freight: freight ?? 0,
-    total: unit == null || quantity == null ? null : unit * quantity + (freight ?? 0),
+    total: unit == null || quantity == null ? null : new Decimal(unit).times(quantity).plus(freight ?? 0).toNumber(),
   });
 }
 
@@ -93,7 +94,7 @@ export function normalizeSpendingProvision(item, columns = []) {
 
 const equals = (left, right) => scalar(left).toLocaleLowerCase("pt-BR") === scalar(right).toLocaleLowerCase("pt-BR");
 const completeSum = (rows, field) => rows.every(row => Number.isFinite(row[field]))
-  ? rows.reduce((sum, row) => sum + row[field], 0) : null;
+  ? rows.reduce((sum, row) => sum.plus(row[field]), new Decimal(0)).toNumber() : null;
 const percentage = (part, whole) => part == null || whole == null ? null : whole === 0 ? 0 : part / whole * 100;
 const byValue = (left, right) => (right.total ?? -Infinity) - (left.total ?? -Infinity)
   || left.name.localeCompare(right.name, "pt-BR");

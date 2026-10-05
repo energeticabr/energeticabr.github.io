@@ -66,7 +66,14 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   assert.equal(bubble.contains(shortcut), false, 'o mascote não ocupa a coluna dos botões');
   const paymentShortcut = root.querySelector('[data-action="open-payment-ledger"]');
   assert.equal(shortcut.nextElementSibling, paymentShortcut);
-  assert.equal(paymentShortcut.nextElementSibling, bubble);
+  const managementShortcut = root.querySelector('[data-action="open-management-report"]');
+  assert.ok(managementShortcut, 'resumo gerencial deve ter seu próprio mascote');
+  assert.equal(paymentShortcut.nextElementSibling, managementShortcut);
+  assert.equal(managementShortcut.nextElementSibling, bubble);
+  assert.equal(bubble.contains(managementShortcut), false);
+  let managementOpened=0; view.on('open-management-report',()=>managementOpened++);
+  managementShortcut.querySelector('img').click();
+  assert.equal(managementOpened,1);
   assert.equal(bubble.contains(paymentShortcut), false);
   assert.equal(shortcut.parentElement, bubble.parentElement);
   assert.match(pending.textContent, /PENDÊNCIAS \(47\)/);
