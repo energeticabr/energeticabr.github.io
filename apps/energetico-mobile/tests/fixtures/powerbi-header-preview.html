@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Prévia do cabeçalho Power BI</title><link rel="stylesheet" href="/src/styles.css"></head>
+<body><script type="module">
+import { createPowerBiDashboardView } from '/src/ui/powerbi-dashboard-view.js';
+const preview = createPowerBiDashboardView({
+  documentRef: document,
+  powerBiClient: {
+    models: { TokenType: { Aad: 0 } },
+    embed(container) {
+      const note = document.createElement('p');
+      note.textContent = 'Área do relatório — prévia de layout';
+      note.style.cssText = 'padding:16px;color:#526b73;font:14px system-ui';
+      container.append(note);
+      return { on() {}, off() {} };
+    },
+    reset() {},
+  },
+});
+await preview.open({ accessToken: 'layout-preview', getAccessToken: async () => 'layout-preview' });
+</script></body>
+</html>
