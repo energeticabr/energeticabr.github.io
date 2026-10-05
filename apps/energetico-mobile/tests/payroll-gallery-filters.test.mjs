@@ -82,6 +82,24 @@ test('payroll filters read later pages, combine columns, and offer choices from 
   await assert.rejects(data.loadFilteredPage('IDFOLHA',{filters:{unknown:'x'}}), /filtro/i);
 });
 
+test('finishing one filter request preserves another open dropdown and its choices', async t => {
+  const dom=new JSDOM('<main></main>');const doc=dom.window.document;let resolveSecond, reads=0;
+  const result={gallery:'IDFOLHA',page:1,rows:[],hasMore:false,filterOptions:{FORNECEDOR:['JOSÉ'],MESREFERENCIA:['09/2026','10/2026']}};
+  const gallery=createHrPayrollGallery({document:doc,gallery:'IDFOLHA',request:async()=>{
+    if(++reads===2) return new Promise(resolve=>{resolveSecond=resolve;});return result;
+  }});
+  t.after(()=>{gallery.destroy();dom.window.close();});await gallery.open();
+  doc.querySelector('[data-action=toggle-payroll-filters]').click();
+  const supplier=doc.querySelector('[name=FORNECEDOR]');supplier.value='JOSÉ';supplier.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  const month=doc.querySelector('[name=MESREFERENCIA]'), field=month.parentElement.querySelector('.sfs');
+  field.querySelector('.sfs-trigger').click();
+  const list=field.querySelector('[role=listbox]'), popup=field.querySelector('.sfs-popup');assert.equal(popup.hidden,false);
+  resolveSecond(result);await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(popup.hidden,false,'finishing the prior request must not interrupt month selection');
+  const october=[...list.querySelectorAll('[role=option]')].find(node=>node.textContent==='10/2026');october.click();
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(month.value,'10/2026');
+});
+
 test('each gallery has a search toolbar and filters for its displayed columns', async t => {
   for (const name of ['IDFOLHA','FOLHAPGTO']) {
     const dom = new JSDOM('<main></main>'); const doc=dom.window.document; const calls=[];

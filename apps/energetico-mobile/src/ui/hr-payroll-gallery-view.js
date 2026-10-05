@@ -166,11 +166,13 @@ export function createHrPayrollGallery({ document: documentOption,
       if(control?.tagName!=='SELECT' || !Array.isArray(values)) continue;
       const selected=control.value;
       const choices=selected && !values.includes(selected) ? [...values,selected]:values;
+      const expected=['',...choices];
+      if(control.options.length===expected.length &&
+        [...control.options].every((option,index)=>option.value===expected[index] && option.textContent===(index ? expected[index]:'Todos'))) continue;
       control.replaceChildren(Object.assign(element('option','','Todos'),{value:''}),
         ...choices.map(value=>Object.assign(element('option','',value),{value})));
       control.value=selected;
     }
-    autoFilters.sync();
   }
 
   function drawRows(rows) {
