@@ -17,6 +17,7 @@ function setup(t, data) {
 }
 
 test("9 preserva marca, período, faixas gerenciais, quantidades e cor de total; 10 apresenta provisões reais", async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-04T12:00:00Z') });
   const calls = [];
   const { view, root } = setup(t, { async loadSnapshot({ reportNumber }) { calls.push(reportNumber); return reportNumber === 9
     ? { launches: [row(1)], productTypes: [{ product: "Cimento", expenseType: "Material" }] }
@@ -50,7 +51,7 @@ test("9 preserva marca, período, faixas gerenciais, quantidades e cor de total;
   assert.deepEqual([...provisionTable.querySelectorAll("thead th")].map(cell => cell.textContent),
     ["FILIAL", "FORNECEDOR", "PRODUTO", "DATA VENCIMENTO", "AGENDAMENTO", "VALOR", "STATUS"]);
   assert.equal(provisionTable.querySelectorAll("tbody tr").length, 1);
-  assert.match(provisionTable.querySelector('[data-label="STATUS"]').textContent, /VENCE/);
+  assert.match(provisionTable.querySelector('[data-label="STATUS"]').textContent, /VENCE HOJE/);
   assert.doesNotMatch(root.textContent, /PEDIDO 42/);
   assert.deepEqual(calls, [9, 10]);
 });

@@ -1393,9 +1393,6 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const initialAreaMenu = isInitialAreaSelectionMenu(message);
   const choices = orderedChoiceOptions.flatMap(option => {
     const replyId = draftReplyId(option);
-    if (initialAreaMenu && currentPoll && !activeFlow && replyId.trim().toLowerCase() === "group_pending") {
-      return [`<div class="chat-main-pending-row"><button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || option.disabled ? " disabled" : ""}><img src="${MASCOT_URL}" alt="Mascote Energético"></button>${pollButton(option, busy)}</div>`];
-    }
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];
     if (isDraftMenu && replyId.startsWith("draft_resume:")) {
       const draftId = replyId.slice("draft_resume:".length);
@@ -1663,7 +1660,10 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
+    const provisionOption = initialAreaMenu && currentPoll && !activeFlow
+      ? (message.options || []).find(option => draftReplyId(option).trim().toLowerCase() === "group_pending") : null;
+    const provisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${MASCOT_URL}" alt="Mascote Energético"></button>` : "";
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div></article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
