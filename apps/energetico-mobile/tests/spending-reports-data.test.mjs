@@ -24,6 +24,23 @@ function fixture(overrides = {}) {
   return { repository, calls };
 }
 
+test('new home provision report loads complete lists with quantity, freight, scheduling and inactive metadata', async () => {
+  const {repository,calls}=fixture({
+    async getColumns(){return [];},
+    async getItemsPage(_site,list,_query,options){
+      calls.push(['new-page',list,options.pageNumber]);
+      if(list==='DESPESASRECORRENTES')return {items:[{id:'7',fields:{STATUS:'INATIVO',IMOVEL:'Sala',DATAINICIO:'2026-01-05',Modified:'2026-10-01T12:00:00Z'}}],hasMore:false};
+      return {items:[{id:String(options.pageNumber),fields:{IDRECORRENCIA:'7',VALORTOTAL:10,QTD:2,FRETE:5,OBS:'Conferir',IMOVEL:'Sala',DATAPGTOAGENDADO:'2026-10-06',DATAEXECUCAOAGENDAMENTO:'2026-10-07'}}],hasMore:options.pageNumber===1,nextLink:options.pageNumber===1?'next':''};
+    }
+  });
+  const data=createSpendingReportsData({repository});assert.equal(typeof data.loadProvisionReportSnapshot,'function');
+  const result=await data.loadProvisionReportSnapshot();
+  assert.equal(result.provisions.length,2);assert.equal(result.provisions[0].total,25);
+  assert.equal(result.provisions[0].observation,'Conferir');assert.equal(result.provisions[0].executionDate,'2026-10-07');
+  assert.equal(result.recurrences[0].property,'Sala');assert.equal(Date.parse(result.recurrences[0].modified),Date.parse('2026-10-01T12:00:00Z'));
+  assert.equal(calls.some(call=>call[1]==='LANCAMENTOS'),false);
+});
+
 test("payment ledger queries only launches, follows pagination and preserves payment fields", async () => {
   const { repository, calls } = fixture();
   const data = createSpendingReportsData({ repository });
