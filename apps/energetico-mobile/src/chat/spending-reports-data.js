@@ -26,8 +26,8 @@ export function createSpendingReportsData({
     return list.id;
   }
 
-  async function allItems(list, signal) {
-    const query = new URLSearchParams({ $expand: "fields", $top: "100" }).toString();
+  async function allItems(list, signal, filter = '') {
+    const query = new URLSearchParams({ $expand: "fields", $top: "100", ...(filter ? { $filter: filter } : {}) }).toString();
     const items = [];
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
@@ -44,7 +44,7 @@ export function createSpendingReportsData({
       if (!page.nextLink) throw new Error("A paginação do relatório não informou a próxima página.");
       cursor = page.nextLink;
     }
-    throw new Error("A lista excedeu o limite seguro de paginação; os totais não foram exibidos parcialmente.");
+    throw new Error("A lista excedeu o limite seguro de paginação; reduza o período. Os totais não foram exibidos parcialmente.");
   }
 
   async function loadSnapshot({ reportNumber, signal } = {}) {
@@ -82,5 +82,29 @@ export function createSpendingReportsData({
     });
   }
 
-  return Object.freeze({ loadSnapshot });
+  async function loadPaymentsSnapshot({ signal, filters = {} } = {}) {
+    const list = await resolve('LANCAMENTOS', signal);
+    const columns = await repository.getColumns(SITE, list, signal ? { signal } : {});
+    abortIfNeeded(signal);
+    if (!Array.isArray(columns)) throw new Error('O SharePoint retornou colunas inválidas.');
+    const key = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const paymentDate = columns.find(column => key(column.name) === 'DATAPGTOEFETUADO' || key(column.displayName) === 'DATAPGTOEFETUADO')?.name;
+    const conditions = [];
+    if (filters.startDate || filters.endDate) {
+      if (!paymentDate || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(paymentDate)) throw new Error('A coluna de data de pagamento não está disponível para filtrar o relatório.');
+      for (const name of ['startDate', 'endDate']) if (filters[name] && !/^\d{4}-\d{2}-\d{2}$/.test(filters[name])) throw new Error('Período de pagamento inválido.');
+      if (filters.startDate && filters.endDate && filters.startDate > filters.endDate) throw new Error('A data inicial não pode ser posterior à final.');
+      if (filters.startDate) conditions.push(`fields/${paymentDate} ge '${filters.startDate}T00:00:00Z'`);
+      if (filters.endDate) conditions.push(`fields/${paymentDate} le '${filters.endDate}T23:59:59.999Z'`);
+    }
+    const items = await allItems(list, signal, conditions.join(' and '));
+    abortIfNeeded(signal);
+    return Object.freeze({ launches: Object.freeze(items.map(item => {
+      const row = normalizeSpendingLaunch(item, columns);
+      return Object.freeze({ ...row, disbursement: row.disbursement === 'true' ? 'SIM'
+        : row.disbursement === 'false' ? 'NÃO' : row.disbursement });
+    })) });
+  }
+
+  return Object.freeze({ loadSnapshot, loadPaymentsSnapshot });
 }

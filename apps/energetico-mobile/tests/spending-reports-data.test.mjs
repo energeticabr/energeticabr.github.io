@@ -24,6 +24,29 @@ function fixture(overrides = {}) {
   return { repository, calls };
 }
 
+test("payment ledger queries only launches, follows pagination and preserves payment fields", async () => {
+  const { repository, calls } = fixture();
+  const data = createSpendingReportsData({ repository });
+  assert.equal(typeof data.loadPaymentsSnapshot, 'function');
+  const result = await data.loadPaymentsSnapshot();
+  assert.deepEqual(result.launches.map(r => r.id), ['1', '2']);
+  assert.equal(result.launches[0].total, 20);
+  assert.equal(calls.some(c => c[1] === 'CADASTROPRODUTO'), false);
+});
+
+test('payment period is constrained at SharePoint before paging, maps dates and boolean disbursement', async () => {
+  const queries = [];
+  const { repository } = fixture({
+    async getColumns() { return [{ name: 'PaidAt', displayName: 'DATA PGTO EFETUADO', dateTime: { format: 'dateOnly' } }, { name: 'Debit', displayName: 'GERADESEMBOLSO' }]; },
+    async getItemsPage(_site, _list, query) { queries.push(new URLSearchParams(query)); return { items: [{ id: '7', fields: { PaidAt: '2026-10-02T03:00:00Z', Debit: true, AGRUPAR: '358', FORNECEDOR: 'Alfa' } }], hasMore: false, nextLink: '' }; },
+  });
+  const result = await createSpendingReportsData({ repository }).loadPaymentsSnapshot({ filters: { startDate: '2026-10-02', endDate: '2026-10-05' } });
+  assert.equal(queries[0].get('$filter'), "fields/PaidAt ge '2026-10-02T00:00:00Z' and fields/PaidAt le '2026-10-05T23:59:59.999Z'");
+  assert.equal(result.launches[0].paymentDate, '2026-10-02');
+  assert.equal(result.launches[0].disbursement, 'SIM');
+  assert.equal(result.launches[0].order, '358');
+});
+
 test("carrega todas as páginas de LANCAMENTOS e CADASTROPRODUTO para o relatório 9", async () => {
   assert.equal(typeof createSpendingReportsData, "function");
   const { repository, calls } = fixture();

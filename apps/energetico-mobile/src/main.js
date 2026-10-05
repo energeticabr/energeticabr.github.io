@@ -17,6 +17,7 @@ import "./ui/contractor-reports.css";
 import "./ui/rh-reports.css";
 import "./ui/operations-reports.css";
 import "./ui/spending-reports.css";
+import "./ui/payment-ledger.css";
 import "./ui/audit-reports-live.css";
 import "./ui/commercial-progress-reports.css";
 import "./ui/commercial-docs-rent-reports-style.css";

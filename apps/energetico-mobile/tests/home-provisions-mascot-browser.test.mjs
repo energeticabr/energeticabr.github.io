@@ -47,6 +47,33 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.ok(layout.m.x>=0&&layout.m.width>=44&&layout.m.height>=44&&!layout.overflow,JSON.stringify(layout));
       assert.equal(layout.transcriptOverflow,false,'área rolável sem overflow lateral');
       assert.ok(layout.image&&layout.i.x>=layout.m.x&&layout.i.right<=layout.m.right&&layout.i.bottom<=layout.m.bottom);
+      const reportLayout=await evaluate(`(()=>{const r=document.querySelector('.chat-main-payment-ledger-shortcut'),m=document.querySelector('.chat-main-provisions-shortcut'),b=document.querySelector('.chat-message--external-provisions .chat-bubble');if(!r)return null;const rr=r.getBoundingClientRect(),mr=m.getBoundingClientRect(),br=b.getBoundingClientRect(),i=r.querySelector('img');return {x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height,mascotBottom:mr.bottom,cardLeft:br.x,external:!b.contains(r),image:i.naturalWidth>0,fill:getComputedStyle(r).backgroundColor};})()`);
+      assert.ok(reportLayout, 'novo relatório acessível na tela inicial');
+      assert.ok(reportLayout.external&&reportLayout.y>=reportLayout.mascotBottom+4&&reportLayout.right<=reportLayout.cardLeft-4,JSON.stringify(reportLayout));
+      assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
+      assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
+      await evaluate(`document.querySelector('.chat-main-payment-ledger-shortcut').click()`);
+      assert.equal(await evaluate('window.reportOpened'),1);
+      if(width<844){
+        assert.equal(await evaluate('window.reportLoads'),0,'vertical não consulta dados');
+        assert.equal(await evaluate(`document.querySelector('.pl-orientation').hidden`),false);
+        assert.equal(await evaluate(`document.querySelector('.pl-report').hidden`),true);
+        await send('Emulation.setDeviceMetricsOverride',{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
+      }
+      let loaded=false;for(let n=0;n<80&&!loaded;n++){loaded=await evaluate(`document.querySelectorAll('.pl-table tbody tr').length===2`);if(!loaded)await delay(100);}
+      assert.ok(loaded,'horizontal carrega relatório real');
+      assert.equal(await evaluate('window.reportLoads'),1);
+      assert.equal(await evaluate(`document.querySelector('.pl-table [data-column="supplierTotal"]').textContent.includes('543,23')`),true);
+      const modal=await evaluate(`(()=>{const p=document.querySelector('.pl-dialog').getBoundingClientRect();return {x:p.x,right:p.right,y:p.y,bottom:p.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
+      assert.ok(modal.x>=8&&modal.right<=await evaluate('innerWidth')-8&&!modal.overflow,JSON.stringify(modal));
+      assert.equal(await evaluate(`(()=>{const p=document.querySelector('.pl-dialog').getBoundingClientRect(),h=document.querySelector('.pl-table thead').getBoundingClientRect();return h.top>=p.top&&h.bottom<p.bottom;})()`),true,'cabeçalho da tabela visível sem rolar o relatório na horizontal');
+      await evaluate(`document.querySelector('.pl-table td').click()`);
+      assert.equal(await evaluate(`document.querySelector('.pl-overlay').hidden`),false,'clicar dentro preserva popup');
+      if(width===390&&!pwa&&process.env.PAYMENT_LEDGER_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.PAYMENT_LEDGER_SCREENSHOT,Buffer.from(shot.data,'base64'));}
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
+      await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
+      assert.equal(await evaluate(`document.querySelector('.pl-overlay').hidden`),true,'clique fora fecha popup');
+      await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       if(width===390&&!pwa&&process.env.HOME_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.HOME_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);
