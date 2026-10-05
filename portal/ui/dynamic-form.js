@@ -748,7 +748,7 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
 function readValues(form, columns, overrides = {}) {
   const values = {};
   for (const column of columns) {
-    if (!column.editable || column.hidden) continue;
+    if (!column.editable || column.hidden || column.readOnly) continue;
     if (Object.hasOwn(overrides, column.name)) {
       values[column.name] = overrides[column.name];
       continue;
