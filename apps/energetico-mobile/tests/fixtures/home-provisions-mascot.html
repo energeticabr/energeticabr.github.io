@@ -9,6 +9,8 @@ import '/src/ui/provision-report.css';
 import { createProvisionReportView } from '/src/ui/provision-report-view.js';
 import '/src/ui/order-validation-report.css';
 import { createOrderValidationReportView } from '/src/ui/order-validation-report-view.js';
+import '/src/ui/attendance-summary.css';
+import { createAttendanceSummaryReportView } from '/src/ui/attendance-summary-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -32,6 +34,12 @@ const validation=createOrderValidationReportView({document,data:{async loadOrder
   launches:Array.from({length:12},(_,i)=>({id:String(3505-i),orderId:String(362-i),branch:'004 - EDIFÍCIO XAVANTE',supplier:`Fornecedor ${i}`,product:'TARIFA DE INTERNET',description:'Conferir nota fiscal',total:99.8}))
 };}}});
 view.on('open-order-validation-report',()=>void validation.open());
+const attendance=createAttendanceSummaryReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
+ complete:true,
+ suppliers:Array.from({length:12},(_,i)=>({id:String(i+1),name:`Profissional ${i+1}`,status:'ATIVO'})),
+ presences:Array.from({length:24},(_,i)=>({id:String(i+1),date:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:`Profissional ${i%12+1}`,profession:['SERVENTE DE PEDREIRO','PEDREIRO','MESTRE DE OBRAS','ARMADOR DE FERRAGEM'][i%4],presence:i<12?'PENDENTE':i%3?'PRESENTE':'AUSENTE',status:i<12?'PENDENTE':i%2?'PAGO':'PENDENTE',dailyValue:181,paymentId:i%2?'3505':''}))
+ };}}});
+view.on('open-attendance-summary',()=>void attendance.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});

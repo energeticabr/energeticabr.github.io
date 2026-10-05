@@ -70,6 +70,16 @@ async function defaultManagementReportFactory(options) {
   return createManagementReportView(options);
 }
 
+async function defaultAttendanceSummaryFactory(options) {
+  const { createAttendanceSummaryReportView } = await import('./ui/attendance-summary-view.js');
+  return createAttendanceSummaryReportView(options);
+}
+
+async function defaultAttendanceSummaryDataFactory(options) {
+  const { createAttendanceSummaryData } = await import('./chat/attendance-summary-data.js');
+  return createAttendanceSummaryData(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -197,6 +207,7 @@ const TASKS_GALLERY_ID = "action_tasks_gallery";
 const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
 const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const CARGOS_TABLE_ID = 'action_cargos_table';
+const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -690,6 +701,8 @@ export function createAppController({
   contractorReportsFactory = defaultContractorReportsFactory,
   cargosFactory = async options => (await import('./ui/cargos-view.js')).createCargosView(options),
   cargosDataFactory = async options => (await import('./chat/cargos-data.js')).createCargosData(options),
+  attendanceSummaryFactory = defaultAttendanceSummaryFactory,
+  attendanceSummaryDataFactory = defaultAttendanceSummaryDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -751,6 +764,9 @@ export function createAppController({
   let paymentLedgerOpening = null;
   let cargosTable = null;
   let cargosTableOpening = null;
+  let attendanceSummaryReport = null;
+  let attendanceSummaryOpening = null;
+  let attendanceSummarySession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -4015,6 +4031,17 @@ export function createAppController({
     contractorReports = null;
   }
 
+  function disposeAttendanceSummaryReport() {
+    const session = attendanceSummarySession;
+    const panel = attendanceSummaryReport;
+    attendanceSummarySession = null;
+    attendanceSummaryOpening = null;
+    attendanceSummaryReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
   function disposePaymentProgrammingGallery() {
     paymentProgrammingGallery?.destroy?.();
     paymentProgrammingGallery = null;
@@ -4042,6 +4069,7 @@ export function createAppController({
       provisionReport,
       orderValidationReport,
       cargosTable,
+      attendanceSummaryReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4683,6 +4711,105 @@ export function createAppController({
       }
     });
     cargosTableOpening = request;
+    return request;
+  }
+
+  async function openAttendanceSummary() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (attendanceSummaryOpening) return attendanceSummaryOpening;
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = attendanceSummarySession || {
+      lifetime: new AbortController(), loadController: null, generation: 0,
+    };
+    attendanceSummarySession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || attendanceSummarySession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async scopes => {
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          await auth.authorize(scopes, { resumeAction: ATTENDANCE_SUMMARY_ID });
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await attendanceSummaryDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    const request = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = attendanceSummaryReport;
+        if (!report) {
+          const panel = await attendanceSummaryFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          attendanceSummaryReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && attendanceSummarySession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir o resumo de presença.');
+        }
+        if (attendanceSummarySession === session && !attendanceSummaryReport) disposeAttendanceSummaryReport();
+        return false;
+      } finally {
+        if (attendanceSummaryOpening === request) attendanceSummaryOpening = null;
+      }
+    });
+    attendanceSummaryOpening = request;
     return request;
   }
 
@@ -5577,6 +5704,7 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    disposeAttendanceSummaryReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -5665,6 +5793,7 @@ export function createAppController({
     disposeOrdersGallery();
     disposeTasksGallery();
     disposeContractorReports();
+    disposeAttendanceSummaryReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -6318,6 +6447,7 @@ export function createAppController({
       if (command.replyId === PROVISION_REPORT_ID) return openPaymentLedger('provision');
       if (command.replyId === ORDER_VALIDATION_REPORT_ID) return openPaymentLedger('validation');
       if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
+      if (command.replyId === ATTENDANCE_SUMMARY_ID) return openAttendanceSummary();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6548,6 +6678,7 @@ export function createAppController({
     bind('open-provision-report', () => openPaymentLedger('provision'));
     bind('open-order-validation-report', () => openPaymentLedger('validation'));
     bind('open-cargos-table', openCargosTable);
+    bind('open-attendance-summary', openAttendanceSummary);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6630,6 +6761,7 @@ export function createAppController({
       if (!stopped) render();
     });
     unsubscribeStore = store.subscribe(() => {
+      if (attendanceSummarySession && (flowBusy() || store.getState().activeFlow)) disposeAttendanceSummaryReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -6693,6 +6825,7 @@ export function createAppController({
     else if (pendingAction === PROVISION_REPORT_ID) await openPaymentLedger('provision');
     else if (pendingAction === ORDER_VALIDATION_REPORT_ID) await openPaymentLedger('validation');
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
+    else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -6710,6 +6843,7 @@ export function createAppController({
     disposeOrdersGallery();
     disposeTasksGallery();
     disposeContractorReports();
+    disposeAttendanceSummaryReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
