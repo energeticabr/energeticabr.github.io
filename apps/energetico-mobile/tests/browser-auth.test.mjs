@@ -379,3 +379,32 @@ test("consentimento Microsoft retoma cada nova galeria local", async () => {
     assert.equal(values.size, 0);
   }
 });
+
+test("retoma validação de pedidos apenas com conta e escopos confirmados pelo retorno Microsoft", async () => {
+  const account = { homeAccountId: "account-1", username: "pessoa@energeticabr.com" };
+  for (const [redirect, expected] of [
+    [{ account, accessToken: "report-token", scopes: ["Sites.Read.All"] }, "order-validation-report"],
+    [{ account: { ...account, homeAccountId: "other-account" }, accessToken: "report-token", scopes: ["Sites.Read.All"] }, null],
+    [{ account, accessToken: "report-token", scopes: ["User.Read"] }, null],
+    [{ account, scopes: ["Sites.Read.All"] }, null],
+    [null, null],
+  ]) {
+    const values = new Map();
+    const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+    const first = createBrowserAuth({ storage, config, client: {
+      async initialize() {}, async handleRedirectPromise() { return null; },
+      getAllAccounts() { return [account]; }, async acquireTokenRedirect() {},
+    } });
+    await first.initialize();
+    await first.authorize(["Sites.Read.All"], { resumeAction: "order-validation-report" });
+    assert.equal(values.size, 1, "a ação precisa ser preservada antes do redirecionamento");
+    const resumed = createBrowserAuth({ storage, config, client: {
+      async initialize() {}, async handleRedirectPromise() { return redirect; },
+      getAllAccounts() { return [account]; },
+    } });
+    await resumed.initialize();
+    assert.equal(resumed.consumePendingAction(), expected);
+    assert.equal(resumed.consumePendingAction(), null);
+    assert.equal(values.size, 0);
+  }
+});
