@@ -1472,6 +1472,38 @@ test("Galeria Tarefas é reaberta após retorno do consentimento Microsoft da te
   assert.equal(opens, 1);
 });
 
+test('mais da galeria envia action_task e exibe o fluxo real de criação de tarefa', async t => {
+  const { createTasksGallery } = await import('../src/ui/tasks-gallery-view.js');
+  const dom = new JSDOM('<main id="app"></main>');
+  const h = makeHarness({
+    tasksGalleryFactory: options => createTasksGallery({ document: dom.window.document, ...options }),
+    tasksGalleryDataFactory: async () => ({ async loadSnapshot() { return { rows: [] }; } }),
+  });
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    return { status: 'awaiting_field', activeFlow: { id: 'task', title: 'ADICIONAR UMA NOVA TAREFA' },
+      messages: [{ type: 'poll', question: 'QUAL É A TAREFA?', options: [] }] };
+  };
+  t.after(() => { h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'DEMANDAS', options: [
+    { id: 'action_task', label: 'ADICIONAR UMA NOVA TAREFA' },
+  ] }], { activeFlow: { id: 'demands', title: 'DEMANDAS' } });
+  const before = h.chatCalls.length;
+  await h.view.emit('select-reply', { replyId: 'action_tasks_gallery', label: 'GALERIA TAREFAS' });
+  const button = dom.window.document.querySelector('[data-action="create-task"]');
+  assert.ok(button, 'botão de criação integrado à galeria');
+  button.click(); button.click();
+  for (let attempt = 0; attempt < 20 && h.store.getState().activeFlow?.id !== 'task'; attempt++)
+    await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.chatCalls.slice(before), [['text', {
+    text: 'ADICIONAR UMA NOVA TAREFA', replyId: 'action_task',
+  }]]);
+  assert.equal(dom.window.document.querySelector('.tg-overlay').hidden, true);
+  assert.equal(h.store.getState().activeFlow.id, 'task');
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL É A TAREFA?');
+});
+
 test("Relatórios abre localmente com token Microsoft e não envia a escolha para a VM", async t => {
   let opens = 0;
   let callbacks;

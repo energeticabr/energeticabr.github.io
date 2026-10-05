@@ -103,7 +103,7 @@ function safeFailure(error, fallback) {
   return `${fallback}: ${message}. Verifique a conexão e tente novamente.`;
 }
 
-export function createTasksGallery({ document: documentRef = globalThis.document, data, openMediaCollection, onClose, onHome, now = () => new Date() } = {}) {
+export function createTasksGallery({ document: documentRef = globalThis.document, data, openMediaCollection, onClose, onHome, onCreate, now = () => new Date() } = {}) {
   if (!documentRef?.body || typeof data?.loadSnapshot !== "function") throw new TypeError("Documento e serviço da Galeria de Tarefas são obrigatórios.");
   const doc = documentRef;
   const el = (tag, className, label) => {
@@ -151,7 +151,18 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     filterDisclosure.open = !filterDisclosure.open;
     filterToggle.setAttribute("aria-expanded", String(filterDisclosure.open));
   });
-  toolbar.append(searchField, filterToggle);
+  const createButton = el("button", "og-button tg-add-task", "+");
+  createButton.type = "button";
+  createButton.dataset.action = "create-task";
+  createButton.setAttribute("aria-label", "Adicionar uma nova tarefa");
+  createButton.title = "Adicionar uma nova tarefa";
+  createButton.dataset.baseDisabled = String(typeof onCreate !== "function");
+  createButton.addEventListener("click", () => {
+    if (!opened || destroyed || createButton.disabled) return;
+    close();
+    onCreate?.();
+  });
+  toolbar.append(searchField, filterToggle, createButton);
   const statusControl = addControl("status", "Status");
   statusControl.append(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
   statusControl.value = DEFAULT_STATUS_FILTER;
