@@ -11,11 +11,15 @@ function setup(t,gallery='FOLHAPGTO',overrides={}) {
 }
 test('white add-payment action opens a full screen with dependent closed selections and locked values',async t=>{
   const f=setup(t);await f.panel.open();const add=f.doc.querySelector('[data-action="add-payroll-payment"]');assert.ok(add);assert.equal(add.getAttribute('aria-label'),'Acrescentar pagamento');
+  assert.ok(add.closest('.hr-gallery-header'));assert.equal(add.previousElementSibling.textContent,'Galeria FOLHA PGTO');
   add.click();await tick();const screen=f.doc.querySelector('[data-payroll-payment-screen]');assert.ok(screen);assert.equal(screen.getAttribute('role'),'region');assert.equal(screen.hasAttribute('aria-modal'),false);
   const launch=screen.querySelector('[name=IDLANCAMENTO]'),sheet=screen.querySelector('[name=IDFOLHA]');
   launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change',{bubbles:true}));
   assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['20','21','22']);
   assert.match(screen.querySelector('[data-payment-supplier]').textContent,/CLEITON/);
+  const table=screen.querySelector('table');assert.ok(table);assert.deepEqual([...table.querySelectorAll('th')].map(node=>node.textContent),['Fornecedor','Valor unitário','Qtd','Data']);
+  assert.deepEqual([...table.querySelectorAll('td')].map(node=>node.textContent),['CLEITON','R$ 200,00','3','04/10/2026']);
+  const buttons=[...screen.querySelector('.dynamic-form-actions').querySelectorAll('button')];assert.deepEqual(buttons.map(node=>node.textContent),['CANCELAR','SUBMETER']);assert.equal(buttons[0].type,'button');assert.equal(buttons[1].type,'submit');assert.equal(screen.querySelector('.payroll-payment-header button'),null);
   assert.equal(screen.querySelector('[name=VALORUNITARIO]'),null);assert.equal(screen.querySelector('[name=QTD]'),null);
   sheet.value='21';screen.querySelector('[name=TIPOPGTO]').value='SALÁRIO';
   screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();

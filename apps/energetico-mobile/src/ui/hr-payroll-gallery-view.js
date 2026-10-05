@@ -143,9 +143,10 @@ export function createHrPayrollGallery({ document: documentOption,
       await loadPage(1,null,false,true);
     }}) : null;
   if(paymentComposer) {
+    header.classList.add('hr-gallery-header--add-payment');
     const add=element('button','hr-gallery-button hr-gallery-add-payment','+');
     add.type='button';add.dataset.action='add-payroll-payment';add.setAttribute('aria-label','Acrescentar pagamento');add.title='Acrescentar pagamento';
-    toolbar.append(add);add.addEventListener('click',()=>{recordActions.close();void paymentComposer.open(add);});
+    header.append(add);add.addEventListener('click',()=>{recordActions.close();void paymentComposer.open(add);});
   }
 
   function selectedFilters() { return {search:search.value.trim(),...Object.fromEntries([...filterControls].map(([name,control])=>[name,control.value.trim()]))}; }

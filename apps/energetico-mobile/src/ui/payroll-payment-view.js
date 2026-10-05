@@ -15,10 +15,12 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
     const overlay=el('div','gallery-record-overlay gallery-record-overlay--screen');
     const screen=el('section','gallery-record-dialog gallery-record-screen payroll-payment-screen');
     screen.dataset.payrollPaymentScreen='';screen.setAttribute('role','region');screen.setAttribute('aria-label','Acrescentar pagamento');screen.tabIndex=-1;
-    const header=el('header','payroll-payment-header'),heading=el('h2','gallery-record-dialog-title','Acrescentar pagamento'),cancel=el('button','hr-gallery-button','Cancelar');
-    cancel.type='button';cancel.dataset.paymentCancel='';header.append(heading,cancel);
+    const header=el('header','payroll-payment-header'),heading=el('h2','gallery-record-dialog-title','Acrescentar pagamento'),cancel=el('button','hr-gallery-button payroll-payment-cancel','CANCELAR');
+    cancel.type='button';cancel.dataset.paymentCancel='';header.append(heading);
+    const actions=el('div','dynamic-form-actions payroll-payment-actions'),submit=el('button','hr-gallery-button payroll-payment-submit','SUBMETER');
+    submit.type='submit';submit.disabled=true;actions.append(cancel,submit);
     const body=el('div'),error=el('p','gallery-record-dialog-error');error.setAttribute('role','alert');error.hidden=true;
-    body.append(createLoadingIndicator(doc,'Carregando lançamentos e folhas…'));screen.append(header,error,body);overlay.append(screen);host.append(overlay);
+    body.append(createLoadingIndicator(doc,'Carregando lançamentos e folhas…'));screen.append(header,error,body,actions);overlay.append(screen);host.append(overlay);
     const state={overlay,screen,trigger,abort:new AbortController(),busy:false,operationId:doc.defaultView.crypto.randomUUID(),saved:null};current=state;
     cancel.addEventListener('click',()=>close());overlay.addEventListener('click',event=>event.stopPropagation());
     overlay.addEventListener('keydown',event=>{
@@ -38,21 +40,25 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
       const options=await loadOptions({signal:state.abort.signal});if(!active())return;
       body.replaceChildren();
       const form=el('form','dynamic-form'),grid=el('div','dynamic-form-grid');
+      form.id=`payroll-payment-${state.operationId}`;submit.setAttribute('form',form.id);
       const select=(name,label,placeholder)=>{const field=el('label','dynamic-field',label),control=el('select');control.name=name;control.required=true;control.setAttribute('aria-label',label);control.append(new doc.defaultView.Option(placeholder,''));field.append(control);grid.append(field);return control;};
       const launch=select('IDLANCAMENTO','Lançamento (IDLANCAMENTO)','Selecione o lançamento');
       for(const row of options.launches) launch.append(new doc.defaultView.Option(`${row.id} — ${row.supplier}${row.description?` — ${row.description}`:''}`,row.id));
-      const supplier=el('p','payroll-payment-summary');supplier.dataset.paymentSupplier='';
-      const details=el('p','payroll-payment-summary');details.dataset.paymentValues='';
+      const summary=el('table','payroll-payment-summary');summary.setAttribute('aria-label','Dados do fornecedor e do lançamento');summary.hidden=true;
+      const rows=el('tbody'),values=[];
+      for(const label of ['Fornecedor','Valor unitário','Qtd','Data']) {const row=el('tr'),key=el('th','',label),value=el('td');key.scope='row';row.append(key,value);rows.append(row);values.push(value);}
+      summary.append(rows);const [supplier,unitValue,quantity,date]=values;supplier.dataset.paymentSupplier='';summary.dataset.paymentValues='';
       const type=select('TIPOPGTO','Tipo de pagamento','Selecione o tipo');for(const value of options.paymentTypes)type.append(new doc.defaultView.Option(value,value));
       const sheet=select('IDFOLHA','Folha (IDFOLHA)','Selecione a folha');sheet.disabled=true;
-      const actions=el('div','dynamic-form-actions'),submit=el('button','button-primary','Cadastrar pagamento');submit.type='submit';actions.append(submit);form.append(grid,supplier,details,actions);body.append(form);
+      form.append(grid,summary);body.append(form);
       function update() {
         const selected=options.launches.find(row=>row.id===launch.value);
         sheet.replaceChildren(new doc.defaultView.Option('Selecione a folha',''));sheet.disabled=!selected;
         for(const row of selected?options.sheets.filter(row=>payrollFieldKey(row.supplier)===payrollFieldKey(selected.supplier)):[])sheet.append(new doc.defaultView.Option(`${row.id} — ${row.label}`,row.id));
-        supplier.textContent=selected?`Fornecedor: ${selected.supplier}`:'';
+        summary.hidden=!selected;supplier.textContent=selected?.supplier||'';
         const unit=typeof selected?.unitValue==='string'&&selected.unitValue.includes(',')?selected.unitValue.replace(/\./g,'').replace(',','.'):selected?.unitValue;
-        details.textContent=selected?`Valor unitário: ${Number.isFinite(Number(unit))?Number(unit).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'—'} · Quantidade: ${selected.quantity} · Data: ${selected.date?.split('-').reverse().join('/')||'—'}`:'';
+        unitValue.textContent=selected&&Number.isFinite(Number(unit))?Number(unit).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'—';
+        quantity.textContent=selected?.quantity??'—';date.textContent=selected?.date?.split('-').reverse().join('/')||'—';
         submit.disabled=!selected||sheet.options.length===1;
         if(selected&&sheet.options.length===1)fail(new Error('Este fornecedor não possui folha cadastrada do mês anterior, atual ou próximo.'));
         else error.hidden=true;
