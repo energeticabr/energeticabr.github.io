@@ -49,7 +49,7 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
  function populate(){
   pickers?.destroy();pickers=null;const options=buildDocumentControlOverview(snapshot,{},provisionDateKey(now())).filterOptions;
   for(const [name,node] of controls){const current=node.value,values=[...new Set([...(options[name]||[]),current].filter(Boolean))];node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of values)node.append(Object.assign(make('option','',value),{value}));node.value=current;}
-  pickers=bindSearchableFilterSelects(toolbar,{placement:'below'});
+  pickers=bindSearchableFilterSelects(toolbar,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;content.replaceChildren(make('p','dcr-notice','Carregando documentos do SharePoint…'));report.setAttribute('aria-busy','true');

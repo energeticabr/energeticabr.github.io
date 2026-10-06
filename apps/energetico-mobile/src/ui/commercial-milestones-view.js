@@ -67,7 +67,7 @@ export function createCommercialMilestonesReportView({document:doc=globalThis.do
   pickers?.destroy();pickers=null;
   const options=buildCommercialMilestones(snapshot,{},today(now())).filterOptions;
   for(const [name] of FILTERS){const select=controls.get(name),current=select.value;const unique=[...new Set([...(options[name]||[]),current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=current;}
-  pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+  pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;

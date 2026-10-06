@@ -96,7 +96,7 @@ export function createCommercialReceiptsReportView({document:doc=globalThis.docu
   const options=buildCommercialReceipts(snapshot,{},localDate(now())).filterOptions;
   for(const [name] of FILTERS){const select=controls.get(name),current=select.value;
    const values=[...new Set([...options[name],current].filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'pt-BR',{numeric:true}));select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of values)select.append(Object.assign(make('option','',String(value)),{value:String(value)}));select.value=current;}
-  pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+  pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando contratos e pagamentos do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;

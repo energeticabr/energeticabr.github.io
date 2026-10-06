@@ -65,7 +65,7 @@ export function createStageProgressReportView({document:doc=globalThis.document,
    const unique=[...new Set([...source.map(r=>r[field]),current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
    select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=current;
   }
-  pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+  pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;

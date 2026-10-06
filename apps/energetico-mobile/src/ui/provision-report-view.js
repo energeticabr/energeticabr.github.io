@@ -96,7 +96,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       const unique=[...new Set([...values,current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
       control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)control.append(Object.assign(make('option','',value),{value}));
       control.value=unique.includes(current)?current:'';}
-    pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+    pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
   }
   async function load(){
     if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();

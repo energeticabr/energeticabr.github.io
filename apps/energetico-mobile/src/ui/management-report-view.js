@@ -91,7 +91,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
       for(const value of unique)control.append(Object.assign(make('option','',name==='month'?MONTHS[Number(value)-1]:value),{value}));
       control.value=unique.includes(current)?current:'';
     }
-    pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+    pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
   }
   async function load() {
     if(root.hidden||portrait()||destroyed)return;

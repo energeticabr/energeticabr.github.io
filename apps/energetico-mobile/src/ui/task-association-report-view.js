@@ -51,7 +51,7 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
   const focusedSelect=[...controls.values()].find(node=>node.nextElementSibling?.contains(doc.activeElement));if(focusedSelect)panel.focus();
   pickers?.destroy();pickers=null;const options=buildTaskAssociationOverview(snapshot||{tasks:[]},{statuses:[]},provisionDateKey(now())).filterOptions;
   for(const [name,node] of controls){const current=reset?(name==='status'?DEFAULT_STATUSES:[]):[...node.selectedOptions].map(option=>option.value).filter(Boolean),values=[...new Set([...(options[name]||[]),...(name==='status'?[...DEFAULT_STATUSES,'CONCLUÍDO']:[]),...current])];node.replaceChildren(Object.assign(make('option','','Todos'),{value:'',selected:!current.length}));for(const value of values)node.append(Object.assign(make('option','',value),{value,selected:current.includes(value)}));}
-  pickers=bindSearchableFilterSelects(toolbar,{placement:'below'});
+  pickers=bindSearchableFilterSelects(toolbar,{placement:'below',report:true});
   if(focusedSelect&&!root.hidden){focusedSelect.nextElementSibling?.querySelector('.sfs-trigger')?.focus();pickers.close();}
  }
  async function load(){

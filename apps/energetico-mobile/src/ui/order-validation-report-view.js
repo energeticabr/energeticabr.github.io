@@ -64,7 +64,7 @@ export function createOrderValidationReportView({document:doc=globalThis.documen
     for(const [name] of FIELDS){const node=controls.get(name),current=node.value;const values=name==='product'?snapshot.launches.map(row=>row.product):snapshot.orders.map(row=>row[name]);
       const unique=[...new Set([...values,current].filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'pt-BR',{numeric:name==='id'}));
       node.replaceChildren(Object.assign(make('option','',name==='status'?'PENDENTE AUDITORIA':'Todos'),{value:''}));for(const value of unique)node.append(Object.assign(make('option','',String(value)),{value:String(value)}));node.value=current;}
-    pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+    pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
   }
   async function load(){
     if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando pedidos e lançamentos do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
