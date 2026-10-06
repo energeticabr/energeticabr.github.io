@@ -101,7 +101,7 @@ export function createCommercialDocumentsReportView({document:doc=globalThis.doc
  function populate(){
   pickers?.destroy();pickers=null;const options=buildCommercialDocuments(snapshot,{},today(now())).filterOptions;
   for(const [name] of FILTERS){const select=controls.get(name),current=select.value,unique=[...new Set([...(options[name]||[]),current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=current;}
-  pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+  pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando pendências comerciais do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;

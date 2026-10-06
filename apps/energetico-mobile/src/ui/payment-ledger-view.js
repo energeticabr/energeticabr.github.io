@@ -123,7 +123,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       for (const value of values) select.append(Object.assign(make('option', '', value), { value }));
       select.value = values.includes(current) ? current : '';
     }
-    pickers = bindSearchableFilterSelects(filters, {placement:'below'});
+    pickers = bindSearchableFilterSelects(filters, {placement:'below',report:true});
   }
   async function load() {
     if (root.hidden || portrait() || destroyed) return;

@@ -25,7 +25,8 @@ function createPicker(select, closeOthers, options = {}) {
   }
 
   const id = `searchable-filter-${++nextId}`;
-  const wrapper = doc.createElement('div'); wrapper.className = 'sfs';
+  const reportPicker = options.report === true;
+  const wrapper = doc.createElement('div'); wrapper.className = reportPicker ? 'sfs sfs--report' : 'sfs';
   const fieldBox = doc.createElement('div'); fieldBox.className = 'sfs-field';
   const arrow = doc.createElement('button'); arrow.type = 'button'; arrow.className = 'sfs-arrow'; arrow.textContent = '▾';
   arrow.tabIndex = -1; arrow.setAttribute('aria-label', `Abrir opções de ${labelText}`);
@@ -76,23 +77,43 @@ function createPicker(select, closeOthers, options = {}) {
     const viewport = view.visualViewport;
     let top = viewport?.offsetTop || 0;
     let bottom = top + (viewport?.height || view.innerHeight || doc.documentElement.clientHeight);
+    let left = viewport?.offsetLeft || 0;
+    let right = left + (viewport?.width || view.innerWidth || doc.documentElement.clientWidth);
     // Keep the dropdown inside scrollable gallery content as well as the
     // viewport. Its DOM stays in the dialog so the existing focus trap works.
     for (let ancestor = wrapper.parentElement; ancestor; ancestor = ancestor.parentElement) {
-      if (!/(auto|scroll|hidden|clip)/.test(view.getComputedStyle(ancestor).overflowY)) continue;
+      const style = view.getComputedStyle(ancestor);
       const bounds = ancestor.getBoundingClientRect();
-      if (bounds.height > 0) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+      if (bounds.height > 0 && /(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+        top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
+      }
+      if (reportPicker && bounds.width > 0 && /(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+        left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
+      }
     }
     const bounds = trigger.getBoundingClientRect();
-    const below = Math.max(0, bottom - bounds.bottom - 13);
+    const below = Math.max(0, bottom - bounds.bottom - (reportPicker ? 5 : 13));
     const above = Math.max(0, bounds.top - top - 13);
-    const placement = options.placement === 'below' ? 'below' : below < 180 && above > below ? 'above' : 'below';
-    const height = Math.max(0, Math.min(320, placement === 'above' ? above : below));
+    const placement = reportPicker || options.placement === 'below' ? 'below' : below < 180 && above > below ? 'above' : 'below';
+    let rowBudget = 0;
+    if (reportPicker) {
+      const width = Math.max(0, Math.min(Math.max(bounds.width, 240), right - left - 12));
+      popup.style.width = `${width}px`;
+      popup.style.left = `${Math.max(left + 6, Math.min(bounds.left, right - width - 6)) - bounds.left}px`;
+      popup.style.right = 'auto';
+      // Measure wrapped labels after sizing the popup. Seven whole options,
+      // including two-line supplier names, should fit when the viewport allows.
+      for (const item of [...list.children].slice(0, 7)) {
+        rowBudget += item.getBoundingClientRect().height || parseFloat(view.getComputedStyle(item).minHeight) || 32;
+      }
+    }
+    const chrome = reportPicker ? 6 : 14;
+    const height = Math.max(0, Math.min(reportPicker ? Math.max(rowBudget, 32) + chrome : 320, placement === 'above' ? above : below));
     popup.dataset.placement = placement;
     popup.style.top = placement === 'below' ? 'calc(100% + 5px)' : 'auto';
     popup.style.bottom = placement === 'above' ? 'calc(100% + 5px)' : 'auto';
     popup.style.maxHeight = `${height}px`;
-    list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14))}px`;
+    list.style.maxHeight = `${Math.max(0, Math.min(reportPicker ? Math.max(rowBudget, 32) : 240, height - chrome))}px`;
   }
   function render() {
     const query = selectionOnly ? '' : searchableText(search.value);

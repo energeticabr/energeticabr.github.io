@@ -55,7 +55,7 @@ export function createSacPathologiesReportView({document:doc=globalThis.document
    // Preserve the model's numeric ID order; the explicit current/default remains available even on an empty list.
    select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of values)select.append(Object.assign(make('option','',value),{value}));select.value=current;
   }
-  pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+  pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando patologias do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;

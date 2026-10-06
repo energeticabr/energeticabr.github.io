@@ -19,3 +19,11 @@
 .sfs-option[aria-disabled="true"] { opacity: .52; cursor: default; }
 .sfs-trigger:focus-visible, .sfs-search:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
 .sfs-empty { margin: 0; padding: 12px 10px; color: #50687b; }
+.sfs.sfs--report .sfs-popup { min-width:0; padding:2px; border:1px solid #1c3c7b; border-radius:0; z-index:10; }
+.sfs.sfs--report .sfs-option {
+  display:flex; align-items:center; box-sizing:border-box; min-height:32px; height:auto;
+  padding:4px 8px; border-radius:0; font:normal 14px/1.2 Arial,sans-serif;
+  white-space:normal; overflow-wrap:anywhere; overflow:visible; text-overflow:clip;
+}
+.sfs.sfs--report .sfs-option[aria-selected="true"] { font-weight:700; }
+@media (min-height:600px) { .sfs.sfs--report .sfs-option { min-height:40px; } }

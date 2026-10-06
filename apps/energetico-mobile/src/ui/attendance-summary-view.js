@@ -106,7 +106,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
    const unique=[...new Set([...values,current].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
    select.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));for(const value of unique)select.append(Object.assign(make('option','',value),{value}));select.value=current;
   }
-  pickers=bindSearchableFilterSelects(filters,{placement:'below'});
+  pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
   if(root.hidden||portrait()||destroyed)return;
