@@ -1,5 +1,6 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
 import { reportNavigationMarkup } from "./report-navigation.js";
+import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { escapeHtml } from "./escape-html.js";
 import { galleryPairForOption, pairedGalleryMenu } from "./menu-gallery-pairs.js";
@@ -1936,6 +1937,7 @@ function pendingProvisionsMarkup(
     <div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
       ${reportNavigationMarkup('open-pending-provisions')}
       <div class="chat-date-picker__header chat-pending-provisions__header">
+        ${pendingReportPrintMarkup()}
         <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" data-immediate-action="true" aria-label="Fechar avisos de provisões pendentes" title="Fechar avisos">×</button>
         <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
         <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Vencidas ou com vencimento em até 2 dias (${rows.length}).</p></div>

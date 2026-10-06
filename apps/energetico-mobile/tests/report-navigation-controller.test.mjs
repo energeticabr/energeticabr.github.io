@@ -81,6 +81,15 @@ function harness(t, options = {}, { dom = true } = {}) {
   return { controller, view, handlers, store, calls, renders, panels, document };
 }
 
+test('every one of the fifteen separately opened mascot reports receives an accessible PDF printer',async t=>{
+ for(const action of Object.keys(factories)){
+  const h=harness(t);await h.controller.start();assert.equal(await h.view.emit(action),true,action);
+  const printer=h.panels.at(-1).element.querySelector('[data-action="print-report-pdf"]');
+  assert.ok(printer,action);assert.match(printer.getAttribute('aria-label'),/PDF/);assert.equal(printer.tagName,'BUTTON');
+  h.controller.stop();
+ }
+});
+
 for (const group of groups) {
   for (let index = 0; index < group.length - 1; index++) {
     for (const direction of ['next', 'previous']) {

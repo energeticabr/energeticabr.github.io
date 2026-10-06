@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
-export async function runBrowserLayout(browser, { width, height, url, maxBuffer = 2_000_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, maxBuffer = 2_000_000, readyTimeoutMs = 30_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -88,7 +88,7 @@ export async function runBrowserLayout(browser, { width, height, url, maxBuffer 
         timer = setTimeout(() => {
           observer.disconnect();
           reject(new Error('A fixture não disponibilizou a medição de layout.'));
-        }, 30000);
+        }, ${Math.max(1000, Math.min(90000, Number(readyTimeoutMs) || 30000))});
         read();
       })`,
       returnByValue: true,
