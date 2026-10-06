@@ -14,6 +14,7 @@ import {
 } from "./chat/presence-date-scope.js";
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
 import { provisionDateKey, provisionDayOffset } from "./chat/pending-provision-dates.js";
+import { decorateReportNavigation, getReportNeighbors } from "./ui/report-navigation.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -877,6 +878,7 @@ export function createAppController({
   let started = false;
   let stopped = false;
   let galleryOpeningRevision = 0;
+  let mascotNavigationOpening = null;
   let launchGallery = null;
   let launchGalleryOpening = null;
   let ordersGallery = null;
@@ -4346,6 +4348,95 @@ export function createAppController({
     ]) gallery?.close?.();
   }
 
+  function reportNavigationPanel(action) {
+    switch (action) {
+      case 'open-provision-report': return provisionReport;
+      case 'open-payment-ledger': return paymentLedger;
+      case 'open-management-report': return managementReport;
+      case 'open-order-validation-report': return orderValidationReport;
+      case 'open-document-control-report': return documentControlReport;
+      case 'open-cargos-table': return cargosTable;
+      case 'open-attendance-summary': return attendanceSummaryReport;
+      case 'open-stage-progress': return stageProgressReport;
+      case 'open-commercial-receipts': return commercialReceiptsReport;
+      case 'open-commercial-milestones': return commercialMilestonesReport;
+      case 'open-commercial-documents': return commercialDocumentsReport;
+      case 'open-sac-pathologies': return sacPathologiesReport;
+      default: return null;
+    }
+  }
+
+  function decorateControllerReport(panel, action) {
+    const decorated = decorateReportNavigation(panel, {
+      action, onNavigate: target => navigateMascotReport(action, target, decorated),
+    });
+    return decorated;
+  }
+
+  async function navigateMascotReport(from, target, originPanel) {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    const neighbors = getReportNeighbors(from);
+    if (typeof target !== 'string' || (target !== neighbors.previous && target !== neighbors.next)) return false;
+    if (from === 'open-pending-provisions') {
+      if (!pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
+    } else {
+      const panel = reportNavigationPanel(from);
+      if (!panel || (originPanel && panel !== originPanel)) return false;
+      if (panel.element && (!panel.element.isConnected || panel.element.hidden
+        || panel.element.closest?.('[hidden]') || panel.element.getAttribute?.('aria-hidden') === 'true')) return false;
+    }
+    resetMascotNavigationOverlays();
+    const navigation = {};
+    mascotNavigationOpening = navigation;
+    try {
+      const result = await openMascotReport(target);
+      return mascotNavigationOpening === navigation && result;
+    } finally {
+      if (mascotNavigationOpening === navigation) mascotNavigationOpening = null;
+    }
+  }
+
+  function resetMascotNavigationOverlays() {
+    // Legacy payment reports do not close other overlays on open. Invalidate
+    // both the source and a superseded destination before showing another one.
+    galleryOpeningRevision++;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
+    registrationGalleryOpenings.clear();
+    closeGalleryOverlays();
+    spendingReportsRevision++;
+    cargosTableRevision++;
+    disposeContractorReports();
+    disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
+    disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
+    pendingProvisionSnapshotRevision++;
+    pendingProvisionRequest = null;
+    pendingProvisionOpenRequest = null;
+    dismissPendingProvisions();
+  }
+
+  function openMascotReport(target) {
+    switch (target) {
+      case 'open-pending-provisions': return openPendingProvisions();
+      case 'open-provision-report': return openPaymentLedger('provision');
+      case 'open-payment-ledger': return openPaymentLedger();
+      case 'open-management-report': return openPaymentLedger('management');
+      case 'open-order-validation-report': return openPaymentLedger('validation');
+      case 'open-document-control-report': return openDocumentControlReport();
+      case 'open-cargos-table': return openCargosTable();
+      case 'open-attendance-summary': return openAttendanceSummary();
+      case 'open-stage-progress': return openStageProgress();
+      case 'open-commercial-receipts': return openCommercialReceipts();
+      case 'open-commercial-milestones': return openCommercialMilestones();
+      case 'open-commercial-documents': return openCommercialDocuments();
+      case 'open-sac-pathologies': return openSacPathologies();
+      default: return false;
+    }
+  }
+
   function galleryAddToTray(assertSession) {
     return async ({ blob, fileName, attachments } = {}) => {
       assertSession();
@@ -4951,7 +5042,9 @@ export function createAppController({
           assertSession();
           if (validation && (flowBusy() || store.getState().activeFlow)) return false;
           const factory = validation ? orderValidationReportFactory : provision ? provisionReportFactory : management ? managementReportFactory : paymentLedgerFactory;
-          const panel = await factory({ data, document: globalThis.document });
+          const action = validation ? 'open-order-validation-report' : provision ? 'open-provision-report'
+            : management ? 'open-management-report' : 'open-payment-ledger';
+          const panel = decorateControllerReport(await factory({ data, document: globalThis.document }), action);
           if (openingRevision !== spendingReportsRevision || stopped || account !== reportsAccount || sessionRevision !== reportsRevision
             || (validation && (flowBusy() || store.getState().activeFlow))) { panel.destroy?.(); return false; }
           report = panel;
@@ -5026,7 +5119,7 @@ export function createAppController({
           } };
           assertSession();
           const factory = cargosFactory;
-          const panel = await factory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await factory({ data, document: globalThis.document }), 'open-cargos-table');
           if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
             || openingRevision !== cargosTableRevision) { panel.destroy?.(); return false; }
           report = panel;
@@ -5132,7 +5225,7 @@ export function createAppController({
         assertSession();
         let report = attendanceSummaryReport;
         if (!report) {
-          const panel = await attendanceSummaryFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await attendanceSummaryFactory({ data, document: globalThis.document }), 'open-attendance-summary');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           attendanceSummaryReport = report = panel;
@@ -5241,7 +5334,7 @@ export function createAppController({
         assertSession();
         let report = stageProgressReport;
         if (!report) {
-          const panel = await stageProgressFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await stageProgressFactory({ data, document: globalThis.document }), 'open-stage-progress');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           stageProgressReport = report = panel;
@@ -5362,7 +5455,7 @@ export function createAppController({
         assertSession();
         let report = commercialReceiptsReport;
         if (!report) {
-          const panel = await commercialReceiptsViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await commercialReceiptsViewFactory({ data, document: globalThis.document }), 'open-commercial-receipts');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           commercialReceiptsReport = report = panel;
@@ -5483,7 +5576,7 @@ export function createAppController({
         assertSession();
         let report = commercialMilestonesReport;
         if (!report) {
-          const panel = await commercialMilestonesViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await commercialMilestonesViewFactory({ data, document: globalThis.document }), 'open-commercial-milestones');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           commercialMilestonesReport = report = panel;
@@ -5604,7 +5697,7 @@ export function createAppController({
         assertSession();
         let report = commercialDocumentsReport;
         if (!report) {
-          const panel = await commercialDocumentsViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await commercialDocumentsViewFactory({ data, document: globalThis.document }), 'open-commercial-documents');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           commercialDocumentsReport = report = panel;
@@ -5734,7 +5827,7 @@ export function createAppController({
         assertSession();
         let report = sacPathologiesReport;
         if (!report) {
-          const panel = await sacPathologiesViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await sacPathologiesViewFactory({ data, document: globalThis.document }), 'open-sac-pathologies');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           sacPathologiesReport = report = panel;
@@ -5869,7 +5962,7 @@ export function createAppController({
         assertSession();
         let report = quotationReport;
         if (!report) {
-          const panel = await quotationReportViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await quotationReportViewFactory({ data, document: globalThis.document }), 'open-quotation-report');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           quotationReport = report = panel;
@@ -6005,7 +6098,7 @@ export function createAppController({
         assertSession();
         let report = depreciationReport;
         if (!report) {
-          const panel = await depreciationReportViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await depreciationReportViewFactory({ data, document: globalThis.document }), 'open-depreciation-report');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           depreciationReport = report = panel;
@@ -6141,7 +6234,7 @@ export function createAppController({
         assertSession();
         let report = documentControlReport;
         if (!report) {
-          const panel = await documentControlReportViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await documentControlReportViewFactory({ data, document: globalThis.document }), 'open-document-control-report');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           documentControlReport = report = panel;
@@ -6281,7 +6374,7 @@ export function createAppController({
         assertSession();
         let report = taskAssociationReport;
         if (!report) {
-          const panel = await taskAssociationReportViewFactory({ data, document: globalThis.document });
+          const panel = decorateControllerReport(await taskAssociationReportViewFactory({ data, document: globalThis.document }), 'open-task-association-report');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
           taskAssociationReport = report = panel;
@@ -7928,6 +8021,11 @@ export function createAppController({
 
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, command => {
+      if (mascotNavigationOpening && (type.startsWith('open-') || type === 'opensacpathologies'
+        || ['select-reply','sign-in','confirm-sign-out','send-text','finish-flow'].includes(type))) {
+        mascotNavigationOpening = null;
+        resetMascotNavigationOverlays();
+      }
       if ([
         "open-media", "open-file", "open-pending-provisions", "open-pending-provision-attachment",
         "resize-signature", "signature-placement-edit", "pick-files", "pick-pending-provision-attachments",
@@ -8228,6 +8326,10 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-pending-provisions", openPendingProvisions);
+    bind('navigate-mascot-report', command => {
+      if (command?.direction !== 'next' && command?.direction !== 'previous') return false;
+      return navigateMascotReport(command.from, getReportNeighbors(command.from)[command.direction]);
+    });
     bind('open-payment-ledger', () => openPaymentLedger());
     bind('open-cargos-table', openCargosTable);
     bind('open-management-report', () => openPaymentLedger('management'));

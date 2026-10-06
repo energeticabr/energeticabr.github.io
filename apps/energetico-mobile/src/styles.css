@@ -535,6 +535,16 @@ button { touch-action: manipulation; }
 .chat-main-depreciation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-main-document-control-shortcut { margin-top:406px; cursor:pointer; background:#89a0cf; }
 .chat-main-document-control-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
+.report-navigation { pointer-events:none; }
+.report-navigation .report-navigation-arrow { position:fixed; top:50%; transform:translateY(-50%); z-index:3; display:grid; place-items:center; box-sizing:border-box; width:56px; height:56px; min-width:44px; min-height:44px; padding:0; border:3px solid #b00000; border-radius:50%; background:white; color:#b00000; cursor:pointer; pointer-events:auto; touch-action:manipulation; }
+.report-navigation-arrow--previous { left:max(6px,env(safe-area-inset-left)); }
+.report-navigation-arrow--next { right:max(6px,env(safe-area-inset-right)); }
+.report-navigation-arrow svg { width:100%; height:100%; }
+.report-navigation-arrow:focus-visible { outline:3px solid #245dac; outline-offset:3px; }
+.report-navigation-arrow:disabled { opacity:.55; cursor:wait; }
+@media(max-height:500px) { .report-navigation .report-navigation-arrow { width:46px; height:46px; } }
+@media(orientation:portrait) { .pl-overlay .report-navigation,.dr-overlay .report-navigation,.dcr-overlay .report-navigation,.tar-overlay .report-navigation { display:none; } }
+@media print { .report-navigation { display:none !important; } }
 .chat-main-task-association-shortcut { margin-top:462px; cursor:pointer; background:#618c25; }
 .chat-main-task-association-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-main-order-validation-shortcut img { transform:scale(1.06); mix-blend-mode:normal; }

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"><link rel="stylesheet" href="/src/ui/management-report.css"><link rel="stylesheet" href="/src/ui/provision-report.css"><link rel="stylesheet" href="/src/ui/searchable-filter-selects.css"></head>
+<body><main id="app"><button id="start">Abrir provisões (dados de teste)</button></main><script type="module">
+import {decorateReportNavigation} from '/src/ui/report-navigation.js';
+import {createProvisionReportView} from '/src/ui/provision-report-view.js';
+import {createPaymentLedgerView} from '/src/ui/payment-ledger-view.js';
+import {createManagementReportView} from '/src/ui/management-report-view.js';
+const panels=new Map();
+const go=async action=>{for(const panel of panels.values())panel.close();return panels.get(action)?.open();};
+const data={loadProvisionReportSnapshot:async()=>({provisions:[{id:'1',supplier:'Fornecedor de teste',branch:'004 - EDIFÍCIO XAVANTE',product:'LOCAÇÃO',dueDate:'2026-10-08',status:'PAGAMENTO PREVISTO',total:200}],recurrences:[]}),loadPaymentsSnapshot:async()=>({launches:[{id:'1',supplier:'Fornecedor de teste',branch:'004 - EDIFÍCIO XAVANTE',paymentDate:'2026-10-02',product:'MATERIAL',order:'1',unit:200,quantity:1,freight:0,total:200}]}),loadSnapshot:async()=>({launches:[],productTypes:[]})};
+for(const [action,factory] of [['open-provision-report',createProvisionReportView],['open-payment-ledger',createPaymentLedgerView],['open-management-report',createManagementReportView]])panels.set(action,decorateReportNavigation(factory({document,data}),{action,onNavigate:go}));
+document.querySelector('#start').addEventListener('click',()=>go('open-provision-report'));
+</script></body></html>

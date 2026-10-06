@@ -1,4 +1,5 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
+import { reportNavigationMarkup } from "./report-navigation.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { escapeHtml } from "./escape-html.js";
 import { galleryPairForOption, pairedGalleryMenu } from "./menu-gallery-pairs.js";
@@ -1932,6 +1933,7 @@ function pendingProvisionsMarkup(
   }
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="dismiss-pending-provisions" data-pending-provisions-dialog>
     <div class="chat-confirmation chat-pending-provisions chat-pending-provisions--payments" role="dialog" aria-modal="true" aria-labelledby="pending-provisions-title">
+      ${reportNavigationMarkup('open-pending-provisions')}
       <div class="chat-date-picker__header chat-pending-provisions__header">
         <button class="chat-date-picker__close" type="button" data-action="dismiss-pending-provisions" data-immediate-action="true" aria-label="Fechar avisos de provisões pendentes" title="Fechar avisos">×</button>
         <button class="chat-pending-provisions__settings" type="button" data-action="close-pending-provisions" data-immediate-action="true" aria-label="Configurar lembrete das provisões" title="Configurar quando lembrar novamente">⚙️</button>
@@ -2460,6 +2462,7 @@ export function commandFromTarget(target) {
   if (actionTarget.disabled || actionTarget.closest?.('[aria-disabled="true"]')) return null;
   return {
     type: actionTarget.dataset.action,
+    ...(actionTarget.dataset.action === 'navigate-mascot-report' ? { from: actionTarget.dataset.from, direction: actionTarget.dataset.direction } : {}),
     ...(actionTarget.dataset.replyId ? { replyId: actionTarget.dataset.replyId } : {}),
     ...(actionTarget.dataset.label ? { label: actionTarget.dataset.label } : {}),
     ...(actionTarget.dataset.fileId ? { fileId: actionTarget.dataset.fileId } : {}),
