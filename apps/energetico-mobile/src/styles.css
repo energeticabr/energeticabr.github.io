@@ -529,6 +529,8 @@ button { touch-action: manipulation; }
 .chat-main-management-shortcut { margin-top:180px; }
 .chat-main-management-shortcut img { transform:scale(1.25); }
 .chat-main-order-validation-shortcut { margin-top:236px; }
+.chat-main-quotation-shortcut { margin-top:292px; cursor:pointer; }
+.chat-main-quotation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-main-order-validation-shortcut img { transform:scale(1.06); mix-blend-mode:normal; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {

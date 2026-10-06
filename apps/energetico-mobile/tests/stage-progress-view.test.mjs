@@ -23,7 +23,7 @@ test('third right HOME mascot follows attendance and dispatches its own local re
  const root=dom.window.document.querySelector('#app'),shortcut=root.querySelector('[data-action=open-stage-progress]');
  assert.ok(shortcut);assert.equal(shortcut.previousElementSibling.dataset.action,'open-attendance-summary');
  assert.equal(shortcut.closest('.chat-bubble'),null);shortcut.querySelector('img').click();assert.equal(calls,1);
- assert.equal(root.querySelectorAll('.chat-main-payment-ledger-shortcut').length,4);
+ assert.deepEqual([...root.querySelectorAll('.chat-main-payment-ledger-shortcut')].map(node=>node.dataset.action).filter(action=>action!=='open-quotation-report'),['open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report']);
  view.render({...state,activeText:{id:'busy'}});assert.equal(root.querySelector('[data-action=open-stage-progress]').disabled,true);
  assert.equal(new JSDOM(renderChatMarkup({...state,activeFlow:'flow'})).window.document.querySelector('[data-action=open-stage-progress]'),null);
 });

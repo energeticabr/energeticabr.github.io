@@ -1,28 +1,128 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn, execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve, dirname, basename } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
-const run = promisify(execFile);
-const frameWidths = new Map();
-
-// Windows browser frame widths vary with Chrome/DPI. Calibrate innerWidth;
-// callers still assert the exact viewport and every content-overflow limit.
+// Use an isolated test browser, an exact viewport, and the fixture's readiness
+// marker. A fixed virtual-time budget can capture an unfinished module/image load.
 export async function runBrowserLayout(browser, { width, height, url, maxBuffer = 2_000_000 }) {
-  let frameWidth = frameWidths.get(browser) ?? (process.platform === "win32" ? 26 : 0);
-  let result;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    result = await run(browser, [
-      "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox", "--disable-dev-shm-usage",
-      `--window-size=${width + frameWidth},${height}`, "--virtual-time-budget=3000", "--dump-dom", url,
-    ], { timeout: 30_000, maxBuffer });
-    const match = /data-layout="([^"]+)"/.exec(result.stdout);
-    if (!match) return result;
-    const measured = JSON.parse(match[1].replaceAll("&quot;", '"').replaceAll("&amp;", "&")).viewport;
-    if (measured === width) {
-      frameWidths.set(browser, frameWidth);
-      return result;
+  const temporaryRoot = resolve(tmpdir());
+  const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
+  const pending = new Map();
+  let child, socket, sequence = 0, sessionId, onLoaded, spawnError;
+  try {
+    child = spawn(browser, [
+      "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox",
+      "--disable-dev-shm-usage", "--remote-debugging-port=0",
+      `--user-data-dir=${profile}`, "about:blank",
+    ], { stdio: "ignore", windowsHide: true });
+    child.on("error", error => { spawnError = error; });
+    let endpoint;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (spawnError) throw spawnError;
+      try {
+        const [port, path] = (await readFile(join(profile, "DevToolsActivePort"), "utf8")).trim().split(/\r?\n/);
+        endpoint = `ws://127.0.0.1:${port}${path}`;
+        break;
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        if (child.exitCode !== null) throw new Error("O navegador de testes encerrou antes de iniciar.");
+        await delay(100);
+      }
     }
-    if (!Number.isFinite(measured) || Math.abs(measured - width) > 64) return result;
-    frameWidth += width - measured;
+    if (!endpoint) throw new Error("O navegador de testes não iniciou.");
+    socket = new WebSocket(endpoint);
+    await new Promise((done, fail) => {
+      const timer = setTimeout(() => fail(new Error("Conexão com o navegador de testes expirou.")), 30_000);
+      socket.addEventListener("open", () => { clearTimeout(timer); done(); }, { once: true });
+      socket.addEventListener("error", error => { clearTimeout(timer); fail(error); }, { once: true });
+    });
+    socket.addEventListener("message", event => {
+      const reply = JSON.parse(event.data);
+      if (reply.method) {
+        if (reply.method === "Page.loadEventFired" && reply.sessionId === sessionId) onLoaded?.();
+        return;
+      }
+      const request = pending.get(reply.id);
+      if (!request) return;
+      pending.delete(reply.id);
+      clearTimeout(request.timer);
+      reply.error ? request.fail(new Error(reply.error.message)) : request.done(reply.result);
+    });
+    const send = (method, params = {}, targetSession) => new Promise((done, fail) => {
+      const id = ++sequence;
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        fail(new Error(`${method}: medição não concluída.`));
+      }, 35_000);
+      pending.set(id, { done, fail, timer });
+      socket.send(JSON.stringify({ id, method, params, sessionId: targetSession }));
+    });
+    const { targetId } = await send("Target.createTarget", { url: "about:blank" });
+    ({ sessionId } = await send("Target.attachToTarget", { targetId, flatten: true }));
+    await send("Page.enable", {}, sessionId);
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
+    let loadTimer;
+    const loaded = new Promise((done, fail) => {
+      onLoaded = () => { clearTimeout(loadTimer); done(); };
+      loadTimer = setTimeout(() => fail(new Error("A página de testes não terminou de carregar.")), 30_000);
+    });
+    try {
+      await Promise.all([send("Page.navigate", { url }, sessionId), loaded]);
+    } finally {
+      clearTimeout(loadTimer);
+      onLoaded = undefined;
+    }
+    const result = await send("Runtime.evaluate", {
+      expression: `new Promise((resolve, reject) => {
+        let observer, timer;
+        const read = () => {
+          if (!document.documentElement.dataset.layout) return;
+          observer?.disconnect();
+          clearTimeout(timer);
+          resolve(document.documentElement.outerHTML);
+        };
+        observer = new MutationObserver(read);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-layout'] });
+        timer = setTimeout(() => {
+          observer.disconnect();
+          reject(new Error('A fixture não disponibilizou a medição de layout.'));
+        }, 30000);
+        read();
+      })`,
+      returnByValue: true,
+      awaitPromise: true,
+    }, sessionId);
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    if (typeof result.result?.value !== "string") throw new Error("Medição de layout inválida.");
+    const stdout = "<!doctype html>" + result.result.value;
+    if (Buffer.byteLength(stdout) > maxBuffer) throw new RangeError("A medição de layout excedeu o limite de saída.");
+    return { stdout, stderr: "" };
+  } finally {
+    for (const request of pending.values()) clearTimeout(request.timer);
+    socket?.close();
+    if (child && !spawnError && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise(done => child.once("exit", () => done(true)));
+      if (process.platform === "win32") {
+        // Chrome owns child processes: terminate only this uniquely spawned tree.
+        if (!Number.isSafeInteger(child.pid) || child.pid <= 0) throw new Error("PID do navegador de testes inválido.");
+        await new Promise(done => execFile("taskkill", ["/PID", String(child.pid), "/T", "/F"],
+          { windowsHide: true, timeout: 5000 }, () => done()));
+      } else {
+        child.kill();
+      }
+      let stopped = await Promise.race([exited, delay(3000, false)]);
+      if (!stopped) {
+        child.kill("SIGKILL");
+        stopped = await Promise.race([exited, delay(3000, false)]);
+      }
+      if (!stopped) throw new Error("O navegador de testes não encerrou; limpeza não concluída.");
+    }
+    // Remove only the exact profile uniquely created above, never a shared root.
+    if (dirname(resolve(profile)) !== temporaryRoot || !basename(profile).startsWith("energetico-layout-")) {
+      throw new Error("Perfil temporário fora do diretório autorizado.");
+    }
+    await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
   }
-  return result;
 }

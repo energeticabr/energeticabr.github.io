@@ -147,6 +147,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_commercial_milestones",
   "action_commercial_documents",
   "action_sac_pathologies",
+  "action_quotation_report",
   "action_cargos_table",
   "provision-report",
   "order-validation-report",

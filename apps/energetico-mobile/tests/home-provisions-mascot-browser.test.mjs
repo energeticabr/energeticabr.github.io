@@ -55,7 +55,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.equal(layout.transcriptOverflow,false,'área rolável sem overflow lateral');
       assert.ok(layout.image&&layout.i.x>=layout.m.x&&layout.i.right<=layout.m.right&&layout.i.bottom<=layout.m.bottom);
       const shortcuts=await evaluate(`(()=>{const buttons=[...document.querySelectorAll('.chat-main-provisions-shortcut,.chat-main-payment-ledger-shortcut')];return buttons.map(b=>{const r=b.getBoundingClientRect();return {action:b.dataset.action,y:r.y,bottom:r.bottom,image:b.querySelector('img').naturalWidth>0};});})()`);
-      assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report']);
+      assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report']);
       assert.ok(shortcuts.every((s,i)=>s.image&&(!i||s.y>=shortcuts[i-1].bottom+4)),JSON.stringify(shortcuts));
       const reportLayout=await evaluate(`(()=>{const r=document.querySelector('[data-action=open-payment-ledger]'),m=document.querySelector('.chat-main-provisions-shortcut'),b=document.querySelector('.chat-message--external-provisions .chat-bubble');if(!r)return null;const rr=r.getBoundingClientRect(),mr=m.getBoundingClientRect(),br=b.getBoundingClientRect(),i=r.querySelector('img');return {x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height,mascotBottom:mr.bottom,cardLeft:br.x,external:!b.contains(r),image:i.naturalWidth>0,fill:getComputedStyle(r).backgroundColor};})()`);
       assert.ok(reportLayout, 'novo relatório acessível na tela inicial');
@@ -247,6 +247,19 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.ok(documentsShortcut.x>=documentsShortcut.cardRight+4&&documentsShortcut.right<=width&&documentsShortcut.image&&documentsShortcut.y>=documentsShortcut.previousBottom+4&&Math.abs(documentsShortcut.x-documentsShortcut.previousX)<1,JSON.stringify(documentsShortcut));
       const pathologyShortcut=await evaluate(`(()=>{const m=document.querySelector('.chat-main-sac-pathologies-shortcut'),a=document.querySelector('.chat-main-commercial-documents-shortcut'),b=document.querySelector('.chat-message--external-cargos .chat-bubble');const r=m.getBoundingClientRect(),q=a.getBoundingClientRect(),s=b.getBoundingClientRect();return {right:r.right,x:r.x,y:r.y,previousBottom:q.bottom,previousX:q.x,cardRight:s.right,image:m.querySelector('img').naturalWidth>0};})()`);
       assert.ok(pathologyShortcut.x>=pathologyShortcut.cardRight+4&&pathologyShortcut.right<=width&&pathologyShortcut.image&&pathologyShortcut.y>=pathologyShortcut.previousBottom+4&&Math.abs(pathologyShortcut.x-pathologyShortcut.previousX)<1,JSON.stringify(pathologyShortcut));
+      await evaluate(`document.querySelector('[data-action=open-quotation-report]').click()`);
+      if(width<844){
+        assert.equal(await evaluate('window.quotationLoads'),0,'portrait quotes must not fetch');
+        assert.equal(await evaluate(`document.querySelector('.qr-orientation').hidden`),false);
+        await send('Emulation.setDeviceMetricsOverride',width===320?{width:568,height:320,deviceScaleFactor:1,mobile:false}:{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
+      }
+      let quotesReady=false;for(let n=0;n<80&&!quotesReady;n++){quotesReady=await evaluate(`document.querySelectorAll('.qr-budgets').length===2`);if(!quotesReady)await delay(100);}
+      assert.ok(quotesReady,'new sixth-left shortcut loads quotation report');
+      const quoteFit=await evaluate(`(()=>{const p=document.querySelector('.qr-dialog'),t=document.querySelectorAll('.qr-budgets')[1],r=p.getBoundingClientRect(),last=t.querySelector('th:last-child').getBoundingClientRect(),c=document.querySelector('.qr-content');return {x:r.x,right:r.right,top:r.top,bottom:r.bottom,height:innerHeight,last:last.right,columns:t.querySelectorAll('thead th').length,groups:t.querySelectorAll('td[rowspan="2"]').length,overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(t).fontSize)};})()`);
+      assert.ok(quoteFit.top===0&&quoteFit.bottom===quoteFit.height&&!quoteFit.overflow&&quoteFit.last<=quoteFit.right&&quoteFit.font>=6,JSON.stringify(quoteFit));assert.equal(quoteFit.columns,9);assert.equal(quoteFit.groups,3);
+      assert.equal(await evaluate(`document.querySelector('.qr-dialog [data-metric=pending] strong').textContent`),'1');
+      await evaluate(`document.querySelector('.qr-overlay').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+      await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
       const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
       assert.ok(cargosFit.top===0&&cargosFit.bottom===844&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);

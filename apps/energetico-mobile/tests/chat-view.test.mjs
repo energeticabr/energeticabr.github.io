@@ -82,7 +82,9 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   const validationShortcut=root.querySelector('[data-action="open-order-validation-report"]');
   assert.ok(validationShortcut,'validação de notas deve ser o quinto mascote');
   assert.equal(managementShortcut.nextElementSibling, validationShortcut);
-  assert.equal(validationShortcut.nextElementSibling, bubble);
+  const quotationShortcut=root.querySelector('[data-action="open-quotation-report"]');
+  assert.equal(validationShortcut.nextElementSibling, quotationShortcut);
+  assert.equal(quotationShortcut.nextElementSibling, bubble);
   assert.equal(bubble.contains(validationShortcut),false);
   assert.notEqual(validationShortcut.querySelector('img').src,paymentShortcut.querySelector('img').src);
   let validationOpened=0;view.on('open-order-validation-report',()=>validationOpened++);
