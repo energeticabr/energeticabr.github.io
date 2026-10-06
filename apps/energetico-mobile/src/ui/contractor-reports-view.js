@@ -138,7 +138,7 @@ export function createContractorReportsView({ document: doc = globalThis.documen
   content.append(hub, report); if (presenceReport) content.append(presenceReport.element);
   for (const view of uniqueExtraViews) content.append(view.element);
   doc.body.append(root);
-  const pickers = bindSearchableFilterSelects(filterGrid);
+  const pickers = bindSearchableFilterSelects(filterGrid, { report: true });
 
   function setNotice(message, retry = false) {
     notice.replaceChildren(); notice.hidden = !message;

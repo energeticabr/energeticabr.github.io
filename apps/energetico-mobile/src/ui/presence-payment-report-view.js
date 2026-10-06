@@ -93,7 +93,7 @@ export function createPresencePaymentReportView({ document: doc = globalThis.doc
         : values.includes(current) ? current : "";
       if (name === "status") defaultStatusApplied = true;
     }
-    searchableFilters = bindSearchableFilterSelects(filters);
+    searchableFilters = bindSearchableFilterSelects(filters, { report: true });
   }
 
   function renderPresence(row) {

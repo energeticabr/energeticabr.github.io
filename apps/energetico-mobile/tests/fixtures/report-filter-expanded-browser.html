@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verificação dos filtros dos relatórios</title>
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/payment-ledger.css">
+<link rel="stylesheet" href="../../src/ui/management-report.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<main id="app"><h1>Verificação dos filtros dos relatórios</h1></main>
+<script type="module">
+import {createManagementReportView} from '../../src/ui/management-report-view.js';
+const products=['13º SALÁRIO','ABRAÇADEIRA METÁLICA 1 POL','ACABAMENTO REGISTRO','AREIA LAVADA','ARGAMASSA AC III','BETONEIRA','BLOCO CERÂMICO','BRITA','CABO ELÉTRICO','CIMENTO','CONCRETO USINADO','DISJUNTOR','ESCORAMENTO','FERRO','IMPERMEABILIZANTE','LOCAÇÃO CONTAINER','MADEIRA','MANGOTE','PISO','PORTA','REJUNTE','TELHA','TINTA','TUBO PVC','VERGALHÃO'];
+const launches=products.map((product,index)=>({id:String(index+1),date:'2026-10-02',paymentDate:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:'Fornecedor de demonstração',product,stage:'ALVENARIA E ESTRUTURAS',account:'CAIXA',disbursement:'SIM',unit:10,quantity:2,freight:5,total:25}));
+const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,productTypes:[]})},now:()=>new Date('2026-10-05T12:00:00Z')});
+await view.open();
+</script>
+</html>

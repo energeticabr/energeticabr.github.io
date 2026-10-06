@@ -98,7 +98,7 @@ export function createSpendingReportsView({ document: doc = globalThis.document,
         ? unique.find(value => value.toLocaleUpperCase("pt-BR") === "PAGAMENTO PREVISTO") || ""
         : reportNumber === 10 && name === "status" ? unique.find(value => value.toLocaleUpperCase("pt-BR") === "ATIVO") || "" : "";
     }
-    searchableFilters = bindSearchableFilterSelects(filters);
+    searchableFilters = bindSearchableFilterSelects(filters, { report: true });
   }
 
   function category(titleText, groups, percentageLabel, variant) {

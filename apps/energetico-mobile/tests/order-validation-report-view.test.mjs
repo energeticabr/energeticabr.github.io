@@ -33,7 +33,7 @@ test('fifth report shows six filtered summary cards and ID-selected full detail 
   assert.equal(root.querySelectorAll('.ov-logo img').length,1);
   assert.equal(root.querySelector('.pl-close'),null);
   root.querySelector('[aria-label="Abrir opções de FORNECEDOR"]').click();
-  assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'below');
+  assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'expanded');
   assert.equal(root.querySelectorAll('[data-action=baixa]').length,0);
 });
 test('report waits for landscape and restores app focus/overflow on outside click',async t=>{

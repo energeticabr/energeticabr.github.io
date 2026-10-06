@@ -58,20 +58,21 @@ function setup(t, spec) {
 function field(root, name) {
   const select = root.querySelector(`select[name="${name}"]`);
   const picker = select?.nextElementSibling;
-  const input = picker?.querySelector('input.sfs-trigger.sfs-search');
-  assert.ok(input, `${name} supports typing in the original field`);
+  const input = picker?.querySelector('.sfs-popup input.sfs-search');
+  assert.ok(input, `${name} supports explicit Localizar itens search`);
   assert.equal(select.hidden, true);
-  assert.equal(picker.querySelector('.sfs-popup input'), null);
+  assert.equal(picker.querySelector('.sfs-trigger').readOnly, true);
   return { select, picker, input, popup: picker.querySelector('.sfs-popup') };
 }
 
 function type(dom, input, value) {
+  input.closest('.sfs').querySelector('.sfs-trigger').click();
   input.focus(); input.value = value;
   input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
 }
 
 for (const spec of specs) {
-  test(`${spec.name}: inline option search leaves report values unchanged until a real choice`, async t => {
+  test(`${spec.name}: explicit option search leaves report values unchanged until a real choice`, async t => {
     const { dom, root, open } = setup(t, spec);
     await open();
     for (const select of root.querySelectorAll(`${spec.filters} select`)) field(root, select.name);
@@ -96,7 +97,7 @@ for (const spec of specs) {
     assert.equal(spec.count(root), 1);
     assert.equal(popup.hidden, true);
     select.value = 'Beta'; select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    assert.equal(input.value, 'Beta', 'native changes synchronize the visible selection');
+    assert.equal(picker.querySelector('.sfs-trigger').value, 'Beta', 'native changes synchronize the visible selection');
     assert.equal(spec.count(root), 1);
     assert.equal(input.name, '', 'option queries are never submitted as report filters');
   });
@@ -134,7 +135,7 @@ for (const spec of specs) {
     assert.equal(current.popup.hidden, true, 'view close closes the picker synchronously');
     await ctx.open();
     const reopened = field(ctx.root, 'branch');
-    assert.equal(reopened.input.value, reopened.select.selectedOptions[0].label);
+    assert.equal(reopened.picker.querySelector('.sfs-trigger').value, reopened.select.selectedOptions[0].label);
     assert.equal(ctx.root.querySelectorAll('.sfs').length, ctx.root.querySelectorAll('select').length);
     type(ctx.dom, reopened.input, 'Gama');
     ctx.view.destroy();
