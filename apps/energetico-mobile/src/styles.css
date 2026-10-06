@@ -1317,3 +1317,6 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-commercial-receipts-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:180px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-receipts-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-receipts-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+.chat-main-commercial-milestones-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:236px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-commercial-milestones-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
+.chat-main-commercial-milestones-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
