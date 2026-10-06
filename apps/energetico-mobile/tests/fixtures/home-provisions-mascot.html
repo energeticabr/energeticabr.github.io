@@ -15,6 +15,8 @@ import '/src/ui/stage-progress.css';
 import { createStageProgressReportView } from '/src/ui/stage-progress-view.js';
 import '/src/ui/commercial-receipts.css';
 import { createCommercialReceiptsReportView } from '/src/ui/commercial-receipts-view.js';
+import '/src/ui/commercial-milestones.css';
+import { createCommercialMilestonesReportView } from '/src/ui/commercial-milestones-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -58,6 +60,12 @@ const commercial=createCommercialReceiptsReportView({document,now:()=>new Date('
  receipts:Array.from({length:36},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+Math.floor(i/3)),contractId:String(10+Math.floor(i/3)),buyer:`Comprador ${Math.floor(i/3)+1}`,amount:i%3===0?500:i%3===1?100:400,paidDate:i%3===2?'':'2026-10-01',dueDate:i%3===2?'2026-10-04':'2026-10-01',directBroker:i%3===1?'SIM':'NÃO',description:i%3===2?'Parcela':i%3===1?'Comissão':'Entrada',paymentMethod:'PIX',account:'CAIXA',status:i%3===2?'PAGAMENTO PREVISTO':'PAGAMENTO EFETUADO'}))
  };}}});
 view.on('open-commercial-receipts',()=>void commercial.open());
+const milestones=createCommercialMilestonesReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
+ complete:true,
+ properties:Array.from({length:12},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+i),visualStatus:'ATIVO'})),
+ milestones:Array.from({length:24},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+Math.floor(i/2)),contractId:String(10+Math.floor(i/2)),buyer:`Comprador ${Math.floor(i/2)+1}`,type:i%2?'PAGAMENTO CORRETAGEM E REGULARIZAÇÃO FISCAL':'ASSINATURA CONTRATO CAIXA',description:i%2?'Conferir documentação do imóvel':'Contrato assinado',startDate:i%2?'2026-05-04':'2026-01-01',dueDate:i===1?'2026-10-04':i%2?'':'2026-01-30',status:i%3?'ATIVIDADE INICIADA':'ATIVIDADE FINALIZADA'}))
+ };}}});
+view.on('open-commercial-milestones',()=>void milestones.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});
