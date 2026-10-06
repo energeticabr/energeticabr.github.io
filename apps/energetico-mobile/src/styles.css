@@ -535,6 +535,8 @@ button { touch-action: manipulation; }
 .chat-main-depreciation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-main-document-control-shortcut { margin-top:406px; cursor:pointer; background:#89a0cf; }
 .chat-main-document-control-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
+.chat-main-task-association-shortcut { margin-top:462px; cursor:pointer; background:#618c25; }
+.chat-main-task-association-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-main-order-validation-shortcut img { transform:scale(1.06); mix-blend-mode:normal; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {

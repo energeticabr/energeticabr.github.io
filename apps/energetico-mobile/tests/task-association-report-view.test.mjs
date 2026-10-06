@@ -1,0 +1,61 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {createChatView,renderChatMarkup} from '../src/ui/chat-view.js';
+const {createTaskAssociationReportView}=await import('../src/ui/task-association-report-view.js').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
+const row=(id,extra={})=>({id,createdDate:'2026-10-04',dueDate:'2026-10-05',description:'Conferir documentação',association:'DEMANDAS PESSOAIS',status:'ATIVIDADE CRIADA',priority:'ATIVIDADE EMERGENCIAL',difficulty:'ALTA DIFICULDADE',supplier:'Bernardo',...extra});
+const snapshot={tasks:[row(1),row(2,{priority:'ATIVIDADE PRIORITÁRIA',dueDate:'2026-10-06',status:'EM ATENDIMENTO'}),row(3,{association:'ENGENHARIA',status:'CONCLUÍDO'}),row(4,{association:'ENGENHARIA',priority:'NÃO PRIORITÁRIA',dueDate:'',supplier:'Edgar'})]};
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const home={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
+function setup(t,load=async()=>snapshot,vertical=false){
+ assert.equal(typeof createTaskAssociationReportView,'function','new report factory must exist');const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let portrait=vertical;
+ dom.window.matchMedia=()=>({get matches(){return portrait;}});const style=dom.window.document.createElement('style');style.textContent=readFileSync(new URL('../src/ui/task-association-report.css',import.meta.url),'utf8');dom.window.document.head.append(style);
+ const view=createTaskAssociationReportView({document:dom.window.document,data:{loadSnapshot:load},now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{view.destroy();dom.window.close();});
+ return {view,root:view.element,dom,rotate(value){portrait=value;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
+}
+test('ninth left HOME mascot is after document control and clicking its provided image opens its own action',t=>{
+ const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
+ let calls=0;view.on('open-task-association-report',()=>calls++);view.render(home);const button=dom.window.document.querySelector('[data-action=open-task-association-report]');assert.ok(button);assert.equal(button.previousElementSibling.dataset.action,'open-document-control-report');assert.equal(button.nextElementSibling.className,'chat-bubble');assert.match(button.querySelector('img').src,/task-association\.png$/);button.querySelector('img').click();assert.equal(calls,1);
+ view.render({...home,activeText:{id:'busy'}});assert.equal(dom.window.document.querySelector('[data-action=open-task-association-report]').disabled,true);assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'busy'}),/data-action="open-task-association-report"/);
+});
+test('source grouping and priority colors render with three unfiltered metrics and five table columns',async t=>{
+ const {view,root,dom}=setup(t);await view.open();assert.match(root.querySelector('img').src,/logo-energetica-oficial/);assert.equal(root.querySelectorAll('.tar-filter').length,7);assert.equal(root.querySelectorAll('.tar-card').length,3);
+ for(const [key,value] of Object.entries({pending:3,completed:1,total:4}))assert.equal(root.querySelector(`[data-metric=${key}] strong`).textContent,String(value));
+ assert.equal(root.querySelectorAll('.tar-group').length,2);assert.equal(root.querySelectorAll('tbody tr[data-task-id]').length,3);assert.equal(root.querySelectorAll('thead')[0].querySelectorAll('th').length,5);assert.match(root.querySelector('.tar-association').textContent,/DEMANDAS PESSOAIS.*TOTAL: 2.*PENDENTES: 2/s);
+ assert.equal(dom.window.getComputedStyle(root.querySelector('[data-task-id="1"]')).backgroundColor,'rgb(255, 205, 210)');assert.equal(dom.window.getComputedStyle(root.querySelector('[data-task-id="2"]')).backgroundColor,'rgb(255, 224, 178)');assert.match(root.querySelector('[data-task-id="1"]').textContent,/HÁ 2 DIAS.*1 DIA VENCIDA/s);assert.match(root.querySelector('[data-task-id="2"]').textContent,/VENCE HOJE/);assert.match(root.querySelector('[data-task-id="4"]').textContent,/SEM DATA/);assert.equal(root.querySelector('[aria-label*="Fechar"]'),null);
+});
+test('description ID supplier difficulty priority and multi-status filters compose without changing full-base counters',async t=>{
+ const {view,root,dom}=setup(t);await view.open();const description=root.querySelector('[name=description]');description.value='INEXISTENTE';description.dispatchEvent(new dom.window.Event('input',{bubbles:true}));assert.equal(root.querySelectorAll('.tar-table').length,0);assert.equal(root.querySelector('[data-metric=total] strong').textContent,'4');
+ description.value='conferir';description.dispatchEvent(new dom.window.Event('input',{bubbles:true}));const supplier=root.querySelector('select[name=supplier]');supplier.value='Edgar';supplier.dispatchEvent(new dom.window.Event('change',{bubbles:true}));assert.equal(root.querySelector('[data-task-id]').dataset.taskId,'4');assert.equal(root.querySelectorAll('[data-task-id]').length,1);supplier.value='';supplier.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+ const status=root.querySelector('select[name=status]');for(const option of status.options)option.selected=option.value==='CONCLUÍDO';status.dispatchEvent(new dom.window.Event('change',{bubbles:true}));assert.equal(root.querySelector('[data-task-id]').dataset.taskId,'3');assert.equal(dom.window.getComputedStyle(root.querySelector('[data-task-id="3"]')).backgroundColor,'rgb(200, 230, 201)');assert.match(root.querySelector('[data-task-id="3"]').textContent,/✅ CONCLUÍDO/);assert.equal(root.querySelector('[data-metric=pending] strong').textContent,'3');
+ root.querySelector('[aria-label="Abrir opções de STATUS"]').click();assert.equal(root.querySelector('[role=listbox][aria-label=STATUS]').getAttribute('aria-multiselectable'),'true');assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'below');
+});
+test('date filter uses source ISO day with dd/mm/yyyy display and clears without changing totals',async t=>{
+ const {view,root,dom}=setup(t);await view.open();const input=root.querySelector('input[name=dueDate]');input.value='2026-10-06';input.dispatchEvent(new dom.window.Event('change',{bubbles:true}));assert.equal(root.querySelector('.tar-date-display').value,'06/10/2026');assert.equal(root.querySelector('[data-task-id]').dataset.taskId,'2');root.querySelector('[aria-label="Limpar data fatal"]').click();assert.equal(root.querySelectorAll('[data-task-id]').length,3);assert.equal(root.querySelector('.tar-date-display').value,'');assert.equal(root.querySelector('[data-metric=total] strong').textContent,'4');
+});
+
+test('blank priority is not fabricated and the visible date control opens its native calendar',async t=>{
+ const {view,root,dom}=setup(t,async()=>({tasks:[row(1,{priority:''})]}));await view.open();assert.equal(root.querySelector('.tar-priority').textContent,'—');
+ const native=root.querySelector('input[name=dueDate]');let opened=0;native.showPicker=()=>opened++;
+ root.querySelector('.tar-date-display').click();root.querySelector('.tar-calendar').click();root.querySelector('.tar-date-display').dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));assert.equal(opened,3);
+});
+
+test('arriving data restores focus to a rebuilt selector so Escape still closes the modal',async t=>{
+ let finish;const {view,root,dom}=setup(t,()=>new Promise(resolve=>finish=resolve));const opening=view.open();const trigger=root.querySelector('select[name=supplier]').nextElementSibling.querySelector('.sfs-trigger');trigger.focus();assert.equal(dom.window.document.activeElement,trigger);finish(snapshot);await opening;
+ const replacement=root.querySelector('select[name=supplier]').nextElementSibling.querySelector('.sfs-trigger');assert.equal(dom.window.document.activeElement,replacement);assert.equal(root.contains(dom.window.document.activeElement),true);dom.window.document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(root.hidden,true);assert.equal(dom.window.document.getElementById('app').inert,false);
+});
+test('portrait avoids reads rotating loads and outside or Escape restore the original app and focus',async t=>{
+ let reads=0;const {view,root,dom,rotate}=setup(t,async()=>{reads++;return snapshot;},true);const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();assert.equal(reads,0);assert.equal(root.querySelector('.tar-orientation').hidden,false);rotate(false);await tick();assert.equal(reads,1);root.querySelector('table').click();assert.equal(root.hidden,false);root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);assert.equal(dom.window.document.getElementById('app').inert,false);await view.open();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(root.hidden,true);
+});
+test('refresh removes stale totals failure offers retry and closed or rotated reads never paint stale tasks',async t=>{
+ let reads=0;const {view,root}=setup(t,async()=>{if(reads++===1)throw Error('network');return snapshot;});await view.open();root.querySelector('.tar-refresh').click();assert.equal(root.querySelectorAll('.tar-card').length,0);await tick();assert.match(root.textContent,/Não foi possível/);root.querySelector('.tar-retry').click();await tick();assert.equal(root.querySelectorAll('.tar-card').length,3);
+ let finish,signal;const late=setup(t,options=>{signal=options.signal;return new Promise(resolve=>finish=resolve);});const opening=late.view.open();late.rotate(true);assert.equal(signal.aborted,true);finish(snapshot);await opening;assert.equal(late.root.querySelectorAll('.tar-card').length,0);late.rotate(false);await tick();late.view.close();assert.equal(signal.aborted,true);finish(snapshot);await tick();assert.equal(late.root.hidden,true);assert.equal(late.root.querySelector('table'),null);
+});
+test('empty base renders zero counters while task text never becomes executable HTML',async t=>{
+ const empty=setup(t,async()=>({tasks:[]}));await empty.view.open();assert.equal(empty.root.querySelectorAll('.tar-card').length,3);assert.equal(empty.root.querySelector('table'),null);assert.match(empty.root.textContent,/Nenhuma atividade/);
+ const safe=setup(t,async()=>({tasks:[row(1,{description:'<script>alert(1)</script>',association:'<img src=x onerror=alert(1)>'})]}));await safe.view.open();assert.match(safe.root.textContent,/<script>/);assert.equal(safe.root.querySelectorAll('img,script').length,1);
+});
+test('closing after a HOME rerender focuses the current ninth mascot instead of the disconnected original',async t=>{
+ const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;dom.window.matchMedia=()=>({matches:false});assert.equal(typeof createTaskAssociationReportView,'function');const chat=createChatView(dom.window.document.querySelector('#app'));const report=createTaskAssociationReportView({document:dom.window.document,data:{async loadSnapshot(){return snapshot;}},now:()=>new Date('2026-10-06T12:00:00Z')});t.after(()=>{report.destroy();chat.destroy();dom.window.close();});chat.render(home);const old=dom.window.document.querySelector('[data-action=open-task-association-report]');old.focus();await report.open();chat.render({...home,messages:[{...home.messages[0],options:[{id:'group_pending',label:'PENDÊNCIAS (1)'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]});const current=dom.window.document.querySelector('[data-action=open-task-association-report]');assert.notEqual(current,old);assert.equal(old.isConnected,false);report.close();assert.equal(dom.window.document.activeElement,current);
+});
