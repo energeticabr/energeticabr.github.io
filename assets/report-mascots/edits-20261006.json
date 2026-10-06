@@ -1,0 +1,35 @@
+{
+  "tool": "image_gen (built-in)",
+  "date": "2026-10-06",
+  "output_directory": "assets/report-mascots",
+  "output_size": [
+    512,
+    512
+  ],
+  "alpha": true,
+  "operation": "Transparent background extraction and crisp cartoon restoration; preserve character and identifying foreground props. Existing provision-report.png was already high-resolution transparent and was retained.",
+  "targets": [
+    "cargos",
+    "attendance-summary",
+    "stage-progress",
+    "commercial-receipts",
+    "commercial-milestones",
+    "sac-pathologies",
+    "payment-ledger",
+    "management-expenses",
+    "order-validation",
+    "quotations",
+    "depreciation",
+    "document-control",
+    "task-association"
+  ],
+  "prompt_template": "Use case: background-extraction. Edit target: the provided existing Energética report mascot icon named {name}. Produce a clean high-resolution square PNG cutout. Preserve EXACT same yellow lightning-bolt cartoon mascot identity, expression, pose, clothes/colors, held objects and identifying foreground props. Restore sharp clean cartoon outlines from the tiny blurry screenshot; do not redesign or invent a different character. Remove ALL surrounding background: colored rectangular fill, gray/beige/white screenshot border, floor/backdrop/building photography behind the mascot. Keep the foreground report-specific objects (board, plans, money, tools or desk where present) as a coherent recognizable cutout, not the background scenery. Genuinely transparent alpha everywhere outside subject/foreground, not white or checkerboard, no frame or square, no cast shadow/glow. Center complete character and props with 4% transparent safe margin, no cropping of helmet/boots. Intended as a crisp 44px menu icon on its existing solid button color. No new elements or watermark.",
+  "additional_prompts": {
+    "commercial-documents.png": "Use case: background-extraction. Edit target: the provided existing Energética commercial-document mascot icon. Produce a clean high-resolution square PNG cutout of EXACTLY this same yellow lightning-bolt mascot wearing orange helmet, blue gloves and boots beside his commercial checklist easel. Preserve identity, expression, pose, colors, objects and composition. Restore crisp clean cartoon outlines from this small blurry screenshot; do not redesign the character. Remove ALL background, including orange fill, gray outer screenshot border and dark shadows/matte. Entire surrounding background must be genuinely transparent alpha, not white or checkerboard, no frame or square behind the subject, no cast shadow/glow. Center full character AND easel, with 4% transparent safe margin, all boots/helmet/easel visible. Intended for a 44px menu icon on solid orange fill. No extra elements or watermark.",
+    "pending-provisions.png": "Use case: background-extraction. Edit target the supplied existing Energética mascot. Remove only the white background, preserve exact yellow lightning bolt identity, blue Energética helmet, orange reflective vest, blue gloves/boots, same hand on hip pose and white ENERGÉTICA sign. Crisp clean cartoon outlines. Square high resolution transparent PNG, full body and sign centered filling 92% of square, 4% transparent safe margin. Genuinely transparent alpha, no opaque matte, no frame, no shadows or halo, no new objects."
+  },
+  "localization_prompts": {
+    "attendance-summary.png": "Use case: text-localization. Edit target supplied transparent Energética attendance mascot. Preserve exact character, expression, pose, all objects/colors, complete composition and transparent background. ONLY replace English words with Brazilian Portuguese: sheet headline 'RESUMO DE PRESENÇAS'; easel title 'RELATÓRIOS'; checklist words 'USO', 'FATURAMENTO', 'PRESENÇA', 'EFICIÊNCIA'. No English words remain. Crisp sharp lettering and cartoon lines, high resolution square with transparent safe margins. No added background, no frame, no new objects.",
+    "order-validation.png": "Use case: text-localization. Edit target supplied transparent Energética report mascot icon. ONLY replace clipboard Spanish words with Brazilian Portuguese 'VALIDAÇÃO DE NOTAS'. Preserve exact mascot identity, blue helmet/boots/gloves, orange details, pose, checklist, plans, cash and tools, composition and genuine transparency. Square high resolution, sharp clean cartoon outlines and lettering, transparent safe margin, no backgrounds, frames, new elements or shadows."
+  }
+}

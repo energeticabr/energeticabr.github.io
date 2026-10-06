@@ -518,20 +518,19 @@ button { touch-action: manipulation; }
 .chat-message.chat-message--initial-area-menu .chat-bubble { flex: 0 1 min(82%, 640px); width: min(82%, 640px); max-width: 640px; min-width: 0; }
 .chat-message--external-provisions { display: grid; grid-template-columns: 44px minmax(0, 640px); align-items: start; }
 .chat-message.chat-message--external-provisions .chat-bubble { box-sizing: border-box; grid-column: 2; grid-row: 1; width: 100%; }
-.chat-main-provisions-shortcut { box-sizing: border-box; grid-column: 1; grid-row: 1; display: grid; place-items: center; width: 44px; height: 44px; margin-top: 12px; padding: 3px; border: 1px solid #0d3562; border-radius: 12px; background: #103b6b; }
-.chat-main-provisions-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 9px; }
+.chat-main-provisions-shortcut { box-sizing: border-box; grid-column: 1; grid-row: 1; display: grid; place-items: center; width: 44px; height: 44px; margin-top: 12px; padding: 0; border: 0; border-radius: 12px; background: #103b6b; overflow:hidden; }
+.chat-main-provisions-shortcut img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .chat-main-provisions-shortcut:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .chat-main-payment-ledger-shortcut { box-sizing:border-box; grid-column:1; grid-row:1; display:grid; place-items:center; align-self:start; width:44px; height:44px; margin-top:124px; padding:0; border:0; border-radius:12px; background:#000d4b; overflow:hidden; }
-.chat-main-payment-ledger-shortcut img { display:block; width:100%; height:100%; object-fit:cover; transform:scale(1.55); mix-blend-mode:lighten; }
+.chat-main-payment-ledger-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-payment-ledger-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-provision-report-shortcut { margin-top:68px; padding:2px; }
+.chat-main-provision-report-shortcut { margin-top:68px; }
 .chat-main-provision-report-shortcut img { object-fit:contain; transform:none; mix-blend-mode:normal; }
 .chat-main-management-shortcut { margin-top:180px; }
-.chat-main-management-shortcut img { transform:scale(1.25); }
 .chat-main-order-validation-shortcut { margin-top:236px; }
-.chat-main-quotation-shortcut { margin-top:292px; cursor:pointer; }
+.chat-main-quotation-shortcut { margin-top:292px; cursor:pointer; background:#f1f3f5; }
 .chat-main-quotation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-depreciation-shortcut { margin-top:348px; cursor:pointer; }
+.chat-main-depreciation-shortcut { margin-top:348px; cursor:pointer; background:#999999; }
 .chat-main-depreciation-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-main-document-control-shortcut { margin-top:406px; cursor:pointer; background:#89a0cf; }
 .chat-main-document-control-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
@@ -547,7 +546,6 @@ button { touch-action: manipulation; }
 @media print { .report-navigation { display:none !important; } }
 .chat-main-task-association-shortcut { margin-top:462px; cursor:pointer; background:#618c25; }
 .chat-main-task-association-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
-.chat-main-order-validation-shortcut img { transform:scale(1.06); mix-blend-mode:normal; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {
   max-width: min(82%, 640px);
@@ -1344,3 +1342,9 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-sac-pathologies-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-sac-pathologies-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-sac-pathologies-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+/* Clean alpha assets: the button alone paints the fill. Never magnify/crop
+   a screenshot or blend its matte into the mascot's original colors. */
+.chat-message--external-provisions > button,
+.chat-message--external-cargos > button { box-sizing:border-box; padding:0; border:0; }
+.chat-message--external-provisions > button > img,
+.chat-message--external-cargos > button > img { display:block; width:100%; height:100%; object-fit:contain; transform:none; mix-blend-mode:normal; border-radius:0; }
