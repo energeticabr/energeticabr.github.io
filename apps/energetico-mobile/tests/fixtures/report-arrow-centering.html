@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main role="dialog" id="report"></main><script type="module">
+import {reportNavigationMarkup} from '/src/ui/report-navigation.js';
+document.querySelector('#report').innerHTML=reportNavigationMarkup('open-commercial-milestones');
+try {
+ await document.fonts.ready;
+ const arrows=[];
+ for(const button of document.querySelectorAll('.report-navigation-arrow')) {
+  const svg=button.querySelector('svg'),copy=svg.cloneNode(true),size=156;
+  copy.setAttribute('xmlns','http://www.w3.org/2000/svg');copy.setAttribute('width',size);copy.setAttribute('height',size);
+  copy.style.color=getComputedStyle(svg).color;
+  const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml'}));
+  const image=new Image();try {image.src=url;await image.decode();}finally {URL.revokeObjectURL(url);}
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=size;const context=canvas.getContext('2d');context.drawImage(image,0,0,size,size);
+  const rgba=context.getImageData(0,0,size,size).data,mask=[];let x0=size,y0=size,x1=-1,y1=-1;
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++) {
+   const ink=rgba[(y*size+x)*4+3]>=128;mask.push(ink?1:0);
+   if(ink){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
+  }
+  const icon=svg.getBoundingClientRect(),circle=button.getBoundingClientRect(),pathStyle=getComputedStyle(svg.querySelector('path'));
+  arrows.push({direction:button.dataset.reportDirection,mask,bounds:[x0,y0,x1,y1],offsetX:icon.x+(x0+x1+1)/2/size*icon.width-(circle.x+circle.width/2),offsetY:icon.y+(y0+y1+1)/2/size*icon.height-(circle.y+circle.height/2),diameter:circle.width,height:circle.height,border:getComputedStyle(button).borderWidth,stroke:pathStyle.strokeWidth,cap:pathStyle.strokeLinecap,join:pathStyle.strokeLinejoin,color:pathStyle.stroke});
+ }
+ document.documentElement.dataset.layout=JSON.stringify({arrows,size:156});
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>

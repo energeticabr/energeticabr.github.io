@@ -12,8 +12,9 @@ export function getReportNeighbors(action) {
 }
 
 function arrowMarkup(direction) {
- const path=direction==='previous'?'M29 10 L13 26 L29 42':'M13 10 L29 26 L13 42';
- return `<svg viewBox="0 0 52 52" aria-hidden="true" focusable="false"><path d="${path}" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter"/></svg>`;
+ // One centered chevron: next is an exact reflection around the circle center.
+ const reflection=direction==='next'?' transform="translate(52 0) scale(-1 1)"':'';
+ return `<svg viewBox="0 0 52 52" aria-hidden="true" focusable="false"><path d="M34 10 L18 26 L34 42"${reflection} fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter"/></svg>`;
 }
 
 export function reportNavigationMarkup(action) {
