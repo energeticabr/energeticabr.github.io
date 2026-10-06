@@ -110,6 +110,16 @@ async function defaultCommercialMilestonesDataFactory(options) {
   return createCommercialMilestonesData(options);
 }
 
+async function defaultCommercialDocumentsViewFactory(options) {
+  const { createCommercialDocumentsReportView } = await import('./ui/commercial-documents-view.js');
+  return createCommercialDocumentsReportView(options);
+}
+
+async function defaultCommercialDocumentsDataFactory(options) {
+  const { createCommercialDocumentsData } = await import('./chat/commercial-documents-data.js');
+  return createCommercialDocumentsData(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -244,6 +254,8 @@ const COMMERCIAL_RECEIPTS_ID = 'action_commercial_receipts';
 const COMMERCIAL_RECEIPTS_SCOPES = Object.freeze(['Sites.Read.All']);
 const COMMERCIAL_MILESTONES_ID = 'action_commercial_milestones';
 const COMMERCIAL_MILESTONES_SCOPES = Object.freeze(['Sites.Read.All']);
+const COMMERCIAL_DOCUMENTS_ID = 'action_commercial_documents';
+const COMMERCIAL_DOCUMENTS_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -745,6 +757,8 @@ export function createAppController({
   commercialReceiptsDataFactory = defaultCommercialReceiptsDataFactory,
   commercialMilestonesViewFactory = defaultCommercialMilestonesViewFactory,
   commercialMilestonesDataFactory = defaultCommercialMilestonesDataFactory,
+  commercialDocumentsViewFactory = defaultCommercialDocumentsViewFactory,
+  commercialDocumentsDataFactory = defaultCommercialDocumentsDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -818,6 +832,9 @@ export function createAppController({
   let commercialMilestonesReport = null;
   let commercialMilestonesOpening = null;
   let commercialMilestonesSession = null;
+  let commercialDocumentsReport = null;
+  let commercialDocumentsOpening = null;
+  let commercialDocumentsSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -4126,6 +4143,17 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  function disposeCommercialDocumentsReport() {
+    const session = commercialDocumentsSession;
+    const panel = commercialDocumentsReport;
+    commercialDocumentsSession = null;
+    commercialDocumentsOpening = null;
+    commercialDocumentsReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
   function disposePaymentProgrammingGallery() {
     paymentProgrammingGallery?.destroy?.();
     paymentProgrammingGallery = null;
@@ -4157,6 +4185,7 @@ export function createAppController({
       stageProgressReport,
       commercialReceiptsReport,
       commercialMilestonesReport,
+      commercialDocumentsReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -5221,6 +5250,122 @@ export function createAppController({
     return request;
   }
 
+  async function openCommercialDocuments() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (commercialDocumentsOpening) return commercialDocumentsOpening;
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = commercialDocumentsSession || {
+      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
+    };
+    commercialDocumentsSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || commercialDocumentsSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = COMMERCIAL_DOCUMENTS_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          if (!session.authorization) {
+            const authorization = Promise.resolve().then(() => {
+              assertSession();
+              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
+              return auth.authorize(scopes, { resumeAction: COMMERCIAL_DOCUMENTS_ID });
+            });
+            session.authorization = authorization;
+            void authorization.finally(() => {
+              if (session.authorization === authorization) session.authorization = null;
+            }).catch(() => {});
+          }
+          await session.authorization;
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await commercialDocumentsDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    let cancelOpening;
+    const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = commercialDocumentsReport;
+        if (!report) {
+          const panel = await commercialDocumentsViewFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          commercialDocumentsReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && commercialDocumentsSession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir os documentos comerciais.');
+        }
+        if (commercialDocumentsSession === session && !commercialDocumentsReport) disposeCommercialDocumentsReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, openingCancellation]).finally(() => {
+      session.lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (commercialDocumentsOpening === request) commercialDocumentsOpening = null;
+    });
+    commercialDocumentsOpening = request;
+    return request;
+  }
+
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
@@ -6116,6 +6261,7 @@ export function createAppController({
     disposeStageProgressReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -6208,6 +6354,7 @@ export function createAppController({
     disposeStageProgressReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -6866,6 +7013,7 @@ export function createAppController({
       if (command.replyId === STAGE_PROGRESS_ID) return openStageProgress();
       if (command.replyId === COMMERCIAL_RECEIPTS_ID) return openCommercialReceipts();
       if (command.replyId === COMMERCIAL_MILESTONES_ID) return openCommercialMilestones();
+      if (command.replyId === COMMERCIAL_DOCUMENTS_ID) return openCommercialDocuments();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -7101,6 +7249,7 @@ export function createAppController({
     bind('open-stage-progress', openStageProgress);
     bind('open-commercial-receipts', openCommercialReceipts);
     bind('open-commercial-milestones', openCommercialMilestones);
+    bind('open-commercial-documents', openCommercialDocuments);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -7187,6 +7336,7 @@ export function createAppController({
       if (stageProgressSession && (flowBusy() || store.getState().activeFlow)) disposeStageProgressReport();
       if (commercialReceiptsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialReceiptsReport();
       if (commercialMilestonesSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialMilestonesReport();
+      if (commercialDocumentsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialDocumentsReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -7255,6 +7405,7 @@ export function createAppController({
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();
+    else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -7276,6 +7427,7 @@ export function createAppController({
     disposeStageProgressReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();

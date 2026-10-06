@@ -1,0 +1,27 @@
+.cd-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.cd-filters { grid-template-columns:6fr 19fr 20fr 21fr 19fr 19fr; }
+.cd-filters .pl-filter-label { height:28px; min-height:28px; display:grid; place-items:center; white-space:normal; }
+.cd-content { font:clamp(6px,.9vw,13px)/1.25 Arial,sans-serif; color:#111; }
+.cd-brand { border:3px solid #111; background:#e6f0ff; text-align:center; padding:8px; margin-bottom:10px; }
+.cd-brand img { height:clamp(36px,5vw,80px); max-width:45%; width:auto; object-fit:contain; }
+.cd-instruction { margin:10px 0 14px; padding:10px; border:2px solid #1565c0; border-left-width:7px; border-radius:6px; background:#e3f2fd; color:#0d47a1; text-align:center; font-weight:900; }
+.cd-heading { color:#263238; text-align:center; font-size:clamp(10px,1.2vw,17px); margin:14px 0 9px; font-weight:900; }
+.cd-cards { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:clamp(4px,.7vw,10px); margin-bottom:18px; }
+.cd-card { border:2px solid; border-radius:8px; min-width:0; min-height:clamp(58px,7vw,104px); padding:7px 3px; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font-weight:900; overflow-wrap:anywhere; gap:7px; }
+.cd-card strong { font-size:clamp(18px,2vw,28px); }.cd-card:nth-child(n+7) { grid-column:span 3; }.cd-card[data-metric=total] { border-width:3px; }
+.cd-branch-section,.cd-property-detail { margin:18px 0; border:2px solid #455a64; border-radius:6px; overflow:hidden; }
+.cd-branch-heading { margin:0; padding:10px; background:#263238; color:white; font-size:clamp(10px,1.2vw,17px); font-weight:900; }
+.cd-content table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font:inherit; color:#111; }
+.cd-content th,.cd-content td { border:1px solid #999; padding:clamp(3px,.5vw,7px); vertical-align:middle; overflow-wrap:anywhere; }
+.cd-properties th { background:#e9ecef; font-weight:900; text-align:center; }.cd-property { font-weight:800; }.cd-count { text-align:center; font-size:clamp(11px,1.1vw,15px); font-weight:900; }
+.cd-id,.cd-status { text-align:center; font-weight:900; }.cd-date,.cd-id small { display:block; margin-top:3px; font-size:clamp(5px,.7vw,11px); color:#455a64; font-weight:800; }
+.cd-properties tfoot { background:#eceff1; font-weight:900; text-align:center; white-space:pre-line; }
+.cd-content [data-tone=danger]:not(tr) { background:#ffebee; border-color:#c62828; color:#c62828; }.cd-content [data-tone=success]:not(tr) { background:#e8f5e9; border-color:#2e7d32; color:#2e7d32; }.cd-content [data-tone=warning]:not(tr) { background:#fff3cd; color:#b8860b; }
+.cd-id[data-tone=danger],.cd-status[data-tone=danger] { background:#ffCDD2; }.cd-status[data-tone=success],.cd-properties th[data-tone=success] { background:#c8e6c9; color:#1b5e20; }.cd-id[data-tone=warning] { background:#ffe0b2; color:#e65100; }.cd-id[data-tone=warning]:has(strong:first-child) { border-color:#999; }
+.cd-content .cd-id[data-dispensed=true] { background:#fff3cd; color:#b8860b; }
+.cd-detail-count { margin:8px; padding:12px; text-align:center; border:2px solid; border-radius:6px; font-weight:900; }.cd-detail-count strong { display:block; font-size:clamp(18px,1.8vw,23px); margin-top:4px; }
+.cd-detail-fields th { width:18%; background:#f5f7fa; text-align:left; font-weight:800; }.cd-detail-fields td { width:32%; font-weight:600; white-space:pre-line; }.cd-detail-section th { background:#e3f2fd; color:#0d47a1; }.cd-broker-heading th { background:#fff3e0; color:#e65100; }.cd-document-heading th { background:#e8f5e9; color:#1b5e20; }
+.cd-content .cd-money-danger { color:#c62828; font-weight:900; }.cd-content .cd-money-blue { color:#1565c0; font-weight:800; }
+.cd-contract { margin:16px 10px 10px; border:2px solid #1565c0; border-radius:6px; overflow:hidden; }.cd-contract-heading { margin:0; padding:10px; background:#1565c0; color:white; font-size:clamp(10px,1.2vw,16px); font-weight:900; }.cd-payment-heading { margin:12px 0 0; padding:10px; background:#e3f2fd; color:#0d47a1; text-align:center; font-size:clamp(10px,1.2vw,16px); border-block:1px solid #1565c0; }
+.cd-payments th { background:#e9ecef; font-weight:900; }.cd-payments tr[data-tone=success] { background:#e8f5e9; }.cd-payments tr[data-tone=danger] { background:#ffebee; }
+.cd-empty { margin:14px 10px; padding:14px; border:2px solid #c62828; background:#ffebee; color:#c62828; text-align:center; font-weight:900; border-radius:6px; }
