@@ -145,7 +145,7 @@ export function createCommercialDocsRentReportsView({ document: doc = globalThis
         if (option.value === "upcoming") option.textContent = "A vencer";
       }
     }
-    searchableFilters = bindSearchableFilterSelects(filters);
+    searchableFilters = bindSearchableFilterSelects(filters, { report: true });
   }
 
   function field(parent, label, value) {

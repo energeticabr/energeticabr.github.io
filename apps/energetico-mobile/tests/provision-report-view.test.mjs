@@ -42,7 +42,7 @@ test('provision report displays all PowerApps sections, safe observations, calen
   const filter=root.querySelector('[name=paymentStatus]');filter.value='';filter.dispatchEvent(new dom.window.Event('change'));
   assert.equal(root.querySelectorAll('[data-section=provisions] tbody tr[data-id]').length,2);
   const branch=root.querySelector('.sfs-trigger[aria-label=FILIAL]');branch.click();
-  assert.equal(branch.closest('.sfs').querySelector('.sfs-popup').dataset.placement,'below');
+  assert.equal(branch.closest('.sfs').querySelector('.sfs-popup').dataset.placement,'expanded');
 });
 test('provision report preserves pending status when only paid provisions exist, including refresh',async t=>{
   const {view,root}=setup(t,async()=>({provisions:[{...row,paidDate:'2026-10-02',status:'PAGAMENTO EFETUADO'}],recurrences:[recurrence]}));

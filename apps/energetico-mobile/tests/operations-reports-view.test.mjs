@@ -195,14 +195,14 @@ test("relatório 8 aceita múltiplos status simultâneos como o filtro Power App
   const status = root.querySelector('select[name="status"]');
   assert.equal(status.multiple, true);
   assert.equal([...status.options].filter(option => option.value).length, 3);
-  const input = status.nextElementSibling.querySelector('.sfs-search');
-  input.focus();
+  const input = status.nextElementSibling.querySelector('.sfs-trigger');
+  input.click();
   for (const value of ["ATIVIDADE CRIADA", "CONCLUÍDO"]) {
     [...status.nextElementSibling.querySelectorAll('[role="option"]')].find(option => option.textContent === value).click();
   }
   assert.equal(root.querySelectorAll('.or-task-card').length, 2);
   assert.deepEqual([...status.selectedOptions].map(option => option.value), ["ATIVIDADE CRIADA", "CONCLUÍDO"]);
-  assert.match(input.placeholder, /ATIVIDADE CRIADA.*CONCLUÍDO/);
+  assert.match(input.value, /ATIVIDADE CRIADA.*CONCLUÍDO/);
   assert.equal(root.querySelector('[data-metric="total"]').textContent, '3');
 });
 
@@ -211,10 +211,10 @@ test("filtro de status do relatório 8 permanece recolhido e mostra a seleção"
   await view.open(8);
   const status = root.querySelector('select[name="status"]');
   const picker = status.nextElementSibling;
-  const input = picker.querySelector('.sfs-search');
+  const input = picker.querySelector('.sfs-trigger');
   const popup = picker.querySelector('.sfs-popup');
   assert.equal(popup.hidden, true);
-  input.focus();
+  input.click();
   [...picker.querySelectorAll('[role="option"]')].find(option => option.textContent === 'ATIVIDADE CRIADA').click();
   input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(popup.hidden, true);

@@ -96,7 +96,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.equal(await evaluate(`document.activeElement.dataset.dateDisplay`),'endDate','Tab segue para a próxima data sem parada invisível');
       await evaluate(`document.querySelector('.pl-filter .sfs-arrow').click()`);
       const dropdown=await evaluate(`(()=>{const p=document.querySelector('.pl-filter .sfs-popup'),l=p.querySelector('.sfs-list'),o=[...l.children],r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:o.filter(x=>{const q=x.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(dropdown.placement,'below');assert.ok(dropdown.visible>=7,JSON.stringify(dropdown));
+      assert.equal(dropdown.placement,'expanded');assert.ok(dropdown.visible>=7,JSON.stringify(dropdown));
       await evaluate(`document.querySelector('.pl-filter .sfs-arrow').click()`);
       await evaluate(`document.querySelector('.pl-table td').click()`);
       assert.equal(await evaluate(`document.querySelector('.pl-overlay').hidden`),false,'clicar dentro preserva popup');
@@ -110,13 +110,13 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       await evaluate(`document.querySelector('.chat-main-management-shortcut').click()`);
       let managementReady=false;for(let n=0;n<80&&!managementReady;n++){managementReady=await evaluate(`document.querySelectorAll('.gm-table').length===7`);if(!managementReady)await delay(100);}
       assert.ok(managementReady,'novo relatório gerencial abre suas sete tabelas');
-      const managementFit=await evaluate(`(()=>{const p=document.querySelector('.gm-dialog').getBoundingClientRect(),c=document.querySelector('.gm-content'),f=[...document.querySelectorAll('.gm-filters>.pl-filter,.gm-filters>.pl-dates')].map(n=>n.getBoundingClientRect());return {tables:[...document.querySelectorAll('.gm-table')].every(n=>{const r=n.getBoundingClientRect();return r.left>=p.left&&r.right<=p.right;}),aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),noOverflow:c.scrollWidth<=c.clientWidth+1,logo:document.querySelector('.gm-logo img').naturalWidth>0,red:getComputedStyle(document.querySelector('.gm-money')).color,bold:getComputedStyle(document.querySelector('.gm-section-title')).fontWeight,month:document.querySelector('.gm-period-filter:nth-child(2) .sfs-search').value};})()`);
+      const managementFit=await evaluate(`(()=>{const p=document.querySelector('.gm-dialog').getBoundingClientRect(),c=document.querySelector('.gm-content'),f=[...document.querySelectorAll('.gm-filters>.pl-filter,.gm-filters>.pl-dates')].map(n=>n.getBoundingClientRect());return {tables:[...document.querySelectorAll('.gm-table')].every(n=>{const r=n.getBoundingClientRect();return r.left>=p.left&&r.right<=p.right;}),aligned:f.every(r=>Math.abs(r.top-f[0].top)<1),noOverflow:c.scrollWidth<=c.clientWidth+1,logo:document.querySelector('.gm-logo img').naturalWidth>0,red:getComputedStyle(document.querySelector('.gm-money')).color,bold:getComputedStyle(document.querySelector('.gm-section-title')).fontWeight,month:document.querySelector('.gm-period-filter:nth-child(2) .sfs-trigger').value};})()`);
       assert.ok(managementFit.tables&&managementFit.aligned&&managementFit.noOverflow&&managementFit.logo,JSON.stringify(managementFit));
       assert.equal(await evaluate(`(()=>{const r=document.querySelector('.gm-dialog').getBoundingClientRect();return r.top<=1&&r.bottom>=innerHeight-1;})()`),true,'resumo gerencial ocupa toda a altura também no tablet/PC');
       assert.equal(managementFit.red,'rgb(255, 0, 0)');assert.ok(Number(managementFit.bold)>=700);assert.equal(managementFit.month,'Outubro');
       await evaluate(`document.querySelector('.gm-period-filter:nth-child(2) .sfs-arrow').click()`);
       const gmDropdown=await evaluate(`(()=>{const p=document.querySelector('.gm-period-filter:nth-child(2) .sfs-popup'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(gmDropdown.placement,'below');assert.ok(gmDropdown.visible>=7,JSON.stringify(gmDropdown));
+      assert.equal(gmDropdown.placement,'expanded');assert.ok(gmDropdown.visible>=7,JSON.stringify(gmDropdown));
       await evaluate(`document.querySelector('.gm-period-filter:nth-child(2) .sfs-arrow').click()`);
       if(width===390&&!pwa&&process.env.MANAGEMENT_REPORT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.MANAGEMENT_REPORT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
@@ -130,7 +130,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.equal(provisionFit.columns,7);assert.equal(provisionFit.status,'PAGAMENTO PREVISTO');
       await evaluate(`document.querySelector('.pr-filters .sfs-arrow[aria-label="Abrir opções de FORNECEDOR"]').click()`);
       const provisionDropdown=await evaluate(`(()=>{const p=document.querySelector('.pr-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(provisionDropdown.placement,'below');assert.ok(provisionDropdown.visible>=7,JSON.stringify(provisionDropdown));
+      assert.equal(provisionDropdown.placement,'expanded');assert.ok(provisionDropdown.visible>=7,JSON.stringify(provisionDropdown));
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.pr-overlay').hidden`),true,'clique fora fecha provisões');
@@ -144,7 +144,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ov-tag')).color`),'rgb(153, 0, 0)');
       await evaluate(`document.querySelector('.ov-filters .sfs-arrow[aria-label="Abrir opções de ID"]').click()`);
       const validationDropdown=await evaluate(`(()=>{const p=document.querySelector('.ov-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(validationDropdown.placement,'below');assert.ok(validationDropdown.visible>=7,JSON.stringify(validationDropdown));
+      assert.equal(validationDropdown.placement,'expanded');assert.ok(validationDropdown.visible>=7,JSON.stringify(validationDropdown));
       await evaluate(`(()=>{const s=document.querySelector('.ov-filters select[name=id]');s.value='362';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       assert.equal(await evaluate(`document.querySelectorAll('[data-section=detail]').length`),1);
       assert.equal(await evaluate(`document.querySelectorAll('[data-section=launches] tbody tr').length`),1);
@@ -161,7 +161,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.equal(attendanceFit.cards,4);assert.equal(attendanceFit.columns,7);assert.equal(attendanceFit.status,'ATIVO');
       await evaluate(`document.querySelector('.as-filters [aria-label="Abrir opções de FORNECEDOR"]').click()`);
       const attendanceDropdown=await evaluate(`(()=>{const p=document.querySelector('.as-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(attendanceDropdown.placement,'below');assert.ok(attendanceDropdown.visible>=7,JSON.stringify(attendanceDropdown));
+      assert.equal(attendanceDropdown.placement,'expanded');assert.ok(attendanceDropdown.visible>=7,JSON.stringify(attendanceDropdown));
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.as-overlay').hidden`),true,'clique fora fecha presenças');
@@ -173,7 +173,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.equal(stageFit.columns,8);assert.equal(stageFit.status,'ATIVIDADE INICIADA');assert.equal(stageFit.red,'rgb(255, 0, 0)');assert.ok(Number(stageFit.bold)>=700);
       await evaluate(`document.querySelector('.sp-filters [aria-label="Abrir opções de COLABORADOR"]').click()`);
       const stageDropdown=await evaluate(`(()=>{const p=document.querySelector('.sp-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(stageDropdown.placement,'below');assert.ok(stageDropdown.visible>=7,JSON.stringify(stageDropdown));
+      assert.equal(stageDropdown.placement,'expanded');assert.ok(stageDropdown.visible>=7,JSON.stringify(stageDropdown));
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.sp-overlay').hidden`),true,'clique fora fecha etapas');
@@ -184,7 +184,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(commercialFit.aligned&&commercialFit.fits&&commercialFit.fullHeight&&commercialFit.logo,JSON.stringify(commercialFit));assert.equal(commercialFit.columns,10);assert.equal(commercialFit.cards,4);assert.equal(commercialFit.red,'rgb(198, 40, 40)');assert.ok(Number(commercialFit.bold)>=700);
       await evaluate(`document.querySelector('.cr-filters [aria-label="Abrir opções de COMPRADOR"]').click()`);
       const commercialDropdown=await evaluate(`(()=>{const p=document.querySelector('.cr-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(commercialDropdown.placement,'below');assert.ok(commercialDropdown.visible>=7,JSON.stringify(commercialDropdown));
+      assert.equal(commercialDropdown.placement,'expanded');assert.ok(commercialDropdown.visible>=7,JSON.stringify(commercialDropdown));
       await evaluate(`document.querySelector('.cr-filters [aria-label="Abrir opções de COMPRADOR"]').click()`);
       await evaluate(`(()=>{const s=document.querySelector('.cr-filters select[name=contractId]');s.value='10';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       assert.equal(await evaluate(`document.querySelectorAll('.cr-contract').length`),1);assert.equal(await evaluate(`document.querySelectorAll('.cr-payments thead th').length`),8);
@@ -201,7 +201,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(milestonesFit.aligned&&milestonesFit.fits&&milestonesFit.fullHeight&&milestonesFit.logo,JSON.stringify(milestonesFit));assert.equal(milestonesFit.columns,9);assert.equal(milestonesFit.status,'ATIVO');assert.equal(milestonesFit.green,'rgb(46, 107, 62)');assert.ok(Number(milestonesFit.bold)>=700);
       await evaluate(`document.querySelector('.cm-filters [aria-label="Abrir opções de COMPRADOR"]').click()`);
       const milestonesDropdown=await evaluate(`(()=>{const p=document.querySelector('.cm-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(milestonesDropdown.placement,'below');assert.ok(milestonesDropdown.visible>=7,JSON.stringify(milestonesDropdown));
+      assert.equal(milestonesDropdown.placement,'expanded');assert.ok(milestonesDropdown.visible>=7,JSON.stringify(milestonesDropdown));
       await evaluate(`document.querySelector('.cm-filters [aria-label="Abrir opções de COMPRADOR"]').click()`);
       await evaluate(`(()=>{const s=document.querySelector('.cm-filters select[name=contractId]');s.value='10';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       assert.equal(await evaluate(`document.querySelectorAll('.cm-milestones tbody tr').length`),2);assert.equal(await evaluate(`document.querySelectorAll('.cm-milestones thead th').length`),9);
@@ -218,7 +218,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(documentsFit.aligned&&documentsFit.fits&&documentsFit.fullHeight&&documentsFit.logo,JSON.stringify(documentsFit));assert.equal(documentsFit.columns,13);assert.equal(documentsFit.cards,8);assert.equal(documentsFit.status,'');assert.equal(documentsFit.total,'48');assert.equal(documentsFit.red,'rgb(198, 40, 40)');assert.equal(documentsFit.green,'rgb(46, 125, 50)');
       await evaluate(`document.querySelector('.cd-filters [aria-label="Abrir opções de COMPRADOR"]').click()`);
       const documentsDropdown=await evaluate(`(()=>{const p=document.querySelector('.cd-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(documentsDropdown.placement,'below');assert.ok(documentsDropdown.visible>=7,JSON.stringify(documentsDropdown));
+      assert.equal(documentsDropdown.placement,'expanded');assert.ok(documentsDropdown.visible>=7,JSON.stringify(documentsDropdown));
       await evaluate(`document.querySelector('.cd-filters [aria-label="Abrir opções de COMPRADOR"]').click()`);
       if(width===390&&!pwa&&process.env.COMMERCIAL_DOCUMENTS_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.COMMERCIAL_DOCUMENTS_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await evaluate(`(()=>{const s=document.querySelector('.cd-filters select[name=contractId]');s.value='10';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
@@ -233,7 +233,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(pathologiesFit.aligned&&pathologiesFit.fits&&pathologiesFit.fullHeight&&pathologiesFit.logo,JSON.stringify(pathologiesFit));assert.equal(pathologiesFit.columns,8);assert.equal(pathologiesFit.cards,4);assert.equal(pathologiesFit.status,'ATIVO');assert.equal(pathologiesFit.total,'12');
       await evaluate(`document.querySelector('.sap-filters [aria-label="Abrir opções de CLIENTE"]').click()`);
       const pathologyDropdown=await evaluate(`(()=>{const p=document.querySelector('.sap-filters .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(pathologyDropdown.placement,'below');assert.ok(pathologyDropdown.visible>=7,JSON.stringify(pathologyDropdown));
+      assert.equal(pathologyDropdown.placement,'expanded');assert.ok(pathologyDropdown.visible>=7,JSON.stringify(pathologyDropdown));
       await evaluate(`document.querySelector('.sap-filters [aria-label="Abrir opções de CLIENTE"]').click()`);
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:2,y:2,button:'left',clickCount:1},sessionId);await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:2,y:2,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.sap-overlay').hidden`),true,'clique fora fecha patologias');
@@ -300,7 +300,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(documentFit.top===0&&documentFit.bottom===documentFit.height&&!documentFit.overflow&&documentFit.last<=documentFit.right&&documentFit.aligned&&documentFit.cardAligned&&documentFit.font>=6,JSON.stringify(documentFit));assert.equal(documentFit.columns,11);assert.equal(documentFit.filters,8);assert.equal(documentFit.cards,5);assert.equal(documentFit.id,'rgb(151, 0, 0)');assert.equal(documentFit.expired,'rgb(254, 226, 226)');
       await evaluate(`document.querySelector('.dcr-filter .sfs-arrow').click()`);
       const documentDropdown=await evaluate(`(()=>{const p=document.querySelector('.dcr-filter .sfs-popup'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(documentDropdown.placement,'below');assert.ok(documentDropdown.visible>=7,JSON.stringify(documentDropdown));
+      assert.equal(documentDropdown.placement,'expanded');assert.ok(documentDropdown.visible>=7,JSON.stringify(documentDropdown));
       await evaluate(`document.querySelector('.dcr-filter .sfs-arrow').click()`);
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:1,y:100,button:'left',clickCount:1},sessionId);await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:1,y:100,button:'left',clickCount:1},sessionId);assert.equal(await evaluate(`document.querySelector('.dcr-overlay').hidden`),true);
       const docHit=await evaluate(`(()=>{const b=document.querySelector('[data-action=open-document-control-report]');b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {action:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'',x:r.x+r.width/2,y:r.y+r.height/2};})()`);
@@ -319,7 +319,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(taskFit.top===0&&taskFit.bottom===taskFit.height&&!taskFit.overflow&&taskFit.last<=taskFit.right&&taskFit.aligned&&taskFit.cardAligned&&taskFit.font>=6,JSON.stringify(taskFit));assert.equal(taskFit.columns,5);assert.equal(taskFit.filters,7);assert.equal(taskFit.cards,3);assert.equal(taskFit.emergency,'rgb(255, 205, 210)');assert.deepEqual(taskFit.metrics,['12','1','13']);
       await evaluate(`document.querySelector('.tar-filter [aria-label="Abrir opções de FORNECEDOR"]').click()`);
       const taskDropdown=await evaluate(`(()=>{const p=document.querySelector('.tar-dialog .sfs-popup:not([hidden])'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
-      assert.equal(taskDropdown.placement,'below');assert.ok(taskDropdown.visible>=7,JSON.stringify(taskDropdown));
+      assert.equal(taskDropdown.placement,'expanded');assert.ok(taskDropdown.visible>=7,JSON.stringify(taskDropdown));
       await evaluate(`document.querySelector('.tar-filter [aria-label="Abrir opções de FORNECEDOR"]').click()`);
       await send('Input.dispatchMouseEvent',{type:'mousePressed',x:1,y:100,button:'left',clickCount:1},sessionId);await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:1,y:100,button:'left',clickCount:1},sessionId);assert.equal(await evaluate(`document.querySelector('.tar-overlay').hidden`),true);
       const taskHit=await evaluate(`(()=>{const b=document.querySelector('[data-action=open-task-association-report]');b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {action:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'',x:r.x+r.width/2,y:r.y+r.height/2};})()`);

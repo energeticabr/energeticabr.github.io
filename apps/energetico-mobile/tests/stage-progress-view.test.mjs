@@ -39,7 +39,7 @@ test('stage report shows supplied six-filter order, initial statuses, logo, perc
  assert.equal(root.querySelector('.pl-close'),null);
  const status=root.querySelector('[name=status]');status.value='';status.dispatchEvent(new dom.window.Event('change'));
  assert.equal(root.querySelectorAll('.sp-activities tbody tr').length,2);
- root.querySelector('[aria-label="Abrir opções de COLABORADOR"]').click();assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'below');
+ root.querySelector('[aria-label="Abrir opções de COLABORADOR"]').click();assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'expanded');
 });
 test('portrait defers SharePoint, rotation loads, outside and Escape restore focus',async t=>{
  let calls=0;const {view,root,dom,rotate}=setup(t,async()=>{calls++;return snapshot;},true);

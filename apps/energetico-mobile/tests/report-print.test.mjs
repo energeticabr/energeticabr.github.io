@@ -23,6 +23,18 @@ function fixture(t,rows=[row]){
 }
 function text(snapshot){return snapshot.pages.flatMap(page=>page.blocks).flatMap(block=>block.type==='table'?block.rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))):block.runs.map(run=>run.text)).join(' ');}
 
+test('expanded report option search preserves filter titles and selected values in the PDF',async t=>{
+ const {dom,original}=fixture(t);await original.open();
+ const select=original.element.querySelector('[name=supplier]');
+ select.value=row.supplier;select.dispatchEvent(new dom.window.Event('change'));
+ const picker=select.nextElementSibling;picker.querySelector('.sfs-trigger').click();
+ const search=picker.querySelector('.sfs-search');search.focus();search.value='not a supplier';search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+ const filters=api.captureFilteredReport(original.element).filters;
+ for(const label of ['FILIAL','PRODUTO','FORNECEDOR'])assert.ok(filters.some(filter=>filter.label===label),`PDF retains ${label}`);
+ assert.ok(filters.some(filter=>filter.label==='FORNECEDOR'&&filter.value===row.supplier));
+ assert.ok(filters.every(filter=>!filter.label.startsWith('Localizar itens')));
+});
+
 test('mixed inline summary text stays separated in the actual PDF',async()=>{
  const dom=new JSDOM('<section><p><b>VALOR TOTAL</b><span>R$ 100,00</span></p><table><tr><td><strong>ALFA</strong> fornecedor <span>ATIVO</span></td></tr></table></section>');
  try{

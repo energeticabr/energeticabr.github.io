@@ -165,7 +165,7 @@ export function createOperationsReportsView({ document: doc = globalThis.documen
       for (const [name, label] of Object.entries(LABELS_8)) selector(name, label, snapshot.rows.map(row => row[name]));
       statusSelector(snapshot.rows.map(row => row.status));
     }
-    searchableFilters = bindSearchableFilterSelects(filters);
+    searchableFilters = bindSearchableFilterSelects(filters, { report: true });
   }
 
   function renderStageActivity(row, index) {

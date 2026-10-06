@@ -122,7 +122,7 @@ export function createCommercialProgressReportsView({ document: doc = globalThis
       for (const value of values) control.append(Object.assign(make("option", "", value), { value }));
       control.value = values.includes(current) ? current : "";
     }
-    searchableFilters = bindSearchableFilterSelects(filters);
+    searchableFilters = bindSearchableFilterSelects(filters, { report: true });
   }
   const selectedFilters = () => Object.fromEntries([...controls].map(([name, control]) => [name, control.value]));
 

@@ -32,20 +32,36 @@ function createPicker(select, closeOthers, options = {}) {
   arrow.tabIndex = -1; arrow.setAttribute('aria-label', `Abrir opções de ${labelText}`);
   const popup = doc.createElement('div'); popup.className = 'sfs-popup'; popup.hidden = true;
   const search = doc.createElement('input'); search.type = 'search'; search.className = 'sfs-trigger sfs-search sfs-value';
-  const trigger = search;
+  const trigger = reportPicker ? doc.createElement('input') : search;
+  if (reportPicker) { trigger.type = 'text'; trigger.className = 'sfs-trigger sfs-value'; trigger.readOnly = true; }
   const selectionOnly = options.selectionOnly === true;
   if (selectionOnly) { search.type = 'text'; search.readOnly = true; search.setAttribute('data-select-only',''); }
   search.dataset.filterOptionSearch = 'true'; search.autocomplete = 'off';
-  search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', labelText);
+  search.setAttribute('role', 'combobox'); search.setAttribute('aria-label', reportPicker ? `Localizar itens de ${labelText}` : labelText);
   search.setAttribute('aria-haspopup', 'listbox');
   search.setAttribute('aria-autocomplete', selectionOnly ? 'none' : 'list'); search.setAttribute('aria-expanded', 'false');
   search.setAttribute('aria-controls', `${id}-list`);
+  if (reportPicker) {
+    trigger.setAttribute('role', 'combobox'); trigger.setAttribute('aria-label', labelText);
+    trigger.setAttribute('aria-haspopup', 'listbox'); trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-controls', `${id}-list`); trigger.setAttribute('aria-autocomplete', 'none');
+  }
   const list = doc.createElement('div'); list.className = 'sfs-list'; list.id = `${id}-list`;
   list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', labelText);
   if (select.multiple) list.setAttribute('aria-multiselectable', 'true');
   const empty = doc.createElement('p'); empty.className = 'sfs-empty'; empty.textContent = 'Nenhuma opção encontrada.';
   empty.setAttribute('role', 'status'); empty.hidden = true;
-  fieldBox.append(search, arrow);
+  fieldBox.append(trigger, arrow);
+  let backdrop = null, dismiss = null;
+  if (reportPicker) {
+    search.className = 'sfs-search sfs-report-search'; search.placeholder = 'Localizar itens';
+    const header = doc.createElement('div'); header.className = 'sfs-picker-header';
+    dismiss = doc.createElement('button'); dismiss.type = 'button'; dismiss.className = 'sfs-dismiss'; dismiss.textContent = '×';
+    dismiss.setAttribute('aria-label', `Fechar opções de ${labelText}`);
+    header.append(search, dismiss); popup.append(header);
+    backdrop = doc.createElement('div'); backdrop.className = 'sfs-backdrop'; backdrop.hidden = true;
+    backdrop.setAttribute('aria-hidden', 'true'); wrapper.append(backdrop);
+  }
   popup.append(list, empty); wrapper.append(fieldBox, popup); select.after(wrapper);
   select.hidden = true; select.setAttribute('aria-hidden', 'true'); select.tabIndex = -1;
   let candidates = [];
@@ -69,8 +85,10 @@ function createPicker(select, closeOthers, options = {}) {
   function highlight(index) {
     active = index;
     [...list.children].forEach((item, position) => item.classList.toggle('sfs-option--active', position === active));
-    if (active < 0) search.removeAttribute('aria-activedescendant');
-    else search.setAttribute('aria-activedescendant', list.children[active].id);
+    for (const control of new Set([trigger, search])) {
+      if (active < 0) control.removeAttribute('aria-activedescendant');
+      else control.setAttribute('aria-activedescendant', list.children[active].id);
+    }
   }
   function positionPopup() {
     if (popup.hidden || destroyed) return;
@@ -79,6 +97,20 @@ function createPicker(select, closeOthers, options = {}) {
     let bottom = top + (viewport?.height || view.innerHeight || doc.documentElement.clientHeight);
     let left = viewport?.offsetLeft || 0;
     let right = left + (viewport?.width || view.innerWidth || doc.documentElement.clientWidth);
+    if (reportPicker) {
+      // Use the available screen, not the narrow report header. Opening this
+      // readonly field leaves the keyboard closed; only Localizar itens edits.
+      const width = Math.max(0, Math.min(480, right - left - 24));
+      const height = Math.max(0, Math.min(640, bottom - top - 24));
+      popup.dataset.placement = 'expanded';
+      popup.style.width = `${width}px`;
+      popup.style.left = `${left + (right - left - width) / 2}px`;
+      popup.style.top = `${top + (bottom - top - height) / 2}px`;
+      popup.style.right = 'auto'; popup.style.bottom = 'auto';
+      popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
+      list.style.maxHeight = `${Math.max(0, height - 54)}px`;
+      return;
+    }
     // Keep the dropdown inside scrollable gallery content as well as the
     // viewport. Its DOM stays in the dialog so the existing focus trap works.
     for (let ancestor = wrapper.parentElement; ancestor; ancestor = ancestor.parentElement) {
@@ -87,33 +119,17 @@ function createPicker(select, closeOthers, options = {}) {
       if (bounds.height > 0 && /(auto|scroll|hidden|clip)/.test(style.overflowY)) {
         top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
       }
-      if (reportPicker && bounds.width > 0 && /(auto|scroll|hidden|clip)/.test(style.overflowX)) {
-        left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
-      }
     }
     const bounds = trigger.getBoundingClientRect();
-    const below = Math.max(0, bottom - bounds.bottom - (reportPicker ? 5 : 13));
+    const below = Math.max(0, bottom - bounds.bottom - 13);
     const above = Math.max(0, bounds.top - top - 13);
-    const placement = reportPicker || options.placement === 'below' ? 'below' : below < 180 && above > below ? 'above' : 'below';
-    let rowBudget = 0;
-    if (reportPicker) {
-      const width = Math.max(0, Math.min(Math.max(bounds.width, 240), right - left - 12));
-      popup.style.width = `${width}px`;
-      popup.style.left = `${Math.max(left + 6, Math.min(bounds.left, right - width - 6)) - bounds.left}px`;
-      popup.style.right = 'auto';
-      // Measure wrapped labels after sizing the popup. Seven whole options,
-      // including two-line supplier names, should fit when the viewport allows.
-      for (const item of [...list.children].slice(0, 7)) {
-        rowBudget += item.getBoundingClientRect().height || parseFloat(view.getComputedStyle(item).minHeight) || 32;
-      }
-    }
-    const chrome = reportPicker ? 6 : 14;
-    const height = Math.max(0, Math.min(reportPicker ? Math.max(rowBudget, 32) + chrome : 320, placement === 'above' ? above : below));
+    const placement = options.placement === 'below' ? 'below' : below < 180 && above > below ? 'above' : 'below';
+    const height = Math.max(0, Math.min(320, placement === 'above' ? above : below));
     popup.dataset.placement = placement;
     popup.style.top = placement === 'below' ? 'calc(100% + 5px)' : 'auto';
     popup.style.bottom = placement === 'above' ? 'calc(100% + 5px)' : 'auto';
     popup.style.maxHeight = `${height}px`;
-    list.style.maxHeight = `${Math.max(0, Math.min(reportPicker ? Math.max(rowBudget, 32) : 240, height - chrome))}px`;
+    list.style.maxHeight = `${Math.max(0, Math.min(240, height - 14))}px`;
   }
   function render() {
     const query = selectionOnly ? '' : searchableText(search.value);
@@ -144,8 +160,11 @@ function createPicker(select, closeOthers, options = {}) {
     if (selectionReset !== null) view.clearTimeout(selectionReset);
     selectionReset = null;
     if (!popup.hidden) popup.hidden = true;
+    if (backdrop && !backdrop.hidden) backdrop.hidden = true;
     trigger.setAttribute('aria-expanded', 'false'); search.setAttribute('aria-expanded', 'false');
-    search.value = selectionLabel(); highlight(-1);
+    trigger.value = selectionLabel();
+    if (reportPicker) search.value = '';
+    highlight(-1);
     if (focus && !trigger.disabled) {
       restoringFocus = true;
       trigger.focus({ preventScroll: true });
@@ -155,8 +174,8 @@ function createPicker(select, closeOthers, options = {}) {
   function sync() {
     if (destroyed) return;
     const selection = selectionLabel();
-    search.placeholder = selection;
-    if (popup.hidden) search.value = selection;
+    search.placeholder = reportPicker ? 'Localizar itens' : selection;
+    if (reportPicker || popup.hidden) trigger.value = selection;
     const isDisabled = select.matches(':disabled');
     if (trigger.disabled !== isDisabled) trigger.disabled = isDisabled;
     if (search.disabled !== isDisabled) search.disabled = isDisabled;
@@ -170,6 +189,7 @@ function createPicker(select, closeOthers, options = {}) {
     if (trigger.disabled) return;
     closeOthers();
     search.value = selectionOnly ? selectionLabel() : ''; popup.hidden = false;
+    if (backdrop) backdrop.hidden = false;
     trigger.setAttribute('aria-expanded', 'true'); search.setAttribute('aria-expanded', 'true');
     if (observedViewport !== view.visualViewport) {
       observedViewport?.removeEventListener('resize', positionPopup);
@@ -178,7 +198,7 @@ function createPicker(select, closeOthers, options = {}) {
       observedViewport?.addEventListener('resize', positionPopup);
       observedViewport?.addEventListener('scroll', positionPopup);
     }
-    render(); search.focus({ preventScroll: true });
+    render(); (reportPicker ? trigger : search).focus({ preventScroll: true });
     positionPopup();
   }
   function choose(option) {
@@ -213,7 +233,10 @@ function createPicker(select, closeOthers, options = {}) {
     if (event.key === 'Escape' && !popup.hidden) {
       event.preventDefault(); event.stopPropagation(); close({ focus: true }); return;
     }
-    if (event.target !== search) return;
+    if (event.target !== search && event.target !== trigger) return;
+    if (reportPicker && popup.hidden && ['Enter', ' '].includes(event.key)) {
+      event.preventDefault(); event.stopPropagation(); open(); return;
+    }
     if (popup.hidden && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
       event.preventDefault(); event.stopPropagation(); open(); return;
     }
@@ -269,6 +292,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function onFocusOut(event) { if (!selectingOption && !wrapper.contains(event.relatedTarget)) close(); }
   function onReset() { view.queueMicrotask(() => { if (!destroyed) { close(); sync(); } }); }
+  function onDismiss() { close({ focus: true }); }
   function closeIfHidden() {
     if (wrapper.closest('[hidden], [aria-hidden="true"], details:not([open])')) close();
     // Fieldset disabling affects the native select without changing its own attributes.
@@ -277,6 +301,7 @@ function createPicker(select, closeOthers, options = {}) {
   trigger.addEventListener('click', onTriggerClick);
   trigger.addEventListener('focus', open);
   arrow.addEventListener('click', onArrowClick);
+  dismiss?.addEventListener('click', onDismiss); backdrop?.addEventListener('click', onDismiss);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
   const blockEditing = event => event.preventDefault();
   const editEvents = ['beforeinput','paste','cut','drop'];
@@ -303,6 +328,7 @@ function createPicker(select, closeOthers, options = {}) {
       if (selectionReset !== null) view.clearTimeout(selectionReset);
       trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
       arrow.removeEventListener('click', onArrowClick);
+      dismiss?.removeEventListener('click', onDismiss); backdrop?.removeEventListener('click', onDismiss);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       if (selectionOnly) editEvents.forEach(name=>search.removeEventListener(name,blockEditing));
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);

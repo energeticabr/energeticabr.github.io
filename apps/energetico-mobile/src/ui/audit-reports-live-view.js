@@ -130,7 +130,7 @@ export function createAuditReportsView({ document: doc = globalThis.document, da
       wrapper.append(select); filters.append(wrapper); controls.set("order", select);
     }
     filters.hidden = !controls.size;
-    searchableFilters = bindSearchableFilterSelects(filters);
+    searchableFilters = bindSearchableFilterSelects(filters, { report: true });
   }
   function renderQuotations() {
     const report = buildQuotationReport(snapshot);

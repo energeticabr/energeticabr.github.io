@@ -47,7 +47,7 @@ test('attendance summary uses four indicators, profession financial cards and se
  assert.ok(root.querySelector('.as-duplicate'));
  assert.equal(root.querySelector('.pl-close'),null);
  root.querySelector('[aria-label="Abrir opções de FORNECEDOR"]').click();
- assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'below');
+ assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'expanded');
 });
 test('portrait waits for rotation, outside closes, Escape and focus restore work',async t=>{
  let calls=0;const {view,root,dom,rotate}=setup(t,async()=>{calls++;return snapshot;},true);

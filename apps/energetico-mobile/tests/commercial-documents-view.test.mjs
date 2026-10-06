@@ -27,7 +27,7 @@ test('summary shows eight cards, thirteen columns, proper colors and all-status 
 test('contract selection replaces summary with property, fiscal, brokerage, contract and payment detail',async t=>{
  const {view,root,dom}=setup(t);await view.open();const s=root.querySelector('[name=contractId]');s.value='21';s.dispatchEvent(new dom.window.Event('change'));assert.equal(root.querySelectorAll('.cd-properties').length,0);assert.equal(root.querySelectorAll('.cd-property-detail').length,1);assert.equal(root.querySelectorAll('.cd-contract').length,1);assert.equal(root.querySelectorAll('.cd-payments thead th').length,6);
  assert.match(root.textContent,/INFORMAÇÕES FISCAIS.*Valor Fiscal.*R\$\s*0,00.*INFORMAÇÕES DE CORRETAGEM.*DOCUMENTOS DO IMÓVEL.*INFORMAÇÕES DO CONTRATO.*Comprador A.*DETALHAMENTO PGTOS.*04\/10\/2026.*Parcela.*500,00/s);
- assert.equal(root.querySelector('.cd-payments tbody tr').dataset.tone,'danger');root.querySelector('[aria-label="Abrir opções de COMPRADOR"]').click();assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'below');
+ assert.equal(root.querySelector('.cd-payments tbody tr').dataset.tone,'danger');root.querySelector('[aria-label="Abrir opções de COMPRADOR"]').click();assert.equal(root.querySelector('.sfs-popup:not([hidden])').dataset.placement,'expanded');
 });
 test('document cells retain pending green and dispensed colors independently of metric cards',async t=>{
  const {view,root,dom}=setup(t);await view.open();const cells=root.querySelector('.cd-properties tbody tr').cells;

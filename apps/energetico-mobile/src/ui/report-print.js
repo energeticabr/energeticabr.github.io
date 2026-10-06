@@ -80,7 +80,7 @@ function readBlocks(root){
 function readFilters(root){
  return [...root.querySelectorAll('select[name],input[name]')].filter(input=>!input.parentElement.closest('[hidden]')).map(input=>{
   const display=input.name.endsWith('Date')?root.querySelector(`[data-date-display="${input.name}"]`):null;
-  const label=input.getAttribute('aria-label')?.replace(/^Calendário: /,'')||input.parentElement.querySelector('.sfs-search')?.getAttribute('aria-label')||input.closest('label')?.querySelector('span')?.textContent||input.closest('label')?.firstChild?.textContent||input.name;
+  const label=input.getAttribute('aria-label')?.replace(/^Calendário: /,'')||input.parentElement.querySelector('.sfs-trigger')?.getAttribute('aria-label')||input.parentElement.querySelector('.sfs-search')?.getAttribute('aria-label')||input.closest('label')?.querySelector('span')?.textContent||input.closest('label')?.firstChild?.textContent||input.name;
   let value=input.tagName==='SELECT'?[...input.selectedOptions].map(option=>option.label).join(', '):input.value;
   if(/^\d{4}-\d{2}-\d{2}$/.test(value))value=`${value.slice(8,10)}/${value.slice(5,7)}/${value.slice(0,4)}`;
   return {label:String(label).trim(),value:String(value||display?.placeholder||'Todos').trim()};
