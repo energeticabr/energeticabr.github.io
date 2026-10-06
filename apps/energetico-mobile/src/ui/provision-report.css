@@ -1,5 +1,5 @@
 .pr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
-.pr-filters { grid-template-columns:4fr 5fr 15fr 18fr 24fr 19fr 15fr; }
+.pr-filters { grid-template-columns:9fr 15fr 18fr 24fr 19fr 15fr; }
 .pr-content { color:black; font-family:Arial,sans-serif; }
 .pr-logo { display:grid; place-items:center; border:2px solid black; background:#e6f0ff; margin-bottom:6px; padding:4px; }
 .pr-logo img { display:block; height:clamp(32px,5.5vw,80px); max-width:40%; object-fit:contain; }

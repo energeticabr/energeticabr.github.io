@@ -21,8 +21,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   const warning=make('p','pl-orientation','PARA VER O RELATÓRIO FAVOR POSICIONAR O TELEFONE NA HORIZONTAL.');warning.setAttribute('role','status');
   const report=make('div','pl-report pr-report');report.hidden=true;
   const filters=make('div','pl-filters pr-filters');
-  const print=button('pl-refresh pr-print','⎙','Imprimir relatório de provisões');
-  const refresh=button('pl-refresh','⟳','Atualizar relatório de provisões');filters.append(print,refresh);
+  const refresh=button('pl-refresh','⟳','Atualizar relatório de provisões');filters.append(refresh);
   const controls=new Map();
   for(const [name,label] of FIELDS){const holder=make('label','pl-filter');holder.append(make('span','pl-filter-label',label));
     const select=make('select');select.name=name;select.setAttribute('aria-label',label);select.append(Object.assign(make('option','','Todos'),{value:''}));
@@ -100,13 +99,13 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   }
   async function load(){
     if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();
-    showNotice('Carregando provisões do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;print.disabled=true;
+    showNotice('Carregando provisões do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
     try{const result=await data.loadProvisionReportSnapshot({signal:active.signal});
       if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
       if(!Array.isArray(result?.provisions)||!Array.isArray(result?.recurrences))throw new Error('O SharePoint retornou dados incompletos para o relatório de provisões.');
       snapshot=result;populate();render();
     }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;content.replaceChildren();showNotice(`Não foi possível carregar o relatório. Use Atualizar para tentar novamente. ${String(error?.message||'Falha na consulta.').replace(/https?:\/\/\S+/gi,'endereço SharePoint').replace(/Bearer\s+\S+/gi,'[oculto]').slice(0,240)}`);
-    }finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;print.disabled=!snapshot;}}
+    }finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }
   function orientationChanged(){
     if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
@@ -123,7 +122,6 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   });
   for(const control of controls.values())control.addEventListener('change',()=>{render();content.scrollTop=0;});
   refresh.addEventListener('click',()=>{void load();});
-  print.addEventListener('click',()=>{if(snapshot){doc.body.classList.add('pr-printing');try{win?.print?.();}finally{doc.body.classList.remove('pr-printing');}}});
   win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
   return Object.freeze({element:root,async open(){
     if(destroyed)throw new Error('O relatório de provisões foi encerrado.');if(!root.hidden)return;

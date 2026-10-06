@@ -1,3 +1,5 @@
+@import './ui/report-print.css';
+
 :root {
   color: #102f3c;
   background: var(--surface-soft);

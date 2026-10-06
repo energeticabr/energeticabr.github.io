@@ -121,4 +121,41 @@ view.on('open-cargos-table',()=>void cargos.open());
 view.render(state);
 await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
 document.documentElement.dataset.ready='true';
+if(new URLSearchParams(location.search).has('print')){
+ const {decorateReportPrint,captureFilteredReport,REPORT_PDF_TITLES}=await import('/src/ui/report-print.js');
+ const {buildFilteredReportPdf}=await import('/src/chat/filtered-report-pdf.js');
+ const {createAttachmentPreview}=await import('/src/web/attachment-preview.js');
+ await import('/src/web/attachment-preview.css');
+ const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{document.documentElement.dataset.shared='true';}});
+ const panels=[['open-provision-report',provision],['open-payment-ledger',report],['open-management-report',management],['open-order-validation-report',validation],['open-cargos-table',cargos],['open-attendance-summary',attendance],['open-stage-progress',stageProgress],['open-commercial-receipts',commercial],['open-commercial-milestones',milestones],['open-commercial-documents',documents],['open-sac-pathologies',pathologies],['open-quotation-report',quotations],['open-depreciation-report',depreciation],['open-document-control-report',documentControl],['open-task-association-report',taskAssociation]];
+ for(const [action,panel]of panels)decorateReportPrint(panel,{action,previewMedia:preview.open,closePreview:preview.close});
+ if(new URLSearchParams(location.search).has('verify')){
+  const results=[];
+  try{
+   const logoBytes=new Uint8Array(await(await fetch(report.element.querySelector('img').src)).arrayBuffer());
+   const {getDocument,GlobalWorkerOptions}=await import('pdfjs-dist/legacy/build/pdf.mjs');GlobalWorkerOptions.workerSrc=(await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
+   for(const [action,panel]of panels){
+    document.documentElement.dataset.pdfProgress=action;
+    await panel.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+    const filters=panel.element.querySelector('.pl-filters,.dcr-toolbar,.tar-filters'),r=panel.element.getBoundingClientRect();
+    const control=panel.element.querySelector('[data-action=print-report-pdf]');
+    const snapshot=captureFilteredReport(panel.element,{title:REPORT_PDF_TITLES[action]});
+    const pdf=await buildFilteredReportPdf(snapshot,{logoBytes});
+    const task=getDocument({data:new Uint8Array(await pdf.arrayBuffer())});const parsed=await task.promise;
+    const text=[];for(let page=1;page<=parsed.numPages;page++)text.push(...(await(await parsed.getPage(page)).getTextContent()).items.map(item=>item.str));
+    results.push({action,bytes:pdf.size,pages:parsed.numPages,text:text.join(' '),printer:Boolean(control&&!control.disabled),fits:r.left>=0&&r.right<=innerWidth+1,filterWidth:filters?.scrollWidth,filterClient:filters?.clientWidth,filterHeight:filters?.getBoundingClientRect().height});
+    if(['open-depreciation-report','open-payment-ledger','open-quotation-report','open-task-association-report'].includes(action)){
+     const bytes=new Uint8Array(await pdf.arrayBuffer()),output=document.createElement('output');output.dataset.pdfSample=action;output.hidden=true;output.textContent=btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''));document.body.append(output);
+    }
+    await task.destroy();panel.close();
+   }
+   await report.open();const supplier=report.element.querySelector('[name=supplier]');supplier.value='Alfa';supplier.dispatchEvent(new Event('change'));
+   report.element.querySelector('[data-action=print-report-pdf]').click();
+   await new Promise((resolve,reject)=>{const check=()=>{if(document.querySelector('.attachment-preview-content canvas')){observer.disconnect();clearTimeout(timer);resolve();}};const observer=new MutationObserver(check);observer.observe(document.body,{subtree:true,childList:true});const timer=setTimeout(()=>{observer.disconnect();reject(new Error('PDF viewer did not render'));},15000);check();});
+   const viewer={open:document.querySelector('.attachment-preview-dialog').open,canvas:Boolean(document.querySelector('.attachment-preview-content canvas')),forward:!document.querySelector('.attachment-preview-export').disabled,back:document.querySelector('.attachment-preview-back').textContent,automaticShare:document.documentElement.dataset.shared==='true'};
+   document.querySelector('.attachment-preview-close').click();viewer.returned=!report.element.hidden&&supplier.value==='Alfa';
+   document.documentElement.dataset.layout=JSON.stringify({results,viewer});
+  }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:error.stack});}
+ }
+}
 </script></body></html>

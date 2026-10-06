@@ -218,6 +218,7 @@ export function createAttachmentPreview({
     previous.zoom?.destroy();
     previous.urls.forEach(url => urlApi.revokeObjectURL(url));
     previous.urls.clear();
+    previous.onClose?.();
     content.replaceChildren();
     addChoice.hidden = true;
     addAllButton.disabled = false;
@@ -230,6 +231,7 @@ export function createAttachmentPreview({
 
   function finishClosed() {
     release();
+    if (typeof returnFocus === "function") returnFocus = returnFocus();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     returnFocus = null;
   }
@@ -270,11 +272,11 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo") {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, resolveReturnFocus } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
-    if (!dialog.open) returnFocus = documentRef.activeElement;
+    if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
-    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo") };
+    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose };
     active = session;
     title.textContent = session.fileName;
     updateCollectionNavigation();
@@ -428,14 +430,16 @@ export function createAttachmentPreview({
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray } = {}) {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, resolveReturnFocus } = {}) {
+    backButton.textContent = returnLabel;
     collection = null;
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
-    return openOne(blobOrPromise, fileName);
+    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, resolveReturnFocus });
   }
 
   async function openCollection(items, { onAddToTray } = {}) {
+    backButton.textContent = "Voltar ao chat";
     const normalized = (Array.isArray(items) ? items : [])
       .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo") }))
       .filter(item => item.source != null);

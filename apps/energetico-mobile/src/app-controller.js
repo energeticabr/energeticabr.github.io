@@ -15,6 +15,7 @@ import {
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
 import { provisionDateKey, provisionDayOffset } from "./chat/pending-provision-dates.js";
 import { decorateReportNavigation, getReportNeighbors } from "./ui/report-navigation.js";
+import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } from "./ui/report-print.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -4367,8 +4368,11 @@ export function createAppController({
   }
 
   function decorateControllerReport(panel, action) {
-    const decorated = decorateReportNavigation(panel, {
+    const navigable = decorateReportNavigation(panel, {
       action, onNavigate: target => navigateMascotReport(action, target, decorated),
+    });
+    const decorated = decorateReportPrint(navigable, {
+      action, previewMedia: native.previewMedia, closePreview: native.closePreview,
     });
     return decorated;
   }
@@ -8326,6 +8330,23 @@ export function createAppController({
     bind("share-attachment", command => shareAttachment(command.fileId));
     bind("close-pending-provisions", closePendingProvisions);
     bind("open-pending-provisions", openPendingProvisions);
+    bind('print-pending-provisions', () => {
+      if (!account || stopped || flowBusy() || !pendingProvisionSnapshot || pendingProvisionReminderOpen) return false;
+      const selector = '.chat-pending-provisions--payments:not(.chat-pending-construction-diaries)';
+      const root = globalThis.document?.querySelector(selector);
+      if (!root || !root.isConnected || root.closest('[hidden]')) return false;
+      const snapshot = pendingProvisionSnapshot;
+      const resolveRoot = () => pendingProvisionSnapshot === snapshot && !pendingProvisionReminderOpen
+        ? globalThis.document?.querySelector(selector) : null;
+      const onClose = preserveReportPdfReturn(root, { resolveRoot });
+      root.querySelector('[data-action="print-pending-provisions"]')?.focus({ preventScroll: true });
+      try {
+        return Promise.resolve(openFilteredReportPdf(root, {
+          action: 'open-pending-provisions', previewMedia: native.previewMedia, onClose,
+          resolveReturnFocus: () => resolveRoot()?.querySelector('[data-action="print-pending-provisions"]'),
+        })).then(() => true).catch(() => false);
+      } catch { return false; }
+    });
     bind('navigate-mascot-report', command => {
       if (command?.direction !== 'next' && command?.direction !== 'previous') return false;
       return navigateMascotReport(command.from, getReportNeighbors(command.from)[command.direction]);
