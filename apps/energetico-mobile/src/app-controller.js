@@ -135,6 +135,16 @@ async function defaultQuotationReportViewFactory(options) {
   return createQuotationReportView(options);
 }
 
+async function defaultDepreciationReportViewFactory(options) {
+  const { createDepreciationReportView } = await import('./ui/depreciation-report-view.js');
+  return createDepreciationReportView(options);
+}
+
+async function defaultDepreciationReportDataFactory(options) {
+  const { createDepreciationReportData } = await import('./chat/depreciation-report-data.js');
+  return createDepreciationReportData(options);
+}
+
 async function defaultQuotationReportDataFactory(options) {
   const { createQuotationReportData } = await import('./chat/quotation-report-data.js');
   return createQuotationReportData(options);
@@ -280,6 +290,8 @@ const SAC_PATHOLOGIES_ID = 'action_sac_pathologies';
 const SAC_PATHOLOGIES_SCOPES = Object.freeze(['Sites.Read.All']);
 const QUOTATION_REPORT_ID = 'action_quotation_report';
 const QUOTATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
+export const DEPRECIATION_REPORT_ID = 'home-depreciation-report';
+const DEPRECIATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -787,6 +799,8 @@ export function createAppController({
   sacPathologiesDataFactory = defaultSacPathologiesDataFactory,
   quotationReportViewFactory = defaultQuotationReportViewFactory,
   quotationReportDataFactory = defaultQuotationReportDataFactory,
+  depreciationReportViewFactory = defaultDepreciationReportViewFactory,
+  depreciationReportDataFactory = defaultDepreciationReportDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -834,6 +848,7 @@ export function createAppController({
   let sessionError = null;
   let started = false;
   let stopped = false;
+  let galleryOpeningRevision = 0;
   let launchGallery = null;
   let launchGalleryOpening = null;
   let ordersGallery = null;
@@ -871,6 +886,9 @@ export function createAppController({
   let quotationReport = null;
   let quotationReportOpening = null;
   let quotationReportSession = null;
+  let depreciationReport = null;
+  let depreciationReportOpening = null;
+  let depreciationReportSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -3846,6 +3864,7 @@ export function createAppController({
     const dashboardAccount = account;
     if (!dashboardAccount || stopped) return false;
     disposeQuotationReport();
+    disposeDepreciationReport();
     try {
       const accessToken = await powerBiAccessToken();
       if (stopped || account !== dashboardAccount) return false;
@@ -4229,9 +4248,21 @@ export function createAppController({
     panel?.destroy?.();
   }
 
-  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false) {
+  function disposeDepreciationReport() {
+    const session = depreciationReportSession;
+    const panel = depreciationReport;
+    depreciationReportSession = null;
+    depreciationReportOpening = null;
+    depreciationReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
+  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false, preserveDepreciationReport = false) {
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveQuotationReport) disposeQuotationReport();
+    if (!preserveDepreciationReport) disposeDepreciationReport();
     for (const gallery of [
       launchGallery,
       ordersGallery,
@@ -4443,16 +4474,24 @@ export function createAppController({
     hrPayrollGalleryData = null;
   }
 
+  function galleryOpeningGuard(openingAccount) {
+    const navigationRevision = galleryOpeningRevision, openingSessionRevision = sessionRevision;
+    return () => !stopped && account === openingAccount && sessionRevision === openingSessionRevision
+      && galleryOpeningRevision === navigationRevision;
+  }
+
   async function openHrPayrollGallery(gallery) {
     if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery) || !account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (hrPayrollGalleryOpening) return hrPayrollGalleryOpening;
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const assertSession = () => {
       if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria foi encerrada.");
     };
-    hrPayrollGalleryOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (hrPayrollGalleryName !== gallery) {
           disposeHrPayrollGallery();
@@ -4461,6 +4500,7 @@ export function createAppController({
             tokenProvider: ordersGalleryTokenProvider(assertSession, resumeAction),
             assertSession,
           });
+          if (!openingIsCurrent()) return false;
           assertSession();
           if (typeof data?.loadPage !== "function"
             || (gallery === "IDFOLHA" && typeof data?.loadPaymentsForPayrollId !== "function")) {
@@ -4522,32 +4562,35 @@ export function createAppController({
               }
             },
           });
-          if (stopped || account !== galleryAccount) { panel?.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel?.destroy?.(); return false; }
           hrPayrollGallery = panel;
           hrPayrollGalleryName = gallery;
         }
         await hrPayrollGallery.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria de folha.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de folha.");
         return false;
       } finally {
-        hrPayrollGalleryOpening = null;
+        if (hrPayrollGalleryOpening === opening) hrPayrollGalleryOpening = null;
       }
-    })();
-    return hrPayrollGalleryOpening;
+    });
+    hrPayrollGalleryOpening = opening;
+    return opening;
   }
 
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (launchGalleryOpening) return launchGalleryOpening;
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const assertSession = () => {
       if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria foi encerrada.");
     };
-    launchGalleryOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (!launchGallery) {
           const panel = await launchGalleryFactory({
@@ -4621,65 +4664,72 @@ export function createAppController({
             onClose: () => { gallerySignatureResolve?.(null); gallerySignatureResolve = null; },
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
-          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           launchGallery = panel;
         }
         await launchGallery.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a galeria.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria.");
         return false;
       } finally {
-        launchGalleryOpening = null;
+        if (launchGalleryOpening === opening) launchGalleryOpening = null;
       }
-    })();
-    return launchGalleryOpening;
+    });
+    launchGalleryOpening = opening;
+    return opening;
   }
 
   async function openOrdersGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (ordersGalleryOpening) return ordersGalleryOpening;
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const assertSession = () => {
       if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Pedidos foi encerrada.");
     };
-    ordersGalleryOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (!ordersGallery) {
           const data = await getOrdersGalleryData(assertSession);
+          if (!openingIsCurrent()) return false;
           assertSession();
           const panel = await ordersGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
-          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           ordersGallery = panel;
         }
         await ordersGallery.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Pedidos.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a Galeria de Pedidos.");
         return false;
       } finally {
-        ordersGalleryOpening = null;
+        if (ordersGalleryOpening === opening) ordersGalleryOpening = null;
       }
-    })();
-    return ordersGalleryOpening;
+    });
+    ordersGalleryOpening = opening;
+    return opening;
   }
 
   async function openTasksGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (tasksGalleryOpening) return tasksGalleryOpening;
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const assertSession = () => {
       if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Tarefas foi encerrada.");
     };
-    tasksGalleryOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (!tasksGallery) {
           const data = await tasksGalleryDataFactory({ tokenProvider: scopes => {
@@ -4691,6 +4741,7 @@ export function createAppController({
               return auth.getToken(scopes);
             });
           } });
+          if (!openingIsCurrent()) return false;
           assertSession();
           const panel = await tasksGalleryFactory({
             data,
@@ -4698,31 +4749,34 @@ export function createAppController({
             onHome: () => { assertSession(); return returnToMainMenu(); },
             onCreate: () => { assertSession(); return sendText("ADICIONAR UMA NOVA TAREFA", "action_task"); },
           });
-          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           tasksGallery = panel;
         }
         await tasksGallery.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Tarefas.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a Galeria de Tarefas.");
         return false;
       } finally {
-        tasksGalleryOpening = null;
+        if (tasksGalleryOpening === opening) tasksGalleryOpening = null;
       }
-    })();
-    return tasksGalleryOpening;
+    });
+    tasksGalleryOpening = opening;
+    return opening;
   }
 
   async function openContractorReports() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (contractorReportsOpening) return contractorReportsOpening;
     const reportsAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(reportsAccount);
     const assertSession = () => {
       if (stopped || account !== reportsAccount) throw new Error("A sessão dos Relatórios foi encerrada.");
     };
-    contractorReportsOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (!contractorReports) {
           const tokenProvider = scopes => {
@@ -4735,8 +4789,11 @@ export function createAppController({
             });
           };
           const data = await contractorReportDataFactory({ tokenProvider });
+          if (!openingIsCurrent()) return false;
           const presenceData = await presencePaymentReportDataFactory({ tokenProvider });
+          if (!openingIsCurrent()) return false;
           const extraReports = await extraReportsFactory({ tokenProvider, document: globalThis.document });
+          if (!openingIsCurrent()) return false;
           assertSession();
           const panel = await contractorReportsFactory({
             data,
@@ -4744,19 +4801,20 @@ export function createAppController({
             extraReports,
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
-          if (stopped || account !== reportsAccount) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           contractorReports = panel;
         }
         await contractorReports.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === reportsAccount) setSessionError(error, "Não foi possível abrir os Relatórios.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir os Relatórios.");
         return false;
       } finally {
-        contractorReportsOpening = null;
+        if (contractorReportsOpening === opening) contractorReportsOpening = null;
       }
-    })();
-    return contractorReportsOpening;
+    });
+    contractorReportsOpening = opening;
+    return opening;
   }
 
   async function openPaymentLedger(kind = 'payments') {
@@ -4765,6 +4823,7 @@ export function createAppController({
     if (validation && store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     const provision = kind === 'provision';
     const management = kind === 'management';
     const opening = validation ? orderValidationReportOpening : provision ? provisionReportOpening : management ? managementReportOpening : paymentLedgerOpening;
@@ -4854,6 +4913,7 @@ export function createAppController({
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     const opening = cargosTableOpening;
     if (opening) return opening;
     const reportId = CARGOS_TABLE_ID;
@@ -4918,6 +4978,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (attendanceSummaryOpening) return attendanceSummaryOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5018,6 +5079,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (stageProgressOpening) return stageProgressOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5120,6 +5182,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (commercialReceiptsOpening) return commercialReceiptsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5233,6 +5296,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (commercialMilestonesOpening) return commercialMilestonesOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5346,6 +5410,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (commercialDocumentsOpening) return commercialDocumentsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5463,6 +5528,7 @@ export function createAppController({
   async function openSacPathologies() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (sacPathologiesOpening) return sacPathologiesOpening;
     cargosTableRevision++;
     cargosTableOpening = null;
@@ -5589,6 +5655,7 @@ export function createAppController({
 
   async function openQuotationReport() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeDepreciationReport();
     if (quotationReportOpening) return quotationReportOpening;
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
     // its request and destroy cached views so a later open gets a fresh session.
@@ -5719,16 +5786,154 @@ export function createAppController({
     return request;
   }
 
+  async function openDepreciationReport() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (depreciationReportOpening) return depreciationReportOpening;
+    galleryOpeningRevision++;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
+    registrationGalleryOpenings.clear();
+    // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
+    // its request and destroy cached views so a later open gets a fresh session.
+    spendingReportsRevision++;
+    paymentLedgerOpening = managementReportOpening = provisionReportOpening = orderValidationReportOpening = null;
+    for (const report of [paymentLedger, managementReport, provisionReport, orderValidationReport]) report?.destroy?.();
+    paymentLedger = managementReport = provisionReport = orderValidationReport = null;
+    cargosTableRevision++;
+    cargosTableOpening = null;
+    cargosTable?.destroy?.();
+    cargosTable = null;
+    disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
+    disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
+    closeGalleryOverlays(false, false, true);
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = depreciationReportSession || {
+      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
+    };
+    depreciationReportSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || depreciationReportSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = DEPRECIATION_REPORT_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          if (!session.authorization) {
+            const authorization = Promise.resolve().then(() => {
+              assertSession();
+              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
+              return auth.authorize(scopes, { resumeAction: DEPRECIATION_REPORT_ID });
+            });
+            session.authorization = authorization;
+            void authorization.finally(() => {
+              if (session.authorization === authorization) session.authorization = null;
+            }).catch(() => {});
+          }
+          await session.authorization;
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await depreciationReportDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    let cancelOpening;
+    const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = depreciationReport;
+        if (!report) {
+          const panel = await depreciationReportViewFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          depreciationReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && depreciationReportSession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir o relatório de depreciação.');
+        }
+        if (depreciationReportSession === session && !depreciationReport) disposeDepreciationReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, openingCancellation]).finally(() => {
+      session.lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (depreciationReportOpening === request) depreciationReportOpening = null;
+    });
+    depreciationReportOpening = request;
+    return request;
+  }
+
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const assertSession = () => {
       if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Programação de Pagamentos foi encerrada.");
     };
-    paymentProgrammingGalleryOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (!paymentProgrammingGallery) {
           const data = await paymentProgrammingGalleryDataFactory({ tokenProvider: scopes => {
@@ -5740,37 +5945,41 @@ export function createAppController({
               return auth.getToken(scopes);
             });
           } });
+          if (!openingIsCurrent()) return false;
           assertSession();
           const panel = await paymentProgrammingGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
-          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           paymentProgrammingGallery = panel;
         }
         await paymentProgrammingGallery.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Programação de Pagamentos.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a Galeria de Programação de Pagamentos.");
         return false;
       } finally {
-        paymentProgrammingGalleryOpening = null;
+        if (paymentProgrammingGalleryOpening === opening) paymentProgrammingGalleryOpening = null;
       }
-    })();
-    return paymentProgrammingGalleryOpening;
+    });
+    paymentProgrammingGalleryOpening = opening;
+    return opening;
   }
 
   async function openRecurringExpensesGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (recurringExpensesGalleryOpening) return recurringExpensesGalleryOpening;
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const assertSession = () => {
       if (stopped || account !== galleryAccount) throw new Error("A sessão da Galeria de Despesas Recorrentes foi encerrada.");
     };
-    recurringExpensesGalleryOpening = (async () => {
+    const opening = Promise.resolve().then(async () => {
       try {
         if (!recurringExpensesGallery) {
           const data = await recurringExpensesGalleryDataFactory({ tokenProvider: scopes => {
@@ -5782,33 +5991,37 @@ export function createAppController({
               return auth.getToken(scopes);
             });
           } });
+          if (!openingIsCurrent()) return false;
           assertSession();
           const panel = await recurringExpensesGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
-          if (stopped || account !== galleryAccount) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           recurringExpensesGallery = panel;
         }
         await recurringExpensesGallery.open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount) setSessionError(error, "Não foi possível abrir a Galeria de Despesas Recorrentes.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a Galeria de Despesas Recorrentes.");
         return false;
       } finally {
-        recurringExpensesGalleryOpening = null;
+        if (recurringExpensesGalleryOpening === opening) recurringExpensesGalleryOpening = null;
       }
-    })();
-    return recurringExpensesGalleryOpening;
+    });
+    recurringExpensesGalleryOpening = opening;
+    return opening;
   }
 
   async function openRegistrationGallery(kind, replyId) {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
     const galleryAccount = account;
+    const openingIsCurrent = galleryOpeningGuard(galleryAccount);
     const galleryRevision = sessionRevision;
     const assertSession = () => {
       if (stopped || account !== galleryAccount || sessionRevision !== galleryRevision) throw new Error("A sessão da galeria de cadastros foi encerrada.");
@@ -5827,6 +6040,7 @@ export function createAppController({
             assertSession();
             return token;
           } });
+          if (!openingIsCurrent()) return false;
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
@@ -5842,13 +6056,13 @@ export function createAppController({
             } : {}),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
-          if (stopped || account !== galleryAccount || sessionRevision !== galleryRevision) { panel.destroy?.(); return false; }
+          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           registrationGalleries.set(kind, panel);
         }
         await registrationGalleries.get(kind).open();
-        return true;
+        return openingIsCurrent();
       } catch (error) {
-        if (!stopped && account === galleryAccount && sessionRevision === galleryRevision) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
+        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir a galeria de cadastros.");
         return false;
       } finally {
         if (registrationGalleryOpenings.get(kind) === opening) registrationGalleryOpenings.delete(kind);
@@ -6623,6 +6837,7 @@ export function createAppController({
     disposeCommercialDocumentsReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -6718,6 +6933,7 @@ export function createAppController({
     disposeCommercialDocumentsReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -7317,6 +7533,12 @@ export function createAppController({
 
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, command => {
+      if ([
+        "open-media", "open-file", "open-pending-provisions", "open-pending-provision-attachment",
+        "resize-signature", "signature-placement-edit", "pick-files", "pick-pending-provision-attachments",
+        "capture-photo", "pick-photos", "pick-document-files",
+        "open-rhid-attendance-today", "rhid-attendance-report-today", "rhid-presence-validate-open",
+      ].includes(type)) disposeDepreciationReport();
       if (rhidAttendanceReportRequests.has("new-report")
         && ["select-reply", "send-text", "date-selected", "show-summary", "finish-flow"].includes(type)) {
         rhidAttendanceReportNavigationRevision += 1;
@@ -7379,6 +7601,7 @@ export function createAppController({
       if (command.replyId === COMMERCIAL_DOCUMENTS_ID) return openCommercialDocuments();
       if (command.replyId === SAC_PATHOLOGIES_ID) return openSacPathologies();
       if (command.replyId === QUOTATION_REPORT_ID) return openQuotationReport();
+      if (command.replyId === DEPRECIATION_REPORT_ID) return openDepreciationReport();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -7618,6 +7841,7 @@ export function createAppController({
     bind('opensacpathologies', openSacPathologies);
     bind('open-sac-pathologies', openSacPathologies);
     bind('open-quotation-report', openQuotationReport);
+    bind('open-depreciation-report', openDepreciationReport);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -7707,6 +7931,7 @@ export function createAppController({
       if (commercialDocumentsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialDocumentsReport();
       if (sacPathologiesSession && (flowBusy() || store.getState().activeFlow)) disposeSacPathologiesReport();
       if (quotationReportSession && (flowBusy() || store.getState().activeFlow)) disposeQuotationReport();
+      if (depreciationReportSession && (flowBusy() || store.getState().activeFlow)) disposeDepreciationReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -7778,6 +8003,7 @@ export function createAppController({
     else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
     else if (pendingAction === SAC_PATHOLOGIES_ID) await openSacPathologies();
     else if (pendingAction === QUOTATION_REPORT_ID) await openQuotationReport();
+    else if (pendingAction === DEPRECIATION_REPORT_ID) await openDepreciationReport();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -7802,6 +8028,7 @@ export function createAppController({
     disposeCommercialDocumentsReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
+    disposeDepreciationReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();

@@ -23,6 +23,8 @@ import '/src/ui/sac-pathologies.css';
 import { createSacPathologiesReportView } from '/src/ui/sac-pathologies-view.js';
 import '/src/ui/quotation-report.css';
 import { createQuotationReportView } from '/src/ui/quotation-report-view.js';
+import '/src/ui/depreciation-report.css';
+import { createDepreciationReportView } from '/src/ui/depreciation-report-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -93,6 +95,11 @@ const quotations=createQuotationReportView({document,data:{async loadSnapshot(){
  budgets:[{id:'8',quotationId:'4',branch:'004 - EDIFÍCIO XAVANTE',stage:'ALVENARIA E ESTRUTURAS',supplier:'Fornecedor A',finalizedDate:'2026-10-05',total:1234.5,status:'AGUARDANDO ORÇAMENTO',observation:'Conferir entrega'},{id:'9',quotationId:'4',branch:'004 - EDIFÍCIO XAVANTE',stage:'ALVENARIA E ESTRUTURAS',supplier:'Fornecedor B',finalizedDate:null,total:0,status:'ORÇAMENTO RECEBIDO',observation:''},{id:'10',quotationId:'99',branch:'',stage:'',supplier:'',finalizedDate:null,total:null,status:'PENDENTE SOLICITAÇÃO',observation:''}]
 };}}});
 view.on('open-quotation-report',()=>void quotations.open());
+window.depreciationLoads=0;
+const depreciation=createDepreciationReportView({document,now:()=>new Date('2026-10-06T12:00:00Z'),data:{async loadSnapshot(){window.depreciationLoads++;return {
+ assets:Array.from({length:12},(_,i)=>({id:i+1,branch:'004 - EDIFÍCIO XAVANTE',depreciationDate:i===0?'2026-10-05':i===1?'2026-10-06':'2026-11-01',patrimony:String(i+1),group:'FERRAMENTAS CONCRETO',asset:'VIBRADOR DE CONCRETO',estimatedUnit:4338.02,residualUnit:3077.05,quantity:1,rate:2}))
+};}}});
+view.on('open-depreciation-report',()=>void depreciation.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});
