@@ -84,7 +84,9 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   assert.equal(managementShortcut.nextElementSibling, validationShortcut);
   const quotationShortcut=root.querySelector('[data-action="open-quotation-report"]');
   assert.equal(validationShortcut.nextElementSibling, quotationShortcut);
-  assert.equal(quotationShortcut.nextElementSibling, bubble);
+  const depreciationShortcut=root.querySelector('[data-action="open-depreciation-report"]');
+  assert.equal(quotationShortcut.nextElementSibling, depreciationShortcut);
+  assert.equal(depreciationShortcut.nextElementSibling, bubble);
   assert.equal(bubble.contains(validationShortcut),false);
   assert.notEqual(validationShortcut.querySelector('img').src,paymentShortcut.querySelector('img').src);
   let validationOpened=0;view.on('open-order-validation-report',()=>validationOpened++);
@@ -3452,7 +3454,10 @@ test("menu inicial remove cabeçalho redundante e preserva as opções", () => {
 
   assert.ok(message);
   assert.ok(message.classList.contains("chat-message--initial-area-menu"), "o menu inicial tem uma classe de layout própria");
-  assert.ok(message.querySelector(".chat-avatar"), "o avatar mantém a coluna original do balão no menu inicial");
+  assert.equal(message.querySelector(":scope > .chat-avatar"), null, "o avatar redundante não pode cobrir o sétimo mascote");
+  const ordinary = new JSDOM(renderChatMarkup(signedInState({ messages: [{ id: "ordinary", role: "assistant", type: "text", text: "Mensagem comum" }] })));
+  assert.ok(ordinary.window.document.querySelector(".chat-message--assistant > .chat-avatar"), "mensagens comuns preservam o avatar");
+  ordinary.window.close();
   assert.equal(message.querySelector(".chat-bubble > strong"), null);
   assert.equal(message.querySelector(".chat-choice-card > p"), null);
   assert.match(message.textContent, /SUPRIMENTOS/);

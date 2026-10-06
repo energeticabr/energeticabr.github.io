@@ -26,7 +26,7 @@ test('second right mascot preserves cargos and existing left shortcuts and dispa
  const root=dom.window.document.querySelector('#app'),shortcut=root.querySelector('[data-action=open-attendance-summary]');
  assert.ok(shortcut);assert.equal(shortcut.previousElementSibling.dataset.action,'open-cargos-table');
  assert.equal(shortcut.closest('.chat-bubble'),null);shortcut.querySelector('img').click();assert.equal(calls,1);
- assert.deepEqual([...root.querySelectorAll('.chat-main-payment-ledger-shortcut')].map(node=>node.dataset.action).filter(action=>action!=='open-quotation-report'),['open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report']);
+ assert.deepEqual([...root.querySelectorAll('.chat-main-payment-ledger-shortcut')].map(node=>node.dataset.action),['open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report']);
  view.render({...state,activeText:{id:'busy'}});assert.equal(root.querySelector('[data-action=open-attendance-summary]').disabled,true);
  assert.equal(new JSDOM(renderChatMarkup({...state,activeFlow:'flow'})).window.document.querySelector('[data-action=open-attendance-summary]'),null);
 });
