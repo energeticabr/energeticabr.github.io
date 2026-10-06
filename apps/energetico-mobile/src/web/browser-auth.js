@@ -143,6 +143,7 @@ const PENDING_ACTION_KEY = "energetico:msal-pending-action:v1";
 const RESUMABLE_ACTIONS = new Set([
   "action_attendance_summary",
   "action_stage_progress",
+  "action_commercial_receipts",
   "action_cargos_table",
   "provision-report",
   "order-validation-report",

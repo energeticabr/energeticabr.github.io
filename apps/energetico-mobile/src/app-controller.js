@@ -90,6 +90,16 @@ async function defaultStageProgressDataFactory(options) {
   return createStageProgressData(options);
 }
 
+async function defaultCommercialReceiptsViewFactory(options) {
+  const { createCommercialReceiptsReportView } = await import('./ui/commercial-receipts-view.js');
+  return createCommercialReceiptsReportView(options);
+}
+
+async function defaultCommercialReceiptsDataFactory(options) {
+  const { createCommercialReceiptsData } = await import('./chat/commercial-receipts-data.js');
+  return createCommercialReceiptsData(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -220,6 +230,8 @@ const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
+const COMMERCIAL_RECEIPTS_ID = 'action_commercial_receipts';
+const COMMERCIAL_RECEIPTS_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -717,6 +729,8 @@ export function createAppController({
   attendanceSummaryDataFactory = defaultAttendanceSummaryDataFactory,
   stageProgressFactory = defaultStageProgressFactory,
   stageProgressDataFactory = defaultStageProgressDataFactory,
+  commercialReceiptsViewFactory = defaultCommercialReceiptsViewFactory,
+  commercialReceiptsDataFactory = defaultCommercialReceiptsDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -784,6 +798,9 @@ export function createAppController({
   let stageProgressReport = null;
   let stageProgressOpening = null;
   let stageProgressSession = null;
+  let commercialReceiptsReport = null;
+  let commercialReceiptsOpening = null;
+  let commercialReceiptsSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -4070,6 +4087,17 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  function disposeCommercialReceiptsReport() {
+    const session = commercialReceiptsSession;
+    const panel = commercialReceiptsReport;
+    commercialReceiptsSession = null;
+    commercialReceiptsOpening = null;
+    commercialReceiptsReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
   function disposePaymentProgrammingGallery() {
     paymentProgrammingGallery?.destroy?.();
     paymentProgrammingGallery = null;
@@ -4099,6 +4127,7 @@ export function createAppController({
       orderValidationReport,
       attendanceSummaryReport,
       stageProgressReport,
+      commercialReceiptsReport,
       paymentProgrammingGallery,
       recurringExpensesGallery,
       hrPayrollGallery,
@@ -4938,6 +4967,117 @@ export function createAppController({
       }
     });
     stageProgressOpening = request;
+    return request;
+  }
+
+  async function openCommercialReceipts() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (commercialReceiptsOpening) return commercialReceiptsOpening;
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = commercialReceiptsSession || {
+      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
+    };
+    commercialReceiptsSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || commercialReceiptsSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = COMMERCIAL_RECEIPTS_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          if (!session.authorization) {
+            const authorization = Promise.resolve().then(() => {
+              assertSession();
+              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
+              return auth.authorize(scopes, { resumeAction: COMMERCIAL_RECEIPTS_ID });
+            });
+            session.authorization = authorization;
+            void authorization.finally(() => {
+              if (session.authorization === authorization) session.authorization = null;
+            }).catch(() => {});
+          }
+          await session.authorization;
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await commercialReceiptsDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    const request = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = commercialReceiptsReport;
+        if (!report) {
+          const panel = await commercialReceiptsViewFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          commercialReceiptsReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && commercialReceiptsSession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir os recebimentos comerciais.');
+        }
+        if (commercialReceiptsSession === session && !commercialReceiptsReport) disposeCommercialReceiptsReport();
+        return false;
+      } finally {
+        if (commercialReceiptsOpening === request) commercialReceiptsOpening = null;
+      }
+    });
+    commercialReceiptsOpening = request;
     return request;
   }
 
@@ -5834,6 +5974,7 @@ export function createAppController({
     const signInRevision = ++sessionRevision;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -5924,6 +6065,7 @@ export function createAppController({
     disposeContractorReports();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -6580,6 +6722,7 @@ export function createAppController({
       if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
       if (command.replyId === ATTENDANCE_SUMMARY_ID) return openAttendanceSummary();
       if (command.replyId === STAGE_PROGRESS_ID) return openStageProgress();
+      if (command.replyId === COMMERCIAL_RECEIPTS_ID) return openCommercialReceipts();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -6813,6 +6956,7 @@ export function createAppController({
     bind('open-cargos-table', openCargosTable);
     bind('open-attendance-summary', openAttendanceSummary);
     bind('open-stage-progress', openStageProgress);
+    bind('open-commercial-receipts', openCommercialReceipts);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -6897,6 +7041,7 @@ export function createAppController({
     unsubscribeStore = store.subscribe(() => {
       if (attendanceSummarySession && (flowBusy() || store.getState().activeFlow)) disposeAttendanceSummaryReport();
       if (stageProgressSession && (flowBusy() || store.getState().activeFlow)) disposeStageProgressReport();
+      if (commercialReceiptsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialReceiptsReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -6963,6 +7108,7 @@ export function createAppController({
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
+    else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -6982,6 +7128,7 @@ export function createAppController({
     disposeContractorReports();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();

@@ -1,0 +1,25 @@
+.cr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.cr-filters { grid-template-columns:4fr 4fr 17fr 18fr 22fr 18fr 17fr; }
+.cr-filters .pl-filter-label { height:28px; min-height:28px; display:grid; place-items:center; white-space:normal; }
+.cr-content { font:clamp(7px,.9vw,13px)/1.3 Arial,sans-serif; color:#111; }
+.cr-brand { border:2px solid black; background:#e6f0ff; text-align:center; padding:7px; margin-bottom:10px; }
+.cr-brand img { height:clamp(36px,5vw,80px); max-width:45%; width:auto; object-fit:contain; }
+.cr-heading { font:800 clamp(10px,1.4vw,18px)/1.3 Arial,sans-serif; text-align:center; margin:10px 0; }
+.cr-indicators { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin:10px 0; }
+.cr-card { border:2px solid; border-radius:7px; padding:8px 4px; min-width:0; min-height:clamp(66px,10vw,138px); display:flex; flex-direction:column; justify-content:center; text-align:center; gap:5px; }
+.cr-card h3 { font-size:clamp(8px,1vw,13px); margin:0; }.cr-card>strong { font-size:clamp(11px,1.6vw,21px); overflow-wrap:anywhere; }
+.cr-card[data-tone=danger] { border-color:#c62828; background:#ffebee; color:#c62828; }.cr-card[data-tone=success] { border-color:#2e7d32; background:#e8f5e9; color:#2e7d32; }.cr-card[data-tone=warning] { border-color:#f57c00; background:#fff3e0; color:#f57c00; }.cr-card[data-tone=neutral] { border-color:#546e7a; background:#f5f7f8; color:#37474f; }
+.cr-active,.cr-inactive { border:1px solid; border-radius:4px; padding:2px; font-size:clamp(9px,1.2vw,16px)!important; }.cr-active { color:#2e7d32; background:#e8f5e9; }.cr-inactive { color:#c62828; background:#ffebee; }
+.cr-instruction { border:2px solid #1565c0; border-left:6px solid #1565c0; border-radius:7px; background:#e3f2fd; color:#0d47a1; padding:10px; font-weight:800; text-align:center; }
+.cr-section { border:2px solid #1565c0; border-left:6px solid #1565c0; border-radius:7px; background:#263238; color:white; font-size:clamp(10px,1.4vw,18px); text-align:center; margin:12px 0 8px; padding:8px; }
+.cr-content table { width:100%; table-layout:fixed; border-collapse:collapse; margin:10px 0; font:inherit; }
+.cr-content th,.cr-content td { border:1px solid #999; padding:5px 2px; overflow-wrap:anywhere; vertical-align:middle; }
+.cr-content th { background:#e9ecef; font-weight:800; text-align:center; }.cr-content td { font-weight:600; }.cr-money { text-align:center; font-weight:800!important; }.cr-property { font-weight:800!important; }.cr-total { font-weight:900!important; }
+.cr-content [data-tone=success] { color:#2e7d32; }.cr-content [data-tone=danger] { color:#c62828; }.cr-content [data-tone=warning] { color:#f57c00; }.cr-content [data-tone=info] { color:#1565c0; }.cr-content [data-tone=former] { color:#6a1b9a; background:#f3e5f5; }
+.cr-content tr[data-tone=success] { background:#e8f5e9; color:#111; }.cr-content tr[data-tone=info] { background:#e3f2fd; color:#111; }.cr-content tr[data-tone=danger] { background:#ffcdd2; color:#111; }.cr-content tr[data-tone=warning] { background:#ffe0b2; color:#111; }
+.cr-content .cr-branch { background:#e3f2fd; font-weight:800; text-align:center; }.cr-document[data-tone=danger] { background:#ffcdd2; }.cr-document[data-tone=warning] { background:#ffe0b2; }.cr-document { text-align:center; }.cr-broker { text-align:center; }.cr-brokerage { font-size:clamp(6px,.68vw,9px); }
+.cr-percentage { display:inline-block; max-width:100%; border:1px solid; border-radius:4px; padding:3px; color:white!important; font-weight:900; font-size:clamp(7px,.9vw,12px); }.cr-percentage[data-tone=success] { background:#2e7d32; }.cr-percentage[data-tone=warning] { background:#f57c00; }.cr-percentage[data-tone=danger] { background:#c62828; }
+.cr-branch-total { border-top:3px solid #c62828; border-bottom:3px solid #c62828; text-align:center; }.cr-branch-total td { font-weight:900; }
+.cr-contract { border:2px solid #333; border-radius:6px; margin:14px 0; padding:7px; }.cr-contract-title { background:#2c3e50; color:white; padding:7px; font-size:clamp(10px,1.2vw,16px); margin:0; }
+.cr-payments tfoot td,.cr-pending tfoot td { font-weight:800; text-align:center; }
+@media print { body:has(.cr-overlay:not([hidden])) #app { display:none!important; } .cr-overlay:not([hidden]) { position:static!important; display:block!important; background:white!important; padding:0!important; } .cr-dialog:not(.pl-dialog--portrait) { height:auto!important; max-height:none!important; width:100%!important; overflow:visible!important; } .cr-report,.cr-content { display:block!important; height:auto!important; overflow:visible!important; } .cr-filters { display:none!important; } }
