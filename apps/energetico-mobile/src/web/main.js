@@ -39,6 +39,7 @@ import "../ui/stage-progress.css";
 import "../ui/commercial-receipts.css";
 import "../ui/commercial-milestones.css";
 import "../ui/commercial-documents.css";
+import "../ui/sac-pathologies.css";
 import "../ui/audit-reports-live.css";
 import "../ui/commercial-progress-reports.css";
 import "../ui/commercial-docs-rent-reports-style.css";

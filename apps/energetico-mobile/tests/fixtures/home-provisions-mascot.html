@@ -19,6 +19,8 @@ import '/src/ui/commercial-milestones.css';
 import { createCommercialMilestonesReportView } from '/src/ui/commercial-milestones-view.js';
 import '/src/ui/commercial-documents.css';
 import { createCommercialDocumentsReportView } from '/src/ui/commercial-documents-view.js';
+import '/src/ui/sac-pathologies.css';
+import { createSacPathologiesReportView } from '/src/ui/sac-pathologies-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -77,6 +79,11 @@ const documents=createCommercialDocumentsReportView({document,now:()=>new Date('
  receipts:Array.from({length:12},(_,i)=>({id:String(i+1),contractId:String(i+10),createdDate:'2026-01-01',dueDate:'2026-10-04',paidDate:'',description:'Parcela',amount:'500',status:'PAGAMENTO PREVISTO'}))
  };}}});
 view.on('open-commercial-documents',()=>void documents.open());
+const pathologies=createSacPathologiesReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
+ complete:true,
+ rows:Array.from({length:12},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+i),client:`Cliente ${i+1}`,type:i%2?'AUSÊNCIA DE ÁGUA BANHEIRO':'TESTE',description:'Verificar a caixa de água e a pressão dos chuveiros do imóvel.',startDate:'2026-09-12',endDate:'',status:'ATIVO',cost:i}))
+};}}});
+view.on('open-sac-pathologies',()=>void pathologies.open());
 view.on('open-pending-provisions',()=>window.opened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});

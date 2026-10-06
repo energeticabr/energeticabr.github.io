@@ -120,6 +120,16 @@ async function defaultCommercialDocumentsDataFactory(options) {
   return createCommercialDocumentsData(options);
 }
 
+async function defaultSacPathologiesViewFactory(options) {
+  const { createSacPathologiesReportView } = await import('./ui/sac-pathologies-view.js');
+  return createSacPathologiesReportView(options);
+}
+
+async function defaultSacPathologiesDataFactory(options) {
+  const { createSacPathologiesData } = await import('./chat/sac-pathologies-data.js');
+  return createSacPathologiesData(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -256,6 +266,8 @@ const COMMERCIAL_MILESTONES_ID = 'action_commercial_milestones';
 const COMMERCIAL_MILESTONES_SCOPES = Object.freeze(['Sites.Read.All']);
 const COMMERCIAL_DOCUMENTS_ID = 'action_commercial_documents';
 const COMMERCIAL_DOCUMENTS_SCOPES = Object.freeze(['Sites.Read.All']);
+const SAC_PATHOLOGIES_ID = 'action_sac_pathologies';
+const SAC_PATHOLOGIES_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -759,6 +771,8 @@ export function createAppController({
   commercialMilestonesDataFactory = defaultCommercialMilestonesDataFactory,
   commercialDocumentsViewFactory = defaultCommercialDocumentsViewFactory,
   commercialDocumentsDataFactory = defaultCommercialDocumentsDataFactory,
+  sacPathologiesViewFactory = defaultSacPathologiesViewFactory,
+  sacPathologiesDataFactory = defaultSacPathologiesDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -820,6 +834,7 @@ export function createAppController({
   let paymentLedgerOpening = null;
   let cargosTable = null;
   let cargosTableOpening = null;
+  let cargosTableRevision = 0;
   let attendanceSummaryReport = null;
   let attendanceSummaryOpening = null;
   let attendanceSummarySession = null;
@@ -835,6 +850,9 @@ export function createAppController({
   let commercialDocumentsReport = null;
   let commercialDocumentsOpening = null;
   let commercialDocumentsSession = null;
+  let sacPathologiesReport = null;
+  let sacPathologiesOpening = null;
+  let sacPathologiesSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -4170,7 +4188,19 @@ export function createAppController({
     registrationGalleryOpenings.clear();
   }
 
-  function closeGalleryOverlays() {
+  function disposeSacPathologiesReport() {
+    const session = sacPathologiesSession;
+    const panel = sacPathologiesReport;
+    sacPathologiesSession = null;
+    sacPathologiesOpening = null;
+    sacPathologiesReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
+  function closeGalleryOverlays(preserveSacPathologies = false) {
+    if (!preserveSacPathologies) disposeSacPathologiesReport();
     for (const gallery of [
       launchGallery,
       ordersGallery,
@@ -4384,6 +4414,7 @@ export function createAppController({
 
   async function openHrPayrollGallery(gallery) {
     if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery) || !account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (hrPayrollGalleryOpening) return hrPayrollGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4477,6 +4508,7 @@ export function createAppController({
 
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (launchGalleryOpening) return launchGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4573,6 +4605,7 @@ export function createAppController({
 
   async function openOrdersGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (ordersGalleryOpening) return ordersGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4605,6 +4638,7 @@ export function createAppController({
 
   async function openTasksGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (tasksGalleryOpening) return tasksGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4646,6 +4680,7 @@ export function createAppController({
 
   async function openContractorReports() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (contractorReportsOpening) return contractorReportsOpening;
     const reportsAccount = account;
     const assertSession = () => {
@@ -4692,6 +4727,7 @@ export function createAppController({
     if (!account || stopped || flowBusy()) return false;
     const validation = kind === 'validation';
     if (validation && store.getState().activeFlow) return false;
+    disposeSacPathologiesReport();
     const provision = kind === 'provision';
     const management = kind === 'management';
     const opening = validation ? orderValidationReportOpening : provision ? provisionReportOpening : management ? managementReportOpening : paymentLedgerOpening;
@@ -4777,14 +4813,17 @@ export function createAppController({
 
   async function openCargosTable() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     const opening = cargosTableOpening;
     if (opening) return opening;
     const reportId = CARGOS_TABLE_ID;
     const method = 'loadSnapshot';
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
+    const openingRevision = cargosTableRevision;
     let requestSignal, requestGeneration = 0;
     const assertSession = () => {
+      if (openingRevision !== cargosTableRevision) throw new DOMException('Consulta substituída.', 'AbortError');
       if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) throw new Error('A sessão do relatório foi encerrada.');
     };
     const request = Promise.resolve().then(async () => {
@@ -4807,20 +4846,25 @@ export function createAppController({
           };
           const source = await cargosDataFactory({ tokenProvider });
           const data = { [method](options = {}) {
+            assertSession();
             requestSignal = options.signal; requestGeneration++;
             return source[method](options);
           } };
           assertSession();
           const factory = cargosFactory;
           const panel = await factory({ data, document: globalThis.document });
-          if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) { panel.destroy?.(); return false; }
+          if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+            || openingRevision !== cargosTableRevision) { panel.destroy?.(); return false; }
           report = panel;
           cargosTable = panel;
         }
+        assertSession();
         await report.open();
+        assertSession();
         return true;
       } catch (error) {
-        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision) setSessionError(error, 'Não foi possível abrir a tabela de cargos.');
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && openingRevision === cargosTableRevision) setSessionError(error, 'Não foi possível abrir a tabela de cargos.');
         return false;
       } finally {
         if (cargosTableOpening === request) cargosTableOpening = null;
@@ -4832,6 +4876,7 @@ export function createAppController({
 
   async function openAttendanceSummary() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSacPathologiesReport();
     if (attendanceSummaryOpening) return attendanceSummaryOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -4930,6 +4975,7 @@ export function createAppController({
   }
   async function openStageProgress() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSacPathologiesReport();
     if (stageProgressOpening) return stageProgressOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5030,6 +5076,7 @@ export function createAppController({
 
   async function openCommercialReceipts() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSacPathologiesReport();
     if (commercialReceiptsOpening) return commercialReceiptsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5141,6 +5188,7 @@ export function createAppController({
 
   async function openCommercialMilestones() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSacPathologiesReport();
     if (commercialMilestonesOpening) return commercialMilestonesOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5252,6 +5300,7 @@ export function createAppController({
 
   async function openCommercialDocuments() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSacPathologiesReport();
     if (commercialDocumentsOpening) return commercialDocumentsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5366,8 +5415,135 @@ export function createAppController({
     return request;
   }
 
+  async function openSacPathologies() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (sacPathologiesOpening) return sacPathologiesOpening;
+    cargosTableRevision++;
+    cargosTableOpening = null;
+    cargosTable?.destroy?.();
+    cargosTable = null;
+    disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
+    disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
+    closeGalleryOverlays(true);
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = sacPathologiesSession || {
+      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
+    };
+    sacPathologiesSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || sacPathologiesSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = SAC_PATHOLOGIES_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          if (!session.authorization) {
+            const authorization = Promise.resolve().then(() => {
+              assertSession();
+              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
+              return auth.authorize(scopes, { resumeAction: SAC_PATHOLOGIES_ID });
+            });
+            session.authorization = authorization;
+            void authorization.finally(() => {
+              if (session.authorization === authorization) session.authorization = null;
+            }).catch(() => {});
+          }
+          await session.authorization;
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await sacPathologiesDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    let cancelOpening;
+    const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = sacPathologiesReport;
+        if (!report) {
+          const panel = await sacPathologiesViewFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          sacPathologiesReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && sacPathologiesSession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir o acompanhamento de patologias.');
+        }
+        if (sacPathologiesSession === session && !sacPathologiesReport) disposeSacPathologiesReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, openingCancellation]).finally(() => {
+      session.lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (sacPathologiesOpening === request) sacPathologiesOpening = null;
+    });
+    sacPathologiesOpening = request;
+    return request;
+  }
+
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -5408,6 +5584,7 @@ export function createAppController({
 
   async function openRecurringExpensesGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (recurringExpensesGalleryOpening) return recurringExpensesGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -5448,6 +5625,7 @@ export function createAppController({
 
   async function openRegistrationGallery(kind, replyId) {
     if (!account || stopped || flowBusy()) return false;
+    disposeSacPathologiesReport();
     if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
     const galleryAccount = account;
     const galleryRevision = sessionRevision;
@@ -6262,6 +6440,7 @@ export function createAppController({
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
+    disposeSacPathologiesReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -6355,6 +6534,7 @@ export function createAppController({
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
+    disposeSacPathologiesReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -7014,6 +7194,7 @@ export function createAppController({
       if (command.replyId === COMMERCIAL_RECEIPTS_ID) return openCommercialReceipts();
       if (command.replyId === COMMERCIAL_MILESTONES_ID) return openCommercialMilestones();
       if (command.replyId === COMMERCIAL_DOCUMENTS_ID) return openCommercialDocuments();
+      if (command.replyId === SAC_PATHOLOGIES_ID) return openSacPathologies();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -7250,6 +7431,8 @@ export function createAppController({
     bind('open-commercial-receipts', openCommercialReceipts);
     bind('open-commercial-milestones', openCommercialMilestones);
     bind('open-commercial-documents', openCommercialDocuments);
+    bind('opensacpathologies', openSacPathologies);
+    bind('open-sac-pathologies', openSacPathologies);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -7337,6 +7520,7 @@ export function createAppController({
       if (commercialReceiptsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialReceiptsReport();
       if (commercialMilestonesSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialMilestonesReport();
       if (commercialDocumentsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialDocumentsReport();
+      if (sacPathologiesSession && (flowBusy() || store.getState().activeFlow)) disposeSacPathologiesReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -7406,6 +7590,7 @@ export function createAppController({
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();
     else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
+    else if (pendingAction === SAC_PATHOLOGIES_ID) await openSacPathologies();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -7428,6 +7613,7 @@ export function createAppController({
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
+    disposeSacPathologiesReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
