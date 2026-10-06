@@ -1,0 +1,41 @@
+.dcr-overlay { position:fixed; inset:0; z-index:1200; display:grid; place-items:center; box-sizing:border-box; padding:0 max(8px,env(safe-area-inset-right)) 0 max(8px,env(safe-area-inset-left)); background:rgb(5 32 46 / 58%); }
+.dcr-overlay[hidden],.dcr-overlay [hidden] { display:none!important; }
+.dcr-dialog { box-sizing:border-box; width:min(1800px,100%); height:100dvh; max-height:100dvh; min-width:0; padding:max(3px,env(safe-area-inset-top)) 3px max(3px,env(safe-area-inset-bottom)); overflow:hidden; background:white; color:#344054; font-family:Arial,sans-serif; }
+.dcr-dialog.dcr-portrait { width:min(460px,100%); height:auto; border-radius:16px; padding:20px; }
+.dcr-orientation { font-size:1rem; font-weight:750; line-height:1.6; padding:16px 4px; }
+.dcr-report { height:100%; min-height:0; display:flex; flex-direction:column; gap:4px; }
+.dcr-toolbar { display:grid; grid-template-columns:4fr 12fr 14fr 16fr 15fr 10fr 9fr 10fr 10fr; gap:3px; flex-shrink:0; align-items:end; }
+.dcr-filter,.dcr-sort { min-width:0; display:flex; flex-direction:column; }
+.dcr-filter-label { display:grid; place-items:center; background:#970000; color:white; height:26px; padding:2px 1px; font:normal clamp(6px,.88vw,14px)/1.1 Arial,sans-serif; text-align:center; overflow-wrap:anywhere; }
+.dcr-toolbar select { width:100%; min-width:0; min-height:0; height:26px; }
+.dcr-dialog .sfs-field { border-radius:0; height:26px; min-height:0; }
+.dcr-dialog .sfs .sfs-field>.sfs-trigger { height:26px; min-height:0; padding:2px 17px 2px 3px; border:1px solid #1c3c7b; border-radius:0; font:normal clamp(7px,.95vw,13px) Arial,sans-serif; }
+.dcr-dialog .sfs .sfs-arrow { width:17px; border-radius:0; background:#395eac; color:white; }
+.dcr-dialog .sfs-popup { min-width:min(190px,30vw); left:auto; right:0; border-radius:0; padding:2px; z-index:10; }
+.dcr-dialog .sfs-option { display:block; box-sizing:border-box; min-height:24px; height:24px; line-height:20px; padding:2px 4px; font:normal 11px Arial,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dcr-refresh { min-height:0; min-width:0; height:52px; padding:0; border:0; background:white; color:#970000; font:normal clamp(26px,3.5vw,50px)/1 Arial,sans-serif; cursor:pointer; }
+.dcr-refresh:disabled { opacity:.5; cursor:wait; }
+.dcr-content { flex:1; box-sizing:border-box; min-height:0; width:100%; min-width:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; font:normal clamp(6px,.79vw,13px)/1.25 Arial,sans-serif; }
+.dcr-brand { border:3px solid black; padding:clamp(6px,.9vw,15px); background:#e6f0ff; text-align:center; margin-bottom:8px; }
+.dcr-brand img { display:block; margin:auto; width:clamp(120px,17vw,280px); max-width:100%; height:clamp(30px,4.5vw,74px); object-fit:contain; }
+.dcr-heading { border-radius:8px 8px 0 0; padding:clamp(5px,.75vw,14px) clamp(6px,1vw,18px); background:#970000; color:white; }
+.dcr-heading h2 { color:inherit; font-size:clamp(10px,1.35vw,24px); font-weight:800; margin:0; }
+.dcr-heading p { margin:3px 0 0; color:#ffe5e5; }
+.dcr-cards { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:clamp(3px,.4vw,7px); padding:clamp(5px,.65vw,12px); background:#e6f0ff; }
+.dcr-card { min-width:0; border:2px solid; border-radius:8px; padding:clamp(5px,.7vw,11px) 2px; text-align:center; overflow-wrap:anywhere; }
+.dcr-card span { display:block; font-weight:800; }.dcr-card strong { display:block; margin-top:3px; font-size:clamp(13px,1.65vw,26px); font-weight:800; }
+.dcr-metric-submitted { border-color:#22c55e; color:#166534; background:#dcfce7; }.dcr-metric-pending { border-color:#fb923c; color:#9a3412; background:#fff7ed; }.dcr-metric-total { border-color:#3b82f6; color:#1e40af; background:#dbeafe; }.dcr-metric-expired { border-color:#ef4444; color:#991b1b; background:#fee2e2; }.dcr-metric-expiring15 { border-color:#eab308; color:#854d0e; background:#fef9c3; }
+.dcr-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font:inherit; color:#344054; }
+.dcr-table th,.dcr-table td { border:1px solid #94a3b8; padding:clamp(3px,.55vw,9px) 2px; text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
+.dcr-table th { background:#e2e8f0; color:#27364a; font-weight:800; border-bottom:3px solid #970000; }
+.dcr-table td.dcr-left { text-align:left; }.dcr-table .dcr-id { color:#970000; font-weight:800; }.dcr-type { font-weight:600; }
+.dcr-even { background:white; }.dcr-odd { background:#f1f5f9; }.dcr-expired { background:#fee2e2; }.dcr-table .dcr-expired td { border-color:#ef4444; }
+.dcr-table small { display:block; font-size:.88em; line-height:1.2; margin-top:3px; font-weight:700; }
+.dcr-submittedDate small { color:#166534; }.dcr-issuedDate small { color:#c2410c; }.dcr-expiration small { color:#64748b; }.dcr-date-expired,.dcr-date-expired small { color:#b91c1c; font-weight:800; }.dcr-date-soon,.dcr-date-soon small { color:#a16207; }
+.dcr-badge { display:inline-block; max-width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:12px; padding:2px 4px; font-size:.95em; line-height:1.2; font-weight:800; }
+.dcr-homologation-filial { background:#dbeafe; color:#1e40af; border-color:#3b82f6; }.dcr-homologation-contract { background:#ede9fe; color:#5b21b6; border-color:#8b5cf6; }.dcr-homologation-labor { background:#ffedd5; color:#9a3412; border-color:#f97316; }.dcr-homologation-commercial { background:#ccfbf1; color:#115e59; border-color:#14b8a6; }.dcr-homologation-other,.dcr-status-other { background:#e5e7eb; color:#374151; }
+.dcr-status-submitted { background:#dcfce7; color:#166534; }.dcr-status-pending { background:#fee2e2; color:#991b1b; }.dcr-status-approved { background:#dbeafe; color:#1e40af; }
+.dcr-footer { margin:0; padding:8px; text-align:right; background:#f8fafc; font-weight:700; }.dcr-empty { margin:0; padding:18px; text-align:center; background:#f8fafc; }
+.dcr-notice { padding:15px; text-align:center; font-size:14px; }.dcr-retry { display:block; margin:15px auto; background:#075267; color:white; border:0; border-radius:8px; padding:10px 16px; }
+.dcr-dialog :focus-visible { outline:2px solid #1476c8; outline-offset:-2px; }
+@media(max-width:900px) { .dcr-table th,.dcr-table td { padding:4px 1px; }.dcr-brand { margin-bottom:5px; }.dcr-badge { padding:2px; } }
