@@ -165,6 +165,12 @@ test("property text monetary fallback reaches the model without coercion to zero
  const source=await create({repository}).loadSnapshot();
  assert.equal(source.properties[0].fiscalValue,"ISENTO");assert.equal(source.properties[0].brokerValue,"DISPENSADO");
 });
+test("Created instants from Graph render their Sao Paulo day, unlike date-only expense and due fields", async () => {
+ const {repository}=fixture({async getItemsPage(_site,list){return {items:[item(list,1,list==="DOCUMENTOS_1"?{field_0:"2026-07-25T01:30:00Z"}:list==="LANÇAMENTORECEITA"?{field_1:"2026-09-15T01:30:00Z",field_2:"2026-09-15"}:list==="LANCAMENTOS"?{field_0:"2026-07-25"}:{})],hasMore:false};}});
+ const source=await create({repository}).loadSnapshot();
+ assert.equal(source.documents[0].createdDate,"2026-07-24");assert.equal(source.receipts[0].createdDate,"2026-09-14");
+ assert.equal(source.expenses[0].paidDate,"2026-07-25");assert.equal(source.receipts[0].dueDate,"2026-09-15");
+});
 
 test("failure after a page aborts siblings without exposing a partial snapshot", { timeout: 2000 }, async () => {
   let siblingSignal;

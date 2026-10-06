@@ -1,7 +1,7 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
-import { normalizeCommercialDocumentsDate, normalizeCommercialDocumentsSaleDate, normalizeCommercialDocumentsAmount, normalizeCommercialDocumentsPropertyAmount } from "./commercial-documents-model.js";
+import { normalizeCommercialDocumentsDate, normalizeCommercialDocumentsCreatedDate, normalizeCommercialDocumentsSaleDate, normalizeCommercialDocumentsAmount, normalizeCommercialDocumentsPropertyAmount } from "./commercial-documents-model.js";
 
 const SITE = "personal";
 const WINDOW_PAGES = 100;
@@ -70,7 +70,8 @@ function normalizeItem(item, columns, kind) {
   for (const [field, column] of Object.entries(columns)) {
     const raw = scalar(fields[column]);
     if (field === "saleDate") Object.assign(row, normalizeCommercialDocumentsSaleDate(raw));
-    else row[field] = ["createdDate", "dueDate", "paidDate"].includes(field) ? normalizeCommercialDocumentsDate(raw)
+    else row[field] = field === "createdDate" ? normalizeCommercialDocumentsCreatedDate(raw)
+      : ["dueDate", "paidDate"].includes(field) ? normalizeCommercialDocumentsDate(raw)
       : ["fiscalValue", "brokerValue"].includes(field) ? normalizeCommercialDocumentsPropertyAmount(raw)
         : ["total", "amount"].includes(field) ? normalizeCommercialDocumentsAmount(raw) : String(raw).trim();
   }

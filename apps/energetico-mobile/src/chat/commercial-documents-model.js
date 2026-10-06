@@ -42,6 +42,18 @@ export function normalizeCommercialDocumentsDate(value) {
   return normalizeCommercialMilestonesDate(value);
 }
 
+const createdDayFormatter = new Intl.DateTimeFormat("en", {
+  timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+});
+// Created is an instant, not a date-only business field. PowerApps displays
+// this instant in local time; slicing a Graph UTC timestamp can add a day.
+export function normalizeCommercialDocumentsCreatedDate(value) {
+  const { startDate, startOrder } = normalizeCommercialMilestonesStart(value);
+  if (startOrder === undefined) return startDate;
+  const parts = Object.fromEntries(createdDayFormatter.formatToParts(new Date(startOrder)).map(part => [part.type, part.value]));
+  return `${parts.year.padStart(4, "0")}-${parts.month}-${parts.day}`;
+}
+
 /** Retain additive timestamp chronology; date-only rows keep the documented shape. */
 export function normalizeCommercialDocumentsSaleDate(value) {
   const { startDate, startOrder } = normalizeCommercialMilestonesStart(value);
@@ -72,7 +84,8 @@ function normalizeRows(source, kind) {
     ids.add(normalized.id);
     for (const field of FIELDS[kind]) {
       if (field === "saleDate") Object.assign(normalized, normalizeCommercialDocumentsSaleDate(row[field]));
-      else normalized[field] = DATE_FIELDS.has(field) ? normalizeCommercialDocumentsDate(row[field])
+      else normalized[field] = field === "createdDate" ? normalizeCommercialDocumentsCreatedDate(row[field])
+        : DATE_FIELDS.has(field) ? normalizeCommercialDocumentsDate(row[field])
         : MONEY_FIELDS.has(field) ? (kind === "properties" ? normalizeCommercialDocumentsPropertyAmount(row[field]) : normalizeCommercialDocumentsAmount(row[field])) : text(row[field]);
     }
     if (kind === "contracts" && Object.hasOwn(row, "saleOrder")) {
