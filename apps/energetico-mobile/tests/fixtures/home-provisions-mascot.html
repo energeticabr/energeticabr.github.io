@@ -27,6 +27,8 @@ import '/src/ui/depreciation-report.css';
 import { createDepreciationReportView } from '/src/ui/depreciation-report-view.js';
 import '/src/ui/document-control-report.css';
 import { createDocumentControlReportView } from '/src/ui/document-control-report-view.js';
+import '/src/ui/task-association-report.css';
+import { createTaskAssociationReportView } from '/src/ui/task-association-report-view.js';
 const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
   {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (45)',tone:'danger'},
   ...[['supplies','📦 SUPRIMENTOS'],['demands','📋 DEMANDAS'],['human_resources','👥 RECURSOS HUMANOS'],['construction','🏗️ ETAPA OBRA'],['commercial','📈 COMERCIAL'],['audit','🔎 AUDITORIA E DOCUMENTOS'],['nb','🏢 NB PARTICIPAÇÕES'],['personal_expenses','💰 GASTOS PESSOAIS']].map(([id,label])=>({id:'group_'+id,reply:'group_'+id,label})),
@@ -98,6 +100,11 @@ const quotations=createQuotationReportView({document,data:{async loadSnapshot(){
 };}}});
 view.on('open-quotation-report',()=>void quotations.open());
 window.documentControlLoads=0;
+window.taskAssociationLoads=0;
+const taskAssociation=createTaskAssociationReportView({document,now:()=>new Date('2026-10-06T12:00:00Z'),data:{async loadSnapshot(){window.taskAssociationLoads++;return {
+ tasks:Array.from({length:13},(_,i)=>({id:i+1,createdDate:'2026-10-04',dueDate:i===0?'2026-10-05':i===1?'2026-10-06':i===2?'':'2026-10-08',description:'Conferir documentos e acompanhar atividades da obra.',association:i<6?'DEMANDAS PESSOAIS':'ENGENHARIA',status:i===12?'CONCLUÍDO':i%2?'EM ATENDIMENTO':'ATIVIDADE CRIADA',priority:i===0?'ATIVIDADE EMERGENCIAL':i===1?'ATIVIDADE PRIORITÁRIA':'NÃO PRIORITÁRIA',difficulty:'ALTA DIFICULDADE',supplier:`Fornecedor ${i+1}`}))
+};}}});
+view.on('open-task-association-report',()=>void taskAssociation.open());
 const documentControl=createDocumentControlReportView({document,now:()=>new Date('2026-10-06T12:00:00Z'),data:{async loadSnapshot(){window.documentControlLoads++;return {
  documents:Array.from({length:12},(_,i)=>({id:300-i,submittedDate:'2026-10-04',issuedDate:'2026-10-01',expirationDate:i===0?'2026-10-05':i===1?'':'2026-10-21',branch:`Filial de teste ${i}`,homologation:'HOMOLOGAÇÃO MÃO DE OBRA',documentType:'COMPROVANTE ENTREGA EPI',person:`Colaborador ${i}`,stage:'ALVENARIA E ESTRUTURAS',property:'TODOS',status:i%2?'PENDENTE':'SUBMETIDO'}))
 };}}});

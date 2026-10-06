@@ -55,6 +55,8 @@ export function createBrowserAuth({ client, config, storage }) {
         && redirect.account.homeAccountId === account.homeAccountId
         && pending?.version === 1
         && RESUMABLE_ACTIONS.has(pending.action)
+        && (pending.action !== 'home-task-association-report'
+          || (Array.isArray(pending.scopes) && pending.scopes.some(scope => String(scope).trim().toLowerCase() === 'sites.read.all')))
         && pending.accountId === account.homeAccountId
         && Array.isArray(pending.scopes)
         && grantedRequestedScopes(redirect, pending.scopes)) {
@@ -150,6 +152,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_quotation_report",
   "home-depreciation-report",
   "home-document-control-report",
+  "home-task-association-report",
   "action_cargos_table",
   "provision-report",
   "order-validation-report",
