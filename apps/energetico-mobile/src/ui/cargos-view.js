@@ -33,7 +33,7 @@ export function createCargosView({document:doc=globalThis.document,data}={}) {
   back.addEventListener('click',close);refresh.addEventListener('click',()=>{void load();});
   root.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();close();}
-    if(event.key==='Tab'){const nodes=[back,refresh,content].filter(node=>!node.disabled),first=nodes[0],last=nodes.at(-1);
+    if(event.key==='Tab'){const nodes=[...root.querySelectorAll('button,[tabindex="0"]')].filter(node=>!node.disabled&&!node.closest('[hidden]')&&node.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
       if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===root)){event.preventDefault();last.focus();}
       else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===root)){event.preventDefault();first.focus();}
     }
