@@ -130,6 +130,16 @@ async function defaultSacPathologiesDataFactory(options) {
   return createSacPathologiesData(options);
 }
 
+async function defaultQuotationReportViewFactory(options) {
+  const { createQuotationReportView } = await import('./ui/quotation-report-view.js');
+  return createQuotationReportView(options);
+}
+
+async function defaultQuotationReportDataFactory(options) {
+  const { createQuotationReportData } = await import('./chat/quotation-report-data.js');
+  return createQuotationReportData(options);
+}
+
 async function defaultPaymentLedgerDataFactory(options) {
   const { createSpendingReportsData } = await import('./chat/spending-reports-data.js');
   return createSpendingReportsData(options);
@@ -268,6 +278,8 @@ const COMMERCIAL_DOCUMENTS_ID = 'action_commercial_documents';
 const COMMERCIAL_DOCUMENTS_SCOPES = Object.freeze(['Sites.Read.All']);
 const SAC_PATHOLOGIES_ID = 'action_sac_pathologies';
 const SAC_PATHOLOGIES_SCOPES = Object.freeze(['Sites.Read.All']);
+const QUOTATION_REPORT_ID = 'action_quotation_report';
+const QUOTATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -773,6 +785,8 @@ export function createAppController({
   commercialDocumentsDataFactory = defaultCommercialDocumentsDataFactory,
   sacPathologiesViewFactory = defaultSacPathologiesViewFactory,
   sacPathologiesDataFactory = defaultSacPathologiesDataFactory,
+  quotationReportViewFactory = defaultQuotationReportViewFactory,
+  quotationReportDataFactory = defaultQuotationReportDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -832,6 +846,7 @@ export function createAppController({
   let contractorReportsOpening = null;
   let paymentLedger = null;
   let paymentLedgerOpening = null;
+  let spendingReportsRevision = 0;
   let cargosTable = null;
   let cargosTableOpening = null;
   let cargosTableRevision = 0;
@@ -853,6 +868,9 @@ export function createAppController({
   let sacPathologiesReport = null;
   let sacPathologiesOpening = null;
   let sacPathologiesSession = null;
+  let quotationReport = null;
+  let quotationReportOpening = null;
+  let quotationReportSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -3827,6 +3845,7 @@ export function createAppController({
   async function openPowerBiDashboard() {
     const dashboardAccount = account;
     if (!dashboardAccount || stopped) return false;
+    disposeQuotationReport();
     try {
       const accessToken = await powerBiAccessToken();
       if (stopped || account !== dashboardAccount) return false;
@@ -4199,8 +4218,20 @@ export function createAppController({
     panel?.destroy?.();
   }
 
-  function closeGalleryOverlays(preserveSacPathologies = false) {
+  function disposeQuotationReport() {
+    const session = quotationReportSession;
+    const panel = quotationReport;
+    quotationReportSession = null;
+    quotationReportOpening = null;
+    quotationReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
+  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false) {
     if (!preserveSacPathologies) disposeSacPathologiesReport();
+    if (!preserveQuotationReport) disposeQuotationReport();
     for (const gallery of [
       launchGallery,
       ordersGallery,
@@ -4415,6 +4446,7 @@ export function createAppController({
   async function openHrPayrollGallery(gallery) {
     if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery) || !account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (hrPayrollGalleryOpening) return hrPayrollGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4509,6 +4541,7 @@ export function createAppController({
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (launchGalleryOpening) return launchGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4606,6 +4639,7 @@ export function createAppController({
   async function openOrdersGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (ordersGalleryOpening) return ordersGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4639,6 +4673,7 @@ export function createAppController({
   async function openTasksGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (tasksGalleryOpening) return tasksGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -4681,6 +4716,7 @@ export function createAppController({
   async function openContractorReports() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (contractorReportsOpening) return contractorReportsOpening;
     const reportsAccount = account;
     const assertSession = () => {
@@ -4728,6 +4764,7 @@ export function createAppController({
     const validation = kind === 'validation';
     if (validation && store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     const provision = kind === 'provision';
     const management = kind === 'management';
     const opening = validation ? orderValidationReportOpening : provision ? provisionReportOpening : management ? managementReportOpening : paymentLedgerOpening;
@@ -4736,8 +4773,10 @@ export function createAppController({
     const method = validation ? 'loadOrderValidationSnapshot' : provision ? 'loadProvisionReportSnapshot' : management ? 'loadSnapshot' : 'loadPaymentsSnapshot';
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
+    const openingRevision = spendingReportsRevision;
     let requestSignal, requestGeneration = 0;
     const assertSession = () => {
+      if (openingRevision !== spendingReportsRevision) throw new DOMException('Consulta cancelada.', 'AbortError');
       if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision) throw new Error('A sessão do relatório foi encerrada.');
     };
     const request = Promise.resolve().then(async () => {
@@ -4782,7 +4821,7 @@ export function createAppController({
           if (validation && (flowBusy() || store.getState().activeFlow)) return false;
           const factory = validation ? orderValidationReportFactory : provision ? provisionReportFactory : management ? managementReportFactory : paymentLedgerFactory;
           const panel = await factory({ data, document: globalThis.document });
-          if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+          if (openingRevision !== spendingReportsRevision || stopped || account !== reportsAccount || sessionRevision !== reportsRevision
             || (validation && (flowBusy() || store.getState().activeFlow))) { panel.destroy?.(); return false; }
           report = panel;
           if (validation) orderValidationReport = panel;
@@ -4794,7 +4833,7 @@ export function createAppController({
         assertSession();
         return true;
       } catch (error) {
-        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+        if (openingRevision === spendingReportsRevision && !stopped && account === reportsAccount && sessionRevision === reportsRevision
           && !(validation && error?.name === 'AbortError')) setSessionError(error, validation ? 'Não foi possível abrir o relatório de validação de pedidos.' : provision ? 'Não foi possível abrir o relatório de provisões.' : management ? 'Não foi possível abrir o resumo gerencial de gastos.' : 'Não foi possível abrir o relatório de pagamentos.');
         return false;
       } finally {
@@ -4814,6 +4853,7 @@ export function createAppController({
   async function openCargosTable() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     const opening = cargosTableOpening;
     if (opening) return opening;
     const reportId = CARGOS_TABLE_ID;
@@ -4877,6 +4917,7 @@ export function createAppController({
   async function openAttendanceSummary() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (attendanceSummaryOpening) return attendanceSummaryOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -4976,6 +5017,7 @@ export function createAppController({
   async function openStageProgress() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (stageProgressOpening) return stageProgressOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5077,6 +5119,7 @@ export function createAppController({
   async function openCommercialReceipts() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (commercialReceiptsOpening) return commercialReceiptsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5189,6 +5232,7 @@ export function createAppController({
   async function openCommercialMilestones() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (commercialMilestonesOpening) return commercialMilestonesOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5301,6 +5345,7 @@ export function createAppController({
   async function openCommercialDocuments() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (commercialDocumentsOpening) return commercialDocumentsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5417,6 +5462,7 @@ export function createAppController({
 
   async function openSacPathologies() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeQuotationReport();
     if (sacPathologiesOpening) return sacPathologiesOpening;
     cargosTableRevision++;
     cargosTableOpening = null;
@@ -5541,9 +5587,142 @@ export function createAppController({
     return request;
   }
 
+  async function openQuotationReport() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (quotationReportOpening) return quotationReportOpening;
+    // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
+    // its request and destroy cached views so a later open gets a fresh session.
+    spendingReportsRevision++;
+    paymentLedgerOpening = managementReportOpening = provisionReportOpening = orderValidationReportOpening = null;
+    for (const report of [paymentLedger, managementReport, provisionReport, orderValidationReport]) report?.destroy?.();
+    paymentLedger = managementReport = provisionReport = orderValidationReport = null;
+    cargosTableRevision++;
+    cargosTableOpening = null;
+    cargosTable?.destroy?.();
+    cargosTable = null;
+    disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
+    disposeCommercialReceiptsReport();
+    disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
+    closeGalleryOverlays(false, true);
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const session = quotationReportSession || {
+      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
+    };
+    quotationReportSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || quotationReportSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = QUOTATION_REPORT_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          if (!session.authorization) {
+            const authorization = Promise.resolve().then(() => {
+              assertSession();
+              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
+              return auth.authorize(scopes, { resumeAction: QUOTATION_REPORT_ID });
+            });
+            session.authorization = authorization;
+            void authorization.finally(() => {
+              if (session.authorization === authorization) session.authorization = null;
+            }).catch(() => {});
+          }
+          await session.authorization;
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await quotationReportDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    let cancelOpening;
+    const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = quotationReport;
+        if (!report) {
+          const panel = await quotationReportViewFactory({ data, document: globalThis.document });
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          quotationReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && quotationReportSession === session && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir o relatório de cotações.');
+        }
+        if (quotationReportSession === session && !quotationReport) disposeQuotationReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, openingCancellation]).finally(() => {
+      session.lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (quotationReportOpening === request) quotationReportOpening = null;
+    });
+    quotationReportOpening = request;
+    return request;
+  }
+
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -5585,6 +5764,7 @@ export function createAppController({
   async function openRecurringExpensesGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (recurringExpensesGalleryOpening) return recurringExpensesGalleryOpening;
     const galleryAccount = account;
     const assertSession = () => {
@@ -5626,6 +5806,7 @@ export function createAppController({
   async function openRegistrationGallery(kind, replyId) {
     if (!account || stopped || flowBusy()) return false;
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
     const galleryAccount = account;
     const galleryRevision = sessionRevision;
@@ -6441,6 +6622,7 @@ export function createAppController({
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -6535,6 +6717,7 @@ export function createAppController({
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -7195,6 +7378,7 @@ export function createAppController({
       if (command.replyId === COMMERCIAL_MILESTONES_ID) return openCommercialMilestones();
       if (command.replyId === COMMERCIAL_DOCUMENTS_ID) return openCommercialDocuments();
       if (command.replyId === SAC_PATHOLOGIES_ID) return openSacPathologies();
+      if (command.replyId === QUOTATION_REPORT_ID) return openQuotationReport();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -7433,6 +7617,7 @@ export function createAppController({
     bind('open-commercial-documents', openCommercialDocuments);
     bind('opensacpathologies', openSacPathologies);
     bind('open-sac-pathologies', openSacPathologies);
+    bind('open-quotation-report', openQuotationReport);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -7521,6 +7706,7 @@ export function createAppController({
       if (commercialMilestonesSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialMilestonesReport();
       if (commercialDocumentsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialDocumentsReport();
       if (sacPathologiesSession && (flowBusy() || store.getState().activeFlow)) disposeSacPathologiesReport();
+      if (quotationReportSession && (flowBusy() || store.getState().activeFlow)) disposeQuotationReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -7591,6 +7777,7 @@ export function createAppController({
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();
     else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
     else if (pendingAction === SAC_PATHOLOGIES_ID) await openSacPathologies();
+    else if (pendingAction === QUOTATION_REPORT_ID) await openQuotationReport();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -7614,6 +7801,7 @@ export function createAppController({
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
     disposeSacPathologiesReport();
+    disposeQuotationReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();

@@ -18,7 +18,7 @@ function setup(t,loader=async()=>snapshot,vertical=false){
  t.after(()=>{view.destroy();dom.window.close();});
  return {view,root:view.element,dom,rotate(v){portrait=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
-test('second right mascot preserves cargos and five left shortcuts and dispatches its own action',t=>{
+test('second right mascot preserves cargos and existing left shortcuts and dispatches its own action',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
@@ -26,7 +26,7 @@ test('second right mascot preserves cargos and five left shortcuts and dispatche
  const root=dom.window.document.querySelector('#app'),shortcut=root.querySelector('[data-action=open-attendance-summary]');
  assert.ok(shortcut);assert.equal(shortcut.previousElementSibling.dataset.action,'open-cargos-table');
  assert.equal(shortcut.closest('.chat-bubble'),null);shortcut.querySelector('img').click();assert.equal(calls,1);
- assert.equal(root.querySelectorAll('.chat-main-payment-ledger-shortcut').length,4);
+ assert.deepEqual([...root.querySelectorAll('.chat-main-payment-ledger-shortcut')].map(node=>node.dataset.action).filter(action=>action!=='open-quotation-report'),['open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report']);
  view.render({...state,activeText:{id:'busy'}});assert.equal(root.querySelector('[data-action=open-attendance-summary]').disabled,true);
  assert.equal(new JSDOM(renderChatMarkup({...state,activeFlow:'flow'})).window.document.querySelector('[data-action=open-attendance-summary]'),null);
 });
