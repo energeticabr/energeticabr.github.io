@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 
 const module = await import("../src/chat/commercial-documents-model.js").catch(error => {
   if (error.code === "ERR_MODULE_NOT_FOUND") return {};
@@ -115,6 +116,22 @@ test("pt-BR scalar IDs resolve grouped thousands rather than another paid item",
  documents:[{id:"1",createdDate:"2026-01-01"},{id:"1000",createdDate:"2026-07-24"}]})).rows[0];
  assert.equal(row.ids.fiscalPayment.date,"");assert.equal(row.ids.fiscalPayment.tone,"amber");
  assert.equal(row.ids.proposal.date,"2026-07-24");assert.equal(row.ids.insurance.date,"");
+});
+test("Created timestamps use Sao Paulo calendar days without shifting date-only payment fields", () => {
+ const result=build(snapshot({documents:[{id:"10",createdDate:"2026-07-25T01:30:00Z"}],
+ expenses:[{id:"20",paidDate:"2026-07-25"}],receipts:[receipt({createdDate:"2026-09-15T01:30:00Z",dueDate:"2026-09-15"})]}));
+ assert.equal(result.rows[0].ids.deed.date,"2026-07-24");
+ assert.equal(result.rows[0].ids.fiscalPayment.date,"2026-07-25");
+ assert.equal(result.rows[0].contracts[0].payments[0].createdDate,"2026-09-14");
+ assert.equal(result.rows[0].contracts[0].payments[0].dueDate,"2026-09-15");
+});
+test("timezone-free Created input has the same validated instant on devices in different timezones", () => {
+ const url=new URL("../src/chat/commercial-documents-model.js",import.meta.url).href;
+ const code=`import {normalizeCommercialDocumentsCreatedDate as convert} from ${JSON.stringify(url)};process.stdout.write(convert("2026-07-25T01:30:00"));`;
+ for(const timezone of ["UTC","America/Sao_Paulo","Asia/Tokyo"]){
+  const result=spawnSync(process.execPath,["--input-type=module","-e",code],{env:{...process.env,TZ:timezone},encoding:"utf8",timeout:10000});
+  assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,"2026-07-24",timezone);
+ }
 });
 
 test("contracts sort by real chronology including timestamps while preserving the source calendar day", () => {
