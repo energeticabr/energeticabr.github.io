@@ -21,6 +21,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
   assert.match(css,/\.sp-activities/,'PWA delivers stage activity table styles');
   assert.match(css,/\.cm-milestones/,'PWA delivers commercial milestones table styles');
   assert.match(css,/\.cd-properties/,'PWA delivers commercial document pending table styles');
+  assert.match(css,/\.dcr-table/,'PWA delivers the document control table and status colors');
   const server=await createServer({root:app,server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   const profile=mkdtempSync(join(tmpdir(),'home-provisions-'));
   const pending=new Map();let child,socket;
@@ -55,7 +56,7 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       assert.equal(layout.transcriptOverflow,false,'área rolável sem overflow lateral');
       assert.ok(layout.image&&layout.i.x>=layout.m.x&&layout.i.right<=layout.m.right&&layout.i.bottom<=layout.m.bottom);
       const shortcuts=await evaluate(`(()=>{const buttons=[...document.querySelectorAll('.chat-main-provisions-shortcut,.chat-main-payment-ledger-shortcut')];return buttons.map(b=>{const r=b.getBoundingClientRect();return {action:b.dataset.action,y:r.y,bottom:r.bottom,image:b.querySelector('img').naturalWidth>0};});})()`);
-      assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report']);
+assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-provision-report','open-payment-ledger','open-management-report','open-order-validation-report','open-quotation-report','open-depreciation-report','open-document-control-report']);
       assert.ok(shortcuts.every((s,i)=>s.image&&(!i||s.y>=shortcuts[i-1].bottom+4)),JSON.stringify(shortcuts));
       const depreciationHit=await evaluate(`(()=>{const button=document.querySelector('[data-action=open-depreciation-report]'),r=button.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'';})()`);
       assert.equal(depreciationHit,'open-depreciation-report','real touch on the seventh mascot must not hit an overlapping legacy avatar');
@@ -283,6 +284,25 @@ test('mascote externo preserva largura de Pendências e abre provisões em celul
       await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:horizontalHit.x,y:horizontalHit.y,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate(`document.querySelector('.dr-overlay').hidden`),false,'real coordinate tap opens depreciation popup');
       await evaluate(`document.querySelector('.dr-overlay').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+      await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
+      await evaluate(`document.querySelector('[data-action=open-document-control-report]').click()`);
+      if(width<844){
+        assert.equal(await evaluate('window.documentControlLoads'),0,'portrait document control does not read SharePoint');
+        assert.equal(await evaluate(`document.querySelector('.dcr-orientation').hidden`),false);
+        await send('Emulation.setDeviceMetricsOverride',width===320?{width:568,height:320,deviceScaleFactor:1,mobile:false}:{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
+      }
+      let documentReady=false;for(let n=0;n<80&&!documentReady;n++){documentReady=await evaluate(`document.querySelectorAll('.dcr-table tbody tr').length===12&&document.querySelector('.dcr-brand img')?.naturalWidth>0`);if(!documentReady)await delay(100);}
+      assert.ok(documentReady,'eighth left mascot loads full document control report');
+      const documentFit=await evaluate(`(()=>{const p=document.querySelector('.dcr-dialog'),table=p.querySelector('table'),r=p.getBoundingClientRect(),last=table.querySelector('th:last-child').getBoundingClientRect(),c=p.querySelector('.dcr-content'),filters=[...p.querySelectorAll('.dcr-filter,.dcr-sort')].map(n=>n.getBoundingClientRect()),cards=[...p.querySelectorAll('.dcr-card')];return {top:r.top,bottom:r.bottom,height:innerHeight,right:r.right,last:last.right,columns:table.querySelectorAll('thead th').length,filters:filters.length,aligned:filters.every(f=>Math.abs(f.top-filters[0].top)<1),cards:cards.length,cardAligned:cards.every(n=>Math.abs(n.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<1),overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(table).fontSize),id:getComputedStyle(p.querySelector('.dcr-id')).color,expired:getComputedStyle(p.querySelector('.dcr-expired')).backgroundColor};})()`);
+      assert.ok(documentFit.top===0&&documentFit.bottom===documentFit.height&&!documentFit.overflow&&documentFit.last<=documentFit.right&&documentFit.aligned&&documentFit.cardAligned&&documentFit.font>=6,JSON.stringify(documentFit));assert.equal(documentFit.columns,11);assert.equal(documentFit.filters,8);assert.equal(documentFit.cards,5);assert.equal(documentFit.id,'rgb(151, 0, 0)');assert.equal(documentFit.expired,'rgb(254, 226, 226)');
+      await evaluate(`document.querySelector('.dcr-filter .sfs-arrow').click()`);
+      const documentDropdown=await evaluate(`(()=>{const p=document.querySelector('.dcr-filter .sfs-popup'),l=p.querySelector('.sfs-list'),r=l.getBoundingClientRect();return {placement:p.dataset.placement,visible:[...l.children].filter(n=>{const q=n.getBoundingClientRect();return q.top>=r.top-1&&q.bottom<=r.bottom+1;}).length};})()`);
+      assert.equal(documentDropdown.placement,'below');assert.ok(documentDropdown.visible>=7,JSON.stringify(documentDropdown));
+      await evaluate(`document.querySelector('.dcr-filter .sfs-arrow').click()`);
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:1,y:100,button:'left',clickCount:1},sessionId);await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:1,y:100,button:'left',clickCount:1},sessionId);assert.equal(await evaluate(`document.querySelector('.dcr-overlay').hidden`),true);
+      const docHit=await evaluate(`(()=>{const b=document.querySelector('[data-action=open-document-control-report]');b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {action:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'',x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      assert.equal(docHit.action,'open-document-control-report','real landscape touch must reach the eighth mascot');
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:docHit.x,y:docHit.y,button:'left',clickCount:1},sessionId);await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:docHit.x,y:docHit.y,button:'left',clickCount:1},sessionId);assert.equal(await evaluate(`document.querySelector('.dcr-overlay').hidden`),false);await evaluate(`document.querySelector('.dcr-overlay').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
       const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
