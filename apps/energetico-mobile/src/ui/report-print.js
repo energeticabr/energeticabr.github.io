@@ -12,6 +12,7 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-document-control-report':'Controle de documentos', 'open-task-association-report':'Atividades por associação',
 });
 const PRINTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8V3h12v5M6 17H3V9h18v8h-3M6 14h12v7H6z"/><path d="M6 11h.01"/></svg>';
+const REFRESH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3v6h-6M20.485 9A9 9 0 1 0 21 12"/></svg>';
 export function pendingReportPrintMarkup(){
  return `<button type="button" class="report-print-button report-print-pending" data-action="print-pending-provisions" aria-label="Abrir PDF das provisões pendentes" title="Abrir PDF do relatório">${PRINTER}</button>`;
 }
@@ -126,7 +127,7 @@ export function decorateReportPrint(panel,{action,previewMedia,closePreview,buil
  // The shared PDF action supersedes the old browser-print shortcut.
  host.querySelector('.cr-print')?.remove();
  const refresh=host.querySelector('button[aria-label^="Atualizar"]'),pair=doc.createElement('div');pair.className='report-print-actions';
- if(refresh){refresh.replaceWith(pair);pair.append(button,refresh);}else{pair.append(button);host.prepend(pair);}
+ if(refresh){refresh.innerHTML=REFRESH;refresh.replaceWith(pair);pair.append(button,refresh);}else{pair.append(button);host.prepend(pair);}
  const status=doc.createElement('p');status.className='report-pdf-status';status.hidden=true;status.setAttribute('role','alert');host.after(status);
  let destroyed=false,busy=false,ownedPreview=null;
  const closeOwned=()=>{if(ownedPreview){ownedPreview=null;closePreview?.();}};

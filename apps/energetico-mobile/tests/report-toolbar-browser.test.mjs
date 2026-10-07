@@ -26,6 +26,10 @@ test('all report printers and refresh controls are larger, side by side, and fit
      assert.ok(Math.abs(printer.y-refresh.y)<=1&&refresh.x>=printer.right,label);
      assert.ok(printer.width>=40&&refresh.width>=40&&printer.height>=44&&refresh.height>=44,label);
      assert.ok(report.printer.width>=32&&report.printer.height>=32&&report.refresh>=36,label);
+     assert.ok(report.refreshIcon,'refresh must have font-independent geometry: '+label);
+     assert.equal(report.refreshIcon.width,report.printer.width,label);
+     assert.equal(report.refreshIcon.height,report.printer.height,label);
+     for(const axis of ['width','height'])assert.ok(Math.abs(report.drawings[0][axis]-report.drawings[1][axis])<=1,label);
      assert.ok(report.hostOverflow<=1&&report.hostRight<=width+1,label);
      assert.ok(!report.filterRows.length||Math.max(...report.filterRows)-Math.min(...report.filterRows)<=1,label);
      assert.equal(report.legacyPrinters,0,label);

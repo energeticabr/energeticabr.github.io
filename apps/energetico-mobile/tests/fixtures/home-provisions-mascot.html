@@ -141,7 +141,9 @@ if(new URLSearchParams(location.search).has('print')){
    const pair=panel.element.querySelector('.report-print-actions');
    const measure=node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right};};
    const host=pair.parentElement,buttons=[...pair.children];
-   results.push({action,buttons:buttons.map(measure),printer:measure(pair.querySelector('svg')),refresh:buttons[1]?parseFloat(getComputedStyle(buttons[1]).fontSize):0,hostOverflow:host.scrollWidth-host.clientWidth,hostRight:measure(host).right,filterRows:[...host.children].filter(node=>node.querySelector('select')).map(node=>measure(node).y),legacyPrinters:panel.element.querySelectorAll('.cr-print').length});
+   const icons=buttons.map(button=>button.querySelector('svg'));
+   const drawing=icon=>{if(!icon)return null;const box=icon.getBBox(),scale=icon.getBoundingClientRect().width/icon.viewBox.baseVal.width;return {width:box.width*scale,height:box.height*scale};};
+   results.push({action,buttons:buttons.map(measure),printer:measure(icons[0]),refresh:buttons[1]?parseFloat(getComputedStyle(buttons[1]).fontSize):0,refreshIcon:icons[1]?measure(icons[1]):null,drawings:icons.map(drawing),hostOverflow:host.scrollWidth-host.clientWidth,hostRight:measure(host).right,filterRows:[...host.children].filter(node=>node.querySelector('select')).map(node=>measure(node).y),legacyPrinters:panel.element.querySelectorAll('.cr-print').length});
    panel.close();
   }
   document.documentElement.dataset.layout=JSON.stringify({results});

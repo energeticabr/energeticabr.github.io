@@ -4,7 +4,7 @@
 .qr-dialog { display:flex; flex-direction:column; }
 .qr-dialog .qr-content { flex:1; min-height:0; height:auto; }
 .report-print-button { display:grid; place-items:center; background:white; color:#a00000; border:0; cursor:pointer; touch-action:manipulation; }
-.report-print-button svg { width:34px; height:34px; max-width:100%; pointer-events:none; }
+.report-print-button svg,.report-print-actions > button > svg { width:34px; height:34px; max-width:100%; pointer-events:none; }
 .report-print-button:focus-visible { outline:2px solid #174e98; outline-offset:1px; }
 .report-print-button:disabled { opacity:.45; cursor:wait; }
 .report-print-actions > button:focus-visible { outline:2px solid #174e98; outline-offset:-2px; }
