@@ -258,7 +258,7 @@ test("galeria mantém Tab dentro do diálogo e cabeçalho visível na rolagem", 
   await gallery.open();
   const dialog = doc.querySelector('.rg-overlay');
   const first = dialog.querySelector('button');
-  const filterSummary = dialog.querySelector('.rg-filter-toggle');
+  const filterSummary = dialog.querySelector('.gallery-filter-button');
   const next = dialog.querySelector('.rg-pagination button:last-child');
   first.focus();
   first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));

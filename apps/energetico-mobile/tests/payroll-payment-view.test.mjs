@@ -11,7 +11,7 @@ function setup(t,gallery='FOLHAPGTO',overrides={}) {
 }
 test('white add-payment action opens a full screen with dependent closed selections and locked values',async t=>{
   const f=setup(t);await f.panel.open();const add=f.doc.querySelector('[data-action="add-payroll-payment"]');assert.ok(add);assert.equal(add.getAttribute('aria-label'),'Acrescentar pagamento');
-  assert.ok(add.closest('.hr-gallery-header'));assert.equal(add.previousElementSibling.textContent,'Galeria FOLHA PGTO');
+  assert.ok(add.closest('.hr-gallery-toolbar'));assert.equal(add.previousElementSibling.dataset.action,'toggle-payroll-filters');
   add.click();await tick();const screen=f.doc.querySelector('[data-payroll-payment-screen]');assert.ok(screen);assert.equal(screen.getAttribute('role'),'region');assert.equal(screen.hasAttribute('aria-modal'),false);
   const launch=screen.querySelector('[name=IDLANCAMENTO]'),sheet=screen.querySelector('[name=IDFOLHA]');
   launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change',{bubbles:true}));

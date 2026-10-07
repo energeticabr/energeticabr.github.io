@@ -1,0 +1,83 @@
+.gallery-create-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+.gallery-create-toolbar > * { min-width: 0; }
+.gallery-create-toolbar--filters { grid-template-columns: auto auto; justify-content: start; margin-bottom: 8px; }
+.gallery-create-toolbar > .gallery-filter-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  height: 46px;
+  padding: 8px 12px;
+  border: 1px solid #b9cede;
+  border-radius: 9px;
+  color: #0d3767;
+  background: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.gallery-create-toolbar > .gallery-create-button {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  min-width: 46px;
+  max-width: 46px;
+  height: 46px;
+  min-height: 46px;
+  padding: 0;
+  border: 1px solid #218443;
+  border-radius: 9px;
+  color: #218443;
+  background: #fff;
+  font-family: inherit;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.gallery-create-toolbar > .gallery-create-button:disabled { opacity: .5; cursor: default; }
+.gallery-create-button:focus-visible, .gallery-filter-button:focus-visible { outline: 3px solid #f0b323; outline-offset: 2px; }
+.gallery-create-filter-panel > summary { display: none !important; }
+.gallery-create-filter-panel:not([open]) { display: none; }
+.gallery-create-error {
+  position: fixed;
+  z-index: 2000;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  max-width: 36rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #b42318;
+  border-radius: 9px;
+  color: #8a1c13;
+  background: #fff1f0;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 16%);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+.gallery-create-error > span { flex: 1; min-width: 0; }
+.gallery-create-error > button {
+  flex: 0 0 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 9px;
+  color: inherit;
+  background: #fff;
+  font: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+.gallery-create-error > button:focus-visible { outline: 3px solid #f0b323; outline-offset: 2px; }

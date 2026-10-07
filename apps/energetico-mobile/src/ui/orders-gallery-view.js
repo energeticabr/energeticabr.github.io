@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -83,6 +84,7 @@ export function createOrdersGallery({
   openMediaCollection,
   onClose,
   onHome,
+  onCreate,
 } = {}) {
   if (!documentRef?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Documento e serviço de pedidos são obrigatórios.");
@@ -146,6 +148,9 @@ export function createOrdersGallery({
   const filterToggle = el('summary', 'og-filter-toggle');
   filterToggle.append(icon('M3 5h18l-7 8v6l-4 2v-8L3 5Z'), el('span', '', 'Filtros'));
   filterDisclosure.append(filterToggle);
+  const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
+    label: 'Adicionar um novo pedido', action: 'create-order',
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros de pedidos");
   const grid = el("div", "og-filter-grid");
@@ -201,7 +206,7 @@ export function createOrdersGallery({
   pagination.append(previous, pageLabel, next);
   const detail = el("section", "og-detail"); detail.hidden = true;
   detail.tabIndex = -1; detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes do pedido");
-  content.append(metrics, toolbar, filterDisclosure, notice, cards, pagination);
+  content.append(metrics, toolbar, createShortcut.toolbar, filterDisclosure, notice, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
   detail.addEventListener('keydown', event => {
@@ -212,8 +217,8 @@ export function createOrdersGallery({
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => data.saveEditor(context, fields),
-    deleteItem: (id, options) => data.deleteItem(id, options),
+    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       closeDetails();
       return loadSnapshot();
@@ -253,6 +258,7 @@ export function createOrdersGallery({
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
+    createShortcut.sync();
   }
 
   function filterOptions() {
@@ -546,6 +552,7 @@ export function createOrdersGallery({
   }
   function destroy() {
     if (destroyed) return;
+    createShortcut.destroy();
     recordActions.destroy(); autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove();
   }
 

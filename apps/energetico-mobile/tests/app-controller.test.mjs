@@ -27,7 +27,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -74,7 +74,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, contractorReportDataFactory, presencePaymentReportDataFactory, extraReportsFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -1514,6 +1514,306 @@ test('mais da galeria envia action_task e exibe o fluxo real de criação de tar
   assert.equal(dom.window.document.querySelector('.tg-overlay').hidden, true);
   assert.equal(h.store.getState().activeFlow.id, 'task');
   assert.equal(h.store.getState().messages.at(-1).question, 'QUAL É A TAREFA?');
+});
+
+const galleryCreationCases = [
+  ['action_launch_gallery', 'launchGalleryFactory', null, 'action_launch', 'EFETUAR LANÇAMENTO', 'launch'],
+  ['action_orders_gallery', 'ordersGalleryFactory', 'ordersGalleryDataFactory', 'action_pending_order_registration', 'EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)', 'pending_order_registration'],
+  ['action_tasks_gallery', 'tasksGalleryFactory', 'tasksGalleryDataFactory', 'action_task', 'ADICIONAR UMA NOVA TAREFA', 'task'],
+  ['action_payment_programming_gallery', 'paymentProgrammingGalleryFactory', 'paymentProgrammingGalleryDataFactory', 'action_payment', 'CRIAR UMA PROVISÃO DE PAGAMENTO', 'payment'],
+  ['action_recurring_expenses_gallery', 'recurringExpensesGalleryFactory', 'recurringExpensesGalleryDataFactory', 'action_recurring_expense', 'CRIAR UMA DESPESA RECORRENTE', 'recurring_expense'],
+  ['action_group_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_supply_group', 'CADASTRAR GRUPO', 'supply_group_registration'],
+  ['action_family_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_supply_family', 'CADASTRAR FAMÍLIA', 'supply_family_registration'],
+  ['action_subfamily_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_supply_subfamily', 'CADASTRAR SUBFAMÍLIA', 'supply_subfamily_registration'],
+  ['action_product_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_supply_product', 'CADASTRAR PRODUTO', 'supply_product_registration'],
+  ['action_documents_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_document', 'ADICIONAR UM NOVO DOCUMENTO', 'document'],
+  ['action_asset_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_fixed_asset', 'CADASTRAR IMOBILIZADO', 'fixed_asset_registration'],
+  ['action_asset_function_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_fixed_asset_function', 'CADASTRAR FUNÇÃO DO IMOBILIZADO', 'fixed_asset_function_registration'],
+  ['action_asset_product_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_fixed_asset_product', 'CADASTRAR PRODUTO IMOBILIZADO', 'fixed_asset_product_registration'],
+  ['action_asset_group_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_fixed_asset_group', 'CADASTRAR GRUPO IMOBILIZADO', 'fixed_asset_group_registration'],
+  ['action_work_diary_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_create_construction_diary', 'CADASTRAR DIÁRIO DE OBRAS', 'construction_diary_create'],
+  ['action_quote_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_create_new_quotation', 'CRIAR NOVA COTAÇÃO', 'new_quotation'],
+  ['action_contract_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_contractor_contract', 'CADASTRAR CONTRATO DE EMPREITEIRO', 'contractor_contract_registration'],
+  ['action_contract_line_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_contract_line', 'CADASTRAR LINHA CONTRATO', 'contract_line_registration'],
+  ['action_measurement_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_measurement', 'CADASTRAR MEDIÇÃO', 'measurement_registration'],
+  ['action_measurement_line_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_measurement_line', 'CADASTRAR LINHA MEDIÇÃO', 'measurement_line_registration'],
+  ['action_stage_demonstrative_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_create_construction_stage_demonstrative', 'CRIAR DEMONSTRATIVO DE ETAPA', 'construction_stage_demonstrative_create'],
+  ['action_construction_stage_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_register_construction_stage', 'CADASTRO DE ETAPA OBRA', 'construction_stage_registration'],
+  ['action_recurring_tasks_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_recurring_task_registration', 'CADASTRAR TAREFA RECORRENTE', 'recurring_task_registration'],
+  ['action_delegated_tasks_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_delegated_task', 'CRIAR UMA TAREFA DELEGADA', 'delegated_task'],
+];
+
+for (const [galleryId, factory, dataFactory, replyId, label, flow] of galleryCreationCases) {
+  test(`gallery create shortcut ${galleryId} starts its own existing flow`, async t => {
+    let options;
+    const h = makeHarness({
+      [factory]: async value => { options = value; return { open() {}, destroy() {} }; },
+      ...(dataFactory ? { [dataFactory]: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) } : {}),
+    });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    h.client.sendText = async payload => {
+      h.chatCalls.push(['text', payload]);
+      assert.equal(payload.replyId, replyId, 'only the matched existing workflow is requested');
+      return { status: 'awaiting_field', activeFlow: { id: flow, title: label },
+        messages: [{ type: 'poll', question: 'PRIMEIRO CAMPO DO CADASTRO', options: [] }] };
+    };
+    const before = h.chatCalls.length;
+    await h.view.emit('select-reply', { replyId: galleryId });
+    assert.equal(typeof options?.onCreate, 'function', 'gallery receives its creation callback');
+    await options.onCreate();
+    assert.deepEqual(h.chatCalls.slice(before), [['text', { text: label, replyId }]]);
+    assert.equal(h.store.getState().activeFlow.id, flow);
+    assert.equal(h.store.getState().messages.at(-1).question, 'PRIMEIRO CAMPO DO CADASTRO');
+  });
+}
+
+test('gallery creation callbacks cannot send after sign-out or controller stop', async t => {
+  let options;
+  const h = makeHarness({ ordersGalleryFactory: async value => {
+    options = value; return { open() {}, destroy() {} };
+  }, ordersGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_orders_gallery' });
+  assert.equal(typeof options?.onCreate, 'function');
+  const before = h.chatCalls.length;
+  h.controller.stop();
+  assert.equal(await options.onCreate(), false);
+  assert.equal(h.chatCalls.length, before, 'expired callback never starts a workflow');
+});
+
+test('cached gallery creation still works after a report navigation attempt', async t => {
+  let options, constructions = 0;
+  const h = makeHarness({
+    ordersGalleryFactory: async value => { options = value; constructions++; return { open() {}, close() {}, destroy() {} }; },
+    ordersGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    paymentLedgerDataFactory: async () => ({}),
+    paymentLedgerFactory: async () => ({ open() {}, close() {}, destroy() {} }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_orders_gallery' });
+  await h.view.emit('open-payment-ledger');
+  // The next report has no DOM in this harness, but navigation invalidates old
+  // openings before its factory runs. A cached gallery must remain reusable.
+  await h.view.emit('navigate-mascot-report', { from: 'open-payment-ledger', direction: 'next' });
+  await h.view.emit('select-reply', { replyId: 'action_orders_gallery' });
+  assert.equal(constructions, 1, 'the same gallery is reopened');
+  const before = h.chatCalls.length;
+  await options.onCreate();
+  assert.deepEqual(h.chatCalls.slice(before), [['text', {
+    text: 'EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)', replyId: 'action_pending_order_registration',
+  }]]);
+});
+
+test('IDFOLHA shortcut opens its native supplier-month registration without posting', async t => {
+  let galleryOptions, createOptions, opens = 0;
+  const writes = [];
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      loadPage: async () => ({}), loadPaymentsForPayrollId: async () => [],
+      loadSheetOptions: async () => ({ suppliers: [{ id: '9', label: 'Fornecedor' }], month: '2026-10' }),
+      saveSheet: async (...args) => { writes.push(args); return { id: '21' }; },
+    }),
+    hrPayrollGalleryFactory: async options => { galleryOptions = options; return { open() {}, destroy() {} }; },
+    payrollSheetCreateFactory: async options => { createOptions = options; return { open() { opens++; }, destroy() {} }; },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_idfolha' });
+  const before = h.chatCalls.length;
+  assert.equal(typeof galleryOptions.onCreate, 'function');
+  await galleryOptions.onCreate();
+  assert.equal(opens, 1);
+  assert.equal(h.chatCalls.length, before, 'no invented remote payroll command');
+  assert.deepEqual(await createOptions.loadOptions({}), { suppliers: [{ id: '9', label: 'Fornecedor' }], month: '2026-10' });
+  assert.deepEqual(writes, [], 'opening a registration never posts a sheet');
+  const draft = { supplierId: '9', month: '2026-10' };
+  await createOptions.save(draft, { operationId: 'sheet-op' });
+  assert.deepEqual(writes, [[draft, { operationId: 'sheet-op' }]]);
+  await h.view.emit('sign-out');
+  await assert.rejects(createOptions.save(draft, { operationId: 'expired-op' }), /sessão/i);
+  assert.equal(writes.length, 1);
+});
+
+test('IDFOLHA creation resumes locally after consent and returns to the gallery on close', async t => {
+  let options, galleryOpens = 0, destroys = 0;
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({ loadPage: async () => ({}), loadPaymentsForPayrollId: async () => [],
+      loadSheetOptions: async () => ({}), saveSheet: async () => ({}) }),
+    hrPayrollGalleryFactory: async () => ({ open() { galleryOpens++; }, destroy() {} }),
+    payrollSheetCreateFactory: async value => { options = value; return { open() {}, destroy() { destroys++; } }; },
+  });
+  h.auth.consumePendingAction = () => 'action_hr_create_idfolha';
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.ok(options);
+  assert.ok(h.chatCalls.every(([, payload]) => payload.replyId !== 'action_hr_create_idfolha'),
+    'consent resumes the native form, not a remote creation command');
+  options.onClose();
+  for (let n = 0; n < 20 && !galleryOpens; n++) await new Promise(done => setImmediate(done));
+  assert.equal(galleryOpens, 1);
+  assert.equal(destroys, 1);
+  options.onClose();
+  assert.equal(galleryOpens, 1, 'stale close never reopens a gallery');
+});
+
+test('IDFOLHA delayed creation factory is destroyed after logout, not opened', async t => {
+  let finish, opens = 0, destroys = 0;
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({}),
+    payrollSheetCreateFactory: () => new Promise(resolve => { finish = resolve; }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const opening = h.view.emit('select-reply', { replyId: 'action_hr_create_idfolha' });
+  for (let n = 0; n < 20 && !finish; n++) await new Promise(done => setImmediate(done));
+  assert.ok(finish);
+  await h.view.emit('sign-out');
+  finish({ open() { opens++; }, destroy() { destroys++; } });
+  assert.equal(await opening, false);
+  assert.equal(opens, 0);
+  assert.equal(destroys, 1);
+});
+
+test('IDFOLHA delayed creation cannot cover a newer gallery navigation', async t => {
+  let finish, opens = 0, destroys = 0;
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({}),
+    payrollSheetCreateFactory: () => new Promise(resolve => { finish = resolve; }),
+    ordersGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }) }),
+    ordersGalleryFactory: async () => ({ open() {}, destroy() {} }),
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const opening = h.view.emit('select-reply', { replyId: 'action_hr_create_idfolha' });
+  for (let n = 0; n < 20 && !finish; n++) await new Promise(done => setImmediate(done));
+  await h.view.emit('select-reply', { replyId: 'action_orders_gallery' });
+  finish({ open() { opens++; }, destroy() { destroys++; } });
+  assert.equal(await opening, false);
+  assert.equal(opens, 0);
+  assert.equal(destroys, 1);
+});
+
+test('IDFOLHA default real gallery and composer open through +, never posting on open', async t => {
+  const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.test' });
+  const previous = globalThis.document;
+  globalThis.document = dom.window.document;
+  let writes = 0;
+  const h = makeHarness({
+    hrPayrollGalleryDataFactory: async () => ({
+      loadPage: async () => ({ gallery: 'IDFOLHA', page: 1, rows: [], hasMore: false }),
+      loadPaymentsForPayrollId: async () => [],
+      loadSheetOptions: async () => ({ suppliers: [{ id: '7', label: 'Fornecedor demonstrativo' }], defaultMonth: '2026-10' }),
+      saveSheet: async () => { writes++; return { id: '21' }; },
+    }),
+  });
+  t.after(() => { h.controller.stop(); globalThis.document = previous; dom.window.close(); });
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_idfolha' });
+  const add = dom.window.document.querySelector('[data-gallery-create]');
+  assert.ok(add); assert.equal(add.disabled, false);
+  add.click();
+  for (let n = 0; n < 20 && !dom.window.document.querySelector('[data-payroll-sheet-create]'); n++)
+    await new Promise(done => setImmediate(done));
+  const dialog = dom.window.document.querySelector('[data-payroll-sheet-create]');
+  assert.ok(dialog, 'the real default factory opens the native form');
+  assert.equal(dialog.querySelector('[name="month"]').value, '2026-10');
+  assert.equal(writes, 0);
+  dialog.querySelector('[data-sheet-create-cancel]').click();
+  for (let n = 0; n < 20 && !dom.window.document.querySelector('[data-gallery-create]'); n++)
+    await new Promise(done => setImmediate(done));
+  assert.equal(dom.window.document.querySelector('[data-payroll-sheet-create]'), null);
+  assert.ok(dom.window.document.querySelector('[data-gallery-create]'));
+});
+
+for (const consentRetry of [false, true]) {
+  test(`IDFOLHA Graph write held at ${consentRetry ? 'consent retry' : 'silent token'} is blocked after logout`, async t => {
+    const { createGraphClient } = await import('../../../portal/data/graph-client.js');
+    let createOptions, resolveToken, attempts = 0, writes = 0;
+    const h = makeHarness({
+      hrPayrollGalleryDataFactory: async ({ tokenProvider }) => {
+        const graph = createGraphClient(tokenProvider, { fetch: async () => {
+          writes++; return new Response(JSON.stringify({ id: '21' }), { status: 201 });
+        } });
+        return { loadSheetOptions: async () => ({}), saveSheet: () => graph.request('/sites/test/lists/idfolha/items', {
+          method: 'POST', scopes: ['Sites.ReadWrite.All'], body: { fields: { FORNECEDOR: 'Teste' } },
+        }) };
+      },
+      payrollSheetCreateFactory: async options => { createOptions = options; return { open() {}, destroy() {} }; },
+    });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    await h.view.emit('select-reply', { replyId: 'action_hr_create_idfolha' });
+    h.auth.authorize = async () => {};
+    h.auth.getToken = () => {
+      if (consentRetry && attempts++ === 0) return Promise.reject(Object.assign(new Error('Autorize'), { code: 'AUTH_REQUIRED' }));
+      return new Promise(resolve => { resolveToken = resolve; });
+    };
+    const pending = createOptions.save({}, {});
+    const rejected = assert.rejects(pending, /sessão.*encerrada/i);
+    for (let n = 0; n < 20 && !resolveToken; n++) await new Promise(done => setImmediate(done));
+    assert.ok(resolveToken);
+    await h.view.emit('sign-out');
+    resolveToken('old-token');
+    await rejected;
+    assert.equal(writes, 0, 'no fetch POST after expired session');
+  });
+}
+
+test('real IDFOLHA Cancel and reopen cannot repeat an uncertain committed POST', async t => {
+  const { createSharePointRepository } = await import('../../../portal/data/sharepoint-repository.js');
+  const { createHrPayrollGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  const dom = new JSDOM('<main></main>', { url: 'https://example.test' });
+  const previousDocument = globalThis.document;
+  globalThis.document = dom.window.document;
+  const rows = { suppliers: [{ id: '7', fields: { Title: 'Fornecedor teste' } }], sheets: [] };
+  let writes = 0;
+  const graph = { async request(path, options = {}) {
+    const url = new URL(path, 'https://graph.microsoft.com/v1.0/');
+    const m = url.pathname.match(/\/lists\/(suppliers|sheets)\/(columns|items)(?:\/([^/]+))?$/);
+    if (m) {
+      const [, list, resource, id] = m;
+      if (resource === 'columns') return { value: list === 'suppliers'
+        ? [{ name: 'Title', displayName: 'CADASTRO', text: {} }]
+        : [{ name: 'Title', displayName: 'Title', text: {} }, { name: 'FORNECEDOR', displayName: 'FORNECEDOR', text: {} },
+          { name: 'MESREFERENCIA', displayName: 'MESREFERENCIA', text: {} }, { name: 'STATUS', displayName: 'STATUS', text: {} }] };
+      if (options.method === 'POST') {
+        assert.equal(list, 'sheets'); writes++;
+        rows.sheets.push({ id: String(100 + writes), fields: structuredClone(options.body.fields) });
+        throw new Error('Resposta perdida após cadastro');
+      }
+      if (id) return structuredClone(rows[list].find(row => row.id === id));
+      return { value: list === 'sheets' ? [] : structuredClone(rows[list]) };
+    }
+    if (url.pathname.endsWith('/lists')) return { value: [
+      { id: 'suppliers', displayName: 'FORNECEDORES', list: { template: 'genericList' } },
+      { id: 'sheets', displayName: 'IDFOLHA', list: { template: 'genericList' } },
+    ] };
+    return { id: 'site-id' };
+  } };
+  const repository = createSharePointRepository(graph, { personal: { host: 'tenant.sharepoint.com', path: '/sites/test' } });
+  const h = makeHarness({ hrPayrollGalleryDataFactory: async options =>
+    createHrPayrollGalleryData({ ...options, repository, now: () => new Date('2026-10-07T12:00:00Z') }) });
+  t.after(() => { h.controller.stop(); globalThis.document = previousDocument; dom.window.close(); });
+  const settleUntil = async predicate => {
+    for (let n = 0; n < 60 && !predicate(); n++) await new Promise(done => setImmediate(done));
+    assert.ok(predicate());
+  };
+  await h.controller.start();
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_idfolha' });
+  for (let iteration = 0; iteration < 2; iteration++) {
+    await settleUntil(() => dom.window.document.querySelector('[data-gallery-create]')?.disabled === false);
+    dom.window.document.querySelector('[data-gallery-create]').click();
+    await settleUntil(() => dom.window.document.querySelector('[data-payroll-sheet-create] [name="supplierId"]'));
+    const form = dom.window.document.querySelector('[data-payroll-sheet-create] form');
+    form.querySelector('[name="supplierId"]').value = '7';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await settleUntil(() => dom.window.document.querySelector('[data-payroll-sheet-create] [role="alert"]:not([hidden])'));
+    assert.equal(writes, 1, 'the same supplier/month is not posted again after Cancel and reopen');
+    dom.window.document.querySelector('[data-sheet-create-cancel]').click();
+  }
 });
 
 test("Relatórios abre localmente com token Microsoft e não envia a escolha para a VM", async t => {

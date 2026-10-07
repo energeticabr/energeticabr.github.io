@@ -1,3 +1,4 @@
+@import './gallery-create-shortcut.css';
 /* The gallery stays below tools/confirmation (20), signature placement (30)
    and the top-layer viewer. It is independent from the chat subtree. */
 .lg-overlay {

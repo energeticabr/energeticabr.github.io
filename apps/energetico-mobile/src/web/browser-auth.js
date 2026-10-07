@@ -162,6 +162,7 @@ const RESUMABLE_ACTIONS = new Set([
   "action_recurring_expenses_gallery",
   "action_powerbi_dashboard",
   "action_hr_gallery_idfolha",
+  "action_hr_create_idfolha",
   "action_hr_gallery_folhapgto",
   "action_asset_gallery",
   "action_asset_function_gallery",

@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -149,6 +150,7 @@ export function createRecurringExpensesGallery({
   openMediaCollection,
   onClose,
   onHome,
+  onCreate,
   now = () => new Date(),
 } = {}) {
   if (!documentRef?.body || typeof data?.loadSnapshot !== "function") {
@@ -254,6 +256,9 @@ export function createRecurringExpensesGallery({
   filterCount.hidden = true;
   filterButton.append(icon("filter"), el("span", "", "Filtros"), filterCount);
   toolbar.append(searchBar, filterButton);
+  const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: filterButton, onCreate, close,
+    label: 'Adicionar uma nova despesa recorrente', action: 'create-recurring-expense',
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
   const filterPanel = el("div", "re-filter-panel");
   filterPanel.id = "re-filter-panel";
   filterPanel.hidden = true;
@@ -284,8 +289,8 @@ export function createRecurringExpensesGallery({
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => data.saveEditor(context, fields),
-    deleteItem: (id, options) => data.deleteItem(id, options),
+    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot();
@@ -361,6 +366,7 @@ export function createRecurringExpensesGallery({
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
+    createShortcut.sync();
   }
 
   function setNotice(message, isError = false) {
@@ -668,6 +674,7 @@ export function createRecurringExpensesGallery({
 
   function destroy() {
     if (destroyed) return;
+    createShortcut.destroy();
     recordActions.destroy(); autoFilters.destroy();
     close();
     destroyed = true;

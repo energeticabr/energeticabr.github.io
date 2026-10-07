@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
@@ -157,6 +158,7 @@ export function createPaymentProgrammingGallery({
   openMediaCollection,
   onClose,
   onHome,
+  onCreate,
   now = () => new Date(),
 } = {}) {
   if (!documentRef?.body || typeof data?.loadSnapshot !== "function") {
@@ -215,6 +217,9 @@ export function createPaymentProgrammingGallery({
   filterIcon.append(filterPath);
   filterToggle.prepend(filterIcon);
   filterDisclosure.append(filterToggle);
+  const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
+    label: 'Adicionar um novo pagamento', action: 'create-payment',
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros da Galeria de Programação de Pagamentos G28");
   const grid = el("div", "og-filter-grid pg-filter-grid");
@@ -272,7 +277,7 @@ export function createPaymentProgrammingGallery({
   detail.setAttribute("role", "dialog");
   detail.setAttribute("aria-modal", "true");
   detail.setAttribute("aria-label", "Detalhes do pagamento previsto");
-  content.append(filterDisclosure, notice, listToolbar, cards, pagination);
+  content.append(createShortcut.toolbar, filterDisclosure, notice, listToolbar, cards, pagination);
   body.append(content, loadingLayer);
   root.append(header, body, detail);
   doc.body.append(root);
@@ -280,8 +285,8 @@ export function createPaymentProgrammingGallery({
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => data.saveEditor(context, fields),
-    deleteItem: (id, options) => data.deleteItem(id, options),
+    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot();
@@ -364,6 +369,7 @@ export function createPaymentProgrammingGallery({
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
+    createShortcut.sync();
   }
 
   function setNotice(message, isError = false) {
@@ -636,6 +642,7 @@ export function createPaymentProgrammingGallery({
 
   function destroy() {
     if (destroyed) return;
+    createShortcut.destroy();
     recordActions.destroy(); searchableSort.destroy(); autoFilters.destroy();
     close();
     destroyed = true;

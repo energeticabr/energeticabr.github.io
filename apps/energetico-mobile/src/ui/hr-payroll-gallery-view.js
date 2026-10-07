@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
@@ -37,7 +38,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome } = {}) {
+  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -129,7 +130,9 @@ export function createHrPayrollGallery({ document: documentOption,
   content.append(filterForm, status, cards, pagination);
   root.append(header, content);
   const recordActions = createGalleryRecordActions({
-    document: doc, host: root, loadEditor, saveEditor, deleteItem,
+    document: doc, host: root, loadEditor,
+    saveEditor: (...args) => createShortcut.runMutation(() => saveEditor(...args)),
+    deleteItem: (...args) => createShortcut.runMutation(() => deleteItem(...args)),
     onChanged: () => {
       // A pre-save background response must never replace the saved record.
       session += 1;
@@ -138,16 +141,21 @@ export function createHrPayrollGallery({ document: documentOption,
     },
   });
   const paymentComposer = gallery === 'FOLHAPGTO' && typeof loadPaymentOptions === 'function' && typeof savePayment === 'function'
-    ? createPayrollPaymentComposer({document:doc,host:root,loadOptions:loadPaymentOptions,save:savePayment,onSaved:async()=>{
+    ? createPayrollPaymentComposer({document:doc,host:root,loadOptions:loadPaymentOptions,
+      save: (...args) => createShortcut.runMutation(() => savePayment(...args)), onSaved:async()=>{
       session += 1;busy=false;
       await loadPage(1,null,false,true);
     }}) : null;
-  if(paymentComposer) {
-    header.classList.add('hr-gallery-header--add-payment');
-    const add=element('button','hr-gallery-button hr-gallery-add-payment','+');
-    add.type='button';add.dataset.action='add-payroll-payment';add.setAttribute('aria-label','Acrescentar pagamento');add.title='Acrescentar pagamento';
-    header.append(add);add.addEventListener('click',()=>{recordActions.close();void paymentComposer.open(add);});
-  }
+  const add = element('button', 'hr-gallery-button hr-gallery-add-payment', '+');
+  const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: toggle, button: add,
+    className: gallery === 'FOLHAPGTO' ? 'hr-gallery-button hr-gallery-add-payment' : 'hr-gallery-button',
+    label: gallery === 'FOLHAPGTO' ? 'Acrescentar pagamento' : 'Adicionar registro — Galeria IDFOLHA',
+    action: gallery === 'FOLHAPGTO' ? 'add-payroll-payment' : 'create-payroll-record',
+    onCreate: typeof onCreate === 'function' ? onCreate : paymentComposer ? () => {
+      recordActions.close(); void paymentComposer.open(add);
+    } : undefined,
+    close: typeof onCreate === 'function' ? closeGallery : () => {},
+    isAvailable: () => opened && !destroyed && !busy && !paymentComposer?.isOpen() });
 
   function selectedFilters() { return {search:search.value.trim(),...Object.fromEntries([...filterControls].map(([name,control])=>[name,control.value.trim()]))}; }
   function applyFilters() {
@@ -213,6 +221,7 @@ export function createHrPayrollGallery({ document: documentOption,
     next.disabled = busy || !hasMore;
     pageLabel.textContent = `Página ${page}`;
     close.disabled = false;
+    createShortcut.sync();
   }
 
   async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false, refresh = false) {
@@ -265,6 +274,7 @@ export function createHrPayrollGallery({ document: documentOption,
     session += 1;
     busy = false;
     root.hidden = true;
+    createShortcut.sync();
     onClose?.();
   }
   close.addEventListener("click", closeGallery);
@@ -296,6 +306,7 @@ export function createHrPayrollGallery({ document: documentOption,
     },
     close: closeGallery,
     destroy() {
+      createShortcut.destroy();
       doc.defaultView?.clearInterval(refreshTimer);
       doc.defaultView?.removeEventListener('focus', refreshSource);
       doc.removeEventListener('visibilitychange', refreshSource);

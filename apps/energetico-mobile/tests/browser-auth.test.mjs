@@ -10,6 +10,24 @@ const config = Object.freeze({
   webRedirectUri: "https://www.energeticabr.com/energetico/",
 });
 
+test('native IDFOLHA creation can resume after Microsoft write consent', async () => {
+  const account = { homeAccountId: 'account-1', username: 'pessoa@energeticabr.com' };
+  const values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  const client = { async initialize() {}, async handleRedirectPromise() { return null; },
+    getAllAccounts: () => [account], async acquireTokenRedirect() {} };
+  const first = createBrowserAuth({ client, config, storage });
+  await first.initialize();
+  await first.authorize(['Sites.ReadWrite.All'], { resumeAction: 'action_hr_create_idfolha' });
+  const resumed = createBrowserAuth({ config, storage, client: { ...client,
+    async handleRedirectPromise() { return { account, scopes: ['Sites.ReadWrite.All'], accessToken: 'sheet-token' }; } } });
+  await resumed.initialize();
+  assert.equal(resumed.consumePendingAction(), 'action_hr_create_idfolha');
+  assert.equal(resumed.consumePendingAction(), null);
+  assert.equal(values.size, 0);
+});
+
 test("restaura a conta do retorno Microsoft e obtém token silenciosamente", async () => {
   const calls = [];
   const account = {
