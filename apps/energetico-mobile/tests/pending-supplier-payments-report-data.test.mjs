@@ -134,14 +134,26 @@ test("page shape errors, partial markers, duplicate ids and cursor cycles reject
   }
 });
 
-test("malformed dates, core choices, lookup arrays and ambiguous payment references reject rows", async () => {
+test("malformed dates, core choices and lookup arrays reject rows", async () => {
   for (const changes of [{ DATA: "2026-02-30" }, { PRESENCA: "??" }, { FORNECEDOR: ["Ana", "Bia"] },
-    { IDPGTO: "1,2" }, { STATUS: "" }]) {
+    { STATUS: "" }]) {
     const repository = fixture({ async getItemsPage(_site, list) {
       return { items: [item(list, 1, list === "DESCRITIVOPRESENCA" ? changes : {})], hasMore: false };
     } });
     await assert.rejects(create({ repository }).loadSnapshot(), /registro|inválid|amb/i);
   }
+});
+
+test("legacy IDPGTO lists and absence markers preserve the complete source verbatim", async () => {
+  const references = ["3362, 3361", "AUSENTE", "", "0009", "não informado"];
+  const repository = fixture({ async getItemsPage(_site, list) {
+    return { items: list === "DESCRITIVOPRESENCA"
+      ? references.map((IDPGTO, i) => item(list, i + 1, { IDPGTO, ...(IDPGTO === "AUSENTE" ? { PRESENCA: "AUSENTE", STATUS: "AUSENTE" } : {}) }))
+      : [item(list)], hasMore: false };
+  } });
+  const data = await create({ repository }).loadSnapshot();
+  assert.equal(data.complete, true);
+  assert.deepEqual(data.presences.map(row => row.paymentId), references);
 });
 
 test("abort stops waiting on ignored transport and failed sibling list cancels outstanding loads", async () => {

@@ -127,7 +127,8 @@ function normalizeItem(item, resolved, kind) {
   }
   if (kind === "presences") {
     if (!["PRESENTE", "PENDENTE", "AUSENTE"].includes(choice(row.presence))) throw new TypeError("Registro com PRESENCA inválida.");
-    if (row.paymentId && (!/^\d+$/.test(row.paymentId) || new Money(row.paymentId).lte(0))) throw new TypeError("Registro com IDPGTO inválido ou ambíguo.");
+    // Legacy rows also store lists of IDs or AUSENTE here. Preserve the scalar
+    // text; only the model decides whether it is an unambiguous payment link.
     return Object.freeze({ ...row, dailyValue: money(raw.dailyValue), dailyValueBlank: raw.dailyValue == null || scalar(raw.dailyValue) === "" });
   }
   const unitValue = money(raw.unitValue); const quantity = money(raw.quantity);
