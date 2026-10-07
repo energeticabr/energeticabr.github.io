@@ -24,6 +24,7 @@ import "./ui/provision-report.css";
 import "./ui/order-validation-report.css";
 import "./ui/attendance-summary.css";
 import "./ui/stage-progress.css";
+import "./ui/supplier-payroll-report.css";
 import "./ui/commercial-receipts.css";
 import "./ui/commercial-milestones.css";
 import "./ui/commercial-documents.css";

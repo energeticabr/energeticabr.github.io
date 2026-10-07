@@ -946,9 +946,15 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   async function getColumns(siteKey, listId, options = {}) {
     throwIfAborted(options.signal);
     await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
+    throwIfAborted(options.signal);
     const cacheKey = `${siteKey}:${listId}`;
     if (columnCache.has(cacheKey)) return columnCache.get(cacheKey);
-    if (columnRequests.has(cacheKey)) return columnRequests.get(cacheKey);
+    const pending = columnRequests.get(cacheKey);
+    if (pending && pending.signal === options.signal) {
+      const columns = await pending.promise;
+      throwIfAborted(options.signal);
+      return columns;
+    }
     const request = (async () => {
       const config = getSiteConfig(siteKey);
       let columns;
@@ -965,16 +971,20 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         const site = await getSite(siteKey, options);
         columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
       }
+      throwIfAborted(options.signal);
       columnCache.set(cacheKey, columns);
       return columns;
     })();
-    columnRequests.set(cacheKey, request);
+    const pendingRequest = { promise: request, signal: options.signal };
+    columnRequests.set(cacheKey, pendingRequest);
     try {
-      return await request;
+      const columns = await request;
+      throwIfAborted(options.signal);
+      return columns;
     } catch (error) {
       throw error;
     } finally {
-      if (columnRequests.get(cacheKey) === request) columnRequests.delete(cacheKey);
+      if (columnRequests.get(cacheKey) === pendingRequest) columnRequests.delete(cacheKey);
     }
   }
 

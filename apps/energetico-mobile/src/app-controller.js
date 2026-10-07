@@ -92,6 +92,16 @@ async function defaultStageProgressDataFactory(options) {
   return createStageProgressData(options);
 }
 
+async function defaultSupplierPayrollReportFactory(options) {
+  const { createSupplierPayrollReportView } = await import('./ui/supplier-payroll-report-view.js');
+  return createSupplierPayrollReportView(options);
+}
+
+async function defaultSupplierPayrollReportDataFactory(options) {
+  const { createSupplierPayrollReportData } = await import('./chat/supplier-payroll-report-data.js');
+  return createSupplierPayrollReportData(options);
+}
+
 async function defaultCommercialReceiptsViewFactory(options) {
   const { createCommercialReceiptsReportView } = await import('./ui/commercial-receipts-view.js');
   return createCommercialReceiptsReportView(options);
@@ -302,6 +312,8 @@ const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
+const SUPPLIER_PAYROLL_REPORT_ID = 'action_supplier_payroll_report';
+const SUPPLIER_PAYROLL_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const COMMERCIAL_RECEIPTS_ID = 'action_commercial_receipts';
 const COMMERCIAL_RECEIPTS_SCOPES = Object.freeze(['Sites.Read.All']);
 const COMMERCIAL_MILESTONES_ID = 'action_commercial_milestones';
@@ -815,6 +827,8 @@ export function createAppController({
   attendanceSummaryDataFactory = defaultAttendanceSummaryDataFactory,
   stageProgressFactory = defaultStageProgressFactory,
   stageProgressDataFactory = defaultStageProgressDataFactory,
+  supplierPayrollReportFactory = defaultSupplierPayrollReportFactory,
+  supplierPayrollReportDataFactory = defaultSupplierPayrollReportDataFactory,
   commercialReceiptsViewFactory = defaultCommercialReceiptsViewFactory,
   commercialReceiptsDataFactory = defaultCommercialReceiptsDataFactory,
   commercialMilestonesViewFactory = defaultCommercialMilestonesViewFactory,
@@ -902,6 +916,9 @@ export function createAppController({
   let stageProgressReport = null;
   let stageProgressOpening = null;
   let stageProgressSession = null;
+  let supplierPayrollReport = null;
+  let supplierPayrollReportOpening = null;
+  let supplierPayrollReportSession = null;
   let commercialReceiptsReport = null;
   let commercialReceiptsOpening = null;
   let commercialReceiptsSession = null;
@@ -2043,6 +2060,7 @@ export function createAppController({
 
   async function openPendingProvisions() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSupplierPayrollReport();
     if (pendingProvisionOpenRequest) return pendingProvisionOpenRequest;
     const targetAccount = account, targetRevision = sessionRevision;
     const targetPoll = latestAssistantPoll();
@@ -3900,6 +3918,7 @@ export function createAppController({
   async function openPowerBiDashboard() {
     const dashboardAccount = account;
     if (!dashboardAccount || stopped) return false;
+    disposeSupplierPayrollReport();
     disposeQuotationReport();
     disposeDepreciationReport();
     disposeDocumentControlReport();
@@ -4216,6 +4235,16 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  function disposeSupplierPayrollReport() {
+    const session = supplierPayrollReportSession, panel = supplierPayrollReport;
+    supplierPayrollReportSession = null;
+    supplierPayrollReportOpening = null;
+    supplierPayrollReport = null;
+    session?.lifetime.abort();
+    for (const request of session?.requests || []) request.abort();
+    panel?.destroy?.();
+  }
+
   function disposeCommercialReceiptsReport() {
     const session = commercialReceiptsSession;
     const panel = commercialReceiptsReport;
@@ -4338,6 +4367,7 @@ export function createAppController({
       orderValidationReport,
       attendanceSummaryReport,
       stageProgressReport,
+      supplierPayrollReport,
       commercialReceiptsReport,
       commercialMilestonesReport,
       commercialDocumentsReport,
@@ -4359,6 +4389,7 @@ export function createAppController({
       case 'open-cargos-table': return cargosTable;
       case 'open-attendance-summary': return attendanceSummaryReport;
       case 'open-stage-progress': return stageProgressReport;
+      case 'open-supplier-payroll-report': return supplierPayrollReport;
       case 'open-commercial-receipts': return commercialReceiptsReport;
       case 'open-commercial-milestones': return commercialMilestonesReport;
       case 'open-commercial-documents': return commercialDocumentsReport;
@@ -4413,6 +4444,7 @@ export function createAppController({
     disposeContractorReports();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -4433,6 +4465,7 @@ export function createAppController({
       case 'open-cargos-table': return openCargosTable();
       case 'open-attendance-summary': return openAttendanceSummary();
       case 'open-stage-progress': return openStageProgress();
+      case 'open-supplier-payroll-report': return openSupplierPayrollReport();
       case 'open-commercial-receipts': return openCommercialReceipts();
       case 'open-commercial-milestones': return openCommercialMilestones();
       case 'open-commercial-documents': return openCommercialDocuments();
@@ -4533,6 +4566,7 @@ export function createAppController({
 
   async function openSupplierPayroll() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     const state = store.getState();
     if (!isSupplierPayrollMenu(latestAssistantPoll(state.messages), state.activeFlow)) return false;
     if (supplierPayrollOpening) return supplierPayrollOpening;
@@ -4637,6 +4671,7 @@ export function createAppController({
 
   async function openHrPayrollGallery(gallery) {
     if (!["IDFOLHA", "FOLHAPGTO"].includes(gallery) || !account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -4738,6 +4773,7 @@ export function createAppController({
 
   async function openLaunchGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -4841,6 +4877,7 @@ export function createAppController({
 
   async function openOrdersGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -4881,6 +4918,7 @@ export function createAppController({
 
   async function openTasksGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -4930,6 +4968,7 @@ export function createAppController({
 
   async function openContractorReports() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -4984,6 +5023,7 @@ export function createAppController({
 
   async function openPaymentLedger(kind = 'payments') {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     const validation = kind === 'validation';
     if (validation && store.getState().activeFlow) return false;
     disposeSacPathologiesReport();
@@ -5080,6 +5120,7 @@ export function createAppController({
 
   async function openCargosTable() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -5147,6 +5188,7 @@ export function createAppController({
 
   async function openAttendanceSummary() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -5253,8 +5295,110 @@ export function createAppController({
     attendanceSummaryOpening = request;
     return request;
   }
+  async function openSupplierPayrollReport() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (supplierPayrollReportOpening) return supplierPayrollReportOpening;
+    if (!supplierPayrollReportSession) resetMascotNavigationOverlays();
+    const reportsAccount = account, reportsRevision = sessionRevision;
+    const session = supplierPayrollReportSession || {
+      lifetime: new AbortController(), requests: new Set(), source: null, authorization: null,
+    };
+    supplierPayrollReportSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || (typeof auth.getAccount === 'function' && auth.getAccount()?.homeAccountId !== reportsAccount.homeAccountId)
+        || supplierPayrollReportSession !== session || session.lifetime.signal.aborted
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const tokenProvider = async (_scopes, { signal } = {}) => {
+      assertSession();
+      // Capture existing readers; a newly opened query cannot revive an old
+      // token/consent continuation after all of its readers were cancelled.
+      const readers = [...session.requests].filter(request => !request.signal.aborted);
+      const assertReaders = () => { assertSession(); if (signal?.aborted || !readers.some(request => session.requests.has(request) && !request.signal.aborted)) throw cancelled(); };
+      assertReaders();
+      try {
+        const token = await auth.getToken(SUPPLIER_PAYROLL_REPORT_SCOPES);
+        assertReaders(); return token;
+      } catch (error) {
+        assertReaders();
+        if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+        if (!session.authorization) {
+          const grant = Promise.resolve().then(() => { assertReaders(); return auth.authorize(SUPPLIER_PAYROLL_REPORT_SCOPES, { resumeAction: SUPPLIER_PAYROLL_REPORT_ID }); });
+          session.authorization = grant;
+          void grant.finally(() => { if (session.authorization === grant) session.authorization = null; }).catch(() => {});
+        }
+        await session.authorization; assertReaders();
+        const token = await auth.getToken(SUPPLIER_PAYROLL_REPORT_SCOPES);
+        assertReaders(); return token;
+      }
+    };
+    async function query(method, args, options = {}) {
+      assertSession(); if (options.signal?.aborted) throw cancelled();
+      const controller = new AbortController(), signal = controller.signal;
+      session.requests.add(controller);
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      session.lifetime.signal.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      const assertQuery = () => { assertSession(); if (signal.aborted) throw cancelled(); };
+      const request = async () => {
+        assertQuery();
+        if (!session.source) {
+          const source = Promise.resolve().then(() => { assertQuery(); return supplierPayrollReportDataFactory({ tokenProvider }); });
+          session.source = source;
+          void source.catch(() => { if (session.source === source) session.source = null; });
+        }
+        const source = await session.source; assertQuery();
+        const result = await source[method](...args, { ...options, signal }); assertQuery(); return result;
+      };
+      try { return await Promise.race([request(), cancellation]); }
+      finally {
+        session.requests.delete(controller);
+        options.signal?.removeEventListener('abort', abort);
+        session.lifetime.signal.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+      }
+    }
+    const data = {
+      loadSnapshot: options => query('loadSnapshot', [], options),
+      loadPaymentsForPayrollIds: (ids, options) => query('loadPaymentsForPayrollIds', [ids], options),
+    };
+    let cancelOpening;
+    const cancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = supplierPayrollReport;
+        if (!report) {
+          const panel = decorateControllerReport(await supplierPayrollReportFactory({ data, document: globalThis.document,
+            onClose: () => { if (supplierPayrollReportSession === session) disposeSupplierPayrollReport(); },
+          }), 'open-supplier-payroll-report');
+          try { assertSession(); } catch (error) { panel?.destroy?.(); throw error; }
+          supplierPayrollReport = report = panel;
+        }
+        await report.open(); assertSession(); return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && supplierPayrollReportSession === session && error?.name !== 'AbortError') setSessionError(error, 'Não foi possível abrir as folhas de pagamento.');
+        if (supplierPayrollReportSession === session && !supplierPayrollReport) disposeSupplierPayrollReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, cancellation]).finally(() => {
+      session.lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (supplierPayrollReportOpening === request) supplierPayrollReportOpening = null;
+    });
+    supplierPayrollReportOpening = request; return request;
+  }
+
   async function openStageProgress() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -5365,6 +5509,7 @@ export function createAppController({
 
   async function openCommercialReceipts() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -5486,6 +5631,7 @@ export function createAppController({
 
   async function openCommercialMilestones() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -5607,6 +5753,7 @@ export function createAppController({
 
   async function openCommercialDocuments() {
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -5739,6 +5886,7 @@ export function createAppController({
     cargosTable = null;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -5874,6 +6022,7 @@ export function createAppController({
     cargosTable = null;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -6010,6 +6159,7 @@ export function createAppController({
     cargosTable = null;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -6146,6 +6296,7 @@ export function createAppController({
     cargosTable = null;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -6283,6 +6434,7 @@ export function createAppController({
     cargosTable = null;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -6406,6 +6558,7 @@ export function createAppController({
 
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -6454,6 +6607,7 @@ export function createAppController({
 
   async function openRecurringExpensesGallery() {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -6502,6 +6656,7 @@ export function createAppController({
 
   async function openRegistrationGallery(kind, replyId) {
     if (!account || stopped || flowBusy()) return false;
+    disposeSupplierPayrollReport();
     disposeSacPathologiesReport();
     disposeQuotationReport();
     disposeDepreciationReport();
@@ -7320,6 +7475,7 @@ export function createAppController({
     const signInRevision = ++sessionRevision;
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -7418,6 +7574,7 @@ export function createAppController({
     disposeContractorReports();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();
@@ -8097,6 +8254,7 @@ export function createAppController({
       if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
       if (command.replyId === ATTENDANCE_SUMMARY_ID) return openAttendanceSummary();
       if (command.replyId === STAGE_PROGRESS_ID) return openStageProgress();
+      if (command.replyId === SUPPLIER_PAYROLL_REPORT_ID) return openSupplierPayrollReport();
       if (command.replyId === COMMERCIAL_RECEIPTS_ID) return openCommercialReceipts();
       if (command.replyId === COMMERCIAL_MILESTONES_ID) return openCommercialMilestones();
       if (command.replyId === COMMERCIAL_DOCUMENTS_ID) return openCommercialDocuments();
@@ -8358,7 +8516,8 @@ export function createAppController({
     bind('open-order-validation-report', () => openPaymentLedger('validation'));
     bind('open-cargos-table', openCargosTable);
     bind('open-attendance-summary', openAttendanceSummary);
-    bind('open-stage-progress', openStageProgress);
+  bind('open-stage-progress', openStageProgress);
+  bind('open-supplier-payroll-report', openSupplierPayrollReport);
     bind('open-commercial-receipts', openCommercialReceipts);
     bind('open-commercial-milestones', openCommercialMilestones);
     bind('open-commercial-documents', openCommercialDocuments);
@@ -8452,6 +8611,7 @@ export function createAppController({
     unsubscribeStore = store.subscribe(() => {
       if (attendanceSummarySession && (flowBusy() || store.getState().activeFlow)) disposeAttendanceSummaryReport();
       if (stageProgressSession && (flowBusy() || store.getState().activeFlow)) disposeStageProgressReport();
+      if (supplierPayrollReportSession && (flowBusy() || store.getState().activeFlow)) disposeSupplierPayrollReport();
       if (commercialReceiptsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialReceiptsReport();
       if (commercialMilestonesSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialMilestonesReport();
       if (commercialDocumentsSession && (flowBusy() || store.getState().activeFlow)) disposeCommercialDocumentsReport();
@@ -8526,6 +8686,7 @@ export function createAppController({
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === ATTENDANCE_SUMMARY_ID) await openAttendanceSummary();
     else if (pendingAction === STAGE_PROGRESS_ID) await openStageProgress();
+    else if (pendingAction === SUPPLIER_PAYROLL_REPORT_ID) await openSupplierPayrollReport();
     else if (pendingAction === COMMERCIAL_RECEIPTS_ID) await openCommercialReceipts();
     else if (pendingAction === COMMERCIAL_MILESTONES_ID) await openCommercialMilestones();
     else if (pendingAction === COMMERCIAL_DOCUMENTS_ID) await openCommercialDocuments();
@@ -8553,6 +8714,7 @@ export function createAppController({
     disposeContractorReports();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
+    disposeSupplierPayrollReport();
     disposeCommercialReceiptsReport();
     disposeCommercialMilestonesReport();
     disposeCommercialDocumentsReport();

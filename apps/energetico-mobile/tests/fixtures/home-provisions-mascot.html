@@ -13,6 +13,8 @@ import '/src/ui/attendance-summary.css';
 import { createAttendanceSummaryReportView } from '/src/ui/attendance-summary-view.js';
 import '/src/ui/stage-progress.css';
 import { createStageProgressReportView } from '/src/ui/stage-progress-view.js';
+import '/src/ui/supplier-payroll-report.css';
+import { createSupplierPayrollReportView } from '/src/ui/supplier-payroll-report-view.js';
 import '/src/ui/commercial-receipts.css';
 import { createCommercialReceiptsReportView } from '/src/ui/commercial-receipts-view.js';
 import '/src/ui/commercial-milestones.css';
@@ -64,6 +66,11 @@ const stageProgress=createStageProgressReportView({document,now:()=>new Date('20
  launches:[{id:'1',branch:'004 - EDIFÍCIO XAVANTE',stage:'ALVENARIA E ESTRUTURAS',startDate:'2026-08-10',endDate:'',status:'INICIADO',percent:25}]
  };}}});
 view.on('open-stage-progress',()=>void stageProgress.open());
+const supplierPayrollReport=createSupplierPayrollReportView({document,now:()=>new Date('2026-10-07T12:00:00Z'),data:{
+ async loadSnapshot(){return {complete:true,sheets:Array.from({length:12},(_,i)=>({id:String(i+1),supplier:`Fornecedor ${i+1}`,month:'2026-10'}))};},
+ async loadPaymentsForPayrollIds(ids){return ids.map(id=>({id:String(Number(id)+20),payrollId:id,supplier:`Fornecedor ${id}`,type:'DIÁRIA',date:'2026-11-02',launchId:String(Number(id)+100),unitValue:181,quantity:5,totalCents:90500}));}
+}});
+view.on('open-supplier-payroll-report',()=>void supplierPayrollReport.open());
 const commercial=createCommercialReceiptsReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
  complete:true,
  properties:Array.from({length:12},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+i),visualStatus:'ATIVO',saleStatus:'VENDIDO',brokerage:'PAGO CLIENTE',invoice:'PENDENTE',fiscal:'DECLARADO'})),
@@ -152,7 +159,7 @@ if(new URLSearchParams(location.search).has('print')){
  const {createAttachmentPreview}=await import('/src/web/attachment-preview.js');
  await import('/src/web/attachment-preview.css');
  const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{document.documentElement.dataset.shared='true';}});
- const panels=[['open-provision-report',provision],['open-payment-ledger',report],['open-management-report',management],['open-order-validation-report',validation],['open-cargos-table',cargos],['open-attendance-summary',attendance],['open-stage-progress',stageProgress],['open-commercial-receipts',commercial],['open-commercial-milestones',milestones],['open-commercial-documents',documents],['open-sac-pathologies',pathologies],['open-quotation-report',quotations],['open-depreciation-report',depreciation],['open-document-control-report',documentControl],['open-task-association-report',taskAssociation]];
+ const panels=[['open-provision-report',provision],['open-payment-ledger',report],['open-management-report',management],['open-order-validation-report',validation],['open-cargos-table',cargos],['open-attendance-summary',attendance],['open-stage-progress',stageProgress],['open-supplier-payroll-report',supplierPayrollReport],['open-commercial-receipts',commercial],['open-commercial-milestones',milestones],['open-commercial-documents',documents],['open-sac-pathologies',pathologies],['open-quotation-report',quotations],['open-depreciation-report',depreciation],['open-document-control-report',documentControl],['open-task-association-report',taskAssociation]];
  for(const [action,panel]of panels)decorateReportPrint(panel,{action,previewMedia:preview.open,closePreview:preview.close});
  if(new URLSearchParams(location.search).has('toolbar')){
   const results=[];
@@ -178,7 +185,8 @@ if(new URLSearchParams(location.search).has('print')){
     await panel.open();await new Promise(resolve=>requestAnimationFrame(resolve));
     const filters=panel.element.querySelector('.pl-filters,.dcr-toolbar,.tar-filters'),r=panel.element.getBoundingClientRect();
     const control=panel.element.querySelector('[data-action=print-report-pdf]');
-    const snapshot=captureFilteredReport(panel.element,{title:REPORT_PDF_TITLES[action]});
+    const restore=await panel.preparePrint?.();
+    const snapshot=captureFilteredReport(panel.element,{title:REPORT_PDF_TITLES[action]});restore?.();
     const pdf=await buildFilteredReportPdf(snapshot,{logoBytes});
     const task=getDocument({data:new Uint8Array(await pdf.arrayBuffer())});const parsed=await task.promise;
     const text=[];for(let page=1;page<=parsed.numPages;page++)text.push(...(await(await parsed.getPage(page)).getTextContent()).items.map(item=>item.str));

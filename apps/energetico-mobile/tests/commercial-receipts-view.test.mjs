@@ -17,10 +17,10 @@ function setup(t,loader=async()=>snapshot,vertical=false){
  const view=createCommercialReceiptsReportView({document:dom.window.document,data:{loadSnapshot:loader},now:()=>new Date('2026-10-05T12:00:00Z')});
  t.after(()=>{view.destroy();dom.window.close();});return {view,root:view.element,dom,rotate(v){portrait=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
-test('fourth right HOME mascot follows stages and dispatches commercial receipts without stealing menu space',t=>{
+test('first orange HOME mascot follows pink payroll and dispatches commercial receipts without stealing menu space',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
- let calls=0;view.on('open-commercial-receipts',()=>calls++);view.render(state);const b=dom.window.document.querySelector('[data-action=open-commercial-receipts]');assert.ok(b);assert.equal(b.previousElementSibling.dataset.action,'open-stage-progress');assert.equal(b.closest('.chat-bubble'),null);b.querySelector('img').click();assert.equal(calls,1);
+ let calls=0;view.on('open-commercial-receipts',()=>calls++);view.render(state);const b=dom.window.document.querySelector('[data-action=open-commercial-receipts]');assert.ok(b);assert.equal(b.previousElementSibling.dataset.action,'open-supplier-payroll-report');assert.equal(b.closest('.chat-bubble'),null);b.querySelector('img').click();assert.equal(calls,1);
  view.render({...state,activeText:{id:'busy'}});assert.equal(dom.window.document.querySelector('[data-action=open-commercial-receipts]').disabled,true);assert.equal(new JSDOM(renderChatMarkup({...state,activeFlow:'busy'})).window.document.querySelector('[data-action=open-commercial-receipts]'),null);
 });
 test('commercial report has five filters, branded colored indicators, ten property columns and pending payments',async t=>{

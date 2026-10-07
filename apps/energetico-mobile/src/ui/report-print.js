@@ -5,6 +5,7 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-payment-ledger':'Relatório de pagamentos', 'open-management-report':'Resumo gerencial de gastos',
  'open-order-validation-report':'Validação de notas pendentes e pedidos para baixa',
  'open-cargos-table':'Tabela de cargos', 'open-attendance-summary':'Resumo de presenças e ausências',
+ 'open-supplier-payroll-report':'Folhas de pagamento por fornecedor',
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',
  'open-commercial-milestones':'Andamento comercial dos imóveis',
  'open-commercial-documents':'Pendências documentais dos imóveis', 'open-sac-pathologies':'Acompanhamento de patologias',
@@ -135,8 +136,11 @@ export function decorateReportPrint(panel,{action,previewMedia,closePreview,buil
  const observer=new doc.defaultView.MutationObserver(update);observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['hidden','aria-busy']});update();
  async function print(event){
   event.preventDefault();event.stopPropagation();if(destroyed||busy||root.hidden||!root.isConnected)return;
-  let snapshot;
-  try{snapshot=captureFilteredReport(root,{title:REPORT_PDF_TITLES[action]});}catch(error){status.textContent=error.message;status.hidden=false;return;}
+  let snapshot,restore;
+  busy=true;update();status.hidden=true;
+  try{restore=await panel.preparePrint?.();if(destroyed||root.hidden)return;snapshot=captureFilteredReport(root,{title:REPORT_PDF_TITLES[action]});}
+  catch(error){if(!destroyed&&!root.hidden){status.textContent='Não foi possível gerar o PDF. Tente novamente.';status.hidden=false;}return;}
+  finally{restore?.();busy=false;update();}
   button.focus({preventScroll:true});
   busy=true;update();status.hidden=true;
   const owner=Symbol('report preview');ownedPreview=owner;
