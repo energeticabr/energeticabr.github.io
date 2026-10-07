@@ -70,6 +70,7 @@ export function createAuthService(plugin, config) {
   let pendingInitialization = null;
   let initialized = false;
   let initializationGeneration = 0;
+  let authorizationGeneration = 0;
 
   async function acceptAccount(value) {
     const candidate = normalizeAccount(value);
@@ -165,6 +166,7 @@ export function createAuthService(plugin, config) {
   }
 
   async function cancelSignIn() {
+    authorizationGeneration += 1;
     const operation = pendingSignIn;
     pendingSignIn = null;
     operation?.catch(() => {});
@@ -181,10 +183,12 @@ export function createAuthService(plugin, config) {
 
   async function getToken(scopes) {
     if (!account) throw new AuthInteractionRequiredError();
+    const activeAccount = account, generation = authorizationGeneration;
     const result = await invoke("getToken", {
       scopes: normalizeScopes(scopes),
       homeAccountId: account.homeAccountId,
     });
+    if (account !== activeAccount || generation !== authorizationGeneration) throw new AuthCancelledError();
     const accessToken = String(result?.accessToken || "");
     if (!accessToken) throw new AuthInteractionRequiredError();
     return accessToken;
@@ -193,6 +197,7 @@ export function createAuthService(plugin, config) {
   async function authorize(scopes) {
     if (!account) throw new AuthInteractionRequiredError();
     const activeAccount = account;
+    const generation = authorizationGeneration;
     const result = await invoke("signIn", {
       clientId: String(config.clientId),
       tenantId: String(config.tenantId),
@@ -202,6 +207,7 @@ export function createAuthService(plugin, config) {
       expectedHomeAccountId: activeAccount.homeAccountId,
       loginHint: activeAccount.username,
     });
+    if (account !== activeAccount || generation !== authorizationGeneration) throw new AuthCancelledError();
     const authorizedAccount = normalizeAccount(result?.account);
     if (!authorizedAccount) throw new AuthInteractionRequiredError();
     if (authorizedAccount.homeAccountId !== activeAccount.homeAccountId) {

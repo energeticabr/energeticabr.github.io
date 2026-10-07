@@ -18,7 +18,7 @@ test('all report printers and refresh controls are larger, side by side, and fit
    const dom=new JSDOM(stdout);
    try{
     const {results}=JSON.parse(dom.window.document.documentElement.dataset.layout);
-    assert.equal(results.length,15);
+    assert.equal(results.length,16);
     for(const report of results){
      const label=`${report.action} at ${width}: ${JSON.stringify(report)}`;
      assert.equal(report.buttons.length,2,label);

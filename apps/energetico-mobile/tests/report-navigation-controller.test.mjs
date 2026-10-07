@@ -8,7 +8,7 @@ import { createConversationStore } from '../src/chat/conversation-store.js';
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
 const groups = [
   ['open-pending-provisions', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
-  ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress'],
+  ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report'],
   ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'],
 ];
 const factories = {
@@ -20,6 +20,7 @@ const factories = {
   'open-cargos-table': 'cargosFactory',
   'open-attendance-summary': 'attendanceSummaryFactory',
   'open-stage-progress': 'stageProgressFactory',
+  'open-supplier-payroll-report': 'supplierPayrollReportFactory',
   'open-commercial-receipts': 'commercialReceiptsViewFactory',
   'open-commercial-milestones': 'commercialMilestonesViewFactory',
   'open-commercial-documents': 'commercialDocumentsViewFactory',
@@ -52,7 +53,7 @@ function harness(t, options = {}, { dom = true } = {}) {
   let sequence = 0;
   const store = createConversationStore({ randomUUID: () => `navigation-${++sequence}` });
   const source = async () => ({ loadSnapshot: async () => ({}), loadPaymentsSnapshot: async () => ({}),
-    loadProvisionReportSnapshot: async () => ({}), loadOrderValidationSnapshot: async () => ({}) });
+    loadProvisionReportSnapshot: async () => ({}), loadOrderValidationSnapshot: async () => ({}), loadPaymentsForPayrollIds: async () => [] });
   const factoryOptions = Object.fromEntries(Object.entries(factories).map(([action, factory]) => [factory, async ({ data }) => {
     const element = document.createElement('div');
     element.hidden = true;
@@ -72,7 +73,7 @@ function harness(t, options = {}, { dom = true } = {}) {
       getPendingProvisionSnapshot: async () => ({ rows: [] }) },
     pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
     ...Object.fromEntries(['paymentLedgerDataFactory', 'cargosDataFactory', 'attendanceSummaryDataFactory',
-      'stageProgressDataFactory', 'commercialReceiptsDataFactory', 'commercialMilestonesDataFactory',
+      'stageProgressDataFactory', 'supplierPayrollReportDataFactory', 'commercialReceiptsDataFactory', 'commercialMilestonesDataFactory',
       'commercialDocumentsDataFactory', 'sacPathologiesDataFactory', 'documentControlReportDataFactory',
       'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory'].map(name => [name, source])),
     ...factoryOptions, ...options, auth,
@@ -81,7 +82,7 @@ function harness(t, options = {}, { dom = true } = {}) {
   return { controller, view, handlers, store, calls, renders, panels, document };
 }
 
-test('every one of the fifteen separately opened mascot reports receives an accessible PDF printer',async t=>{
+test('every one of the sixteen separately opened mascot reports receives an accessible PDF printer',async t=>{
  for(const action of Object.keys(factories)){
   const h=harness(t);await h.controller.start();assert.equal(await h.view.emit(action),true,action);
   const printer=h.panels.at(-1).element.querySelector('[data-action="print-report-pdf"]');
@@ -124,7 +125,7 @@ for (const group of groups) {
 
 for (const [from, direction] of [
   ['open-pending-provisions', 'previous'], ['open-document-control-report', 'next'],
-  ['open-cargos-table', 'previous'], ['open-stage-progress', 'next'],
+  ['open-cargos-table', 'previous'], ['open-supplier-payroll-report', 'next'],
   ['open-commercial-receipts', 'previous'], ['open-sac-pathologies', 'next'],
   ['open-quotation-report', 'next'], ['open-depreciation-report', 'previous'],
   ['open-task-association-report', 'next'], ['unknown', 'next'],

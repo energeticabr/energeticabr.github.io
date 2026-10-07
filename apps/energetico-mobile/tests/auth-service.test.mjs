@@ -114,6 +114,40 @@ test("não troca a conta ativa se a autorização adicional retornar outra ident
   assert.equal(auth.getAccount().homeAccountId, "account-1");
 });
 
+test("autorização nativa atrasada não restaura a conta anterior depois de sair e entrar", async () => {
+  const first = { homeAccountId: "first", username: "a@energeticabr.com" };
+  const second = { homeAccountId: "second", username: "b@energeticabr.com" };
+  let complete;
+  const auth = createAuthService({
+    initialize: async () => ({ account: first }),
+    signIn: options => options.authorizationMode === "incremental"
+      ? new Promise(resolve => { complete = resolve; }) : Promise.resolve({ account: second }),
+    signOut: async () => {},
+    getToken: async ({ homeAccountId }) => ({ accessToken: `token-for-${homeAccountId}` }),
+  }, config);
+  await auth.initialize();
+  const consent = auth.authorize(["Sites.Read.All"]);
+  const rejected = assert.rejects(consent, { code: "AUTH_CANCELLED" });
+  await auth.signOut(); await auth.signIn();
+  complete({ account: first }); await rejected;
+  assert.equal(auth.getAccount().homeAccountId, "second");
+  assert.equal(await auth.getToken(["Sites.Read.All"]), "token-for-second");
+});
+
+test("renovação nativa atrasada não entrega token da sessão cancelada", async () => {
+  let complete;
+  const auth = createAuthService({
+    initialize: async () => ({ account: { homeAccountId: "first" } }),
+    getToken: () => new Promise(resolve => { complete = resolve; }),
+    signOut: async () => {},
+  }, config);
+  await auth.initialize();
+  const token = auth.getToken(["Sites.Read.All"]);
+  const rejected = assert.rejects(token, { code: "AUTH_CANCELLED" });
+  await auth.signOut(); complete({ accessToken: "old-token" }); await rejected;
+  assert.equal(auth.getAccount(), null);
+});
+
 test("login e saída mantêm somente a conta normalizada", async () => {
   const calls = [];
   const plugin = {

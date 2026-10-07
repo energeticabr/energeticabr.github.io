@@ -474,6 +474,122 @@ test("a descoberta de uma rota nova não herda o AbortSignal da consulta anterio
   assert.equal(graph.calls.length, 3, "a nova abertura faz sua própria leitura, sem reutilizar a solicitação abortada");
 });
 
+function metadataGate() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+async function realColumnsRepository(readColumns) {
+  const requests = [];
+  const graph = createGraphClient(async () => "test-token", {
+    fetch: async (url, options) => {
+      assert.equal(options.method, "GET");
+      if (new URL(url).pathname.endsWith("/columns")) {
+        requests.push({ url, options });
+        return readColumns(options, requests.length);
+      }
+      assert.match(url, /\/sites\/energeticaltda\.sharepoint\.com:/);
+      return jsonResponse(200, { id: "company-site" });
+    },
+  });
+  const repository = createSharePointRepository(graph, { company: companyGraphSite });
+  await repository.resolveSites();
+  return { repository, requests };
+}
+
+test("getColumns isolates different signals and old cleanup preserves the newer pending request", async () => {
+  const entered = metadataGate(), release = metadataGate();
+  const a = new AbortController(), b = new AbortController();
+  const wanted = [{ name: "field_9", displayName: "VALOR UNITÁRIO" }];
+  const { repository, requests } = await realColumnsRepository(async (options, number) => {
+    if (number === 1) {
+      entered.resolve();
+      return new Promise((_resolve, reject) => options.signal.addEventListener("abort",
+        () => reject(new DOMException("Supplier A closed", "AbortError")), { once: true }));
+    }
+    await release.promise;
+    return jsonResponse(200, { value: wanted });
+  });
+  const first = repository.getColumns("company", "LANCAMENTOS", { signal: a.signal });
+  const firstRejected = assert.rejects(first, error => error?.code === "request_aborted");
+  await entered.promise;
+  const second = repository.getColumns("company", "LANCAMENTOS", { signal: b.signal })
+    .then(value => ({ value }), error => ({ error }));
+  await new Promise(resolve => setImmediate(resolve));
+  a.abort(); await firstRejected;
+  // The old finally must not delete B's pending metadata: another B consumer joins it.
+  const joined = repository.getColumns("company", "LANCAMENTOS", { signal: b.signal });
+  await new Promise(resolve => setImmediate(resolve)); release.resolve();
+  const survivor = await second;
+  assert.equal(survivor.error, undefined, "supplier B must not inherit A's cancellation");
+  assert.deepEqual(survivor.value, wanted);
+  assert.deepEqual(await joined, wanted);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(await repository.getColumns("company", "LANCAMENTOS", { signal: new AbortController().signal }), wanted);
+  assert.equal(requests.length, 2, "completed metadata is still shared across consumers");
+});
+
+for (const withSignal of [false, true]) {
+  test(`getColumns deduplicates simultaneous consumers with ${withSignal ? 'the same signal' : 'no signal'}`, async () => {
+    const entered = metadataGate(), release = metadataGate();
+    const wanted = [{ name: "QUANTIDADE", displayName: "QUANTIDADE" }];
+    const options = withSignal ? { signal: new AbortController().signal } : {};
+    const { repository, requests } = await realColumnsRepository(async () => {
+      entered.resolve(); await release.promise; return jsonResponse(200, { value: wanted });
+    });
+    const first = repository.getColumns("company", "LANCAMENTOS", options);
+    await entered.promise;
+    const second = repository.getColumns("company", "LANCAMENTOS", options);
+    await new Promise(resolve => setImmediate(resolve)); release.resolve();
+    assert.deepEqual(await first, wanted); assert.deepEqual(await second, wanted);
+    assert.equal(requests.length, 1);
+  });
+}
+
+test("getColumns checks cancellation after authorization before returning completed cache", async () => {
+  const wanted = [{ name: "VALORUNITARIO" }];
+  const { repository, requests } = await realColumnsRepository(async () => jsonResponse(200, { value: wanted }));
+  assert.deepEqual(await repository.getColumns("company", "LANCAMENTOS"), wanted);
+  const entered = metadataGate(), release = metadataGate(), controller = new AbortController();
+  repository.setAuthorizationProvider({ async authorize() { entered.resolve(); await release.promise; } });
+  const pending = repository.getColumns("company", "LANCAMENTOS", { signal: controller.signal });
+  const rejected = assert.rejects(pending, error => error?.name === "AbortError");
+  await entered.promise; controller.abort(); release.resolve(); await rejected;
+  repository.setAuthorizationProvider({ async authorize() {} });
+  assert.deepEqual(await repository.getColumns("company", "LANCAMENTOS"), wanted);
+  assert.equal(requests.length, 1);
+});
+
+test("late columns from an aborted ignored-signal transport cannot poison completed cache", async () => {
+  const entered = metadataGate(), release = metadataGate(), controller = new AbortController();
+  const fresh = [{ name: "QUANTIDADE", displayName: "Current quantity" }];
+  const { repository, requests } = await realColumnsRepository(async (_options, number) => {
+    if (number === 1) {
+      entered.resolve(); await release.promise;
+      return jsonResponse(200, { value: [{ name: "stale" }] });
+    }
+    return jsonResponse(200, { value: fresh });
+  });
+  const first = repository.getColumns("company", "LANCAMENTOS", { signal: controller.signal });
+  const rejected = assert.rejects(first, error => error?.name === "AbortError");
+  await entered.promise; controller.abort(); release.resolve(); await rejected;
+  assert.deepEqual(await repository.getColumns("company", "LANCAMENTOS"), fresh);
+  assert.deepEqual(await repository.getColumns("company", "LANCAMENTOS"), fresh);
+  assert.equal(requests.length, 2);
+});
+
+test("failed column requests are removed so the same signal can retry metadata", async () => {
+  const controller = new AbortController(), wanted = [{ name: "VALORUNITARIO" }];
+  const { repository, requests } = await realColumnsRepository(async (_options, number) => number === 1
+    ? jsonResponse(503, { error: { code: "unavailable", message: "Metadata unavailable" } })
+    : jsonResponse(200, { value: wanted }));
+  await assert.rejects(repository.getColumns("company", "LANCAMENTOS", { signal: controller.signal }),
+    error => error?.status === 503);
+  assert.deepEqual(await repository.getColumns("company", "LANCAMENTOS", { signal: controller.signal }), wanted);
+  assert.equal(requests.length, 2);
+});
+
 test("o repositorio mantem somente metadados em cache e permite limpa-los no logout", async () => {
   const graph = createFakeGraph([
     { id: "company-site" },

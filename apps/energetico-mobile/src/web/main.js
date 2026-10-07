@@ -36,6 +36,7 @@ import "../ui/management-report.css";
 import "../ui/cargos.css";
 import "../ui/attendance-summary.css";
 import "../ui/stage-progress.css";
+import "../ui/supplier-payroll-report.css";
 import "../ui/commercial-receipts.css";
 import "../ui/commercial-milestones.css";
 import "../ui/commercial-documents.css";
