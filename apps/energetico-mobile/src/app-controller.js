@@ -177,6 +177,16 @@ async function defaultTaskAssociationReportDataFactory(options) {
   return createTaskAssociationReportData(options);
 }
 
+async function defaultDelegatedDeadlineReportViewFactory(options) {
+  const { createDelegatedDeadlineReportView } = await import('./ui/delegated-deadline-report-view.js');
+  return createDelegatedDeadlineReportView(options);
+}
+
+async function defaultDelegatedDeadlineReportDataFactory(options) {
+  const { createDelegatedDeadlineReportData } = await import('./chat/delegated-deadline-report-data.js');
+  return createDelegatedDeadlineReportData(options);
+}
+
 async function defaultQuotationReportDataFactory(options) {
   const { createQuotationReportData } = await import('./chat/quotation-report-data.js');
   return createQuotationReportData(options);
@@ -335,6 +345,8 @@ export const DOCUMENT_CONTROL_REPORT_ID = 'home-document-control-report';
 const DOCUMENT_CONTROL_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 export const TASK_ASSOCIATION_REPORT_ID = 'home-task-association-report';
 const TASK_ASSOCIATION_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
+export const DELEGATED_DEADLINE_REPORT_ID = 'home-delegated-deadline-report';
+const DELEGATED_DEADLINE_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
 const MANAGEMENT_REPORT_ID = 'action_management_report';
 const PROVISION_REPORT_ID = 'provision-report';
 const ORDER_VALIDATION_REPORT_ID = 'order-validation-report';
@@ -876,6 +888,8 @@ export function createAppController({
   documentControlReportDataFactory = defaultDocumentControlReportDataFactory,
   taskAssociationReportViewFactory = defaultTaskAssociationReportViewFactory,
   taskAssociationReportDataFactory = defaultTaskAssociationReportDataFactory,
+  delegatedDeadlineReportViewFactory = defaultDelegatedDeadlineReportViewFactory,
+  delegatedDeadlineReportDataFactory = defaultDelegatedDeadlineReportDataFactory,
   paymentLedgerFactory = defaultPaymentLedgerFactory,
   managementReportFactory = defaultManagementReportFactory,
   provisionReportFactory = defaultProvisionReportFactory,
@@ -975,6 +989,9 @@ export function createAppController({
   let taskAssociationReport = null;
   let taskAssociationReportOpening = null;
   let taskAssociationReportSession = null;
+  let delegatedDeadlineReport = null;
+  let delegatedDeadlineReportOpening = null;
+  let delegatedDeadlineReportSession = null;
   let managementReport = null;
   let managementReportOpening = null;
   let provisionReport = null;
@@ -3959,6 +3976,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     try {
       const accessToken = await powerBiAccessToken();
       if (stopped || account !== dashboardAccount) return false;
@@ -4385,13 +4403,25 @@ export function createAppController({
     panel?.destroy?.();
   }
 
-  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false) {
+  function disposeDelegatedDeadlineReport() {
+    const session = delegatedDeadlineReportSession;
+    const panel = delegatedDeadlineReport;
+    delegatedDeadlineReportSession = null;
+    delegatedDeadlineReportOpening = null;
+    delegatedDeadlineReport = null;
+    session?.lifetime.abort();
+    session?.loadController?.abort();
+    panel?.destroy?.();
+  }
+
+  function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false, preserveDelegatedDeadlineReport = false) {
     disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveQuotationReport) disposeQuotationReport();
     if (!preserveDepreciationReport) disposeDepreciationReport();
     if (!preserveDocumentControlReport) disposeDocumentControlReport();
     if (!preserveTaskAssociationReport) disposeTaskAssociationReport();
+    if (!preserveDelegatedDeadlineReport) disposeDelegatedDeadlineReport();
     for (const gallery of [
       launchGallery,
       ordersGallery,
@@ -4423,6 +4453,8 @@ export function createAppController({
       case 'open-management-report': return managementReport;
       case 'open-order-validation-report': return orderValidationReport;
       case 'open-document-control-report': return documentControlReport;
+      case 'open-task-association-report': return taskAssociationReport;
+      case 'open-delegated-deadline-report': return delegatedDeadlineReport;
       case 'open-cargos-table': return cargosTable;
       case 'open-attendance-summary': return attendanceSummaryReport;
       case 'open-stage-progress': return stageProgressReport;
@@ -4499,6 +4531,8 @@ export function createAppController({
       case 'open-management-report': return openPaymentLedger('management');
       case 'open-order-validation-report': return openPaymentLedger('validation');
       case 'open-document-control-report': return openDocumentControlReport();
+      case 'open-task-association-report': return openTaskAssociationReport();
+      case 'open-delegated-deadline-report': return openDelegatedDeadlineReport();
       case 'open-cargos-table': return openCargosTable();
       case 'open-attendance-summary': return openAttendanceSummary();
       case 'open-stage-progress': return openStageProgress();
@@ -4795,6 +4829,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (hrPayrollGalleryOpening) return hrPayrollGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -4899,6 +4934,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (launchGalleryOpening) return launchGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -5004,6 +5040,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (ordersGalleryOpening) return ordersGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -5046,6 +5083,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (tasksGalleryOpening) return tasksGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -5096,6 +5134,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (contractorReportsOpening) return contractorReportsOpening;
     const reportsAccount = account;
     const openingIsCurrent = galleryOpeningGuard(reportsAccount);
@@ -5153,6 +5192,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     const provision = kind === 'provision';
     const management = kind === 'management';
     const opening = validation ? orderValidationReportOpening : provision ? provisionReportOpening : management ? managementReportOpening : paymentLedgerOpening;
@@ -5248,6 +5288,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     const opening = cargosTableOpening;
     if (opening) return opening;
     const reportId = CARGOS_TABLE_ID;
@@ -5316,6 +5357,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (attendanceSummaryOpening) return attendanceSummaryOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5526,6 +5568,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (stageProgressOpening) return stageProgressOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5637,6 +5680,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (commercialReceiptsOpening) return commercialReceiptsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5759,6 +5803,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (commercialMilestonesOpening) return commercialMilestonesOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -5881,6 +5926,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (commercialDocumentsOpening) return commercialDocumentsOpening;
     const reportsAccount = account;
     const reportsRevision = sessionRevision;
@@ -6001,6 +6047,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (sacPathologiesOpening) return sacPathologiesOpening;
     cargosTableRevision++;
     cargosTableOpening = null;
@@ -6131,6 +6178,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (quotationReportOpening) return quotationReportOpening;
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
     // its request and destroy cached views so a later open gets a fresh session.
@@ -6678,6 +6726,148 @@ export function createAppController({
     return request;
   }
 
+  async function openDelegatedDeadlineReport() {
+    if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
+    if (delegatedDeadlineReportSession && delegatedDeadlineReportSession.origin !== globalThis.location?.origin) disposeDelegatedDeadlineReport();
+    if (delegatedDeadlineReportOpening) return delegatedDeadlineReportOpening;
+    galleryOpeningRevision++;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
+    registrationGalleryOpenings.clear();
+    // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
+    // its request and destroy cached views so a later open gets a fresh session.
+    spendingReportsRevision++;
+    paymentLedgerOpening = managementReportOpening = provisionReportOpening = orderValidationReportOpening = null;
+    for (const report of [paymentLedger, managementReport, provisionReport, orderValidationReport]) report?.destroy?.();
+    paymentLedger = managementReport = provisionReport = orderValidationReport = null;
+    cargosTableRevision++;
+    cargosTableOpening = null;
+    cargosTable?.destroy?.();
+    cargosTable = null;
+    disposeAttendanceSummaryReport();
+    disposeStageProgressReport();
+    disposeSupplierPayrollReport();
+    disposeCommercialReceiptsReport();
+    disposeCommercialMilestonesReport();
+    disposeCommercialDocumentsReport();
+    closeGalleryOverlays(false, false, false, false, false, true);
+    const reportsAccount = account;
+    const reportsRevision = sessionRevision;
+    const reportsOrigin = globalThis.location?.origin;
+    const session = delegatedDeadlineReportSession || {
+      origin: reportsOrigin,
+      lifetime: new AbortController(), loadController: null, generation: 0, authorization: null,
+    };
+    delegatedDeadlineReportSession = session;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || delegatedDeadlineReportSession !== session || session.lifetime.signal.aborted
+        || globalThis.location?.origin !== reportsOrigin
+        || flowBusy() || store.getState().activeFlow) throw cancelled();
+    };
+    const data = { async loadSnapshot(options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      session.loadController?.abort();
+      const controller = new AbortController();
+      session.loadController = controller;
+      const generation = ++session.generation;
+      const signal = controller.signal;
+      const assertQuery = () => {
+        assertSession();
+        if (signal.aborted || generation !== session.generation) throw cancelled();
+      };
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      signal.addEventListener('abort', rejectCancelled, { once: true });
+      // Each source owns this request's token provider. A source that resumes
+      // after replacement must never borrow the replacement's credentials.
+      const tokenProvider = async () => {
+        const scopes = DELEGATED_DEADLINE_REPORT_SCOPES;
+        assertQuery();
+        try {
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        } catch (error) {
+          assertQuery();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          if (!session.authorization) {
+            const authorization = Promise.resolve().then(() => {
+              assertSession();
+              if (!session.loadController || session.loadController.signal.aborted) throw cancelled();
+              return auth.authorize(scopes, { resumeAction: DELEGATED_DEADLINE_REPORT_ID });
+            });
+            session.authorization = authorization;
+            void authorization.finally(() => {
+              if (session.authorization === authorization) session.authorization = null;
+            }).catch(() => {});
+          }
+          await session.authorization;
+          assertQuery();
+          const token = await auth.getToken(scopes);
+          assertQuery();
+          return token;
+        }
+      };
+      const load = async () => {
+        try {
+          assertQuery();
+          const source = await delegatedDeadlineReportDataFactory({ tokenProvider });
+          assertQuery();
+          const snapshot = await source.loadSnapshot({ ...options, signal });
+          assertQuery();
+          return snapshot;
+        } catch (error) {
+          assertQuery();
+          throw error;
+        }
+      };
+      try {
+        return await Promise.race([load(), cancellation]);
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        signal.removeEventListener('abort', rejectCancelled);
+        if (session.loadController === controller) session.loadController = null;
+      }
+    } };
+    let cancelOpening;
+    const openingCancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      try {
+        assertSession();
+        let report = delegatedDeadlineReport;
+        if (!report) {
+          const panel = decorateControllerReport(await delegatedDeadlineReportViewFactory({ data, document: globalThis.document }), 'open-delegated-deadline-report');
+          try { assertSession(); }
+          catch (error) { panel?.destroy?.(); throw error; }
+          delegatedDeadlineReport = report = panel;
+        }
+        await report.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === reportsAccount && sessionRevision === reportsRevision
+          && delegatedDeadlineReportSession === session && globalThis.location?.origin === reportsOrigin && error?.name !== 'AbortError') {
+          setSessionError(error, 'Não foi possível abrir o relatório de tarefas delegadas por data fatal.');
+        }
+        if (delegatedDeadlineReportSession === session
+          && (!delegatedDeadlineReport || globalThis.location?.origin !== reportsOrigin)) disposeDelegatedDeadlineReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, openingCancellation]).finally(() => {
+      session.lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (delegatedDeadlineReportOpening === request) delegatedDeadlineReportOpening = null;
+    });
+    delegatedDeadlineReportOpening = request;
+    return request;
+  }
+
   async function openPaymentProgrammingGallery() {
     if (!account || stopped || flowBusy()) return false;
     disposeSupplierPayrollReport();
@@ -6686,6 +6876,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (paymentProgrammingGalleryOpening) return paymentProgrammingGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -6736,6 +6927,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (recurringExpensesGalleryOpening) return recurringExpensesGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -6786,6 +6978,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     if (registrationGalleryOpenings.has(kind)) return registrationGalleryOpenings.get(kind);
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
@@ -7609,6 +7802,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     pendingNoteLaunchProgress = null;
     pendingNoteLaunchNeedsResync = false;
     pendingNoteLaunchOrderId = "";
@@ -7708,6 +7902,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();
@@ -8325,6 +8520,7 @@ export function createAppController({
         disposeDepreciationReport();
         disposeDocumentControlReport();
         disposeTaskAssociationReport();
+        disposeDelegatedDeadlineReport();
       }
       if (rhidAttendanceReportRequests.has("new-report")
         && ["select-reply", "send-text", "date-selected", "show-summary", "finish-flow"].includes(type)) {
@@ -8392,6 +8588,7 @@ export function createAppController({
       if (command.replyId === DEPRECIATION_REPORT_ID) return openDepreciationReport();
       if (command.replyId === DOCUMENT_CONTROL_REPORT_ID) return openDocumentControlReport();
       if (command.replyId === TASK_ASSOCIATION_REPORT_ID) return openTaskAssociationReport();
+      if (command.replyId === DELEGATED_DEADLINE_REPORT_ID) return openDelegatedDeadlineReport();
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
@@ -8657,6 +8854,7 @@ export function createAppController({
     bind('open-depreciation-report', openDepreciationReport);
     bind('open-document-control-report', openDocumentControlReport);
     bind('open-task-association-report', openTaskAssociationReport);
+    bind('open-delegated-deadline-report', openDelegatedDeadlineReport);
     bind("dismiss-pending-provisions", dismissPendingProvisions);
     bind("dismiss-pending-notes", dismissPendingNotes);
     bind("dismiss-pending-construction-diaries", dismissPendingConstructionDiaries);
@@ -8750,6 +8948,7 @@ export function createAppController({
       if (depreciationReportSession && (flowBusy() || store.getState().activeFlow)) disposeDepreciationReport();
       if (documentControlReportSession && (flowBusy() || store.getState().activeFlow)) disposeDocumentControlReport();
       if (taskAssociationReportSession && (flowBusy() || store.getState().activeFlow)) disposeTaskAssociationReport();
+      if (delegatedDeadlineReportSession && (flowBusy() || store.getState().activeFlow)) disposeDelegatedDeadlineReport();
       persistRecovery();
       render();
       if (globalThis.document?.visibilityState !== "hidden") armFlowReminder();
@@ -8825,6 +9024,7 @@ export function createAppController({
     else if (pendingAction === DEPRECIATION_REPORT_ID) await openDepreciationReport();
     else if (pendingAction === DOCUMENT_CONTROL_REPORT_ID) await openDocumentControlReport();
     else if (pendingAction === TASK_ASSOCIATION_REPORT_ID) await openTaskAssociationReport();
+    else if (pendingAction === DELEGATED_DEADLINE_REPORT_ID) await openDelegatedDeadlineReport();
     else if (pendingAction === PAYMENT_PROGRAMMING_GALLERY_ID) await openPaymentProgrammingGallery();
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
@@ -8854,6 +9054,7 @@ export function createAppController({
     disposeDepreciationReport();
     disposeDocumentControlReport();
     disposeTaskAssociationReport();
+    disposeDelegatedDeadlineReport();
     disposePaymentProgrammingGallery();
     disposeRecurringExpensesGallery();
     disposeRegistrationGalleries();

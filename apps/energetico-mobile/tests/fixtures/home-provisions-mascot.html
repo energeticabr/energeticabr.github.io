@@ -129,6 +129,8 @@ const depreciation=createDepreciationReportView({document,now:()=>new Date('2026
 };}}});
 view.on('open-depreciation-report',()=>void depreciation.open());
 view.on('open-pending-provisions',()=>window.opened++);
+window.delegatedDeadlineOpened=0;
+view.on('open-delegated-deadline-report',()=>window.delegatedDeadlineOpened++);
 view.on('select-reply',event=>window.selected.push(event.replyId));
 const cargos=createCargosView({document,data:{async loadSnapshot(){return {rows:['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III','PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS'].map(cargo=>({cargo,group:cargo.startsWith('SERVENTE')?'SERVENTE DE PEDREIRO':cargo.startsWith('PEDREIRO')?'PEDREIRO':'',salary:1800,food:800,bonus:445,transport:238.33,total:3283.33}))};}}});
 view.on('open-cargos-table',()=>void cargos.open());

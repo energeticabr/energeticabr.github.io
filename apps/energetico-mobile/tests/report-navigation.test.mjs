@@ -22,7 +22,9 @@ for(const [action,previous,next] of [
  ['open-commercial-milestones','open-commercial-receipts','open-commercial-documents'],
  ['open-commercial-documents','open-commercial-milestones','open-sac-pathologies'],
  ['open-sac-pathologies','open-commercial-documents',null],
- ...['open-quotation-report','open-depreciation-report','open-task-association-report','invalid'].map(action=>[action,null,null]),
+ ['open-task-association-report',null,'open-delegated-deadline-report'],
+ ['open-delegated-deadline-report','open-task-association-report',null],
+ ...['open-quotation-report','open-depreciation-report','invalid'].map(action=>[action,null,null]),
 ])test(`${action} advances only within its visible mascot color, without wrapping`,()=>{
  assert.equal(typeof getReportNeighbors,'function');assert.deepEqual(getReportNeighbors(action),{previous,next});
 });
@@ -35,7 +37,7 @@ function setup(t,action,onNavigate){
  const view=decorateReportNavigation(source,{action,onNavigate});t.after(()=>{view.destroy();dom.window.close();});return {dom,view,root:view.element};
 }
 test('first report has only next, intermediate both, last only previous, and singleton none',async t=>{
- for(const [action,expected] of [['open-pending-provisions',['next']],['open-payment-ledger',['previous','next']],['open-document-control-report',['previous']],['open-task-association-report',[]]]){
+ for(const [action,expected] of [['open-pending-provisions',['next']],['open-payment-ledger',['previous','next']],['open-document-control-report',['previous']],['open-task-association-report',['next']],['open-delegated-deadline-report',['previous']],['open-depreciation-report',[]]]){
   const {view,root}=setup(t,action,async()=>true);await view.open();assert.deepEqual([...root.querySelectorAll('[data-report-direction]')].map(node=>node.dataset.reportDirection),expected);
   for(const arrow of root.querySelectorAll('[data-report-direction]'))assert.ok(arrow.getAttribute('aria-label').includes('relatório'));
  }
