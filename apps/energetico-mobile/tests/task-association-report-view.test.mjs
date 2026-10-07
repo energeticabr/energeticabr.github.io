@@ -16,7 +16,7 @@ function setup(t,load=async()=>snapshot,vertical=false){
 }
 test('ninth left HOME mascot is after document control and clicking its provided image opens its own action',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
- let calls=0;view.on('open-task-association-report',()=>calls++);view.render(home);const button=dom.window.document.querySelector('[data-action=open-task-association-report]');assert.ok(button);assert.equal(button.previousElementSibling.dataset.action,'open-document-control-report');assert.equal(button.nextElementSibling.className,'chat-bubble');assert.match(button.querySelector('img').src,/task-association\.png$/);button.querySelector('img').click();assert.equal(calls,1);
+ let calls=0;view.on('open-task-association-report',()=>calls++);view.render(home);const button=dom.window.document.querySelector('[data-action=open-task-association-report]');assert.ok(button);assert.equal(button.previousElementSibling.dataset.action,'open-document-control-report');assert.equal(button.nextElementSibling.dataset.action,'open-delegated-deadline-report');assert.match(button.querySelector('img').src,/task-association\.png$/);button.querySelector('img').click();assert.equal(calls,1);
  view.render({...home,activeText:{id:'busy'}});assert.equal(dom.window.document.querySelector('[data-action=open-task-association-report]').disabled,true);assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'busy'}),/data-action="open-task-association-report"/);
 });
 test('source grouping and priority colors render with three unfiltered metrics and five table columns',async t=>{

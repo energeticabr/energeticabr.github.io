@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mock delegated deadline report</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button>Abrir relatório</button></main>
+<script type="module">
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+import '../../src/ui/delegated-deadline-report.css';
+import {createDelegatedDeadlineReportView} from '../../src/ui/delegated-deadline-report-view.js';
+import {decorateReportPrint} from '../../src/ui/report-print.js';
+try {
+  const tasks = Array.from({length:4}, (_, i) => ({id:i+1, createdDate:'2026-10-06', dueDate:i<2?'2026-10-05':i===2?'2026-10-06':null,
+    description:'TAREFA EXTENSA ' + 'DESCRIÇÃO SEM QUEBRAS '.repeat(70) + 'x'.repeat(250),
+    association:'ESTRUTURA COM NOME EXTENSO', responsible:i<2?'ANA COM NOME EXTENSO':i===2?'BRUNO':'',
+    status:'ATIVIDADE CRIADA', priority:i===0?'ATIVIDADE EMERGENCIAL':'ATIVIDADE PRIORITÁRIA', difficulty:'ALTA DIFICULDADE'}));
+  const view = decorateReportPrint(createDelegatedDeadlineReportView({data:{async loadSnapshot(){return {tasks};}}, now:()=>new Date('2026-10-06T12:00:00Z')}), {action:'open-delegated-deadline-report'});
+  await view.open();
+  const logo = view.element.querySelector('img');
+  await logo.decode();
+  await new Promise(requestAnimationFrame);
+  const root=view.element, toolbar=root.querySelector('.tdr-toolbar'), content=root.querySelector('.tdr-content'), pair=toolbar.querySelector('.report-print-actions');
+  const result={rows:root.querySelectorAll('tbody tr[data-task-id]').length, columns:root.querySelector('thead').querySelectorAll('th').length,
+    rowSpan:root.querySelector('.tdr-responsible').rowSpan, metrics:[...root.querySelectorAll('.tdr-card strong')].map(node=>node.textContent),
+    documentOverflow:document.documentElement.scrollWidth-innerWidth, contentOverflow:content.scrollWidth-content.clientWidth,
+    toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth, contentHeight:content.clientHeight, contentScrollHeight:content.scrollHeight,
+    logoLoaded:logo.complete&&logo.naturalWidth>0, labelRows:[...root.querySelectorAll('.tdr-filter-label')].map(node=>node.getBoundingClientRect().top),
+    buttons:[...pair.children].map(node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};})};
+  root.querySelector('[aria-label="Abrir opções de ETAPA OBRA"]').click();
+  const popup=root.querySelector('.sfs-popup:not([hidden])'), rect=popup.getBoundingClientRect();
+  result.searchFocused=document.activeElement===popup.querySelector('.sfs-report-search');
+  result.popupPlacement=popup.dataset.placement;
+  result.popupInsideViewport=rect.left>=0&&rect.right<=innerWidth&&rect.top>=0&&rect.bottom<=innerHeight;
+  document.documentElement.dataset.layout=JSON.stringify(result);
+} catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>

@@ -548,6 +548,8 @@ button { touch-action: manipulation; }
 @media print { .report-navigation { display:none !important; } }
 .chat-main-task-association-shortcut { margin-top:462px; cursor:pointer; background:#618c25; }
 .chat-main-task-association-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
+.chat-main-delegated-deadline-shortcut { margin-top:518px; cursor:pointer; background:#618c25; }
+.chat-main-delegated-deadline-shortcut img { transform:none; mix-blend-mode:normal; object-fit:contain; }
 .chat-pending-provisions__empty { margin: 10px 0; padding: 14px; border-radius: 12px; color: var(--brand); background: #edf7f3; }
 .chat-bubble {
   max-width: min(82%, 640px);
