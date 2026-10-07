@@ -8,7 +8,7 @@ import { createConversationStore } from '../src/chat/conversation-store.js';
 // of the helper's neighbor calculation. Only UI/network boundaries are doubled.
 const groups = [
   ['open-pending-provisions', 'open-provision-report', 'open-payment-ledger', 'open-management-report', 'open-order-validation-report', 'open-document-control-report'],
-  ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report'],
+  ['open-cargos-table', 'open-attendance-summary', 'open-stage-progress', 'open-supplier-payroll-report', 'open-supplier-workforce-report', 'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'],
   ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'],
   ['open-task-association-report', 'open-delegated-deadline-report'],
 ];
@@ -22,6 +22,9 @@ const factories = {
   'open-attendance-summary': 'attendanceSummaryFactory',
   'open-stage-progress': 'stageProgressFactory',
   'open-supplier-payroll-report': 'supplierPayrollReportFactory',
+  'open-supplier-workforce-report': 'supplierWorkforceReportViewFactory',
+  'open-pending-supplier-payments-report': 'pendingSupplierPaymentsReportViewFactory',
+  'open-pending-work-diaries-report': 'pendingWorkDiariesReportViewFactory',
   'open-commercial-receipts': 'commercialReceiptsViewFactory',
   'open-commercial-milestones': 'commercialMilestonesViewFactory',
   'open-commercial-documents': 'commercialDocumentsViewFactory',
@@ -77,7 +80,8 @@ function harness(t, options = {}, { dom = true } = {}) {
     ...Object.fromEntries(['paymentLedgerDataFactory', 'cargosDataFactory', 'attendanceSummaryDataFactory',
       'stageProgressDataFactory', 'supplierPayrollReportDataFactory', 'commercialReceiptsDataFactory', 'commercialMilestonesDataFactory',
       'commercialDocumentsDataFactory', 'sacPathologiesDataFactory', 'documentControlReportDataFactory',
-      'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory', 'delegatedDeadlineReportDataFactory'].map(name => [name, source])),
+      'quotationReportDataFactory', 'depreciationReportDataFactory', 'taskAssociationReportDataFactory', 'delegatedDeadlineReportDataFactory',
+      'supplierWorkforceReportDataFactory', 'pendingSupplierPaymentsReportDataFactory', 'pendingWorkDiariesReportDataFactory'].map(name => [name, source])),
     ...factoryOptions, ...options, auth,
   });
   t.after(() => { controller.stop(); document.defaultView.close(); });
@@ -127,7 +131,7 @@ for (const group of groups) {
 
 for (const [from, direction] of [
   ['open-pending-provisions', 'previous'], ['open-document-control-report', 'next'],
-  ['open-cargos-table', 'previous'], ['open-supplier-payroll-report', 'next'],
+  ['open-cargos-table', 'previous'], ['open-pending-work-diaries-report', 'next'],
   ['open-commercial-receipts', 'previous'], ['open-sac-pathologies', 'next'],
   ['open-quotation-report', 'next'], ['open-depreciation-report', 'previous'],
   ['open-task-association-report', 'previous'], ['open-delegated-deadline-report', 'next'], ['unknown', 'next'],

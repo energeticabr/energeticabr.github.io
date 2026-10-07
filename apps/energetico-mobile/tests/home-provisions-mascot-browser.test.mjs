@@ -66,7 +66,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button')].map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
-      assert.equal(mascotFit.length,20);
+      assert.equal(mascotFit.length,21);
       assert.ok(mascotFit.every(m=>m.source>=256&&m.fit==='contain'&&m.blend==='normal'&&m.transform==='none'&&m.inside),'sharp full-body mascots without cropping or color blending: '+JSON.stringify(mascotFit));
       assert.ok(mascotFit.filter(m=>m.action.startsWith('open-commercial-')||m.action==='open-sac-pathologies').every(m=>m.fill==='rgb(173, 62, 8)'),'orange fills remain uniform');
       assert.ok(mascotFit.filter(m=>['open-task-association-report','open-delegated-deadline-report'].includes(m.action)).every(m=>m.fill==='rgb(97, 140, 37)'),'both green report backgrounds remain uniform');
@@ -339,8 +339,11 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(await evaluate(`(()=>{const th=document.querySelector('.cargos-table tbody tr[data-cargo] th').getBoundingClientRect(),s=document.querySelector('.cargos-scroll').getBoundingClientRect();return Math.abs(th.left-s.left)<=2;})()`),'cargo permanece fixo durante a rolagem');
       await evaluate(`document.querySelector('[aria-label="Voltar ao menu inicial"]').click()`);
       if(width===390&&!pwa&&process.env.HOME_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.HOME_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
-      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);
-      await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:layout.m.x+22,y:layout.m.y+22,button:'left',clickCount:1},sessionId);
+      // Earlier report checks scroll the longer mascot rail. Use the current hit target, not initial coordinates.
+      const provisionsHit=await evaluate(`(()=>{const b=document.querySelector('.chat-main-provisions-shortcut');b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {action:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'',x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      assert.equal(provisionsHit.action,'open-pending-provisions','provisions remains reachable after scrolling all mascots');
+      await send('Input.dispatchMouseEvent',{type:'mousePressed',x:provisionsHit.x,y:provisionsHit.y,button:'left',clickCount:1},sessionId);
+      await send('Input.dispatchMouseEvent',{type:'mouseReleased',x:provisionsHit.x,y:provisionsHit.y,button:'left',clickCount:1},sessionId);
       assert.equal(await evaluate('window.opened'),1);
       assert.deepEqual(await evaluate('window.selected'),[]);
       await evaluate(`document.querySelector('[data-reply-id=group_pending]').click()`);

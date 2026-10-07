@@ -15,7 +15,7 @@ const dom = new JSDOM(renderChatMarkup({
     ] }],
 }));
 const buttons = [...dom.window.document.querySelectorAll('.chat-message--external-provisions > button, .chat-message--external-cargos > button')];
-assert.equal(buttons.length, 20, 'all HOME mascots are exercised');
+assert.equal(buttons.length, 21, 'all HOME mascots are exercised');
 
 for (const button of buttons) {
   test(`${button.dataset.action}: sharp mascot cutout leaves every outer edge transparent`, async () => {
