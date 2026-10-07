@@ -23,6 +23,20 @@ function fixture(t,rows=[row]){
 }
 function text(snapshot){return snapshot.pages.flatMap(page=>page.blocks).flatMap(block=>block.type==='table'?block.rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))):block.runs.map(run=>run.text)).join(' ');}
 
+test('refresh uses a font-independent icon without replacing the working refresh button',async t=>{
+ const {original}=fixture(t);await original.open();
+ const refresh=original.element.querySelector('[aria-label^="Atualizar"]'),label=refresh.getAttribute('aria-label');
+ let clicks=0;refresh.addEventListener('click',()=>clicks++);
+ const view=api.decorateReportPrint(original,{action:'open-payment-ledger',previewMedia:async()=>{}});
+ t.after(()=>view.destroy());
+ assert.equal(view.element.querySelector('[aria-label^="Atualizar"]'),refresh);
+ assert.equal(refresh.getAttribute('aria-label'),label);
+ const icon=refresh.querySelector('svg');assert.ok(icon,'refresh must not depend on a platform font glyph');
+ assert.equal(icon.getAttribute('aria-hidden'),'true');
+ refresh.disabled=true;refresh.click();assert.equal(clicks,0);
+ refresh.disabled=false;refresh.click();assert.equal(clicks,1);
+});
+
 test('expanded report option search preserves filter titles and selected values in the PDF',async t=>{
  const {dom,original}=fixture(t);await original.open();
  const select=original.element.querySelector('[name=supplier]');
