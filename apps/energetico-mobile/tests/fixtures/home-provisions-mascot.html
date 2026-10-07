@@ -121,6 +121,11 @@ view.on('open-cargos-table',()=>void cargos.open());
 view.render(state);
 await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
 document.documentElement.dataset.ready='true';
+if(new URLSearchParams(location.search).has('standalone-toolbar')){
+ await commercial.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+ const filters=commercial.element.querySelector('.cr-filters');
+ document.documentElement.dataset.layout=JSON.stringify({filterRows:[...filters.children].filter(node=>node.querySelector('select')).map(node=>node.getBoundingClientRect().y)});
+}
 if(new URLSearchParams(location.search).has('print')){
  const {decorateReportPrint,captureFilteredReport,REPORT_PDF_TITLES}=await import('/src/ui/report-print.js');
  const {buildFilteredReportPdf}=await import('/src/chat/filtered-report-pdf.js');
@@ -129,6 +134,18 @@ if(new URLSearchParams(location.search).has('print')){
  const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{document.documentElement.dataset.shared='true';}});
  const panels=[['open-provision-report',provision],['open-payment-ledger',report],['open-management-report',management],['open-order-validation-report',validation],['open-cargos-table',cargos],['open-attendance-summary',attendance],['open-stage-progress',stageProgress],['open-commercial-receipts',commercial],['open-commercial-milestones',milestones],['open-commercial-documents',documents],['open-sac-pathologies',pathologies],['open-quotation-report',quotations],['open-depreciation-report',depreciation],['open-document-control-report',documentControl],['open-task-association-report',taskAssociation]];
  for(const [action,panel]of panels)decorateReportPrint(panel,{action,previewMedia:preview.open,closePreview:preview.close});
+ if(new URLSearchParams(location.search).has('toolbar')){
+  const results=[];
+  for(const [action,panel]of panels){
+   await panel.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+   const pair=panel.element.querySelector('.report-print-actions');
+   const measure=node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right};};
+   const host=pair.parentElement,buttons=[...pair.children];
+   results.push({action,buttons:buttons.map(measure),printer:measure(pair.querySelector('svg')),refresh:buttons[1]?parseFloat(getComputedStyle(buttons[1]).fontSize):0,hostOverflow:host.scrollWidth-host.clientWidth,hostRight:measure(host).right,filterRows:[...host.children].filter(node=>node.querySelector('select')).map(node=>measure(node).y),legacyPrinters:panel.element.querySelectorAll('.cr-print').length});
+   panel.close();
+  }
+  document.documentElement.dataset.layout=JSON.stringify({results});
+ }
  if(new URLSearchParams(location.search).has('verify')){
   const results=[];
   try{

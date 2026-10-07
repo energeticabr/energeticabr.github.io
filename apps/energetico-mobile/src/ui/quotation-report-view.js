@@ -12,7 +12,8 @@ export function createQuotationReportView({document:doc=globalThis.document,data
  const panel=make('section','qr-dialog');panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Cotações e orçamentos');
  const warning=make('p','qr-orientation','PARA VER O RELATÓRIO FAVOR POSICIONAR O TELEFONE NA HORIZONTAL.');warning.setAttribute('role','status');
  const content=make('div','qr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Cotações e orçamentos vinculados');
- panel.append(warning,content);root.append(panel);doc.body.append(root);
+ const toolbar=make('header','qr-toolbar'),refresh=make('button','qr-refresh','⟳');refresh.type='button';refresh.setAttribute('aria-label','Atualizar cotações e orçamentos');refresh.addEventListener('click',()=>void load());toolbar.append(refresh);
+ panel.append(toolbar,warning,content);root.append(panel);doc.body.append(root);
  let controller=null,revision=0,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
  function badge(value,quote=false){
@@ -44,10 +45,10 @@ export function createQuotationReportView({document:doc=globalThis.document,data
   if(!result.quotes.length)content.append(make('p','qr-empty','Nenhuma cotação encontrada.'));
  }
  async function load(){
-  if(root.hidden||portrait()||destroyed)return;controller?.abort();const current=++revision,active=new AbortController();controller=active;content.replaceChildren(make('p','qr-notice','Carregando cotações e orçamentos do SharePoint…'));content.setAttribute('aria-busy','true');
+  if(root.hidden||portrait()||destroyed)return;controller?.abort();const current=++revision,active=new AbortController();controller=active;content.replaceChildren(make('p','qr-notice','Carregando cotações e orçamentos do SharePoint…'));content.setAttribute('aria-busy','true');refresh.disabled=true;
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;render(result);}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;const message=make('p','qr-notice','Não foi possível carregar as cotações e os orçamentos.');message.setAttribute('role','status');const retry=make('button','qr-retry','Tentar novamente');retry.type='button';retry.addEventListener('click',()=>void load());content.replaceChildren(message,retry);}
-  finally{if(current===revision)content.setAttribute('aria-busy','false');}
+  finally{if(current===revision){content.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
  function orientationChanged(){if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('qr-portrait',vertical);if(vertical){if(content.contains(doc.activeElement))panel.focus();controller?.abort();revision++;content.replaceChildren();content.hidden=true;}else if(content.hidden){content.hidden=false;void load();}}
  function close(){if(root.hidden)return;controller?.abort();revision++;content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
