@@ -66,7 +66,7 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(reportLayout.width>=44&&reportLayout.height>=44&&reportLayout.x>=0&&reportLayout.image);
       assert.equal(reportLayout.fill,'rgb(0, 13, 75)');
       const mascotFit=await evaluate(`(()=>{return [...document.querySelectorAll('.chat-message--external-provisions > button,.chat-message--external-cargos > button')].map(b=>{const i=b.querySelector('img'),r=b.getBoundingClientRect(),q=i.getBoundingClientRect(),s=getComputedStyle(i);return {action:b.dataset.action,source:i.naturalWidth,fit:s.objectFit,blend:s.mixBlendMode,transform:s.transform,inside:q.left>=r.left&&q.right<=r.right&&q.top>=r.top&&q.bottom<=r.bottom,fill:getComputedStyle(b).backgroundColor};});})()`);
-      assert.equal(mascotFit.length,19);
+      assert.equal(mascotFit.length,20);
       assert.ok(mascotFit.every(m=>m.source>=256&&m.fit==='contain'&&m.blend==='normal'&&m.transform==='none'&&m.inside),'sharp full-body mascots without cropping or color blending: '+JSON.stringify(mascotFit));
       assert.ok(mascotFit.filter(m=>m.action.startsWith('open-commercial-')||m.action==='open-sac-pathologies').every(m=>m.fill==='rgb(173, 62, 8)'),'orange fills remain uniform');
       assert.ok(mascotFit.filter(m=>['open-task-association-report','open-delegated-deadline-report'].includes(m.action)).every(m=>m.fill==='rgb(97, 140, 37)'),'both green report backgrounds remain uniform');

@@ -6,6 +6,7 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-order-validation-report':'Validação de notas pendentes e pedidos para baixa',
  'open-cargos-table':'Tabela de cargos', 'open-attendance-summary':'Resumo de presenças e ausências',
  'open-supplier-payroll-report':'Folhas de pagamento por fornecedor',
+ 'open-pending-supplier-payments-report':'Pagamentos pendentes por fornecedor',
  'open-pending-work-diaries-report':'Diários de obras pendentes',
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',
  'open-commercial-milestones':'Andamento comercial dos imóveis',

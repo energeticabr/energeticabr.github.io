@@ -20,10 +20,10 @@ test('fourth pink HOME mascot sits after stages before pending diaries and stays
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
  let calls=0;view.on('open-supplier-payroll-report',()=>calls++);view.render(state);
  const mascot=dom.window.document.querySelector('[data-action=open-supplier-payroll-report]');assert.ok(mascot);
- assert.equal(mascot.previousElementSibling.dataset.action,'open-stage-progress');assert.equal(mascot.nextElementSibling.dataset.action,'open-pending-work-diaries-report');
+ assert.equal(mascot.previousElementSibling.dataset.action,'open-stage-progress');assert.equal(mascot.nextElementSibling.dataset.action,'open-pending-supplier-payments-report');
  mascot.querySelector('img').click();assert.equal(calls,1);
  assert.deepEqual(getReportNeighbors('open-stage-progress'),{previous:'open-attendance-summary',next:'open-supplier-payroll-report'});
- assert.deepEqual(getReportNeighbors('open-supplier-payroll-report'),{previous:'open-stage-progress',next:'open-pending-work-diaries-report'});
+ assert.deepEqual(getReportNeighbors('open-supplier-payroll-report'),{previous:'open-stage-progress',next:'open-pending-supplier-payments-report'});
  view.render({...state,activeFlow:'flow'});assert.equal(dom.window.document.querySelector('[data-action=open-supplier-payroll-report]'),null);
 });
 test('current reference month defaults with collapsed supplier groups and all their IDFOLHA',async t=>{
