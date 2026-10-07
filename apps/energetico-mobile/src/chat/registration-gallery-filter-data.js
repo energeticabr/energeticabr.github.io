@@ -107,11 +107,16 @@ function filterValue(filters, field) {
 }
 function columnFor(columns, field, aliases = []) {
   const accepted = new Set([field, ...aliases].map(key));
-  const matches = columns.filter(column => column?.name && [column.name, column.displayName].some(name => name && accepted.has(key(name))));
-  if (matches.length !== 1) throw new Error(`O campo ${field} do catálogo está ${matches.length ? 'ambíguo' : 'indisponível'}.`);
+  const matches = columns.filter(column => column?.name && column.hidden !== true && column.computed !== true
+    && [column.name, column.displayName].some(name => name && accepted.has(key(name))));
+  // SharePoint exposes read-only LinkTitle mirrors with the same display label
+  // as Title. Prefer the data column, but retain unique read-only fields like ID.
+  const writable = matches.filter(column => column.readOnly !== true);
+  const selected = writable.length ? writable : matches;
+  if (selected.length !== 1) throw new Error(`O campo ${field} do catálogo está ${selected.length ? 'ambíguo' : 'indisponível'}.`);
   // Column names become OData field selectors; reject unexpected syntax.
-  if (!/^[a-z_][a-z0-9_]*$/i.test(matches[0].name)) throw new Error(`O campo ${field} do catálogo tem um nome interno inválido.`);
-  return matches[0];
+  if (!/^[a-z_][a-z0-9_]*$/i.test(selected[0].name)) throw new Error(`O campo ${field} do catálogo tem um nome interno inválido.`);
+  return selected[0];
 }
 const MAX_PAGES = 100;
 
