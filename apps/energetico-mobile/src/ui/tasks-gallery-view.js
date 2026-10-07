@@ -115,6 +115,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   let opened = false; let destroyed = false; let session = 0; let returnFocus = null;
   let rows = []; let filteredRows = []; let page = 1; let pageSize = 10; let listLoading = false; let attachmentLoading = false;
   let filterValues = Object.create(null); let sortValue = "fatal-asc"; let controller = null; let detailsSession = 0;
+  let supplierOptions = [];
 
   const root = el("section", "og-overlay tg-overlay");
   root.hidden = true; root.tabIndex = -1; root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true");
@@ -166,6 +167,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const statusControl = addControl("status", "Status");
   statusControl.append(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
   statusControl.value = DEFAULT_STATUS_FILTER;
+  addControl("supplier", "Fornecedor");
   for (const name of ["priority", "charge"]) {
     const control = addControl(name, name === "priority" ? "Prioritária" : "Cobrar");
     for (const value of ["SIM", "NÃO"]) { const option = el("option", "", value); option.value = value; control.append(option); }
@@ -186,6 +188,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   actions.append(clearButton); filterDisclosure.append(grid, actions); form.append(toolbar, filterDisclosure);
   const metrics = el("section", "og-metrics tg-metrics"); metrics.setAttribute("aria-label", "Resumo de tarefas");
   const notice = el("p", "og-notice"); notice.hidden = true;
+  const supplierNotice = el("p", "og-notice tg-supplier-notice"); supplierNotice.hidden = true; supplierNotice.setAttribute("role", "alert");
   const listStatus = el("p", "og-list-status tg-list-status"); listStatus.setAttribute("aria-live", "polite");
   const cards = el("div", "og-cards tg-cards"); cards.setAttribute("aria-label", "Tarefas");
   const pagination = el("nav", "og-pagination"); pagination.setAttribute("aria-label", "Páginas de tarefas");
@@ -195,7 +198,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   pagination.append(previous, pageLabel, next);
   const detail = el("section", "og-detail tg-detail"); detail.hidden = true; detail.tabIndex = -1;
   detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes da tarefa");
-  content.append(metrics, form, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
+  content.append(metrics, form, supplierNotice, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
@@ -320,9 +323,10 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
 
   function filterOptions() {
-    for (const [name, aliases] of [["status", ["STATUS"]], ["branch", ["FILIAL"]], ["association", ["ASSOCIAÇÃO", "ASSOCIACAO", "field_10"]]]) {
+    for (const [name, aliases] of [["status", ["STATUS"]], ["supplier", []], ["branch", ["FILIAL"]], ["association", ["ASSOCIAÇÃO", "ASSOCIACAO", "field_10"]]]) {
       const control = controls.get(name); const current = control.value;
-      const rowValues = rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean);
+      const rowValues = name === "supplier" ? supplierOptions.map(option => option.value)
+        : rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean);
       const values = [...new Set(name === "status" ? [...DEFAULT_TASK_STATUSES, ...rowValues] : rowValues)]
         .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
       const options = [Object.assign(el("option", "", "Todos"), { value: "" })];
@@ -363,6 +367,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       if (filterValues.status === DEFAULT_STATUS_FILTER) {
         if (!DEFAULT_TASK_STATUSES.some(value => normalized(value) === normalized(taskStatus))) return false;
       } else if (filterValues.status && normalized(taskStatus) !== normalized(filterValues.status)) return false;
+      if (filterValues.supplier && normalized(field(fields, ["REFERENTE"])) !== normalized(filterValues.supplier)) return false;
       if (filterValues.priority && String(priority(fields)) !== String(filterValues.priority === "SIM")) return false;
       if (filterValues.charge && String(charge(fields)) !== String(filterValues.charge === "SIM")) return false;
       if (filterValues.branch && normalized(field(fields, ["FILIAL"])) !== normalized(filterValues.branch)) return false;
@@ -502,9 +507,28 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const current = session; controller?.abort(); controller = new AbortController(); listLoading = true;
     showNotice(""); listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando tarefas…")); cards.replaceChildren(); updateBusy();
     try {
-      const result = await data.loadSnapshot({ signal: controller.signal });
+      const [result, suppliers] = await Promise.all([
+        data.loadSnapshot({ signal: controller.signal }),
+        typeof data.loadFilterOptions === "function"
+          ? data.loadFilterOptions("FORNECEDOR", { signal: controller.signal, refresh: true })
+            .then(options => {
+              if (!Array.isArray(options) || options.some(option => typeof option?.value !== "string")) {
+                throw new Error("A consulta não retornou opções de fornecedores válidas.");
+              }
+              return { options };
+            }).catch(error => ({ error }))
+          : { options: [] },
+      ]);
       if (!opened || destroyed || current !== session) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de tarefas válida.");
+      supplierOptions = suppliers.options || supplierOptions;
+      controls.get("supplier").disabled = Boolean(suppliers.error);
+      supplierNotice.hidden = !suppliers.error; supplierNotice.replaceChildren();
+      if (suppliers.error) {
+        supplierNotice.textContent = safeFailure(suppliers.error, "Não foi possível carregar fornecedores");
+        const retry = el("button", "og-button", "Tentar novamente fornecedores"); retry.type = "button";
+        retry.addEventListener("click", () => { void loadSnapshot(); }); supplierNotice.append(" ", retry);
+      }
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions(); updateMetrics(); applyLocalFilters(); return true;
     } catch (error) {
