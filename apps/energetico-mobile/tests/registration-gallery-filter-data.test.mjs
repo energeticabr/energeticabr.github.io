@@ -104,6 +104,25 @@ test('missing and ambiguous metadata/list resolution fail closed rather than ret
   }
 });
 
+test('Graph title mirrors do not make catalog labels ambiguous', async () => {
+  const { data, calls } = service('asset', { async getColumns() { return [
+    column('Title', 'FILIAL'),
+    { ...column('LinkTitle', 'FILIAL'), readOnly: true },
+    { ...column('LinkTitleNoMenu', 'FILIAL'), readOnly: true },
+    { ...column('ComputedFilial', 'FILIAL'), computed: true },
+    { ...column('ArchivedFilial', 'FILIAL'), hidden: true },
+  ]; } });
+  assert.deepEqual(await data.loadFilterOptions('FILIAL'), [{ value: '001 - Centro', label: '001 - Centro' }]);
+  assert.match(calls.find(call => call[0] === 'page')[3], /fields\(\$select=Title\)/);
+});
+
+test('unique read-only catalog fields remain usable for contract IDs', async () => {
+  const { data } = service('contractLines', { async getColumns() { return [
+    { ...column('ID'), readOnly: true }, column('STATUS'), column('FORNECEDOR'),
+  ]; }, async getItemsPage() { return page([row(25, { STATUS: 'ATIVO', FORNECEDOR: 'BERNARDO' })]); } });
+  assert.deepEqual(await data.loadFilterOptions('IDCONTRATO'), [{ value: '25', label: '25 - BERNARDO' }]);
+});
+
 test('a missing or repeated paging cursor rejects instead of exposing partial choices', async () => {
   for (const nextLink of [undefined, 'repeating']) {
     const { data } = service('asset', { async getItemsPage() { return { items: [row(1, { Title: 'partial' })], hasMore: true, nextLink }; } });

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createSharePointRepository } from '../../../portal/data/sharepoint-repository.js';
 
 async function taskGalleryDataFactory(t) {
   const module = await import("../src/chat/orders-gallery-data.js");
@@ -78,6 +79,43 @@ test('filtro G7 consulta todos os fornecedores ativos de mão de obra do escrit�
   assert.match(pages[0][3], /fields\(\$select=Title,FILIAL,field_1,STATUS\)/);
   assert.equal(pages[1][4].cursor, 'suppliers-page-2');
   assert.equal(pages[1][4].signal, signal);
+});
+
+test('catálogo G7 lê CADASTRO pelo Title com metadados REST que incluem LinkTitle homônimos', async t => {
+  const createTasksGalleryData = await taskGalleryDataFactory(t);
+  const listId = '11111111-1111-1111-1111-111111111111', calls = [];
+  const restTransport = { async request(_config, path) {
+    calls.push(path);
+    if (path.startsWith('/_api/web/lists?')) return { value: [{
+      Id: listId, Title: 'FORNECEDORES', Hidden: false, BaseTemplate: 100,
+      RootFolder: { ServerRelativeUrl: '/personal/catalog/Lists/FORNECEDORES' },
+    }] };
+    if (path.includes('/fields?')) return { value: [
+      { InternalName: 'Title', Title: 'CADASTRO', TypeAsString: 'Text' },
+      { InternalName: 'LinkTitle', Title: 'CADASTRO', TypeAsString: 'Computed', ReadOnlyField: true },
+      { InternalName: 'LinkTitleNoMenu', Title: 'CADASTRO', TypeAsString: 'Computed', ReadOnlyField: true },
+      { InternalName: 'HiddenCadastro', Title: 'CADASTRO', TypeAsString: 'Text', Hidden: true },
+      { InternalName: 'FILIAL', Title: 'FILIAL', TypeAsString: 'Text' },
+      { InternalName: 'field_1', Title: 'TIPO', TypeAsString: 'Text' },
+      { InternalName: 'STATUS', Title: 'STATUS', TypeAsString: 'Text' },
+    ] };
+    if (path.includes('/items?')) return { value: [
+      { ID: 1, Title: 'BERNARDO', FILIAL: '000 - ESCRITÓRIO CENTRAL', field_1: 'MÃO DE OBRA', STATUS: 'ATIVO' },
+      { ID: 2, Title: 'CODEX', FILIAL: '000 - ESCRITÓRIO CENTRAL', field_1: 'MÃO DE OBRA', STATUS: 'ATIVO' },
+      { ID: 3, Title: 'INATIVO', FILIAL: '000 - ESCRITÓRIO CENTRAL', field_1: 'MÃO DE OBRA', STATUS: 'INATIVO' },
+    ] };
+    throw new Error(`Rota REST inesperada: ${path}`);
+  } };
+  const repository = createSharePointRepository({ async request() { throw new Error('O catálogo usa REST'); } }, {
+    personal: { host: 'catalog.test', path: '/personal/catalog', readTransport: 'rest' },
+  }, { restTransport });
+  const data = createTasksGalleryData({ repository });
+  assert.deepEqual(await data.loadFilterOptions('FORNECEDOR'), [
+    { value: 'BERNARDO', label: 'BERNARDO' }, { value: 'CODEX', label: 'CODEX' },
+  ]);
+  const query = decodeURIComponent(calls.find(path => path.includes('/items?')));
+  assert.match(query, /Title/);
+  assert.doesNotMatch(query, /LinkTitle|HiddenCadastro/);
 });
 
 test('conclusão rápida usa contrato real e envia somente data e concluído com ETag', async t => {
