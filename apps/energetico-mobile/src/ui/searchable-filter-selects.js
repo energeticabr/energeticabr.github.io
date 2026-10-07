@@ -68,6 +68,7 @@ function createPicker(select, closeOthers, options = {}) {
   let active = -1;
   let destroyed = false;
   let observedViewport = null;
+  let reportViewport = null;
   let selectingOption = false;
   let pressedOption = null;
   let pressedAt = null;
@@ -98,14 +99,26 @@ function createPicker(select, closeOthers, options = {}) {
     let left = viewport?.offsetLeft || 0;
     let right = left + (viewport?.width || view.innerWidth || doc.documentElement.clientWidth);
     if (reportPicker) {
-      // Use the available screen, not the narrow report header. Opening this
-      // readonly field leaves the keyboard closed; only Localizar itens edits.
+      // Retain the unobstructed height while searching: mobile keyboards shrink
+      // both visualViewport and (on Android) the layout viewport. Like PowerApps,
+      // let the keyboard cover the list bottom instead of flattening the list.
+      // A width change is a new orientation/window size, not a keyboard resize.
+      const viewportWidth = right - left, viewportHeight = bottom - top;
+      if (reportViewport?.width === viewportWidth && viewportHeight < reportViewport.height
+        && (doc.activeElement === search || reportViewport.keyboardOpen)) {
+        // Keep this through keyboard dismissal/reopening too. A resize while
+        // search is not being edited is an ordinary window resize and may fit.
+        reportViewport.keyboardOpen = true;
+      } else {
+        reportViewport = { width: viewportWidth, height: viewportHeight, keyboardOpen: false };
+      }
       const width = Math.max(0, Math.min(480, right - left - 24));
-      const height = Math.max(0, Math.min(640, bottom - top - 24));
+      const height = Math.max(0, Math.min(640, reportViewport.height - 24));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
       popup.style.left = `${left + (right - left - width) / 2}px`;
-      popup.style.top = `${top + (bottom - top - height) / 2}px`;
+      // Keep Localizar itens at the visible top even when iOS pans the viewport.
+      popup.style.top = `${top + 12}px`;
       popup.style.right = 'auto'; popup.style.bottom = 'auto';
       popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
       list.style.maxHeight = `${Math.max(0, height - 54)}px`;

@@ -88,13 +88,56 @@ test('keyboard navigation chooses from the readonly report field without activat
   assert.equal(ctx.doc.activeElement, ctx.trigger);
 });
 
-test('expanded panel stays inside visual viewport when intentional search opens the keyboard', t => {
+test('search keyboard overlays the report list without flattening its opening height', t => {
   const ctx = setup(t); ctx.trigger.click(); ctx.search().focus(); ctx.type('produto');
+  const openingHeight = ctx.popup.style.height, openingListHeight = ctx.list.style.maxHeight;
   ctx.viewport.height = 230; ctx.viewport.offsetTop = 30; ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
   const top = parseFloat(ctx.popup.style.top), height = parseFloat(ctx.popup.style.height);
-  assert.ok(top >= 30 && top + height <= 260);
+  assert.equal(ctx.popup.style.height, openingHeight, 'keyboard must not shrink the selection panel');
+  assert.equal(ctx.list.style.maxHeight, openingListHeight, 'scrollable options retain their height');
+  assert.ok(top >= 30 && top + 48 <= 260, 'Localizar itens remains above the keyboard');
+  assert.ok(top + height > 260, 'the keyboard may cover the list bottom, as in PowerApps');
   assert.equal(ctx.search().value, 'produto'); assert.equal(ctx.list.children.length, 40);
   ctx.list.lastElementChild.click(); assert.equal(ctx.select.value, 'p40');
+});
+
+test('Android layout resize and search rerender do not collapse the report picker', t => {
+  const ctx = setup(t); ctx.trigger.click(); ctx.search().focus();
+  ctx.viewport.height = 170;
+  ctx.dom.window.innerHeight = 170;
+  ctx.dom.window.dispatchEvent(new ctx.dom.window.Event('resize'));
+  ctx.type('produto');
+  assert.equal(ctx.popup.style.height, '366px');
+  assert.equal(ctx.list.style.maxHeight, '312px');
+  ctx.binding.sync();
+  assert.equal(ctx.popup.style.height, '366px');
+  ctx.binding.close(); ctx.trigger.click();
+  assert.equal(ctx.popup.style.height, '366px', 'reopening during keyboard dismissal keeps the full list');
+});
+
+test('report picker adapts to rotation instead of retaining the previous orientation height', t => {
+  const ctx = setup(t); ctx.viewport.width = 390; ctx.viewport.height = 844; ctx.trigger.click();
+  assert.equal(ctx.popup.style.height, '640px');
+  ctx.viewport.width = 844; ctx.viewport.height = 390;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  assert.equal(ctx.popup.style.height, '366px');
+  assert.ok(parseFloat(ctx.popup.style.left) + parseFloat(ctx.popup.style.width) <= 844);
+});
+
+test('resizing a desktop window without editing search still fits the smaller viewport', t => {
+  const ctx = setup(t); ctx.viewport.height = 800; ctx.trigger.click();
+  assert.equal(ctx.popup.style.height, '640px');
+  ctx.viewport.height = 390; ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  assert.equal(ctx.popup.style.height, '366px');
+});
+
+test('report options use compact black text while search remains large enough to avoid iOS focus zoom', t => {
+  const ctx = setup(t); ctx.trigger.click();
+  const style = ctx.dom.window.getComputedStyle(ctx.list.children[1]);
+  assert.equal(style.color, 'rgb(0, 0, 0)');
+  assert.equal(style.fontSize, '14px');
+  assert.ok(['normal', '400'].includes(style.fontWeight));
+  assert.equal(ctx.dom.window.getComputedStyle(ctx.search()).fontSize, '16px');
 });
 
 test('backdrop dismisses the report selection and is removed when picker is destroyed', t => {

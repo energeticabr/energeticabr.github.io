@@ -34,12 +34,13 @@ test('expanded report selection fits more compact rows than the previous narrow 
   assert.equal(style.whiteSpace, 'normal');
   assert.equal(ctx.list.children.length, 10, 'scrolling still reaches all existing choices');
 });
-test('expanded report selection adapts to the visual keyboard viewport without anchoring to the header', t => {
+test('expanded report selection keeps its large list while search stays above the keyboard', t => {
   const ctx = fixture(t); const viewport = layout(ctx.dom, ctx.input, { height: 800, top: 300, bottom: 327 });
-  ctx.input.click(); viewport.height = 400; viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  ctx.input.click(); ctx.search.focus(); viewport.height = 400; viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
   assert.equal(ctx.popup.dataset.placement, 'expanded');
-  assert.ok(parseFloat(ctx.popup.style.top) + parseFloat(ctx.popup.style.height) <= 400);
-  assert.ok(parseFloat(ctx.list.style.maxHeight) > 240);
+  assert.ok(parseFloat(ctx.popup.style.top) + 48 <= 400, 'search remains accessible');
+  assert.equal(ctx.popup.style.height, '640px');
+  assert.equal(ctx.list.style.maxHeight, '586px');
 });
 test('report search matches existing options without accents and does not apply a typed unknown supplier', t => {
   const ctx = fixture(t); layout(ctx.dom, ctx.input); ctx.input.click();
