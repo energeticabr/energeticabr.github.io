@@ -43,6 +43,43 @@ test("informa quando a lista G7 não está acessível à conta SharePoint autent
   await assert.rejects(data.loadSnapshot(), error => error.code === "tasks_list_missing" && /LANCAMENTOTAREFAS/.test(error.message));
 });
 
+test('filtro G7 consulta todos os fornecedores ativos de mão de obra do escritório central', async t => {
+  const createTasksGalleryData = await taskGalleryDataFactory(t);
+  const calls = [], signal = new AbortController().signal;
+  const fields = (Title, overrides = {}) => ({ Title, FILIAL: '000 - ESCRITÓRIO CENTRAL', field_1: 'MÃO DE OBRA', STATUS: 'ATIVO', ...overrides });
+  const data = createTasksGalleryData({ repository: {
+    async resolveList(site, aliases, options) { calls.push(['resolve', site, aliases, options]); return { status: 'resolved', id: aliases[0] }; },
+    async getColumns() { return [
+      { name: 'Title', displayName: 'CADASTRO' }, { name: 'FILIAL', displayName: 'FILIAL' },
+      { name: 'field_1', displayName: 'TIPO' }, { name: 'STATUS', displayName: 'STATUS' },
+    ]; },
+    async getItemsPage(site, list, query, options) {
+      calls.push(['page', site, list, query, options]);
+      return options.cursor ? { items: [
+        { id: '7', fields: fields('CODEX') }, { id: '8', fields: fields('BERNARDO') },
+        { id: '9', fields: fields('NOVO FORNECEDOR SEM TAREFAS') },
+      ], hasMore: false } : { items: [
+        { id: '1', fields: fields('BERNARDO') },
+        { id: '2', fields: fields('INATIVO', { STATUS: 'INATIVO' }) },
+        { id: '3', fields: fields('OUTRA FILIAL', { FILIAL: '004 - EDIFÍCIO XAVANTE' }) },
+        { id: '4', fields: fields('MATERIAL', { field_1: 'MATERIAL' }) },
+        { id: '5', fields: fields('') },
+      ], hasMore: true, nextLink: 'suppliers-page-2' };
+    },
+  } });
+  assert.equal(typeof data.loadFilterOptions, 'function');
+  assert.deepEqual(await data.loadFilterOptions('FORNECEDOR', { signal }), [
+    { value: 'BERNARDO', label: 'BERNARDO' }, { value: 'CODEX', label: 'CODEX' },
+    { value: 'NOVO FORNECEDOR SEM TAREFAS', label: 'NOVO FORNECEDOR SEM TAREFAS' },
+  ]);
+  assert.deepEqual(calls[0], ['resolve', 'personal', ['FORNECEDORES'], { signal }]);
+  const pages = calls.filter(call => call[0] === 'page');
+  assert.equal(pages.length, 2);
+  assert.match(pages[0][3], /fields\(\$select=Title,FILIAL,field_1,STATUS\)/);
+  assert.equal(pages[1][4].cursor, 'suppliers-page-2');
+  assert.equal(pages[1][4].signal, signal);
+});
+
 test('conclusão rápida usa contrato real e envia somente data e concluído com ETag', async t => {
   const createTasksGalleryData = await taskGalleryDataFactory(t), writes = [];
   const data = createTasksGalleryData({ repository: {
