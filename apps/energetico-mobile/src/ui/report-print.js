@@ -6,6 +6,7 @@ export const REPORT_PDF_TITLES = Object.freeze({
  'open-order-validation-report':'Validação de notas pendentes e pedidos para baixa',
  'open-cargos-table':'Tabela de cargos', 'open-attendance-summary':'Resumo de presenças e ausências',
  'open-supplier-payroll-report':'Folhas de pagamento por fornecedor',
+ 'open-pending-work-diaries-report':'Diários de obras pendentes',
  'open-stage-progress':'Etapas e atividades da obra', 'open-commercial-receipts':'Contratos e pagamentos',
  'open-commercial-milestones':'Andamento comercial dos imóveis',
  'open-commercial-documents':'Pendências documentais dos imóveis', 'open-sac-pathologies':'Acompanhamento de patologias',
@@ -123,7 +124,7 @@ export function openFilteredReportPdf(root,{action,previewMedia,buildPdf=default
 export function decorateReportPrint(panel,{action,previewMedia,closePreview,buildPdf,loadLogo}={}){
  const root=panel?.element;if(!root?.ownerDocument||!REPORT_PDF_TITLES[action])return panel;
  const doc=root.ownerDocument,button=doc.createElement('button');button.type='button';button.className='report-print-button';button.dataset.action='print-report-pdf';button.innerHTML=PRINTER;button.setAttribute('aria-label','Abrir PDF do relatório');button.title='Abrir PDF com os filtros atuais';
- let host=root.querySelector('.pl-filters,.dr-toolbar,.qr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.tdr-toolbar,.cargos-header');
+ let host=root.querySelector('.pl-filters,.dr-toolbar,.qr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.tdr-toolbar,.pwdr-toolbar,.cargos-header');
  if(!host&&root.querySelector('.qr-dialog')){host=doc.createElement('header');host.className='qr-toolbar';root.querySelector('.qr-dialog').prepend(host);}
  host||=root.querySelector('[role="dialog"]')||root;
  // The shared PDF action supersedes the old browser-print shortcut.
