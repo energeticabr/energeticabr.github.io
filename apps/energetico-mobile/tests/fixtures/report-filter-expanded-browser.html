@@ -10,6 +10,27 @@
 <main id="app"><h1>Verificação dos filtros dos relatórios</h1></main>
 <script type="module">
 import {createManagementReportView} from '../../src/ui/management-report-view.js';
+// Opt-in browser proof: emulate a keyboard covering the lower viewport without
+// changing production code or claiming this is a physical iOS keyboard test.
+if (new URL(location.href).searchParams.has('simulate-keyboard')) {
+  const viewport = new EventTarget();
+  Object.assign(viewport, {width:innerWidth,height:innerHeight,offsetLeft:0,offsetTop:0});
+  Object.defineProperty(window,'visualViewport',{value:viewport,configurable:true});
+  const keyboard = document.createElement('div');
+  keyboard.textContent = 'TECLADO SIMULADO — lista permanece com a altura original';
+  keyboard.style.cssText = 'display:none;position:fixed;bottom:0;left:0;right:0;height:180px;z-index:2147483647;background:#d4d6da;color:#000;padding:20px;box-sizing:border-box;font:14px Arial;text-align:center;border-top:1px solid #888';
+  document.body.append(keyboard);
+  document.addEventListener('focusin',event=>{
+    if (!event.target.matches('.sfs-report-search')) return;
+    keyboard.style.display = 'block'; viewport.height = innerHeight - 180;
+    viewport.dispatchEvent(new Event('resize'));
+  });
+  document.addEventListener('focusout',event=>{
+    if (!event.target.matches('.sfs-report-search')) return;
+    keyboard.style.display = 'none'; viewport.height = innerHeight;
+    viewport.dispatchEvent(new Event('resize'));
+  });
+}
 const products=['13º SALÁRIO','ABRAÇADEIRA METÁLICA 1 POL','ACABAMENTO REGISTRO','AREIA LAVADA','ARGAMASSA AC III','BETONEIRA','BLOCO CERÂMICO','BRITA','CABO ELÉTRICO','CIMENTO','CONCRETO USINADO','DISJUNTOR','ESCORAMENTO','FERRO','IMPERMEABILIZANTE','LOCAÇÃO CONTAINER','MADEIRA','MANGOTE','PISO','PORTA','REJUNTE','TELHA','TINTA','TUBO PVC','VERGALHÃO'];
 const launches=products.map((product,index)=>({id:String(index+1),date:'2026-10-02',paymentDate:'2026-10-05',branch:'004 - EDIFÍCIO XAVANTE',supplier:'Fornecedor de demonstração',product,stage:'ALVENARIA E ESTRUTURAS',account:'CAIXA',disbursement:'SIM',unit:10,quantity:2,freight:5,total:25}));
 const view=createManagementReportView({document,data:{loadSnapshot:async()=>({launches,productTypes:[]})},now:()=>new Date('2026-10-05T12:00:00Z')});
