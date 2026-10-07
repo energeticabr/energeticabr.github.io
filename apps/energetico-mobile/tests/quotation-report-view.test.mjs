@@ -23,7 +23,17 @@ test('portrait does not query, rotation loads, outside and Escape restore focus 
 });
 test('closing aborts late reads and failure removes old data, with retry available',async t=>{
  let finish,signal;const {view,root}=setup(t,o=>{signal=o.signal;return new Promise(r=>finish=r);});const loading=view.open();view.close();assert.equal(signal.aborted,true);finish(snapshot);await loading;assert.equal(root.querySelectorAll('table').length,0);
- let count=0;const other=setup(t,async()=>{if(count++===0)throw Error('network');return snapshot;});await other.view.open();assert.equal(other.root.querySelectorAll('.qr-card').length,0);assert.match(other.root.textContent,/Não foi possível/);other.root.querySelector('button').click();await new Promise(r=>setImmediate(r));assert.equal(other.root.querySelectorAll('.qr-card').length,4);
+ let count=0;const other=setup(t,async()=>{if(count++===0)throw Error('network');return snapshot;});await other.view.open();assert.equal(other.root.querySelectorAll('.qr-card').length,0);assert.match(other.root.textContent,/Não foi possível/);other.root.querySelector('.qr-retry').click();await new Promise(r=>setImmediate(r));assert.equal(other.root.querySelectorAll('.qr-card').length,4);
+});
+
+test('quotation toolbar refresh rereads SharePoint and is disabled while loading',async t=>{
+ let reads=0,finish;
+ const {view,root}=setup(t,async()=>{reads++;if(reads===2)return new Promise(resolve=>{finish=resolve;});return snapshot;});
+ await view.open();
+ const refresh=root.querySelector('button[aria-label="Atualizar cotações e orçamentos"]');
+ assert.ok(refresh);refresh.click();assert.equal(reads,2);assert.equal(refresh.disabled,true);
+ finish({...snapshot,quotes:[]});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(refresh.disabled,false);assert.equal(root.querySelector('[data-metric=total] strong').textContent,'0');
 });
 test('zero quotes remains explicit and injected descriptions and supplier names are only safe text',async t=>{
  const empty=setup(t,async()=>({complete:true,quotes:[],budgets:[]}));await empty.view.open();assert.match(empty.root.textContent,/Nenhuma cotação/);assert.equal(empty.root.querySelector('[data-metric=total] strong').textContent,'0');

@@ -123,6 +123,8 @@ export function decorateReportPrint(panel,{action,previewMedia,closePreview,buil
  let host=root.querySelector('.pl-filters,.dr-toolbar,.qr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.cargos-header');
  if(!host&&root.querySelector('.qr-dialog')){host=doc.createElement('header');host.className='qr-toolbar';root.querySelector('.qr-dialog').prepend(host);}
  host||=root.querySelector('[role="dialog"]')||root;
+ // The shared PDF action supersedes the old browser-print shortcut.
+ host.querySelector('.cr-print')?.remove();
  const refresh=host.querySelector('button[aria-label^="Atualizar"]'),pair=doc.createElement('div');pair.className='report-print-actions';
  if(refresh){refresh.replaceWith(pair);pair.append(button,refresh);}else{pair.append(button);host.prepend(pair);}
  const status=doc.createElement('p');status.className='report-pdf-status';status.hidden=true;status.setAttribute('role','alert');host.after(status);
