@@ -1,5 +1,5 @@
 // Catalog filter Items are taken from G22/G14/G13/G39/G19_2 and
-// G31/G48/G6/G49/G23/G25 in the extracted Power Apps source. Internal aliases
+// G31/G48/G6/G49/G23/G25/G7 in the extracted Power Apps source. Internal aliases
 // below are proven by References/DataSources.json; live metadata must still
 // identify exactly one column before any values are exposed.
 function key(value) {
@@ -19,6 +19,12 @@ const stages = source('LANCAMENTOOBRA', 'ETAPA', {
   conditions: [{ sourceField: 'FILIAL', filterField: 'FILIAL', optional: true }],
 });
 const suppliers = source('FORNECEDORES', 'CADASTRO', { sourceAliases: ['Title'] });
+const centralOfficeLabourSuppliers = source('FORNECEDORES', 'CADASTRO', {
+  sourceAliases: ['Title'], conditions: [
+    { sourceField: 'FILIAL', value: '000 - ESCRITÓRIO CENTRAL' },
+    { sourceField: 'TIPO', value: 'MÃO DE OBRA' }, { sourceField: 'STATUS', value: 'ATIVO' },
+  ],
+});
 const contractorSuppliers = source('FORNECEDORES', 'CADASTRO', {
   sourceAliases: ['Title'], conditions: [{ sourceField: 'EMPREITEIRO', value: 'SIM' }],
 });
@@ -58,12 +64,11 @@ export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
   }) },
   recurringTasks: {
     FILIAL: branch,
-    FORNECEDOR: source('FORNECEDORES', 'CADASTRO', { sourceAliases: ['Title'], conditions: [
-      { sourceField: 'FILIAL', value: '000 - ESCRITÓRIO CENTRAL' }, { sourceField: 'TIPO', value: 'MÃO DE OBRA' }, { sourceField: 'STATUS', value: 'ATIVO' },
-    ] }),
+    FORNECEDOR: centralOfficeLabourSuppliers,
     'ASSOCIAÇÃO': source('CADASTROTAREFAS', 'ASSOCIAÇÃO', { sourceAliases: ['field_1'] }),
     RECORRENCIA: source('TAREFASRECORRENTES', 'RECORRENCIA', { metadataChoices: true }),
   },
+  tasks: { FORNECEDOR: centralOfficeLabourSuppliers },
   delegatedTasks: {
     'ASSOCIAÇÃO': source('CADASTROTAREFAS', 'ASSOCIAÇÃO', { sourceAliases: ['field_1'] }),
     DIFICULDADE: source('CADASTRODIFICULDADE', 'DIFICULDADE', { sourceAliases: ['Title'] }),

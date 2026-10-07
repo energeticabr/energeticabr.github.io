@@ -236,6 +236,92 @@ function setFilter(ctx, name, value) {
   control.dispatchEvent(new ctx.dom.window.Event("change", { bubbles: true }));
 }
 
+test('fornecedor usa catálogo G7 pesquisável e filtra REFERENTE em conjunto com os outros filtros', async t => {
+  const calls = [];
+  const ctx = await setup(t, { rows: [
+    { id: '1', fields: { TAREFA: 'Bernardo central', REFERENTE: 'BERNARDO', STATUS: 'EM ATENDIMENTO', FILIAL: 'CENTRAL', FORNECEDOR: 'CODEX' } },
+    { id: '2', fields: { TAREFA: 'Codex central', REFERENTE: { LookupValue: 'CODEX' }, STATUS: 'ATIVIDADE CRIADA', FILIAL: 'CENTRAL' } },
+    { id: '3', fields: { TAREFA: 'Codex obra', REFERENTE: 'CODEX', STATUS: 'EM ATENDIMENTO', FILIAL: 'OBRA' } },
+    { id: '4', fields: { TAREFA: 'Outro responsável', REFERENTE: 'FORNECEDOR FORA DO CATÁLOGO', STATUS: 'EM ATENDIMENTO', FILIAL: 'CENTRAL' } },
+  ], data: { async loadFilterOptions(field, options) {
+    calls.push([field, options]);
+    return ['NOVO SEM TAREFAS', 'CODEX', 'BERNARDO'].map(value => ({ value, label: value }));
+  } } });
+  await ctx.gallery.open();
+  const supplier = ctx.root().querySelector('select[name="supplier"]');
+  assert.ok(supplier, 'campo Fornecedor presente');
+  assert.equal(calls[0][0], 'FORNECEDOR');
+  assert.ok(calls[0][1].signal instanceof AbortSignal);
+  assert.deepEqual([...supplier.options].map(option => option.value), ['', 'BERNARDO', 'CODEX', 'NOVO SEM TAREFAS']);
+  ctx.root().querySelector('.tg-filter-toggle').click();
+  const search = ctx.root().querySelector('[role="combobox"][aria-label="Fornecedor"]');
+  assert.ok(search, 'busca no suspenso de fornecedor');
+  search.click(); search.value = 'cod';
+  search.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  const option = [...supplier.nextElementSibling.querySelectorAll('[role="option"]')].find(node => node.textContent === 'CODEX');
+  assert.ok(option, 'fornecedor pode ser localizado dentro das opções'); option.click();
+  const ids = () => [...ctx.root().querySelectorAll('.tg-card')].map(card => card.dataset.itemId).sort();
+  assert.equal(supplier.value, 'CODEX');
+  assert.deepEqual(ids(), ['2', '3']);
+  setFilter(ctx, 'branch', 'CENTRAL');
+  assert.deepEqual(ids(), ['2']);
+  setFilter(ctx, 'supplier', 'BERNARDO');
+  assert.deepEqual(ids(), ['1'], 'filtra REFERENTE, não FORNECEDOR');
+  setFilter(ctx, 'supplier', 'NOVO SEM TAREFAS');
+  assert.deepEqual(ids(), []);
+  button(ctx.root(), 'Limpar filtros').click();
+  assert.equal(supplier.value, '');
+  assert.deepEqual(ids(), ['1', '2', '3', '4']);
+  assert.equal(calls.length, 1, 'seleção e busca não consultam novamente o SharePoint');
+});
+
+test('falha do catálogo de fornecedores preserva tarefas e permite tentar novamente', async t => {
+  let failed = true;
+  const ctx = await setup(t, { data: { async loadFilterOptions() {
+    if (failed) throw new Error('A lista FORNECEDORES não está disponível.');
+    return [{ value: 'BERNARDO', label: 'BERNARDO' }];
+  } } });
+  await ctx.gallery.open();
+  assert.ok(ctx.root().querySelector('.tg-card'), 'tarefas permanecem disponíveis');
+  assert.match(ctx.root().querySelector('.tg-supplier-notice').textContent, /fornecedores/i);
+  assert.equal(ctx.root().querySelector('select[name="supplier"]').disabled, true);
+  failed = false;
+  button(ctx.root(), 'Tentar novamente fornecedores').click();
+  await settle(); await settle();
+  assert.equal(ctx.root().querySelector('select[name="supplier"]').disabled, false);
+  assert.deepEqual([...ctx.root().querySelector('select[name="supplier"]').options].map(option => option.value), ['', 'BERNARDO']);
+});
+
+test('abrir anexos após falha de fornecedores preserva o aviso e o botão de tentar novamente', async t => {
+  const ctx = await setup(t, { openMediaCollection: async () => {}, data: {
+    async loadFilterOptions() { throw new Error('Catálogo indisponível'); },
+  } });
+  await ctx.gallery.open();
+  await settle();
+  const attachments = ctx.root().querySelector('[data-action="attachments"]');
+  assert.ok(attachments); attachments.click();
+  await settle(); await settle();
+  const retry = [...ctx.root().querySelectorAll('button')].find(node => node.textContent === 'Tentar novamente fornecedores');
+  assert.ok(retry, 'abrir documentos não remove a recuperação do catálogo');
+  assert.equal(retry.disabled, false);
+  assert.equal(ctx.root().querySelector('.tg-supplier-notice').hidden, false);
+});
+
+test('falha do catálogo durante recarga mantém o fornecedor selecionado e as tarefas filtradas', async t => {
+  let failed = false;
+  const ctx = await setup(t, { rows: [
+    { id: '1', fields: { TAREFA: 'Bernardo', REFERENTE: 'BERNARDO', STATUS: 'EM ATENDIMENTO' } },
+    { id: '2', fields: { TAREFA: 'Codex', REFERENTE: 'CODEX', STATUS: 'EM ATENDIMENTO' } },
+  ], data: { async loadFilterOptions() {
+    if (failed) throw new Error('Catálogo indisponível');
+    return ['BERNARDO', 'CODEX'].map(value => ({ value, label: value }));
+  } } });
+  await ctx.gallery.open(); setFilter(ctx, 'supplier', 'CODEX');
+  failed = true; await ctx.gallery.reload();
+  assert.equal(ctx.root().querySelector('[name="supplier"]').value, 'CODEX');
+  assert.deepEqual([...ctx.root().querySelectorAll('.tg-card')].map(card => card.dataset.itemId), ['2']);
+});
+
 test("Galeria G7 exibe métricas e filtros reais e formata datas em dd/mm/aaaa", async t => {
   const ctx = await setup(t);
   await ctx.gallery.open();

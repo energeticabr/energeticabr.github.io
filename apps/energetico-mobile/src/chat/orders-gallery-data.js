@@ -6,6 +6,7 @@ import { provisionDateKey, provisionDayOffset, provisionDueState, provisionTotal
 import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
 import { createPayrollSourceReader } from './payroll-editor-policy.js';
 import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters } from './payroll-gallery-filters.js';
+import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -294,6 +295,7 @@ export function createTasksGalleryData(options = {}) {
     listAliases: options.listAliases || ["LANCAMENTOTAREFAS", "LANCAMENTO TAREFAS"],
     listName: options.listName || "LANCAMENTOTAREFAS",
     listMissingCode: options.listMissingCode || "tasks_list_missing",
+    filterKind: "tasks",
   });
 }
 
@@ -607,6 +609,7 @@ function createSharePointListData({
   listName = "NOTASPENDENTES",
   listMissingCode = "orders_list_missing",
   preserveSourceOrder = false,
+  filterKind,
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
@@ -622,6 +625,7 @@ function createSharePointListData({
   if (typeof repository.resolveList !== "function" || typeof repository.getItemsPage !== "function") {
     throw new TypeError("A Galeria de Pedidos requer um repositório SharePoint compatível.");
   }
+  const filters = filterKind ? createRegistrationGalleryFilterData({ repository, siteKey, kind: filterKind }) : null;
 
   let resolvedList;
   const attachmentCache = new Map();
@@ -848,5 +852,6 @@ function createSharePointListData({
   }
 
   return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem,
-    loadEditor, saveEditor, deleteItem, updateDueDate, loadUpcomingPayments });
+    loadEditor, saveEditor, deleteItem, updateDueDate, loadUpcomingPayments,
+    ...(filters ? { loadFilterOptions: filters.loadFilterOptions } : {}) });
 }
