@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pagamentos pendentes — verificação de layout</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button>Abrir relatório</button></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+import '../../src/ui/pending-supplier-payments-report.css';
+try {
+  const viewport=new EventTarget();
+  Object.assign(viewport,{width:innerWidth,height:innerHeight,offsetLeft:0,offsetTop:0});
+  Object.defineProperty(window,'visualViewport',{value:viewport,configurable:true});
+  const {createPendingSupplierPaymentsReportView}=await import('../../src/ui/pending-supplier-payments-report-view.js');
+  const {decorateReportNavigation}=await import('../../src/ui/report-navigation.js');
+  const {decorateReportPrint,captureFilteredReport}=await import('../../src/ui/report-print.js');
+  const suppliers=Array.from({length:12},(_,index)=>({id:String(index+1),name:`Fornecedor ${index+1} ${'EXTENSO '.repeat(8)}`,branch:'FILIAL '+ 'BH '.repeat(12),status:'ATIVO',contractor:true,hours:8,dailyValue:100}));
+  const presences=suppliers.flatMap(supplier=>[
+    {id:`${supplier.id}01`,supplier:supplier.name,branch:supplier.branch,date:'2026-09-01',presence:'PRESENTE',status:'PENDENTE PGTO',dailyValue:100,
+      entry1:'08:00',exit1:'12:00',entry2:'13:00',exit2:'17:00',activity:'Atividade extensa '+ 'x'.repeat(160),property:'Obra 1',motivation:'Conferir',observation:'Observação',paymentId:''},
+    {id:`${supplier.id}02`,supplier:supplier.name,branch:supplier.branch,date:'2026-10-03',presence:'PENDENTE',status:'PENDENTE PGTO',dailyValue:50,
+      entry1:'08:00',exit1:'12:00',entry2:'',exit2:'',activity:'Atividade',property:'Obra 1',motivation:'',observation:'',paymentId:''},
+  ]);
+  let loads=0;
+  const view=decorateReportPrint(decorateReportNavigation(createPendingSupplierPaymentsReportView({now:()=>new Date(2026,9,7,12),data:{async loadSnapshot(){loads++;return {complete:true,suppliers,presences,launches:[]};}}}),{action:'open-pending-supplier-payments-report'}),{action:'open-pending-supplier-payments-report'});
+  await view.open();
+  const root=view.element;
+  if(matchMedia('(orientation:portrait)').matches) {
+    const close=root.querySelector('.psp-close');
+    document.documentElement.dataset.layout=JSON.stringify({portrait:true,loads,warning:!root.querySelector('.pl-orientation').hidden,closeVisible:getComputedStyle(close).display!=='none',busy:root.getAttribute('aria-busy'),tables:root.querySelectorAll('table').length});
+  } else {
+    const logo=root.querySelector('img'); await logo.decode(); await new Promise(requestAnimationFrame);
+    const rect=node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};};
+    const tables=[...root.querySelectorAll('table')], content=root.querySelector('.psp-content'), toolbar=root.querySelector('.psp-filters');
+    const actions=toolbar.querySelector('.report-print-actions');
+    const tableBackground=selector=>getComputedStyle(root.querySelector(selector)).backgroundColor;
+    const capture=captureFilteredReport(root);
+    root.querySelector('[aria-label="Abrir opções de FILIAL"]').click();
+    const popup=root.querySelector('.sfs-popup:not([hidden])');
+    const popupData={placement:popup.dataset.placement,...rect(popup),searchFocused:document.activeElement===popup.querySelector('input[type=search]')};
+    const search=popup.querySelector('input[type=search]'); search.focus();
+    viewport.height=innerHeight-180; viewport.dispatchEvent(new Event('resize'));
+    await new Promise(requestAnimationFrame);
+    const keyboardData={...rect(popup),report:rect(root.querySelector('.psp-dialog')),content:rect(content),
+      tables:tables.map(rect),arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),
+      scrollOverflow:toolbar.scrollWidth-toolbar.clientWidth,focused:document.activeElement===search,
+      reducedHeight:viewport.height,fontSize:getComputedStyle(tables[0].querySelector('tbody td')).fontSize};
+    root.querySelector('.sfs-dismiss').click();
+    viewport.height=innerHeight; viewport.dispatchEvent(new Event('resize'));
+    document.documentElement.dataset.layout=JSON.stringify({portrait:false,loads,logoLoaded:logo.naturalWidth>0,
+      documentOverflow:document.documentElement.scrollWidth-innerWidth,toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
+      contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,contentScrollHeight:content.scrollHeight,
+      tables:tables.map(table=>({...rect(table),rows:table.tBodies[0].rows.length,columns:table.tHead.rows[1].cells.length})),
+      arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),fontSize:getComputedStyle(tables[0].querySelector('tbody td')).fontSize,
+      backgrounds:[tableBackground('.psp-pending .psp-table-title'),tableBackground('.psp-pending thead'),tableBackground('.psp-details .psp-table-title')],
+      capturedTables:capture.pages[0].blocks.filter(block=>block.type==='table').map(block=>({columns:block.widths.length,rows:block.rows.length})),
+      actions:[...actions.children].map(node=>({...rect(node),label:node.getAttribute('aria-label')})),
+      firstDate:rect(toolbar.querySelector('[name=startDate]').parentElement),popup:popupData,keyboard:keyboardData});
+  }
+} catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>
