@@ -1,3 +1,4 @@
+@import './gallery-create-shortcut.css';
 .tg-overlay .og-content { padding-top: 12px; }
 .tg-overlay .tg-metrics {
   grid-template-columns: repeat(3, minmax(0, 1fr));

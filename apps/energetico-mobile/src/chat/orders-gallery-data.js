@@ -358,6 +358,7 @@ export function createHrPayrollGalleryData({
   fetchImpl = globalThis.fetch,
   now = () => new Date(),
   assertSession = () => {},
+  sheetCreationAttempts,
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
@@ -576,9 +577,16 @@ export function createHrPayrollGalleryData({
   async function payments() {
     return paymentData ||= import('./payroll-payment-data.js').then(({createPayrollPaymentData})=>createPayrollPaymentData({repository,siteKey:SITE_KEY,now,assertSession}));
   }
+  let sheetData;
+  async function sheets() {
+    return sheetData ||= import('./payroll-sheet-create-data.js').then(({ createPayrollSheetCreateData }) =>
+      createPayrollSheetCreateData({ repository, siteKey: SITE_KEY, now, assertSession, attempts: sheetCreationAttempts }));
+  }
   return Object.freeze({ loadPage, loadFilteredPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),
+    loadSheetOptions: async options => (await sheets()).loadOptions(options),
+    saveSheet: async (draft, options) => (await sheets()).save(draft, options),
     deleteItem: async (gallery, id, options) => (await editor(gallery)).deleteItem(id, options) });
 }
 

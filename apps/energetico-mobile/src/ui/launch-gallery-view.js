@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createMascotReportButton } from './report-action-button.js';
@@ -193,7 +194,7 @@ function personDisplayName(value) {
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
   request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot, loadLaunchGroup,
-  captureSignature, onClose, onHome, clusterTimeoutMs = 30_000 } = {}) {
+  captureSignature, onClose, onHome, onCreate, clusterTimeoutMs = 30_000 } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
   let opened = false, destroyed = false, suspended = false, busy = false;
@@ -289,6 +290,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= pages;
+    createShortcut.sync();
   }
   function active(epoch) { return opened && !destroyed && epoch === session; }
   function focus(node) { if (opened && !suspended && node?.isConnected) node.focus({ preventScroll: true }); }
@@ -311,6 +313,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const content = element('div', 'lg-content');
   const filterDisclosure = element('details', 'lg-filters');
   filterDisclosure.append(element('summary', 'lg-filter-toggle', 'Filtros e ordenação'));
+  const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
+    label: 'Adicionar um novo lançamento', action: 'create-launch',
+    isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading && !editor && !review });
   const filterForm = element('form', 'lg-filter-form');
   filterForm.setAttribute('aria-label', 'Filtros de lançamentos');
   const filterGrid = element('div', 'lg-filter-grid');
@@ -350,7 +355,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   reviewHost.setAttribute('role', 'dialog'); reviewHost.setAttribute('aria-modal', 'true');
   reviewHost.setAttribute('aria-label', 'Revisão e confirmação'); reviewHost.tabIndex = -1;
   filterDisclosure.append(filterForm);
-  content.append(filterDisclosure, totals, notice, listStatus, cards, pagination);
+  content.append(createShortcut.toolbar, filterDisclosure, totals, notice, listStatus, cards, pagination);
   root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
   const recordActions = createGalleryRecordActions({
@@ -364,7 +369,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       reveal(editor?.form ?? panel);
       focus(editor?.form?.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? panel);
     },
-    deleteItem: async id => {
+    deleteItem: id => createShortcut.runMutation(async () => {
       if (busy || editor || review) throw new Error('Conclua ou cancele a edição aberta antes de deletar.');
       const item = recordItems.get(String(id));
       if (!item) throw new Error('Atualize a galeria antes de deletar este item.');
@@ -376,7 +381,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       }
       if (!expectedModified) throw new Error('A versão atual do registro não foi identificada. Atualize a galeria.');
       return request('delete', { id, confirm: true, expectedModified });
-    },
+    }),
     onChanged: async ({ id }) => {
       if (String(selectedId) === String(id)) {
         ++detailVersion; current = null; selectedId = null;
@@ -1554,7 +1559,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (event.key !== 'Tab') return;
     const activeModal = !reviewHost.hidden ? reviewHost : !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;
     const controls = [...activeModal.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
-      .filter(node => !node.disabled && !node.closest('[hidden]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
+      .filter(node => !node.disabled && node.getAttribute('aria-hidden') !== 'true' && !node.closest('[hidden]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
     const first = controls[0] ?? activeModal, last = controls.at(-1) ?? activeModal;
     if (event.shiftKey && (doc.activeElement === first || !controls.includes(doc.activeElement))) { event.preventDefault(); focus(last); }
     else if (!event.shiftKey && (doc.activeElement === last || !controls.includes(doc.activeElement))) { event.preventDefault(); focus(first); }
@@ -1582,6 +1587,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    createShortcut.destroy();
     recordActions.destroy(); recordItems.clear();
     autoFilters.destroy();
     attachmentCounts.destroy();

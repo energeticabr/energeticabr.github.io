@@ -1,3 +1,4 @@
+@import './gallery-create-shortcut.css';
 .og-overlay {
   position: fixed;
   inset: 0;
@@ -186,7 +187,7 @@
 .re-header .og-button { display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px #001e3c24; }
 .re-header .og-button svg { width: 18px; height: 18px; flex: none; }
 .re-filter-form { display: grid; gap: 12px; padding: 0; }
-.re-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.re-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
 .re-search-bar { display: flex; align-items: center; min-width: 0; padding: 0 12px; border: 1px solid #cbd9e4; border-radius: 11px; background: #fff; box-shadow: 0 2px 7px #163c6114; }
 .re-search-bar > svg { width: 22px; height: 22px; flex: none; margin-right: 8px; color: #123e70; }
 .re-search-bar .og-field { flex: 1; }

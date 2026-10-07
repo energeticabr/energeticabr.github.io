@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+<link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+<link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/hr-payroll-gallery.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<style>* { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; }</style>
+</head><body><script type="module">
+import { galleryCases, galleryOptions } from '../helpers/gallery-create-cases.mjs';
+const results = [];
+let unhandledRejections = 0;
+window.addEventListener('unhandledrejection', () => { unhandledRejections++; });
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+try {
+  for (const entry of galleryCases) {
+    let creates = 0, closedFirst = false, failCreation = false;
+    const gallery = entry.factory(galleryOptions(entry, document, { onCreate: () => {
+      closedFirst = document.querySelector(entry.root).hidden; creates++;
+      if (failCreation) return Promise.reject(new Error('Fixture factory unavailable'));
+    } }));
+    await gallery.open();
+    const root = document.querySelector(entry.root);
+    const add = root.querySelector('[data-gallery-create], [data-action="create-task"]');
+    if (!add) { results.push({ name: entry.name, missing: true }); gallery.destroy(); continue; }
+    const filter = add.previousElementSibling;
+    const measure = async () => {
+      await nextFrame();
+      const a = add.getBoundingClientRect(), b = filter.getBoundingClientRect(), style = getComputedStyle(add);
+      return { width: a.width, height: a.height, color: style.color, background: style.backgroundColor, border: style.borderColor,
+        visible: a.width > 0 && a.height > 0 && !add.closest('details') && !add.closest('[hidden]'),
+        ordered: b.right <= a.left && Math.abs(b.bottom - a.bottom) < 1,
+        fits: a.left >= 0 && a.right <= innerWidth && b.left >= 0,
+        overflow: root.scrollWidth > root.clientWidth + 1,
+        outside: [...root.querySelectorAll('*')].filter(node => { const r = node.getBoundingClientRect();
+          return r.width && (r.left < 0 || r.right > innerWidth); }).slice(0, 8).map(node => ({
+            className: node.className, tag: node.tagName, width: node.getBoundingClientRect().width, right: node.getBoundingClientRect().right })),
+        hittable: document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2) === add };
+    };
+    const collapsed = await measure(); filter.click(); const expanded = await measure();
+    add.click(); add.click();
+    const result = { name: entry.name, collapsed, expanded, creates, closedFirst };
+    await gallery.open(); failCreation = true; add.click(); await nextFrame();
+    const alert = document.querySelector('[data-gallery-create-error]');
+    if (alert) {
+      const a = alert.getBoundingClientRect(), dismiss = alert.querySelector('button'), b = dismiss.getBoundingClientRect();
+      result.failure = { present: true, closed: root.hidden, role: alert.getAttribute('role'),
+        visible: a.width > 0 && a.height > 0 && !alert.closest('[hidden]'),
+        fits: a.left >= 0 && a.right <= innerWidth && a.top >= 0 && a.bottom <= innerHeight,
+        overflow: alert.scrollWidth > alert.clientWidth + 1 || document.body.scrollWidth > innerWidth,
+        hittable: document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) === dismiss,
+        dismissLabel: dismiss.getAttribute('aria-label') };
+      dismiss.click(); result.failure.dismissed = !document.querySelector('[data-gallery-create-error]');
+    } else result.failure = { present: false };
+    result.unhandledRejections = unhandledRejections;
+    results.push(result);
+    gallery.destroy();
+  }
+  document.documentElement.dataset.layout = JSON.stringify(results);
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.stack }); }
+</script></body></html>

@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -122,7 +123,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, openMediaCollection } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -159,6 +160,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   applyScreenNavigation({ header, back: close, home, title });
   const filterDisclosure = el("details", "rg-filters");
   filterDisclosure.append(el("summary", "rg-filter-toggle", "Filtros"));
+  const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close: hide,
+    label: `Adicionar registro — ${model.title}`, action: 'create-registration',
+    isAvailable: () => !destroyed && !attachmentLoading });
   const toolbar = el("div", "rg-toolbar");
   const filterFields = model.filterFields || ["STATUS"];
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");
@@ -220,14 +224,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const pageText = el("span", "", "Página 1");
   const next = el("button", "rg-button", "Próxima"); next.type = "button";
   pagination.append(previous, pageText, next);
-  root.append(header, filterDisclosure, feedback, list, pagination);
+  root.append(header, createShortcut.toolbar, filterDisclosure, feedback, list, pagination);
   doc.body.append(root);
   const searchableFilters = bindSearchableFilterSelects(toolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => data.saveEditor(context, fields),
-    deleteItem: (id, options) => data.deleteItem(id, options),
+    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
     onChanged: load,
   });
 
@@ -551,6 +555,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function render() {
     if (destroyed) return;
+    createShortcut.sync();
     const filtered = filteredRows();
     const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     page = Math.min(page, pages);
@@ -657,6 +662,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     attachmentCountQueue = [];
     loadFailed = false;
     root.setAttribute("aria-busy", "true");
+    createShortcut.sync();
     feedback.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
     try {
       const snapshot = await data.loadSnapshot();
@@ -681,7 +687,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       page = 1;
       render();
     } finally {
-      if (current === request) root.setAttribute("aria-busy", "false");
+      if (current === request) { root.setAttribute("aria-busy", "false"); createShortcut.sync(); }
     }
   }
 
@@ -690,6 +696,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     recordActions.close();
     searchableFilters.close();
     root.hidden = true;
+    createShortcut.sync();
     request += 1;
     filterEpoch += 1;
     attachmentRequest += 1;
@@ -709,7 +716,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if (event.key === "Escape") { hide(); return; }
     if (event.key !== "Tab" || root.hidden) return;
     const focusable = [...root.querySelectorAll("summary, button:not(:disabled), input:not(:disabled), select:not(:disabled)")]
-      .filter(node => !node.disabled && !node.closest("[hidden]")
+      .filter(node => !node.disabled && node.getAttribute('aria-hidden') !== 'true' && !node.closest("[hidden]")
         && (node.tagName === "SUMMARY" || !node.closest("details:not([open])")));
     if (!focusable.length) { event.preventDefault(); root.focus(); return; }
     const current = focusable.indexOf(doc.activeElement);
@@ -722,6 +729,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { createShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

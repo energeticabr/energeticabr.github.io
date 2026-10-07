@@ -248,6 +248,11 @@ async function defaultHrPayrollGalleryFactory(options) {
   return createHrPayrollGallery(options);
 }
 
+async function defaultPayrollSheetCreateFactory(options) {
+  const { createPayrollSheetCreateView } = await import("./ui/payroll-sheet-create-view.js");
+  return createPayrollSheetCreateView(options);
+}
+
 async function defaultSupplierPayrollFactory(options) {
   const { createSupplierPayrollView } = await import("./ui/supplier-payroll-view.js");
   return createSupplierPayrollView(options);
@@ -359,6 +364,32 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_delegated_tasks_gallery: "delegatedTasks",
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
+const GALLERY_CREATION_ACTIONS = Object.freeze({
+  action_launch_gallery: ["action_launch", "EFETUAR LANÇAMENTO"],
+  action_orders_gallery: ["action_pending_order_registration", "EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)"],
+  action_tasks_gallery: ["action_task", "ADICIONAR UMA NOVA TAREFA"],
+  action_payment_programming_gallery: ["action_payment", "CRIAR UMA PROVISÃO DE PAGAMENTO"],
+  action_recurring_expenses_gallery: ["action_recurring_expense", "CRIAR UMA DESPESA RECORRENTE"],
+  action_group_gallery: ["action_register_supply_group", "CADASTRAR GRUPO"],
+  action_family_gallery: ["action_register_supply_family", "CADASTRAR FAMÍLIA"],
+  action_subfamily_gallery: ["action_register_supply_subfamily", "CADASTRAR SUBFAMÍLIA"],
+  action_product_gallery: ["action_register_supply_product", "CADASTRAR PRODUTO"],
+  action_documents_gallery: ["action_document", "ADICIONAR UM NOVO DOCUMENTO"],
+  action_asset_gallery: ["action_register_fixed_asset", "CADASTRAR IMOBILIZADO"],
+  action_asset_function_gallery: ["action_register_fixed_asset_function", "CADASTRAR FUNÇÃO DO IMOBILIZADO"],
+  action_asset_product_gallery: ["action_register_fixed_asset_product", "CADASTRAR PRODUTO IMOBILIZADO"],
+  action_asset_group_gallery: ["action_register_fixed_asset_group", "CADASTRAR GRUPO IMOBILIZADO"],
+  action_work_diary_gallery: ["action_create_construction_diary", "CADASTRAR DIÁRIO DE OBRAS"],
+  action_quote_gallery: ["action_create_new_quotation", "CRIAR NOVA COTAÇÃO"],
+  action_contract_gallery: ["action_register_contractor_contract", "CADASTRAR CONTRATO DE EMPREITEIRO"],
+  action_contract_line_gallery: ["action_register_contract_line", "CADASTRAR LINHA CONTRATO"],
+  action_measurement_gallery: ["action_register_measurement", "CADASTRAR MEDIÇÃO"],
+  action_measurement_line_gallery: ["action_register_measurement_line", "CADASTRAR LINHA MEDIÇÃO"],
+  action_stage_demonstrative_gallery: ["action_create_construction_stage_demonstrative", "CRIAR DEMONSTRATIVO DE ETAPA"],
+  action_construction_stage_gallery: ["action_register_construction_stage", "CADASTRO DE ETAPA OBRA"],
+  action_recurring_tasks_gallery: ["action_recurring_task_registration", "CADASTRAR TAREFA RECORRENTE"],
+  action_delegated_tasks_gallery: ["action_delegated_task", "CRIAR UMA TAREFA DELEGADA"],
+});
 const DOCUMENT_SIGNING_REOPEN_LAST_ID = "document_signing_reopen_last";
 const DOCUMENT_SIGNING_POSITION_BACK_ID = "document_signing_position_back";
 const DOCUMENT_LINE_FINALIZE_ID = "document_line_finalize";
@@ -863,6 +894,7 @@ export function createAppController({
   pendingConstructionDiaryDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
+  payrollSheetCreateFactory = defaultPayrollSheetCreateFactory,
   supplierPayrollFactory = defaultSupplierPayrollFactory,
   supplierPayrollDataFactory = defaultSupplierPayrollDataFactory,
   databaseFilterDebounceMs = 300,
@@ -961,6 +993,10 @@ export function createAppController({
   let hrPayrollGalleryName = "";
   let hrPayrollGalleryOpening = null;
   let hrPayrollGalleryData = null;
+  let payrollSheetCreate = null;
+  let payrollSheetCreateOpening = null;
+  let payrollSheetCreateRevision = 0;
+  const payrollSheetAttemptsByAccount = new Map();
   let gallerySignatureResolve = null;
   let unsubscribeStore = null;
   const unsubscribeCommands = [];
@@ -4350,6 +4386,7 @@ export function createAppController({
   }
 
   function closeGalleryOverlays(preserveSacPathologies = false, preserveQuotationReport = false, preserveDepreciationReport = false, preserveDocumentControlReport = false, preserveTaskAssociationReport = false) {
+    disposePayrollSheetCreate();
     if (!preserveSacPathologies) disposeSacPathologiesReport();
     if (!preserveQuotationReport) disposeQuotationReport();
     if (!preserveDepreciationReport) disposeDepreciationReport();
@@ -4528,14 +4565,21 @@ export function createAppController({
   }
 
   function ordersGalleryTokenProvider(assertSession, resumeAction = ORDERS_GALLERY_ID) {
-    return scopes => {
+    return async scopes => {
       assertSession();
-      return auth.getToken(scopes).catch(async error => {
+      try {
+        const token = await auth.getToken(scopes);
+        assertSession();
+        return token;
+      } catch (error) {
+        assertSession();
         if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
         await auth.authorize(scopes, { resumeAction });
         assertSession();
-        return auth.getToken(scopes);
-      });
+        const token = await auth.getToken(scopes);
+        assertSession();
+        return token;
+      }
     };
   }
 
@@ -4657,6 +4701,7 @@ export function createAppController({
   }
 
   function disposeHrPayrollGallery() {
+    disposePayrollSheetCreate();
     hrPayrollGallery?.destroy?.();
     hrPayrollGallery = null;
     hrPayrollGalleryName = "";
@@ -4667,6 +4712,79 @@ export function createAppController({
     const navigationRevision = galleryOpeningRevision, openingSessionRevision = sessionRevision;
     return () => !stopped && account === openingAccount && sessionRevision === openingSessionRevision
       && galleryOpeningRevision === navigationRevision;
+  }
+
+  function galleryCreationHandler(galleryId, assertSession) {
+    const action = GALLERY_CREATION_ACTIONS[galleryId];
+    if (!action) throw new Error("O fluxo de criação desta galeria não foi identificado.");
+    // Cached galleries survive report navigation; only account lifetime expires
+    // their creation callback. The UI separately guards closed/destroyed panels.
+    const creationAccount = account, creationRevision = sessionRevision;
+    return () => {
+      if (stopped || account !== creationAccount || sessionRevision !== creationRevision || flowBusy()) return false;
+      assertSession();
+      return sendText(action[1], action[0]);
+    };
+  }
+
+  function disposePayrollSheetCreate() {
+    payrollSheetCreateRevision++;
+    payrollSheetCreateOpening = null;
+    const panel = payrollSheetCreate;
+    payrollSheetCreate = null;
+    panel?.destroy?.();
+  }
+
+  function payrollSheetAttemptsFor(creationAccount) {
+    const key = creationAccount.homeAccountId || creationAccount.localAccountId
+      || creationAccount.username || creationAccount.id || creationAccount;
+    if (!payrollSheetAttemptsByAccount.has(key)) payrollSheetAttemptsByAccount.set(key, new Map());
+    return payrollSheetAttemptsByAccount.get(key);
+  }
+
+  async function openPayrollSheetCreate() {
+    if (!account || stopped || flowBusy()) return false;
+    if (payrollSheetCreateOpening) return payrollSheetCreateOpening;
+    if (payrollSheetCreate) return payrollSheetCreate.open();
+    closeGalleryOverlays();
+    const creationAccount = account, creationSession = sessionRevision;
+    const revision = payrollSheetCreateRevision;
+    const current = () => !stopped && account === creationAccount && sessionRevision === creationSession
+      && revision === payrollSheetCreateRevision;
+    const assertSession = () => { if (!current()) throw new Error('A sessão do cadastro de folha foi encerrada.'); };
+    const opening = Promise.resolve().then(async () => {
+      let panel;
+      try {
+        const data = await hrPayrollGalleryDataFactory({
+          tokenProvider: ordersGalleryTokenProvider(assertSession, 'action_hr_create_idfolha'), assertSession,
+          sheetCreationAttempts: payrollSheetAttemptsFor(creationAccount),
+        });
+        assertSession();
+        panel = await payrollSheetCreateFactory({
+          loadOptions: async options => { assertSession(); const result = await data.loadSheetOptions(options); assertSession(); return result; },
+          save: async (draft, options) => { assertSession(); const result = await data.saveSheet(draft, options); assertSession(); return result; },
+          onSaved: () => {},
+          onClose: () => {
+            if (payrollSheetCreate !== panel || !current()) return;
+            disposePayrollSheetCreate();
+            void openHrPayrollGallery('IDFOLHA');
+          },
+        });
+        if (!current()) { panel?.destroy?.(); return false; }
+        payrollSheetCreate = panel;
+        await panel.open();
+        return current();
+      } catch (error) {
+        if (current()) setSessionError(error, 'Não foi possível abrir o cadastro de folha.');
+        if (payrollSheetCreate === panel) disposePayrollSheetCreate();
+        else panel?.destroy?.();
+        return false;
+      } finally {
+        if (payrollSheetCreateOpening === opening) payrollSheetCreateOpening = null;
+      }
+    });
+    payrollSheetCreateOpening = opening;
+    return opening;
   }
 
   async function openHrPayrollGallery(gallery) {
@@ -4680,8 +4798,9 @@ export function createAppController({
     if (hrPayrollGalleryOpening) return hrPayrollGalleryOpening;
     const galleryAccount = account;
     const openingIsCurrent = galleryOpeningGuard(galleryAccount);
+    const gallerySession = sessionRevision;
     const assertSession = () => {
-      if (stopped || account !== galleryAccount) throw new Error("A sessão da galeria foi encerrada.");
+      if (stopped || account !== galleryAccount || sessionRevision !== gallerySession) throw new Error("A sessão da galeria foi encerrada.");
     };
     const opening = Promise.resolve().then(async () => {
       try {
@@ -4702,6 +4821,7 @@ export function createAppController({
           let panel;
           panel = await hrPayrollGalleryFactory({
             gallery,
+            onCreate: gallery === 'IDFOLHA' ? () => { assertSession(); return openPayrollSheetCreate(); } : undefined,
             loadPaymentOptions: gallery === 'FOLHAPGTO' ? async options => {
               assertSession();const result=await data.loadPaymentOptions(options);assertSession();return result;
             } : undefined,
@@ -4856,6 +4976,7 @@ export function createAppController({
                 }
               });
             },
+            onCreate: galleryCreationHandler(LAUNCH_GALLERY_ID, assertSession),
             onClose: () => { gallerySignatureResolve?.(null); gallerySignatureResolve = null; },
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
@@ -4898,6 +5019,7 @@ export function createAppController({
           const panel = await ordersGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
+            onCreate: galleryCreationHandler(ORDERS_GALLERY_ID, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
@@ -4948,7 +5070,7 @@ export function createAppController({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
-            onCreate: () => { assertSession(); return sendText("ADICIONAR UMA NOVA TAREFA", "action_task"); },
+            onCreate: galleryCreationHandler(TASKS_GALLERY_ID, assertSession),
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
           tasksGallery = panel;
@@ -6587,6 +6709,7 @@ export function createAppController({
           const panel = await paymentProgrammingGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
+            onCreate: galleryCreationHandler(PAYMENT_PROGRAMMING_GALLERY_ID, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
@@ -6636,6 +6759,7 @@ export function createAppController({
           const panel = await recurringExpensesGalleryFactory({
             data,
             openMediaCollection: items => openGalleryMedia(items, assertSession),
+            onCreate: galleryCreationHandler(RECURRING_EXPENSES_GALLERY_ID, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },
           });
           if (!openingIsCurrent()) { panel.destroy?.(); return false; }
@@ -6687,6 +6811,7 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
+            onCreate: galleryCreationHandler(replyId, assertSession),
             ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
@@ -8182,6 +8307,10 @@ export function createAppController({
 
   function bind(type, handler) {
     unsubscribeCommands.push(view.on(type, command => {
+      if ((payrollSheetCreate || payrollSheetCreateOpening)
+        && (type.startsWith('open-') || type === 'select-reply' || type === 'send-text'
+          || type === 'finish-flow' || type === 'navigate-mascot-report')
+        && command?.replyId !== 'action_hr_create_idfolha') disposePayrollSheetCreate();
       if (mascotNavigationOpening && (type.startsWith('open-') || type === 'opensacpathologies'
         || ['select-reply','sign-in','confirm-sign-out','send-text','finish-flow'].includes(type))) {
         mascotNavigationOpening = null;
@@ -8266,6 +8395,7 @@ export function createAppController({
       if (command.replyId === PAYMENT_PROGRAMMING_GALLERY_ID) return openPaymentProgrammingGallery();
       if (command.replyId === RECURRING_EXPENSES_GALLERY_ID) return openRecurringExpensesGallery();
       if (command.replyId === "action_hr_gallery_idfolha") return openHrPayrollGallery("IDFOLHA");
+      if (command.replyId === "action_hr_create_idfolha") return openPayrollSheetCreate();
       if (command.replyId === "action_hr_gallery_folhapgto") return openHrPayrollGallery("FOLHAPGTO");
       const state = store.getState();
       syncEpiDeliverySnapshot(state.activeFlow);
@@ -8699,6 +8829,7 @@ export function createAppController({
     else if (pendingAction === RECURRING_EXPENSES_GALLERY_ID) await openRecurringExpensesGallery();
     else if (pendingAction === POWERBI_DASHBOARD_REPLY_ID) await openPowerBiDashboard();
     else if (pendingAction === "action_hr_gallery_idfolha") await openHrPayrollGallery("IDFOLHA");
+    else if (pendingAction === "action_hr_create_idfolha") await openPayrollSheetCreate();
     else if (pendingAction === "action_hr_gallery_folhapgto") await openHrPayrollGallery("FOLHAPGTO");
     else if (REGISTRATION_GALLERY_KIND[pendingAction]) await openRegistrationGallery(REGISTRATION_GALLERY_KIND[pendingAction], pendingAction);
   }
