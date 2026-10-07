@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pending work diaries layout</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button>Abrir relatório</button></main>
+<script type="module">
+import '../../src/ui/report-print.css';
+import '../../src/styles.css';
+import '../../src/ui/pending-work-diaries-report.css';
+import {createPendingWorkDiariesReportView} from '../../src/ui/pending-work-diaries-report-view.js';
+import {decorateReportPrint} from '../../src/ui/report-print.js';
+import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
+try {
+  const rows = Array.from({length:30}, (_, i) => ({id:String(10001+i), date:'2026-10-07', branch:'FILIAL ' + 'EXTENSA '.repeat(20) + 'x'.repeat(100), status:'PENDENTE'}));
+  const view = decorateReportPrint(decorateReportNavigation(createPendingWorkDiariesReportView({data:{async loadSnapshot(){return {rows,count:rows.length};}}}), {action:'open-pending-work-diaries-report'}), {action:'open-pending-work-diaries-report'});
+  await view.open();
+  const root=view.element, logo=root.querySelector('img');
+  await logo.decode();
+  await new Promise(requestAnimationFrame);
+  const toolbar=root.querySelector('.pwdr-toolbar'), content=root.querySelector('.pwdr-content'), table=root.querySelector('table'), pair=toolbar.querySelector('.report-print-actions');
+  const style=selector=>getComputedStyle(table.querySelector(selector));
+  const styles={headerBackground:style('thead th').backgroundColor, rowWeight:style('tbody td').fontWeight,
+    statusWeight:style('.pwdr-status').fontWeight, statusColor:style('.pwdr-status').color,
+    labelColor:style('.pwdr-count-label').color, labelWeight:style('.pwdr-count-label').fontWeight,
+    labelAlign:style('.pwdr-count-label').textAlign, labelPadding:style('.pwdr-count-label').padding,
+    labelSize:style('.pwdr-count-label').fontSize, countColor:style('.pwdr-count').color,
+    countSize:style('.pwdr-count').fontSize, countWeight:style('.pwdr-count').fontWeight};
+  document.documentElement.dataset.layout=JSON.stringify({rows:table.tBodies[0].rows.length, columns:table.tHead.rows[0].cells.length,
+    footerSpan:table.tFoot.rows[0].cells[0].colSpan, logoLoaded:logo.complete&&logo.naturalWidth>0,
+    documentOverflow:document.documentElement.scrollWidth-innerWidth, contentOverflow:content.scrollWidth-content.clientWidth,
+    toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth, tableWidth:table.getBoundingClientRect().width,
+    contentHeight:content.clientHeight, contentScrollHeight:content.scrollHeight, fontSize:getComputedStyle(table.querySelector('tbody td')).fontSize, styles,
+    arrowRight:root.querySelector('.report-navigation-arrow').getBoundingClientRect().right,
+    tableLeft:table.getBoundingClientRect().left,
+    buttons:[...pair.children].map(node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};})});
+} catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>

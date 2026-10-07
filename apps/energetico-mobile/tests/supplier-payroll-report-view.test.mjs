@@ -14,16 +14,16 @@ function setup(t,options={}){
  const calls=[];const view=createSupplierPayrollReportView({document:dom.window.document,now:()=>new Date('2026-10-07T12:00:00Z'),data:{loadSnapshot:async()=>snapshot,loadPaymentsForPayrollIds:async ids=>{calls.push(ids);return rows;},...options}});
  t.after(()=>{view.destroy();dom.window.close();});return {dom,view,root:view.element,calls};
 }
-test('fourth pink HOME mascot sits after stages before orange and stays in its own navigation family',t=>{
+test('fourth pink HOME mascot sits after stages before pending diaries and stays in its own navigation family',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};
  let calls=0;view.on('open-supplier-payroll-report',()=>calls++);view.render(state);
  const mascot=dom.window.document.querySelector('[data-action=open-supplier-payroll-report]');assert.ok(mascot);
- assert.equal(mascot.previousElementSibling.dataset.action,'open-stage-progress');assert.equal(mascot.nextElementSibling.dataset.action,'open-commercial-receipts');
+ assert.equal(mascot.previousElementSibling.dataset.action,'open-stage-progress');assert.equal(mascot.nextElementSibling.dataset.action,'open-pending-work-diaries-report');
  mascot.querySelector('img').click();assert.equal(calls,1);
  assert.deepEqual(getReportNeighbors('open-stage-progress'),{previous:'open-attendance-summary',next:'open-supplier-payroll-report'});
- assert.deepEqual(getReportNeighbors('open-supplier-payroll-report'),{previous:'open-stage-progress',next:null});
+ assert.deepEqual(getReportNeighbors('open-supplier-payroll-report'),{previous:'open-stage-progress',next:'open-pending-work-diaries-report'});
  view.render({...state,activeFlow:'flow'});assert.equal(dom.window.document.querySelector('[data-action=open-supplier-payroll-report]'),null);
 });
 test('current reference month defaults with collapsed supplier groups and all their IDFOLHA',async t=>{
