@@ -54,3 +54,21 @@ test('standalone commercial report keeps all five filters on the same row', {tim
   }finally{dom.window.close();}
  }finally{await server.close();}
 });
+
+test('supplier payroll reserves a navigation margin so its previous arrow never covers names or title', {timeout:60000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(value=>value&&existsSync(value));
+ if(!browser)return t.skip('Chrome unavailable');
+ const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+ try{
+  await server.listen();
+  for(const [width,height]of [[740,360],[844,390],[1280,800]]){
+   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/home-provisions-mascot.html?payroll-navigation=1`});
+   const dom=new JSDOM(stdout);
+   try{
+    const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
+    assert.equal(result.namesLeft.length,12);assert.ok(result.titleLeft>result.arrowRight,JSON.stringify(result));
+    assert.ok(result.namesLeft.every(left=>left>result.arrowRight),JSON.stringify(result));assert.ok(result.overflow<=1,JSON.stringify(result));
+   }finally{dom.window.close();}
+  }
+ }finally{await server.close();}
+});

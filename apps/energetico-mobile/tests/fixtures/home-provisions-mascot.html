@@ -71,6 +71,13 @@ const supplierPayrollReport=createSupplierPayrollReportView({document,now:()=>ne
  async loadPaymentsForPayrollIds(ids){return ids.map(id=>({id:String(Number(id)+20),payrollId:id,supplier:`Fornecedor ${id}`,type:'DIÁRIA',date:'2026-11-02',launchId:String(Number(id)+100),unitValue:181,quantity:5,totalCents:90500}));}
 }});
 view.on('open-supplier-payroll-report',()=>void supplierPayrollReport.open());
+if(new URLSearchParams(location.search).has('payroll-navigation')){
+ const {decorateReportNavigation}=await import('/src/ui/report-navigation.js');
+ decorateReportNavigation(supplierPayrollReport,{action:'open-supplier-payroll-report',onNavigate:async()=>{}});
+ await supplierPayrollReport.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+ const root=supplierPayrollReport.element,arrow=root.querySelector('.report-navigation-arrow').getBoundingClientRect();
+ document.documentElement.dataset.layout=JSON.stringify({arrowRight:arrow.right,titleLeft:root.querySelector('h1').getBoundingClientRect().left,namesLeft:[...root.querySelectorAll('.spr-name')].map(node=>node.getBoundingClientRect().left),overflow:root.querySelector('.spr-content').scrollWidth-root.querySelector('.spr-content').clientWidth});
+}
 const commercial=createCommercialReceiptsReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
  complete:true,
  properties:Array.from({length:12},(_,i)=>({id:String(i+1),branch:'001 - OURO PRETO',property:String(740+i),visualStatus:'ATIVO',saleStatus:'VENDIDO',brokerage:'PAGO CLIENTE',invoice:'PENDENTE',fiscal:'DECLARADO'})),
