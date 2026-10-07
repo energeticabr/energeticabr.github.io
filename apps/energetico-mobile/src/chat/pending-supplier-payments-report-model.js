@@ -41,8 +41,9 @@ const add = (a, b) => a == null || b == null ? null : numeric(new Money(a).plus(
 const ordered = (a, b) => a.date.localeCompare(b.date) || new Money(a.id).comparedTo(b.id);
 const paymentId = value => {
   const raw = text(value);
-  if (!raw) return "";
-  if (!/^\d+$/.test(raw) || new Money(raw).lte(0)) throw new TypeError("Referência de pagamento inválida ou ambígua.");
+  // Match PowerFx IfError(Value(IDPGTO); Blank()): descriptive legacy values
+  // do not abort the report and must not become guessed payment identities.
+  if (!/^\d+$/.test(raw) || new Money(raw).lte(0)) return "";
   return new Money(raw).toFixed(0);
 };
 
@@ -66,7 +67,6 @@ function validateRows(rows, kind) {
     if (kind !== "suppliers") dateFilter(row.date);
     if (kind === "presences") {
       if (!["PRESENTE", "PENDENTE", "AUSENTE"].includes(key(row.presence))) throw new TypeError("Presença inválida no snapshot.");
-      paymentId(row.paymentId);
     }
   }
 }
@@ -194,6 +194,12 @@ export function buildPendingSupplierPaymentsReport(snapshot, filters = {}, today
     const presenceRows = periodPresences.filter(row => matches(row.branch, filters.branch) && matches(row.presence, filters.presence))
       .sort(ordered).map(row => decoratePresence(row, supplier));
     const linkedElsewhere = [];
+    for (const row of periodPresences) {
+      if (text(row.paymentId) && !paymentId(row.paymentId)
+        && !(key(row.presence) === "AUSENTE" && key(row.paymentId) === "AUSENTE")) {
+        warnings.add(`Presença ${row.id}: IDPGTO não contém uma referência única válida. Conteúdo original preservado; confira os pagamentos no detalhamento.`);
+      }
+    }
     // PowerFx derives distinct links from all period rows, independently of its
     // presence select. The linked launch date may fall outside that period.
     for (const id of new Set(periodPresences.map(row => paymentId(row.paymentId)).filter(Boolean))) {

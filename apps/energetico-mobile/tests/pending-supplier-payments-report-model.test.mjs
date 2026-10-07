@@ -134,13 +134,33 @@ test("distinct supplier identities with the same name fail closed before filters
   assert.equal(equivalent.total, 100);
 });
 
-test("partial snapshots, duplicate ids, invalid rows and ambiguous links cannot return totals", () => {
+test("partial snapshots, duplicate ids and invalid core rows cannot return totals", () => {
   for (const change of [{ complete: false }, { partial: true }, { error: "failure" }, { launches: null }]) {
     assert.throws(() => build({ ...snapshot(), ...change }), /snapshot|complet/i);
   }
   for (const data of [snapshot([presence(1), presence(1)]), snapshot([presence(1, { date: "2026-02-30" })]),
-    snapshot([presence(1, { presence: "??" })]), snapshot([presence(1, { paymentId: "9,10" })]),
+    snapshot([presence(1, { presence: "??" })]),
     snapshot([], [supplier()], [launch(1), launch(1)])]) assert.throws(() => build(data), /inválid|duplicad|amb/i);
+});
+
+test("legacy payment references do not block totals or invent links, matching PowerFx IfError", () => {
+  const data = snapshot([
+    presence(1, { paymentId: "3362, 3361", status: "PAGO" }),
+    presence(2, { paymentId: "AUSENTE", presence: "AUSENTE", status: "AUSENTE" }),
+    presence(3, { paymentId: "não informado", status: "PAGO" }),
+    presence(4, { paymentId: "0009" }),
+    presence(5, { paymentId: "12, 13", date: "2026-08-01", status: "PAGO" }),
+  ], [supplier()], [launch(9, { supplier: "Outro" }), launch(3362, { supplier: "Outro" }), launch(3361, { supplier: "Outro" })]);
+  const before = structuredClone(data);
+  const report = build(data);
+  assert.equal(report.total, 100);
+  assert.equal(report.details[0].occurrences, 4);
+  assert.deepEqual(report.details[0].linkedElsewhere.map(row => row.id), ["9"]);
+  assert.equal(report.details[0].presenceRows[0].paymentId, "3362, 3361");
+  assert.ok(report.warnings.some(message => /IDPGTO/.test(message) && /1/.test(message)));
+  assert.ok(report.warnings.some(message => /IDPGTO/.test(message) && /3/.test(message)));
+  assert.ok(!report.warnings.some(message => /IDPGTO/.test(message) && /presença 2|presença 5/i.test(message)));
+  assert.deepEqual(data, before);
 });
 
 test("complete histories beyond 2000 rows are counted and summed without truncation", () => {
