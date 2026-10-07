@@ -1350,3 +1350,26 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-message--external-cargos > button { box-sizing:border-box; padding:0; border:0; }
 .chat-message--external-provisions > button > img,
 .chat-message--external-cargos > button > img { display:block; width:100%; height:100%; object-fit:contain; transform:none; mix-blend-mode:normal; border-radius:0; }
+
+/* Large tablets and desktop: use the available width instead of the 640px
+   phone menu. Keep the phone/short landscape layout and signature surfaces
+   unchanged; only the conversation shell and composer become more compact. */
+@media (min-width: 900px) and (min-height: 500px) {
+  body { padding: 8px; }
+  .chat-shell { width: min(100%, 1600px); height: calc(100dvh - 16px); --control-height: 48px; --compact-control-height: 44px; --compact-control-size: 44px; }
+  .chat-transcript { padding: 12px 16px; }
+  .chat-message.chat-message--initial-area-menu .chat-bubble { flex: 1 1 0; width: 100%; max-width: none; }
+  .chat-message--initial-area-menu.chat-message--external-provisions { grid-template-columns: 44px minmax(0, 1fr); }
+  .chat-message--initial-area-menu.chat-message--external-cargos { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .chat-message--initial-area-menu .chat-choice-list { width: 100%; }
+  .chat-composer { align-items: center; }
+  /* Restored drafts can be laid out after resizeDraft's first measurement.
+     Allow overflow in that case too, without clipping a long saved message. */
+  .chat-composer textarea { field-sizing: content; min-height: 76px; overflow-y: auto !important; }
+  .attachment-actions, .composer-submit-actions { flex-direction: row; align-items: center; }
+  .voice-input-button { width: 48px; flex: 0 0 48px; }
+  .chat-flow-status { padding-block: 4px; }
+  .chat-flow-nav-button { padding: 4px; }
+  .chat-attachments summary { padding-block: 4px; }
+  .chat-attachments summary button { min-height: 44px; padding-block: 7px !important; }
+}

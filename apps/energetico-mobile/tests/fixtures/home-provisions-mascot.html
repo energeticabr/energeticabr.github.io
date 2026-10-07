@@ -121,6 +121,26 @@ view.on('open-cargos-table',()=>void cargos.open());
 view.render(state);
 await Promise.all([...document.images].map(img=>img.decode().catch(()=>{})));
 document.documentElement.dataset.ready='true';
+if(new URLSearchParams(location.search).has('space')){
+ const params=new URLSearchParams(location.search);
+ const spaceState={...state};
+ if(params.has('attachments'))spaceState.attachments=[1,2,3,4].map(id=>({id:String(id),fileName:`Documento ${id}.pdf`,mimeType:'application/pdf',size:12000,mediaUrl:`/api/portal-media/test-${id}`}));
+ if(params.has('long'))spaceState.draft=Array.from({length:12},(_,i)=>`Linha ${i+1} de um rascunho longo.`).join('\n');
+ if(params.has('attachments'))spaceState.activeFlow={id:'launch',title:'BAIXAR PAGAMENTO AGENDADO',allowBulkAttachmentDelete:true};
+ view.render(spaceState);
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ const rect=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right,top:r.top,bottom:r.bottom};};
+ const transcript=document.querySelector('.chat-transcript');
+ document.documentElement.dataset.layout=JSON.stringify({
+  shell:rect('.chat-shell'),transcript:rect('.chat-transcript'),menu:rect('.chat-message--initial-area-menu .chat-bubble'),
+  composer:rect('.chat-composer'),buttons:[...document.querySelectorAll('.chat-composer button')].filter(n=>!n.hidden&&n.getBoundingClientRect().width).map(n=>({width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height})),
+  overflow:transcript.scrollWidth>transcript.clientWidth+1||document.documentElement.scrollWidth>innerWidth+1,
+  draftMinHeight:getComputedStyle(document.querySelector('.chat-composer textarea')).minHeight,
+  draftHeight:rect('.chat-composer textarea').height,draftOverflow:getComputedStyle(document.querySelector('.chat-composer textarea')).overflowY,
+  attachmentCount:document.querySelectorAll('.chat-attachment-cluster').length,
+  attachmentHeight:document.querySelector('.chat-attachments')?.getBoundingClientRect().height||0
+ });
+}
 if(new URLSearchParams(location.search).has('standalone-toolbar')){
  await commercial.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const filters=commercial.element.querySelector('.cr-filters');
