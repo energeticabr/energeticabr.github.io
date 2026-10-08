@@ -5,6 +5,7 @@ import { createForm43StatusPolicy } from './orders-form43-locks.js';
 import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
 import { createPayrollSheetReader } from './payroll-sheet-options.js';
 import { createPayrollLaunchReader } from './payroll-launch-options.js';
+import { createPayrollSheetAttachments } from './payroll-sheet-attachments.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -113,7 +114,7 @@ function typedColumns(rawColumns, entity, metadataOnly) {
 }
 
 /** Edit contexts belong to one service instance; their loaded ETag is never refreshed on save. */
-export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date() } = {}) {
+export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{} } = {}) {
   const aliases = new Set([listName, ...listAliases].map(key));
   const entity = suppliedEntity || ENTITIES.find(candidate => candidate.listNames.some(name => aliases.has(key(name))))
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
@@ -199,10 +200,12 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const form43 = entity.id === 'notas-pendentes' && contract.formVariant?.formName === 'Form43' && statusColumn
       ? createForm43StatusPolicy({ repository, siteKey, orderId: id, orderColumns: rawColumns, statusFieldName: inputName(statusColumn), orderListId: list.id }) : null;
     const evaluateFieldLocks = form43 ? (draft = {}, options = {}) => form43.evaluate({ ...item.fields, ...draft }, options) : undefined;
+    const sheetAttachments = isPayrollSheet ? createPayrollSheetAttachments({ repository, siteKey, list, item, columns, currentItem, assertSession }) : null;
     const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
+      ...(sheetAttachments ? { sheetAttachments } : {}),
       ...(refreshDerivedValues ? { refreshDerivedValues } : {}),
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
-    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn });
+    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn,sheetAttachments });
     return context;
   }
 
@@ -236,7 +239,16 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     }
   }
 
-  async function saveEditor(context, fields) {
+  async function saveEditor(context, fields, options = {}) {
+    const baseline = context && contexts.get(context);
+    if (!baseline) throw new Error("O contexto de edição não pertence a esta galeria. Reabra o registro.");
+    if (baseline.saving) throw new Error("A gravação desta folha já está em andamento.");
+    baseline.saving = true;
+    try { return await persistEditor(context, fields, options); }
+    finally { baseline.saving = false; }
+  }
+
+  async function persistEditor(context, fields, options = {}) {
     const baseline = context && contexts.get(context);
     if (!baseline) throw new Error("O contexto de edição não pertence a esta galeria. Reabra o registro.");
     if (baseline.contract.requiresVariantSelection || baseline.contract.readOnly) throw new Error("Selecione uma variante de formulário editável comprovada.");
@@ -302,6 +314,14 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       });
       if (Object.hasOwn(changed, name) || dependencyChanged) await validateClosed(column, merged[name], baseline, columns, merged);
     }
+    let eTag = version(item.eTag);
+    if (baseline.sheetAttachments) {
+      const status = merged[baseline.statusColumn?.name];
+      const inactive = (Array.isArray(status) ? status : [status]).some(value => String(value ?? '').trim().toUpperCase() === 'INATIVO');
+      eTag = await baseline.sheetAttachments.prepare(options.attachments ?? [], { inactive, signal: options.signal });
+    }
+    assertSession();
+    abort(options.signal);
     if (!Object.keys(changed).length) return item;
     if (baseline.form43) {
       const statusName = inputName(baseline.statusColumn);
@@ -319,7 +339,9 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       }
     }
     if (typeof repository.updateItem !== "function") throw new Error("A gravação segura não está disponível.");
-    const saved = await repository.updateItem(siteKey, list.id, item.id, changed, { eTag: version(item.eTag) });
+    assertSession();
+    abort(options.signal);
+    const saved = await repository.updateItem(siteKey, list.id, item.id, changed, { eTag });
     contexts.delete(context);
     return saved || { id: item.id, fields: merged };
   }

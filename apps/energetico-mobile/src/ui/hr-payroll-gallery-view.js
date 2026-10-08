@@ -38,7 +38,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate } = {}) {
+  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -130,6 +130,7 @@ export function createHrPayrollGallery({ document: documentOption,
   content.append(filterForm, status, cards, pagination);
   root.append(header, content);
   const recordActions = createGalleryRecordActions({
+    getReceiptAttachments, readReceiptAttachment,
     document: doc, host: root, loadEditor,
     saveEditor: (...args) => createShortcut.runMutation(() => saveEditor(...args)),
     deleteItem: (...args) => createShortcut.runMutation(() => deleteItem(...args)),

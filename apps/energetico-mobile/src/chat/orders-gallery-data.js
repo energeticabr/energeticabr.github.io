@@ -557,7 +557,7 @@ export function createHrPayrollGalleryData({
     if (!config) throw new RangeError("Galeria de folha inválida.");
     if (!editors.has(gallery)) {
       editors.set(gallery, import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
-        createGalleryRecordData({ repository, siteKey: SITE_KEY, listName: config.listName, now,
+        createGalleryRecordData({ repository, siteKey: SITE_KEY, listName: config.listName, now, assertSession,
           listAliases: [config.listName], metadataOnly: true, resolveList: () => resolveList(gallery) })));
     }
     return editors.get(gallery);
@@ -568,10 +568,10 @@ export function createHrPayrollGalleryData({
     editorContexts.set(context, service);
     return context;
   }
-  async function saveEditor(context, fields) {
+  async function saveEditor(context, fields, options) {
     const service = context && editorContexts.get(context);
     if (!service) throw new Error("O contexto de edição não pertence a esta galeria de folha.");
-    return service.saveEditor(context, fields);
+    return service.saveEditor(context, fields, options);
   }
   let paymentData;
   async function payments() {

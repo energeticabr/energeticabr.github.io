@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IDFOLHA — anexos (dados sintéticos)</title>
+<style>body{margin:0;font-family:Arial,sans-serif;}*,*::before,*::after{box-sizing:border-box;}</style></head>
+<body><main id="app"></main><script type="module">
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/supplier-payroll.css';
+import { createGalleryRecordActions } from '../../src/ui/gallery-record-actions.js';
+import { createHrPayrollGalleryData } from '../../src/chat/orders-gallery-data.js';
+const query=new URLSearchParams(location.search);
+const files=query.has('saved')?[{name:'Recibo_contabilidade_assinado_setembro_2026.pdf',size:145024}]:[];
+let revision=1,fields={Title:'',MESREFERENCIA:'09/2026',FORNECEDOR:'MAURICIO HONORATO DE SOUZA',STATUS:'INATIVO'};
+const repository={
+  getItemsPage:async()=>({items:[],hasMore:false}),
+  resolveList:async(_site,aliases)=>({status:'resolved',id:aliases[0]}),
+  getColumns:async()=>[{name:'Title',displayName:'Título',text:{}},{name:'MESREFERENCIA',text:{}},{name:'FORNECEDOR',text:{}},{name:'STATUS',text:{}}],
+  getItem:async(_site,_list,id)=>({id,eTag:'"v'+revision+'"',fields:{...fields}}),
+  listAttachments:async()=>[...files],
+  uploadAttachment:async(_site,_list,_id,file,name)=>{files.push({name,size:file.size});revision++;},
+  downloadAttachment:async()=>new TextEncoder().encode('PDF synthetic fixture').buffer,
+  updateItem:async(_site,_list,id,patch,options)=>{if(options.eTag!=='"v'+revision+'"')throw new Error('Conflito');fields={...fields,...patch};revision++;window.saved.push(patch);return {id,fields};},
+};
+const file=new File(['Synthetic signed salary receipt fixture'],'Novo_recibo_contabilidade_assinado_com_nome_longo_setembro_2026.pdf',{type:'application/pdf'});
+const data=createHrPayrollGalleryData({repository});
+window.saved=[];
+const actions=createGalleryRecordActions({
+  document,host:document.querySelector('#app'),loadEditor:id=>data.loadEditor('IDFOLHA',id),saveEditor:data.saveEditor,
+  getReceiptAttachments:()=>[{id:'pending:fixture',fileName:file.name,source:file}],
+  readReceiptAttachment:async()=>file,
+});
+document.querySelector('#app').append(actions.render({id:'4',fields}));
+document.querySelector('[data-gallery-action=edit]').click();
+const ready=()=>{
+  if(!document.querySelector('[data-sheet-attachment-input]')){setTimeout(ready,20);return;}
+  document.documentElement.dataset.ready='true';
+  if(query.has('measure')){
+    document.querySelector('[data-sheet-attachment-tray]').click();
+    document.querySelector('[data-receipt-picker] input').checked=true;
+    document.querySelector('[data-receipt-confirm]').click();
+    const measure=()=>{
+      if(!document.querySelector('[data-sheet-attachment-remove]')){setTimeout(measure,20);return;}
+      const screen=document.querySelector('[data-gallery-record-screen]'),tray=document.querySelector('[data-sheet-attachments]'),save=document.querySelector('[data-form-save]'),cancel=document.querySelector('[data-form-cancel]');
+      const r=screen.getBoundingClientRect(),a=save.getBoundingClientRect(),b=cancel.getBoundingClientRect(),tr=tray.getBoundingClientRect();
+      document.documentElement.dataset.layout=JSON.stringify({
+        fullScreen:r.left===0&&r.top===0&&r.width===innerWidth&&r.height===innerHeight,
+        fits:screen.scrollWidth<=screen.clientWidth+1&&tray.scrollWidth<=tray.clientWidth+1,
+        fileNames:[...tray.querySelectorAll('strong')].map(n=>n.textContent),
+        beforeActions:tr.bottom<=Math.min(a.top,b.top),
+        buttonsUsable:a.height>=44&&b.height>=44&&a.right<=innerWidth&&b.left>=0,
+        selectUsable:tray.querySelector('[data-sheet-attachment-tray]').getBoundingClientRect().height>=44,
+      });
+    };measure();
+  }
+};ready();
+</script></body></html>

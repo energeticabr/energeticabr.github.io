@@ -8,6 +8,7 @@ function fixture({ status = '', column = { name: 'STATUS', text: {} } } = {}) {
   const writes = [];
   const fields = { Title: '', MESREFERENCIA: '09/2026', FORNECEDOR: 'RAFAEL GONTIJO', OBS: 'ANTIGO', [column.name]: status };
   const repository = {
+    async listAttachments() { return [{ name: 'recibo-existente.pdf' }]; },
     async resolveList(_site, aliases) { return { status: 'resolved', id: aliases[0] }; },
     async getItemsPage() { return { items: [], hasMore: false }; },
     async getColumns() { return [{ name: 'Title', text: {} }, { name: 'MESREFERENCIA', text: {} }, { name: 'FORNECEDOR', text: {} }, { name: 'OBS', text: {} }, column]; },
