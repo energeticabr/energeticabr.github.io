@@ -27,6 +27,45 @@ function signedInState(overrides = {}) {
   };
 }
 
+test("mascotes comerciais ficam em uma faixa externa antes do cartão e preservam suas ações", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const menu = { id: 'commercial-top-home', role: 'assistant', type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
+    { id: 'group_pending', label: 'PENDÊNCIAS' },
+    { id: 'group_supplies', label: 'SUPRIMENTOS' },
+  ] };
+  const actions = ['open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies'];
+  const opened = [], selected = [];
+  actions.forEach(action => view.on(action, () => opened.push(action)));
+  view.on('select-reply', event => selected.push(event));
+  view.render(signedInState({ messages: [menu] }));
+  const row = root.querySelector('nav[aria-label="Relatórios comerciais"]');
+  assert.ok(row, 'os quatro mascotes laranja precisam de uma faixa própria');
+  const bubble = root.querySelector('[data-reply-id="group_pending"]').closest('.chat-bubble');
+  assert.equal(bubble.contains(row), false);
+  assert.equal(row.parentElement, bubble.parentElement);
+  assert.ok(row.compareDocumentPosition(bubble) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.deepEqual([...row.querySelectorAll('button')].map(button => button.dataset.action), actions);
+  for (const action of actions) {
+    assert.equal(root.querySelectorAll(`[data-action="${action}"]`).length, 1);
+    row.querySelector(`[data-action="${action}"] img`).click();
+  }
+  assert.deepEqual(opened, actions);
+  assert.deepEqual(selected, []);
+  view.render(signedInState({ messages: [menu], activeText: { id: 'sending' } }));
+  for (const button of root.querySelectorAll('nav[aria-label="Relatórios comerciais"] button')) {
+    assert.equal(button.disabled, true);
+    button.click();
+  }
+  assert.deepEqual(opened, actions, 'cliques durante processamento não abrem relatórios');
+  view.render(signedInState({ messages: [menu, { id: 'next', role: 'assistant', type: 'poll', question: 'ESCOLHA', options: [{ id: 'next', label: 'Próximo' }] }] }));
+  assert.equal(root.querySelector('nav[aria-label="Relatórios comerciais"]'), null);
+  view.render(signedInState({ messages: [menu], activeFlow: { id: 'new-flow' } }));
+  assert.equal(root.querySelector('nav[aria-label="Relatórios comerciais"]'), null);
+});
+
 test("cancelar assinatura da galeria devolve contexto ao chamador", () => {
   const dom = new JSDOM('<main id="app"></main>');
   dom.window.HTMLCanvasElement.prototype.getContext = () => null;

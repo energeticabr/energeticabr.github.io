@@ -22,12 +22,12 @@ function harness(t,options={}) {
  const controller=createAppController({store,view,auth,client:{sendText:async payload=>{calls.push(payload);return {status:'processed',messages:[]};}},native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),pendingWorkDiariesReportViewFactory:async({data,onClose})=>{const panel={data,opens:0,destroys:0,open(){this.opens++;},close(){onClose?.();},destroy(){this.destroys++;}};panels.push(panel);return panel;},pendingWorkDiariesReportDataFactory:async()=>({loadSnapshot:async()=>({rows:[],count:0})}),...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,panels,calls};
 }
-test('fifth right mascot follows payroll, before orange, and dispatches its own local report',t=>{
+test('last pink right mascot follows pending payments and dispatches its own local report',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  let opened=0;view.on(action,()=>opened++);view.render(home);
  const mascot=dom.window.document.querySelector(`[data-action="${action}"]`);assert.ok(mascot);
- assert.equal(mascot.previousElementSibling.dataset.action,'open-pending-supplier-payments-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-commercial-receipts');
+ assert.equal(mascot.previousElementSibling.dataset.action,'open-pending-supplier-payments-report');assert.equal(mascot.nextElementSibling,null);
  assert.equal(mascot.closest('.chat-bubble'),null);assert.match(mascot.querySelector('img').src,/pending-work-diaries\.png$/);
  mascot.querySelector('img').click();assert.equal(opened,1);
  view.render({...home,activeText:{id:'busy'}});const busy=dom.window.document.querySelector(`[data-action="${action}"]`);assert.equal(busy.disabled,true);busy.click();assert.equal(opened,1);
@@ -39,9 +39,10 @@ test('last pink has only previous to payroll and payroll gains next, without rea
  assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
  assert.equal(REPORT_PDF_TITLES[action],'Diários de obras pendentes');
 });
-test('right rail keeps pink fill and an even gap before the shifted orange mascots',t=>{
+test('right rail keeps pink fill and an even gap with orange mascots in their separate top row',t=>{
  const dom=new JSDOM(renderChatMarkup(home));t.after(()=>dom.window.close());const css=dom.window.document.createElement('style');css.textContent=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');dom.window.document.head.append(css);
- const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-supplier-workforce-report','open-pending-supplier-payments-report',action,'open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies'];
+ const actions=['open-cargos-table','open-attendance-summary','open-stage-progress','open-supplier-payroll-report','open-supplier-workforce-report','open-pending-supplier-payments-report',action];
+ assert.deepEqual([...dom.window.document.querySelectorAll('.chat-main-commercial-shortcuts > button')].map(b=>b.dataset.action),['open-commercial-receipts','open-commercial-milestones','open-commercial-documents','open-sac-pathologies']);
  let previousBottom=0;for(const name of actions){const node=dom.window.document.querySelector(`[data-action="${name}"]`),style=dom.window.getComputedStyle(node);const top=parseFloat(style.marginTop),height=parseFloat(style.height);assert.ok(top>=previousBottom+4,name);previousBottom=top+height;}
  const style=dom.window.getComputedStyle(dom.window.document.querySelector(`[data-action="${action}"]`));assert.equal(style.backgroundColor,'rgb(207, 117, 122)');assert.equal(style.gridColumn,'3');
 });
