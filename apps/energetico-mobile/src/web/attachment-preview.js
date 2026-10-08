@@ -272,10 +272,11 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, resolveReturnFocus } = {}) {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, resolveReturnFocus, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
+    dialog.dataset.layout = layout === "flow-summary" ? "flow-summary" : "media";
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose };
     active = session;
     title.textContent = session.fileName;
@@ -332,6 +333,11 @@ export function createAttachmentPreview({
           return true;
         };
         const applyImageZoom = zoom => {
+          // The loading notice can change the phone's fitted image height
+          // after load. Until explicit zoom sizes exist, use what is visible.
+          if (layout === "flow-summary" && !img.style.width) {
+            imageBaseWidth = imageBaseHeight = 0;
+          }
           if (!captureImageBaseSize()) return false;
           img.style.maxWidth = "none";
           img.style.maxHeight = "none";
@@ -375,6 +381,31 @@ export function createAttachmentPreview({
             }
           },
         });
+        if (layout === "flow-summary") {
+          const resizeSummary = () => {
+            if (active !== session || !(img.naturalWidth > 0) || !(img.naturalHeight > 0)) return;
+            // Measure the current CSS base (tablet width / phone fit), never
+            // the previously zoomed pixels, then restore the user's zoom.
+            img.style.width = img.style.height = img.style.maxWidth = img.style.maxHeight = "";
+            imageBaseWidth = imageBaseHeight = 0;
+            if (!captureImageBaseSize()) return;
+            const zoom = session.zoom.getZoom();
+            if (zoom !== 1) applyImageZoom(zoom);
+          };
+          const windowRef = documentRef.defaultView;
+          const observer = windowRef?.ResizeObserver ? new windowRef.ResizeObserver(resizeSummary) : null;
+          if (observer) observer.observe(content);
+          else windowRef?.addEventListener("resize", resizeSummary);
+          const pinch = session.zoom;
+          session.zoom = {
+            ...pinch,
+            destroy() {
+              observer?.disconnect();
+              if (!observer) windowRef?.removeEventListener("resize", resizeSummary);
+              pinch.destroy();
+            },
+          };
+        }
         status.replaceChildren(createLoadingIndicator(documentRef, "Carregando imagem…"));
       } else if (kind === "video" || kind === "audio") {
         const media = element(kind, `attachment-preview-${kind}`);
@@ -430,12 +461,12 @@ export function createAttachmentPreview({
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, resolveReturnFocus } = {}) {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, resolveReturnFocus, layout } = {}) {
     backButton.textContent = returnLabel;
     collection = null;
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
-    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, resolveReturnFocus });
+    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, resolveReturnFocus, layout });
   }
 
   async function openCollection(items, { onAddToTray } = {}) {

@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
@@ -151,6 +152,15 @@ export function createOrdersGallery({
   const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
     label: 'Adicionar um novo pedido', action: 'create-order',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
+  let pendingMutations = 0;
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar,
+    onRefresh: () => loadSnapshot({ refresh: true }),
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
+  async function runMutation(operation) {
+    pendingMutations++; refreshShortcut.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshShortcut.sync(); }
+  }
   const form = el("form", "og-filter-form");
   form.setAttribute("aria-label", "Filtros de pedidos");
   const grid = el("div", "og-filter-grid");
@@ -217,8 +227,8 @@ export function createOrdersGallery({
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
-    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
+    saveEditor: (context, fields) => runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       closeDetails();
       return loadSnapshot();
@@ -259,6 +269,7 @@ export function createOrdersGallery({
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
     createShortcut.sync();
+    refreshShortcut.sync();
   }
 
   function filterOptions() {
@@ -267,6 +278,7 @@ export function createOrdersGallery({
       const current = control.value;
       const values = [...new Set(rows.map(row => text(field(row.fields, [fieldName])).trim()).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+      if (current && !values.includes(current)) values.push(current);
       control.replaceChildren(Object.assign(el("option", "", "Todos"), { value: "" }), ...values.map(value => Object.assign(el("option", "", value), { value })));
       if (values.includes(current)) control.value = current;
     }
@@ -397,7 +409,7 @@ export function createOrdersGallery({
     updateBusy();
   }
 
-  async function loadSnapshot({ retry = false } = {}) {
+  async function loadSnapshot({ retry = false, refresh = retry } = {}) {
     if (!opened || destroyed) return false;
     closeDetails();
     attachmentCounts.reset();
@@ -411,8 +423,8 @@ export function createOrdersGallery({
     cards.replaceChildren();
     updateBusy();
     try {
-      const result = await data.loadSnapshot({ signal: controller.signal });
-      if (!opened || destroyed || currentSession !== session) return false;
+      const result = await data.loadSnapshot({ signal: controller.signal, refresh });
+      if (!opened || destroyed || !root.isConnected || currentSession !== session) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pedidos válida");
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions();
@@ -420,7 +432,7 @@ export function createOrdersGallery({
       applyLocalFilters();
       return true;
     } catch (error) {
-      if (!opened || destroyed || currentSession !== session || error?.name === "AbortError") return false;
+      if (!opened || destroyed || !root.isConnected || currentSession !== session || error?.name === "AbortError") return false;
       snapshotError = error;
       listStatus.textContent = safeFailure(error, "Não foi possível carregar pedidos");
       const retryButton = el("button", "og-button og-button--primary", "Tentar novamente");
@@ -429,7 +441,7 @@ export function createOrdersGallery({
       cards.replaceChildren(retryButton);
       return false;
     } finally {
-      if (opened && !destroyed && currentSession === session) { listLoading = false; updateBusy(); }
+      if (opened && !destroyed && root.isConnected && currentSession === session) { listLoading = false; updateBusy(); }
     }
   }
 
@@ -553,6 +565,7 @@ export function createOrdersGallery({
   function destroy() {
     if (destroyed) return;
     createShortcut.destroy();
+    refreshShortcut.destroy();
     recordActions.destroy(); autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove();
   }
 

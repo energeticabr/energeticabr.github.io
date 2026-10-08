@@ -81,3 +81,32 @@
   cursor: pointer;
 }
 .gallery-create-error > button:focus-visible { outline: 3px solid #f0b323; outline-offset: 2px; }
+
+/* Keep search, Filters and + on their existing row. The read-only action has its own row. */
+.gallery-create-toolbar.gallery-refresh-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+}
+.gallery-create-toolbar--filters.gallery-refresh-toolbar { grid-template-columns: auto auto; }
+.gallery-refresh-toolbar > .gallery-refresh-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-width: 44px;
+  min-height: 46px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #b9cede;
+  border-radius: 9px;
+  background: #fff;
+  color: #0d3767;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  box-sizing: border-box;
+}
+.gallery-refresh-button:disabled { opacity: .5; cursor: default; }
+.gallery-refresh-button:focus-visible { outline: 3px solid #f0b323; outline-offset: 2px; }
+.gallery-refresh-error { color: #8a1c13; overflow-wrap: anywhere; }

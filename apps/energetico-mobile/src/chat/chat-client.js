@@ -272,10 +272,14 @@ export function createChatClient({
     if (!allowed.has(operation)) throw new Error("Operação de galeria inválida.");
     const token = await acquireToken(tokenProvider);
     const readOnly = ["snapshot", "detail", "schema", "attachment"].includes(operation);
+    // The VM reads launch rows afresh on every snapshot and rejects unknown keys.
+    // Refresh is a UI loader hint, not an additional server contract field.
+    const requestPayload = { ...payload };
+    if (operation === "snapshot") delete requestPayload.refresh;
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "launch_gallery", operation, payload }),
+      body: JSON.stringify({ action: "launch_gallery", operation, payload: requestPayload }),
       cache: "no-store", credentials: "omit", ...(signal ? { signal } : {}),
     }, response => parsePortalResponse(response, "A galeria de lançamentos"), readOnly);
     if (!result.launchGallery || typeof result.launchGallery !== "object") throw new Error("A VM não devolveu os dados da galeria.");

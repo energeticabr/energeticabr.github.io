@@ -8115,7 +8115,7 @@ export function createAppController({
         const image = result.messages.find(item => item.type === "image" && item.mediaUrl);
         if (summaryStatus === "flow_summary" && image) {
           try {
-            await showMedia(client.fetchMedia(image), image.fileName || "Resumo do fluxo.png");
+            await showMedia(client.fetchMedia(image), image.fileName || "Resumo do fluxo.png", { layout: "flow-summary" });
           } catch (error) {
             if (!stopped && account) setSessionError(error, "Não foi possível abrir o resumo.");
           }
@@ -8949,6 +8949,9 @@ export function createAppController({
   }
 
   async function showMedia(source, fileName, previewOptions) {
+    if (previewOptions?.layout == null && /^resumo-.+\.png$/i.test(String(fileName))) {
+      previewOptions = { ...previewOptions, layout: "flow-summary" };
+    }
     if (native.previewMedia) return native.previewMedia(source, fileName, previewOptions);
     const previewAccount = account;
     const blob = await source;

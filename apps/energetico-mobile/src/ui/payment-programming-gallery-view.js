@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -257,7 +258,16 @@ export function createPaymentProgrammingGallery({
   const actions = el("div", "og-actions");
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
   const refreshButton = el("button", "og-button", "Atualizar dados"); refreshButton.type = "button";
-  actions.append(clearButton, refreshButton);
+  actions.append(clearButton);
+  let pendingMutations = 0;
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, button: refreshButton,
+    onRefresh: () => loadSnapshot({ refresh: true }),
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
+  async function runMutation(operation) {
+    pendingMutations++; refreshShortcut.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshShortcut.sync(); }
+  }
   form.append(grid, actions);
   filterDisclosure.append(form);
 
@@ -285,8 +295,8 @@ export function createPaymentProgrammingGallery({
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
-    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
+    saveEditor: (context, fields) => runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot();
@@ -365,11 +375,13 @@ export function createPaymentProgrammingGallery({
     for (const control of controls.values()) control.disabled = Boolean(busy);
     for (const button of root.querySelectorAll("button")) {
       if (button.closest(".gallery-record-dialog")) continue;
+      if (button === refreshShortcut.button) continue;
       if (button !== closeButton && button !== homeButton) button.disabled = Boolean(busy);
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
     createShortcut.sync();
+    refreshShortcut.sync();
   }
 
   function setNotice(message, isError = false) {
@@ -385,6 +397,7 @@ export function createPaymentProgrammingGallery({
       const current = control.value;
       const values = [...new Set(rows.map(row => filterValue(row.fields, name, aliases)).filter(Boolean))]
         .sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true, sensitivity: "base" }));
+      if (current && !values.includes(current)) values.push(current);
       const all = el("option", "", "Todos"); all.value = "";
       control.replaceChildren(all, ...values.map(value => { const option = el("option", "", value); option.value = value; return option; }));
       if (values.includes(current)) control.value = current;
@@ -563,7 +576,7 @@ export function createPaymentProgrammingGallery({
     }
   }
 
-  async function loadSnapshot() {
+  async function loadSnapshot({ refresh = false } = {}) {
     if (!opened || destroyed) return false;
     attachmentCounts.reset();
     const current = session;
@@ -573,8 +586,8 @@ export function createPaymentProgrammingGallery({
     setNotice("");
     updateBusy();
     try {
-      const result = await data.loadSnapshot({ signal: controller.signal });
-      if (!opened || destroyed || current !== session) return false;
+      const result = await data.loadSnapshot({ signal: controller.signal, refresh });
+      if (!opened || destroyed || !root.isConnected || current !== session) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pagamentos válida.");
       rows = result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || "")));
       populateFilters();
@@ -582,7 +595,7 @@ export function createPaymentProgrammingGallery({
       applyFilters();
       return true;
     } catch (error) {
-      if (!opened || destroyed || current !== session || error?.name === "AbortError") return false;
+      if (!opened || destroyed || !root.isConnected || current !== session || error?.name === "AbortError") return false;
       setNotice(safeFailure(error, "Não foi possível carregar a programação de pagamentos"), true);
       listStatus.textContent = "Não foi possível carregar a programação de pagamentos.";
       const retry = el("button", "og-button og-button--primary", "Tentar novamente");
@@ -591,7 +604,7 @@ export function createPaymentProgrammingGallery({
       cards.replaceChildren(retry);
       return false;
     } finally {
-      if (opened && !destroyed && current === session) { listLoading = false; updateBusy(); }
+      if (opened && !destroyed && root.isConnected && current === session) { listLoading = false; updateBusy(); }
     }
   }
 
@@ -604,7 +617,6 @@ export function createPaymentProgrammingGallery({
     autoFilters.apply();
     searchableSort.sync();
   });
-  refreshButton.addEventListener("click", () => { void loadSnapshot(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => { if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); } });
   closeButton.addEventListener("click", () => { close(); onClose?.(); });
@@ -643,6 +655,7 @@ export function createPaymentProgrammingGallery({
   function destroy() {
     if (destroyed) return;
     createShortcut.destroy();
+    refreshShortcut.destroy();
     recordActions.destroy(); searchableSort.destroy(); autoFilters.destroy();
     close();
     destroyed = true;

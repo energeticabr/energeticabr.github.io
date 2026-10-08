@@ -80,6 +80,81 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
+test('manual refresh bypasses cached launch data, preserves filters and ignores repeated busy clicks', async t => {
+  let generation = 0;
+  const pending = deferred();
+  const ctx = await setup(t, { request: async (operation, payload) => {
+    if (operation !== 'snapshot') return detail();
+    if (payload.refresh) { generation++; return pending.promise; }
+    return snapshot();
+  } });
+  await ctx.gallery.open();
+  input(ctx, 'branch', 'Obra B');
+  input(ctx, 'sort', 'MAIOR DATA');
+  await new Promise(resolve => setTimeout(resolve, 350)); await settle();
+  const refresh = ctx.root().querySelector('[data-gallery-refresh]');
+  assert.ok(refresh, 'always visible refresh control');
+  assert.equal(refresh.closest('details'), null);
+  assert.equal(refresh.disabled, false);
+  refresh.click(); refresh.click(); await settle();
+  assert.equal(generation, 1);
+  assert.equal(refresh.disabled, true);
+  const request = ctx.calls.filter(call => call.operation==='snapshot').at(-1).payload;
+  assert.equal(request.filters.branch, 'Obra B');
+  assert.equal(request.sort, 'MAIOR DATA');
+  pending.resolve(snapshot({rows:[row(901)]})); await settle(); await settle();
+  assert.ok(ctx.root().querySelector('[data-item-id="901"]'));
+  assert.equal(ctx.root().querySelector('[name=branch]').value, 'Obra B');
+  assert.equal(ctx.root().querySelector('[name=sort]').value, 'MAIOR DATA');
+  assert.equal(refresh.disabled, false);
+  await showDetail(ctx);
+  assert.equal(refresh.disabled, true, 'open editor cannot be discarded by refresh');
+});
+
+test('manual refresh remains blocked by a pending deletion after close and reopen', async t => {
+  const pending = deferred();
+  const ctx = await setup(t, { request: async operation => operation === 'delete' ? pending.promise : operation === 'snapshot' ? snapshot() : detail() });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-gallery-action="delete"]').click();
+  button(ctx.root(), 'Sim').click(); await settle();
+  ctx.gallery.close(); await ctx.gallery.open(); await settle();
+  const refresh = ctx.root().querySelector('[data-gallery-refresh]');
+  const count = ctx.calls.filter(call => call.operation === 'snapshot').length;
+  refresh.dispatchEvent(new ctx.dom.window.Event('click', {bubbles:true})); await settle();
+  assert.equal(refresh.disabled, true);
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, count);
+  pending.resolve({}); await settle(); await settle();
+  assert.equal(refresh.disabled, false);
+});
+
+test('manual refresh consumes pending launch filter debounce and forces the current query once', async t => {
+  const ctx = await setup(t, { request: async (operation,payload) => operation === 'snapshot'
+    ? snapshot({rows:[row(payload.refresh ? 901 : 17)]}) : detail() });
+  await ctx.gallery.open();
+  const control = ctx.root().querySelector('[name=id]'); control.value = '901';
+  control.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  const count = ctx.calls.filter(call => call.operation === 'snapshot').length;
+  ctx.root().querySelector('[data-gallery-refresh]').click();
+  await new Promise(resolve => setTimeout(resolve,350)); await settle();
+  const reads = ctx.calls.filter(call => call.operation === 'snapshot').slice(count);
+  assert.equal(reads.length,1);
+  assert.equal(reads[0].payload.refresh,true);
+  assert.equal(reads[0].payload.filters.id,'901');
+  assert.ok(ctx.root().querySelector('[data-item-id="901"]'));
+});
+
+for (const rejected of [false,true]) test(`manual refresh ignores detached launch response (${rejected ? 'error' : 'success'})`, async t => {
+  const pending = deferred();
+  const ctx = await setup(t, {request: async (operation,payload) => operation === 'snapshot'
+    ? payload.refresh ? pending.promise : snapshot() : detail()});
+  await ctx.gallery.open();
+  const root = ctx.root(); root.querySelector('[data-gallery-refresh]').click(); await settle();
+  root.remove(); const before = root.innerHTML;
+  if (rejected) pending.reject(new Error('late error')); else pending.resolve(snapshot({rows:[row(901)]}));
+  await settle(); await settle();
+  assert.ok(root.innerHTML === before,'detached UI receives no cards, errors or control updates');
+});
+
 test('plus cancels background attachment counts before creation and reopening resumes counting', async t => {
   const pending = [];
   let createCalls = 0;
@@ -744,7 +819,7 @@ test('missing or visually empty descriptions do not add an empty row below freig
   assert.equal(ctx.root().querySelectorAll('.lg-record-description').length, 0);
 });
 
-test('launch total is highlighted beside status while the lower finance area shows freight instead', async t => {
+test('launch total precedes edit controls while status stays below and finance shows freight', async t => {
   const cases = [
     { id: 3489, total: '13.040,00', freight: 40, wantTotal: 'R$ 13.040,00', wantFreight: 'R$ 40,00' },
     { id: 3488, total: 0, freight: 0, wantTotal: 'R$ 0,00', wantFreight: 'R$ 0,00' },
@@ -757,11 +832,13 @@ test('launch total is highlighted beside status while the lower finance area sho
   for (const sample of cases) {
     const card = ctx.root().querySelector(`[data-item-id="${sample.id}"]`);
     const headingSummary = card.querySelector('.lg-record-heading-summary');
-    assert.ok(headingSummary, 'status and highlighted total share the bottom of the heading');
-    assert.equal(headingSummary.querySelector('.lg-record-status').nextElementSibling,
-      headingSummary.querySelector('.lg-record-total'));
-    assert.equal(headingSummary.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
-    assert.equal(headingSummary.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
+    assert.ok(headingSummary.querySelector('.lg-record-status'), 'status remains below controls');
+    assert.equal(headingSummary.querySelector('.lg-record-total'), null);
+    const actions = card.querySelector('.lg-record-header-actions');
+    assert.equal(actions.querySelector('.lg-record-total').nextElementSibling,
+      actions.querySelector('.gallery-record-action--edit'));
+    assert.equal(actions.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
+    assert.equal(actions.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
     const finance = card.querySelector('.lg-record-finance');
     assert.deepEqual([...finance.querySelectorAll('.lg-record-label')].map(label => label.textContent),
       ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
@@ -2424,8 +2501,9 @@ test('launch summary and its blue divider span the action column without coverin
   const heading = card.querySelector('.lg-record-heading');
   const actions = card.querySelector('.gallery-record-actions');
   assert.equal(withMedia.dom.window.getComputedStyle(content).gridColumn, '2 / -1');
-  assert.ok(parseFloat(withMedia.dom.window.getComputedStyle(heading).paddingRight) >= 108);
-  assert.equal(withMedia.dom.window.getComputedStyle(actions).gridColumn, '-2 / -1');
+  assert.equal(parseFloat(withMedia.dom.window.getComputedStyle(heading).paddingRight), 0);
+  assert.equal(actions.parentElement, heading);
+  assert.equal(withMedia.dom.window.getComputedStyle(actions).gridColumn, '3');
 
   const withoutMedia = await setup(t, { request: async operation => operation === 'snapshot'
     ? snapshot({ rows: [{ ...row(18), hasAttachments: false }] }) : detail() });

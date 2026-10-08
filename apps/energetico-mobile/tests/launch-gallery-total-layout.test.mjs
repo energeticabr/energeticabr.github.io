@@ -12,7 +12,7 @@ const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'].find(path => path && existsSync(path));
 
-test('launch total is red above the divider, clear of pencil/X, and freight replaces the lower total', { timeout: 90_000 }, async t => {
+test('launch total is highlighted left of pencil, status moves below controls and freight/description remain visible', { timeout: 90_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
   const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
     fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
@@ -45,7 +45,7 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
       const response = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
       assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails)); return response.result.value;
     };
-    for (const [width, height] of [[320, 740], [390, 844], [1365, 768], [844, 390]]) {
+    for (const [width, height] of [[320, 740], [390, 844], [1024, 768], [1365, 768], [844, 390]]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/launch-gallery-total-responsive.html?w=${width}` }, sessionId);
       let ready = false;
@@ -59,6 +59,7 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
         if (!total) return { missingTotal: true };
         const box = total.getBoundingClientRect(), heading = card.querySelector('.lg-record-heading').getBoundingClientRect();
         const status = card.querySelector('.lg-record-status').getBoundingClientRect(), actions = card.querySelector('.gallery-record-actions').getBoundingClientRect();
+        const edit = card.querySelector('.gallery-record-action--edit').getBoundingClientRect();
         const mascot = card.querySelector('.report-mascot-button'), order = card.querySelector('.lg-record-order');
         const mascotBox = mascot?.getBoundingClientRect(), orderBox = order?.getBoundingClientRect();
         const description = card.querySelector('.lg-record-description');
@@ -69,9 +70,10 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
           mascot: mascot ? { width: mascotBox.width, height: mascotBox.height,
             fits: mascotBox.left >= orderBox.left && mascotBox.right <= orderBox.right + 1,
             loaded: mascot.querySelector('img').complete && mascot.querySelector('img').naturalWidth > 0 } : null,
-          belowActions: box.top >= actions.bottom, aboveDivider: box.bottom <= heading.bottom - 2,
-          alignedRight: Math.abs(box.right - heading.right) < 1,
-          noStatusOverlap: box.left >= status.right || box.top >= status.bottom,
+          leftOfPencil: box.right <= edit.left && Math.abs(box.top + box.height/2 - edit.top - edit.height/2)<2,
+          aboveDivider: box.bottom <= heading.bottom - 2,
+          statusBelowActions: status.top >= actions.bottom && Math.abs(status.right - heading.right)<2,
+          highlighted: getComputedStyle(total).borderStyle !== 'none' && getComputedStyle(total).backgroundColor !== 'rgba(0, 0, 0, 0)',
           fits: box.left >= heading.left && box.right <= heading.right,
           overflow: card.scrollWidth > card.clientWidth + 1 || total.scrollWidth > total.clientWidth + 1,
           labels: [...card.querySelectorAll('.lg-record-finance .lg-record-label')].map(label => label.textContent),
@@ -91,7 +93,7 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
       for (const layout of layouts) {
         assert.ok(!layout.missingTotal, 'total must move to the heading');
         assert.equal(layout.color, 'rgb(181, 31, 36)');
-        assert.ok(layout.belowActions && layout.aboveDivider && layout.alignedRight && layout.noStatusOverlap && layout.fits && !layout.overflow,
+        assert.ok(layout.leftOfPencil && layout.aboveDivider && layout.statusBelowActions && layout.highlighted && layout.fits && !layout.overflow,
           `Layout inválido em ${width}px: ${JSON.stringify(layout)}`);
         assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
         assert.ok(layout.description?.visible && layout.description.belowFreight &&

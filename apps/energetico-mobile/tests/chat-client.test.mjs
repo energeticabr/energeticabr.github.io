@@ -65,6 +65,24 @@ test("galeria consulta dados autenticados sem responder ao formulário", async (
   assert.deepEqual(JSON.parse(sent.body), { action: "launch_gallery", operation: "snapshot", payload: { filters: { supplier: "A" }, page: 2 } });
 });
 
+test("manual launch refresh uses the current strict VM contract and a fresh no-store request", async () => {
+  const sent = [];
+  const client = clientWith(async (_url,options) => {
+    sent.push(options);
+    const body = JSON.parse(options.body);
+    if (Object.hasOwn(body.payload,'refresh')) return jsonResponse({error:'Campo de galeria desconhecido'},400);
+    return jsonResponse({status:'processed',messages:[],launchGallery:{rows:[{id:String(sent.length)}]}});
+  });
+  const payload = {filters:{id:'901'},page:1,pageSize:20,sort:'MAIOR ID',refresh:true};
+  assert.equal((await client.launchGalleryRequest('snapshot',payload)).rows[0].id,'1');
+  assert.equal((await client.launchGalleryRequest('snapshot',payload)).rows[0].id,'2');
+  assert.equal(payload.refresh,true,'caller query is untouched');
+  for (const options of sent) {
+    assert.equal(options.cache,'no-store');
+    assert.deepEqual(JSON.parse(options.body).payload,{filters:{id:'901'},page:1,pageSize:20,sort:'MAIOR ID'});
+  }
+});
+
 test("consulta da galeria encaminha o sinal para permitir cancelar chamadas pendentes", async () => {
   let sent;
   const controller = new AbortController();

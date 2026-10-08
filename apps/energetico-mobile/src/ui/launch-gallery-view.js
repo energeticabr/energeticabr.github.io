@@ -1,5 +1,6 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createMascotReportButton } from './report-action-button.js';
@@ -291,8 +292,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= pages;
     createShortcut.sync();
+    refreshControl.sync();
   }
-  function active(epoch) { return opened && !destroyed && epoch === session; }
+  function active(epoch) { return opened && !destroyed && root.isConnected && epoch === session; }
   function focus(node) { if (opened && !suspended && node?.isConnected) node.focus({ preventScroll: true }); }
   function reveal(node) { if (opened && !suspended) { node?.scrollIntoView?.({ block: 'start' }); focus(node); } }
 
@@ -316,6 +318,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
     label: 'Adicionar um novo lançamento', action: 'create-launch',
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading && !editor && !review });
+  let pendingMutations = 0;
+  const refreshControl = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar,
+    onRefresh: () => {
+      autoFilters.sync();
+      return applyFilters({ refresh: true, preservePage: true });
+    },
+    isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading
+      && !pendingMutations && !editor && !review && panel.hidden && clusterPanel.hidden });
+  async function runMutation(operation) {
+    pendingMutations++; refreshControl.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshControl.sync(); }
+  }
   const filterForm = element('form', 'lg-filter-form');
   filterForm.setAttribute('aria-label', 'Filtros de lançamentos');
   const filterGrid = element('div', 'lg-filter-grid');
@@ -369,7 +384,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       reveal(editor?.form ?? panel);
       focus(editor?.form?.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? panel);
     },
-    deleteItem: id => createShortcut.runMutation(async () => {
+    deleteItem: id => runMutation(async () => {
       if (busy || editor || review) throw new Error('Conclua ou cancele a edição aberta antes de deletar.');
       const item = recordItems.get(String(id));
       if (!item) throw new Error('Atualize a galeria antes de deletar este item.');
@@ -416,21 +431,22 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return { filters: Object.fromEntries([...filterControls].map(([name, control]) =>
       [name, control.type === 'checkbox' ? control.checked : control.value])), sort: sort.value, page: targetPage, pageSize: 20 };
   }
-  function applyFilters() {
+  function applyFilters({ refresh = false, preservePage = false } = {}) {
     const data = query(1);
+    if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
-    notify(''); loadSnapshot(data);
+    notify(''); return loadSnapshot(data, { refresh });
   }
-  async function loadSnapshot(data = applied) {
-    if (!opened || destroyed) return;
+  async function loadSnapshot(data = applied, { refresh = false } = {}) {
+    if (!opened || destroyed || !root.isConnected) return;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
     listLoading = true; listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando lançamentos…")); updateBusy();
     try {
-      const result = await request('snapshot', { ...data, filters: { ...data.filters } });
+      const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) });
       if (!active(epoch) || version !== listVersion) return;
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       page = result.page ?? data.page; pages = result.pages ?? 1;
@@ -970,8 +986,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       headingSummary.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
     const total = summaryField('VALOR TOTAL', moneyFieldValue(totalValue));
-    if (total) { total.classList.add('lg-record-total'); headingSummary.append(total); }
-    identity.append(headingSummary);
+    const headingActions = recordActions.render(item);
+    headingActions.classList.add('lg-record-header-actions');
+    if (total) { total.classList.add('lg-record-total'); headingActions.prepend(total); }
+    identity.append(headingActions, headingSummary);
 
     const summary = element('section', 'lg-record-summary');
     const supplier = field(fields, 'FORNECEDOR');
@@ -1071,7 +1089,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     summary.append(expand);
     body.append(summary, extra);
     card.classList.add('gallery-record-card');
-    card.append(...(recordPreview ? [recordPreview] : []), body, recordActions.render(item));
+    card.append(...(recordPreview ? [recordPreview] : []), body);
     return card;
   }
   function canChangeDetail() {
@@ -1594,6 +1612,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function destroy() {
     if (destroyed) return;
     createShortcut.destroy();
+    refreshControl.destroy();
     recordActions.destroy(); recordItems.clear();
     autoFilters.destroy();
     attachmentCounts.destroy();

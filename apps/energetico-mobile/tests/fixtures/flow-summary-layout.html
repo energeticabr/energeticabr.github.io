@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resumo sintético — layout do visualizador</title>
+<link rel="stylesheet" href="../../src/web/attachment-preview.css">
+<style>body { margin: 0; font: 16px system-ui; } iframe { border: 0; display: block; }</style>
+<textarea>Rascunho preservado</textarea>
+<script type="module">
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+
+const params = new URLSearchParams(location.search);
+const settle = async () => {
+  await new Promise(resolve => setTimeout(resolve, 80));
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+};
+if (params.has('orientation')) {
+  const frame = document.createElement('iframe');
+  frame.style.width = '768px';
+  frame.style.height = '1024px';
+  frame.src = '?mode=explicit&embedded=1';
+  const loaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
+  document.body.append(frame);
+  await loaded;
+  const fixture = await frame.contentWindow.summaryFixtureReady;
+  const stages = [fixture.measure()];
+  fixture.pinch();
+  stages.push(fixture.measure());
+  for (const [width, height] of [[1024,768], [390,844], [768,1024]]) {
+    frame.style.width = `${width}px`;
+    frame.style.height = `${height}px`;
+    await settle();
+    stages.push(fixture.measure());
+  }
+  document.documentElement.dataset.layout = JSON.stringify({ stages });
+} else {
+  window.summaryFixtureReady = (async () => {
+    const mode = params.get('mode') || 'explicit';
+    const canvas = document.createElement('canvas');
+    canvas.width = 1000;
+    canvas.height = 4000;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#fff'; context.fillRect(0,0,1000,4000);
+    context.fillStyle = '#142923'; context.font = '24px sans-serif';
+    for (let row=0; row<80; row++) context.fillText(`RESUMO SINTÉTICO — LINHA ${row+1}`,40,50+row*48);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const draft = document.querySelector('textarea');
+    draft.focus();
+    let exported;
+    const preview = createAttachmentPreview({ exportMedia: (source, fileName) => { exported = { source, fileName }; } });
+    const fileName = mode === 'fallback' ? 'resumo-confirmacao.png' : 'imagem.png';
+    await preview.open(blob, fileName, mode === 'explicit' ? { layout: 'flow-summary' } : {});
+    const image = document.querySelector('dialog img');
+    await image.decode();
+    await settle();
+    const content = document.querySelector('.attachment-preview-content');
+    const measure = () => {
+      const bounds = image.getBoundingClientRect();
+      const css = getComputedStyle(content);
+      return {
+        viewport: innerWidth,
+        availableWidth: content.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight),
+        availableHeight: content.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom),
+        imageWidth: bounds.width, imageHeight: bounds.height,
+        scrollHeight: content.scrollHeight, clientHeight: content.clientHeight,
+        scrollWidth: content.scrollWidth, clientWidth: content.clientWidth,
+        scrollTop: content.scrollTop,
+      };
+    };
+    const pinch = () => {
+      content.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:1,pointerType:'touch',clientX:100,clientY:100}));
+      content.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:2,pointerType:'touch',clientX:200,clientY:100}));
+      content.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerId:2,pointerType:'touch',clientX:300,clientY:100}));
+      for (const pointerId of [1,2]) content.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId,pointerType:'touch'}));
+    };
+    if (!params.has('embedded')) {
+      const base = measure();
+      content.scrollTop = content.scrollHeight;
+      const scrolled = measure();
+      pinch();
+      const zoomed = measure();
+      document.querySelector('.attachment-preview-export').click();
+      await settle();
+      preview.close();
+      const sharedBytes = exported ? new Uint8Array(await exported.source.arrayBuffer()) : [];
+      const originalBytes = new Uint8Array(await blob.arrayBuffer());
+      document.documentElement.dataset.layout = JSON.stringify({ base, scrolled, zoomed,
+        originalShared: exported?.source === blob && sharedBytes.length === originalBytes.length && sharedBytes.every((byte,index)=>byte===originalBytes[index]),
+        sharedName: exported?.fileName, fileName,
+        closed: !document.querySelector('dialog').open,
+        draft: draft.value, focusReturned: document.activeElement === draft,
+      });
+    }
+    return { measure, pinch };
+  })();
+}
+</script>
+</html>
