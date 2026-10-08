@@ -145,7 +145,8 @@
 .tg-complete { color: #fff; background: #25a24e; font-size: 1.6rem; font-weight: 800; }
 .tg-completion-form { display: grid; gap: 16px; }
 .tg-completion-dialog .og-input { box-sizing: border-box; width: 100%; min-width: 0; }
-.tg-completion-dialog .gallery-record-dialog-buttons { flex-wrap: wrap; }
+.tg-completion-dialog .gallery-record-dialog-buttons { flex-wrap: wrap; justify-content: space-between; }
+.tg-completion-submit { margin-left: auto; }
 .tg-completion-cancel { background: #c52e3a; border-color: #c52e3a; color: #fff; }
 .tg-completion-submit { background: #218443; border-color: #218443; color: #fff; }
 .tg-expand[aria-expanded="true"] svg { transform: rotate(180deg); }

@@ -140,7 +140,9 @@
 .gallery-record-dialog .dynamic-field textarea { min-height: 110px; resize: vertical; }
 .gallery-record-dialog .dynamic-field small,
 .gallery-record-dialog .dynamic-relationship-status { color: #526672; font-size: .85rem; font-weight: 400; }
-.gallery-record-dialog .dynamic-form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #cbd5e1; }
+.gallery-record-dialog .dynamic-form-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #cbd5e1; }
+.gallery-record-dialog .dynamic-form-actions > button[type="submit"],
+.gallery-record-dialog .dynamic-form-actions > [data-form-save] { margin-left: auto; }
 .gallery-record-dialog .dynamic-form button { min-height: 44px; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #172033; font: inherit; cursor: pointer; }
 .gallery-record-dialog .dynamic-form .button-primary { background: #1565c0; border-color: #1565c0; color: #fff; }
 .gallery-record-dialog [data-edit-form] .dynamic-form-actions { flex-wrap: nowrap; justify-content: space-between; }
