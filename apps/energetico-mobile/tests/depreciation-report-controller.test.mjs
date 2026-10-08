@@ -7,7 +7,6 @@ import { createConversationStore } from '../src/chat/conversation-store.js';
 const localReports = [
   ['action_quotation_report', 'quotationReportViewFactory', 'quotationReportDataFactory'],
   ['action_sac_pathologies', 'sacPathologiesViewFactory', 'sacPathologiesDataFactory'],
-  ['action_contractor_reports', 'contractorReportsFactory', 'contractorReportDataFactory'],
   ['action_payment_ledger', 'paymentLedgerFactory', 'paymentLedgerDataFactory'],
   ['action_management_report', 'managementReportFactory', 'paymentLedgerDataFactory'],
   ['provision-report', 'provisionReportFactory', 'paymentLedgerDataFactory'],
@@ -155,7 +154,6 @@ for (const stage of ['source', 'view']) {
 }
 
 const pendingLegacyReports = [
-  ['action_contractor_reports', 'contractorReportsFactory', ['contractorReportDataFactory', 'presencePaymentReportDataFactory', 'extraReportsFactory']],
   ['action_launch_gallery', 'launchGalleryFactory', []],
   ['action_orders_gallery', 'ordersGalleryFactory', ['ordersGalleryDataFactory']],
   ['action_tasks_gallery', 'tasksGalleryFactory', ['tasksGalleryDataFactory']],

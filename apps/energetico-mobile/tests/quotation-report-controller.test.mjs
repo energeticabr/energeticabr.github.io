@@ -6,7 +6,6 @@ import { JSDOM } from 'jsdom';
 
 const localReports = [
   ['action_sac_pathologies', 'sacPathologiesViewFactory', 'sacPathologiesDataFactory'],
-  ['action_contractor_reports', 'contractorReportsFactory', 'contractorReportDataFactory'],
   ['action_payment_ledger', 'paymentLedgerFactory', 'paymentLedgerDataFactory'],
   ['action_management_report', 'managementReportFactory', 'paymentLedgerDataFactory'],
   ['provision-report', 'provisionReportFactory', 'paymentLedgerDataFactory'],

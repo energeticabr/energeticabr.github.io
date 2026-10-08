@@ -350,10 +350,6 @@ function powerBiDashboardOption() {
   return { id: "action_powerbi_dashboard", reply: "action_powerbi_dashboard", label: "📊 POWER BI" };
 }
 
-function contractorReportsOption() {
-  return { id: "action_contractor_reports", reply: "action_contractor_reports", label: "📑 RELATÓRIOS" };
-}
-
 function insertPowerBiAfterPersonalExpenses(options) {
   if (options.some(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_powerbi_dashboard")) return options;
   const index = options.findIndex(option => (
@@ -364,20 +360,12 @@ function insertPowerBiAfterPersonalExpenses(options) {
   return [...options.slice(0, index + 1), powerBiDashboardOption(), ...options.slice(index + 1)];
 }
 
-function insertMainReportsOption(options) {
-  const result = insertPowerBiAfterPersonalExpenses(options);
-  if (result.some(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_contractor_reports")) return result;
-  const powerBiIndex = result.findIndex(option => String(option?.reply || option?.id || "").trim().toLowerCase() === "action_powerbi_dashboard");
-  const diaryIndex = result.findIndex(option => mainMenuDiaryRank(option) > 0);
-  const index = powerBiIndex >= 0 ? powerBiIndex + 1 : diaryIndex >= 0 ? diaryIndex : result.length;
-  return [...result.slice(0, index), contractorReportsOption(), ...result.slice(index)];
-}
-
 function draftMenuOptions(message) {
   const question = String(message?.question || message?.prompt || "");
   const isMainAreaMenu = /QUAL\s+(?:ÁREA|AREA)[\s\S]*DESEJA\s+ACESSAR/i.test(question);
   const options = Array.isArray(message?.options)
-    ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option))
+    ? message.options.map(option => ({ ...option })).filter(option => !isInlineDraftSaveOption(option)
+      && String(option?.reply || option?.id || "").trim().toLowerCase() !== "action_contractor_reports")
     : [];
   // LOG DE AÇÕES belongs to the Auditoria e Documentos submenu. Filter it
   // from the root area chooser even if an older VM response still includes
@@ -398,7 +386,7 @@ function draftMenuOptions(message) {
         return option;
       })
     : options;
-  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? insertMainReportsOption(menuOptions) : menuOptions;
+  if (!/RASCUNHOS?/i.test(question)) return isRootAreaMenu ? insertPowerBiAfterPersonalExpenses(menuOptions) : menuOptions;
 
   const deleteIds = new Set(menuOptions
     .map(option => String(option.reply || option.id || ""))

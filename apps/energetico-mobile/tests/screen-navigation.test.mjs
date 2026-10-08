@@ -7,7 +7,6 @@ import { createTasksGallery } from '../src/ui/tasks-gallery-view.js';
 import { createPaymentProgrammingGallery } from '../src/ui/payment-programming-gallery-view.js';
 import { createRecurringExpensesGallery } from '../src/ui/recurring-expenses-gallery-view.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
-import { createContractorReportsView } from '../src/ui/contractor-reports-view.js';
 import { createHrPayrollGallery } from '../src/ui/hr-payroll-gallery-view.js';
 import { createHrPayrollReport } from '../src/ui/hr-payroll-report-view.js';
 import { createSupplierPayrollView } from '../src/ui/supplier-payroll-view.js';
@@ -19,7 +18,6 @@ const cases = [
   ['tarefas', opts => createTasksGallery({ ...opts, data })],
   ['pagamentos previstos', opts => createPaymentProgrammingGallery({ ...opts, data })],
   ['despesas recorrentes', opts => createRecurringExpensesGallery({ ...opts, data })],
-  ['relatórios 1 a 17', opts => createContractorReportsView({ ...opts, data })],
   ...['group', 'family', 'subfamily', 'product', 'documents'].map(kind =>
     [kind, opts => createRegistrationGallery({ ...opts, kind, data })]),
   ...['IDFOLHA', 'FOLHAPGTO'].map(gallery => [gallery, opts => createHrPayrollGallery({ ...opts, gallery, request: async () => ({ rows: [] }) })]),
