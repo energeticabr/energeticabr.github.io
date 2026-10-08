@@ -87,7 +87,8 @@ test('IDFOLHA editor opens the two status options and submits the selected value
   assert.equal(input.value, 'INATIVO');
   await submitEditor(document, dom, f);
   assert.deepEqual(f.writes[0]?.values, { STATUS: 'INATIVO' });
-  assert.deepEqual(f.writes[0]?.options, { eTag: '"v1"' });
+  assert.equal(f.writes[0]?.options.eTag, '"v1"');
+  assert.ok(f.writes[0]?.options.signal instanceof AbortSignal);
 });
 
 test('unrelated IDFOLHA edits retain whitespace-bearing legacy status', async t => {

@@ -6,11 +6,11 @@ import { createHrPayrollGalleryData } from '../src/chat/orders-gallery-data.js';
 import { createGalleryRecordActions } from '../src/ui/gallery-record-actions.js';
 
 const receipt = (name='recibo.pdf') => new File(['signed receipt fixture'],name,{type:'application/pdf'});
-function fixture({status='ATIVO',statusName='STATUS',existing=[]}={}) {
+function fixture({status='ATIVO',statusName='STATUS',hiddenStatus=false,existing=[]}={}) {
   const events=[],files=[...existing],uploaded=[];
   let fields={Title:'',MESREFERENCIA:'09/2026',FORNECEDOR:'FORNECEDOR TESTE',[statusName]:status},revision=1,active=true;
-  const columns=[{name:'Title',text:{}},{name:'MESREFERENCIA',text:{}},{name:'FORNECEDOR',text:{}},
-    {name:statusName,displayName:'STATUS',text:{}}];
+  const columns=[{name:'Title',text:{}},{name:'MESREFERENCIA',text:{}},{name:'FORNECEDOR',text:{}},{name:'OBS',text:{}},
+    {name:statusName,displayName:'STATUS',text:{},hidden:hiddenStatus}];
   const repository={
     async resolveList(_site,aliases){return {status:'resolved',id:aliases[0]};},
     async getColumns(){return columns;},
@@ -25,6 +25,46 @@ function fixture({status='ATIVO',statusName='STATUS',existing=[]}={}) {
   return {data,repository,events,files,uploaded,fields:()=>fields,change:patch=>{fields={...fields,...patch};revision++;},cancel:()=>{active=false;}};
 }
 const updates=f=>f.events.filter(e=>typeof e==='object');
+
+for (const statusName of ['STATUS','field_7']) {
+  test('hidden persisted INATIVO still requires a receipt: '+statusName,async()=>{
+    const f=fixture({status:'INATIVO',statusName,hiddenStatus:true}),ctx=await f.data.loadEditor('IDFOLHA','4');
+    await assert.rejects(f.data.saveEditor(ctx,{OBS:'EDITADO'}),/recibo de pagamento/i);
+    assert.deepEqual(updates(f),[]);
+  });
+}
+
+test('editor cancellation signal reaches attachment upload and item update',async()=>{
+  const f=fixture(),ctx=await f.data.loadEditor('IDFOLHA','4'),abort=new AbortController();
+  const upload=f.repository.uploadAttachment;
+  f.repository.uploadAttachment=async(...args)=>{assert.equal(args[5]?.signal,abort.signal);return upload(...args);};
+  await f.data.saveEditor(ctx,{STATUS:'INATIVO'},{attachments:[receipt()],signal:abort.signal});
+  assert.equal(updates(f)[0].options.signal,abort.signal);
+});
+
+test('production payroll factory configures SharePoint attachment reads and receipt upload',async()=>{
+  const listId='11111111-1111-4111-8111-111111111111',files=[],requests=[];
+  let revision=1,status='ATIVO';
+  const fetchImpl=async(url,init={})=>{
+    const path=new URL(url).pathname;requests.push({path,method:init.method||'GET'});
+    if(path.includes('/_api/')){
+      if(path.endsWith("/add(FileName='recibo.pdf')")){files.push({FileName:'recibo.pdf',Length:29});revision++;return Response.json({FileName:'recibo.pdf'});}
+      if(path.endsWith('/AttachmentFiles'))return Response.json({value:files});
+    }
+    if(path.includes('/sites/energeticaltda-my.sharepoint.com:'))return Response.json({id:'site-personal'});
+    if(path.endsWith('/lists'))return Response.json({value:[{id:listId,displayName:'IDFOLHA',list:{template:'genericList'}}]});
+    if(path.endsWith('/columns'))return Response.json({value:[{name:'Title',text:{}},{name:'MESREFERENCIA',text:{}},{name:'FORNECEDOR',text:{}},{name:'STATUS',text:{}}]});
+    if(path.endsWith('/items/4/fields')){status=JSON.parse(init.body).STATUS;revision++;return Response.json({STATUS:status});}
+    if(path.endsWith('/items/4'))return Response.json({id:'4',eTag:'"v'+revision+'"',fields:{Title:'',MESREFERENCIA:'09/2026',FORNECEDOR:'FORNECEDOR TESTE',STATUS:status}});
+    throw new Error('Unexpected fixture URL: '+path);
+  };
+  const data=createHrPayrollGalleryData({tokenProvider:async()=> 'fixture-token',fetchImpl});
+  const ctx=await data.loadEditor('IDFOLHA','4');
+  assert.deepEqual(await ctx.sheetAttachments.list(),[]);
+  await data.saveEditor(ctx,{STATUS:'INATIVO'},{attachments:[receipt()]});
+  assert.equal(status,'INATIVO');
+  assert.ok(requests.some(r=>r.path.includes('/AttachmentFiles/add')&&r.method==='POST'));
+});
 
 for(const [status,statusName] of [['ATIVO','STATUS'],['INATIVO','STATUS'],['ATIVO','field_7']]) {
   test('INATIVO requires receipt at persistence boundary: '+status+'/'+statusName,async()=>{

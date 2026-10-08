@@ -196,7 +196,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       if (typeof repository.searchPowerAppsOptions !== "function") throw new Error("A origem de opções não está disponível.");
       return repository.searchPowerAppsOptions(siteKey, source, term, dependencies, options);
     };
-    const statusColumn = columns.find(column => key(column.name) === 'STATUS' || key(column.label) === 'STATUS');
+    const isStatus = column => key(column.name) === 'STATUS' || key(column.label) === 'STATUS';
+    const statusColumn = columns.find(isStatus) || (isPayrollSheet ? mapped.find(isStatus) : null);
     const form43 = entity.id === 'notas-pendentes' && contract.formVariant?.formName === 'Form43' && statusColumn
       ? createForm43StatusPolicy({ repository, siteKey, orderId: id, orderColumns: rawColumns, statusFieldName: inputName(statusColumn), orderListId: list.id }) : null;
     const evaluateFieldLocks = form43 ? (draft = {}, options = {}) => form43.evaluate({ ...item.fields, ...draft }, options) : undefined;
@@ -341,7 +342,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (typeof repository.updateItem !== "function") throw new Error("A gravação segura não está disponível.");
     assertSession();
     abort(options.signal);
-    const saved = await repository.updateItem(siteKey, list.id, item.id, changed, { eTag });
+    const saved = await repository.updateItem(siteKey, list.id, item.id, changed, { eTag, ...(options.signal ? { signal: options.signal } : {}) });
     contexts.delete(context);
     return saved || { id: item.id, fields: merged };
   }

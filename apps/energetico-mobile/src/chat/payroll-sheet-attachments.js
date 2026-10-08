@@ -61,7 +61,7 @@ export function createPayrollSheetAttachments({ repository, siteKey, list, item,
       const existing = files.find(file => nameKey(file.name) === entry.key);
       if (existing && successfulUploads.get(entry.key) === entry.file) continue;
       guard(signal);
-      await repository.uploadAttachment(siteKey, list.id, item.id, entry.file, entry.name);
+      await repository.uploadAttachment(siteKey, list.id, item.id, entry.file, entry.name, { signal });
       successfulUploads.set(entry.key, entry.file);
       guard(signal);
       files = await listFiles(signal);

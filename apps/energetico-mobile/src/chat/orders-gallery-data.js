@@ -364,7 +364,10 @@ export function createHrPayrollGalleryData({
   if (!repository) {
     if (typeof tokenProvider !== "function") throw new TypeError("A consulta da folha requer a sessão Microsoft ativa.");
     const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
-    repository = createSharePointRepository(graph, siteConfig);
+    const attachments = createSharePointAttachmentTransport({
+      tokenProvider, allowedSites: Object.values(siteConfig), fetch: fetchImpl,
+    });
+    repository = createSharePointRepository(graph, siteConfig, { attachmentTransport: attachments });
   }
   if (typeof repository.resolveList !== "function" || typeof repository.getItemsPage !== "function") {
     throw new TypeError("A galeria de folha requer um repositório SharePoint somente leitura.");
