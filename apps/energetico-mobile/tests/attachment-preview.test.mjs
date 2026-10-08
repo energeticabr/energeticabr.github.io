@@ -76,6 +76,25 @@ test("imagem usa URL local e libera a anterior ao substituir e ao cancelar", asy
   assert.deepEqual(revoked, ["blob:preview-1", "blob:preview-2"]);
 });
 
+test("layout semântico chega à imagem, infere resumo gerado e não vaza para foto ou PDF", async t => {
+  const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: Promise.resolve(), destroy() {} }) }) });
+  const dialog = documentRef.querySelector('dialog');
+  const image = new Blob(['original'], { type: 'image/png' });
+  await preview.open(image, 'arquivo.png', { layout: 'flow-summary' });
+  assert.equal(dialog.dataset.layout, 'flow-summary', 'opção explícita chega a openOne');
+  await preview.openCollection([{ source: image, fileName: 'RESUMO-tarefa.PNG' }, { source: image, fileName: 'foto.png' }]);
+  assert.equal(dialog.dataset.layout, 'flow-summary', 'coleção reconhece resumo gerado');
+  dialog.querySelector('[data-preview-action=next]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.notEqual(dialog.dataset.layout, 'flow-summary', 'próxima foto mantém ajuste comum');
+  for (const name of ['resumo-foto.jpg', 'meu-resumo-tarefa.png', 'resumo-.png']) {
+    await preview.open(image, name);
+    assert.notEqual(dialog.dataset.layout, 'flow-summary', 'fallback restrito ao PNG gerado');
+  }
+  await preview.open(new Blob(['pdf'], { type: 'application/pdf' }), 'relatorio.pdf');
+  assert.notEqual(dialog.dataset.layout, 'flow-summary');
+});
+
 for (const type of ["", "application/octet-stream", "binary/octet-stream", "image/jpg", "image/pjpeg"]) {
   test(`JPEG com nome genérico e tipo ${type || "ausente"} abre como imagem e preserva o original`, async t => {
     const jpeg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])], { type });
@@ -161,6 +180,32 @@ test("imagem amplia a partir de dimensões-base fixas sem acumular escala", asyn
 
   assert.ok(intermediateWidth > 500 && intermediateWidth < 550, "a primeira ampliação deve usar uma curva suave");
   assert.ok(finalWidth > 600 && finalWidth < 650, "a ampliação absoluta deve continuar partindo da largura-base de 400px");
+});
+
+test("primeira pinça do resumo usa a base visível após a altura do aviso de carregamento mudar", async t => {
+  const { preview, documentRef } = setup(t);
+  await preview.open(new Blob(["resumo"], { type: "image/png" }), "resumo-confirmacao.png");
+  const image = documentRef.querySelector("dialog img");
+  let visibleWidth = 100;
+  Object.defineProperties(image, {
+    naturalWidth: { value: 1000 }, naturalHeight: { value: 4000 },
+    getBoundingClientRect: { value: () => ({ width: parseFloat(image.style.width) || visibleWidth,
+      height: parseFloat(image.style.height) || visibleWidth * 4 }) },
+  });
+  image.dispatchEvent(new documentRef.defaultView.Event("load"));
+  visibleWidth = 120;
+  const content = documentRef.querySelector(".attachment-preview-content");
+  const pointer = (type, pointerId, clientX) => {
+    const event = new documentRef.defaultView.Event(type, { bubbles: true });
+    Object.defineProperties(event, { pointerId: { value: pointerId }, pointerType: { value: "touch" },
+      clientX: { value: clientX }, clientY: { value: 100 } });
+    return event;
+  };
+  content.dispatchEvent(pointer("pointerdown", 1, 100));
+  content.dispatchEvent(pointer("pointerdown", 2, 200));
+  content.dispatchEvent(pointer("pointermove", 2, 300));
+  assert.ok(parseFloat(image.style.width) > 180 && parseFloat(image.style.width) < 192,
+    "zoom deve usar os 120px agora visíveis, não a base antiga de 100px");
 });
 
 test("pinça antes do carregamento não fixa a imagem em uma base provisória de 1px", async t => {

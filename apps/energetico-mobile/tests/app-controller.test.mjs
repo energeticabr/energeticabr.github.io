@@ -6141,8 +6141,9 @@ test('imagem da VM sem id ganha prévia e abre o arquivo sem perder a conversa',
   } finally { h.controller.stop(); }
 });
 
-test('ao abrir identifica o fluxo ativo e permite resumo em imagem sem substituir pergunta ou rascunho', async () => {
+test('ao abrir identifica o fluxo ativo e permite resumo em imagem sem substituir pergunta ou rascunho', async t => {
   const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
   const activeFlow = { id: 'task', title: 'ADICIONAR TAREFA' };
   h.client.sendText = async () => ({ status: 'processed', activeFlow, messages: [{type:'text', text:'Qual é a filial?'}] });
   await h.controller.start();
@@ -6155,12 +6156,34 @@ test('ao abrir identifica o fluxo ativo e permite resumo em imagem sem substitui
     return {status:'processed', activeFlow, results:[{status:'flow_summary'}], messages:[{type:'image',mediaUrl:'/api/portal-media/summary',fileName:'resumo.png'}]};
   };
   const previews = [];
-  h.native.previewMedia = async (source, name) => { previews.push([await source,name]); };
+  h.native.previewMedia = async (source, name, options) => { previews.push([await source,name,options]); };
   await h.view.emit('show-summary');
   assert.equal(previews.length, 1);
   assert.equal(previews[0][1], 'resumo.png');
+  assert.equal(previews[0][2]?.layout, 'flow-summary');
   assert.equal(h.store.getState().messages, messages);
   assert.equal(h.store.getState().draft, 'Rascunho em andamento');
+});
+
+test('resumos automáticos para confirmação e imagens reabertas recebem layout pelo nome gerado', async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const previews = [];
+  const original = new Blob(['png original'], { type: 'image/png' });
+  h.client.fetchMedia = async () => original;
+  h.native.previewMedia = async (source, name, options) => { previews.push({ blob: await source, name, options }); };
+  for (const [index, name, status] of [[1,'resumo-lancamento.png','awaiting_confirmation'], [2,'RESUMO-documentos.PNG','awaiting_confirmation'], [3,'foto.png','processed']]) {
+    h.client.sendText = async () => ({ status: 'processed', activeFlow: { id: 'task', title: 'TAREFA' }, results: [{ status }], messages: [{ id: `media-${index}`, type: 'image', mediaUrl: '/api/portal-media/synthetic', fileName: name }] });
+    await h.controller.sendText('Avançar');
+    const message = h.store.getState().messages.find(item => item.fileName === name);
+    assert.ok(message, 'a imagem automática permanece na confirmação');
+    await h.view.emit('open-media', { messageId: message.id });
+    const preview = previews.at(-1);
+    assert.equal(preview.blob, original);
+    assert.equal(preview.name, name);
+    assert.equal(preview.options?.layout, index < 3 ? 'flow-summary' : undefined);
+  }
 });
 
 test('res digitado abre resumo, e conclusão remove a opção do fluxo anterior', async () => {
