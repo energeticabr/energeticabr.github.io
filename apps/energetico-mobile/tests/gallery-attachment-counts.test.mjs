@@ -76,3 +76,62 @@ test("ignora a resposta de contagem que chega depois da atualização da galeria
   assert.deepEqual(updates, []);
   counter.destroy();
 });
+
+test("reset aborta a consulta ativa e liquida a fila sem iniciar novas consultas", async () => {
+  const { createGalleryAttachmentCounts } = await loadModule();
+  const calls = [];
+  let finish;
+  const counter = createGalleryAttachmentCounts({ concurrency: 1,
+    loadAttachments: (row, options) => {
+      calls.push({ row, options });
+      return new Promise(resolve => { finish = resolve; });
+    },
+  });
+  const pending = counter.request([{ id: 1 }, { id: 2 }, { id: 3 }]);
+  await Promise.resolve();
+  assert.equal(calls.length, 1);
+  counter.reset();
+  assert.equal(calls[0].options?.signal?.aborted, true);
+  assert.deepEqual(await pending, [null, null, null]);
+  finish([]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.length, 1);
+  counter.destroy();
+});
+
+test("reset antes da microtask impede que a consulta chegue à rede", async () => {
+  const { createGalleryAttachmentCounts } = await loadModule();
+  let calls = 0;
+  const counter = createGalleryAttachmentCounts({ loadAttachments: async () => { calls++; return []; } });
+  const pending = counter.request([{ id: 1 }]);
+  counter.reset();
+  await pending;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 0);
+  counter.destroy();
+});
+
+test("contagem reinicia após cancelamento e ignora falhas antigas de abort", { timeout: 2000 }, async () => {
+  const { createGalleryAttachmentCounts } = await loadModule();
+  const updates = [];
+  let calls = 0;
+  const counter = createGalleryAttachmentCounts({ concurrency: 1,
+    loadAttachments: (row, { signal } = {}) => {
+      calls++;
+      if (calls > 1) return Promise.resolve([{ fileName: 'fresh.pdf' }]);
+      return new Promise((resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    },
+    onChange: row => updates.push(row.id),
+  });
+  const row = { id: 1 };
+  const first = counter.request([row]);
+  await Promise.resolve();
+  counter.reset();
+  await first;
+  await counter.request([row]);
+  assert.equal(counter.label(row), '1 anexo');
+  assert.deepEqual(updates, [1]);
+  counter.destroy();
+});

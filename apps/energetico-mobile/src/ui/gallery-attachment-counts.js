@@ -76,6 +76,7 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
   let active = 0;
   let epoch = 0;
   let destroyed = false;
+  const activeTasks = new Set();
 
   function rowKey(row) {
     return String(row?.id ?? row?.ID ?? "");
@@ -95,7 +96,13 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
     while (!destroyed && active < Math.max(1, concurrency) && queue.length) {
       const task = queue.shift();
       active += 1;
-      Promise.resolve().then(() => loadAttachments(task.row)).then(items => {
+      task.controller = new AbortController();
+      activeTasks.add(task);
+      Promise.resolve().then(() => {
+        // reset/close can happen before the scheduled loader reaches the network.
+        if (task.controller.signal.aborted) return null;
+        return loadAttachments(task.row, { signal: task.controller.signal });
+      }).then(items => {
         const normalized = Array.isArray(items) ? items : [];
         const isCurrent = !destroyed && task.epoch === epoch && states.get(task.key) === task.state;
         if (isCurrent) {
@@ -105,6 +112,7 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
         }
         task.resolve(isCurrent ? normalized : null);
       }).catch(error => {
+        if (task.controller.signal.aborted) { task.resolve(null); return; }
         if (!destroyed && task.epoch === epoch && states.get(task.key) === task.state) {
           task.state.status = "error";
           task.state.error = error;
@@ -112,6 +120,7 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
         }
         task.reject(error);
       }).finally(() => {
+        activeTasks.delete(task);
         active -= 1;
         pump();
       });
@@ -155,6 +164,10 @@ export function createGalleryAttachmentCounts({ loadAttachments, onChange, concu
     for (const task of queue) task.resolve(null);
     queue = [];
     states.clear();
+    for (const task of activeTasks) {
+      task.resolve(null);
+      task.controller.abort();
+    }
   }
 
   function destroy() {
