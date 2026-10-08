@@ -35,6 +35,11 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     return found;
   }
   function value(descriptor,row,aliases,required=true) { const c=column(descriptor,aliases,required);return c ? scalar(row.fields?.[c.name]) : ''; }
+  function fieldValue(descriptor,label,raw) {
+    const c=column(descriptor,[label]);
+    if(c.readOnly||c.calculated||c.lookup||c.personOrGroup) throw new Error(`O campo ${label} não permite esse cadastro.`);
+    return c.dateTime&&label==='DATA' ? `${raw}T12:00:00Z` : c.text ? String(raw) : raw;
+  }
   async function all(descriptor,{signal,filter=''}={}) {
     const rows=[], seen=new Set();let cursor;
     for(let pageNumber=1;pageNumber<=100;pageNumber++) {
@@ -104,9 +109,10 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
         return verified;
       };
       if(found[0]) {
-        const expected=previous?.fields || Object.fromEntries(Object.entries({Title:token,TIPOPGTO:selection.paymentType,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)}).map(([label,value])=>[column(payroll,[label]).name,value]));
+        const expected=previous?.fields || Object.fromEntries(Object.entries({Title:token,TIPOPGTO:selection.paymentType,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)}).map(([label,value])=>[column(payroll,[label]).name,fieldValue(payroll,label,value)]));
         return verify(found[0],expected);
       }
+      if(previous?.attempted) throw new Error('O envio anterior ainda não foi confirmado. Reabra a galeria e confira o pagamento antes de iniciar outro cadastro.');
       const launch=await get(launches,selection.launchId),name=value(launches,launch,['FORNECEDOR']);
       const matches=(await all(suppliers)).filter(row=>key(supplierName(suppliers,row))===key(name));
       if(matches.length!==1||!activeSupplier(suppliers,matches[0])) throw new Error('O fornecedor deve ser empreiteiro SIM e estar ATIVO.');
@@ -121,11 +127,11 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
       const fields={};
       for(const [label,raw] of Object.entries({Title:token,FORNECEDOR:supplier,TIPOPGTO:selection.paymentType,VALORUNITARIO:number(['VALOR UNITÁRIO','VALORUNITARIO']),QTD:number(['QUANTIDADE','QTD']),DATA:date,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)})) {
         const c=column(payroll,[label]);
-        if(c.readOnly||c.calculated||c.lookup||c.personOrGroup) throw new Error(`O campo ${label} não permite esse cadastro.`);
-        fields[c.name]=c.dateTime&&label==='DATA'?`${raw}T12:00:00Z`:raw;
+        fields[c.name]=fieldValue(payroll,label,raw);
       }
-      operations.set(operationId,{fingerprint,fields});
-      assertSession();const saved=await repository.createItem(siteKey,payroll.id,fields);assertSession();
+      assertSession();
+      operations.set(operationId,{fingerprint,fields,attempted:true});
+      const saved=await repository.createItem(siteKey,payroll.id,fields);assertSession();
       return verify(saved,fields);
     } finally {saving=false;}
   }

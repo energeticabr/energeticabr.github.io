@@ -73,6 +73,35 @@ test('save rechecks source and writes a payroll record with fresh amounts and se
   assert.equal(saved.id,'101');
   assert.deepEqual(f.writes[0],{list:'FOLHAPGTO',fields:{Title:'APP-folha-vinculo-payment-test-1',FORNECEDOR:'CLEITON',TIPOPGTO:'SALÁRIO',VALORUNITARIO:200,QTD:3,DATA:'2026-10-04',IDFOLHA:21,IDLANCAMENTO:10}});
 });
+
+test('real text-backed payroll columns receive strings rather than Graph-invalid numbers',async()=>{
+  const f=fixture(),getColumns=f.repository.getColumns;
+  f.repository.getColumns=async(...args)=>(await getColumns(...args)).map(c=>args[1]==='FOLHAPGTO'
+    ? {...c,...(c.name==='DATA'?{dateTime:{format:'dateOnly'}}:{text:{}})} : c);
+  f.rows.LANCAMENTOS[0].fields['VALOR UNITÁRIO']='1.234,56';
+  const saved=await f.data.save(draft,operation);
+  assert.deepEqual(saved.fields,{Title:'APP-folha-vinculo-payment-test-1',FORNECEDOR:'CLEITON',TIPOPGTO:'SALÁRIO',
+    VALORUNITARIO:'1234.56',QTD:'3',DATA:'2026-10-04T12:00:00Z',IDFOLHA:'21',IDLANCAMENTO:'10'});
+});
+
+test('numeric payroll metadata retains numeric amounts and links',async()=>{
+  const f=fixture(),getColumns=f.repository.getColumns;
+  f.repository.getColumns=async(...args)=>(await getColumns(...args)).map(c=>args[1]==='FOLHAPGTO'
+    && ['VALORUNITARIO','QTD','IDFOLHA','IDLANCAMENTO'].includes(c.name) ? {...c,number:{}} : c);
+  const saved=await f.data.save(draft,operation);
+  assert.equal(saved.fields.VALORUNITARIO,168.8);
+  assert.equal(saved.fields.QTD,3);
+  assert.equal(saved.fields.IDFOLHA,21);
+  assert.equal(saved.fields.IDLANCAMENTO,10);
+});
+
+test('uncertain create with no visible match never POSTs a second payroll payment',async()=>{
+  const f=fixture();let attempts=0;
+  f.repository.createItem=async()=>{attempts++;throw new TypeError('Failed to fetch');};
+  await assert.rejects(f.data.save(draft,operation),/fetch/);
+  await assert.rejects(f.data.save(draft,operation),/confirm|incert|reabr/i);
+  assert.equal(attempts,1);
+});
 test('arbitrary types, another supplier sheet, old months and inactive contractor are rejected before writes',async()=>{
   const f=fixture();
   for(const invalid of [{...draft,paymentType:'DIGITADO'},{...draft,sheetId:'24'},{...draft,sheetId:'23'},{...draft,launchId:'11'}]) await assert.rejects(f.data.save(invalid,operation));
