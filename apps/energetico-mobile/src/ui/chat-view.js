@@ -12,7 +12,7 @@ import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize }
 import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
-import { attachmentFinishOption, isDiaryAttachmentPrompt } from "../chat/attachment-finish.js";
+import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
@@ -1343,7 +1343,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   );
   let allOptions = orderMeasurementUnitOptions(message, filteredOptions);
   let finishOption = null;
-  if (isDiaryAttachmentPrompt(message, activeFlow)) {
+  if (isDiaryAttachmentPrompt(message, activeFlow)
+    || (isDocumentAttachmentPrompt(message, activeFlow) && attachmentFinishOption(message))) {
     const serverFinishOption = attachmentFinishOption(message);
     const serverFinishReplyId = serverFinishOption ? draftReplyId(serverFinishOption) : null;
     finishOption = serverFinishOption || { id: "local_attachment_finish", label: "✅ FINALIZAR" };
@@ -1641,7 +1642,8 @@ function flowStatusMarkup(state, messages, busy, fallbackTitle = "", { homeOnly 
   const home = `<button class="chat-flow-nav-button" type="button" data-action="select-reply" data-reply-id="navigation_main_menu" data-label="🏠 RETORNAR AO MENU INICIAL" aria-label="Retornar ao menu inicial" title="Retornar ao menu inicial"${busy ? " disabled" : ""}>🏠</button>`;
   const latestAssistantMessage = [...messages].reverse().find(message => message?.role !== "user");
   const finishDisabled = busy || attachmentFinishOption(latestAssistantMessage)?.disabled === true;
-  const finish = !homeOnly && (asksToFinishFlow(messages) || isDiaryAttachmentPrompt(latestAssistantMessage, state.activeFlow))
+  const finish = !homeOnly && (asksToFinishFlow(messages) || isDiaryAttachmentPrompt(latestAssistantMessage, state.activeFlow)
+    || (isDocumentAttachmentPrompt(latestAssistantMessage, state.activeFlow) && attachmentFinishOption(latestAssistantMessage)))
     ? `<button class="chat-flow-finish" type="button" data-action="finish-flow" aria-label="Finalizar anexos" title="Finalizar anexos"${finishDisabled ? " disabled" : ""}>FINALIZAR</button>`
     : "";
   const quickRhid = isHumanResourcesMenu(latestAssistantMessage);
@@ -2367,7 +2369,9 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
 
-  const messages = Array.isArray(state.messages) ? state.messages : [];
+  const messages = withDocumentAttachmentPrompt(
+    Array.isArray(state.messages) ? state.messages : [], state.activeFlow, state.attachments,
+  );
   const provisionLines = normalizeProvisionSnapshotForFlow(state.activeFlow);
   let finalSignedIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
