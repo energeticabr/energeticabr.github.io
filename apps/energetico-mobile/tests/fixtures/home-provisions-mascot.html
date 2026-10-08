@@ -76,7 +76,8 @@ if(new URLSearchParams(location.search).has('payroll-navigation')){
  decorateReportNavigation(supplierPayrollReport,{action:'open-supplier-payroll-report',onNavigate:async()=>{}});
  await supplierPayrollReport.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const root=supplierPayrollReport.element,arrow=root.querySelector('.report-navigation-arrow').getBoundingClientRect();
- document.documentElement.dataset.layout=JSON.stringify({arrowRight:arrow.right,contentLeft:root.querySelector('summary').getBoundingClientRect().left,namesLeft:[...root.querySelectorAll('.spr-name')].map(node=>node.getBoundingClientRect().left),overflow:root.querySelector('.spr-content').scrollWidth-root.querySelector('.spr-content').clientWidth});
+ const content=root.querySelector('.spr-content'),bounds=node=>{const box=node.getBoundingClientRect();return {left:box.left,right:box.right,width:box.width};};
+ document.documentElement.dataset.layout=JSON.stringify({arrowRight:arrow.right,arrowCenter:arrow.top+arrow.height/2,content:bounds(content),rows:[...root.querySelectorAll('summary')].map(bounds),namesLeft:[...root.querySelectorAll('.spr-name')].map(node=>node.getBoundingClientRect().left),overflow:content.scrollWidth-content.clientWidth});
 }
 const commercial=createCommercialReceiptsReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
  complete:true,

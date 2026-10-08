@@ -1,0 +1,19 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+index 251f79f..f990755 100644
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -25724 +25724 @@ class WorkflowEngine(PaymentProvisionFlow):
+-        self._save(state, etag)
++        etag = self._save(state, etag)
+@@ -25728,0 +25729 @@ class WorkflowEngine(PaymentProvisionFlow):
++            "etag": etag,
+@@ -25803 +25804 @@ class WorkflowEngine(PaymentProvisionFlow):
+-                self._save(state, etag)
++                etag = self._save(state, etag)
+@@ -25807,0 +25809 @@ class WorkflowEngine(PaymentProvisionFlow):
++                    "etag": etag,
+@@ -25812 +25814 @@ class WorkflowEngine(PaymentProvisionFlow):
+-            self._save(state, etag)
++            etag = self._save(state, etag)
+@@ -25815,0 +25818 @@ class WorkflowEngine(PaymentProvisionFlow):
++                "etag": etag,
