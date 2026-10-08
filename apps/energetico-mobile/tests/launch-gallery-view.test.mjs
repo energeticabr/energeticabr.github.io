@@ -80,6 +80,48 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
+test('plus cancels background attachment counts before creation and reopening resumes counting', async t => {
+  const pending = [];
+  let createCalls = 0;
+  const ctx = await setup(t, {
+    request: async (operation, payload, options) => {
+      if (operation === 'snapshot') return snapshot({ rows: [row(1), row(2), row(3)] });
+      const wait = deferred();
+      pending.push({ ...wait, signal: options?.signal });
+      options?.signal?.addEventListener('abort', () => wait.reject(new Error('aborted')), { once: true });
+      return wait.promise;
+    },
+    onCreate: () => {
+      createCalls++;
+      assert.equal(pending[0].signal?.aborted, true, 'abort before workflow request');
+    },
+  });
+  await ctx.gallery.open(); await settle();
+  assert.equal(pending.length, 1, 'only one background request occupies the serialized bridge');
+  ctx.root().querySelector('[data-gallery-create]').click(); await settle();
+  assert.equal(createCalls, 1);
+  assert.equal(ctx.root().hidden, true);
+  assert.equal(pending.length, 1, 'hidden gallery must not continue draining the queue');
+  await ctx.gallery.open(); await settle();
+  assert.equal(pending.length, 2);
+  assert.equal(pending[1].signal?.aborted, false);
+  pending[1].resolve(detail()); await settle();
+  ctx.gallery.close(); await settle();
+});
+
+test('closing the gallery aborts counts without requiring the plus button', async t => {
+  let countSignal;
+  const ctx = await setup(t, { request: async (operation, payload, options) => {
+    if (operation === 'snapshot') return snapshot();
+    countSignal = options?.signal;
+    return new Promise((resolve, reject) => countSignal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+  } });
+  await ctx.gallery.open(); await settle();
+  ctx.gallery.close();
+  assert.equal(countSignal?.aborted, true);
+  await settle();
+});
+
 test('the launch pencil opens a selection-only editing form without a separate details action', async t => {
   const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot() : detail({
     editFields: [
@@ -618,7 +660,7 @@ test('launch cards keep a compact summary and reveal remaining fields only when 
   };
   const ctx = await setup(t, { request: async operation => operation === 'snapshot'
     ? snapshot({ rows: [item, second] }) : detail({ item }) });
-  await ctx.gallery.open();
+  await ctx.gallery.open(); await settle(); // Drain sequential background counts before checking the pencil request.
 
   const [card, secondCard] = ctx.root().querySelectorAll('.lg-record');
   const summary = card.querySelector('.lg-record-summary');

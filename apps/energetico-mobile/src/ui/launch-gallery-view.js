@@ -391,8 +391,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     },
   });
   const attachmentCounts = createGalleryAttachmentCounts({
-    loadAttachments: async item => {
-      const result = await request('detail', { id: item.id });
+    // The bridge serializes gallery reads with chat answers. Do not queue four
+    // detail requests ahead of the user's next workflow action.
+    concurrency: 1,
+    loadAttachments: async (item, { signal }) => {
+      const result = await request('detail', { id: item.id }, { signal });
       return attachmentDescriptors(item, result);
     },
     onChange: updateAttachmentCount,
@@ -1573,6 +1576,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function close() {
     if (!opened || destroyed) return;
+    attachmentCounts.reset();
     recordActions.close();
     autoFilters.cancelPending();
     cancelClusterLoad();
