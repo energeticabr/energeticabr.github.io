@@ -111,6 +111,50 @@ test('manual refresh bypasses cached launch data, preserves filters and ignores 
   assert.equal(refresh.disabled, true, 'open editor cannot be discarded by refresh');
 });
 
+test('manual refresh remains blocked by a pending deletion after close and reopen', async t => {
+  const pending = deferred();
+  const ctx = await setup(t, { request: async operation => operation === 'delete' ? pending.promise : operation === 'snapshot' ? snapshot() : detail() });
+  await ctx.gallery.open();
+  ctx.root().querySelector('[data-gallery-action="delete"]').click();
+  button(ctx.root(), 'Sim').click(); await settle();
+  ctx.gallery.close(); await ctx.gallery.open(); await settle();
+  const refresh = ctx.root().querySelector('[data-gallery-refresh]');
+  const count = ctx.calls.filter(call => call.operation === 'snapshot').length;
+  refresh.dispatchEvent(new ctx.dom.window.Event('click', {bubbles:true})); await settle();
+  assert.equal(refresh.disabled, true);
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, count);
+  pending.resolve({}); await settle(); await settle();
+  assert.equal(refresh.disabled, false);
+});
+
+test('manual refresh consumes pending launch filter debounce and forces the current query once', async t => {
+  const ctx = await setup(t, { request: async (operation,payload) => operation === 'snapshot'
+    ? snapshot({rows:[row(payload.refresh ? 901 : 17)]}) : detail() });
+  await ctx.gallery.open();
+  const control = ctx.root().querySelector('[name=id]'); control.value = '901';
+  control.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  const count = ctx.calls.filter(call => call.operation === 'snapshot').length;
+  ctx.root().querySelector('[data-gallery-refresh]').click();
+  await new Promise(resolve => setTimeout(resolve,350)); await settle();
+  const reads = ctx.calls.filter(call => call.operation === 'snapshot').slice(count);
+  assert.equal(reads.length,1);
+  assert.equal(reads[0].payload.refresh,true);
+  assert.equal(reads[0].payload.filters.id,'901');
+  assert.ok(ctx.root().querySelector('[data-item-id="901"]'));
+});
+
+for (const rejected of [false,true]) test(`manual refresh ignores detached launch response (${rejected ? 'error' : 'success'})`, async t => {
+  const pending = deferred();
+  const ctx = await setup(t, {request: async (operation,payload) => operation === 'snapshot'
+    ? payload.refresh ? pending.promise : snapshot() : detail()});
+  await ctx.gallery.open();
+  const root = ctx.root(); root.querySelector('[data-gallery-refresh]').click(); await settle();
+  root.remove(); const before = root.innerHTML;
+  if (rejected) pending.reject(new Error('late error')); else pending.resolve(snapshot({rows:[row(901)]}));
+  await settle(); await settle();
+  assert.ok(root.innerHTML === before,'detached UI receives no cards, errors or control updates');
+});
+
 test('plus cancels background attachment counts before creation and reopening resumes counting', async t => {
   const pending = [];
   let createCalls = 0;

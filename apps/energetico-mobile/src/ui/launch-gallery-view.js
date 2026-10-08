@@ -294,7 +294,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     createShortcut.sync();
     refreshControl.sync();
   }
-  function active(epoch) { return opened && !destroyed && epoch === session; }
+  function active(epoch) { return opened && !destroyed && root.isConnected && epoch === session; }
   function focus(node) { if (opened && !suspended && node?.isConnected) node.focus({ preventScroll: true }); }
   function reveal(node) { if (opened && !suspended) { node?.scrollIntoView?.({ block: 'start' }); focus(node); } }
 
@@ -318,10 +318,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
     label: 'Adicionar um novo lançamento', action: 'create-launch',
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading && !editor && !review });
+  let pendingMutations = 0;
   const refreshControl = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar,
-    onRefresh: () => loadSnapshot(applied, { refresh: true }),
+    onRefresh: () => {
+      autoFilters.sync();
+      return applyFilters({ refresh: true, preservePage: true });
+    },
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading
-      && !editor && !review && panel.hidden && clusterPanel.hidden });
+      && !pendingMutations && !editor && !review && panel.hidden && clusterPanel.hidden });
+  async function runMutation(operation) {
+    pendingMutations++; refreshControl.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshControl.sync(); }
+  }
   const filterForm = element('form', 'lg-filter-form');
   filterForm.setAttribute('aria-label', 'Filtros de lançamentos');
   const filterGrid = element('div', 'lg-filter-grid');
@@ -375,7 +384,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       reveal(editor?.form ?? panel);
       focus(editor?.form?.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? panel);
     },
-    deleteItem: id => createShortcut.runMutation(async () => {
+    deleteItem: id => runMutation(async () => {
       if (busy || editor || review) throw new Error('Conclua ou cancele a edição aberta antes de deletar.');
       const item = recordItems.get(String(id));
       if (!item) throw new Error('Atualize a galeria antes de deletar este item.');
@@ -422,15 +431,16 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return { filters: Object.fromEntries([...filterControls].map(([name, control]) =>
       [name, control.type === 'checkbox' ? control.checked : control.value])), sort: sort.value, page: targetPage, pageSize: 20 };
   }
-  function applyFilters() {
+  function applyFilters({ refresh = false, preservePage = false } = {}) {
     const data = query(1);
+    if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
-    notify(''); loadSnapshot(data);
+    notify(''); return loadSnapshot(data, { refresh });
   }
   async function loadSnapshot(data = applied, { refresh = false } = {}) {
-    if (!opened || destroyed) return;
+    if (!opened || destroyed || !root.isConnected) return;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
