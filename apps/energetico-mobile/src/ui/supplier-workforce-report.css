@@ -1,16 +1,15 @@
 .swr-dialog { position:relative; }
-.swr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.swr-dialog:not(.pl-dialog--portrait) { width:100%; height:100dvh; max-height:100dvh; }
 .swr-report { padding-top:28px; box-sizing:border-box; }
 .swr-close { position:absolute; right:4px; top:2px; z-index:2; display:grid; place-items:center; width:32px; height:28px; min-width:0; min-height:0; border:1px solid #a20000; border-radius:4px; padding:0; color:#a20000; background:white; font:24px/1 Arial,sans-serif; cursor:pointer; }
 .swr-filters { grid-template-columns:84px repeat(2,minmax(82px,1fr)) minmax(55px,.85fr) minmax(60px,1fr) minmax(74px,1.2fr) minmax(90px,1fr) minmax(60px,1fr); align-items:end; }
 .swr-filter-input { width:100%; min-width:0; box-sizing:border-box; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; height:27px; padding:2px 3px; font:normal clamp(9px,1.2vw,14px) Arial,sans-serif; }
 .swr-filters .pl-filter-label { white-space:normal; min-height:2.3em; display:grid; align-items:center; }
 .swr-filters .sfs .sfs-field > .sfs-trigger { color:#000; font-weight:400; }
-/* Full tables stay between the shared navigation arrows, including on small phones. */
-.swr-content { box-sizing:border-box; margin-inline:calc(64px + env(safe-area-inset-left,0px)) calc(64px + env(safe-area-inset-right,0px)); color:#111827; font:normal clamp(11px,1.1vw,15px)/1.4 Arial,sans-serif; }
+/* The overlay owns safe areas; reserve only the shared navigation arrow rails here. */
+.swr-content { box-sizing:border-box; margin-inline:58px; color:#111827; font:normal clamp(11px,1.1vw,15px)/1.4 Arial,sans-serif; }
 .swr-brand { border:2px solid #000; background:#e6f0ff; text-align:center; padding:12px; }
 .swr-brand img { height:clamp(44px,6vw,90px); max-width:65%; object-fit:contain; }
-.swr-filter-note { padding:7px 9px; margin:8px 0; background:#eff6ff; border-left:3px solid #2563eb; overflow-wrap:anywhere; }
 .swr-warnings { padding:5px 8px; border:1px solid #c62828; color:#a00000; background:#ffebee; overflow-wrap:anywhere; }
 .swr-warnings p { margin:4px 0; }
 .swr-branch { box-sizing:border-box; width:100%; border:1px solid #1f2937; border-radius:14px; padding:14px; margin:18px 0; background:#fff; }
@@ -56,4 +55,5 @@
   .swr-table th,.swr-table td { padding:6px 3px; }
   .swr-table .swr-badge,.swr-frequency-box,.swr-description-box { padding:5px 3px; }
 }
+@media(max-height:500px) { .swr-content { margin-inline:48px; } }
 @media print { .swr-content { margin-inline:0; overflow:visible; }.swr-close { display:none; }.swr-branch,.swr-profession { break-inside:auto; }.swr-table thead { display:table-header-group; } }

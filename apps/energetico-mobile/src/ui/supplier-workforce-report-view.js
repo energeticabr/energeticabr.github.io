@@ -117,9 +117,8 @@ export function createSupplierWorkforceReportView({document:doc=globalThis.docum
     let result;try{result=buildSupplierWorkforceReport(snapshot,values,localDate(now()));}
     catch{showNotice('Não foi possível calcular o relatório completo. Use Atualizar para tentar novamente.',true);return;}
     const brand=make('div','swr-brand'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética Construtora';brand.append(logo);
-    const note=make('p','swr-filter-note','A frequência e o período ativo usam as presenças filtradas por data, filial, imóvel, fornecedor e etapa. O histórico completo inclui todas as presenças desses filtros, sem limite de 2.000 registros.');
     const warnings=make('div','swr-warnings');warnings.setAttribute('role','status');for(const warning of result.warnings||[])warnings.append(make('p','',warning));warnings.hidden=!warnings.childElementCount;
-    const fragment=doc.createDocumentFragment();fragment.append(brand,note,warnings);
+    const fragment=doc.createDocumentFragment();fragment.append(brand,warnings);
     for(const group of result.branches) {
       const branch=make('section','swr-branch');branch.append(make('h2','swr-branch-heading',`🏢 FILIAL: ${group.branch||'NÃO INFORMADA'}`));
       for(const propertyGroup of group.properties) {
