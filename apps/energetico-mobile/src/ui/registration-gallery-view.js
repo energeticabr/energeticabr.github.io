@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
@@ -213,7 +214,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   refresh.type = "button";
   refresh.dataset.action = "registration-refresh";
   toolbar.prepend(searchLabel);
-  toolbar.append(refresh);
   filterDisclosure.append(toolbar);
   const feedback = el("p", "rg-feedback");
   feedback.setAttribute("role", "status");
@@ -231,8 +231,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     document: doc, host: root,
     actions: model.recordActions,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
-    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
+    saveEditor: (context, fields) => runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: load,
   });
 
@@ -254,6 +254,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterRequests = new Map();
   const filterErrors = new Map();
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
+  let pendingMutations = 0;
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, button: refresh,
+    onRefresh: () => load({ refresh: true }),
+    isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations });
+  async function runMutation(operation) {
+    pendingMutations++; refreshShortcut.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshShortcut.sync(); }
+  }
 
   function fieldLabel(field) {
     return model.fieldLabels?.[field] || ({ TIPOHOMOLOGACAO: "Tipo de homologação", PESSOARELACIONADA: "Pessoa relacionada", TIPODOCUMENTO: "Tipo de documento", STATUS: "Status", FILIAL: "Filial", IMOVEL: "Imóvel", ETAPA: "Etapa", TIPOMARCO: "Tipo marco", ID: "ID", IMOBILIZADO: "Imobilizado", FORNECEDOR: "Fornecedor", DEPRECIAR: "Depreciar", "INFORMAÇÕES CLIMÁTICAS": "Informações climáticas", TIPO: "Tipo" })[field] || field;
@@ -440,6 +449,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const current = (filterRequests.get(field) || 0) + 1;
     filterRequests.set(field, current);
     const epoch = filterEpoch, filters = filterSelections(), selectedValue = control.value;
+    const selectedLabel = control.selectedOptions[0]?.textContent || selectedValue;
     const policy = data.getFilterPolicy?.(field);
     const fixedValue = policy?.disabled === true ? policy.defaultValue || "" : "";
     filterErrors.delete(field);
@@ -453,16 +463,21 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     try {
       if (typeof data.loadFilterOptions !== "function") throw new Error("Fonte de filtro indisponível.");
       const options = await data.loadFilterOptions(field, { filters, refresh });
-      if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
+      if (destroyed || root.hidden || !root.isConnected || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
       if (!Array.isArray(options)) throw new Error("Opções do filtro indisponíveis.");
       control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
       if (fixedValue && !options.some(item => String(item.value) === fixedValue)) control.append(option(fixedValue, fixedValue));
       const desiredValue = fixedValue || (!hasLoaded ? policy?.defaultValue || selectedValue : selectedValue);
-      control.value = fixedValue || (options.some(item => String(item.value) === desiredValue) ? desiredValue : "");
+      if (refresh && desiredValue && ![...control.options].some(item => item.value === desiredValue)) control.append(option(selectedLabel || desiredValue, desiredValue));
+      control.value = fixedValue || ([...control.options].some(item => item.value === desiredValue) ? desiredValue : "");
       control.disabled = policy?.disabled === true;
     } catch {
-      if (destroyed || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
+      if (destroyed || root.hidden || !root.isConnected || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
       control.replaceChildren(option("Indisponível", fixedValue));
+      if (refresh && selectedValue && selectedValue !== fixedValue) {
+        control.append(option(selectedLabel, selectedValue));
+        control.value = selectedValue;
+      }
       control.disabled = true;
       filterErrors.set(field, `Filtro ${fieldLabel(field)} indisponível. Tente atualizar.`);
     }
@@ -476,6 +491,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         const value = rowFieldValue(row, field);
         return model.substringFilters?.includes(field) ? value.split(/;|\r?\n|,\s*|\s+\|\s+/).map(part => part.trim()) : [value];
       }).filter(Boolean)])];
+      for (const selected of [].concat(selectedValue)) if (selected && !values.includes(selected)) values.push(selected);
       values.sort((left, right) => field === "ID"
         ? Number(right) - Number(left)
         : left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true }));
@@ -493,7 +509,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   async function populateCatalogFilters(fields, options) {
     const pending = new Set(fields), epoch = filterEpoch;
-    while (pending.size && !destroyed && epoch === filterEpoch) {
+    while (pending.size && !destroyed && !root.hidden && root.isConnected && epoch === filterEpoch) {
       const ready = [...pending].filter(field => ![...(filterSources.get(field).dependsOn || []), ...(filterSources.get(field).disabledUntil || [])].some(parent => pending.has(parent)));
       if (!ready.length) throw new Error("Não foi possível resolver as dependências dos filtros.");
       await Promise.all(ready.map(field => populateCatalogFilter(field, options)));
@@ -557,6 +573,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function render() {
     if (destroyed) return;
     createShortcut.sync();
+    refreshShortcut.sync();
     const filtered = filteredRows();
     const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     page = Math.min(page, pages);
@@ -655,7 +672,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
   }
 
-  async function load() {
+  async function load({ refresh = hasLoaded } = {}) {
     const current = ++request;
     filterEpoch += 1;
     filterErrors.clear();
@@ -665,31 +682,33 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     loadFailed = false;
     root.setAttribute("aria-busy", "true");
     createShortcut.sync();
+    refreshShortcut.sync();
     feedback.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
     try {
-      const snapshot = await data.loadSnapshot();
-      if (destroyed || current !== request) return;
+      const snapshot = await data.loadSnapshot({ refresh });
+      if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
-      await populateFilters({ refresh: hasLoaded });
-      if (destroyed || current !== request) return;
+      await populateFilters({ refresh });
+      if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       const status = filterControls.get("STATUS");
       if (status && !model.filterFields) {
+        const selected = status.value;
         const statuses = [...new Set(rows.map(row => fieldValue(row.fields, "STATUS", model)).filter(Boolean))].sort();
+        if (hasLoaded && selected && !statuses.includes(selected)) statuses.push(selected);
         status.replaceChildren(option("Todos", ""), ...statuses.map(value => option(value, value)));
-        status.value = hasLoaded && statuses.includes(status.value)
-          ? status.value : !hasLoaded && statuses.includes("ATIVO") ? "ATIVO" : "";
+        status.value = hasLoaded ? selected : statuses.includes("ATIVO") ? "ATIVO" : "";
       }
       hasLoaded = true;
       page = 1;
       render();
     } catch (error) {
-      if (destroyed || current !== request) return;
+      if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       loadFailed = true;
       rows = [];
       page = 1;
       render();
     } finally {
-      if (current === request) { root.setAttribute("aria-busy", "false"); createShortcut.sync(); }
+      if (!destroyed && !root.hidden && root.isConnected && current === request) { root.setAttribute("aria-busy", "false"); createShortcut.sync(); refreshShortcut.sync(); }
     }
   }
 
@@ -699,6 +718,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     searchableFilters.close();
     root.hidden = true;
     createShortcut.sync();
+    refreshShortcut.sync();
     request += 1;
     filterEpoch += 1;
     attachmentRequest += 1;
@@ -707,7 +727,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     returnFocus = null;
   }
   close.addEventListener("click", hide);
-  refresh.addEventListener("click", load);
   search.addEventListener("input", () => { page = 1; attachmentNotice = ""; render(); });
   for (const [field, control] of filterControls) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; void refreshDependentFilters(field); });
   for (const control of dateBounds.values()) control.addEventListener("change", () => { page = 1; attachmentNotice = ""; render(); });
@@ -731,6 +750,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { createShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }

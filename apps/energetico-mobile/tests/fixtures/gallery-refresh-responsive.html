@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+<link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+<link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/hr-payroll-gallery.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<style>* { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; }</style>
+</head><body><script type="module">
+import { galleryCases, galleryOptions } from '../helpers/gallery-create-cases.mjs';
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+try {
+  const results = [];
+  for (const entry of galleryCases.filter(entry => entry.name !== 'launch')) {
+    const gallery = entry.factory(galleryOptions(entry, document));
+    await gallery.open();
+    const root = document.querySelector(entry.root), refresh = root.querySelector('[data-gallery-refresh]');
+    if (!refresh) { results.push({ name: entry.name, missing: true }); gallery.destroy(); continue; }
+    const add = root.querySelector('[data-gallery-create]'), filter = add.previousElementSibling;
+    const measure = async () => {
+      await nextFrame();
+      const r = refresh.getBoundingClientRect(), a = add.getBoundingClientRect(), f = filter.getBoundingClientRect();
+      const search = refresh.parentElement.querySelector('input[type="search"]');
+      const s = search?.getBoundingClientRect();
+      return { width: r.width, height: r.height, addBottom: a.bottom, filterBottom: f.bottom, searchBottom: s?.bottom,
+        visible: r.width > 0 && r.height > 0 && !refresh.closest('details') && !refresh.closest('[hidden]'),
+        fits: r.left >= 0 && r.right <= innerWidth,
+        secondRow: r.top >= a.bottom && r.top >= f.bottom,
+        controlsTogether: Math.abs(f.bottom - a.bottom) < 1 && f.right <= a.left && (!s || Math.abs(s.bottom - a.bottom) <= 2),
+        overflow: root.scrollWidth > root.clientWidth + 1 || refresh.parentElement.scrollWidth > refresh.parentElement.clientWidth + 1,
+        hittable: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === refresh };
+    };
+    const collapsed = await measure(); filter.click(); const expanded = await measure();
+    results.push({ name: entry.name, collapsed, expanded }); gallery.destroy();
+  }
+  document.documentElement.dataset.layout = JSON.stringify(results);
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.stack }); }
+</script></body></html>

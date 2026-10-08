@@ -1,5 +1,6 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createMascotReportButton } from './report-action-button.js';
@@ -291,6 +292,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= pages;
     createShortcut.sync();
+    refreshControl.sync();
   }
   function active(epoch) { return opened && !destroyed && epoch === session; }
   function focus(node) { if (opened && !suspended && node?.isConnected) node.focus({ preventScroll: true }); }
@@ -316,6 +318,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const createShortcut = createGalleryCreationToolbar({ document: doc, root, disclosure: filterDisclosure, onCreate, close,
     label: 'Adicionar um novo lançamento', action: 'create-launch',
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading && !editor && !review });
+  const refreshControl = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar,
+    onRefresh: () => loadSnapshot(applied, { refresh: true }),
+    isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading
+      && !editor && !review && panel.hidden && clusterPanel.hidden });
   const filterForm = element('form', 'lg-filter-form');
   filterForm.setAttribute('aria-label', 'Filtros de lançamentos');
   const filterGrid = element('div', 'lg-filter-grid');
@@ -423,14 +429,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     notify(''); loadSnapshot(data);
   }
-  async function loadSnapshot(data = applied) {
+  async function loadSnapshot(data = applied, { refresh = false } = {}) {
     if (!opened || destroyed) return;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
     listLoading = true; listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando lançamentos…")); updateBusy();
     try {
-      const result = await request('snapshot', { ...data, filters: { ...data.filters } });
+      const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) });
       if (!active(epoch) || version !== listVersion) return;
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       page = result.page ?? data.page; pages = result.pages ?? 1;
@@ -1596,6 +1602,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function destroy() {
     if (destroyed) return;
     createShortcut.destroy();
+    refreshControl.destroy();
     recordActions.destroy(); recordItems.clear();
     autoFilters.destroy();
     attachmentCounts.destroy();

@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
@@ -244,7 +245,7 @@ export function createRecurringExpensesGallery({
   const actions = el("div", "og-actions");
   const clearButton = el("button", "og-button", "Limpar filtros"); clearButton.type = "button";
   const refreshButton = el("button", "og-button", "Atualizar dados"); refreshButton.type = "button";
-  actions.append(clearButton, refreshButton);
+  actions.append(clearButton);
   const toolbar = el("div", "re-toolbar");
   const searchBar = el("div", "re-search-bar");
   searchBar.append(icon("search"), controls.get("search").parentElement);
@@ -259,6 +260,15 @@ export function createRecurringExpensesGallery({
   const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: filterButton, onCreate, close,
     label: 'Adicionar uma nova despesa recorrente', action: 'create-recurring-expense',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
+  let pendingMutations = 0;
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar, button: refreshButton,
+    onRefresh: () => loadSnapshot({ refresh: true }),
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
+  async function runMutation(operation) {
+    pendingMutations++; refreshShortcut.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshShortcut.sync(); }
+  }
   const filterPanel = el("div", "re-filter-panel");
   filterPanel.id = "re-filter-panel";
   filterPanel.hidden = true;
@@ -289,8 +299,8 @@ export function createRecurringExpensesGallery({
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
-    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
+    saveEditor: (context, fields) => runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot();
@@ -362,11 +372,13 @@ export function createRecurringExpensesGallery({
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
       if (button.closest(".gallery-record-dialog")) continue;
+      if (button === refreshShortcut.button) continue;
       if (button !== closeButton && button !== homeButton) button.disabled = Boolean(busy);
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
     createShortcut.sync();
+    refreshShortcut.sync();
   }
 
   function setNotice(message, isError = false) {
@@ -382,6 +394,7 @@ export function createRecurringExpensesGallery({
       const current = control.value;
       const values = [...new Set(rows.map(row => filterValue(row.fields, name, aliases)).filter(Boolean))]
         .sort((left, right) => left.localeCompare(right, "pt-BR", { numeric: true, sensitivity: "base" }));
+      if (current && !values.includes(current)) values.push(current);
       const all = el("option", "", "Todos"); all.value = "";
       control.replaceChildren(all, ...values.map(value => { const option = el("option", "", value); option.value = value; return option; }));
       if (values.includes(current)) control.value = current;
@@ -589,8 +602,8 @@ export function createRecurringExpensesGallery({
     }
   }
 
-  async function loadSnapshot() {
-    if (!opened || listLoading) return;
+  async function loadSnapshot({ refresh = false } = {}) {
+    if (!opened || destroyed || listLoading) return;
     attachmentCounts.reset();
     const requestSession = session;
     controller?.abort();
@@ -600,19 +613,19 @@ export function createRecurringExpensesGallery({
     listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando despesas recorrentes…"));
     updateBusy();
     try {
-      const snapshot = await data.loadSnapshot({ signal: controller.signal });
-      if (!opened || requestSession !== session) return;
+      const snapshot = await data.loadSnapshot({ signal: controller.signal, refresh });
+      if (!opened || destroyed || !root.isConnected || requestSession !== session) return;
       rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
       populateFilters();
       applyFilters();
     } catch (error) {
-      if (!opened || requestSession !== session) return;
+      if (!opened || destroyed || !root.isConnected || requestSession !== session) return;
       setNotice(safeFailure(error, "Não foi possível carregar as despesas recorrentes"), true);
       listStatus.textContent = "Não foi possível carregar a lista.";
       cards.replaceChildren();
       pageLabel.textContent = "Página 0 de 0";
     } finally {
-      if (opened && requestSession === session) {
+      if (opened && !destroyed && root.isConnected && requestSession === session) {
         listLoading = false;
         updateBusy();
       }
@@ -631,7 +644,6 @@ export function createRecurringExpensesGallery({
     filterPanel.hidden = !filterPanel.hidden;
     filterButton.setAttribute("aria-expanded", String(!filterPanel.hidden));
   });
-  refreshButton.addEventListener("click", () => { if (!listLoading) void loadSnapshot(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
   next.addEventListener("click", () => {
     if (page < Math.ceil(filteredRows.length / pageSize)) { page += 1; renderList(); }
@@ -675,6 +687,7 @@ export function createRecurringExpensesGallery({
   function destroy() {
     if (destroyed) return;
     createShortcut.destroy();
+    refreshShortcut.destroy();
     recordActions.destroy(); autoFilters.destroy();
     close();
     destroyed = true;

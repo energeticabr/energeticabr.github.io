@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -157,6 +158,15 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle, onCreate, close,
     label: 'Adicionar uma nova tarefa', action: 'create-task', className: 'og-button tg-add-task',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
+  let pendingMutations = 0;
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar,
+    onRefresh: () => loadSnapshot({ refresh: true }),
+    isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
+  async function runMutation(operation) {
+    pendingMutations++; refreshShortcut.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshShortcut.sync(); }
+  }
   const statusControl = addControl("status", "Status");
   statusControl.append(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
   statusControl.value = DEFAULT_STATUS_FILTER;
@@ -195,8 +205,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
-    deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),
+    saveEditor: (context, fields) => runMutation(() => data.saveEditor(context, fields)),
+    deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot();
@@ -209,7 +219,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const completionDialog = createTaskCompletionDialog({
     document: doc, host: root, data: {
       loadEditor: (...args) => data.loadEditor(...args),
-      saveEditor: (...args) => createShortcut.runMutation(() => data.saveEditor(...args)),
+      saveEditor: (...args) => runMutation(() => data.saveEditor(...args)),
     },
     today: () => dateKey(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(now())),
     onBlocked: blocked => { header.inert = content.inert = detail.inert = blocked; },
@@ -298,12 +308,14 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
       if (button.closest(".gallery-record-dialog")) continue;
+      if (button === refreshShortcut.button) continue;
       if (button === closeButton || button === homeButton) continue;
       button.disabled = busy || button.dataset.baseDisabled === "true";
     }
     previous.disabled = listLoading || page <= 1;
     next.disabled = listLoading || page >= Math.max(1, Math.ceil(filteredRows.length / pageSize));
     createShortcut.sync();
+    refreshShortcut.sync();
   }
 
   function sortRows(items) {
@@ -326,6 +338,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
         : rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean);
       const values = [...new Set(name === "status" ? [...DEFAULT_TASK_STATUSES, ...rowValues] : rowValues)]
         .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+      if (current && current !== DEFAULT_STATUS_FILTER && !values.includes(current)) values.push(current);
       const options = [Object.assign(el("option", "", "Todos"), { value: "" })];
       if (name === "status") options.push(Object.assign(el("option", "", DEFAULT_STATUS_LABEL), { value: DEFAULT_STATUS_FILTER }));
       control.replaceChildren(...options, ...values.map(value => Object.assign(el("option", "", value), { value })));
@@ -498,14 +511,14 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     }
   }
 
-  async function loadSnapshot() {
+  async function loadSnapshot({ refresh = false } = {}) {
     if (!opened || destroyed) return false;
     attachmentCounts.reset();
     const current = session; controller?.abort(); controller = new AbortController(); listLoading = true;
     showNotice(""); listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando tarefas…")); cards.replaceChildren(); updateBusy();
     try {
       const [result, suppliers] = await Promise.all([
-        data.loadSnapshot({ signal: controller.signal }),
+        data.loadSnapshot({ signal: controller.signal, refresh }),
         typeof data.loadFilterOptions === "function"
           ? data.loadFilterOptions("FORNECEDOR", { signal: controller.signal, refresh: true })
             .then(options => {
@@ -516,7 +529,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
             }).catch(error => ({ error }))
           : { options: [] },
       ]);
-      if (!opened || destroyed || current !== session) return false;
+      if (!opened || destroyed || !root.isConnected || current !== session) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de tarefas válida.");
       supplierOptions = suppliers.options || supplierOptions;
       controls.get("supplier").disabled = Boolean(suppliers.error);
@@ -529,10 +542,10 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions(); updateMetrics(); applyLocalFilters(); return true;
     } catch (error) {
-      if (!opened || destroyed || current !== session || error?.name === "AbortError") return false;
+      if (!opened || destroyed || !root.isConnected || current !== session || error?.name === "AbortError") return false;
       listStatus.textContent = safeFailure(error, "Não foi possível carregar tarefas");
       const retry = el("button", "og-button og-button--primary", "Tentar novamente"); retry.type = "button"; retry.addEventListener("click", () => { void loadSnapshot(); }); cards.replaceChildren(retry); return false;
-    } finally { if (opened && !destroyed && current === session) { listLoading = false; updateBusy(); } }
+    } finally { if (opened && !destroyed && root.isConnected && current === session) { listLoading = false; updateBusy(); } }
   }
 
   const autoFilters = bindAutoFilterForm(form, applyLocalFilters);
@@ -556,6 +569,6 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; createShortcut.destroy(); completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
+  function destroy() { if (destroyed) return; createShortcut.destroy(); refreshShortcut.destroy(); completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }

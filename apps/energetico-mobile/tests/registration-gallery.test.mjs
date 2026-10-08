@@ -264,7 +264,10 @@ test("galeria mantém Tab dentro do diálogo e cabeçalho visível na rolagem", 
   first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   assert.equal(doc.activeElement, filterSummary, 'o painel de filtros deve continuar acessível por teclado');
   filterSummary.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
-  assert.equal(doc.activeElement, dialog.querySelector('[data-gallery-action="edit"]'), 'Tab sai do filtro recolhido para as ações visíveis do primeiro item');
+  const refreshButton = dialog.querySelector('[data-gallery-refresh]');
+  assert.equal(doc.activeElement, refreshButton, 'Tab alcança a atualização visível fora dos filtros recolhidos');
+  refreshButton.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  assert.equal(doc.activeElement, dialog.querySelector('[data-gallery-action="edit"]'), 'Tab sai da atualização para as ações visíveis do primeiro item');
   const last = dialog.querySelector('.rg-pagination button:last-child');
   last.focus();
   last.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));

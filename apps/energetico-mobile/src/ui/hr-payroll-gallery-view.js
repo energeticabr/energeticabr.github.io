@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryRecordActions } from './gallery-record-actions.js';
@@ -132,8 +133,8 @@ export function createHrPayrollGallery({ document: documentOption,
   const recordActions = createGalleryRecordActions({
     getReceiptAttachments, readReceiptAttachment,
     document: doc, host: root, loadEditor,
-    saveEditor: (...args) => createShortcut.runMutation(() => saveEditor(...args)),
-    deleteItem: (...args) => createShortcut.runMutation(() => deleteItem(...args)),
+    saveEditor: (...args) => runMutation(() => saveEditor(...args)),
+    deleteItem: (...args) => runMutation(() => deleteItem(...args)),
     onChanged: () => {
       // A pre-save background response must never replace the saved record.
       session += 1;
@@ -143,7 +144,7 @@ export function createHrPayrollGallery({ document: documentOption,
   });
   const paymentComposer = gallery === 'FOLHAPGTO' && typeof loadPaymentOptions === 'function' && typeof savePayment === 'function'
     ? createPayrollPaymentComposer({document:doc,host:root,loadOptions:loadPaymentOptions,
-      save: (...args) => createShortcut.runMutation(() => savePayment(...args)), onSaved:async()=>{
+      save: (...args) => runMutation(() => savePayment(...args)), onSaved:async()=>{
       session += 1;busy=false;
       await loadPage(1,null,false,true);
     }}) : null;
@@ -157,6 +158,18 @@ export function createHrPayrollGallery({ document: documentOption,
     } : undefined,
     close: typeof onCreate === 'function' ? closeGallery : () => {},
     isAvailable: () => opened && !destroyed && !busy && !paymentComposer?.isOpen() });
+  let pendingMutations = 0;
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar,
+    onRefresh: () => {
+      autoFilters.sync();
+      return loadPage(page, pageCursors[page] || null, false, true);
+    },
+    isAvailable: () => opened && !destroyed && !busy && !pendingMutations && !paymentComposer?.isOpen() });
+  async function runMutation(operation) {
+    pendingMutations++; refreshShortcut.sync();
+    try { return await createShortcut.runMutation(operation); }
+    finally { pendingMutations--; refreshShortcut.sync(); }
+  }
 
   function selectedFilters() { return {search:search.value.trim(),...Object.fromEntries([...filterControls].map(([name,control])=>[name,control.value.trim()]))}; }
   function applyFilters() {
@@ -223,6 +236,7 @@ export function createHrPayrollGallery({ document: documentOption,
     pageLabel.textContent = `Página ${page}`;
     close.disabled = false;
     createShortcut.sync();
+    refreshShortcut.sync();
   }
 
   async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false, refresh = false) {
@@ -236,21 +250,36 @@ export function createHrPayrollGallery({ document: documentOption,
     const epoch = session;
     const filters = selectedFilters();
     try {
-      const result = await request(gallery, targetPage, 25, cursor, {filters,refresh});
-      if (!opened || destroyed || epoch !== session) return;
-      if(JSON.stringify(filters)!==JSON.stringify(selectedFilters())) return;
+      const current = () => opened && !destroyed && root.isConnected && epoch === session
+        && JSON.stringify(filters) === JSON.stringify(selectedFilters());
+      let result;
+      try { result = await request(gallery, targetPage, 25, cursor, {filters,refresh}); }
+      catch (error) {
+        const invalidCursor = error?.status === 410 || error?.statusCode === 410
+          || /cursor|skip.?token/i.test(`${error?.code || ''} ${error?.message || ''}`);
+        if (!current() || !refresh || targetPage <= 1 || !invalidCursor) throw error;
+        targetPage = 1; cursor = null;
+        result = await request(gallery, 1, 25, null, {filters,refresh});
+      }
+      if (!current()) return;
+      if (refresh && targetPage > 1 && result?.page > 1 && Array.isArray(result.rows) && !result.rows.length) {
+        targetPage = 1; cursor = null;
+        result = await request(gallery, 1, 25, null, {filters,refresh});
+      }
+      if (!current()) return;
       if (result?.gallery !== gallery || !Array.isArray(result.rows)) {
         throw new Error("Resposta da galeria inválida.");
       }
       page = result.page;
-      pageCursors[page] = cursor;
+      if (refresh) pageCursors.splice(page + 1);
+      pageCursors[page] = page === 1 ? null : cursor;
       pageCursors[page + 1] = result.nextCursor || null;
       hasMore = result.hasMore === true && Boolean(result.nextCursor);
       if(!quiet || !filterForm.contains(doc.activeElement)) syncFilterOptions(result);
       drawRows(result.rows);
       if(Number.isInteger(result.count)) status.textContent=`${result.count} registro(s) encontrado(s) · ${result.rows.length} nesta página.`;
     } catch(error) {
-      if (opened && !destroyed && epoch === session) {
+      if (opened && !destroyed && root.isConnected && epoch === session) {
         status.textContent = `Não foi possível carregar os registros. ${error?.message || 'Tente novamente.'}`;
         cards.replaceChildren();
         const retry = element("button", "hr-gallery-button hr-gallery-retry", "Tentar novamente");
@@ -259,7 +288,7 @@ export function createHrPayrollGallery({ document: documentOption,
         cards.append(retry);
       }
     } finally {
-      if (opened && !destroyed && epoch === session) {
+      if (opened && !destroyed && root.isConnected && epoch === session) {
         busy = false;
         updateControls();
       }
@@ -276,6 +305,7 @@ export function createHrPayrollGallery({ document: documentOption,
     busy = false;
     root.hidden = true;
     createShortcut.sync();
+    refreshShortcut.sync();
     onClose?.();
   }
   close.addEventListener("click", closeGallery);
@@ -308,6 +338,7 @@ export function createHrPayrollGallery({ document: documentOption,
     close: closeGallery,
     destroy() {
       createShortcut.destroy();
+      refreshShortcut.destroy();
       doc.defaultView?.clearInterval(refreshTimer);
       doc.defaultView?.removeEventListener('focus', refreshSource);
       doc.removeEventListener('visibilitychange', refreshSource);

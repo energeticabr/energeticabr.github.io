@@ -80,6 +80,37 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
+test('manual refresh bypasses cached launch data, preserves filters and ignores repeated busy clicks', async t => {
+  let generation = 0;
+  const pending = deferred();
+  const ctx = await setup(t, { request: async (operation, payload) => {
+    if (operation !== 'snapshot') return detail();
+    if (payload.refresh) { generation++; return pending.promise; }
+    return snapshot();
+  } });
+  await ctx.gallery.open();
+  input(ctx, 'branch', 'Obra B');
+  input(ctx, 'sort', 'MAIOR DATA');
+  await new Promise(resolve => setTimeout(resolve, 350)); await settle();
+  const refresh = ctx.root().querySelector('[data-gallery-refresh]');
+  assert.ok(refresh, 'always visible refresh control');
+  assert.equal(refresh.closest('details'), null);
+  assert.equal(refresh.disabled, false);
+  refresh.click(); refresh.click(); await settle();
+  assert.equal(generation, 1);
+  assert.equal(refresh.disabled, true);
+  const request = ctx.calls.filter(call => call.operation==='snapshot').at(-1).payload;
+  assert.equal(request.filters.branch, 'Obra B');
+  assert.equal(request.sort, 'MAIOR DATA');
+  pending.resolve(snapshot({rows:[row(901)]})); await settle(); await settle();
+  assert.ok(ctx.root().querySelector('[data-item-id="901"]'));
+  assert.equal(ctx.root().querySelector('[name=branch]').value, 'Obra B');
+  assert.equal(ctx.root().querySelector('[name=sort]').value, 'MAIOR DATA');
+  assert.equal(refresh.disabled, false);
+  await showDetail(ctx);
+  assert.equal(refresh.disabled, true, 'open editor cannot be discarded by refresh');
+});
+
 test('plus cancels background attachment counts before creation and reopening resumes counting', async t => {
   const pending = [];
   let createCalls = 0;
