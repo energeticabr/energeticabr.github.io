@@ -3494,6 +3494,33 @@ test("menu principal não exibe APPS nem o acesso direto à galeria", () => {
   assert.doesNotMatch(markup, /📱 APPS/);
 });
 
+test("menu inicial não oferece o hub antigo, inclusive em respostas legadas", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const view = createChatView(dom.window.document.querySelector('#app'));
+  t.after(() => { view.destroy(); dom.window.close(); });
+  for (const question of ['QUAL ÁREA VOCÊ DESEJA ACESSAR?', 'DESEJA UTILIZAR ELES EM QUAL FLUXO?']) {
+    const opened = [];
+    const actions = ['open-contractor-control-report', 'open-supplier-workforce-report',
+      'open-pending-supplier-payments-report', 'open-pending-work-diaries-report'];
+    for (const action of actions) view.on(action, () => opened.push(action));
+    view.render(signedInState({ messages: [{
+      id: 'retired-reports-menu', role: 'assistant', type: 'poll', question,
+      options: [
+        { id: 'group_pending', reply: 'group_pending', label: 'PENDÊNCIAS' },
+        { id: 'group_supplies', reply: 'group_supplies', label: 'SUPRIMENTOS' },
+        { id: 'action_contractor_reports', reply: 'action_contractor_reports', label: 'RELATÓRIOS' },
+      ],
+    }] }));
+    assert.equal(dom.window.document.querySelector('[data-reply-id="action_contractor_reports"]'), null);
+    for (const action of question.startsWith('QUAL ÁREA') ? actions : []) {
+      const mascot = dom.window.document.querySelector('[data-action="' + action + '"]');
+      assert.ok(mascot, action);
+      mascot.click();
+      assert.ok(opened.includes(action), action + ' continua acionável');
+    }
+  }
+});
+
 test("menu inicial posiciona Power BI logo depois de Gastos Pessoais", () => {
   const markup = renderChatMarkup(signedInState({ messages: [{
     id: "main-menu-powerbi",
@@ -3511,12 +3538,10 @@ test("menu inicial posiciona Power BI logo depois de Gastos Pessoais", () => {
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_personal_expenses",
     "action_powerbi_dashboard",
-    "action_contractor_reports",
     "group_supplies",
     "start_pending_construction_diary",
   ]);
   assert.equal(buttons[1].dataset.label, "📊 POWER BI");
-  assert.equal(buttons[2].dataset.label, "📑 RELATÓRIOS");
   dom.window.close();
 });
 
@@ -3650,7 +3675,6 @@ test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", ()
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_supplies",
     "group_demands",
-    "action_contractor_reports",
     "append_today_construction_diary_photos",
     "start_pending_construction_diary",
   ]);
@@ -3676,7 +3700,6 @@ test("menu inicial mantém apenas adicionar fotos no último botão azul", () =>
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
     "group_supplies",
-    "action_contractor_reports",
     "append_today_construction_diary_photos",
   ]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
@@ -3700,7 +3723,7 @@ test("menu com anexos põe COMEÇAR DIÁRIO latente depois de fotos e em vermelh
   const dom = new JSDOM(markup);
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
   assert.deepEqual(buttons.map(button => button.dataset.replyId), [
-    "group_supplies", "group_demands", "action_contractor_reports", "append_today_construction_diary_photos", "resume_latent_construction_diary",
+    "group_supplies", "group_demands", "append_today_construction_diary_photos", "resume_latent_construction_diary",
   ]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
   dom.window.close();
@@ -3719,7 +3742,7 @@ test("CONTINUAR DIÁRIO latente fica no fim sem destaque vermelho", () => {
   }] }));
   const dom = new JSDOM(markup);
   const buttons = [...dom.window.document.querySelectorAll(".chat-choice-list > .chat-choice-button")];
-  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "action_contractor_reports", "resume_latent_construction_diary"]);
+  assert.deepEqual(buttons.map(button => button.dataset.replyId), ["group_supplies", "resume_latent_construction_diary"]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), false);
   dom.window.close();
 });

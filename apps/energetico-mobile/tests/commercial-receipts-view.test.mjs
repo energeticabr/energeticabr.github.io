@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {JSDOM} from 'jsdom';
 import {createChatView,renderChatMarkup} from '../src/ui/chat-view.js';
 const {createCommercialReceiptsReportView}=await import('../src/ui/commercial-receipts-view.js').catch(e=>{if(e.code==='ERR_MODULE_NOT_FOUND')return {};throw e;});
@@ -17,6 +18,22 @@ function setup(t,loader=async()=>snapshot,vertical=false){
  const view=createCommercialReceiptsReportView({document:dom.window.document,data:{loadSnapshot:loader},now:()=>new Date('2026-10-05T12:00:00Z')});
  t.after(()=>{view.destroy();dom.window.close();});return {view,root:view.element,dom,rotate(v){portrait=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
+test('commercial HOME report preserves its panel styling without the deleted reports hub',async t=>{
+ const {view,root,dom}=setup(t);
+ const style=dom.window.document.createElement('style');
+ style.textContent=readFileSync(new URL('../src/ui/commercial-receipts.css',import.meta.url),'utf8');
+ dom.window.document.head.append(style);
+ await view.open();
+ const panel=dom.window.getComputedStyle(root.querySelector('.cr-report'));
+ assert.equal(panel.width,'min(100%, 1600px)');
+ assert.equal(panel.borderTopWidth,'1px');
+ assert.equal(panel.borderTopStyle,'solid');
+ assert.equal(panel.borderRadius,'12px');
+ assert.ok(parseFloat(panel.paddingTop)>=12 && parseFloat(panel.paddingTop)<=22);
+ assert.equal(dom.window.getComputedStyle(root.querySelector('.cr-filters')).gap,'9px');
+ assert.equal(dom.window.getComputedStyle(root.querySelector('.cr-content')).width,'100%');
+});
+
 test('first orange HOME mascot follows pink pending diaries and dispatches commercial receipts without stealing menu space',t=>{
  const dom=new JSDOM('<main id="app"></main>');dom.window.HTMLCanvasElement.prototype.getContext=()=>null;const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  const state={sessionStatus:'authenticated',account:{name:'Bernardo'},draft:'',pendingFiles:[],messages:[{id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[{id:'group_pending',label:'PENDÊNCIAS'},{id:'group_supplies',label:'SUPRIMENTOS'}]}]};

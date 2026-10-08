@@ -8,7 +8,6 @@
 <link rel="stylesheet" href="../../src/ui/launch-gallery.css">
 <link rel="stylesheet" href="../../src/ui/registration-gallery.css">
 <link rel="stylesheet" href="../../src/ui/hr-payroll-gallery.css">
-<link rel="stylesheet" href="../../src/ui/contractor-reports.css">
 <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
 </head><body><script type="module">
 import { createLaunchGallery } from '../../src/ui/launch-gallery-view.js';
@@ -17,7 +16,6 @@ import { createTasksGallery } from '../../src/ui/tasks-gallery-view.js';
 import { createPaymentProgrammingGallery } from '../../src/ui/payment-programming-gallery-view.js';
 import { createRecurringExpensesGallery } from '../../src/ui/recurring-expenses-gallery-view.js';
 import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
-import { createContractorReportsView } from '../../src/ui/contractor-reports-view.js';
 import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
 import { createHrPayrollReport } from '../../src/ui/hr-payroll-report-view.js';
 import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
@@ -44,7 +42,6 @@ const factories = {
  tasks: () => createTasksGallery({...options,data}),
  payments: () => createPaymentProgrammingGallery({...options,data}),
  recurring: () => createRecurringExpensesGallery({...options,data}),
- reports: () => createContractorReportsView({...options,data}),
  registration: () => createRegistrationGallery({...options,data,kind:'documents'}),
  hr: () => createHrPayrollGallery({...options,gallery:'IDFOLHA',request:async()=>({gallery:'IDFOLHA',rows:[],page:1,hasMore:false})}),
  hrreport: () => createHrPayrollReport({...options,request:async()=>[]}),

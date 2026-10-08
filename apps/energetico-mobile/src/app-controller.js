@@ -47,11 +47,6 @@ async function defaultTasksGalleryDataFactory(options) {
   return createTasksGalleryData(options);
 }
 
-async function defaultContractorReportsFactory(options) {
-  const { createContractorReportsView } = await import("./ui/contractor-reports-view.js");
-  return createContractorReportsView(options);
-}
-
 async function defaultPaymentLedgerFactory(options) {
   const { createPaymentLedgerView } = await import('./ui/payment-ledger-view.js');
   return createPaymentLedgerView(options);
@@ -247,17 +242,6 @@ async function defaultContractorReportDataFactory(options) {
   return createContractorReportData(options);
 }
 
-async function defaultPresencePaymentReportDataFactory(options) {
-  const { createPresencePaymentReportData } = await import("./chat/presence-payment-report-data.js");
-  return createPresencePaymentReportData(options);
-}
-
-async function defaultExtraReportsFactory(options) {
-  if (!options.document?.createElement) return [];
-  const { createExtraReports } = await import("./ui/extra-reports-factory.js");
-  return createExtraReports(options);
-}
-
 async function defaultPaymentProgrammingGalleryFactory(options) {
   const { createPaymentProgrammingGallery } = await import("./ui/payment-programming-gallery-view.js");
   return createPaymentProgrammingGallery(options);
@@ -366,7 +350,6 @@ const PORTAL_TRANSFER_ATTACHMENTS_ID = "portal_transfer_attachments";
 const LAUNCH_GALLERY_ID = "action_launch_gallery";
 const ORDERS_GALLERY_ID = "action_orders_gallery";
 const TASKS_GALLERY_ID = "action_tasks_gallery";
-const CONTRACTOR_REPORTS_ID = "action_contractor_reports";
 const PAYMENT_LEDGER_ID = 'action_payment_ledger';
 const CARGOS_TABLE_ID = 'action_cargos_table';
 const ATTENDANCE_SUMMARY_ID = 'action_attendance_summary';
@@ -916,7 +899,6 @@ export function createAppController({
   ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
   tasksGalleryFactory = defaultTasksGalleryFactory,
   tasksGalleryDataFactory = defaultTasksGalleryDataFactory,
-  contractorReportsFactory = defaultContractorReportsFactory,
   cargosFactory = async options => (await import('./ui/cargos-view.js')).createCargosView(options),
   cargosDataFactory = async options => (await import('./chat/cargos-data.js')).createCargosData(options),
   attendanceSummaryFactory = defaultAttendanceSummaryFactory,
@@ -958,9 +940,6 @@ export function createAppController({
   provisionReportFactory = defaultProvisionReportFactory,
   orderValidationReportFactory = defaultOrderValidationReportFactory,
   paymentLedgerDataFactory = defaultPaymentLedgerDataFactory,
-  contractorReportDataFactory = defaultContractorReportDataFactory,
-  presencePaymentReportDataFactory = defaultPresencePaymentReportDataFactory,
-  extraReportsFactory = defaultExtraReportsFactory,
   paymentProgrammingGalleryFactory = defaultPaymentProgrammingGalleryFactory,
   paymentProgrammingGalleryDataFactory = defaultPaymentProgrammingGalleryDataFactory,
   recurringExpensesGalleryFactory = defaultRecurringExpensesGalleryFactory,
@@ -1011,8 +990,6 @@ export function createAppController({
   const ordersGalleryDataOpening = new Map();
   let tasksGallery = null;
   let tasksGalleryOpening = null;
-  let contractorReports = null;
-  let contractorReportsOpening = null;
   let paymentLedger = null;
   let paymentLedgerOpening = null;
   let spendingReportsRevision = 0;
@@ -4347,8 +4324,6 @@ export function createAppController({
     managementReport = null;
     paymentLedger?.destroy?.();
     paymentLedger = null;
-    contractorReports?.destroy?.();
-    contractorReports = null;
   }
 
   function disposeAttendanceSummaryReport() {
@@ -4570,7 +4545,6 @@ export function createAppController({
       launchGallery,
       ordersGallery,
       tasksGallery,
-      contractorReports,
       paymentLedger,
       managementReport,
       cargosTable,
@@ -4652,7 +4626,7 @@ export function createAppController({
     // Legacy payment reports do not close other overlays on open. Invalidate
     // both the source and a superseded destination before showing another one.
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     closeGalleryOverlays();
@@ -5295,67 +5269,6 @@ export function createAppController({
       }
     });
     tasksGalleryOpening = opening;
-    return opening;
-  }
-
-  async function openContractorReports() {
-    if (!account || stopped || flowBusy()) return false;
-    disposeSupplierPayrollReport();
-    disposeSacPathologiesReport();
-    disposeQuotationReport();
-    disposeDepreciationReport();
-    disposeDocumentControlReport();
-    disposeTaskAssociationReport();
-    disposeDelegatedDeadlineReport();
-    disposeSupplierWorkforceReport();
-    disposeContractorControlReport();
-    disposeGeneralSummaryReport();
-    disposePendingSupplierPaymentsReport();
-    disposePendingWorkDiariesReport();
-    if (contractorReportsOpening) return contractorReportsOpening;
-    const reportsAccount = account;
-    const openingIsCurrent = galleryOpeningGuard(reportsAccount);
-    const assertSession = () => {
-      if (stopped || account !== reportsAccount) throw new Error("A sessão dos Relatórios foi encerrada.");
-    };
-    const opening = Promise.resolve().then(async () => {
-      try {
-        if (!contractorReports) {
-          const tokenProvider = scopes => {
-            assertSession();
-            return auth.getToken(scopes).catch(async error => {
-              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
-              await auth.authorize(scopes, { resumeAction: CONTRACTOR_REPORTS_ID });
-              assertSession();
-              return auth.getToken(scopes);
-            });
-          };
-          const data = await contractorReportDataFactory({ tokenProvider });
-          if (!openingIsCurrent()) return false;
-          const presenceData = await presencePaymentReportDataFactory({ tokenProvider });
-          if (!openingIsCurrent()) return false;
-          const extraReports = await extraReportsFactory({ tokenProvider, document: globalThis.document });
-          if (!openingIsCurrent()) return false;
-          assertSession();
-          const panel = await contractorReportsFactory({
-            data,
-            presenceData,
-            extraReports,
-            onHome: () => { assertSession(); return returnToMainMenu(); },
-          });
-          if (!openingIsCurrent()) { panel.destroy?.(); return false; }
-          contractorReports = panel;
-        }
-        await contractorReports.open();
-        return openingIsCurrent();
-      } catch (error) {
-        if (openingIsCurrent()) setSessionError(error, "Não foi possível abrir os Relatórios.");
-        return false;
-      } finally {
-        if (contractorReportsOpening === opening) contractorReportsOpening = null;
-      }
-    });
-    contractorReportsOpening = opening;
     return opening;
   }
 
@@ -6536,7 +6449,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     if (depreciationReportOpening) return depreciationReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -6673,7 +6586,7 @@ export function createAppController({
     if (!account || stopped || flowBusy() || store.getState().activeFlow) return false;
     if (documentControlReportOpening) return documentControlReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -6811,7 +6724,7 @@ export function createAppController({
     if (taskAssociationReportSession && taskAssociationReportSession.origin !== globalThis.location?.origin) disposeTaskAssociationReport();
     if (taskAssociationReportOpening) return taskAssociationReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -6953,7 +6866,7 @@ export function createAppController({
     if (delegatedDeadlineReportSession && delegatedDeadlineReportSession.origin !== globalThis.location?.origin) disposeDelegatedDeadlineReport();
     if (delegatedDeadlineReportOpening) return delegatedDeadlineReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -7095,7 +7008,7 @@ export function createAppController({
     if (supplierWorkforceReportSession && supplierWorkforceReportSession.origin !== globalThis.location?.origin) disposeSupplierWorkforceReport();
     if (supplierWorkforceReportOpening) return supplierWorkforceReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -7242,7 +7155,7 @@ export function createAppController({
     if (contractorControlReportSession?.origin !== globalThis.location?.origin) disposeContractorControlReport();
     if (contractorControlReportOpening) return contractorControlReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     spendingReportsRevision++;
@@ -7372,7 +7285,7 @@ export function createAppController({
     }
     if (generalSummaryReportOpening) return generalSummaryReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     spendingReportsRevision++;
@@ -7502,7 +7415,7 @@ export function createAppController({
     if (pendingSupplierPaymentsReportSession && pendingSupplierPaymentsReportSession.origin !== globalThis.location?.origin) disposePendingSupplierPaymentsReport();
     if (pendingSupplierPaymentsReportOpening) return pendingSupplierPaymentsReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -7648,7 +7561,7 @@ export function createAppController({
     if (pendingWorkDiariesReportSession && pendingWorkDiariesReportSession.origin !== globalThis.location?.origin) disposePendingWorkDiariesReport();
     if (pendingWorkDiariesReportOpening) return pendingWorkDiariesReportOpening;
     galleryOpeningRevision++;
-    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = contractorReportsOpening = null;
+    launchGalleryOpening = ordersGalleryOpening = tasksGalleryOpening = null;
     paymentProgrammingGalleryOpening = recurringExpensesGalleryOpening = hrPayrollGalleryOpening = null;
     registrationGalleryOpenings.clear();
     // A pending factory has no panel for closeGalleryOverlays to close. Invalidate
@@ -9521,7 +9434,7 @@ export function createAppController({
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
       if (command.replyId === ORDERS_GALLERY_ID) return openOrdersGallery();
       if (command.replyId === TASKS_GALLERY_ID) return openTasksGallery();
-      if (command.replyId === CONTRACTOR_REPORTS_ID) return openContractorReports();
+      if (command.replyId === "action_contractor_reports") return false;
       if (command.replyId === PAYMENT_LEDGER_ID) return openPaymentLedger();
       if (command.replyId === CARGOS_TABLE_ID) return openCargosTable();
       if (command.replyId === MANAGEMENT_REPORT_ID) return openPaymentLedger('management');
@@ -9973,7 +9886,6 @@ export function createAppController({
     else if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
     else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
-    else if (pendingAction === CONTRACTOR_REPORTS_ID) await openContractorReports();
     else if (pendingAction === PAYMENT_LEDGER_ID) await openPaymentLedger();
     else if (pendingAction === CARGOS_TABLE_ID) await openCargosTable();
     else if (pendingAction === MANAGEMENT_REPORT_ID) await openPaymentLedger('management');

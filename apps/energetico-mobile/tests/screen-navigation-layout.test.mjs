@@ -45,7 +45,7 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
       const response = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
       assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails)); return response.result.value;
     };
-    for (const screen of ['launches','orders','tasks','payments','recurring','reports','registration','hr','hrreport','payroll','payroll-stage','payroll-summary','payroll-summary-long','powerbi']) {
+    for (const screen of ['launches','orders','tasks','payments','recurring','registration','hr','hrreport','payroll','payroll-stage','payroll-summary','payroll-summary-long','powerbi']) {
       for (const [width, height] of [[320,740],[390,844],[1365,768],[844,390]]) {
         await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false},sessionId);
         const query = '?screen='+screen+'&w='+width;

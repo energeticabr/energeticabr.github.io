@@ -30,7 +30,6 @@ test('real HOME mascot click opens SAC through the chat view event', async t => 
 });
 
 const localReports = [
-  ['action_contractor_reports', 'contractorReportsFactory', 'contractorReportDataFactory'],
   ['action_payment_ledger', 'paymentLedgerFactory', 'paymentLedgerDataFactory'],
   ['action_management_report', 'managementReportFactory', 'paymentLedgerDataFactory'],
   ['provision-report', 'provisionReportFactory', 'paymentLedgerDataFactory'],

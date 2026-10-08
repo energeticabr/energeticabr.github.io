@@ -1,5 +1,9 @@
+.cr-overlay { color:#183b5e; min-width:0; max-width:100%; }
+.cr-dialog .cr-report { width:min(100%, 1600px); margin-inline:auto; padding:clamp(12px, 1.5vw, 22px); border:1px solid #c4d4df; border-radius:12px; background:#fff; min-width:0; max-width:100%; }
+.cr-dialog .cr-content { width:100%; min-width:0; max-width:100%; }
+@media (max-width:650px) { .cr-dialog .cr-content { padding-inline:max(8px, env(safe-area-inset-left)); } }
 .cr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
-.cr-filters { grid-template-columns:4fr 4fr 17fr 18fr 22fr 18fr 17fr; }
+.cr-filters { grid-template-columns:4fr 4fr 17fr 18fr 22fr 18fr 17fr; gap:9px; }
 .cr-filters:has(> .report-print-actions) { grid-template-columns:auto 17fr 18fr 22fr 18fr 17fr; }
 .cr-filters .pl-filter-label { height:28px; min-height:28px; display:grid; place-items:center; white-space:normal; }
 .cr-content { font:clamp(7px,.9vw,13px)/1.3 Arial,sans-serif; color:#111; }
