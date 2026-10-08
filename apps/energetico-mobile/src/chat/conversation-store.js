@@ -1,5 +1,6 @@
 import { normalizeLaunchSnapshot } from "./launch-snapshot.js";
 import { normalizeMeasurementSnapshot } from "./measurement-snapshot.js";
+import { normalizeProvisionSnapshotForFlow } from "./provision-snapshot.js";
 
 function cloneRemoteMessage(message, nextId) {
   const type = ["text", "poll", "image", "document"].includes(message?.type)
@@ -247,6 +248,7 @@ export function createConversationStore({
     if (!Object.hasOwn(result, "activeFlow")) return result.resetConversation ? null : state.activeFlow;
     const launches = normalizeLaunchSnapshot(result.activeFlow?.launches);
     const measurementLines = normalizeMeasurementSnapshot(result.activeFlow?.measurementLines);
+    const provisionLines = normalizeProvisionSnapshotForFlow(result.activeFlow);
     const epiDelivery = normalizeEpiDeliverySnapshot(result.activeFlow?.epiDelivery);
     const rawSigningPlacement = result.activeFlow?.documentSigningPlacement;
     const signingPlacement = rawSigningPlacement && typeof rawSigningPlacement === "object"
@@ -260,6 +262,7 @@ export function createConversationStore({
       ? Object.freeze({ id: String(result.activeFlow.id), title: String(result.activeFlow.title),
         ...(launches ? { launches } : {}),
         ...(measurementLines ? { measurementLines } : {}),
+        ...(provisionLines ? { provisionLines } : {}),
         ...(epiDelivery ? { epiDelivery } : {}),
         ...(typeof result.activeFlow.contextId === "string" ? { contextId: result.activeFlow.contextId } : {}),
         ...(typeof result.activeFlow.paused === "boolean" ? { paused: result.activeFlow.paused } : {}),
