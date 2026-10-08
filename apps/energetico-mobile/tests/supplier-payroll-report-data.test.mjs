@@ -10,18 +10,23 @@ const create = options => {
   return dataModule.createSupplierPayrollReportData(options);
 };
 const columns = {
+  FORNECEDORES: ['CADASTRO', 'PROFISSÃO'],
   IDFOLHA: ['FORNECEDOR', 'MESREFERENCIA'],
   FOLHAPGTO: ['FORNECEDOR', 'TIPOPGTO', 'DATA', 'IDFOLHA', 'IDLANCAMENTO', 'VALORUNITARIO', 'QTD'],
   LANCAMENTOS: ['VALOR UNITÁRIO', 'QUANTIDADE'],
 };
 const sheet = (id = '2', supplier = 'Ana', month = '10/2026') =>
   ({ id, fields: { field_0: supplier, field_1: month } });
+const vendor = (id = '1', supplier = 'Ana', profession = 'Pedreira') =>
+  ({ id, fields: { field_0: supplier, field_1: profession } });
 const payment = (id = '1', payroll = '2', launch = '71', supplier = 'Ana') => ({ id,
   fields: { field_0: supplier, field_1: 'SALÁRIO', field_2: '2026-11-05', field_3: payroll,
     field_4: launch, field_5: 9999, field_6: 9999 } });
 const page = items => ({ items, hasMore: false, nextLink: '', batchCount: items.length });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 function fixture(overrides = {}) {
+  // Keep each external list's response separate from payment-only overrides.
+  const { getSuppliersPage = async () => page([vendor()]), ...repositoryOverrides } = overrides;
   const scans = [], gets = [], writes = [];
   const repository = {
     async resolveList(site, names) {
@@ -43,16 +48,25 @@ function fixture(overrides = {}) {
     },
     async updateItem(...args) { writes.push(args); throw new Error('unexpected write'); },
     async createItem(...args) { writes.push(args); throw new Error('unexpected write'); },
-    ...overrides,
+    ...repositoryOverrides,
+  };
+  const getItemsPage = repository.getItemsPage;
+  repository.getItemsPage = (...args) => {
+    if (args[1] !== 'FORNECEDORES') return getItemsPage(...args);
+    scans.push('FORNECEDORES');
+    assert.equal(new URLSearchParams(args[2]).get('$top'), '100');
+    assert.equal(new URLSearchParams(args[2]).get('$filter'), null);
+    assert.ok(args[3].signal);
+    return getSuppliersPage(...args);
   };
   return { repository, scans, gets, writes };
 }
 
-test('snapshot scans only two lists; expansion links by reference sheet and rereads current financial values', async () => {
+test('snapshot scans three read-only lists; expansion links by reference sheet and rereads current financial values', async () => {
   const f = fixture(), data = create({ repository: f.repository });
   const source = await data.loadSnapshot();
   assert.deepEqual(source, { complete: true, sheets: [
-    { id: '2', supplier: 'Ana', month: '2026-10', referenceLabel: '10/2026' },
+    { id: '2', supplier: 'Ana', month: '2026-10', referenceLabel: '10/2026', profession: 'Pedreira' },
   ] });
   assert.ok(Object.isFrozen(source)); assert.ok(Object.isFrozen(source.sheets));
   assert.deepEqual(f.gets, []);
@@ -60,7 +74,7 @@ test('snapshot scans only two lists; expansion links by reference sheet and rere
     { id: '1', payrollId: '2', supplier: 'Ana', type: 'SALÁRIO', date: '2026-11-05',
       launchId: '71', unitValue: 10.01, quantity: 1.5, totalCents: 1502 },
   ]);
-  assert.deepEqual(f.scans.sort(), ['FOLHAPGTO', 'IDFOLHA']);
+  assert.deepEqual(f.scans.sort(), ['FOLHAPGTO', 'FORNECEDORES', 'IDFOLHA']);
   assert.deepEqual(f.gets, [['LANCAMENTOS', '71']]); assert.deepEqual(f.writes, []);
 });
 
@@ -73,7 +87,8 @@ test('all pages across the 100-page window contribute suppliers months and payme
   } });
   const data = create({ repository: f.repository }), source = await data.loadSnapshot();
   assert.equal(source.sheets.length, 101);
-  assert.deepEqual(source.sheets.at(-1), { id: '101', supplier: 'Zélia', month: '2026-09', referenceLabel: '09/2026' });
+  assert.deepEqual(source.sheets.at(-1), { id: '101', supplier: 'Zélia', month: '2026-09', referenceLabel: '09/2026',
+    profession: 'Profissão não informada' });
   // Payment labels must agree with the selected reference sheet.
   await assert.rejects(data.loadPaymentsForPayrollIds(['101']), /fornecedor/i);
   const rows = await data.loadPaymentsForPayrollIds(['100']);
@@ -352,8 +367,9 @@ test('one service uses real Graph transport for refresh and concurrent details',
       else if (path.endsWith('/columns')) {
         const list = path.split('/').at(-2);
         body = { value: columns[list].map((displayName, i) => ({ name: `field_${i}`, displayName })) };
-      } else if (path.endsWith('/items')) body = { value: path.includes('/IDFOLHA/') ? [sheet()] : [payment()] };
-      else if (path.endsWith('/lists')) body = { value: ['IDFOLHA', 'FOLHAPGTO', 'LANCAMENTOS'].map(id =>
+      } else if (path.endsWith('/items')) body = { value: path.includes('/FORNECEDORES/') ? [vendor()]
+        : path.includes('/IDFOLHA/') ? [sheet()] : [payment()] };
+      else if (path.endsWith('/lists')) body = { value: ['IDFOLHA', 'FOLHAPGTO', 'FORNECEDORES', 'LANCAMENTOS'].map(id =>
         ({ id, displayName: id, list: { template: 'genericList' } })) };
       else body = { id: 'site-1' };
       return { ok: true, status: 200, json: async () => body };
@@ -365,7 +381,7 @@ test('one service uses real Graph transport for refresh and concurrent details',
     data.loadPaymentsForPayrollIds(['2'], { signal: b.signal })]);
   assert.deepEqual(rows.map(r => r[0].totalCents), [1502, 1502]);
   assert.ok(tokenSignals.every(Boolean));
-  assert.equal(requests.filter(url => new URL(url).pathname.endsWith('/items')).length, 2);
+  assert.equal(requests.filter(url => new URL(url).pathname.endsWith('/items')).length, 3);
   await data.loadSnapshot(); assert.equal((await data.loadPaymentsForPayrollIds(['2']))[0].totalCents, 1502);
 });
 
@@ -406,9 +422,9 @@ test('real supplier expansions isolate pending LANCAMENTOS columns when another 
         const list = path.split('/').at(-2);
         if (list === 'LANCAMENTOS' && ++metadataReads === 1) { entered.resolve(); await release.promise; }
         body = { value: columns[list].map((displayName, i) => ({ name: `field_${i}`, displayName })) };
-      } else if (path.endsWith('/items')) body = { value: path.includes('/IDFOLHA/')
-        ? [sheet(), sheet('3', 'Bia')] : [payment(), payment('2', '3', '72', 'Bia')] };
-      else if (path.endsWith('/lists')) body = { value: ['IDFOLHA', 'FOLHAPGTO', 'LANCAMENTOS'].map(id =>
+      } else if (path.endsWith('/items')) body = { value: path.includes('/FORNECEDORES/') ? [vendor()]
+        : path.includes('/IDFOLHA/') ? [sheet(), sheet('3', 'Bia')] : [payment(), payment('2', '3', '72', 'Bia')] };
+      else if (path.endsWith('/lists')) body = { value: ['IDFOLHA', 'FOLHAPGTO', 'FORNECEDORES', 'LANCAMENTOS'].map(id =>
         ({ id, displayName: id, list: { template: 'genericList' } })) };
       else body = { id: 'site-1' };
       return { ok: true, status: 200, json: async () => body };
@@ -425,4 +441,162 @@ test('real supplier expansions isolate pending LANCAMENTOS columns when another 
   assert.equal(survivor.error, undefined, 'Bia expansion must survive Ana collapse during metadata');
   assert.deepEqual(survivor.value.map(r => [r.supplier, r.payrollId, r.totalCents]), [['Bia', '3', 5000]]);
   assert.deepEqual(launchIds, ['72']); assert.equal(metadataReads, 2);
+});
+
+test('profession joins only exact case-insensitive labels without inferred accents or supplier IDs', async () => {
+  const f = fixture({
+    async getItemsPage(_site, list) {
+      return page(list === 'IDFOLHA' ? [sheet(), sheet('3', 'Ána'), sheet('4', 'Ana Maria'),
+        sheet('5', '1'), sheet('6', ''), sheet('7', 'Bia')] : []);
+    },
+    async getSuppliersPage() {
+      return page([vendor('1', { LookupValue: ' ANA ' }, { Value: ' Pedreira ' }),
+        vendor('2', '', 'Eletricista'), vendor('3', 'Bia', ' ')]);
+    },
+  });
+  const source = await create({ repository: f.repository }).loadSnapshot();
+  assert.deepEqual(source.sheets.map(s => [s.supplier, s.profession]), [
+    ['Ana', 'Pedreira'], ['Ána', 'Profissão não informada'], ['Ana Maria', 'Profissão não informada'],
+    ['1', 'Profissão não informada'], ['Fornecedor não informado', 'Profissão não informada'],
+    ['Bia', 'Profissão não informada'],
+  ]);
+  assert.ok(source.sheets.every(Object.isFrozen));
+  assert.deepEqual(f.gets, []); assert.deepEqual(f.writes, []);
+});
+
+test('conflicting duplicate supplier professions remain not informed in either page order', async () => {
+  for (const professions of [['Pedreira', 'Eletricista', 'Pedreira'], ['Eletricista', 'Pedreira', 'Eletricista'],
+    ['', 'Pedreira', 'Pedreira']]) {
+    const f = fixture({ async getSuppliersPage(_site, _list, _query, options) {
+      const index = Number(options.cursor || 0);
+      return { items: [vendor(String(index + 1), index ? 'ANA' : 'Ana', professions[index])],
+        hasMore: index < 2, nextLink: index < 2 ? String(index + 1) : '' };
+    } });
+    assert.equal((await create({ repository: f.repository }).loadSnapshot()).sheets[0].profession,
+      'Profissão não informada');
+  }
+  const f = fixture({ async getSuppliersPage() { return page([vendor(), vendor('2', 'ANA', 'pedreira')]); } });
+  assert.equal((await create({ repository: f.repository }).loadSnapshot()).sheets[0].profession, 'Pedreira');
+});
+
+test('supplier profession is joined from page 101 beyond the repository page window', async () => {
+  const f = fixture({ async getSuppliersPage(_site, _list, _query, options) {
+    const n = Number(options.cursor || 1);
+    assert.equal(options.pageNumber, (n - 1) % 100 + 1); assert.equal(options.maxPages, 100);
+    return { items: [vendor(String(n), n === 101 ? 'Ana' : `Other ${n}`, 'Eletricista')],
+      hasMore: n < 101, nextLink: n < 101 ? String(n + 1) : '', batchCount: 1 };
+  } });
+  assert.equal((await create({ repository: f.repository }).loadSnapshot()).sheets[0].profession, 'Eletricista');
+  assert.equal(f.scans.filter(list => list === 'FORNECEDORES').length, 101);
+});
+
+test('FORNECEDORES renamed Title and FORNECEDOR alias ignore computed mirrors', async () => {
+  for (const label of ['CADASTRO', 'FORNECEDOR']) {
+    const f = fixture(); const original = f.repository.getColumns;
+    f.repository.getColumns = async (site, list) => list !== 'FORNECEDORES' ? original(site, list) : [
+      { name: 'Title', displayName: label }, { name: 'field_1', displayName: 'PROFISSÃO' },
+      ...['LinkTitle', 'LinkTitleNoMenu', 'LinkTitle2'].map(name => ({ name, displayName: label })),
+      { name: 'computed', displayName: 'PROFISSÃO', computed: { formula: 'x' } },
+    ];
+    f.repository.getItemsPage = async (_site, list) => page(list === 'FORNECEDORES'
+      ? [{ id: '1', fields: { Title: 'Ana', field_1: 'Eletricista' } }]
+      : list === 'IDFOLHA' ? [sheet()] : []);
+    assert.equal((await create({ repository: f.repository }).loadSnapshot()).sheets[0].profession, 'Eletricista');
+  }
+});
+
+test('missing or ambiguous FORNECEDORES schema fails instead of inventing a profession', async () => {
+  for (const badColumns of [null, [], [{ name: 'Title', displayName: 'CADASTRO' }],
+    [{ name: 'p', displayName: 'PROFISSAO' }],
+    [{ name: 'Title', displayName: 'CADASTRO' }, { name: 'other', displayName: 'FORNECEDOR' },
+      { name: 'p', displayName: 'PROFISSAO' }],
+    [{ name: 'Title', displayName: 'CADASTRO' }, { name: 'p', displayName: 'PROFISSAO' },
+      { name: 'other', displayName: 'PROFISSÃO' }]]) {
+    const f = fixture(); const original = f.repository.getColumns;
+    f.repository.getColumns = async (site, list) => list === 'FORNECEDORES' ? badColumns : original(site, list);
+    const data = create({ repository: f.repository });
+    await assert.rejects(data.loadSnapshot(), TypeError);
+    await assert.rejects(data.loadPaymentsForPayrollIds(['2']), /snapshot/i);
+    assert.deepEqual(f.gets, []);
+  }
+});
+
+test('malformed supplier scalar fields reject complete snapshots', async () => {
+  for (const row of [vendor('1', false), vendor('1', ['Ana']), vendor('1', 'Ana', false),
+    vendor('1', 'Ana', {}), vendor('1', 'Ana', { Value: ['Pedreira'] })]) {
+    const f = fixture({ async getSuppliersPage() { return page([row]); } });
+    await assert.rejects(create({ repository: f.repository }).loadSnapshot(), TypeError);
+  }
+});
+
+test('incomplete or cyclic supplier pages never expose a usable snapshot', async () => {
+  for (const kind of ['partial', 'cursor', 'duplicate', 'count']) {
+    let n = 0;
+    const f = fixture({ async getSuppliersPage() {
+      n++;
+      if (kind === 'partial') return { ...page([vendor()]), partial: true };
+      if (kind === 'count') return { ...page([vendor()]), batchCount: 2 };
+      return { items: [vendor(kind === 'duplicate' ? '1' : String(n))], hasMore: true,
+        nextLink: kind === 'cursor' ? 'next' : String(n) };
+    } });
+    const data = create({ repository: f.repository });
+    await assert.rejects(data.loadSnapshot(), TypeError);
+    await assert.rejects(data.loadPaymentsForPayrollIds(['2']), /snapshot/i);
+  }
+});
+
+test('supplier metadata and page cancellation consume late responses without subsequent reads', async () => {
+  for (const boundary of ['resolveList', 'getColumns', 'getItemsPage']) {
+    const f = fixture(), entered = deferred(), release = deferred();
+    const original = f.repository[boundary]; let supplierReads = 0;
+    f.repository[boundary] = async (...args) => {
+      const list = boundary === 'resolveList' ? args[1][0] : args[1];
+      if (list !== 'FORNECEDORES') return original(...args);
+      supplierReads++; entered.resolve(); await release.promise;
+      if (boundary === 'getItemsPage') return { items: [vendor()], hasMore: true, nextLink: 'next' };
+      return original(...args);
+    };
+    const controller = new AbortController(), data = create({ repository: f.repository });
+    const result = data.loadSnapshot({ signal: controller.signal });
+    // Before implementation the supplier boundary is never entered; fail promptly.
+    await Promise.race([entered.promise, result.then(() => assert.fail('FORNECEDORES must be read'))]);
+    controller.abort(); await assert.rejects(result, { name: 'AbortError' });
+    release.resolve(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(supplierReads, 1);
+    await assert.rejects(data.loadPaymentsForPayrollIds(['2']), /snapshot/i);
+  }
+});
+
+test('actual Graph repository normalizes paginated supplier responses before joining profession', async () => {
+  const supplierPages = [];
+  const data = create({
+    tokenProvider: async () => 'test-token',
+    siteConfig: { personal: { host: 'example.sharepoint.com', path: '/sites/test', readTransport: 'graph' } },
+    fetchImpl: async (url, options) => {
+      assert.equal(options.method, 'GET'); assert.ok(options.signal);
+      const parsed = new URL(url), path = parsed.pathname;
+      let body;
+      if (path.endsWith('/columns')) {
+        const list = path.split('/').at(-2);
+        body = { value: list === 'FORNECEDORES' ? [
+          { name: 'Title', displayName: 'CADASTRO' }, { name: 'profession', displayName: 'PROFISSÃO' },
+          { name: 'LinkTitle', displayName: 'CADASTRO' },
+        ] : columns[list].map((displayName, i) => ({ name: `field_${i}`, displayName })) };
+      } else if (path.endsWith('/FORNECEDORES/items')) {
+        const cursor = parsed.searchParams.get('$skiptoken'); supplierPages.push(cursor);
+        body = cursor ? { value: [{ id: '2', fields: { Title: ' ANA ', profession: { Value: ' Eletricista ' } } }] }
+          : { value: [{ id: '1', fields: { Title: 'Other', profession: 'Pedreira' } }],
+            '@odata.nextLink': 'https://graph.microsoft.com/v1.0/sites/site-1/lists/FORNECEDORES/items?$skiptoken=second' };
+      } else if (path.endsWith('/items')) body = { value: path.includes('/IDFOLHA/') ? [sheet()] : [payment()] };
+      else if (path.endsWith('/lists')) body = { value: ['IDFOLHA', 'FOLHAPGTO', 'FORNECEDORES', 'LANCAMENTOS']
+        .map(id => ({ id, displayName: id, list: { template: 'genericList' } })) };
+      else if (path.endsWith('/items/71')) body = { id: '71', fields: { field_0: 10.01, field_1: 1.5 } };
+      else body = { id: 'site-1' };
+      return { ok: true, status: 200, json: async () => body };
+    },
+  });
+  const source = await data.loadSnapshot();
+  assert.equal(source.sheets[0].profession, 'Eletricista');
+  assert.deepEqual(supplierPages, [null, 'second']);
+  assert.equal((await data.loadPaymentsForPayrollIds(['2']))[0].totalCents, 1502);
 });

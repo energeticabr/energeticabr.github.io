@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Teste do layout de folhas</title></head><body><main id="app"></main>
+<script type="module">
+import '/src/styles.css';import '/src/ui/searchable-filter-selects.css';import '/src/ui/payment-ledger.css';import '/src/ui/report-print.css';import '/src/ui/supplier-payroll-report.css';
+import {createSupplierPayrollReportView} from '/src/ui/supplier-payroll-report-view.js';
+import {decorateReportNavigation} from '/src/ui/report-navigation.js';
+import {decorateReportPrint} from '/src/ui/report-print.js';
+const view=decorateReportNavigation(decorateReportPrint(createSupplierPayrollReportView({document,now:()=>new Date('2026-10-08T12:00:00Z'),data:{
+ loadSnapshot:async()=>({complete:true,sheets:[{id:'9',supplier:'CLEITON CESAR NONATO',month:'2026-10',profession:'Servente de Pedreiro'},{id:'3',supplier:'EDGAR NELSON DA SILVA',month:'2026-10',profession:'Mestre de Obras'},{id:'5',supplier:'FELICIANO SOARES COM NOME LONGO PARA VERIFICAR QUE NÃO CORTA',month:'2026-10',profession:'Pedreiro'}]}),
+ loadPaymentsForPayrollIds:async ids=>Array.from({length:3},(_,i)=>({id:String(12873+i),payrollId:ids[0],type:['Salário','Ajuda de Custo','Vale Transporte'][i],date:'2026-10-05',launchId:String(45512+i),unitValue:527,quantity:1,totalCents:52700}))
+}}),{action:'open-supplier-payroll-report'}),{action:'open-supplier-payroll-report',onNavigate:async()=>{}});
+await view.open();await new Promise(resolve=>setTimeout(resolve,0));
+const root=view.element,first=root.querySelector('details');first.open=true;first.dispatchEvent(new Event('toggle'));await new Promise(resolve=>setTimeout(resolve,0));
+await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const bounds=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height,center:r.top+r.height/2};};
+const content=root.querySelector('.spr-content'),toolbar=root.querySelector('.spr-filters'),summaries=[...root.querySelectorAll('summary')],arrows=[...root.querySelectorAll('.report-navigation-arrow')];
+document.documentElement.dataset.pickerArrows=JSON.stringify([...toolbar.querySelectorAll('.sfs-field')].map(field=>({field:bounds(field),arrow:bounds(field.querySelector('.sfs-arrow'))})));
+document.documentElement.dataset.layout=JSON.stringify({width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth-innerWidth,contentOverflow:content.scrollWidth-content.clientWidth,toolbar:bounds(toolbar),logo:bounds(toolbar.querySelector('img')),logoLoaded:toolbar.querySelector('img').naturalWidth>0,arrows:arrows.map(bounds),summaryBounds:summaries.map(bounds),summaryColors:summaries.map(node=>getComputedStyle(node).backgroundColor),paymentColors:[...first.querySelectorAll('tbody tr')].map(node=>getComputedStyle(node).backgroundColor),paymentTable:bounds(first.querySelector('table')),filterCount:toolbar.querySelectorAll('select').length,controlBounds:[...toolbar.querySelectorAll('.sfs-field,.report-print-actions,.spr-close')].map(bounds),headerMetricWidths:[...first.querySelectorAll('.spr-metric')].map(node=>({width:node.clientWidth,scroll:node.scrollWidth})),headerTexts:[...first.querySelectorAll('.spr-metric-value')].map(node=>node.textContent)});
+</script></body></html>

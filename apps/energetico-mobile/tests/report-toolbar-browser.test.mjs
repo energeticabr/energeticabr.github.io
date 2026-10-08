@@ -66,7 +66,7 @@ test('supplier payroll reserves a navigation margin so its previous arrow never 
    const dom=new JSDOM(stdout);
    try{
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
-    assert.equal(result.namesLeft.length,12);assert.ok(result.titleLeft>result.arrowRight,JSON.stringify(result));
+    assert.equal(result.namesLeft.length,12);assert.ok(result.contentLeft>result.arrowRight,JSON.stringify(result));
     assert.ok(result.namesLeft.every(left=>left>result.arrowRight),JSON.stringify(result));assert.ok(result.overflow<=1,JSON.stringify(result));
    }finally{dom.window.close();}
   }
