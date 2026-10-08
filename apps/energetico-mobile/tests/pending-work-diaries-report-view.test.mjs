@@ -312,8 +312,8 @@ test('real print decorator gates busy/failure and PDF rotation returns to the sa
   assert.equal(print.disabled, false);
 });
 
-// Break caught: fixed widths or undersized columns cause overflow on supported landscape viewports.
-test('report fills horizontal phone and tablet width with readable table and toolbar', {timeout:120000}, async t => {
+// Break caught: oversized navigation gutters or duplicated safe areas waste report width.
+test('report fills horizontal phone and tablet width with readable table and toolbar', {timeout:180000}, async t => {
   assert.equal(typeof createPendingWorkDiariesReportView, 'function');
   assert.ok(REPORT_PDF_TITLES[action], 'main must register the pending diaries PDF title');
   const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
@@ -321,8 +321,8 @@ test('report fills horizontal phone and tablet width with readable table and too
   const server = await createServer({root:resolve(fileURLToPath(new URL('..', import.meta.url))), server:{host:'127.0.0.1', port:0}, logLevel:'silent'});
   try {
     await server.listen();
-    for (const [width,height] of [[667,375],[844,390],[1280,800]]) {
-      const {stdout} = await runBrowserLayout(browser, {width, height, url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/pending-work-diaries-report-browser.html`});
+    for (const [width,height,safeAreaInsets] of [[667,375],[844,390],[844,390,{left:47,right:47}],[844,390,{left:47,right:0}],[1024,768],[1280,800],[1920,1080]]) {
+      const {stdout} = await runBrowserLayout(browser, {width, height, safeAreaInsets, url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/pending-work-diaries-report-browser.html`});
       const dom = new JSDOM(stdout);
       try {
         const result = JSON.parse(dom.window.document.documentElement.dataset.layout);
@@ -334,8 +334,15 @@ test('report fills horizontal phone and tablet width with readable table and too
         assert.ok(result.documentOverflow <= 1, JSON.stringify(result));
         assert.ok(result.contentOverflow <= 1, JSON.stringify(result));
         assert.ok(result.toolbarOverflow <= 1, JSON.stringify(result));
-        assert.ok(result.tableWidth > width * .83, JSON.stringify(result));
+        assert.ok(Math.abs(result.dialog.left - Math.max(8, safeAreaInsets?.left || 0)) <= 1, JSON.stringify(result));
+        assert.ok(Math.abs(result.dialog.right - (width - Math.max(8, safeAreaInsets?.right || 0))) <= 1, JSON.stringify(result));
+        assert.ok(result.tableWidth >= result.dialog.width - (height <= 500 ? 70 : 80), JSON.stringify(result));
         assert.ok(result.tableLeft >= result.arrowRight + 4, 'previous arrow must not obscure IDs: ' + JSON.stringify(result));
+        assert.ok(result.tableLeft <= result.arrowRight + 8, 'previous arrow gutter must stay compact: ' + JSON.stringify(result));
+        assert.ok(result.content.right - result.tableRight <= 16, 'no unused next-arrow gutter: ' + JSON.stringify(result));
+        assert.ok(Math.abs(result.brand.left - result.tableLeft) <= 1 && Math.abs(result.brand.right - result.tableRight) <= 1, JSON.stringify(result));
+        assert.equal(result.arrows.length, 1, 'last report retains only its previous arrow');
+        assert.ok(Math.abs(result.arrows[0].top + result.arrows[0].height / 2 - height / 2) <= 1, 'arrow stays vertically centered');
         assert.ok(result.contentHeight > 100, JSON.stringify(result));
         assert.ok(result.contentScrollHeight > result.contentHeight);
         assert.equal(result.fontSize, '12px');

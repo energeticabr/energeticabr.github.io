@@ -9,7 +9,10 @@
 .pwdr-close { position:absolute; top:max(3px,env(safe-area-inset-top)); right:3px; }
 .pwdr-refresh:disabled { opacity:.5; cursor:wait; }
 .pwdr-content { flex:1; box-sizing:border-box; min-height:0; width:100%; min-width:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; font:normal 12px/1.3 Arial,sans-serif; }
-.pwdr-overlay[data-report-action] .pwdr-content { padding-inline-start:calc(64px + env(safe-area-inset-left,0px)); }
+.pwdr-overlay[data-report-action] .pwdr-content { padding-inline-start:58px; }
+@media (max-height:500px) {
+  .pwdr-overlay[data-report-action] .pwdr-content { padding-inline-start:48px; }
+}
 .pwdr-brand { box-sizing:border-box; border:3px solid black; padding:8px; background:#e6f0ff; text-align:center; margin-bottom:8px; }
 .pwdr-brand img { display:block; margin:auto; width:clamp(120px,17vw,280px); max-width:100%; height:clamp(30px,4.5vw,74px); object-fit:contain; }
 .pwdr-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font:normal 12px/1.3 Arial,sans-serif; color:black; }
