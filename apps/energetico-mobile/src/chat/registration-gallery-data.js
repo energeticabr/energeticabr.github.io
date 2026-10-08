@@ -13,7 +13,8 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   provisionDescription: Object.freeze({
     title: "GALERIA DESCRITIVO PROVISÃO",
     listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],
-    nativeCard: true, showAttachments: true, recordLabel: "descritivo de provisão", readOnly: true,
+    nativeCard: true, showAttachments: true, recordLabel: "descritivo de provisão", recordActions: ["edit"],
+    metadataEditorFields: ["FILIAL", "FORNECEDOR", "VALORTOTAL", "DATAPGTOEFETUADO", "OBS", "FORMAPGTO", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", "DATAPREVISTOPGTO"],
     searchPlaceholder: "Pesquisar fornecedor, observação ou ID",
     fields: ["FORNECEDOR", "FILIAL", "VALORTOTAL", "DATA PREVISTO PGTO", "DATAPGTOEFETUADO", "FORMAPGTO", "OBS", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", ...AUDIT_FIELDS],
     filterFields: ["ID", "FILIAL", "FORNECEDOR", "FORMAPGTO"],
@@ -249,8 +250,8 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   });
   if (!model.nativeCard) return data;
   const filters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });
-  // This list has no extracted edit form. Its inventory proves FUNCAO is a
-  // writable text field; only that field may enter the metadata editor.
+  // Lists without an extracted edit form use only the model's proven fields
+  // with their real SharePoint metadata in the metadata editor.
   let editorPromise;
   function metadataEditor() {
     return editorPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) => {
@@ -258,8 +259,11 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
         get(_target, property) {
           if (property === "getColumns") return async (...args) => {
             const columns = await repository.getColumns(...args);
+            // The provision parent's Title is an idempotency token; display
+            // labels must not grant fields outside its proven internal names.
             return (Array.isArray(columns) ? columns : []).filter(column => model.metadataEditorFields.some(field =>
-              [column.name, column.displayName].some(name => registrationFieldKey(name) === registrationFieldKey(field))));
+              (kind === "provisionDescription" ? [column.name] : [column.name, column.displayName])
+                .some(name => registrationFieldKey(name) === registrationFieldKey(field))));
           };
           const value = repository[property];
           return typeof value === "function" ? value.bind(repository) : value;

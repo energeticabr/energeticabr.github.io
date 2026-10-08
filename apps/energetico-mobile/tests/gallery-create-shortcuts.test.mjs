@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { galleryCases, galleryOptions, registrationKinds } from './helpers/gallery-create-cases.mjs';
-import { REGISTRATION_GALLERY_MODELS } from '../src/chat/registration-gallery-data.js';
+import { createRegistrationGalleryData, REGISTRATION_GALLERY_MODELS } from '../src/chat/registration-gallery-data.js';
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
@@ -132,19 +132,56 @@ for (const entry of galleryCases) {
     assert.equal(creates, 0);
   });
 
-  if (REGISTRATION_GALLERY_MODELS[entry.options?.kind]?.readOnly) {
-    test(`${entry.name}: read-only parent has no isolated edit/delete but + starts the linked creation flow`, async t => {
+  if (entry.options?.kind === 'provisionDescription') {
+    test(`${entry.name}: edit-only parent offers a pencil and + starts the linked creation flow`, async t => {
       let creates = 0;
       const ctx = setup(t, entry, {
         onCreate: () => { creates++; },
         snapshot: { rows: [{ id: '7', fields: { FORNECEDOR: 'Fornecedor', VALORTOTAL: '100' } }] },
       });
       await ctx.gallery.open();
-      assert.equal(ctx.root().querySelector('[data-gallery-action]'), null);
+      assert.ok(ctx.root().querySelector('[data-gallery-action="edit"]'));
+      assert.equal(ctx.root().querySelector('[data-gallery-action="delete"]'), null);
       shortcut(ctx).click();
       await settle();
       assert.equal(creates, 1);
       assert.equal(ctx.root().hidden, true);
+    });
+    test(`${entry.name}: pending parent edit blocks creation even after reopening`, async t => {
+      const mutation = deferred(); let creates = 0, saves = 0;
+      const item = { id: '7', eTag: '"v3"', fields: { OBS: 'ORIGINAL', Attachments: false } };
+      const data = createRegistrationGalleryData({ kind: entry.options.kind, repository: {
+        async resolveList() { return { status: 'resolved', id: 'parent-list' }; },
+        async getColumns() { return [{ name: 'OBS', text: {} }]; },
+        async getItemsPage() { return { items: [item], hasMore: false }; },
+        async getItem() { return item; },
+        async updateItem() { saves++; return mutation.promise; },
+        async deleteItem() { assert.fail('the parent policy permits editing only'); },
+      } });
+      const ctx = setup(t, entry, { data, onCreate: () => { creates++; } });
+      await ctx.gallery.open();
+      const button = shortcut(ctx);
+      assert.equal(ctx.root().querySelector('[data-gallery-action="delete"]'), null);
+      const edit = ctx.root().querySelector('[data-gallery-action="edit"]');
+      assert.ok(edit); edit.click();
+      for (let attempt = 0; attempt < 100 && !ctx.root().querySelector('[data-dynamic-form]'); attempt++) await settle();
+      const form = ctx.root().querySelector('[data-dynamic-form]');
+      assert.ok(form, 'the actual metadata form opens');
+      form.querySelector('[name="OBS"]').value = 'ALTERADO';
+      form.dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+      await settle();
+      assert.equal(saves, 1);
+      assert.equal(button.disabled, true);
+      forceClick(ctx, button);
+      assert.equal(creates, 0);
+      assert.equal(ctx.root().hidden, false);
+      ctx.gallery.close(); await ctx.gallery.open();
+      assert.equal(button.disabled, true, 'reopening cannot bypass an unfinished edit');
+      forceClick(ctx, button);
+      assert.equal(creates, 0);
+      mutation.resolve({ id: '7', fields: { OBS: 'ALTERADO' } }); await settle(); await settle();
+      assert.equal(button.disabled, false);
+      assert.equal(ctx.root().querySelector('[data-gallery-action="delete"]'), null);
     });
     continue;
   }
