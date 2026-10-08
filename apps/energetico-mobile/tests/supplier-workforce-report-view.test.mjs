@@ -60,8 +60,19 @@ test('blank initial date and local today show active contractors in complete nes
   const summary=root.querySelector('.swr-property > .swr-summary');
   assert.match(summary.textContent,/2 FORNECEDORES.*1 DIÁRIA.*1 MEDIÇÃO.*0 VALOR GLOBAL.*100,00.*DIA/s);
   assert.match(root.querySelector('.swr-warnings').textContent,/Conferir cadastro/);
-  assert.match(root.querySelector('.swr-filter-note').textContent,/presenças filtradas/);
-  assert.match(root.querySelector('.swr-filter-note').textContent,/sem limite de 2\.000/);
+});
+
+// Break caught: the explanatory strip wastes space below the logo, or removing
+// it also suppresses genuine data-quality warnings or supplier tables.
+test('logo leads directly to warnings and supplier data without the explanatory legend',async t=>{
+  const {view,root}=setup(t);await view.open();
+  const brand=root.querySelector('.swr-brand');
+  assert.ok(brand.querySelector('img'));
+  assert.equal(brand.nextElementSibling,root.querySelector('.swr-warnings'));
+  assert.match(brand.nextElementSibling.textContent,/Conferir cadastro/);
+  assert.equal(brand.nextElementSibling.nextElementSibling,root.querySelector('.swr-branch'));
+  const capture=captureFilteredReport(root,{title:'Fornecedores e frequência'});
+  assert.equal(capture.pages[0].blocks.filter(block=>block.type==='table').length,3);
 });
 
 // Break caught: frequency uses unfiltered rows, pending counts as present, or history is truncated.

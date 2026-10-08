@@ -53,6 +53,7 @@ try {
     root.querySelector('.sfs-dismiss').click();viewport.height=innerHeight;viewport.dispatchEvent(new Event('resize'));
     const blockText=block=>block.runs?.map(run=>run.text).join('')||'';
     document.documentElement.dataset.layout=JSON.stringify({loads,logoLoaded:logo.naturalWidth>0,
+      dialog:rect(root.querySelector('.swr-dialog')),content:rect(content),brand:rect(root.querySelector('.swr-brand')),
       documentOverflow:document.documentElement.scrollWidth-innerWidth,toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
       contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,contentScrollHeight:content.scrollHeight,
       tables:tables.map(table=>({...rect(table),columns:table.tHead.rows[0].cells.length,rows:table.tBodies[0].rows.length})),
