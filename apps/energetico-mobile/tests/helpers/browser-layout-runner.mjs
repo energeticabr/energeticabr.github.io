@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
-export async function runBrowserLayout(browser, { width, height, url, maxBuffer = 2_000_000, readyTimeoutMs = 30_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, maxBuffer = 2_000_000, readyTimeoutMs = 30_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -65,6 +65,7 @@ export async function runBrowserLayout(browser, { width, height, url, maxBuffer 
     ({ sessionId } = await send("Target.attachToTarget", { targetId, flatten: true }));
     await send("Page.enable", {}, sessionId);
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
+    if (safeAreaInsets) await send("Emulation.setSafeAreaInsetsOverride", { insets: safeAreaInsets }, sessionId);
     let loadTimer;
     const loaded = new Promise((done, fail) => {
       onLoaded = () => { clearTimeout(loadTimer); done(); };
