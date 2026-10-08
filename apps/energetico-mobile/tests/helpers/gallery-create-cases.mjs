@@ -8,7 +8,7 @@ import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js'
 
 export const registrationKinds = ['group', 'family', 'subfamily', 'product', 'documents', 'asset',
   'assetFunction', 'assetProduct', 'assetGroup', 'workDiary', 'quotes', 'contracts', 'contractLines',
-  'measurements', 'measurementLines', 'stageDemonstratives', 'constructionStages', 'recurringTasks', 'delegatedTasks'];
+  'measurements', 'measurementLines', 'stageDemonstratives', 'constructionStages', 'recurringTasks', 'delegatedTasks', 'provisionDescription'];
 export const galleryCases = [
   { name: 'tasks', factory: createTasksGallery, root: '.tg-overlay' },
   { name: 'orders', factory: createOrdersGallery, root: '.og-orders-overlay' },
