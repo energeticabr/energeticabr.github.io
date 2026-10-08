@@ -22,11 +22,15 @@ Nova linha herda a anterior; o usuário escolhe campos para alterar e pode fazer
 
 Anexos continuam pelo mecanismo existente após a composição. No modo único permanecem no filho como antes; no modo múltiplo os anexos comuns permanecem no primeiro filho, sem cópias implícitas para outros fornecedores.
 
+Após começar a gravação, congelar metadados e SHA256 dos bytes dos anexos junto do grupo. Bloquear exclusão e compactação no portal, inclusive escolha de prévia já existente; retomadas usam o contrato congelado e não repetem gravações dos filhos confirmados.
+
 ## Interface entre VM e app
 
-activeFlow.provisionLines = {id, currency:"BRL", count, total, totalDisplay, lines}.
+activeFlow.provisionLines = {id, ownerFlow:"payment", currency:"BRL", count, total, totalDisplay, lines}.
 Cada linha: {index, product, quantity, unitPrice, unitPriceDisplay, freight, freightDisplay, total, totalDisplay, details:{supplier,branch,property,paymentMethod,dueDate,observation}}.
 Valores numéricos são strings decimais canônicas; textos de moeda são formatados em pt-BR. O resumo é somente leitura; composição/alterações usam as perguntas existentes.
+
+Manter o resumo nos cadastros auxiliares de produto, fornecedor, subfamília, família e grupo quando a VM validar sua origem no pai payment. Não alterar a identidade de navegação do cadastro. No app, aceitar ownerFlow=payment somente para esses cadastros suportados, preservando expansão ao retornar ao mesmo lote; rejeitar fluxos alheios. Payment direto mantém compatibilidade com snapshots anteriores sem ownerFlow.
 
 ## Segurança e entrega
 

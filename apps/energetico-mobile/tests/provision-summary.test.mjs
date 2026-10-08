@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createConversationStore } from '../src/chat/conversation-store.js';
+import { createChatClient } from '../src/chat/chat-client.js';
 import { createChatView, renderChatMarkup } from '../src/ui/chat-view.js';
 import { provisionSnapshot, provisionFlow, provisionState } from './helpers/provision-summary-fixture.mjs';
 
@@ -94,3 +95,91 @@ test('disclosure is local and zero-line summary is accessible', t => {
   assert.equal(submitted, 0);
   assert.equal(root.querySelector('textarea').value, 'Próxima linha');
 });
+
+const embeddedFlows = [
+  { id: 'supply_product_registration', title: 'CADASTRO DE PRODUTO' },
+  { id: 'supply_supplier_registration', title: 'CADASTRO DE FORNECEDOR' },
+  { id: 'supply_subfamily_registration', title: 'CADASTRO DE SUBFAMÍLIA' },
+  { id: 'supply_family_registration', title: 'CADASTRO DE FAMÍLIA' },
+  { id: 'supply_group_registration', title: 'CADASTRO DE GRUPO' },
+];
+
+test('renderer requires payment provenance in supported registrations and rejects forged ownership elsewhere', t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  t.after(() => dom.window.close());
+  const root = dom.window.document.querySelector('#app');
+  for (const flow of embeddedFlows) {
+    root.innerHTML = renderChatMarkup(provisionState({
+      ...flow, provisionLines: provisionSnapshot({ ownerFlow: 'payment' }),
+    }));
+    assert.equal(root.querySelector('.chat-provisions summary')?.textContent,
+      'Total da provisão: R$ 44,50 · 2 linhas', flow.id);
+    for (const provenance of [{}, { ownerFlow: 'launch' }, { ownerFlow: null }, { ownerFlow: 'Payment' }, { ownerFlow: ' payment ' }]) {
+      root.innerHTML = renderChatMarkup(provisionState({ ...flow, provisionLines: provisionSnapshot(provenance) }));
+      assert.equal(root.querySelector('.chat-provisions'), null, `${flow.id}: ${provenance.ownerFlow}`);
+    }
+  }
+  for (const id of ['launch', 'measurement', 'document_signing', 'other_registration', 'payment_registration']) {
+    root.innerHTML = renderChatMarkup(provisionState({
+      id, title: 'OUTRO FLUXO', provisionLines: provisionSnapshot({ ownerFlow: 'payment' }),
+    }));
+    assert.equal(root.querySelector('.chat-provisions'), null, id);
+  }
+  root.innerHTML = renderChatMarkup(provisionState(provisionFlow(provisionSnapshot({ ownerFlow: 'launch' }))));
+  assert.equal(root.querySelector('.chat-provisions'), null);
+});
+
+for (const open of [true, false]) {
+  test(`transport → store/view preserves ${open ? 'expanded' : 'collapsed'} disclosure through direct/nested registration and payment return`, async t => {
+    const dom = new JSDOM('<main id="app"></main>');
+    const root = dom.window.document.querySelector('#app');
+    const view = createChatView(root), store = createConversationStore();
+    const unsubscribe = store.subscribe(state => view.render({ ...provisionState(state.activeFlow), ...state }));
+    t.after(() => { unsubscribe(); view.destroy(); dom.window.close(); });
+    let responseFlow;
+    const client = createChatClient({
+      apiBaseUrl: 'https://provision.test', tokenProvider: async () => 'test-token',
+      fetchImpl: async () => new Response(JSON.stringify({
+        status: 'processed', activeFlow: responseFlow,
+        messages: [{ type: 'text', text: 'Próxima pergunta' }],
+      }), { headers: { 'Content-Type': 'application/json' } }),
+    });
+    const receive = async flow => {
+      responseFlow = flow;
+      const operation = store.beginText('Próximo');
+      store.confirmText(operation, await client.sendText({ text: 'Próximo' }));
+    };
+    await receive(provisionFlow(provisionSnapshot())); // Legacy direct payment has no ownerFlow.
+    const panel = root.querySelector('.chat-provisions');
+    assert.ok(panel);
+    if (open) panel.querySelector('summary').click();
+    const composer = root.querySelector('textarea');
+    composer.focus();
+    root.querySelector('.chat-file-tray').scrollTop = 80;
+    const [product, supplier, subfamily, family, group] = embeddedFlows;
+    const route = [product, subfamily, family, group, family, subfamily, product,
+      { id: 'payment', title: 'PROVISÃO DE PAGAMENTO' }, supplier,
+      { id: 'payment', title: 'PROVISÃO DE PAGAMENTO' }];
+    for (const [index, flow] of route.entries()) {
+      await receive({ ...flow, contextId: `step:${index}`,
+        provisionLines: provisionSnapshot(flow.id === 'payment' ? {} : { ownerFlow: 'payment' }),
+      });
+      assert.equal(store.getState().activeFlow.id, flow.id);
+      assert.equal(root.querySelector('.chat-provisions')?.dataset.batchId, 'provision-batch-one', flow.id);
+      assert.equal(root.querySelector('.chat-provisions')?.open, open, flow.id);
+      assert.equal(root.querySelector('.chat-file-tray')?.scrollTop, 80, flow.id);
+      assert.equal(root.querySelector('textarea'), composer);
+      assert.equal(dom.window.document.activeElement, composer);
+    }
+    await receive({ ...group, provisionLines: provisionSnapshot({ ownerFlow: 'payment', id: 'new-batch' }) });
+    assert.equal(root.querySelector('.chat-provisions').open, false);
+    assert.equal(root.querySelector('.chat-file-tray').scrollTop, 0);
+    root.querySelector('.chat-provisions').open = true;
+    await receive({ ...group, provisionLines: provisionSnapshot({ id: 'new-batch' }) });
+    assert.equal(root.querySelector('.chat-provisions'), null);
+    await receive(provisionFlow(provisionSnapshot({ id: 'new-batch' })));
+    assert.equal(root.querySelector('.chat-provisions').open, false);
+    await receive({ id: 'launch', title: 'LANÇAMENTO', provisionLines: provisionSnapshot({ id: 'new-batch', ownerFlow: 'payment' }) });
+    assert.equal(root.querySelector('.chat-provisions'), null);
+  });
+}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createConversationStore } from '../src/chat/conversation-store.js';
+import { createChatClient } from '../src/chat/chat-client.js';
 import { provisionSnapshot, provisionFlow } from './helpers/provision-summary-fixture.mjs';
 
 const module = await import('../src/chat/provision-snapshot.js').catch(error => {
@@ -99,4 +100,81 @@ test('store preserves confirmed totals on failure but removes absent, invalid or
   store.ingestRemoteMessages([], { activeFlow: provisionFlow(provisionSnapshot()) });
   store.ingestRemoteMessages([], { resetConversation: true });
   assert.equal(store.getState().activeFlow, null);
+});
+
+test('normalization preserves payment provenance and rejects an explicit foreign owner', () => {
+  const source = provisionSnapshot({ ownerFlow: 'payment' });
+  const saved = normalize(source);
+  assert.equal(saved.ownerFlow, 'payment');
+  assert.ok(Object.isFrozen(saved));
+  source.ownerFlow = 'launch';
+  assert.equal(saved.ownerFlow, 'payment');
+  for (const ownerFlow of ['launch', 'measurement', '', 'Payment', ' payment ', null, true, {}]) {
+    assert.equal(normalize(provisionSnapshot({ ownerFlow })), undefined);
+  }
+});
+
+const registrationIds = [
+  'supply_product_registration', 'supply_supplier_registration',
+  'supply_subfamily_registration', 'supply_family_registration', 'supply_group_registration',
+];
+
+// Real client JSON parsing and store response paths; only the HTTP boundary is replaced.
+function portalClient(activeFlow) {
+  return createChatClient({
+    apiBaseUrl: 'https://provision.test', tokenProvider: async () => 'test-token',
+    fetchImpl: async () => new Response(JSON.stringify({
+      status: 'processed', activeFlow,
+      messages: [{ type: 'text', text: 'Informe o nome para o cadastro' }],
+    }), { headers: { 'Content-Type': 'application/json' } }),
+  });
+}
+
+for (const id of registrationIds) {
+  for (const path of ['ingest', 'text', 'upload']) {
+    test(`transport → store keeps payment-owned lines and navigation id in ${id} (${path})`, async () => {
+      const store = createConversationStore();
+      const client = portalClient({
+        id, title: 'CADASTRO', contextId: `embedded:${id}`,
+        provisionLines: provisionSnapshot({ ownerFlow: 'payment' }),
+      });
+      if (path === 'upload') {
+        const file = new File(['nota'], 'nota.pdf', { type: 'application/pdf' });
+        const [queued] = store.queueFiles([file]);
+        const operation = store.beginFile(queued.id);
+        store.confirmFile(operation, await client.sendFile(file));
+      } else {
+        const operation = path === 'text' ? store.beginText('Cadastrar') : null;
+        const result = await client.sendText({ text: 'Cadastrar' });
+        if (operation) store.confirmText(operation, result);
+        else store.ingestRemoteMessages(result.messages, result);
+      }
+      const flow = store.getState().activeFlow;
+      assert.equal(flow.id, id);
+      assert.equal(flow.title, 'CADASTRO');
+      assert.equal(flow.contextId, `embedded:${id}`);
+      assert.deepEqual(flow.provisionLines, provisionSnapshot({ ownerFlow: 'payment' }));
+      assert.ok(Object.isFrozen(flow.provisionLines.lines[0].details));
+    });
+  }
+}
+
+test('transport → store clears unproven embedded snapshots and forged unrelated ownership', async () => {
+  const store = createConversationStore();
+  const rejected = [
+    ...registrationIds.flatMap(id => [undefined, 'launch', null, 'Payment', ' payment '].map(ownerFlow => ({
+      id, provisionLines: provisionSnapshot(ownerFlow === undefined ? {} : { ownerFlow }),
+    }))),
+    ...['launch', 'measurement', 'document_signing', 'other_registration', 'payment_registration'].map(id => ({
+      id, provisionLines: provisionSnapshot({ ownerFlow: 'payment' }),
+    })),
+    { id: 'payment', provisionLines: provisionSnapshot({ ownerFlow: 'launch' }) },
+  ];
+  for (const candidate of rejected) {
+    store.ingestRemoteMessages([], { activeFlow: provisionFlow(provisionSnapshot()) });
+    const result = await portalClient({ title: 'CADASTRO', ...candidate }).sendText({ text: 'Próximo' });
+    store.ingestRemoteMessages(result.messages, result);
+    assert.equal(store.getState().activeFlow.id, candidate.id);
+    assert.equal(store.getState().activeFlow.provisionLines, undefined, `${candidate.id}: ${candidate.provisionLines.ownerFlow}`);
+  }
 });

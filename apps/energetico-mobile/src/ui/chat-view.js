@@ -3,7 +3,7 @@ import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { escapeHtml } from "./escape-html.js";
-import { normalizeProvisionSnapshot } from "../chat/provision-snapshot.js";
+import { normalizeProvisionSnapshotForFlow } from "../chat/provision-snapshot.js";
 import { galleryPairForOption, pairedGalleryMenu } from "./menu-gallery-pairs.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
@@ -2368,8 +2368,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   }
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
-  const provisionLines = state.activeFlow?.id === "payment"
-    ? normalizeProvisionSnapshot(state.activeFlow.provisionLines) : undefined;
+  const provisionLines = normalizeProvisionSnapshotForFlow(state.activeFlow);
   let finalSignedIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (isSignedDocumentMessage(messages[index])) {
