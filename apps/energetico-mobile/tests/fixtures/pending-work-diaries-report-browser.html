@@ -18,6 +18,7 @@ try {
   await logo.decode();
   await new Promise(requestAnimationFrame);
   const toolbar=root.querySelector('.pwdr-toolbar'), content=root.querySelector('.pwdr-content'), table=root.querySelector('table'), pair=toolbar.querySelector('.report-print-actions');
+  const rect=node=>{const {left,right,width,top,height}=node.getBoundingClientRect();return {left,right,width,top,height};};
   const style=selector=>getComputedStyle(table.querySelector(selector));
   const styles={headerBackground:style('thead th').backgroundColor, rowWeight:style('tbody td').fontWeight,
     statusWeight:style('.pwdr-status').fontWeight, statusColor:style('.pwdr-status').color,
@@ -32,6 +33,9 @@ try {
     contentHeight:content.clientHeight, contentScrollHeight:content.scrollHeight, fontSize:getComputedStyle(table.querySelector('tbody td')).fontSize, styles,
     arrowRight:root.querySelector('.report-navigation-arrow').getBoundingClientRect().right,
     tableLeft:table.getBoundingClientRect().left,
+    tableRight:table.getBoundingClientRect().right, dialog:rect(root.querySelector('[role="dialog"]')),
+    content:rect(content), brand:rect(root.querySelector('.pwdr-brand')),
+    arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),
     buttons:[...pair.children].map(node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};})});
 } catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>
