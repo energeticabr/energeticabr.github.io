@@ -1,4 +1,4 @@
-import {buildSupplierPayrollOverview,currentPayrollMonth,summarizePayrollPayments} from '../chat/supplier-payroll-report-model.js';
+import {buildSupplierPayrollOverview,currentPayrollMonth,summarizePayrollPayments,summarizePayrollPaymentsByType} from '../chat/supplier-payroll-report-model.js';
 import {formatOperationsDate} from '../chat/operations-reports-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
@@ -46,6 +46,10 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  function displayPayments(entry,rows){
   const totals=summarizePayrollPayments(rows);entry.rows=rows;entry.loaded=true;
   entry.totalValue.textContent=money(totals.totalCents);entry.countValue.textContent=String(rows.length);entry.metrics.removeAttribute('aria-busy');
+  const rubrics=summarizePayrollPaymentsByType(rows);
+  entry.rubrics.replaceChildren();
+  for(const rubric of rubrics){const item=make('span','spr-rubric-row');item.setAttribute('role','listitem');item.append(make('span','spr-rubric-label',`${rubric.type}: `),make('strong','spr-rubric-value',money(rubric.totalCents)));entry.rubrics.append(item);}
+  if(!rubrics.length)entry.rubrics.textContent='Sem pagamentos';
   if(entry.card.open||printing)paymentTable(entry,rows);
  }
  async function loadGroup(entry){
@@ -53,12 +57,12 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
   const key=entry.group.ids.join(',');
   if(rowCache.has(key)){displayPayments(entry,rowCache.get(key));return;}
   const active=new AbortController();entry.controller=active;entry.detail.setAttribute('aria-busy','true');entry.detail.replaceChildren(make('p','','Carregando pagamentos vinculados às folhas…'));
-  entry.metrics.setAttribute('aria-busy','true');entry.totalValue.textContent='Carregando…';entry.countValue.textContent='—';
+  entry.metrics.setAttribute('aria-busy','true');entry.totalValue.textContent='Carregando…';entry.countValue.textContent='—';entry.rubrics.textContent='Carregando…';
   const task=(async()=>{
    try{const rows=await abortable(Promise.resolve().then(()=>data.loadPaymentsForPayrollIds(entry.group.ids,{signal:active.signal})),active.signal);
     if(!alive(entry,active.signal))throw cancelled();rowCache.set(key,rows);displayPayments(entry,rows);
    }catch(error){if(!alive(entry,active.signal))throw cancelled();
-    entry.totalValue.textContent='Não disponível';entry.countValue.textContent='—';entry.metrics.removeAttribute('aria-busy');
+    entry.totalValue.textContent='Não disponível';entry.countValue.textContent='—';entry.rubrics.textContent='Não disponível';entry.metrics.removeAttribute('aria-busy');
     const message=make('p','','Não foi possível carregar os pagamentos. Tente novamente.');message.setAttribute('role','alert');
     const retry=make('button','spr-retry','Tentar novamente');retry.type='button';retry.addEventListener('click',()=>void loadGroup(entry).catch(()=>{}));entry.detail.replaceChildren(message,retry);throw error;
    }finally{entry.detail.setAttribute('aria-busy','false');if(entry.controller===active)entry.controller=null;entry.promise=null;}
@@ -81,8 +85,9 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
    const sheetIcon=make('span','spr-sheet-icon'),sheetText=make('span','spr-sheet-text');sheetIcon.append(icon('sheet'));sheetText.append(make('strong','spr-ids',`IDFOLHA: ${group.ids.join(', ')}`),make('span','spr-count',`${group.ids.length} folha(s)`));sheet.append(sheetIcon,sheetText);
    const metrics=make('span','spr-metrics'),totalValue=make('strong','spr-metric-value','Carregando…'),countValue=make('strong','spr-metric-value','—');
    for(const [cls,image,value,label]of [['spr-total-paid','coins',totalValue,'TOTAL PAGO'],['spr-payment-count','payment',countValue,'QTD. DE PGTOS']]){const metric=make('span','spr-metric '+cls),text=make('span','spr-metric-text');text.append(value,make('span','spr-metric-label',label));metric.append(icon(image),text);metrics.append(metric);}
+   const rubrics=make('span','spr-rubrics','Carregando…');rubrics.setAttribute('role','list');rubrics.setAttribute('aria-label','Total pago por rubrica');metrics.insertBefore(rubrics,metrics.lastElementChild);
    summary.append(identity,sheet,metrics);
-   const entry={card,detail,group,metrics,totalValue,countValue,loaded:false,open:false,promise:null,controller:null,rows:null};entries.push(entry);card.append(summary,detail);content.append(card);
+   const entry={card,detail,group,metrics,totalValue,countValue,rubrics,loaded:false,open:false,promise:null,controller:null,rows:null};entries.push(entry);card.append(summary,detail);content.append(card);
    card.addEventListener('toggle',()=>{
     if(printing||!entries.includes(entry)||entry.open===card.open)return;entry.open=card.open;detail.hidden=!card.open;
     if(!card.open)return;

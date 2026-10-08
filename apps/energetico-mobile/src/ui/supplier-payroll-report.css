@@ -10,7 +10,7 @@
 /* Reserve equal gutters for the unchanged, shared viewport-centered arrows. */
 .spr-overlay[data-report-action] .spr-content { padding-inline:calc(64px + env(safe-area-inset-left,0px)) calc(64px + env(safe-area-inset-right,0px)); }
 .spr-supplier { border:1px solid #bdd2e2; border-radius:7px; margin:5px 0; overflow:hidden; background:white; }
-.spr-supplier summary { display:grid; grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,2.2fr); gap:10px; align-items:center; cursor:pointer; padding:8px 10px; min-height:62px; background:#fff; color:#123e63; list-style:none; }
+.spr-supplier summary { display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.1fr) minmax(0,3.2fr); gap:10px; align-items:center; cursor:pointer; padding:8px 10px; min-height:62px; background:#fff; color:#123e63; list-style:none; }
 .spr-supplier:nth-of-type(odd)>summary { background:#d2e4f2; }
 .spr-supplier summary::-webkit-details-marker { display:none; }
 .spr-supplier summary:focus-visible { outline:3px solid #2369ad; outline-offset:-3px; }
@@ -23,7 +23,11 @@
 .spr-sheet-icon { flex:0 0 30px; width:30px; }
 .spr-sheet-icon svg,.spr-metric svg { display:block; width:100%; height:34px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .spr-ids { font-weight:700; overflow-wrap:anywhere; }
-.spr-metrics { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:12px; min-width:0; color:#b00000; }
+.spr-metrics { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1.8fr) minmax(0,.75fr); gap:10px; min-width:0; color:#b00000; }
+.spr-rubrics { display:flex; flex-direction:column; gap:3px; min-width:0; border-left:1px solid #b6cddc; padding-left:10px; font-size:clamp(8px,.85vw,12px); line-height:1.25; color:#325c7b; }
+.spr-rubric-row { display:flex; justify-content:space-between; align-items:baseline; gap:4px; min-width:0; }
+.spr-rubric-label { min-width:0; overflow-wrap:anywhere; }
+.spr-rubric-value { flex-shrink:0; color:#b00000; white-space:nowrap; }
 .spr-metric { display:flex; align-items:center; gap:10px; min-width:0; }
 .spr-metric svg { flex:0 0 30px; width:30px; }
 .spr-payment-count { border-left:1px solid #b6cddc; padding-left:12px; }
@@ -42,6 +46,7 @@
  .spr-avatar { flex-basis:36px; width:36px; height:36px; }.spr-identity { gap:6px; }
  .spr-sheet-block { gap:4px; }.spr-sheet-icon { flex-basis:22px; width:22px; }
  .spr-metrics { gap:5px; }.spr-metric { gap:4px; }.spr-metric svg { flex-basis:20px; width:20px; height:26px; }.spr-payment-count { padding-left:5px; }
+ .spr-rubrics { padding-left:5px; }
  .spr-payments th,.spr-payments td { padding:5px 3px; }.spr-detail { padding-inline:5px; }
 }
 @media(max-width:650px) {
@@ -52,6 +57,6 @@
  .spr-dialog .spr-filters .sfs-field,.spr-dialog .spr-filters .sfs-field>.sfs-trigger { height:30px; }
  .spr-dialog .spr-filters .sfs-field>.sfs-trigger { font-size:9px; padding:3px 17px 3px 3px; }
  .spr-dialog .spr-filters .sfs-arrow { width:16px; }
- .spr-sheet-icon,.spr-metric svg { display:none; }.spr-supplier summary { grid-template-columns:minmax(0,1.65fr) minmax(0,1fr) minmax(0,1.8fr); }
+ .spr-sheet-icon,.spr-metric svg { display:none; }.spr-supplier summary { grid-template-columns:minmax(0,1.65fr) minmax(0,.9fr) minmax(0,3.2fr); }
  .spr-avatar { flex-basis:28px; width:28px; height:28px; }.spr-metric-value { font-size:10px; }
 }
