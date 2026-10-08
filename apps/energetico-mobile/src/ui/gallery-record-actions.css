@@ -162,6 +162,16 @@
 .gallery-record-dialog .searchable-select-chip,
 .gallery-record-dialog .dynamic-selected-items li { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: #eaf3ff; }
 .gallery-record-dialog [hidden] { display: none !important; }
+.payroll-sheet-attachments { margin-top: 20px; padding: 16px; border: 1px solid #b9d4da; border-radius: 12px; background: #f0f7fa; min-width: 0; }
+.payroll-sheet-attachments h3 { margin: 0 0 8px; color: #075568; }
+.payroll-sheet-attachments p { line-height: 1.5; overflow-wrap: anywhere; }
+.payroll-sheet-attachment-list { display: grid; gap: 8px; margin: 12px 0; }
+.payroll-sheet-attachment { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid #cbdce3; border-radius: 8px; background: #fff; min-width: 0; }
+.payroll-sheet-attachment > div:first-child { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.payroll-sheet-attachment small { display: block; margin-top: 4px; color: #526672; }
+.payroll-sheet-attachment-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.payroll-sheet-attachments input[type=file] { max-width: 100%; }
+.payroll-sheet-attachments > button { margin-top: 10px; max-width: 100%; }
 
 @media (max-width: 600px) {
   .gallery-record-dialog { padding: 18px; }

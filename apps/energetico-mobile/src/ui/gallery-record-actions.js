@@ -7,7 +7,7 @@ let dialogSequence = 0;
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
-export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra,
+export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra, getReceiptAttachments, readReceiptAttachment,
   actions = ["edit", "delete"] } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
@@ -42,6 +42,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     previous?.controller?.cleanup?.();
     previous?.fieldLocks?.cleanup?.();
     previous?.sourceBinding?.cleanup?.();
+    previous?.sheetAttachmentBinding?.cleanup?.();
+    previous?.mutationAbort?.abort();
     previous?.variantPicker?.destroy();
     previous?.overlay.remove();
     if (previous?.focus?.isConnected) previous.focus.focus();
@@ -93,7 +95,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     }
     overlay.append(dialog);
     (host || document.body).append(overlay);
-    const state = { epoch, row, operation, overlay, dialog, error, body, focus: trigger || document.activeElement, busy: false, controller: null, loadEpoch: 0 };
+    const state = { epoch, row, operation, overlay, dialog, error, body, focus: trigger || document.activeElement, busy: false, controller: null, loadEpoch: 0, mutationAbort: new AbortController() };
     session = state;
     overlay.addEventListener("click", event => event.stopPropagation());
     overlay.addEventListener("keydown", event => {
@@ -157,6 +159,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
             : disabled[index];
         });
         if (state.refreshRetry) state.refreshRetry.disabled = false;
+        state.sheetAttachmentBinding?.refresh?.();
       }
     }
   }
@@ -192,6 +195,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     state.controller?.cleanup?.();
     state.fieldLocks?.cleanup?.();
     state.sourceBinding?.cleanup?.();
+    state.sheetAttachmentBinding?.cleanup?.(); state.sheetAttachmentBinding = null;
     state.variantPicker?.destroy(); state.variantPicker = null;
     state.fieldLocks = null;
     state.controller = null;
@@ -253,7 +257,10 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
           await mutate(state, () => {
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
             const readOnly = new Set(context.columns.filter(c => c.readOnly).flatMap(c => [c.name,...(['lookup','person'].includes(c.control)?[`${c.name}LookupId`]:[])]));
-            return saveEditor(context, Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name))));
+            const filtered = Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name)));
+            return state.sheetAttachmentBinding
+              ? saveEditor(context, filtered, { attachments: state.sheetAttachmentBinding.changes(), signal: state.mutationAbort.signal })
+              : saveEditor(context, filtered);
           });
           // Re-evaluate conditional locks after a rejected save, once the
           // renderer has restored its own disabled-state snapshot.
@@ -268,6 +275,13 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
           }));
         },
       });
+      if (context.sheetAttachments) {
+        const { bindPayrollSheetAttachments } = await import('./payroll-sheet-attachments.js');
+        if (!current()) return;
+        state.sheetAttachmentBinding = bindPayrollSheetAttachments(state.body.querySelector('form'), context, {
+          isBusy: () => state.busy || state.persisted, getReceiptAttachments, readReceiptAttachment,
+        });
+      }
       state.fieldLocks = bindForm43FieldLocks(state.body, context, { isBusy: () => state.busy || state.persisted });
       state.sourceBinding = bindPayrollEditorSource(state.body.querySelector('form'), context, {
         isBusy: () => state.busy || state.persisted,

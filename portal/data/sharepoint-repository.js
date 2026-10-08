@@ -1519,7 +1519,9 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   }
 
   async function writeItem(action, siteKey, listId, itemId, fields, options = {}) {
+    throwIfAborted(options.signal);
     await authorize(action, siteKey, listId, { itemId: String(itemId || "") });
+    throwIfAborted(options.signal);
     const eTag = requireEtag(options);
     const config = getSiteConfig(siteKey);
     if (siteTransport(config, "write") === "rest") {
@@ -1545,13 +1547,18 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
     const site = await getSite(siteKey, options);
     try {
+      throwIfAborted(options.signal);
       await graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}/fields`, {
         method: "PATCH",
         scopes: ["Sites.ReadWrite.All"],
         headers: { "If-Match": eTag },
         body: fields,
+        ...(options.signal ? { signal: options.signal } : {}),
       });
-      return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}?$expand=fields`, { method: "GET" });
+      return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}?$expand=fields`, {
+        method: "GET",
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
     } catch (error) {
       throw asConcurrencyError(error);
     }
@@ -2024,16 +2031,20 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return attachmentValues(payload).map(attachmentMetadata);
   }
 
-  async function uploadAttachment(siteKey, listId, itemId, file, fileName = file?.name) {
+  async function uploadAttachment(siteKey, listId, itemId, file, fileName = file?.name, options = {}) {
+    throwIfAborted(options.signal);
     await authorize("edit", siteKey, listId, { itemId: String(itemId || "") });
+    throwIfAborted(options.signal);
     if (typeof file?.arrayBuffer !== "function") throw new TypeError("O arquivo de anexo não pode ser lido.");
     const body = await file.arrayBuffer();
+    throwIfAborted(options.signal);
     const name = attachmentName(fileName);
     return requestAttachment(siteKey, listId, itemId, `/add(FileName='${name}')`, {
       method: "POST",
       permission: "write",
       headers: { "Content-Type": file.type || "application/octet-stream" },
       body,
+      ...(options.signal ? { signal: options.signal } : {}),
     });
   }
 

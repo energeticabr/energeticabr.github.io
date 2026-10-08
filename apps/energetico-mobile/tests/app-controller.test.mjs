@@ -1194,6 +1194,28 @@ test('FOLHAPGTO creation callbacks use authenticated gallery data and reject a s
   assert.deepEqual(calls,[['options',{signal}],['save',{launchId:'10'},{operationId:'test'}]]);
   h.controller.stop();await assert.rejects(options.savePayment({launchId:'10'},{operationId:'test'}));assert.equal(calls.length,2);
 });
+test('IDFOLHA editor forwards attachment save options and guarded current app tray',async t=>{
+  let options;const calls=[];
+  const h=makeHarness({hrPayrollGalleryDataFactory:async()=>({loadPage:async()=>({}),loadPaymentsForPayrollId:async()=>[],
+    saveEditor:async(...args)=>{calls.push(args);return {id:'4'};}}),
+    hrPayrollGalleryFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();
+  h.store.syncAttachments([{id:'remote',fileName:'assinado.pdf',mimeType:'application/pdf',mediaUrl:'/api/portal-media/remote'}]);
+  await h.view.emit('select-reply',{replyId:'action_hr_gallery_idfolha'});
+  assert.equal(typeof options.getReceiptAttachments,'function');
+  assert.equal(typeof options.readReceiptAttachment,'function');
+  const tray=options.getReceiptAttachments();assert.deepEqual(tray.map(a=>a.id),['attachment:remote']);
+  const file=await options.readReceiptAttachment(tray[0].id,tray[0]);
+  const extra={attachments:[file],signal:new AbortController().signal},context={};
+  await options.saveEditor(context,{STATUS:'INATIVO'},extra);
+  assert.deepEqual(calls,[[context,{STATUS:'INATIVO'},extra]]);
+  assert.equal(h.store.getState().attachments.length,1);
+  h.store.syncAttachments([{id:'remote',fileName:'substituido.pdf',mediaUrl:'/api/portal-media/remote'}]);
+  await assert.rejects(options.readReceiptAttachment(tray[0].id,tray[0]),/alterad/i);
+  h.controller.stop();assert.throws(options.getReceiptAttachments,/sessão/i);
+  await assert.rejects(options.saveEditor(context,{STATUS:'INATIVO'},extra),/sessão/i);
+  assert.equal(calls.length,1);
+});
 
 test("abre galeria sem enviar escolha ao fluxo e captura assinatura sem usar bandeja", async t => {
   let callbacks;

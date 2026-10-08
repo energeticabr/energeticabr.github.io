@@ -8,6 +8,7 @@ function fixture({ status = '', column = { name: 'STATUS', text: {} } } = {}) {
   const writes = [];
   const fields = { Title: '', MESREFERENCIA: '09/2026', FORNECEDOR: 'RAFAEL GONTIJO', OBS: 'ANTIGO', [column.name]: status };
   const repository = {
+    async listAttachments() { return [{ name: 'recibo-existente.pdf' }]; },
     async resolveList(_site, aliases) { return { status: 'resolved', id: aliases[0] }; },
     async getItemsPage() { return { items: [], hasMore: false }; },
     async getColumns() { return [{ name: 'Title', text: {} }, { name: 'MESREFERENCIA', text: {} }, { name: 'FORNECEDOR', text: {} }, { name: 'OBS', text: {} }, column]; },
@@ -86,7 +87,8 @@ test('IDFOLHA editor opens the two status options and submits the selected value
   assert.equal(input.value, 'INATIVO');
   await submitEditor(document, dom, f);
   assert.deepEqual(f.writes[0]?.values, { STATUS: 'INATIVO' });
-  assert.deepEqual(f.writes[0]?.options, { eTag: '"v1"' });
+  assert.equal(f.writes[0]?.options.eTag, '"v1"');
+  assert.ok(f.writes[0]?.options.signal instanceof AbortSignal);
 });
 
 test('unrelated IDFOLHA edits retain whitespace-bearing legacy status', async t => {

@@ -293,6 +293,10 @@ export function createSharePointRestTransport({ tokenProvider, allowedSites, fet
       }
       const token = await tokenProvider([permissionScopes[permission]]);
       if (!token) throw new AttachmentRequestError({ status: 401, code: "token_unavailable", message: "Não foi possível obter autorização Microsoft para anexos." });
+      if (options.signal?.aborted) {
+        if (options.signal.reason instanceof Error) throw options.signal.reason;
+        throw new DOMException("A requisição SharePoint foi cancelada.", "AbortError");
+      }
       const response = await fetch(target, {
         method: options.method || "GET",
         headers: { Accept: "application/json;odata=nometadata", Authorization: `Bearer ${token}`, ...(options.headers || {}) },
