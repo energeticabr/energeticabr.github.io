@@ -119,6 +119,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
   const contexts = new WeakMap();
   const isPayroll = key(listName) === 'FOLHAPGTO';
+  const isPayrollSheet = key(listName) === 'IDFOLHA';
   const readPayrollSource = isPayroll ? createPayrollSourceReader(repository, siteKey) : null;
   const payrollSheets=isPayroll?createPayrollSheetReader(repository,siteKey,now):null;
   const payrollLaunches=isPayroll?createPayrollLaunchReader(repository,siteKey):null;
@@ -160,7 +161,17 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
     const launchOptions=launchColumn?await payrollLaunches.options({signal}):[];
     abort(signal);
-    const columns = frozenCopy(isPayroll ? payrollEditorColumns(contract.formColumns,sheetOptions,launchOptions) : contract.formColumns);
+    const formColumns = isPayrollSheet ? contract.formColumns.map(column =>
+      (key(column.name) === 'STATUS' || key(column.label) === 'STATUS') && !column.allowMultipleValues
+        && ['text', 'textarea', 'select'].includes(column.control)
+        ? { ...column, control: 'select', allowMultipleValues: false, choices: ['ATIVO', 'INATIVO'],
+          // Match the selector's trimmed label without changing the stored value.
+          optionLabels: { ...column.optionLabels,
+            ...(typeof item.fields[column.name] === 'string' && item.fields[column.name]
+              ? { [item.fields[column.name]]: item.fields[column.name].trim() || 'Sem status' } : {}) },
+          powerApps: { closed: true, preserveCurrentValue: true } }
+        : column) : contract.formColumns;
+    const columns = frozenCopy(isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions) : formColumns);
     contract = frozenCopy({ ...contract, formColumns: columns });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
@@ -255,6 +266,14 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const validation = validateFormValues(raw, columns, entity, { mode: "edit" });
     if (Object.keys(validation.errors).length) throw new Error(Object.values(validation.errors).join(" "));
     const normalized = { ...validation.fields, ...direct };
+    const sheetStatus = isPayrollSheet ? baseline.statusColumn : null;
+    if (sheetStatus?.control === 'select' && !sheetStatus.allowMultipleValues) {
+      const name = sheetStatus.name, original = item.fields[name];
+      // The renderer trims submitted strings; retaining the same selection must
+      // not rewrite or reject a legacy status while another field is edited.
+      if (Object.hasOwn(normalized, name) && typeof original === 'string'
+        && String(normalized[name] ?? '') === original.trim()) normalized[name] = original;
+    }
     if(baseline.sheetColumn&&Object.hasOwn(normalized,baseline.sheetColumn.name)) {
       idValue(normalized[baseline.sheetColumn.name]);
       if(baseline.sheetColumn.number)normalized[baseline.sheetColumn.name]=Number(normalized[baseline.sheetColumn.name]);
