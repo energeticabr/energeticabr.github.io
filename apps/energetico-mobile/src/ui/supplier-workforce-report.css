@@ -1,0 +1,59 @@
+.swr-dialog { position:relative; }
+.swr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.swr-report { padding-top:28px; box-sizing:border-box; }
+.swr-close { position:absolute; right:4px; top:2px; z-index:2; display:grid; place-items:center; width:32px; height:28px; min-width:0; min-height:0; border:1px solid #a20000; border-radius:4px; padding:0; color:#a20000; background:white; font:24px/1 Arial,sans-serif; cursor:pointer; }
+.swr-filters { grid-template-columns:84px repeat(2,minmax(82px,1fr)) minmax(55px,.85fr) minmax(60px,1fr) minmax(74px,1.2fr) minmax(90px,1fr) minmax(60px,1fr); align-items:end; }
+.swr-filter-input { width:100%; min-width:0; box-sizing:border-box; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; height:27px; padding:2px 3px; font:normal clamp(9px,1.2vw,14px) Arial,sans-serif; }
+.swr-filters .pl-filter-label { white-space:normal; min-height:2.3em; display:grid; align-items:center; }
+.swr-filters .sfs .sfs-field > .sfs-trigger { color:#000; font-weight:400; }
+/* Full tables stay between the shared navigation arrows, including on small phones. */
+.swr-content { box-sizing:border-box; margin-inline:calc(64px + env(safe-area-inset-left,0px)) calc(64px + env(safe-area-inset-right,0px)); color:#111827; font:normal clamp(11px,1.1vw,15px)/1.4 Arial,sans-serif; }
+.swr-brand { border:2px solid #000; background:#e6f0ff; text-align:center; padding:12px; }
+.swr-brand img { height:clamp(44px,6vw,90px); max-width:65%; object-fit:contain; }
+.swr-filter-note { padding:7px 9px; margin:8px 0; background:#eff6ff; border-left:3px solid #2563eb; overflow-wrap:anywhere; }
+.swr-warnings { padding:5px 8px; border:1px solid #c62828; color:#a00000; background:#ffebee; overflow-wrap:anywhere; }
+.swr-warnings p { margin:4px 0; }
+.swr-branch { box-sizing:border-box; width:100%; border:1px solid #1f2937; border-radius:14px; padding:14px; margin:18px 0; background:#fff; }
+.swr-branch-heading { background:#e6f0ff; border:1px solid #9bbce6; border-radius:10px; padding:14px; margin:0; text-align:center; color:#003366; font-size:clamp(16px,1.7vw,22px); overflow-wrap:anywhere; }
+.swr-property { box-sizing:border-box; width:100%; margin-top:16px; border:1px solid #d0d7de; border-radius:12px; overflow:hidden; background:#fafafa; padding-bottom:12px; }
+.swr-property-heading { background:#f3f6fa; border-bottom:1px solid #d0d7de; padding:13px; margin:0; text-align:center; color:#003366; font-size:clamp(14px,1.5vw,20px); overflow-wrap:anywhere; }
+.swr-summary { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; padding:10px; border-bottom:1px solid #e5e7eb; background:#fff; text-align:center; }
+.swr-badge { box-sizing:border-box; display:inline-block; border:1px solid; border-radius:9px; padding:7px 9px; font-weight:700; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.swr-count { background:#f8fafc; border-color:#cbd5e1; color:#111827; }
+.swr-daily { background:#ffebee; border-color:#b00020; color:#8b0000; }
+.swr-measured { background:#d9ead3; border-color:#2e7d32; color:#1b5e20; }
+.swr-global { background:#dbeafe; border-color:#1565c0; color:#0d47a1; }
+.swr-daily-total,.swr-active { background:#ecfdf5; border-color:#059669; color:#065f46; }
+.swr-inactive { background:#ffebee; border-color:#b00020; color:#8b0000; }
+.swr-unspecified { background:#f3f4f6; border-color:#9ca3af; color:#374151; }
+.swr-missing { background:#fff7ed; border-color:#f97316; color:#9a3412; }
+.swr-missing-text { color:#9a3412; }
+.swr-profession { margin:12px 10px 0; border:1px solid #d1d5db; border-radius:12px; overflow:hidden; background:#fff; }
+.swr-profession-heading { padding:10px; margin:0; text-align:center; font-size:clamp(13px,1.4vw,18px); border-bottom:1px solid #d1d5db; background:var(--swr-prof-fill); color:var(--swr-prof-text); overflow-wrap:anywhere; }
+.swr-profession-title,.swr-profession-badge,.swr-profession .swr-count { display:inline-block; border:1px solid var(--swr-prof-border); background:var(--swr-prof-fill); color:var(--swr-prof-text); border-radius:999px; padding:7px 12px; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere; }
+.swr-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; background:#fff; color:#111827; font-size:inherit; }
+.swr-table th,.swr-table td { border:1px solid #cbd5e1; padding:8px 5px; text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
+.swr-table thead { background:#f0f4f8; }
+.swr-table tbody tr:nth-child(even) { background:#f8fafc; }
+.swr-supplier-name { display:block; margin-bottom:6px; }
+.swr-supplier > .swr-badge { border-radius:999px; }
+.swr-table .swr-badge { padding:6px 7px; }
+.swr-frequency-box { border:1px solid #cbd5e1; border-radius:9px; padding:7px; background:#f8fafc; }
+.swr-detail-label { display:block; margin-bottom:4px; font-weight:400; color:#334155; }
+.swr-frequency-section + .swr-frequency-section,.swr-first-date + .swr-frequency-section { border-top:1px solid #cbd5e1; padding-top:6px; margin-top:6px; }
+.swr-description-box { background:#fffbeb; border:1px solid #facc15; border-radius:9px; padding:8px; }
+.swr-description .swr-detail-label { color:#713f12; font-weight:700; }
+.swr-description-section + .swr-description-section { border-top:1px solid #fde68a; padding-top:7px; margin-top:7px; }
+.swr-measurement-ok { background:#ecfdf5; color:#065f46; }
+.swr-measurement-text { background:#eff6ff; color:#1e3a8a; font-weight:700; }
+.swr-measurement-missing { background:#fff7ed; color:#9a3412; }
+.swr-empty { padding:16px; text-align:center; border:1px solid #cbd5e1; background:#f8fafc; }
+@media(max-width:900px) {
+  .swr-filters { grid-template-columns:84px repeat(4,minmax(0,1fr)); }
+  .swr-filters .pl-refresh,.swr-filters .report-print-actions { grid-row:span 2; }
+  .swr-branch { padding:8px; }
+  .swr-profession { margin-inline:5px; }
+  .swr-table th,.swr-table td { padding:6px 3px; }
+  .swr-table .swr-badge,.swr-frequency-box,.swr-description-box { padding:5px 3px; }
+}
+@media print { .swr-content { margin-inline:0; overflow:visible; }.swr-close { display:none; }.swr-branch,.swr-profession { break-inside:auto; }.swr-table thead { display:table-header-group; } }

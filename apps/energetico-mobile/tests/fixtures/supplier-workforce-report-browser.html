@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fornecedores e frequência — layout</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button>Abrir relatório</button></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+try {
+  // Dynamic imports keep missing view/CSS in the fixture's observable failure path during RED.
+  await import('../../src/ui/supplier-workforce-report.css');
+  const {createSupplierWorkforceReportView}=await import('../../src/ui/supplier-workforce-report-view.js');
+  const {decorateReportNavigation}=await import('../../src/ui/report-navigation.js');
+  const {decorateReportPrint,captureFilteredReport}=await import('../../src/ui/report-print.js');
+  const {buildFilteredReportPdf}=await import('../../src/chat/filtered-report-pdf.js');
+  const {PDFDocument}=await import('pdf-lib');
+  const viewport=new EventTarget();Object.assign(viewport,{width:innerWidth,height:innerHeight,offsetLeft:0,offsetTop:0});
+  Object.defineProperty(window,'visualViewport',{value:viewport,configurable:true});
+  const groups=[
+    ['BH','Obra 1','PEDREIRO','DIÁRIA',100],['BH','Obra 1','ELETRICISTA','MEDIÇÃO',null],
+    ['BH','Obra 2','PEDREIRO','VALOR GLOBAL',null],['BH','Obra 2','SERVENTE','DIÁRIA',75],
+    ['SP','Obra 3','PINTOR','MEDIÇÃO',null],['SP','Obra 3','PEDREIRO','DIÁRIA',100],
+  ];
+  const suppliers=groups.flatMap(([branch,property,profession,paymentMethod,dailyValue],group)=>Array.from({length:4},(_,index)=>({
+    id:String(group*4+index+1),name:`Fornecedor ${group}-${index} ${'NOME EXTENSO '.repeat(5)}`,branch,property,profession,paymentMethod,dailyValue,
+    dailyValueBlank:dailyValue===null,status:'ATIVO',contractor:true,stage:'Estrutura',activity:'Atividade '+ 'x'.repeat(100),measurement:paymentMethod==='DIÁRIA'?'':'20 metros',
+  })));
+  const presences=suppliers.map(row=>({id:row.id,date:'2026-10-01',supplier:row.name,branch:row.branch,property:row.property,stage:'Estrutura',presence:'PRESENTE'}));
+  let loads=0;
+  const view=decorateReportPrint(decorateReportNavigation(createSupplierWorkforceReportView({now:()=>new Date(2026,9,7,12),
+    data:{async loadSnapshot(){loads++;return {complete:true,suppliers,presences,warnings:[]};}}}),
+    {action:'open-supplier-workforce-report'}),{action:'open-supplier-workforce-report'});
+  await view.open();const root=view.element;
+  const rect=node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};};
+  if(matchMedia('(orientation:portrait)').matches) {
+    document.documentElement.dataset.layout=JSON.stringify({loads,warning:!root.querySelector('.pl-orientation').hidden,
+      closeVisible:root.querySelector('.swr-close').getBoundingClientRect().height>0,busy:root.getAttribute('aria-busy'),tables:root.querySelectorAll('table').length});
+  } else {
+    const logo=root.querySelector('img');await logo.decode();await new Promise(requestAnimationFrame);
+    const content=root.querySelector('.swr-content'),toolbar=root.querySelector('.swr-filters'),tables=[...root.querySelectorAll('table')];
+    const capture=captureFilteredReport(root,{title:'Fornecedores e frequência'});
+    const blob=await buildFilteredReportPdf(capture,{logoBytes:new Uint8Array(await (await fetch(logo.src)).arrayBuffer())});
+    const bytes=new Uint8Array(await blob.arrayBuffer());
+    const pdf=await PDFDocument.load(bytes);
+    root.querySelector('[aria-label="Abrir opções de FILIAL"]').click();
+    const popup=root.querySelector('.sfs-popup:not([hidden])'),search=popup.querySelector('input[type=search]');
+    const popupData={...rect(popup),placement:popup.dataset.placement,searchFocused:document.activeElement===search,
+      color:getComputedStyle(popup.querySelector('.sfs-option')).color,fontWeight:getComputedStyle(popup.querySelector('.sfs-option:not([aria-selected=true])')).fontWeight};
+    search.focus();viewport.height=innerHeight-180;viewport.dispatchEvent(new Event('resize'));await new Promise(requestAnimationFrame);
+    const keyboard={...rect(popup),focused:document.activeElement===search,report:rect(root.querySelector('.swr-dialog')),
+      toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,fontSize:getComputedStyle(tables[0].querySelector('tbody td')).fontSize};
+    root.querySelector('.sfs-dismiss').click();viewport.height=innerHeight;viewport.dispatchEvent(new Event('resize'));
+    const blockText=block=>block.runs?.map(run=>run.text).join('')||'';
+    document.documentElement.dataset.layout=JSON.stringify({loads,logoLoaded:logo.naturalWidth>0,
+      documentOverflow:document.documentElement.scrollWidth-innerWidth,toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
+      contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,contentScrollHeight:content.scrollHeight,
+      tables:tables.map(table=>({...rect(table),columns:table.tHead.rows[0].cells.length,rows:table.tBodies[0].rows.length})),
+      arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),fontSize:getComputedStyle(tables[0].querySelector('tbody td')).fontSize,
+      capturedTables:capture.pages[0].blocks.filter(block=>block.type==='table').map(block=>({columns:block.widths.length,rows:block.rows.length})),
+      capturedColors:capture.pages[0].blocks.filter(block=>block.type==='text'&&blockText(block).includes('fornecedor(es)')).map(block=>block.background),
+      filterCaptions:capture.filters, pdfPages:pdf.getPageCount(),pdfHeader:new TextDecoder().decode(bytes.slice(0,5)),
+      actions:[...toolbar.querySelector('.report-print-actions').children].map(node=>({...rect(node),label:node.getAttribute('aria-label')})),
+      firstDate:rect(toolbar.querySelector('[name=startDate]').parentElement),popup:popupData,keyboard});
+  }
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>
