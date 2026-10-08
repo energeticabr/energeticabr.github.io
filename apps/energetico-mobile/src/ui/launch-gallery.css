@@ -259,6 +259,8 @@
 .lg-record-summary { display: grid; gap: 8px; min-width: 0; }
 .lg-record-summary-fields { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .75fr) minmax(0, .85fr); gap: 0 8px; min-width: 0; }
 .lg-record-summary-fields .lg-record-field { padding-inline: 4px; }
+.lg-record-description { grid-column: 1 / -1; padding-inline: 4px; }
+.lg-record-description .lg-record-value { white-space: pre-wrap; }
 .lg-record-expand {
   grid-column: 1 / -1;
   display: flex;

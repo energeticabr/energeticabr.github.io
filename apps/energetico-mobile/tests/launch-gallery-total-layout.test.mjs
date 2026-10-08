@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
 
@@ -61,6 +61,10 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
         const status = card.querySelector('.lg-record-status').getBoundingClientRect(), actions = card.querySelector('.gallery-record-actions').getBoundingClientRect();
         const mascot = card.querySelector('.report-mascot-button'), order = card.querySelector('.lg-record-order');
         const mascotBox = mascot?.getBoundingClientRect(), orderBox = order?.getBoundingClientRect();
+        const description = card.querySelector('.lg-record-description');
+        const descriptionBox = description?.getBoundingClientRect();
+        const financeBox = card.querySelector('.lg-record-finance').getBoundingClientRect();
+        const expandBox = card.querySelector('.lg-record-expand').getBoundingClientRect();
         return { text: total.textContent.replace(/\u00a0/g, ' '), color: getComputedStyle(total.querySelector('.lg-record-value')).color,
           mascot: mascot ? { width: mascotBox.width, height: mascotBox.height,
             fits: mascotBox.left >= orderBox.left && mascotBox.right <= orderBox.right + 1,
@@ -72,6 +76,15 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
           overflow: card.scrollWidth > card.clientWidth + 1 || total.scrollWidth > total.clientWidth + 1,
           labels: [...card.querySelectorAll('.lg-record-finance .lg-record-label')].map(label => label.textContent),
           freight: card.querySelector('.lg-record-finance .lg-record-field:last-child .lg-record-value').textContent.replace(/\u00a0/g, ' '),
+          description: description ? {
+            text: description.querySelector('.lg-record-value').textContent,
+            visible: descriptionBox.height > 0 && !description.closest('[hidden]'),
+            belowFreight: descriptionBox.top >= financeBox.bottom,
+            beforeDisclosure: descriptionBox.bottom <= expandBox.top,
+            fullWidth: Math.abs(descriptionBox.width - financeBox.width) < 1,
+            preservesLines: getComputedStyle(description.querySelector('.lg-record-value')).whiteSpace === 'pre-wrap',
+            overflow: description.scrollWidth > description.clientWidth + 1,
+          } : null,
         };
       }))()`);
       assert.equal(layouts.length, 2);
@@ -81,7 +94,12 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
         assert.ok(layout.belowActions && layout.aboveDivider && layout.alignedRight && layout.noStatusOverlap && layout.fits && !layout.overflow,
           `Layout inválido em ${width}px: ${JSON.stringify(layout)}`);
         assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
+        assert.ok(layout.description?.visible && layout.description.belowFreight &&
+          layout.description.beforeDisclosure && layout.description.fullWidth &&
+          layout.description.preservesLines && !layout.description.overflow,
+          `Descrição inválida em ${width}px: ${JSON.stringify(layout.description)}`);
       }
+      assert.equal(layouts[0].description.text, 'Forma dos pilares & vigas\nConferir medidas antes da execução.');
       assert.equal(layouts[0].text, 'VALOR TOTALR$ 13.040,00');
       assert.deepEqual(layouts[0].mascot, { width: 44, height: 44, fits: true, loaded: true }, `Mascote em ${width}px`);
       assert.equal(layouts[1].mascot, null);
@@ -96,8 +114,18 @@ test('launch total is red above the divider, clear of pencil/X, and freight repl
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);
     socket?.close();
-    if (child && child.exitCode === null) { const exited = new Promise(done => child.once('exit', done)); child.kill(); await Promise.race([exited, delay(3000)]); }
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise(done => child.once('exit', () => done(true)));
+      if (process.platform === 'win32') {
+        assert.ok(Number.isSafeInteger(child.pid) && child.pid > 0, 'isolated test browser PID');
+        await new Promise(done => execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'],
+          { windowsHide: true, timeout: 5000 }, () => done()));
+      } else child.kill();
+      assert.equal(await Promise.race([exited, delay(3000, false)]), true, 'isolated test browser stopped');
+    }
     await server.close();
+    assert.ok(dirname(resolve(profile)) === resolve(tmpdir()) && basename(profile).startsWith('launch-total-layout-'),
+      'cleanup stays inside the uniquely created test profile');
     rmSync(profile, { recursive: true, force: true, maxRetries: 12, retryDelay: 300 });
   }
 });

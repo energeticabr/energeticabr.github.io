@@ -701,6 +701,49 @@ test('launch cards keep a compact summary and reveal remaining fields only when 
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
 });
 
+test('launch description stays below freight and before the disclosure when collapsed or expanded', async t => {
+  const ctx = await setup(t);
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.lg-record');
+  const summary = card.querySelector('.lg-record-summary');
+  const description = summary.querySelector('.lg-record-description');
+  assert.ok(description, 'the line description is visible without expanding');
+  assert.equal(description.querySelector('.lg-record-label').textContent, 'DESCRIÇÃO');
+  assert.equal(description.querySelector('.lg-record-value').textContent, 'Primeira & segunda\nLinha 2');
+  assert.equal(description.previousElementSibling, summary.querySelector('.lg-record-finance'));
+  const toggle = button(card, 'Ver mais informações');
+  assert.equal(description.nextElementSibling, toggle);
+  assert.equal(description.closest('[hidden]'), null);
+  assert.equal(description.querySelector('script, img, iframe'), null, 'description markup must remain inert text');
+  assert.equal(card.querySelectorAll('.lg-record-description').length, 1);
+  toggle.click();
+  assert.equal(description.closest('[hidden]'), null);
+  button(card, 'Ver menos informações').click();
+  assert.equal(description.closest('[hidden]'), null);
+});
+
+test('launch description accepts the unaccented SharePoint alias without using the product title', async t => {
+  const item = row();
+  delete item.fields.DESCRIÇÃO;
+  item.fields.DESCRICAO = 'Atividade da linha\nSegunda etapa';
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows: [item] }) : detail({ item }) });
+  await ctx.gallery.open();
+  assert.equal(ctx.root().querySelector('.lg-record-description .lg-record-value')?.textContent,
+    'Atividade da linha\nSegunda etapa');
+});
+
+test('missing or visually empty descriptions do not add an empty row below freight', async t => {
+  const rows = [undefined, '', '   ', '<p><br></p>', '<script>unsafe()</script>'].map((value, index) => ({
+    ...row(index + 1), fields: { ...row(index + 1).fields, DESCRIÇÃO: value },
+  }));
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot'
+    ? snapshot({ rows }) : detail() });
+  await ctx.gallery.open();
+  assert.equal(ctx.root().querySelectorAll('.lg-record').length, 5);
+  assert.equal(ctx.root().querySelectorAll('.lg-record-description').length, 0);
+});
+
 test('launch total is highlighted beside status while the lower finance area shows freight instead', async t => {
   const cases = [
     { id: 3489, total: '13.040,00', freight: 40, wantTotal: 'R$ 13.040,00', wantFreight: 'R$ 40,00' },
