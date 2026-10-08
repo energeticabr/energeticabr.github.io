@@ -3,6 +3,9 @@ import { payrollFieldKey as key } from './payroll-editor-policy.js';
 const scalar=value=>String(value&&typeof value==='object'?value.LookupValue??value.lookupValue??value.Value??value.value??'':value??'').trim();
 const checkedId=value=>{const id=String(value??'').trim();if(!/^[1-9]\d{0,14}$/.test(id))throw new Error('O vínculo IDLANCAMENTO é inválido. Selecione um ID de lançamento cadastrado.');return id;};
 const abort=signal=>{if(signal?.aborted)throw signal.reason||new DOMException('Consulta cancelada.','AbortError');};
+// A renamed Title gives its computed SharePoint link mirrors the same label.
+// Exclude only those auxiliaries; genuine duplicate data fields remain ambiguous.
+const dataColumns=columns=>columns.filter(c=>c?.computed!==true&&!/^LinkTitle(?:NoMenu|2)?$/i.test(String(c?.name??'')));
 
 /** Values remain IDs; supplier labels are presentation only. */
 export function createPayrollLaunchReader(repository,siteKey) {
@@ -12,14 +15,14 @@ export function createPayrollLaunchReader(repository,siteKey) {
     const result=await (descriptorPromise ||= (async()=>{
       const list=await repository.resolveList(siteKey,['LANCAMENTOS','LANÇAMENTOS']);
       if(list?.status!=='resolved'||!list.id)throw new Error('A base LANCAMENTOS não está disponível.');
-      const columns=await repository.getColumns(siteKey,list.id);
+      const columns=dataColumns(await repository.getColumns(siteKey,list.id));
       const field=name=>{const matches=columns.filter(c=>[c.name,c.displayName].some(n=>key(n)===name));return matches.length===1?matches[0].name:null;};
       const supplier=field('FORNECEDOR'),contractor=field('EMPREITEIRO');
       if(!supplier)throw new Error('Fornecedor não foi identificado em LANCAMENTOS.');
       if(contractor)return {list,supplier,contractor};
       const suppliers=await repository.resolveList(siteKey,['FORNECEDORES']);
       if(suppliers?.status!=='resolved'||!suppliers.id)throw new Error('A base FORNECEDORES não está disponível para conferir EMPREITEIRO.');
-      const supplierColumns=await repository.getColumns(siteKey,suppliers.id);
+      const supplierColumns=dataColumns(await repository.getColumns(siteKey,suppliers.id));
       const supplierField=aliases=>{const matches=supplierColumns.filter(c=>[c.name,c.displayName].some(n=>aliases.includes(key(n))));return matches.length===1?matches[0].name:null;};
       const name=supplierField(['CADASTRO','FORNECEDOR']),flag=supplierField(['EMPREITEIRO']),status=supplierField(['STATUS']);
       if(!name||!flag||!status)throw new Error('Os metadados de fornecedor, EMPREITEIRO e STATUS não foram identificados em FORNECEDORES.');
