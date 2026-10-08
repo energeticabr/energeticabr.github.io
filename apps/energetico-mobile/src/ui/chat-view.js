@@ -2411,6 +2411,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
       <button class="chat-header-avatar-shortcut" ${headerReportAttributes}>${assistantAvatar()}</button>
       <span><button class="chat-header-name-shortcut" ${headerReportAttributes}><strong>Energético</strong></button><small>${demo ? `<span data-demo-banner role="status">Demonstração — dados fictícios</span>` : `${escapeHtml(firstName)}, conectado à VM`}</small></span>
       ${showSettings ? settingsButton() : ""}
+      <button class="chat-header-general-summary-shortcut" type="button" data-action="open-general-summary-report" aria-label="Abrir resumo geral" title="Resumo geral"${headerReportDisabled || state.activeFlow ? " disabled" : ""}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Energético com placa da construtora"></button>
       <button class="header-action" type="button" data-action="sign-out">Sair</button>
     </header>
     ${showFlowStatus ? flowStatusMarkup(state, visibleMessages, busy, rhidAttendanceReportPage ? "📊 RELATÓRIO DE PRESENÇAS RHID" : latestPollTitle(visibleMessages), { homeOnly: completedCreation, rhidRefresh }) : ""}

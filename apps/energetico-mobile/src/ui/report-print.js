@@ -1,5 +1,6 @@
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 export const REPORT_PDF_TITLES = Object.freeze({
+ 'open-general-summary-report':'Resumo geral',
  'open-pending-provisions':'Provisões de pagamento pendentes',
  'open-provision-report':'Provisões de pagamento e despesas recorrentes',
  'open-payment-ledger':'Relatório de pagamentos', 'open-management-report':'Resumo gerencial de gastos',
@@ -127,7 +128,7 @@ export function openFilteredReportPdf(root,{action,previewMedia,buildPdf=default
 export function decorateReportPrint(panel,{action,previewMedia,closePreview,buildPdf,loadLogo}={}){
  const root=panel?.element;if(!root?.ownerDocument||!REPORT_PDF_TITLES[action])return panel;
  const doc=root.ownerDocument,button=doc.createElement('button');button.type='button';button.className='report-print-button';button.dataset.action='print-report-pdf';button.innerHTML=PRINTER;button.setAttribute('aria-label','Abrir PDF do relatório');button.title='Abrir PDF com os filtros atuais';
- let host=root.querySelector('.pl-filters,.dr-toolbar,.qr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.tdr-toolbar,.pwdr-toolbar,.ccr-toolbar,.cargos-header');
+ let host=root.querySelector('.pl-filters,.dr-toolbar,.qr-toolbar,.dcr-toolbar,.tar-filters,.tar-toolbar,.tdr-toolbar,.pwdr-toolbar,.ccr-toolbar,.gsr-toolbar,.cargos-header');
  if(!host&&root.querySelector('.qr-dialog')){host=doc.createElement('header');host.className='qr-toolbar';root.querySelector('.qr-dialog').prepend(host);}
  host||=root.querySelector('[role="dialog"]')||root;
  // The shared PDF action supersedes the old browser-print shortcut.

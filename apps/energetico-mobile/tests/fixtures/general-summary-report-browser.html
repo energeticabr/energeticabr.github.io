@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Resumo geral — layout real</title></head>
+<body><main id="app"></main><aside id="app-tools"></aside>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/report-print.css';
+import '../../src/ui/general-summary-report.css';
+try {
+  const {renderChatMarkup, createChatView} = await import('../../src/ui/chat-view.js');
+  const {createInstallView} = await import('../../src/web/install-view.js');
+  const {createGeneralSummaryReportView} = await import('../../src/ui/general-summary-report-view.js');
+  const {decorateReportPrint, captureFilteredReport, REPORT_PDF_TITLES} = await import('../../src/ui/report-print.js');
+  const {decorateReportNavigation} = await import('../../src/ui/report-navigation.js');
+  const {buildFilteredReportPdf} = await import('../../src/chat/filtered-report-pdf.js');
+  const {PDFDocument} = await import('pdf-lib');
+  const app = document.getElementById('app'), tools = document.getElementById('app-tools');
+  const state = {sessionStatus:'authenticated', account:{name:'Pessoa Exemplo', username:'person@example.invalid'},
+    draft:'Rascunho preservado', messages:[{id:'1', type:'text', role:'assistant', text:'Qual é a obra?'}], pendingFiles:[], activeText:null, error:null};
+  // Production markup and styles, including the settings control, rather than a simplified header.
+  app.innerHTML = renderChatMarkup(state, {showSettings:true});
+  const installer = createInstallView(tools, {client:{}, standalone:false, storageRef:{getItem:() => '1', setItem() {}}});
+  const chat = createChatView(app, {onOpenSettings:() => installer.open()}); chat.render(state);
+  const rect = node => {const {left, right, top, width, height} = node.getBoundingClientRect(); return {left, right, top, width, height};};
+  const header = app.querySelector('.chat-header'), shortcut = header.querySelector('[data-action="open-general-summary-report"]');
+  const settings = header.querySelector('[data-action="open-settings"]'), signOut = header.querySelector('[data-action="sign-out"]'), mascot = shortcut.querySelector('img');
+  await mascot.decode(); await new Promise(requestAnimationFrame);
+  const gearRect = settings.getBoundingClientRect(), hit = document.elementFromPoint(gearRect.left + gearRect.width / 2, gearRect.top + gearRect.height / 2);
+  settings.focus();
+  const settingsData = {bounds:rect(settings), enabled:!settings.disabled, hitTarget:settings.contains(hit), focused:document.activeElement === settings};
+  const headerData = {bounds:rect(header), adjacentToSignOut:shortcut.nextElementSibling === signOut,
+    adjacentToSettings:settings.nextElementSibling === shortcut, overflow:Math.max(0, header.scrollWidth - header.clientWidth),
+    documentOverflow:Math.max(0, document.documentElement.scrollWidth - innerWidth), logoLoaded:mascot.naturalWidth > 0,
+    logoUrl:mascot.src, background:getComputedStyle(shortcut).backgroundColor, mascot:rect(shortcut), signOut:rect(signOut),
+    objectFit:getComputedStyle(mascot).objectFit, settings:settingsData};
+  settings.click(); await new Promise(requestAnimationFrame);
+  const settingsDialog = tools.querySelector('[role="dialog"]');
+  settingsData.opened = Boolean(settingsDialog && settingsDialog.getBoundingClientRect().height > 0 && settingsDialog.textContent.includes('Instalar o aplicativo no iPhone'));
+  tools.querySelector('button[data-tool-action="close"]')?.click(); settingsData.closed = !tools.querySelector('[role="dialog"]');
+
+  let loads = 0, partial = false;
+  const action = 'open-general-summary-report';
+  const view = decorateReportPrint(decorateReportNavigation(createGeneralSummaryReportView({data:{async loadReport() {
+    loads++;
+    return {today:'2026-10-08', updatedAt:'2026-10-08T13:45:00.000Z',
+      warnings:partial ? ['DOCUMENTOS indisponíveis: consulta incompleta.'] : ['Conferir indicadores carregados.'],
+      metrics:{dueToday:3, overdue:4, auditOrders:115, quotes:1, documents:partial ? null : 18,
+        pendingTasks:69, delegatedTasks:5, activeContracts:2, pendingPayments:'7303.00', pendingDiaries:6,
+        commercialDocuments:13, activePathologies:7}};
+  }}}), {action}), {action});
+  let opening;
+  chat.on(action, () => {opening = view.open();}); shortcut.focus(); shortcut.click(); await opening;
+  const root = view.element, logo = root.querySelector('img'); await logo.decode(); await new Promise(requestAnimationFrame);
+  const content = root.querySelector('.gsr-content'), toolbar = root.querySelector('.gsr-toolbar');
+  const group = name => root.querySelector(`.gsr-group--${name}`);
+  const restore = await view.preparePrint(), capture = captureFilteredReport(root, {title:REPORT_PDF_TITLES[action]}); restore();
+  const blob = await buildFilteredReportPdf(capture, {logoBytes:new Uint8Array(await (await fetch(logo.src)).arrayBuffer())});
+  const bytes = new Uint8Array(await blob.arrayBuffer()), pdf = await PDFDocument.load(bytes);
+  const capturedText = snapshot => snapshot.pages.flatMap(page => page.blocks).flatMap(block => block.runs?.map(run => run.text) || []).join(' ');
+  const layout = {header:headerData, loads, metricCount:root.querySelectorAll('[data-metric]').length,
+    portraitBlocked:Boolean(root.querySelector('[class*="orientation"]:not([hidden])')), logoLoaded:logo.naturalWidth > 0,
+    documentOverflow:Math.max(0, document.documentElement.scrollWidth - innerWidth),
+    toolbarOverflow:toolbar.scrollWidth - toolbar.clientWidth, contentOverflow:content.scrollWidth - content.clientWidth,
+    contentHeight:content.clientHeight, navigationArrows:root.querySelectorAll('.report-navigation-arrow').length,
+    toolbarBackground:getComputedStyle(toolbar).backgroundColor,
+    groupColors:[...root.querySelectorAll('.gsr-group')].map(node => getComputedStyle(node).backgroundColor),
+    groupWidthRatios:Object.fromEntries(['documents', 'tasks', 'works', 'commercial'].map(name => [name, rect(group(name)).width])),
+    rows:Object.fromEntries(['documents', 'tasks', 'works', 'commercial'].map(name => [name, rect(group(name)).top])),
+    actions:[...toolbar.querySelector('.report-print-actions').children].map(node => ({...rect(node), label:node.getAttribute('aria-label')})),
+    pdf:{title:capture.title, header:new TextDecoder().decode(bytes.slice(0, 5)), pages:pdf.getPageCount(), text:capturedText(capture)}};
+  partial = true; root.querySelector('[aria-label="Atualizar resumo geral"]').click(); await view.open();
+  const restorePartial = await view.preparePrint(), partialCapture = captureFilteredReport(root, {title:'Resumo geral'}); restorePartial();
+  layout.partial = {value:root.querySelector('[data-metric="documents"]').textContent,
+    visible:!root.querySelector('.gsr-warnings').hidden, text:capturedText(partialCapture)};
+  view.close(); layout.closed = root.hidden; layout.appInert = app.inert; layout.restoredHeaderFocus = document.activeElement === shortcut;
+  view.destroy(); chat.destroy(); installer.destroy();
+  document.documentElement.dataset.layout = JSON.stringify(layout);
+} catch (error) {document.documentElement.dataset.layout = JSON.stringify({error:String(error.stack || error)});}
+</script></body></html>
