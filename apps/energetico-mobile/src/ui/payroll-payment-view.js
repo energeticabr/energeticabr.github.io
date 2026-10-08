@@ -43,7 +43,11 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
       form.id=`payroll-payment-${state.operationId}`;submit.setAttribute('form',form.id);
       const select=(name,label,placeholder)=>{const field=el('label','dynamic-field',label),control=el('select');control.name=name;control.required=true;control.setAttribute('aria-label',label);control.append(new doc.defaultView.Option(placeholder,''));field.append(control);grid.append(field);return control;};
       const launch=select('IDLANCAMENTO','Lançamento (IDLANCAMENTO)','Selecione o lançamento');
-      for(const row of options.launches) launch.append(new doc.defaultView.Option(`${row.id} — ${row.supplier}${row.description?` — ${row.description}`:''}`,row.id));
+      for(const row of options.launches) {
+        const total=typeof row.total==='number'&&Number.isFinite(row.total)?row.total.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'Valor não informado';
+        const paidDate=row.paidDate?.split('-').reverse().join('/') || 'Sem pagamento efetuado';
+        launch.append(new doc.defaultView.Option(`${row.id} — ${row.supplier} — ${row.description || 'Profissão não informada'} (${total} — ${paidDate})`,row.id));
+      }
       const summary=el('table','payroll-payment-summary');summary.setAttribute('aria-label','Dados do fornecedor e do lançamento');summary.hidden=true;
       const rows=el('tbody'),values=[];
       for(const label of ['Fornecedor','Valor unitário','Qtd','Data']) {const row=el('tr'),key=el('th','',label),value=el('td');key.scope='row';row.append(key,value);rows.append(row);values.push(value);}
