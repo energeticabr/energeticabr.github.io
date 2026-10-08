@@ -13,5 +13,14 @@ test('reference payroll layout fits horizontal phone tablet desktop with blue wh
   for(const control of layout.controlBounds)assert.ok(control.left>=0&&control.right<=width+1&&control.bottom<=layout.toolbar.bottom+1);
   assert.ok(layout.headerMetricWidths.every(metric=>metric.scroll<=metric.width+1),'financial metrics fit');assert.ok(layout.paymentTable.width<=width);
   assert.match(layout.headerTexts[0],/1\.581,00/);assert.equal(layout.headerTexts[1],'3');
+  for(const rubric of layout.rubricLayouts){
+   assert.ok(rubric.rubrics.left>=rubric.total.right-1,'rubrics are to the right of total paid');
+   assert.ok(rubric.count.left>=rubric.rubrics.right-1,'payment count stays after rubric totals');
+   assert.ok(rubric.border>=1,'a vertical rule separates total paid and rubrics');
+   assert.ok(rubric.font<rubric.totalFont,'rubric figures use smaller type than the total');
+   for(const row of rubric.rows){assert.ok(row.scroll<=row.width+1,'long rubric labels and values are never clipped');assert.ok(row.bounds.bottom<=rubric.rubrics.bottom+1,'every rubric row fits its summary');}
+  }
+  assert.deepEqual(layout.rubricLayouts.map(r=>r.rows.length),[3,8,3]);
+  assert.match(layout.rubricLayouts[0].rows.map(r=>r.text).join(' '),/SALÁRIO:.*527,00/);
  }}finally{await server.close();}
 });

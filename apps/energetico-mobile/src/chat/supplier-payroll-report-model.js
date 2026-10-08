@@ -123,3 +123,17 @@ export function summarizePayrollPayments(rows) {
   }
   return { totalCents: uncalculated || total.abs().gt(Number.MAX_SAFE_INTEGER) ? null : total.toNumber(), uncalculated };
 }
+
+/** Reuse the paid-total policy per rubric, never replace an unknown amount with zero. */
+export function summarizePayrollPaymentsByType(rows) {
+  if (!Array.isArray(rows)) throw new TypeError('Lista de pagamentos inválida.');
+  const groups = new Map();
+  for (const row of rows) {
+    const type = (typeof row?.type === 'string' ? row.type.normalize('NFC').trim().replace(/\s+/g, ' ') : '')
+      .toLocaleUpperCase('pt-BR') || 'RUBRICA NÃO INFORMADA';
+    if (!groups.has(type)) groups.set(type, []);
+    groups.get(type).push(row);
+  }
+  return [...groups].sort(([a], [b]) => compareNames(a, b))
+    .map(([type, payments]) => ({ type, ...summarizePayrollPayments(payments) }));
+}
