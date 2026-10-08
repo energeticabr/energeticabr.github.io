@@ -1066,6 +1066,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const body = element('div', 'lg-record-content');
     summary.append(identity, summaryFields);
     if (!finance.hidden) summary.append(finance);
+    const description = summaryField('DESCRIÇÃO', field(fields, 'DESCRIÇÃO', 'DESCRICAO'), 'lg-record-description');
+    if (description?.querySelector('.lg-record-value').textContent.trim()) summary.append(description);
     summary.append(expand);
     body.append(summary, extra);
     card.classList.add('gallery-record-card');
