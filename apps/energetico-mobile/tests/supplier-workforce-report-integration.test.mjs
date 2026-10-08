@@ -27,14 +27,14 @@ test('fifth right workforce mascot follows payroll, before orange, and dispatche
  const view=createChatView(dom.window.document.querySelector('#app'));t.after(()=>{view.destroy();dom.window.close();});
  let opened=0;view.on(action,()=>opened++);view.render(home);
  const mascot=dom.window.document.querySelector(`[data-action="${action}"]`);assert.ok(mascot);
- assert.equal(mascot.previousElementSibling.dataset.action,'open-supplier-payroll-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-pending-supplier-payments-report');
+ assert.equal(mascot.previousElementSibling.dataset.action,'open-supplier-payroll-report');assert.equal(mascot.nextElementSibling.dataset.action,'open-contractor-control-report');
  assert.equal(mascot.closest('.chat-bubble'),null);assert.match(mascot.querySelector('img').src,/supplier-workforce\.png$/);
  mascot.querySelector('img').click();assert.equal(opened,1);
  view.render({...home,activeText:{id:'busy'}});const busy=dom.window.document.querySelector(`[data-action="${action}"]`);assert.equal(busy.disabled,true);busy.click();assert.equal(opened,1);
  assert.doesNotMatch(renderChatMarkup({...home,activeFlow:'busy'}),/data-action="open-supplier-workforce-report"/);
 });
 test('last pink has only previous to payroll and payroll gains next, without reaching orange',()=>{
- assert.deepEqual(getReportNeighbors(action),{previous:'open-supplier-payroll-report',next:'open-pending-supplier-payments-report'});
+ assert.deepEqual(getReportNeighbors(action),{previous:'open-supplier-payroll-report',next:'open-contractor-control-report'});
  assert.deepEqual(getReportNeighbors('open-supplier-payroll-report'),{previous:'open-stage-progress',next:action});
  assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
  assert.equal(REPORT_PDF_TITLES[action],'Fornecedores por filial, imóvel e profissão');
@@ -79,7 +79,7 @@ test('refresh cancels the old token query so a late consent error cannot prompt'
  const token=deferred();let tokens=0,grants=0;const h=harness(t,{auth:{getToken:()=>++tokens===1?token.promise:Promise.resolve('fresh'),authorize:async()=>{grants++;}},supplierWorkforceReportDataFactory:async({tokenProvider})=>({loadSnapshot:()=>tokenProvider()})});await h.controller.start();await h.view.emit(action);const data=h.panels[0].data,old=data.loadSnapshot(),rejected=assert.rejects(old,{name:'AbortError'});await tick();assert.equal(await data.loadSnapshot(),'fresh');await rejected;token.reject(Object.assign(Error('old consent'),{code:'AUTH_REQUIRED'}));await tick();assert.equal(grants,0);
 });
 test('new pink navigates to both payroll and diaries and rejects forged direction',async t=>{
- let payroll=0,diaries=0;const h=harness(t,{supplierPayrollReportFactory:async()=>({open(){payroll++;},close(){},destroy(){}}),supplierPayrollReportDataFactory:async()=>({loadSnapshot:async()=>({complete:true,sheets:[]}),loadPaymentsForPayrollIds:async()=>[]}),pendingSupplierPaymentsReportViewFactory:async()=>({open(){diaries++;},close(){},destroy(){}})});
+ let payroll=0,diaries=0;const h=harness(t,{supplierPayrollReportFactory:async()=>({open(){payroll++;},close(){},destroy(){}}),supplierPayrollReportDataFactory:async()=>({loadSnapshot:async()=>({complete:true,sheets:[]}),loadPaymentsForPayrollIds:async()=>[]}),contractorControlReportViewFactory:async()=>({open(){diaries++;},close(){},destroy(){}})});
  await h.controller.start();await h.view.emit(action);
  assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'orange'}),false);
  assert.equal(await h.view.emit('navigate-mascot-report',{from:action,direction:'next'}),true);assert.equal(diaries,1);

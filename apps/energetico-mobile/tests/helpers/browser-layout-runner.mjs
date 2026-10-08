@@ -26,7 +26,9 @@ export async function runBrowserLayout(browser, { width, height, url, maxBuffer 
         endpoint = `ws://127.0.0.1:${port}${path}`;
         break;
       } catch (error) {
-        if (error.code !== "ENOENT") throw error;
+        // Chrome can briefly lock this startup file while writing it on Windows.
+        // Keep the existing bounded wait; other read and cleanup errors still fail.
+        if (error.code !== "ENOENT" && !(process.platform === "win32" && error.code === "EBUSY")) throw error;
         if (child.exitCode !== null) throw new Error("O navegador de testes encerrou antes de iniciar.");
         await delay(100);
       }

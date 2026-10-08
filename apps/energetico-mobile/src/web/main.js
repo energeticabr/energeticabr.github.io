@@ -49,6 +49,7 @@ import "../ui/delegated-deadline-report.css";
 import "../ui/pending-work-diaries-report.css";
 import "../ui/pending-supplier-payments-report.css";
 import "../ui/supplier-workforce-report.css";
+import "../ui/contractor-control-report.css";
 import "../ui/audit-reports-live.css";
 import "../ui/commercial-progress-reports.css";
 import "../ui/commercial-docs-rent-reports-style.css";

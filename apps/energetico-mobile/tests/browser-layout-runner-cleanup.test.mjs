@@ -10,12 +10,12 @@ const source = await readFile(new URL('./helpers/browser-layout-runner.mjs', imp
 const ownedPid = 424242;
 const html = '<html data-layout="{&quot;ready&quot;:true}"><body>Measured</body></html>';
 
-function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, removalError } = {}) {
+function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, removalError, startupBusyAttempts = 0, startupError } = {}) {
   const child = new EventEmitter();
   Object.assign(child, { pid: ownedPid, exitCode: null, signalCode: null });
   const root = path.resolve('simulated-layout-tmp');
   const profile = path.join(root, 'energetico-layout-owned');
-  const state = { exitObserved: false, removals: [], signals: [], commands: [], unsafe: [], socketsClosed: 0 };
+  const state = { exitObserved: false, removals: [], signals: [], commands: [], unsafe: [], socketsClosed: 0, endpointReads: 0 };
   const timers = new Set();
   const later = (callback, ms, ...args) => {
     const timer = setTimeout(() => {
@@ -118,7 +118,13 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
     },
     'node:fs/promises': {
       async mkdtemp(prefix) { assert.equal(prefix, path.join(root, 'energetico-layout-')); return profile; },
-      async readFile(file) { assert.equal(file, path.join(profile, 'DevToolsActivePort')); return '12345\n/devtools/browser/owned'; },
+      async readFile(file) {
+        assert.equal(file, path.join(profile, 'DevToolsActivePort'));
+        state.endpointReads++;
+        if (startupError) throw startupError;
+        if (state.endpointReads <= startupBusyAttempts) throw Object.assign(new Error('Chrome is writing its endpoint'), { code: 'EBUSY' });
+        return '12345\n/devtools/browser/owned';
+      },
       async rm(file, options) {
         state.removals.push(file);
         if (file !== profile || !options.recursive) return unsafe(`rm ${file}`);
@@ -163,6 +169,40 @@ test('confirmed cleanup preserves the captured stdout', { timeout: 1500 }, async
   assert.equal(f.state.removals.length, 1);
   f.audit();
 });
+
+// Break: a transient Windows startup file lock aborts a valid layout capture.
+test('Windows endpoint startup retries transient EBUSY then captures the real result', { timeout: 1500 }, async t => {
+  const f = fixture(t, { startupBusyAttempts: 2 });
+  const result = await f.run();
+  assert.equal(result.stdout, '<!doctype html>' + html);
+  assert.equal(f.state.endpointReads, 3);
+  assert.ok(f.state.exitObserved);
+  f.audit();
+});
+
+// Break: ignoring a persistent startup lock returns success or loops forever.
+test('persistent Windows endpoint EBUSY expires the existing startup bound and still cleans its owned child', { timeout: 5000 }, async t => {
+  const f = fixture(t, { startupBusyAttempts: Infinity });
+  await assert.rejects(f.run(), /não iniciou/);
+  assert.equal(f.state.endpointReads, 100);
+  assert.ok(f.state.exitObserved);
+  assert.equal(f.state.removals.length, 1);
+  assert.equal(f.state.socketsClosed, 0);
+  assert.deepEqual(f.state.unsafe, []);
+});
+
+for (const [platform, code] of [['win32', 'EPERM'], ['linux', 'EBUSY']]) {
+  test(`${platform} unrelated startup ${code} rejects immediately instead of fabricating a measurement`, { timeout: 1500 }, async t => {
+    const error = Object.assign(new Error('Endpoint unavailable'), { code });
+    const f = fixture(t, { platform, startupError: error });
+    await assert.rejects(f.run(), value => value === error);
+    assert.equal(f.state.endpointReads, 1);
+    assert.ok(f.state.exitObserved);
+    assert.equal(f.state.removals.length, 1);
+    assert.equal(f.state.socketsClosed, 0);
+    assert.deepEqual(f.state.unsafe, []);
+  });
+}
 
 for (const code of ['EPERM', 'EBUSY']) {
   test(`profile cleanup ${code} rejects instead of returning successful stdout`, { timeout: 1500 }, async t => {

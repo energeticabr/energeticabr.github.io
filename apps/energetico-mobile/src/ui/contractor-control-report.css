@@ -1,0 +1,75 @@
+.ccr-overlay { z-index:1500; }
+.ccr-overlay[hidden],.ccr-overlay [hidden] { display:none !important; }
+.ccr-dialog { position:relative; width:100%; background:#fff; color:#243447; }
+.ccr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.ccr-report { padding-top:34px; box-sizing:border-box; }
+.ccr-back,.ccr-close { position:absolute; top:2px; z-index:2; display:grid; place-items:center; width:40px; height:30px; min-height:0; min-width:0; padding:0; border:1px solid #a20000; border-radius:4px; color:#a20000; background:white; font:24px/1 Arial,sans-serif; cursor:pointer; }
+.ccr-back { left:4px; }
+.ccr-close { right:4px; }
+.ccr-dialog.pl-dialog--portrait { padding-top:38px; }
+.ccr-filters { grid-template-columns:84px minmax(70px,.9fr) minmax(55px,.7fr) minmax(100px,1.4fr) minmax(75px,1fr) minmax(95px,1.3fr) minmax(65px,.9fr); align-items:end; }
+.ccr-filters .ccr-filter-label { background:#a20000; color:white; white-space:normal; min-height:2.3em; display:grid; align-items:center; }
+.ccr-filter-input { width:100%; min-width:0; box-sizing:border-box; height:27px; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; font:normal clamp(9px,1.2vw,14px) Arial,sans-serif; }
+.ccr-filters .sfs .sfs-field > .sfs-trigger { color:#000; font-weight:400; }
+/* Shared report pickers own their modal typography and keyboard behavior. */
+.ccr-notice p { margin:2px 0; }
+.ccr-content { box-sizing:border-box; margin-inline:calc(64px + env(safe-area-inset-left,0px)) calc(64px + env(safe-area-inset-right,0px)); overflow-y:auto; overflow-x:hidden; color:#243447; font:normal clamp(10.5px,1.1vw,14px)/1.35 Arial,sans-serif; }
+.ccr-brand { border:2px solid #000; background:#fce7f3; padding:8px; text-align:center; }
+.ccr-brand img { display:block; height:clamp(38px,5vw,70px); max-width:65%; width:auto; object-fit:contain; margin:auto; }
+.ccr-title { font-size:clamp(16px,1.8vw,22px); font-weight:700; color:#831843; border-bottom:3px solid #831843; margin:10px 0; padding-bottom:6px; }
+.ccr-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0; }
+.ccr-metric { border:2px solid #70ad47; background:#e2f0d9; color:#375623; padding:10px 5px; text-align:center; min-width:0; overflow-wrap:anywhere; }
+.ccr-metric dt { font-size:clamp(9px,1vw,12px); font-weight:700; }
+.ccr-metric dd { margin:4px 0 0; font-size:clamp(17px,2vw,25px); line-height:1.15; font-weight:800; }
+.ccr-metric--inactive { background:#fce4d6; color:#9c0006; border-color:#c00000; }
+.ccr-metric--contracts { background:#ddebf7; color:#1f4e78; border-color:#5b9bd5; }
+.ccr-metric--activeGlobalValue { border-color:#548235; }
+.ccr-metric--activeGlobalValue dd { font-size:clamp(14px,1.8vw,22px); }
+.ccr-note { box-sizing:border-box; width:100%; margin:10px 0; padding:8px; background:#fdf2f8; color:#831843; border:1px solid #f9a8d4; border-left:4px solid #be185d; text-align:center; font-weight:600; overflow-wrap:anywhere; }
+.ccr-warnings { margin:8px 0; padding:5px 8px; color:#9c0006; background:#fff2cc; border:1px solid #d6b656; overflow-wrap:anywhere; }
+.ccr-warnings p { margin:3px 0; }
+.ccr-table-scroll { width:100%; overflow:auto; overscroll-behavior:contain; }
+.ccr-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; background:#fff; color:#243447; font-size:inherit; }
+.ccr-main-table { min-width:740px; }
+.ccr-table th,.ccr-table td { border:1px solid #d5dce3; padding:7px 4px; text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
+.ccr-table thead th { background:#831843; color:white; font-weight:700; }
+.ccr-table td { font-weight:600; }
+.ccr-table [data-column=totalValue] { color:#163a5f; }
+.ccr-table [data-column=totalMeasurements] { color:#246b35; }
+.ccr-table td[data-tone=pending] { background:#f4b183; color:#7f4e00; }
+.ccr-table td[data-tone=danger] { background:#ffc7ce; color:#9c0006; }
+.ccr-table td[data-tone=success] { background:#c6efce; color:#006100; }
+.ccr-table .ccr-empty { padding:12px; background:#fff2cc; color:#7f6000; }
+.ccr-select-row { max-width:100%; min-width:0; min-height:28px; padding:2px; border:0; background:transparent; color:#831843; font:inherit; font-weight:700; text-decoration:underline; cursor:pointer; overflow-wrap:anywhere; }
+/* Remains readable by the shared PDF collector, which deliberately omits buttons. */
+.ccr-print-id { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.ccr-pager { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:10px 0; text-align:center; }
+.ccr-pager button,.ccr-retry,.ccr-detail-retry { min-height:32px; padding:5px 8px; border:1px solid #be185d; border-radius:4px; background:white; color:#831843; font:inherit; cursor:pointer; }
+.ccr-pager button:disabled { opacity:.4; cursor:default; }
+.ccr-detail { margin:18px 0; }
+.ccr-selected-title,.ccr-detail-title { padding:9px; margin:12px 0 8px; background:#831843; color:white; font-size:clamp(12px,1.4vw,17px); text-align:center; overflow-wrap:anywhere; }
+.ccr-detail-section:has(.ccr-launches) .ccr-detail-title { background:#163a5f; }
+.ccr-launches thead th { background:#4472c4; }
+.ccr-detail-section:has(.ccr-measurements) .ccr-detail-title { background:#548235; }
+.ccr-measurements thead th { background:#70ad47; }
+.ccr-detail-error,.ccr-detail-notice { padding:8px; border:1px solid #d6b656; background:#fff2cc; color:#7f6000; }
+.ccr-overlay :focus-visible { outline:2px solid #2188c1; outline-offset:2px; }
+@media(max-width:900px) {
+  .ccr-filters { grid-template-columns:84px repeat(3,minmax(0,1fr)); }
+  .ccr-filters .pl-refresh,.ccr-filters .report-print-actions { grid-row:span 2; }
+  .ccr-brand { padding:5px; }
+  .ccr-title { margin:6px 0; }
+  .ccr-metrics { gap:4px; margin:6px 0; }
+  .ccr-metric { padding:6px 3px; }
+  .ccr-note { margin:6px 0; padding:5px; }
+  .ccr-table th,.ccr-table td { padding:5px 3px; }
+}
+@media print {
+  .ccr-overlay,.ccr-dialog,.ccr-report { position:static; height:auto; max-height:none; overflow:visible; padding:0; }
+  .ccr-content { margin-inline:0; overflow:visible; }
+  .ccr-table-scroll { overflow:visible; }
+  .ccr-main-table { min-width:0; }
+  .ccr-filters,.ccr-back,.ccr-close,.ccr-pager,.ccr-select-row { display:none; }
+  .ccr-print-id { position:static; width:auto; height:auto; overflow:visible; clip-path:none; white-space:normal; }
+  .ccr-table thead { display:table-header-group; }
+}

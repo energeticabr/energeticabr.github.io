@@ -35,7 +35,7 @@ test('fifth right mascot follows payroll, before orange, and dispatches its own 
 });
 test('last pink has only previous to payroll and payroll gains next, without reaching orange',()=>{
  assert.deepEqual(getReportNeighbors(action),{previous:'open-pending-supplier-payments-report',next:null});
- assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:'open-supplier-workforce-report',next:action});
+ assert.deepEqual(getReportNeighbors('open-pending-supplier-payments-report'),{previous:'open-contractor-control-report',next:action});
  assert.equal(getReportNeighbors('open-commercial-receipts').previous,null);
  assert.equal(REPORT_PDF_TITLES[action],'Diários de obras pendentes');
 });
