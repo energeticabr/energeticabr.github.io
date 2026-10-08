@@ -78,6 +78,33 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
+test("descritivo provisão abre localmente e reutiliza a galeria sem enviar comandos para a VM", async t => {
+  const created = [], opened = [], destroyed = [];
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => {
+      assert.equal(kind, "provisionDescription");
+      return { kind, loadSnapshot: async () => ({ rows: [] }) };
+    },
+    registrationGalleryFactory: async ({ kind, data, openMediaCollection }) => {
+      assert.equal(kind, "provisionDescription");
+      assert.equal(data.kind, kind);
+      assert.equal(typeof openMediaCollection, "function");
+      created.push(kind);
+      return { open() { opened.push(kind); }, destroy() { destroyed.push(kind); } };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_provision_description_gallery" });
+  await h.view.emit("select-reply", { replyId: "action_provision_description_gallery" });
+  assert.deepEqual(created, ["provisionDescription"]);
+  assert.deepEqual(opened, ["provisionDescription", "provisionDescription"]);
+  assert.equal(h.chatCalls.length, before);
+  h.controller.stop();
+  assert.deepEqual(destroyed, ["provisionDescription"]);
+});
+
 test("relatório RHID consulta a data escolhida e coloca os registros no chat", async t => {
   const h = makeHarness();
   const requested = [];
@@ -1517,6 +1544,7 @@ test('mais da galeria envia action_task e exibe o fluxo real de criação de tar
 });
 
 const galleryCreationCases = [
+  ['action_provision_description_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_payment', 'CRIAR UMA PROVISÃO DE PAGAMENTO', 'payment'],
   ['action_launch_gallery', 'launchGalleryFactory', null, 'action_launch', 'EFETUAR LANÇAMENTO', 'launch'],
   ['action_orders_gallery', 'ordersGalleryFactory', 'ordersGalleryDataFactory', 'action_pending_order_registration', 'EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)', 'pending_order_registration'],
   ['action_tasks_gallery', 'tasksGalleryFactory', 'tasksGalleryDataFactory', 'action_task', 'ADICIONAR UMA NOVA TAREFA', 'task'],

@@ -132,6 +132,23 @@ for (const entry of galleryCases) {
     assert.equal(creates, 0);
   });
 
+  if (REGISTRATION_GALLERY_MODELS[entry.options?.kind]?.readOnly) {
+    test(`${entry.name}: read-only parent has no isolated edit/delete but + starts the linked creation flow`, async t => {
+      let creates = 0;
+      const ctx = setup(t, entry, {
+        onCreate: () => { creates++; },
+        snapshot: { rows: [{ id: '7', fields: { FORNECEDOR: 'Fornecedor', VALORTOTAL: '100' } }] },
+      });
+      await ctx.gallery.open();
+      assert.equal(ctx.root().querySelector('[data-gallery-action]'), null);
+      shortcut(ctx).click();
+      await settle();
+      assert.equal(creates, 1);
+      assert.equal(ctx.root().hidden, true);
+    });
+    continue;
+  }
+
   test(`${entry.name}: pending record deletion blocks creation and does not close the gallery`, async t => {
     const mutation = deferred(); let creates = 0;
     const status = { tasks: 'EM ATENDIMENTO', measurementLines: 'PENDENTE PGTO', stageDemonstratives: 'ATIVIDADE INICIADA', constructionStages: 'INICIADO' }[entry.name] || 'ATIVO';

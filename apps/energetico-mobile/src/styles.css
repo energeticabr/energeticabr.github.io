@@ -843,12 +843,14 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-choice-columns--launch-menu { --supplies-gap: clamp(7px, 1vw, 10px); --supplies-gallery-height: max(54px, var(--control-height)); display: grid; gap: var(--supplies-gap); }
 .chat-supplies-pair, .chat-supplies-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--supplies-gap); }
 .chat-supplies-pair { min-height: calc(2 * var(--supplies-gallery-height) + var(--supplies-gap)); }
+.chat-supplies-pair--three-galleries { min-height: calc(3 * var(--supplies-gallery-height) + 2 * var(--supplies-gap)); }
 .chat-supplies-pair__primary, .chat-supplies-extras__primary { min-width: 0; display: grid; }
 .chat-supplies-extras__primary { gap: var(--supplies-gap); }
 .chat-supplies-extras { grid-template-columns: minmax(0, 1fr); }
 .chat-supplies-extra-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--supplies-gap); min-width: 0; }
 .chat-choice-columns--launch-menu .chat-supplies-extra-pair .chat-gallery-actions { grid-template-rows: minmax(var(--supplies-gallery-height), 1fr); }
 .chat-choice-columns--launch-menu .chat-gallery-actions { display: grid; grid-template-rows: repeat(2, minmax(var(--supplies-gallery-height), 1fr)); gap: var(--supplies-gap); }
+.chat-choice-columns--launch-menu .chat-supplies-pair--three-galleries .chat-gallery-actions { grid-template-rows: repeat(3, minmax(var(--supplies-gallery-height), 1fr)); }
 .chat-choice-columns--launch-menu .chat-choice-button { width: 100%; min-width: 0; min-height: var(--supplies-gallery-height); padding: 8px; border: 0; border-radius: 14px; color: #fff; background: var(--brand); font-size: clamp(.78rem, 2.5vw, 1.05rem); font-weight: 800; line-height: 1.2; }
 .chat-choice-columns--launch-menu .chat-supplies-pair__primary .chat-choice-button { height: 100%; }
 .chat-choice-columns--launch-menu .chat-choice-button--supplies { display: flex; align-items: center; justify-content: center; gap: clamp(4px, 1vw, 12px); text-align: center; }

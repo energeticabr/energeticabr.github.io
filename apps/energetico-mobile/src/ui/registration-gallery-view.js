@@ -607,8 +607,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
       const recordMain = el('div', 'gallery-record-main');
       recordMain.append(...card.childNodes);
-      card.classList.add('gallery-record-card');
-      card.append(recordMain, recordActions.render(row));
+      if (!model.readOnly) card.classList.add('gallery-record-card');
+      card.append(recordMain);
+      if (!model.readOnly) card.append(recordActions.render(row));
       list.append(card);
     }
     feedback.textContent = loadFailed

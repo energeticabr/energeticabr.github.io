@@ -927,13 +927,13 @@ function suppliesMenuChoices(options, galleries, busy) {
   const others = options.filter(option => option !== launches && option !== payment);
   const primary = option => option ? pollButton(option, busy, { suppliesButton: true, ...suppliesOptionVisual(option) }) : "";
   const gallery = (option, label) => option ? pollButton(option, busy, { galleryButton: true, displayLabel: label }) : "";
-  const pair = (option, firstGallery, firstLabel, secondGallery, secondLabel) => `<div class="chat-supplies-pair">
+  const pair = (option, firstGallery, firstLabel, secondGallery, secondLabel, thirdGallery, thirdLabel) => `<div class="chat-supplies-pair${thirdGallery ? " chat-supplies-pair--three-galleries" : ""}">
     <div class="chat-supplies-pair__primary">${primary(option)}</div>
-    <div class="chat-gallery-actions">${gallery(firstGallery, firstLabel)}${gallery(secondGallery, secondLabel)}</div>
+    <div class="chat-gallery-actions">${gallery(firstGallery, firstLabel)}${gallery(secondGallery, secondLabel)}${gallery(thirdGallery, thirdLabel)}</div>
   </div>`;
   return `<div class="chat-choice-columns chat-choice-columns--launch-menu">
     ${pair(launches, galleries.orders, "PEDIDOS", galleries.launches, "LANÇAMENTOS")}
-    ${pair(payment, galleries.payments, "PGTOS PREVISTOS", galleries.recurring, "DESPESAS RECORRENTES")}
+    ${pair(payment, galleries.payments, "PGTOS PREVISTOS", galleries.provisionDescription, "DESCRITIVO PROVISÃO", galleries.recurring, "DESPESAS RECORRENTES")}
     <div class="chat-supplies-extras">${others.map(option => `<div class="chat-supplies-extra-pair"><div class="chat-supplies-extras__primary">${primary(option)}</div>${isSupplyQuoteOption(option) ? `<div class="chat-gallery-actions">${gallery(galleries.quotes, "GALERIA DE COTAÇÕES")}</div>` : ""}</div>`).join("")}</div>
   </div>`;
 }
@@ -966,6 +966,10 @@ function recurringExpensesGalleryOption() {
   return { id: "action_recurring_expenses_gallery", reply: "action_recurring_expenses_gallery", label: "GAL. DESPESAS RECORRENTES" };
 }
 
+function provisionDescriptionGalleryOption() {
+  return { id: "action_provision_description_gallery", reply: "action_provision_description_gallery", label: "GAL. DESCRITIVO PROVISÃO" };
+}
+
 function menuOptionsWithoutApps(message, options) {
   const suppliesMenu = isSuppliesLaunchMenu(message);
   const registrationsMenu = isSuppliesRegistrationMenu(message);
@@ -978,9 +982,9 @@ function menuOptionsWithoutApps(message, options) {
       && !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId)
       && replyId !== "action_apps" && replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery"
       && replyId !== "action_tasks_gallery" && replyId !== "action_payment_programming_gallery"
-      && replyId !== "action_recurring_expenses_gallery";
+      && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_provision_description_gallery";
   });
-  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), recurringExpensesGalleryOption(), ...(filtered.some(isSupplyQuoteOption) ? [quoteGalleryOption()] : [])];
+  if (suppliesMenu) return [...filtered, ordersGalleryOption(), launchGalleryOption(), paymentProgrammingGalleryOption(), provisionDescriptionGalleryOption(), recurringExpensesGalleryOption(), ...(filtered.some(isSupplyQuoteOption) ? [quoteGalleryOption()] : [])];
   if (pairedMenu) return [...filtered, ...pairedMenu.pairs.filter(pair => filtered.some(option => galleryPairForOption(option, pairedMenu.pairs) === pair)).map(pair => ({ id: pair.id, reply: pair.id, label: pair.label }))];
   if (registrationsMenu) return [...filtered, ...REGISTRATION_GALLERIES];
   if (isAuditDocumentsMenu(message)) {
@@ -1384,7 +1388,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const replyId = draftReplyId(option).trim().toLowerCase();
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
     return !compressionOptionIds.has(replyId)
-      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_quote_gallery"))
+      && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_provision_description_gallery" && replyId !== "action_quote_gallery"))
       && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
       && (!isAuditMenu || replyId !== "action_documents_gallery")
@@ -1465,6 +1469,9 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const recurringExpensesGallery = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_recurring_expenses_gallery")
     : null;
+  const provisionDescriptionGallery = isLaunchMenu
+    ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_provision_description_gallery")
+    : null;
   const quoteGallery = isLaunchMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_quote_gallery")
     : null;
@@ -1482,7 +1489,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ? isHrGalleryMenu
       ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries"><div class="chat-choice-columns__flow"><div class="${choiceListClass}">${choices}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${galleryChoices}</aside></div>`
       : isLaunchMenu
-      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, recurring: recurringExpensesGallery, quotes: quoteGallery }, busy)
+      ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, provisionDescription: provisionDescriptionGallery, recurring: recurringExpensesGallery, quotes: quoteGallery }, busy)
       : pairedMenu
         ? pairedGalleryMenuChoices(displayOptions, pairedMenu, busy)
       : isRegistrationMenu

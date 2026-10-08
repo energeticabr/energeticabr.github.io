@@ -10,6 +10,19 @@ const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado p
 
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
+  provisionDescription: Object.freeze({
+    title: "GALERIA DESCRITIVO PROVISÃO",
+    listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],
+    nativeCard: true, showAttachments: true, recordLabel: "descritivo de provisão", readOnly: true,
+    searchPlaceholder: "Pesquisar fornecedor, observação ou ID",
+    fields: ["FORNECEDOR", "FILIAL", "VALORTOTAL", "DATA PREVISTO PGTO", "DATAPGTOEFETUADO", "FORMAPGTO", "OBS", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", ...AUDIT_FIELDS],
+    filterFields: ["ID", "FILIAL", "FORNECEDOR", "FORMAPGTO"],
+    fieldAliases: { ...AUDIT_ALIASES, "DATA PREVISTO PGTO": ["DATAPREVISTOPGTO"] },
+    fieldLabels: { VALORTOTAL: "Valor total", "DATA PREVISTO PGTO": "Data previsto pgto", DATAPGTOEFETUADO: "Data pgto efetuado", FORMAPGTO: "Forma de pagamento", OBS: "Observação", PGTOAGENDADO: "Pgto agendado", DATAPGTOAGENDADO: "Data pgto agendado", DATAEXECUCAOAGENDAMENTO: "Data execução agendamento" },
+    fieldTypes: { VALORTOTAL: "currency", "DATA PREVISTO PGTO": "date", DATAPGTOEFETUADO: "date", PGTOAGENDADO: "date", DATAPGTOAGENDADO: "date", DATAEXECUCAOAGENDAMENTO: "date" },
+    dateRangeField: "DATA PREVISTO PGTO",
+    sourceSort: { field: "ID", direction: "desc", type: "number" },
+  }),
   group: Object.freeze({ title: "GALERIA GRUPO", screen: "G10- HISTÓRICO GRUPO", listName: "CADASTROGRUPO", aliases: ["CADASTROGRUPO", "CADASTRO GRUPO"], fields: ["GRUPO", "STATUS", "ID", "Criado por", "Criado", "Modificado", "Modificado por"], fieldAliases: { GRUPO: ["Title"] } }),
   family: Object.freeze({ title: "GALERIA FAMÍLIA", screen: "G8- HISTÓRICO FAMÍLIA", listName: "CADASTRO FAMÍLIA_1", aliases: ["CADASTRO FAMÍLIA_1", "CADASTRO FAMILIA_1"], fields: ["FAMÍLIA", "GRUPO", "STATUS", "ID", "Criado por", "Criado", "Modificado", "Modificado por"], fieldAliases: { "FAMÍLIA": ["field_1"], GRUPO: ["Title"] } }),
   subfamily: Object.freeze({ title: "GALERIA SUBFAMÍLIA", screen: "G35- HISTÓRICO SUBFAMÍLIA", listName: "CADASTROSUBFAMÍLIA", aliases: ["CADASTROSUBFAMÍLIA", "CADASTROSUBFAMILIA", "CADASTRO SUBFAMÍLIA", "CADASTRO SUBFAMILIA"], fields: ["SUBFAMÍLIAS CADASTRADAS", "FAMÍLIA", "UNIDADE", "TIPO", "STATUS", "ID", "Criado por", "Criado", "Modificado", "Modificado por"], fieldAliases: { "SUBFAMÍLIAS CADASTRADAS": ["field_1"], "FAMÍLIA": ["Title"], UNIDADE: ["field_2"], TIPO: ["field_3"] } }),

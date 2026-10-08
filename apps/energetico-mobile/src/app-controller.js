@@ -391,6 +391,7 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_provision_description_gallery: "provisionDescription",
   action_group_gallery: "group",
   action_family_gallery: "family",
   action_subfamily_gallery: "subfamily",
@@ -413,6 +414,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const GALLERY_CREATION_ACTIONS = Object.freeze({
+  action_provision_description_gallery: ["action_payment", "CRIAR UMA PROVISÃO DE PAGAMENTO"],
   action_launch_gallery: ["action_launch", "EFETUAR LANÇAMENTO"],
   action_orders_gallery: ["action_pending_order_registration", "EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)"],
   action_tasks_gallery: ["action_task", "ADICIONAR UMA NOVA TAREFA"],
@@ -7854,7 +7856,7 @@ export function createAppController({
           const panel = await registrationGalleryFactory({
             kind, data,
             onCreate: galleryCreationHandler(replyId, assertSession),
-            ...(["documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
+            ...(["provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

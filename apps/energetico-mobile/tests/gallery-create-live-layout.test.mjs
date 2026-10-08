@@ -27,7 +27,7 @@ test('all gallery shortcuts keep Tasks sizing beside Filters, collapsed and expa
       const results = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
       assert.ok(Array.isArray(results), JSON.stringify(results));
-      assert.equal(results.length, 26);
+      assert.equal(results.length, 27);
       for (const result of results) {
         assert.equal(result.missing, undefined, `${width}px ${result.name}: shortcut missing`);
         for (const state of ['collapsed', 'expanded']) {
