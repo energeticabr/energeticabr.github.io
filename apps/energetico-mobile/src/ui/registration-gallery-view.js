@@ -229,6 +229,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const searchableFilters = bindSearchableFilterSelects(toolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
+    actions: model.recordActions,
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields) => createShortcut.runMutation(() => data.saveEditor(context, fields)),
     deleteItem: (id, options) => createShortcut.runMutation(() => data.deleteItem(id, options)),

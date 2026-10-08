@@ -52,7 +52,8 @@ test("galeria pai apresenta moeda e datas, permite filtrar fornecedor e voltar s
   assert.match(root.textContent, /09\/10\/2026/);
   assert.match(root.textContent, /08\/10\/2026/);
   assert.match(root.textContent, /Duas linhas/);
-  assert.equal(root.querySelector('[data-gallery-action]'), null, "o grupo pai não oferece mutação isolada que deixe itens sem vínculo");
+  assert.equal(root.querySelectorAll('[data-gallery-action="edit"]').length, 2, "cada pai oferece um lápis");
+  assert.equal(root.querySelector('[data-gallery-action="delete"]'), null, "exclusão do pai não foi solicitada");
   const supplier = root.querySelector('[data-filter-field="FORNECEDOR"]');
   supplier.value = "FORNECEDOR B";
   supplier.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
@@ -60,6 +61,120 @@ test("galeria pai apresenta moeda e datas, permite filtrar fornecedor e voltar s
   assert.match(root.querySelector('[role="listitem"]').textContent, /FORNECEDOR B/);
   root.querySelector('[data-action="registration-close"]').click();
   assert.equal(root.hidden, true);
+});
+
+async function waitFor(predicate) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (predicate()) return;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.ok(predicate(), "a operação da galeria deve terminar");
+}
+
+function parentFixture({ tokenLabel = "Título" } = {}) {
+  const columns = [
+    { name: "FILIAL", text: {} }, { name: "FORNECEDOR", text: {} },
+    { name: "VALORTOTAL", text: {} }, { name: "DATAPGTOEFETUADO", dateTime: {} },
+    { name: "OBS", text: {} }, { name: "FORMAPGTO", text: {} },
+    { name: "PGTOAGENDADO", dateTime: {} }, { name: "DATAPGTOAGENDADO", dateTime: {} },
+    { name: "DATAEXECUCAOAGENDAMENTO", dateTime: {} },
+    { name: "DATAPREVISTOPGTO", displayName: "DATA PREVISTO PGTO", dateTime: {} },
+    { name: "ID", number: {} }, { name: "Title", displayName: tokenLabel, text: {} },
+    { name: "Created", dateTime: {} }, { name: "Modified", dateTime: {} },
+    { name: "Author", personOrGroup: {} }, { name: "Editor", personOrGroup: {} },
+    { name: "IDPROVISAO", lookup: { listId: "child-list", columnName: "Title" } },
+    { name: "EXTRA", text: {} },
+  ];
+  const item = { id: "9", eTag: '"parent-v7"', fields: {
+    FILIAL: "FILIAL A", FORNECEDOR: "FORNECEDOR A", VALORTOTAL: "1234,56", OBS: "ORIGINAL",
+    FORMAPGTO: "CAIXA", DATAPGTOEFETUADO: "2026-10-08T03:00:00Z",
+    PGTOAGENDADO: "2026-10-08T03:00:00Z", DATAPGTOAGENDADO: "2026-10-08T03:00:00Z",
+    DATAEXECUCAOAGENDAMENTO: "2026-10-08T03:00:00Z", DATAPREVISTOPGTO: "2026-10-09T03:00:00Z",
+    ID: 9, Title: "IDEMPOTENCY-TOKEN", Created: "2026-10-07T03:00:00Z",
+    Modified: "2026-10-08T03:00:00Z", AuthorLookupId: 1, EditorLookupId: 2,
+    IDPROVISAOLookupId: 31, EXTRA: "NÃO EDITÁVEL", Attachments: false,
+  } };
+  const reads = [], writes = [];
+  function assertParent(site, list) { assert.equal(site, "personal"); assert.equal(list, "parent-list-id"); }
+  const data = createRegistrationGalleryData({ kind: "provisionDescription", repository: Object.freeze({
+    async resolveList(site, aliases) {
+      assert.equal(site, "personal"); assert.deepEqual(aliases, ["DESCRITIVOPROVISAO"]);
+      return { status: "resolved", id: "parent-list-id" };
+    },
+    async getColumns(site, list) { assertParent(site, list); return columns; },
+    async getItemsPage(site, list) {
+      assertParent(site, list);
+      return { items: [{ ...item, eTag: '"snapshot-v2"' }], hasMore: false };
+    },
+    async getItem(site, list, id, query) {
+      assertParent(site, list); reads.push([site, list, id, query]); return item;
+    },
+    async updateItem(site, list, id, fields, options) {
+      assertParent(site, list); writes.push([site, list, id, fields, options]);
+      return { id, eTag: '"parent-v8"', fields: { ...item.fields, ...fields } };
+    },
+    async deleteItem() { assert.fail("nenhuma exclusão foi autorizada"); },
+    async createItem() { assert.fail("edição não cria registros nem filhos"); },
+  }) });
+  return { data, reads, writes };
+}
+
+test("lápis abre o formulário real do pai e salva só campos comprovados com o ETag carregado", async t => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const doc = dom.window.document, fixture = parentFixture();
+  const gallery = createRegistrationGallery({ document: doc, kind: "provisionDescription", data: fixture.data });
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const pencil = doc.querySelector('[data-registration-row="9"] [data-gallery-action="edit"]');
+  assert.ok(pencil, "o item pai precisa oferecer o lápis");
+  assert.equal(pencil.getAttribute("aria-label"), "Editar item de ID 9");
+  assert.equal(doc.querySelector('[data-gallery-action="delete"]'), null);
+  pencil.click();
+  await waitFor(() => doc.querySelector('[data-dynamic-form]'));
+  const form = doc.querySelector('[data-dynamic-form]');
+  assert.deepEqual([...form.querySelectorAll('[name]')].map(control => control.name).sort(), [
+    "FILIAL", "FORNECEDOR", "VALORTOTAL", "DATAPGTOEFETUADO", "OBS", "FORMAPGTO",
+    "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", "DATAPREVISTOPGTO",
+  ].sort());
+  assert.equal(form.querySelector('[name="VALORTOTAL"]').type, "text");
+  assert.equal(form.querySelector('[name="VALORTOTAL"]').value, "1234,56");
+  assert.equal(form.querySelector('[name="PGTOAGENDADO"]').type, "datetime-local");
+  assert.equal(form.querySelector('[name="PGTOAGENDADO"]').value, "2026-10-08T03:00");
+  assert.equal(form.querySelector('[name="DATAPREVISTOPGTO"]').value, "2026-10-09T03:00");
+  assert.match(form.querySelector('[name="DATAPREVISTOPGTO"]').closest('label').textContent, /DATA PREVISTO PGTO/);
+  const draft = {
+    FILIAL: "FILIAL B", FORNECEDOR: "FORNECEDOR B", VALORTOTAL: "2345,67", OBS: "ALTERADO", FORMAPGTO: "PIX",
+    DATAPGTOEFETUADO: "2026-10-10T04:10", PGTOAGENDADO: "2026-10-11T05:20",
+    DATAPGTOAGENDADO: "2026-10-12T06:30", DATAEXECUCAOAGENDAMENTO: "2026-10-13T07:40",
+    DATAPREVISTOPGTO: "2026-10-14T08:50",
+  };
+  for (const [name, value] of Object.entries(draft)) form.querySelector(`[name="${name}"]`).value = value;
+  form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+  await waitFor(() => fixture.writes.length === 1 && !doc.querySelector('[data-gallery-record-screen]'));
+  assert.deepEqual(fixture.reads, [["personal", "parent-list-id", "9", "$expand=fields"]]);
+  assert.deepEqual(fixture.writes, [["personal", "parent-list-id", "9", {
+    FILIAL: "FILIAL B", FORNECEDOR: "FORNECEDOR B", VALORTOTAL: "2345,67", OBS: "ALTERADO", FORMAPGTO: "PIX",
+    DATAPGTOEFETUADO: "2026-10-10T04:10:00", PGTOAGENDADO: "2026-10-11T05:20:00",
+    DATAPGTOAGENDADO: "2026-10-12T06:30:00", DATAEXECUCAOAGENDAMENTO: "2026-10-13T07:40:00",
+    DATAPREVISTOPGTO: "2026-10-14T08:50:00",
+  }, { eTag: '"parent-v7"' }]]);
+  assert.equal(doc.querySelector('[data-gallery-action="delete"]'), null, "atualizar a galeria mantém somente edição");
+});
+
+test("editor do pai rejeita campos de identidade, auditoria e relacionamento fora da whitelist", async () => {
+  const fixture = parentFixture();
+  const context = await fixture.data.loadEditor("9");
+  for (const name of ["ID", "Title", "Created", "Modified", "AuthorLookupId", "EditorLookupId", "IDPROVISAOLookupId", "EXTRA"]) {
+    await assert.rejects(fixture.data.saveEditor(context, { OBS: "ALTERADO", [name]: "INVÁLIDO" }), /não é editável/);
+  }
+  assert.deepEqual(fixture.writes, []);
+});
+
+test("editor do pai não permite sobrescrever Title mesmo com rótulo igual a um campo permitido", async () => {
+  const fixture = parentFixture({ tokenLabel: "FILIAL" });
+  const context = await fixture.data.loadEditor("9");
+  await assert.rejects(fixture.data.saveEditor(context, { Title: "ALTERADO" }), /não é editável/);
+  assert.deepEqual(fixture.writes, []);
 });
 
 test("menu deduplica o atalho pai, envia a ação correta e reserva três linhas só para provisões", () => {
