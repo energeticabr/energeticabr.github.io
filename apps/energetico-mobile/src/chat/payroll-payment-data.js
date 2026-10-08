@@ -1,5 +1,6 @@
 import { payrollFieldKey as key } from './payroll-editor-policy.js';
-import { PAYROLL_RUBRICS, validPayrollDate } from './supplier-payroll.js';
+import { PAYROLL_RUBRICS, payrollDecimal, validPayrollDate } from './supplier-payroll.js';
+import Decimal from 'decimal.js';
 
 const scalar = value => String(value && typeof value === 'object' ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
 const id = value => { const result = String(value ?? ''); if (!/^[1-9]\d{0,14}$/.test(result) || !Number.isSafeInteger(Number(result))) throw new Error('Selecione um ID cadastrado.'); return result; };
@@ -50,15 +51,23 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
   function supplierName(descriptor,row) { return value(descriptor,row,['CADASTRO','FORNECEDOR']); }
   function types(descriptor) { return column(descriptor,['TIPOPGTO']).choice?.choices?.length ? [...column(descriptor,['TIPOPGTO']).choice.choices] : PAYROLL_RUBRICS.map(r=>r.payrollType); }
   function launchRow(descriptor,row,supplier) {
+    const unitValue=value(descriptor,row,['VALOR UNITÁRIO','VALORUNITARIO']),quantity=value(descriptor,row,['QUANTIDADE','QTD']);
+    const freight=value(descriptor,row,['FRETE'],false);
+    let total=null;
+    try {
+      const amount=payrollDecimal(unitValue).times(payrollDecimal(quantity)).plus(payrollDecimal(freight || 0)).toDecimalPlaces(2,Decimal.ROUND_HALF_UP);
+      if(amount.times(100).lte(Number.MAX_SAFE_INTEGER))total=amount.toNumber();
+    } catch(error) { if(!(error instanceof RangeError))throw error; }
+    const paidDate=value(descriptor,row,['DATA PGTO EFETUADO','DATAPGTOEFETUADO'],false).slice(0,10);
     return {id:id(row.id),supplier:supplier.label,supplierId:supplier.id,
       date:value(descriptor,row,['DATA']).slice(0,10),
-      unitValue:value(descriptor,row,['VALOR UNITÁRIO','VALORUNITARIO']),quantity:value(descriptor,row,['QUANTIDADE','QTD']),
-      description:value(descriptor,row,['DESCRICAOPGTO','PRODUTO'],false)};
+      unitValue,quantity,total,paidDate:validPayrollDate(paidDate)?paidDate:'',
+      description:supplier.profession};
   }
   async function loadOptions({signal}={}) {
     const [suppliers,launches,sheets,payroll]=await Promise.all(['FORNECEDORES','LANCAMENTOS','IDFOLHA','FOLHAPGTO'].map(describe));
     const [supplierRows,launchRows,sheetRows]=await Promise.all([suppliers,launches,sheets].map(d=>all(d,{signal})));
-    const eligible=supplierRows.filter(row=>activeSupplier(suppliers,row)).map(row=>({id:id(row.id),label:supplierName(suppliers,row)}));
+    const eligible=supplierRows.filter(row=>activeSupplier(suppliers,row)).map(row=>({id:id(row.id),label:supplierName(suppliers,row),profession:value(suppliers,row,['PROFISSÃO'],false)}));
     const window=monthWindow(now());
     return {
       launches:launchRows.flatMap(row=>{const name=value(launches,row,['FORNECEDOR']),matches=eligible.filter(s=>key(s.label)===key(name));return matches.length===1?[launchRow(launches,row,matches[0])]:[];}).sort((a,b)=>Number(b.id)-Number(a.id)),

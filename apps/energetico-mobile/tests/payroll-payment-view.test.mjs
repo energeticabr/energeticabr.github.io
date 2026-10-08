@@ -33,6 +33,31 @@ test('switching launch clears incompatible sheet and cancel performs no writes',
   assert.equal(sheet.value,'');assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['30']);
   f.doc.querySelector('[data-payment-cancel]').click();assert.equal(f.saves.length,0);assert.equal(f.doc.querySelector('[data-payroll-payment-screen]'),null);
 });
+
+test('launch picker displays and searches total and paid date while saving only the numeric link',async t=>{
+  const detailed={...options,launches:[{...options.launches[0],description:'PEDREIRO',total:518.9,paidDate:'2026-10-06'}]};
+  const f=setup(t,'FOLHAPGTO',{loadPaymentOptions:async()=>detailed});
+  await f.panel.open();f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
+  const screen=f.doc.querySelector('[data-payroll-payment-screen]');
+  const launch=screen.querySelector('[name=IDLANCAMENTO]');
+  assert.equal(launch.options[1].textContent.replace(/\u00a0/g,' '),'10 — CLEITON — PEDREIRO (R$ 518,90 — 06/10/2026)');
+  const picker=launch.nextElementSibling;
+  const search=picker.querySelector('input');
+  search.value='518,90';search.dispatchEvent(new f.dom.window.Event('input',{bubbles:true}));
+  const choice=picker.querySelector('[role=option]');
+  assert.ok(choice);choice.click();
+  assert.equal(launch.value,'10');
+  screen.querySelector('[name=IDFOLHA]').value='21';screen.querySelector('[name=TIPOPGTO]').value='SALÁRIO';
+  screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();
+  assert.deepEqual(f.saves[0][0],{launchId:'10',sheetId:'21',paymentType:'SALÁRIO'});
+});
+
+test('unknown launch amounts and missing paid dates remain explicit and never become zero or purchase dates',async t=>{
+  const f=setup(t);await f.panel.open();f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
+  const label=f.doc.querySelector('[data-payroll-payment-screen] select[name=IDLANCAMENTO]').options[1].textContent;
+  assert.match(label,/Profissão não informada \(Valor não informado — Sem pagamento efetuado\)/);
+  assert.doesNotMatch(label,/0,00|04\/10\/2026/);
+});
 test('IDFOLHA gallery has no add-payment action',async t=>{const f=setup(t,'IDFOLHA');await f.panel.open();assert.equal(f.doc.querySelector('[data-action="add-payroll-payment"]'),null);assert.equal(f.reads(),0);});
 test('closing gallery ignores late composer loads and never saves',async t=>{
   let resolve;const f=setup(t,'FOLHAPGTO',{loadPaymentOptions:()=>new Promise(done=>{resolve=done;})});await f.panel.open();f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();f.panel.close();resolve(options);await tick();assert.equal(f.doc.querySelector('[data-payroll-payment-screen]'),null);assert.equal(f.saves.length,0);

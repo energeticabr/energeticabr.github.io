@@ -4,8 +4,8 @@ import { createPayrollPaymentData } from '../src/chat/payroll-payment-data.js';
 
 function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
   const columns = Object.fromEntries(Object.entries({
-    FORNECEDORES:['CADASTRO','EMPREITEIRO','STATUS'],
-    LANCAMENTOS:['FORNECEDOR','VALOR UNITÁRIO','QUANTIDADE','DATA','PRODUTO'],
+    FORNECEDORES:['CADASTRO','EMPREITEIRO','STATUS','PROFISSÃO'],
+    LANCAMENTOS:['FORNECEDOR','VALOR UNITÁRIO','QUANTIDADE','DATA','PRODUTO','FRETE','DATA PGTO EFETUADO','VALORTOTAL'],
     IDFOLHA:['FORNECEDOR','MESREFERENCIA'],
     FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
   }).map(([list,names])=>[list,names.map(name=>({name,displayName:name,...(name==='TIPOPGTO'?{choice:{choices:['SALÁRIO','AJUDA DE CUSTO']}}:{})}))]));
@@ -27,6 +27,37 @@ function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
 }
 const draft={launchId:'10',sheetId:'21',paymentType:'SALÁRIO'};
 const operation={operationId:'payment-test-1'};
+
+test('launch options expose profession, exact unit times quantity plus freight and paid date without writes',async()=>{
+  const f=fixture();
+  f.rows.FORNECEDORES[0].fields['PROFISSÃO']='PEDREIRO';
+  Object.assign(f.rows.LANCAMENTOS[0].fields,{FRETE:'12,50','DATA PGTO EFETUADO':'2026-10-06T00:00:00Z',VALORTOTAL:9999});
+  const [launch]= (await f.data.loadOptions()).launches;
+  assert.equal(launch.description,'PEDREIRO');
+  assert.equal(launch.total,518.9);
+  assert.equal(launch.paidDate,'2026-10-06');
+  assert.equal(launch.date,'2026-10-04');
+  assert.equal(f.writes.length,0);
+});
+
+test('launch totals preserve decimal rounding and do not invent invalid money or paid dates',async()=>{
+  const f=fixture(),fields=f.rows.LANCAMENTOS[0].fields;
+  Object.assign(fields,{'VALOR UNITÁRIO':'1.234,565',QUANTIDADE:'2',FRETE:'0,01','DATA PGTO EFETUADO':'2026-02-30'});
+  assert.equal((await f.data.loadOptions()).launches[0].total,2469.14);
+  assert.equal((await f.data.loadOptions()).launches[0].paidDate,'');
+  fields['VALOR UNITÁRIO']='inválido';
+  assert.equal((await f.data.loadOptions()).launches[0].total,null);
+  fields['VALOR UNITÁRIO']=0; fields.FRETE='';
+  assert.equal((await f.data.loadOptions()).launches[0].total,0);
+  assert.equal((await f.data.loadOptions()).launches[0].description,'');
+});
+
+test('paid date resolves encoded SharePoint names by display name instead of the unrelated DATA field',async()=>{
+  const f=fixture(),getColumns=f.repository.getColumns;
+  f.repository.getColumns=async(...args)=>(await getColumns(...args)).map(c=>c.name==='DATA PGTO EFETUADO'?{...c,name:'field_15'}:c);
+  f.rows.LANCAMENTOS[0].fields.field_15='2026-10-07';
+  assert.equal((await f.data.loadOptions()).launches[0].paidDate,'2026-10-07');
+});
 
 test('only active contractor launches and supplier sheets in previous/current/next months are offered',async()=>{
   const f=fixture(),options=await f.data.loadOptions();
