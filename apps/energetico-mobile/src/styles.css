@@ -1007,6 +1007,17 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 }
 .chat-file-tray { flex-shrink: 0; max-height: 30dvh; overflow-y: auto; border-top: 1px solid #d8e6ea; }
 .chat-file-tray .pending-files { max-height: none; }
+.chat-provisions { min-width: 0; color: var(--text); background: var(--surface-soft); }
+.chat-provisions summary { position: sticky; top: 0; z-index: 1; min-height: var(--compact-control-height); padding: var(--compact-control-padding-block) var(--compact-control-padding-inline); background: var(--surface-soft); cursor: pointer; font-weight: 750; overflow-wrap: anywhere; }
+.chat-provisions summary:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.chat-provision-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 8px; min-width: 0; padding: 0 8px 10px; }
+.chat-provision-entry { min-width: 0; padding: 10px; border-radius: 10px; background: var(--surface); overflow-wrap: anywhere; }
+.chat-provision-entry h3 { margin: 0 0 8px; font-size: .95rem; }
+.chat-provision-entry dl { margin: 0; font-size: .85rem; }
+.chat-provision-entry dl > div { display: grid; grid-template-columns: minmax(0, 100px) minmax(0, 1fr); gap: 8px; padding: 4px 0; }
+.chat-provision-entry dt { color: var(--muted); }
+.chat-provision-entry dd { min-width: 0; margin: 0; white-space: pre-wrap; font-variant-numeric: tabular-nums; }
+.chat-provisions > p { margin: 0; padding: 0 14px 12px; }
 .chat-launches { background: var(--surface-soft); }
 .chat-launches summary { min-height: var(--compact-control-height); padding: var(--compact-control-padding-block) var(--compact-control-padding-inline); cursor: pointer; font-weight: 750; position: sticky; top: 0; background: var(--surface-soft); overflow-wrap: anywhere; }
 .chat-launches summary:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }

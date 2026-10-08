@@ -3,6 +3,7 @@ import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { escapeHtml } from "./escape-html.js";
+import { normalizeProvisionSnapshot } from "../chat/provision-snapshot.js";
 import { galleryPairForOption, pairedGalleryMenu } from "./menu-gallery-pairs.js";
 import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
@@ -2297,6 +2298,24 @@ function renderMeasurementLines(measurements, busy) {
   </details>`;
 }
 
+function renderProvisionLines(provisions) {
+  if (!provisions) return "";
+  const value = item => escapeHtml(item || "Em branco");
+  return `<details class="chat-provisions" data-batch-id="${escapeHtml(provisions.id)}">
+    <summary>Total da provisão: ${escapeHtml(provisions.totalDisplay)} · ${provisions.count} ${provisions.count === 1 ? "linha" : "linhas"}</summary>
+    ${provisions.lines.length ? `<div class="chat-provision-list" aria-label="Linhas da provisão">${provisions.lines.map(line => `<article class="chat-provision-entry" data-line-index="${line.index}">
+      <h3>${line.index}. ${value(line.product)}</h3>
+      <dl>${[
+        ["Fornecedor", line.details.supplier], ["Quantidade", line.quantity.replace(".", ",")],
+        ["Valor unitário", line.unitPriceDisplay], ["Frete", line.freightDisplay], ["Total da linha", line.totalDisplay],
+        ["Filial", line.details.branch], ["Imóvel", line.details.property],
+        ["Forma de pagamento", line.details.paymentMethod], ["Vencimento", line.details.dueDate],
+        ["Observação", line.details.observation],
+      ].map(([label, text]) => `<div><dt>${label}</dt><dd>${value(text)}</dd></div>`).join("")}</dl>
+    </article>`).join("")}</div>` : "<p>Nenhuma linha de provisão adicionada.</p>"}
+  </details>`;
+}
+
 function renderRecovery(state) {
   const preview = state.recoveryPreview;
   const reference = state.recoveryReference;
@@ -2349,6 +2368,8 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   }
 
   const messages = Array.isArray(state.messages) ? state.messages : [];
+  const provisionLines = state.activeFlow?.id === "payment"
+    ? normalizeProvisionSnapshot(state.activeFlow.provisionLines) : undefined;
   let finalSignedIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     if (isSignedDocumentMessage(messages[index])) {
@@ -2426,7 +2447,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
-    ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}</div>` : ""}
+    ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
       ${generatedSignatureChoice ? "" : `<div class="attachment-actions" aria-label="Adicionar anexo">
@@ -5011,6 +5032,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const oldMeasurements = root.querySelector?.(".chat-measurements");
     const measurementOpen = oldMeasurements?.open;
     const sameMeasurements = oldMeasurements?.dataset.batchId === state.activeFlow?.measurementLines?.id;
+    const oldProvisions = root.querySelector?.(".chat-provisions");
+    const provisionOpen = oldProvisions?.open;
+    const sameProvisions = oldProvisions?.dataset.batchId === state.activeFlow?.provisionLines?.id;
     const responseFinished = Boolean(lastState?.activeText && !state.activeText && !state.error);
     const previousScroll = root.querySelector?.('[role="log"]')?.scrollTop || 0;
     const trayScroll = root.querySelector?.(".chat-file-tray")?.scrollTop || 0;
@@ -5060,7 +5084,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (launches && sameLaunch) launches.open = Boolean(launchOpen);
     const measurements = root.querySelector?.(".chat-measurements");
     if (measurements && sameMeasurements) measurements.open = Boolean(measurementOpen);
-    if (tray) tray.scrollTop = (launches && !sameLaunch) || (measurements && !sameMeasurements) ? 0 : trayScroll;
+    const provisions = root.querySelector?.(".chat-provisions");
+    if (provisions && sameProvisions) provisions.open = Boolean(provisionOpen);
+    if (tray) tray.scrollTop = (launches && !sameLaunch) || (measurements && !sameMeasurements)
+      || (provisions && !sameProvisions) ? 0 : trayScroll;
     const transcript = root.querySelector?.('[role="log"]');
     const messageChanged = messageKey !== nextMessageKey;
     if (transcript) {

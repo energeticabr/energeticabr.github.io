@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createConversationStore } from '/src/chat/conversation-store.js';
+import { provisionSnapshot, provisionFlow, provisionState } from '/tests/helpers/provision-summary-fixture.mjs';
+const root = document.querySelector('#app'), view = createChatView(root), store = createConversationStore();
+store.subscribe(state => view.render({ ...provisionState(state.activeFlow), ...state }));
+const data = provisionSnapshot({ count: 18, total: '400.50', totalDisplay: 'R$ 400,50' });
+data.lines = Array.from({ length: 18 }, (_, index) => ({
+  ...data.lines[index % 2], index: index + 1,
+  product: 'Produto ' + (index + 1) + ' ' + 'CimentoResistente'.repeat(10),
+  details: { ...data.lines[index % 2].details, supplier: 'Fornecedor ' + 'NomeExtenso'.repeat(15),
+    observation: 'Observação ' + 'EntregaSemEspaços'.repeat(20) },
+}));
+store.ingestRemoteMessages([], { activeFlow: provisionFlow(data) });
+await document.fonts.ready;
+await Promise.all([...document.images].map(image => image.complete ? Promise.resolve() :
+  new Promise(done => { image.addEventListener('load', done, { once: true }); image.addEventListener('error', done, { once: true }); })));
+const frame = () => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+await frame();
+const rect = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
+const measure = () => {
+  const panel = root.querySelector('.chat-provisions'), tray = root.querySelector('.chat-file-tray');
+  const composer = root.querySelector('[data-chat-form]'), send = root.querySelector('[data-action="send-text"]');
+  return {
+    open: panel.open, panel: rect(panel), tray: rect(tray), composer: rect(composer), send: rect(send),
+    trayScrollHeight: tray.scrollHeight, trayClientHeight: tray.clientHeight,
+    overflow: document.documentElement.scrollWidth > innerWidth + 1 || panel.scrollWidth > panel.clientWidth + 1,
+    contentOverflow: [...panel.querySelectorAll('h3, dd')].some(n => n.scrollWidth > n.clientWidth + 1),
+    unsupportedControls: panel.querySelectorAll('button, input').length,
+  };
+};
+const panel = root.querySelector('.chat-provisions');
+if (!panel) {
+  document.documentElement.dataset.layout = JSON.stringify({ missing: true });
+} else {
+  const collapsed = measure(), draft = root.querySelector('textarea');
+  panel.querySelector('summary').click();
+  await frame();
+  const expanded = measure();
+  const tray = root.querySelector('.chat-file-tray');
+  tray.scrollTop = tray.scrollHeight;
+  const last = rect(panel.querySelector('.chat-provision-entry:last-child'));
+  const lastLineReachable = last.bottom <= rect(tray).bottom + 1;
+  const previousScroll = tray.scrollTop;
+  store.ingestRemoteMessages([{ type: 'text', text: 'Próxima pergunta' }], { activeFlow: provisionFlow(data) });
+  await frame();
+  const sameBatch = { open: root.querySelector('.chat-provisions').open,
+    scroll: root.querySelector('.chat-file-tray').scrollTop, previousScroll,
+    composerPreserved: root.querySelector('textarea') === draft };
+  store.ingestRemoteMessages([], { activeFlow: provisionFlow({ ...data, id: 'other-batch' }) });
+  await frame();
+  const changedBatch = { open: root.querySelector('.chat-provisions').open, scroll: root.querySelector('.chat-file-tray').scrollTop };
+  document.documentElement.dataset.layout = JSON.stringify({ missing: false, width: innerWidth, height: innerHeight,
+    collapsed, expanded, lastLineReachable, sameBatch, changedBatch });
+}
+</script></body></html>
