@@ -1361,24 +1361,31 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-supplier-workforce-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-work-diaries-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-commercial-receipts-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:460px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-message--commercial-top { row-gap:12px; }
+.chat-main-commercial-shortcuts { grid-column:1 / -1; grid-row:1; display:flex; gap:12px; align-items:center; min-width:0; }
+.chat-message.chat-message--commercial-top > .chat-bubble,
+.chat-message--commercial-top > button { grid-row:2; }
+.chat-main-commercial-shortcuts > button { flex:0 0 44px; }
+.chat-main-commercial-receipts-shortcut { width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-receipts-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-receipts-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-commercial-milestones-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:516px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-commercial-milestones-shortcut { width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-milestones-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-milestones-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-commercial-documents-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:572px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-commercial-documents-shortcut { width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-documents-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-documents-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-sac-pathologies-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:628px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-sac-pathologies-shortcut { width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-sac-pathologies-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-sac-pathologies-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 /* Clean alpha assets: the button alone paints the fill. Never magnify/crop
    a screenshot or blend its matte into the mascot's original colors. */
 .chat-message--external-provisions > button,
-.chat-message--external-cargos > button { box-sizing:border-box; padding:0; border:0; }
+.chat-message--external-cargos > button,
+.chat-main-commercial-shortcuts > button { box-sizing:border-box; padding:0; border:0; }
 .chat-message--external-provisions > button > img,
-.chat-message--external-cargos > button > img { display:block; width:100%; height:100%; object-fit:contain; transform:none; mix-blend-mode:normal; border-radius:0; }
+.chat-message--external-cargos > button > img,
+.chat-main-commercial-shortcuts > button > img { display:block; width:100%; height:100%; object-fit:contain; transform:none; mix-blend-mode:normal; border-radius:0; }
 
 /* Large tablets and desktop: use the available width instead of the 640px
    phone menu. Keep the phone/short landscape layout and signature surfaces
