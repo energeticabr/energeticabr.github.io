@@ -970,8 +970,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       headingSummary.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
     const total = summaryField('VALOR TOTAL', moneyFieldValue(totalValue));
-    if (total) { total.classList.add('lg-record-total'); headingSummary.append(total); }
-    identity.append(headingSummary);
+    const headingActions = recordActions.render(item);
+    headingActions.classList.add('lg-record-header-actions');
+    if (total) { total.classList.add('lg-record-total'); headingActions.prepend(total); }
+    identity.append(headingActions, headingSummary);
 
     const summary = element('section', 'lg-record-summary');
     const supplier = field(fields, 'FORNECEDOR');
@@ -1071,7 +1073,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     summary.append(expand);
     body.append(summary, extra);
     card.classList.add('gallery-record-card');
-    card.append(...(recordPreview ? [recordPreview] : []), body, recordActions.render(item));
+    card.append(...(recordPreview ? [recordPreview] : []), body);
     return card;
   }
   function canChangeDetail() {

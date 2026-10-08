@@ -744,7 +744,7 @@ test('missing or visually empty descriptions do not add an empty row below freig
   assert.equal(ctx.root().querySelectorAll('.lg-record-description').length, 0);
 });
 
-test('launch total is highlighted beside status while the lower finance area shows freight instead', async t => {
+test('launch total precedes edit controls while status stays below and finance shows freight', async t => {
   const cases = [
     { id: 3489, total: '13.040,00', freight: 40, wantTotal: 'R$ 13.040,00', wantFreight: 'R$ 40,00' },
     { id: 3488, total: 0, freight: 0, wantTotal: 'R$ 0,00', wantFreight: 'R$ 0,00' },
@@ -757,11 +757,13 @@ test('launch total is highlighted beside status while the lower finance area sho
   for (const sample of cases) {
     const card = ctx.root().querySelector(`[data-item-id="${sample.id}"]`);
     const headingSummary = card.querySelector('.lg-record-heading-summary');
-    assert.ok(headingSummary, 'status and highlighted total share the bottom of the heading');
-    assert.equal(headingSummary.querySelector('.lg-record-status').nextElementSibling,
-      headingSummary.querySelector('.lg-record-total'));
-    assert.equal(headingSummary.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
-    assert.equal(headingSummary.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
+    assert.ok(headingSummary.querySelector('.lg-record-status'), 'status remains below controls');
+    assert.equal(headingSummary.querySelector('.lg-record-total'), null);
+    const actions = card.querySelector('.lg-record-header-actions');
+    assert.equal(actions.querySelector('.lg-record-total').nextElementSibling,
+      actions.querySelector('.gallery-record-action--edit'));
+    assert.equal(actions.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
+    assert.equal(actions.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
     const finance = card.querySelector('.lg-record-finance');
     assert.deepEqual([...finance.querySelectorAll('.lg-record-label')].map(label => label.textContent),
       ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
@@ -2424,8 +2426,9 @@ test('launch summary and its blue divider span the action column without coverin
   const heading = card.querySelector('.lg-record-heading');
   const actions = card.querySelector('.gallery-record-actions');
   assert.equal(withMedia.dom.window.getComputedStyle(content).gridColumn, '2 / -1');
-  assert.ok(parseFloat(withMedia.dom.window.getComputedStyle(heading).paddingRight) >= 108);
-  assert.equal(withMedia.dom.window.getComputedStyle(actions).gridColumn, '-2 / -1');
+  assert.equal(parseFloat(withMedia.dom.window.getComputedStyle(heading).paddingRight), 0);
+  assert.equal(actions.parentElement, heading);
+  assert.equal(withMedia.dom.window.getComputedStyle(actions).gridColumn, '3');
 
   const withoutMedia = await setup(t, { request: async operation => operation === 'snapshot'
     ? snapshot({ rows: [{ ...row(18), hasAttachments: false }] }) : detail() });
