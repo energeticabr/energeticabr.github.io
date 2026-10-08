@@ -1,6 +1,7 @@
 import Decimal from 'decimal.js';
 
 const unnamed = 'Fornecedor não informado';
+const unknownProfession = 'Profissão não informada';
 const identity = name => name.normalize('NFC').toLocaleLowerCase('pt-BR');
 const compareNames = (a, b) => a.localeCompare(b, 'pt-BR');
 
@@ -49,11 +50,13 @@ export function normalizePayrollMonth(value) {
   return `${year}-${String(m).padStart(2, '0')}`;
 }
 
-export function buildSupplierPayrollOverview(snapshot, { month = '', supplier = '' } = {}) {
+export function buildSupplierPayrollOverview(snapshot, { month = '', supplier = '', profession = '' } = {}) {
   if (snapshot?.complete !== true || !Array.isArray(snapshot.sheets)) throw new TypeError('Snapshot completo de folhas obrigatório.');
   const chosenMonth = normalizePayrollMonth(month);
   if (typeof supplier !== 'string') throw new TypeError('Fornecedor inválido.');
   const chosenSupplier = identity(supplier.trim());
+  if (typeof profession !== 'string') throw new TypeError('Profissão inválida.');
+  const chosenProfession = identity(profession.trim());
   const groups = new Map(), ids = new Set(), months = new Set();
   for (const sheet of snapshot.sheets) {
     const id = String(sheet?.id ?? '');
@@ -63,10 +66,15 @@ export function buildSupplierPayrollOverview(snapshot, { month = '', supplier = 
     ids.add(id);
     if (sheet.supplier != null && typeof sheet.supplier !== 'string') throw new TypeError('Fornecedor inválido.');
     const name = sheet.supplier?.trim() || unnamed, key = identity(name);
+    if (sheet.profession != null && typeof sheet.profession !== 'string') throw new TypeError('Profissão inválida.');
+    const professionLabel = sheet.profession?.trim() || unknownProfession;
     const period = normalizePayrollMonth(sheet.month);
     if (period) months.add(period);
-    if (!groups.has(key)) groups.set(key, { key, supplier: name, ids: [], sheets: [] });
+    if (!groups.has(key)) groups.set(key, { key, supplier: name, profession: professionLabel, ids: [], sheets: [] });
     const group = groups.get(key);
+    // Apply the same safe duplicate rule to older/external snapshots, before
+    // filtering periods: conflicting professions never identify a supplier.
+    if (identity(group.profession) !== identity(professionLabel)) group.profession = unknownProfession;
     group.sheets.push({ id, supplier: group.supplier, month: period,
       referenceLabel: period ? `${period.slice(5)}/${period.slice(0, 4)}` : 'Sem referência' });
   }
@@ -74,11 +82,15 @@ export function buildSupplierPayrollOverview(snapshot, { month = '', supplier = 
   const filtered = [];
   for (const group of all) {
     if (chosenSupplier && chosenSupplier !== group.key) continue;
+    if (chosenProfession && chosenProfession !== identity(group.profession)) continue;
     const sheets = group.sheets.filter(s => !chosenMonth || s.month === chosenMonth)
       .sort((a, b) => Number(a.id) - Number(b.id));
-    if (sheets.length) filtered.push({ key: group.key, supplier: group.supplier, ids: sheets.map(s => s.id), sheets });
+    if (sheets.length) filtered.push({ key: group.key, supplier: group.supplier, profession: group.profession,
+      ids: sheets.map(s => s.id), sheets });
   }
+  const professions = new Map(all.map(g => [identity(g.profession), g.profession]));
   return { groups: filtered, months: [...months].sort().reverse(), suppliers: all.map(g => g.supplier),
+    professions: [...professions.values()].sort(compareNames),
     sheetCount: filtered.reduce((n, g) => n + g.sheets.length, 0) };
 }
 

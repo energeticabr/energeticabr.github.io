@@ -6,7 +6,9 @@ import { normalizePayrollMonth, summarizePayrollPayments } from './supplier-payr
 
 const site = 'personal';
 const unnamed = 'Fornecedor não informado';
+const unknownProfession = 'Profissão não informada';
 const schema = {
+  FORNECEDORES: { supplier: ['CADASTRO', 'FORNECEDOR'], profession: ['PROFISSAO'] },
   IDFOLHA: { supplier: ['FORNECEDOR'], month: ['MESREFERENCIA'] },
   FOLHAPGTO: { supplier: ['FORNECEDOR'], type: ['TIPOPGTO', 'TIPOPAGAMENTO'], date: ['DATA'],
     payrollId: ['IDFOLHA'], launchId: ['IDLANCAMENTO'], unitValue: ['VALORUNITARIO'], quantity: ['QTD', 'QUANTIDADE'] },
@@ -64,6 +66,9 @@ function normalizeItem(item, fields, list) {
   const id = validId(item.id);
   const values = Object.fromEntries(Object.entries(fields).map(([key, name]) => [key, item.fields[name]]));
   const supplier = scalar(values.supplier);
+  if (list === 'FORNECEDORES') {
+    return Object.freeze({ id, supplier, profession: scalar(values.profession) || unknownProfession });
+  }
   if (list === 'IDFOLHA') {
     const month = normalizePayrollMonth(values.month);
     return { sourceSupplier: supplier, row: Object.freeze({ id, supplier: supplier || unnamed, month,
@@ -141,7 +146,23 @@ async function readList(repository, list, signal) {
   throw new RangeError('Limite seguro de paginação excedido; nenhum total parcial disponibilizado.');
 }
 
-/** Read-only report: two full scans per refresh; launch reads only on detail expansion. */
+function supplierProfessions(suppliers) {
+  const professions = new Map();
+  for (const supplier of suppliers) {
+    // An empty cadastro cannot identify a sheet whose supplier is also missing.
+    if (!supplier.supplier) continue;
+    const key = identity(supplier.supplier);
+    if (!professions.has(key)) professions.set(key, supplier.profession);
+    else if (identity(professions.get(key)) !== identity(supplier.profession)) {
+      // Conflicting duplicates stay not informed, even if a later row agrees
+      // with an earlier profession. Never select a cadastro by order or ID.
+      professions.set(key, unknownProfession);
+    }
+  }
+  return professions;
+}
+
+/** Read-only report: three full scans per refresh; cached launch reads serve summaries and details. */
 export function createSupplierPayrollReportData({ tokenProvider, repository: suppliedRepository,
   fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== 'function') throw new TypeError('Sessão Microsoft ativa obrigatória.');
@@ -183,13 +204,17 @@ export function createSupplierPayrollReportData({ tokenProvider, repository: sup
     const abort = () => controller.abort(externalSignal.reason);
     externalSignal?.addEventListener('abort', abort, { once: true });
     try {
-      const [sheets, payments] = await Promise.all([
+      const [sheets, payments, suppliers] = await Promise.all([
         readList(repository, 'IDFOLHA', signal), readList(repository, 'FOLHAPGTO', signal),
+        readList(repository, 'FORNECEDORES', signal),
       ]);
       checkAbort(signal);
       if (generation !== controller) throw abortError();
-      const snapshot = Object.freeze({ complete: true, sheets: Object.freeze(sheets.map(s => s.row)) });
-      cache = { controller, sheets: new Map(sheets.map(s => [s.row.id, s])), payments };
+      const professions = supplierProfessions(suppliers);
+      const enrichedSheets = sheets.map(s => ({ ...s, row: Object.freeze({ ...s.row,
+        profession: professions.get(identity(s.sourceSupplier)) || unknownProfession }) }));
+      const snapshot = Object.freeze({ complete: true, sheets: Object.freeze(enrichedSheets.map(s => s.row)) });
+      cache = { controller, sheets: new Map(enrichedSheets.map(s => [s.row.id, s])), payments };
       return snapshot;
     } catch (error) { controller.abort(error); throw error; }
     finally { externalSignal?.removeEventListener('abort', abort); }

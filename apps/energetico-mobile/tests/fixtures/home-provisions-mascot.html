@@ -76,7 +76,7 @@ if(new URLSearchParams(location.search).has('payroll-navigation')){
  decorateReportNavigation(supplierPayrollReport,{action:'open-supplier-payroll-report',onNavigate:async()=>{}});
  await supplierPayrollReport.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const root=supplierPayrollReport.element,arrow=root.querySelector('.report-navigation-arrow').getBoundingClientRect();
- document.documentElement.dataset.layout=JSON.stringify({arrowRight:arrow.right,titleLeft:root.querySelector('h1').getBoundingClientRect().left,namesLeft:[...root.querySelectorAll('.spr-name')].map(node=>node.getBoundingClientRect().left),overflow:root.querySelector('.spr-content').scrollWidth-root.querySelector('.spr-content').clientWidth});
+ document.documentElement.dataset.layout=JSON.stringify({arrowRight:arrow.right,contentLeft:root.querySelector('summary').getBoundingClientRect().left,namesLeft:[...root.querySelectorAll('.spr-name')].map(node=>node.getBoundingClientRect().left),overflow:root.querySelector('.spr-content').scrollWidth-root.querySelector('.spr-content').clientWidth});
 }
 const commercial=createCommercialReceiptsReportView({document,now:()=>new Date('2026-10-05T12:00:00Z'),data:{async loadSnapshot(){return {
  complete:true,
