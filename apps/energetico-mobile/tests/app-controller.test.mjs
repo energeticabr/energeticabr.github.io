@@ -3803,6 +3803,98 @@ function sharedFile(id) {
   return file;
 }
 
+test("compartilhamento confirmado atualiza finalizar do documento mesmo sem nova pergunta", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ historyMode: 'current-step', view: createChatView(root) });
+  t.after(() => { h.controller.stop(); h.view.destroy(); dom.window.close(); });
+  let resume;
+  h.native.onResume = async handler => { resume = handler; return () => {}; };
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO', contextId: 'shared-document' };
+  const prompt = {
+    id: 'first-document-attachment', type: 'poll',
+    question: '📎 ENVIE O PRIMEIRO ANEXO DO DOCUMENTO. DEPOIS DE CADA ENVIO, VOCÊ PODERÁ ADICIONAR MAIS ANEXOS OU FINALIZAR.',
+    options: [{ id: 'attachment_upload_continue', label: '📎 ENVIAR ANEXO' }],
+  };
+  h.store.ingestRemoteMessages([prompt], { activeFlow, attachments: [] });
+  h.store.setDraft('texto preservado');
+  const attachments = [{ id: 'shared-confirmed', fileName: 'whatsapp-teste.pdf', mimeType: 'application/pdf', size: 3, mediaUrl: '/api/portal-media/shared-confirmed' }];
+  const file = sharedFile('whatsapp-teste');
+  Object.defineProperty(file, 'confirmedResult', { value: { status: 'processed', messages: [], activeFlow, attachments } });
+  const inbox = [file];
+  h.native.importSharedItems = async () => inbox;
+  h.native.discardSharedItem = async id => { h.discarded.push(id); inbox.length = 0; };
+  const before = h.chatCalls.length;
+  await resume();
+  assert.equal(h.chatCalls.length, before, 'receber o arquivo confirmado não reenvia bytes nem finaliza');
+  assert.deepEqual(h.discarded, ['whatsapp-teste']);
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.equal(h.store.getState().draft, 'texto preservado');
+  const finish = root.querySelector('.chat-choice-list [data-action="finish-flow"]');
+  assert.ok(finish, 'a mensagem oferece finalizar sem abrir o seletor de arquivos');
+  assert.equal(finish.disabled, false);
+  assert.match(root.querySelector('.chat-bubble').textContent, /1 JÁ ADICIONADO/);
+  assert.doesNotMatch(root.querySelector('.chat-bubble').textContent, /PRIMEIRO ANEXO/);
+
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    return { status: 'processed', activeFlow, messages: [{ type: 'text', text: 'Qual é a descrição do documento?' }], attachments };
+  };
+  finish.click();
+  for (let attempt = 0; attempt < 20 && !/Qual é a descrição/.test(root.textContent); attempt++)
+    await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.chatCalls.at(-1), ['text', { text: 'FINALIZAR' }]);
+  assert.match(root.textContent, /Qual é a descrição do documento/);
+  assert.equal(h.store.getState().attachments.length, 1);
+  assert.equal(root.querySelector('.chat-choice-list [data-action="finish-flow"]'), null);
+});
+
+test("finalizar documento respeita a opção e o bloqueio enviados pelo servidor", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const message = { type: 'poll', question: 'Envie os anexos do documento.', options: [
+    { id: 'attachment_upload_continue', label: 'ENVIAR ANEXO' },
+    { id: 'finish_attachments', label: '✅ FINALIZAR', disabled: true },
+  ] };
+  h.store.ingestRemoteMessages([message], { activeFlow });
+  const before = h.chatCalls.length;
+  assert.equal(await h.view.emit('finish-flow'), false);
+  assert.equal(h.chatCalls.length, before);
+  h.store.ingestRemoteMessages([{ ...message, options: message.options.map(option => ({ ...option, disabled: false })) }], { activeFlow });
+  await h.view.emit('finish-flow');
+  assert.deepEqual(h.chatCalls.at(-1), ['text', { text: '✅ FINALIZAR', replyId: 'finish_attachments' }]);
+});
+
+for (const status of ['pending', 'failed', 'sending']) {
+  test(`documento com compartilhado confirmado e outro anexo ${status} não finaliza`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    h.store.ingestRemoteMessages([{
+      type: 'poll', question: 'ENVIE O PRIMEIRO ANEXO DO DOCUMENTO.',
+      options: [{ id: 'attachment_upload_continue', label: 'ENVIAR ANEXO' }],
+    }], { activeFlow: { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' },
+      attachments: [{ id: 'ready', fileName: 'confirmado.pdf', mimeType: 'application/pdf', size: 3, mediaUrl: '/api/portal-media/ready' }] });
+    h.store.queueFiles([new File(['pdf'], 'segundo.pdf', { type: 'application/pdf' })]);
+    const id = h.store.getState().pendingFiles[0].id;
+    if (status === 'failed') h.store.markFileError(id, new Error('Falha de conexão'));
+    if (status === 'sending') h.store.beginFile(id);
+    const markup = renderChatMarkup(h.view.renders.at(-1));
+    const dom = new JSDOM(markup);
+    assert.ok(dom.window.document.querySelector('.chat-choice-list [data-action="finish-flow"]'));
+    if (status === 'sending') assert.equal(dom.window.document.querySelector('.chat-choice-list [data-action="finish-flow"]').disabled, true);
+    dom.window.close();
+    const before = h.chatCalls.length;
+    assert.equal(await h.view.emit('finish-flow'), false);
+    assert.equal(h.chatCalls.length, before);
+    assert.equal(h.store.getState().attachments.length, 1);
+    assert.equal(h.store.getState().pendingFiles.length, 1);
+  });
+}
+
 test("lixeira de documento pendente exige confirmação antes de enviar exclusão", async t => {
   const h = makeHarness();
   t.after(() => { h.controller.stop(); });

@@ -3,7 +3,7 @@ import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
-import { attachmentFinishOption, isDiaryAttachmentPrompt } from "./chat/attachment-finish.js";
+import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import {
@@ -9619,7 +9619,8 @@ export function createAppController({
       const state = store.getState();
       const poll = latestAssistantPoll(state.messages);
       const diaryAttachments = isDiaryAttachmentPrompt(poll, state.activeFlow);
-      const finishOption = diaryAttachments ? attachmentFinishOption(poll) : null;
+      const finishOption = diaryAttachments || isDocumentAttachmentPrompt(poll, state.activeFlow)
+        ? attachmentFinishOption(poll) : null;
       if (finishOption?.disabled === true) return false;
       finishingFlow = true;
       try {

@@ -6620,6 +6620,36 @@ test("mantém finalizar disponível na etapa de anexos mesmo sem anexo", () => {
   assert.match(markup, /data-action="finish-flow"/);
 });
 
+test('documento reconhece a bandeja sem liberar anexos pendentes ou alterar etapas antigas', () => {
+  const prompt = { id: 'first', role: 'assistant', type: 'poll',
+    question: 'ENVIE O PRIMEIRO ANEXO DO DOCUMENTO. DEPOIS DE CADA ENVIO, VOCÊ PODERÁ ADICIONAR MAIS ANEXOS OU FINALIZAR.',
+    options: [{ id: 'attachment_upload_continue', label: 'ENVIAR ANEXO' }] };
+  const attachment = { id: 'ready', fileName: 'teste.pdf', mimeType: 'application/pdf', size: 3, mediaUrl: '/api/portal-media/ready' };
+  const base = { activeFlow: { id: 'document' }, messages: [prompt] };
+  for (const attachments of [[], [{ ...attachment, mediaUrl: '' }], [{ ...attachment, existing: true }], [{ ...attachment, readOnly: true }]]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ ...base, attachments,
+      pendingFiles: [{ id: 'pending', file: { name: 'pendente.pdf' }, status: 'pending' }] })));
+    assert.equal(dom.window.document.querySelector('.chat-choice-list [data-action="finish-flow"]'), null);
+    dom.window.close();
+  }
+  const markup = renderChatMarkup(signedInState({ ...base, attachments: [attachment, { ...attachment, id: 'ready-2' }] }));
+  const dom = new JSDOM(markup);
+  assert.match(dom.window.document.querySelector('.chat-bubble').textContent, /2 JÁ ADICIONADOS/);
+  assert.ok(dom.window.document.querySelector('.chat-choice-list [data-action="finish-flow"]'));
+  assert.equal(prompt.options.length, 1, 'a projeção não muda o snapshot original');
+  assert.match(prompt.question, /PRIMEIRO ANEXO/);
+  dom.window.close();
+
+  for (const overrides of [
+    { activeFlow: { id: 'task' } },
+    { messages: [prompt, { id: 'description', role: 'assistant', type: 'text', text: 'Qual é a descrição?' }] },
+  ]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ ...base, attachments: [attachment], ...overrides })));
+    assert.equal(dom.window.document.querySelector('.chat-choice-list [data-action="finish-flow"]'), null);
+    dom.window.close();
+  }
+});
+
 test("marca opção única para ocupar uma área maior em tablets", () => {
   const singleMarkup = renderChatMarkup(signedInState({
     activeFlow: { id: "document_signing", title: "ASSINAR DOCUMENTOS" },
