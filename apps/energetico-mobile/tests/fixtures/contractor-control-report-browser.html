@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Controle de empreiteiros — layout</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button>Abrir relatório</button></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+try {
+  await import('../../src/ui/contractor-control-report.css');
+  const {createContractorControlReportView}=await import('../../src/ui/contractor-control-report-view.js');
+  const {decorateReportNavigation}=await import('../../src/ui/report-navigation.js');
+  const {decorateReportPrint,captureFilteredReport,REPORT_PDF_TITLES}=await import('../../src/ui/report-print.js');
+  const {buildFilteredReportPdf}=await import('../../src/chat/filtered-report-pdf.js');
+  const {PDFDocument}=await import('pdf-lib');
+  const viewport=new EventTarget();Object.assign(viewport,{width:innerWidth,height:innerHeight,offsetLeft:0,offsetTop:0});Object.defineProperty(window,'visualViewport',{value:viewport,configurable:true});
+  const rows=Array.from({length:61},(_,i)=>({id:String(i+1),startDate:'2026-10-01',endDate:'',branch:i===60?'SP':'BH',supplier:'Fornecedor '+ 'NOME EXTENSO '.repeat(3),
+    stage:'Estrutura',activity:'Atividade '+ 'x'.repeat(50),measurementType:'VALOR GLOBAL',contractDocumentId:'900',estimateDocumentId:'901',
+    globalEstimatedValue:12500.75,totalValue:320.25,totalMeasurements:0,status:'ATIVO'}));let loads=0;
+  const action='open-contractor-control-report';
+  const view=decorateReportPrint(decorateReportNavigation(createContractorControlReportView({data:{
+    async loadOverview(){loads++;return {rows,documentStatuses:{900:'PENDENTE',901:'SUBMETIDO'},warnings:[]};},
+    async loadDetails(id){return {launches:[{id:'71',date:'2026-10-02',supplier:'Ana',contract:id,total:212.5,paymentStatus:'APROVADO',paymentTone:'success'}],
+      measurements:[{id:'51',supplier:'Ana',contract:id,status:'ATIVO',statusTone:'success'}]};}
+  }}),{action}),{action});await view.open();const root=view.element;
+  const rect=node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};};
+  if(matchMedia('(orientation:portrait)').matches) {
+    document.documentElement.dataset.layout=JSON.stringify({loads,warning:!root.querySelector('.pl-orientation').hidden,closeVisible:root.querySelector('.ccr-close').getBoundingClientRect().height>0,rows:root.querySelectorAll('.ccr-main-table tbody tr').length});
+  } else {
+    const logo=root.querySelector('img');await logo.decode();await new Promise(requestAnimationFrame);
+    const content=root.querySelector('.ccr-content'),toolbar=root.querySelector('.ccr-filters'),table=root.querySelector('.ccr-main-table'),main=root.querySelector('.ccr-table-scroll');
+    const screenRows=table.tBodies[0].rows.length,tones=Object.fromEntries(['pending','danger','success'].map(tone=>[tone,getComputedStyle(table.querySelector(`[data-tone=${tone}]`)).backgroundColor]));
+    content.scrollTop=55;const restore=await view.preparePrint(),capture=captureFilteredReport(root,{title:REPORT_PDF_TITLES[action]});restore();
+    const capturedTables=capture.pages[0].blocks.filter(b=>b.type==='table'),pdfRow=capturedTables[0].rows[1];
+    const blob=await buildFilteredReportPdf(capture,{logoBytes:new Uint8Array(await (await fetch(logo.src)).arrayBuffer())}),bytes=new Uint8Array(await blob.arrayBuffer()),pdf=await PDFDocument.load(bytes);
+    root.querySelector('[aria-label="Abrir opções de FILIAL"]').click();const popup=root.querySelector('.sfs-popup:not([hidden])'),search=popup.querySelector('input[type=search]');
+    const popupData={...rect(popup),placement:popup.dataset.placement,searchFocused:document.activeElement===search,color:getComputedStyle(popup.querySelector('.sfs-option')).color,fontWeight:getComputedStyle(popup.querySelector('.sfs-option:not([aria-selected=true])')).fontWeight};
+    search.focus();viewport.height=innerHeight-180;viewport.dispatchEvent(new Event('resize'));await new Promise(requestAnimationFrame);
+    const keyboard={...rect(popup),focused:document.activeElement===search};root.querySelector('.sfs-dismiss').click();viewport.height=innerHeight;viewport.dispatchEvent(new Event('resize'));
+    const layout={loads,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
+      contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,mainOverflow:main.scrollWidth-main.clientWidth,main:rect(main),rows:screenRows,columns:table.tHead.rows[0].cells.length,
+      fontSize:getComputedStyle(table.querySelector('tbody td')).fontSize,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),
+      brandBackground:getComputedStyle(root.querySelector('.ccr-brand')).backgroundColor,reportBackground:getComputedStyle(root.querySelector('.ccr-dialog')).backgroundColor,tones,
+      capturedTables:capturedTables.map(b=>({columns:b.widths.length,rows:b.rows.length})),firstCapturedId:pdfRow.cells[0].runs.map(r=>r.text).join(''),lastCapturedId:capturedTables[0].rows.at(-1).cells[0].runs.map(r=>r.text).join(''),
+      pdfColors:{pending:pdfRow.cells[2].background,danger:pdfRow.cells[7].background,success:pdfRow.cells[8].background},pdfTitle:capture.title,reportAction:root.dataset.reportAction,
+      navigationActions:[...root.querySelectorAll('.report-navigation-arrow')].map(node=>({from:node.dataset.from,direction:node.dataset.reportDirection})),
+      pdfHeader:new TextDecoder().decode(bytes.slice(0,5)),pdfPages:pdf.getPageCount(),filterCaptions:capture.filters,
+      restoredRows:table.tBodies[0].rows.length,restoredScroll:content.scrollTop,actions:[...toolbar.querySelector('.report-print-actions').children].map(node=>({...rect(node),label:node.getAttribute('aria-label')})),popup:popupData,keyboard};
+    const change=(name,value)=>{const node=root.querySelector(`[name=${name}]`);node.value=value;node.dispatchEvent(new Event('change',{bubbles:true}));};
+    change('id','1');await new Promise(resolve=>setTimeout(resolve,0));layout.detailColumns={launches:root.querySelector('.ccr-launches').tHead.rows[0].cells.length,measurements:root.querySelector('.ccr-measurements').tHead.rows[0].cells.length};
+    change('branch','SP');layout.unmatchedDetailHidden=root.querySelector('.ccr-detail').hidden;layout.unmatchedDetailTables=root.querySelectorAll('.ccr-detail table').length;
+    document.documentElement.dataset.layout=JSON.stringify(layout);
+  }
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>

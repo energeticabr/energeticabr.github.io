@@ -261,7 +261,7 @@ test('real navigation and PDF decorators capture both tables and block export af
   t.after(()=>decorated.destroy()); await decorated.open();
   assert.equal(root.querySelectorAll('.report-navigation-arrow').length,2);
   root.querySelector('.report-navigation-arrow--previous').click(); await tick();
-  assert.equal(navigation,'open-supplier-workforce-report');
+  assert.equal(navigation,'open-contractor-control-report');
   root.querySelector('.report-navigation-arrow--next').click(); await tick();
   assert.equal(navigation,'open-pending-work-diaries-report');
   const print=root.querySelector('.report-print-button');

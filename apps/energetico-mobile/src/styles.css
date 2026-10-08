@@ -1336,22 +1336,24 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-main-stage-progress-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-supplier-payroll-report-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:180px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-supplier-payroll-report-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
-.chat-main-pending-work-diaries-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-supplier-payments-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:348px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-pending-work-diaries-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:404px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
 .chat-main-supplier-workforce-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:236px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-contractor-control-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:292px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#cf757a; overflow:hidden; cursor:pointer; }
+.chat-main-contractor-control-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-supplier-workforce-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-supplier-payments-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .chat-main-pending-work-diaries-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-commercial-receipts-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:404px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-commercial-receipts-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:460px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-receipts-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-receipts-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-commercial-milestones-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:460px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-commercial-milestones-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:516px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-milestones-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-milestones-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-commercial-documents-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:516px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-commercial-documents-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:572px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-commercial-documents-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-commercial-documents-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
-.chat-main-sac-pathologies-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:572px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
+.chat-main-sac-pathologies-shortcut { grid-column:3; grid-row:1; align-self:start; margin-top:628px; width:44px; height:44px; padding:0; border:0; border-radius:10px; background:#ad3e08; overflow:hidden; cursor:pointer; }
 .chat-main-sac-pathologies-shortcut img { display:block; width:100%; height:100%; object-fit:contain; }
 .chat-main-sac-pathologies-shortcut:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 /* Clean alpha assets: the button alone paints the fill. Never magnify/crop
