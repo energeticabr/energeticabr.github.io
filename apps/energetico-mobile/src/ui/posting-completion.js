@@ -7,20 +7,19 @@ const icons = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
 };
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
-const row = (label, value, name) => `<div class="launch-completion__row"><dt>${icon(name)}<span>${label}</span></dt><dd>${escapeHtml(value)}</dd></div>`;
+const row = (label, value, name) => `<div class="launch-completion__row"><dt>${icon(name)}<span>${escapeHtml(label)}</span></dt><dd>${escapeHtml(value)}</dd></div>`;
 
-export function singleLaunchCompletionMarkup(receipt) {
-  return `<section class="launch-completion" aria-label="Lançamento gravado">
+export function postingCompletionMarkup(receipt, notesMarkup = '') {
+  return `<section class="launch-completion" aria-label="${escapeHtml(receipt.title)}">
     <header class="launch-completion__success">
       <span class="launch-completion__check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>
-      <div><h2>LANÇAMENTO GRAVADO!</h2><p>Os dados foram registrados com sucesso na base de dados LANCAMENTOS às ${escapeHtml(receipt.time)}.</p></div>
+      <div><h2>${escapeHtml(receipt.title)}!</h2><p>Operação concluída com sucesso na base de dados ${escapeHtml(receipt.database)} às ${escapeHtml(receipt.time)}.</p></div>
     </header>
     <h3 class="launch-completion__title"><span aria-hidden="true">🆔</span> REGISTROS CONFIRMADOS</h3>
     <dl class="launch-completion__records">
-      ${row('LANÇAMENTO', `ID ${receipt.launchId}`, 'launch')}
-      ${receipt.orderId ? row('PEDIDO', `ID ${receipt.orderId}`, 'order') : ''}
-      ${row('VALOR TOTAL DOS LANÇAMENTOS', receipt.total, 'total')}
+      ${receipt.records.map(record => row(record.label, record.value, record.icon)).join('')}
     </dl>
+    ${notesMarkup ? `<div class="launch-completion__details">${notesMarkup}</div>` : ''}
     <footer>${icon('clock')}<span>Registrado às ${escapeHtml(receipt.time)}</span></footer>
   </section>`;
 }

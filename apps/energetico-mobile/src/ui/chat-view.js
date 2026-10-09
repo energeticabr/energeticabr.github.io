@@ -1,6 +1,6 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
-import { singleLaunchCompletion } from "../chat/single-launch-completion.js";
-import { singleLaunchCompletionMarkup } from "./single-launch-completion.js";
+import { postingCompletion } from "../chat/posting-completion.js";
+import { postingCompletionMarkup } from "./posting-completion.js";
 import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
@@ -1722,9 +1722,9 @@ const provisionShortcut = provisionOption ? `<button class="chat-main-provisions
   const isUser = message.role === "user";
   const name = isUser ? account?.name || "Você" : "Energético";
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
-  const completion = !isUser && singleLaunchCompletion(message);
+  const completion = !isUser && postingCompletion(message);
   if (completion) {
-    return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${avatar}<div class="chat-bubble"><div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong><time>${escapeHtml(completion.time)}</time></div>${singleLaunchCompletionMarkup(completion)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${avatar}<div class="chat-bubble"><div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong><time>${escapeHtml(completion.time)}</time></div>${postingCompletionMarkup(completion, completion.notes.length ? `<p>${formatChatText(completion.notes.join('\n'))}</p>` : '')}</div></article>`;
   }
   const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
