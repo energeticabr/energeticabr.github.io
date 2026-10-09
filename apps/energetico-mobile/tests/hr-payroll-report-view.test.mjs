@@ -87,3 +87,86 @@ test("fechar o relatório aborta a consulta e ignora uma resposta tardia", async
   report.destroy();
   dom.window.close();
 });
+
+test("resumo agrupa dinheiro sem incluir outras rubricas no subtotal e preserva o total da folha", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const rows = [
+    { id: "1", TIPOPGTO: " salário ", VALORUNITARIO: "R$ 284,00", QTD: 1 },
+    { id: "2", TIPOPGTO: "SALARIO", VALORUNITARIO: 160, QTD: 1 },
+    { id: "3", TIPOPGTO: "Premiação", VALORUNITARIO: 146.13, QTD: 1 },
+    { id: "4", TIPOPGTO: "PRÊMIO", VALORUNITARIO: 10.01, QTD: 2 },
+    { id: "5", TIPOPGTO: "AJUDA DE CUSTO", VALORUNITARIO: 25, QTD: 2 },
+    { id: "6", TIPOPGTO: "vale refeição", VALORUNITARIO: 72.72, QTD: 2 },
+    { id: "7", TIPOPGTO: "VALE TRANSPORTE", VALORUNITARIO: 4.5, QTD: 10 },
+    { id: "8", TIPOPGTO: "13 SALÁRIO", VALORUNITARIO: 100, QTD: 1 },
+    { id: "9", TIPOPGTO: "FÉRIAS E/OU ENCARGOS", VALORUNITARIO: 200, QTD: 1 },
+    { id: "10", TIPOPGTO: "OUTRO", VALORUNITARIO: 0.1, QTD: 3 },
+  ];
+  const before = structuredClone(rows);
+  const report = createHrPayrollReport({ root, request: async () => rows });
+  await report.open({ id: "4" });
+  const cards = [...root.querySelectorAll(".hr-payroll-report-totals > article")];
+  assert.deepEqual(cards.map(card => card.querySelector(".hr-payroll-report-total-label").textContent),
+    ["DINHEIRO", "VALE REFEIÇÃO", "VALE TRANSPORTE", "TOTAL"]);
+  assert.deepEqual(cards.map(card => card.querySelector("strong").textContent.replace(/\u00a0/g, " ")),
+    ["R$ 660,15", "R$ 145,44", "R$ 45,00", "R$ 1.150,89"]);
+  assert.equal(root.querySelectorAll(".hr-payroll-payment-card").length, 10);
+  assert.deepEqual(rows, before);
+  report.destroy();
+  dom.window.close();
+});
+
+test("rubricas recebem cores diferentes e variantes do mesmo tipo mantêm a cor em ambas as listas", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const types = ["SALÁRIO", "PREMIAÇÃO", "AJUDA DE CUSTO", "VALE REFEIÇÃO", "VALE TRANSPORTE", "13 SALÁRIO", "FÉRIAS E/OU ENCARGOS"];
+  const report = createHrPayrollReport({ root, request: async () =>
+    [...types, " salario ", "PRÊMIO"].map((TIPOPGTO, index) => ({ id: String(index + 1), TIPOPGTO, VALORUNITARIO: 1, QTD: 1 })) });
+  await report.open({ id: "4" });
+  const cards = [...root.querySelectorAll(".hr-payroll-payment-card")];
+  const color = card => card.style.getPropertyValue("--payroll-type-background");
+  assert.ok(cards.every(card => color(card)), "cada linha tem cor de rubrica");
+  assert.equal(new Set(cards.slice(0, 7).map(color)).size, 7);
+  assert.equal(color(cards[0]), color(cards[7]));
+  assert.equal(color(cards[1]), color(cards[8]));
+  for (const card of cards) {
+    const breakdown = root.querySelector('[data-report-total-type="' + card.dataset.paymentType + '"]').closest("details");
+    assert.equal(color(card), color(breakdown));
+  }
+  report.destroy();
+  dom.window.close();
+});
+
+test("resumo mostra grupos vazios como zero mas não apresenta dinheiro incompleto como subtotal completo", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const report = createHrPayrollReport({ root, request: async () => [
+    { id: "1", TIPOPGTO: "SALÁRIO", VALORUNITARIO: 50, QTD: 1 },
+    { id: "2", TIPOPGTO: "AJUDA DE CUSTO", VALORUNITARIO: null, QTD: 1 },
+  ] });
+  await report.open({ id: "4" });
+  assert.equal(root.querySelector('[data-report-total="cash"]').textContent, "Não calculado");
+  for (const group of ["meal", "transport"]) {
+    assert.equal(root.querySelector('[data-report-total="' + group + '"]').textContent.replace(/\u00a0/g, " "), "R$ 0,00");
+  }
+  assert.match(root.querySelector(".hr-payroll-report-warning").textContent, /1 pagamento/);
+  report.destroy();
+  dom.window.close();
+});
+
+test("pagamentos sem rubrica inclusive espaços mantêm a mesma cor neutra do subtotal Sem tipo", async () => {
+  const dom = new JSDOM("<main id='root'></main>");
+  const root = dom.window.document.querySelector("#root");
+  const report = createHrPayrollReport({ root, request: async () =>
+    ["", "   ", null].map((TIPOPGTO, index) => ({ id: String(index + 1), TIPOPGTO, VALORUNITARIO: 1, QTD: 1 })) });
+  await report.open({ id: "4" });
+  const subtotal = root.querySelector('[data-report-total-type="SEMTIPO"]').closest("details");
+  const color = subtotal.style.getPropertyValue("--payroll-type-background");
+  for (const card of root.querySelectorAll(".hr-payroll-payment-card")) {
+    assert.equal(card.dataset.paymentType, "SEMTIPO");
+    assert.equal(card.style.getPropertyValue("--payroll-type-background"), color);
+  }
+  report.destroy();
+  dom.window.close();
+});
