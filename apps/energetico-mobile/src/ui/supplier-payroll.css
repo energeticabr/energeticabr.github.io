@@ -112,6 +112,14 @@
   font: inherit;
   font-size: 1rem;
 }
+.supplier-payroll-field input[type="date"] {
+  box-sizing: border-box;
+  width: min(100%, 20rem);
+  max-width: 100%;
+  align-self: flex-start;
+  appearance: none;
+  -webkit-appearance: none;
+}
 .supplier-payroll-rubrics {
   display: grid;
   gap: 12px;
