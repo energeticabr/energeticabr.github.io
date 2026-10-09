@@ -1,0 +1,263 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -30214,4 +30214 @@
+-        pending["sheet_suppliers"] = self._launch_payroll_distinct_suppliers(
+-            pending["selected_entries"]
+-        )
+-        pending["sheet_supplier_index"] = 0
++        pending["sheet_entry_index"] = 0
+@@ -30326,4 +30323 @@
+-        pending["sheet_suppliers"] = self._launch_payroll_distinct_suppliers(
+-            pending["selected_entries"]
+-        )
+-        pending["sheet_supplier_index"] = 0
++        pending["sheet_entry_index"] = 0
+@@ -30390,0 +30385,62 @@
++    def _migrate_launch_payroll_sheet_entries(self, state: dict, pending: dict) -> None:
++        if "sheet_entry_index" in pending:
++            return
++        # A legacy POST may have succeeded before its verification/checkpoint.
++        # Reconcile by the existing token using reads only, before discarding
++        # any supplier-wide choices. Never merge or relink an existing payment.
++        for entry in pending.get("selected_entries") or []:
++            if entry.get("FOLHAPGTO_ID"):
++                continue
++            launch_id = int(str(entry.get("item_id")).strip())
++            token = f"WA-launch-payroll-{state['batch_id']}-{launch_id}"
++            existing = self.sharepoint._find_item(token, "FOLHAPGTO", "Title")
++            if not existing:
++                continue
++            payroll_item_id = int(existing["Id"])
++            actual = self.sharepoint.get_item_fields(
++                payroll_item_id, ["TIPOPGTO"], target_list="FOLHAPGTO"
++            )
++            selected_type = next(
++                (title for _, title in LAUNCH_PAYROLL_TYPE_OPTIONS
++                 if normalize_text(str(actual.get("TIPOPGTO") or "")) == normalize_text(title)),
++                None,
++            )
++            fields = entry.get("fields") or {}
++            sheet_id = int(str(entry.get("IDFOLHA")).strip())
++            unit_value = _parse_decimal(fields.get("VALOR UNITÁRIO"), allow_zero=True)
++            quantity = _parse_decimal(fields.get("QUANTIDADE"), allow_zero=True)
++            if (launch_id <= 0 or payroll_item_id <= 0 or sheet_id <= 0
++                    or selected_type is None or unit_value is None or quantity is None):
++                raise ValueError("Invalid legacy payroll reconciliation")
++            payroll_fields = {
++                "FORNECEDOR": str(fields.get("FORNECEDOR") or entry.get("supplier") or "").strip(),
++                "TIPOPGTO": selected_type,
++                "VALORUNITARIO": _decimal_storage(unit_value),
++                "QTD": _decimal_storage(quantity),
++                "DATA": str(fields.get("DATA") or "")[:10],
++                "IDFOLHA": sheet_id,
++                "IDLANCAMENTO": launch_id,
++            }
++            if not payroll_fields["FORNECEDOR"] or not payroll_fields["DATA"]:
++                raise ValueError("Missing legacy payroll reconciliation fields")
++            verification = self.sharepoint.verify_item(
++                payroll_item_id, payroll_fields, [], target_list="FOLHAPGTO"
++            )
++            entry["TIPOPGTO"] = selected_type
++            entry["FOLHAPGTO_ID"] = payroll_item_id
++            rows = state.setdefault("sharepoint", {}).setdefault("folhapgto_rows", [])
++            if not any(row.get("item_id") == payroll_item_id for row in rows):
++                rows.append({"item_id": payroll_item_id, "launch_item_id": launch_id,
++                             "fields": copy.deepcopy(payroll_fields), "verified": verification})
++            self._send_text(state, f"✅ O PAGAMENTO DO LANÇAMENTO {launch_id} JÁ FOI GRAVADO "
++                            f"NA FOLHA {sheet_id}. ESSE VÍNCULO FOI PRESERVADO.")
++        # Legacy supplier-wide choices must not become individual consent.
++        # Verified payments are checkpoints, never candidates for relinking.
++        for entry in pending.get("selected_entries") or []:
++            if not entry.get("FOLHAPGTO_ID"):
++                entry.pop("IDFOLHA", None)
++        pending["sheet_entry_index"] = 0
++        for key in ("sheet_suppliers", "sheet_supplier_index", "current_sheet_supplier",
++                    "current_sheet_launch_id", "current_sheet_option_key"):
++            pending.pop(key, None)
++
+@@ -30395,2 +30451,12 @@
+-        suppliers = pending.get("sheet_suppliers") or []
+-        index = int(pending.get("sheet_supplier_index", 0))
++        try:
++            self._migrate_launch_payroll_sheet_entries(state, pending)
++        except Exception:
++            state["stage"] = LAUNCH_PAYROLL_SHEET_STAGE
++            state["options"] = []
++            state.pop("option_pagination", None)
++            self._send_text(state, "❌ NÃO FOI POSSÍVEL CONFIRMAR OS PAGAMENTOS JÁ INICIADOS. "
++                            "OS VÍNCULOS EXISTENTES FORAM PRESERVADOS. TENTE NOVAMENTE.")
++            etag = self._save(state, etag)
++            return {"status": "launch_payroll_reconciliation_failed",
++                    "batch_id": state["batch_id"], "etag": etag}
++        index = int(pending.get("sheet_entry_index", 0))
+@@ -30398,8 +30464,18 @@
+-        while index < len(suppliers):
+-            supplier = str(suppliers[index]).strip()
+-            supplier_entries = [
+-                item
+-                for item in selected_entries
+-                if normalize_text(str(item.get("supplier") or ""))
+-                == normalize_text(supplier)
+-            ]
++        # The historic method name remains compatible with persisted stages.
++        # The cursor and each answer now belong to one launch, not a supplier.
++        while index < len(selected_entries):
++            entry = selected_entries[index]
++            if entry.get("FOLHAPGTO_ID"):
++                index += 1
++                pending["sheet_entry_index"] = index
++                continue
++            supplier = str(entry.get("supplier") or "").strip()
++            launch_id = entry["item_id"]
++            option_key = f"launch_payroll_sheet_{launch_id}"
++            pending["sheet_entry_index"] = index
++            pending["current_sheet_supplier"] = supplier
++            pending["current_sheet_launch_id"] = launch_id
++            pending["current_sheet_option_key"] = option_key
++            state["stage"] = LAUNCH_PAYROLL_SHEET_STAGE
++            state["options"] = []
++            state.pop("option_pagination", None)
+@@ -30407,0 +30484,22 @@
++                if not options:
++                    all_supplier_sheets = self.sharepoint.get_options(
++                        {
++                            "key": "launch_payroll_all_supplier_sheets",
++                            "source": {
++                                "type": "sharepoint_list",
++                                "list": "IDFOLHA",
++                                "id_field": "Id",
++                                "label_field": "MESREFERENCIA",
++                                "value_field": "MESREFERENCIA",
++                                "fields": ["MESREFERENCIA", "FORNECEDOR"],
++                                "filters": [{"field": "FORNECEDOR", "equals": supplier}],
++                                "top": 5000,
++                            },
++                        },
++                        {},
++                    )
++                    has_any_sheet = any(
++                        normalize_text(str((item.get("source_values") or {}).get("FORNECEDOR") or ""))
++                        == normalize_text(supplier)
++                        for item in all_supplier_sheets
++                    )
+@@ -30414 +30511,0 @@
+-                state["stage"] = LAUNCH_PAYROLL_SHEET_STAGE
+@@ -30416 +30513 @@
+-                return {"status": "launch_payroll_sheet_load_failed", "supplier": supplier, "batch_id": state["batch_id"], "etag": etag}
++                return {"status": "launch_payroll_sheet_load_failed", "supplier": supplier, "launch_id": launch_id, "batch_id": state["batch_id"], "etag": etag}
+@@ -30418,3 +30514,0 @@
+-                pending["sheet_supplier_index"] = index
+-                pending["current_sheet_supplier"] = supplier
+-                state["stage"] = LAUNCH_PAYROLL_SHEET_STAGE
+@@ -30421,0 +30516 @@
++                total = _currency_display(self._launch_payroll_total(entry.get("fields") or {}))
+@@ -30423,2 +30518,6 @@
+-                    "key": "launch_payroll_sheet",
+-                    "prompt": f"QUAL FOLHA DE PAGAMENTO DO FORNECEDOR {supplier} DEVE RECEBER OS LANÇAMENTOS?",
++                    "key": option_key,
++                    "prompt": (
++                        f"PAGAMENTO {index + 1} DE {len(selected_entries)} — LANÇAMENTO ID {launch_id} "
++                        f"— {supplier} — VALOR TOTAL {total}. "
++                        "A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?"
++                    ),
+@@ -30430,19 +30529,8 @@
+-                return {"status": "awaiting_launch_payroll_sheet", "supplier": supplier, "option_count": len(options), "batch_id": state["batch_id"], "etag": etag}
+-
+-            if supplier_entries:
+-                skipped_ids = ", ".join(str(item["item_id"]) for item in supplier_entries)
+-                all_supplier_sheets = self.sharepoint.get_options(
+-                    {
+-                        "key": "launch_payroll_all_supplier_sheets",
+-                        "source": {
+-                            "type": "sharepoint_list",
+-                            "list": "IDFOLHA",
+-                            "id_field": "Id",
+-                            "label_field": "MESREFERENCIA",
+-                            "value_field": "MESREFERENCIA",
+-                            "fields": ["MESREFERENCIA", "FORNECEDOR"],
+-                            "filters": [{"field": "FORNECEDOR", "equals": supplier}],
+-                            "top": 5000,
+-                        },
+-                    },
+-                    {},
++                return {"status": "awaiting_launch_payroll_sheet", "supplier": supplier, "launch_id": launch_id, "line": index + 1, "line_count": len(selected_entries), "option_count": len(options), "batch_id": state["batch_id"], "etag": etag}
++
++            if has_any_sheet:
++                self._send_text(
++                    state,
++                    f"⚠️ O FORNECEDOR {supplier} NÃO TEM FOLHA DO MÊS VIGENTE, "
++                    f"DO MÊS ANTERIOR OU DO PRÓXIMO MÊS. O ID {launch_id} "
++                    "NÃO SERÁ ACRESCENTADO À FOLHA.",
+@@ -30450,4 +30538,5 @@
+-                has_any_sheet = any(
+-                    normalize_text(str((item.get("source_values") or {}).get("FORNECEDOR") or ""))
+-                    == normalize_text(supplier)
+-                    for item in all_supplier_sheets
++            else:
++                self._send_text(
++                    state,
++                    f"⚠️ ESSE FORNECEDOR NÃO TEM FOLHAS CADASTRADAS. "
++                    f"O ID {launch_id} NÃO SERÁ ACRESCENTADO À FOLHA.",
+@@ -30455,20 +30544 @@
+-                if has_any_sheet:
+-                    self._send_text(
+-                        state,
+-                        f"⚠️ O FORNECEDOR {supplier} NÃO TEM FOLHA DO MÊS VIGENTE, "
+-                        f"DO MÊS ANTERIOR OU DO PRÓXIMO MÊS. OS IDS {skipped_ids} "
+-                        "NÃO SERÃO ACRESCENTADOS À FOLHA.",
+-                    )
+-                else:
+-                    self._send_text(
+-                        state,
+-                        f"⚠️ ESSE FORNECEDOR NÃO TEM FOLHAS CADASTRADAS. "
+-                        f"OS IDS {skipped_ids} NÃO SERÃO ACRESCENTADOS À FOLHA.",
+-                    )
+-                selected_entries = [
+-                    item
+-                    for item in selected_entries
+-                    if normalize_text(str(item.get("supplier") or ""))
+-                    != normalize_text(supplier)
+-                ]
+-                pending["selected_entries"] = selected_entries
++            entry.pop("IDFOLHA", None)
+@@ -30476 +30546 @@
+-            pending["sheet_supplier_index"] = index
++            pending["sheet_entry_index"] = index
+@@ -30493,0 +30564,4 @@
++        pending = state.get("pending_launch_payroll") or {}
++        if "sheet_entry_index" not in pending:
++            self._mark_processed(state, message_id)
++            return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
+@@ -30495 +30569 @@
+-        selected = resolve_option(raw, state.get("options", []), "launch_payroll_sheet")
++        selected = resolve_option(raw, state.get("options", []), pending.get("current_sheet_option_key"))
+@@ -30497,2 +30571,4 @@
+-        pending = state.get("pending_launch_payroll") or {}
+-        supplier = str(pending.get("current_sheet_supplier") or "").strip()
++        entries = pending.get("selected_entries") or []
++        index = int(pending.get("sheet_entry_index", 0))
++        entry = entries[index] if 0 <= index < len(entries) else None
++        supplier = str((entry or {}).get("supplier") or "").strip()
+@@ -30501,0 +30578,3 @@
++            or not entry
++            or entry.get("FOLHAPGTO_ID")
++            or entry.get("item_id") != pending.get("current_sheet_launch_id")
+@@ -30517,4 +30596,2 @@
+-        for item in pending.get("selected_entries", []):
+-            if normalize_text(str(item.get("supplier") or "")) == normalize_text(supplier):
+-                item["IDFOLHA"] = sheet_id
+-        pending["sheet_supplier_index"] = int(pending.get("sheet_supplier_index", 0)) + 1
++        entry["IDFOLHA"] = sheet_id
++        pending["sheet_entry_index"] = index + 1
+@@ -30527,0 +30605,2 @@
++        if len(entries) > 1 and "sheet_entry_index" not in pending:
++            return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
+@@ -30528,0 +30608,3 @@
++        while index < len(entries) and entries[index].get("FOLHAPGTO_ID"):
++            index += 1
++            pending["type_index"] = index
+@@ -30556,0 +30639,4 @@
++        pending = state.get("pending_launch_payroll") or {}
++        if len(pending.get("selected_entries") or []) > 1 and "sheet_entry_index" not in pending:
++            self._mark_processed(state, message_id)
++            return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
