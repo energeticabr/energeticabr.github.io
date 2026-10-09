@@ -1,4 +1,5 @@
 import { normalizeLaunchSnapshot } from "./launch-snapshot.js";
+import { isMultipleLaunchFlow } from "./single-launch-completion.js";
 import { normalizeMeasurementSnapshot } from "./measurement-snapshot.js";
 import { normalizeProvisionSnapshotForFlow } from "./provision-snapshot.js";
 
@@ -102,7 +103,9 @@ export function createConversationStore({
     return (messages || []).filter(message => {
       if (["poll", "image", "document"].includes(message?.type)) return true;
       return (!message?.type || message.type === "text") && String(message?.text || "").trim();
-    }).map(message => cloneRemoteMessage(message, nextId));
+    }).map(message => cloneRemoteMessage(isMultipleLaunchFlow(state.activeFlow)
+      ? { ...message, launchCompletionMode: 'multiple' }
+      : message, nextId));
   }
 
   function nextMessages(messages, { resetConversation = false, userMessage, replaceAuditReport = false } = {}) {
