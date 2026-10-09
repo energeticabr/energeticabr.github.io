@@ -111,6 +111,63 @@ test('typing matches accents and case without changing the value or applying gal
   assert.equal(new ctx.FormData(ctx.form).get('product'), 'steel');
 });
 
+for (const [inputType, data, caret] of [
+  ['insertText', 'Con', 13],
+  ['insertText', 'Con', 4],
+  ['insertFromPaste', 'Con', 0],
+]) {
+  test(`${inputType} after choosing a filter starts a new search at caret ${caret}`, t => {
+    const ctx = fixture(t, { auto: true });
+    ctx.search().focus(); ctx.type('aco'); ctx.key('Enter');
+    const input = ctx.search();
+    assert.equal(ctx.document.activeElement, input);
+    assert.equal(input.value, 'Aço estrutural');
+    ctx.form.elements.description.value = 'obra';
+    input.setSelectionRange(caret, caret);
+
+    // Simulate the browser's default edit after beforeinput, not a replacement
+    // assigned by the test: the selected label must have been cleared first.
+    const edit = text => {
+      input.dispatchEvent(new ctx.dom.window.InputEvent('beforeinput', { inputType, data: text, bubbles: true, cancelable: true }));
+      input.setRangeText(text, input.selectionStart, input.selectionEnd, 'end');
+      input.dispatchEvent(new ctx.dom.window.InputEvent('input', { inputType, data: text, bubbles: true }));
+    };
+    edit(data); edit('creto');
+    assert.equal(input.value, 'Concreto');
+    assert.deepEqual(ctx.options().map(option => option.textContent), ['Concreto']);
+    assert.equal(ctx.select.value, 'steel', 'typing alone does not replace the committed filter');
+    assert.equal(ctx.applies(), 1);
+    assert.equal(new ctx.FormData(ctx.form).get('description'), 'obra');
+    ctx.key('Enter');
+    assert.equal(new ctx.FormData(ctx.form).get('product'), 'concrete');
+    assert.equal(ctx.applies(), 2);
+  });
+}
+
+test('composition after choosing a filter clears the selected label before IME editing', t => {
+  const ctx = fixture(t);
+  ctx.search().focus(); ctx.type('aco'); ctx.key('Enter');
+  ctx.search().dispatchEvent(new ctx.dom.window.CompositionEvent('compositionstart', { bubbles: true }));
+  assert.equal(ctx.search().value, '');
+  assert.equal(ctx.popup().hidden, false);
+  ctx.type('concreto');
+  ctx.search().dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+  assert.equal(ctx.select.value, 'steel');
+  ctx.key('Escape');
+  assert.equal(ctx.search().value, 'Aço estrutural', 'cancelling a new search keeps the previous filter');
+});
+
+test('deleting after a selection opens an empty search without applying another filter', t => {
+  const ctx = fixture(t, { auto: true });
+  ctx.search().focus(); ctx.type('aco'); ctx.key('Enter');
+  ctx.search().dispatchEvent(new ctx.dom.window.InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+  assert.equal(ctx.search().value, '');
+  assert.equal(ctx.popup().hidden, false);
+  assert.equal(ctx.options().length, 5);
+  assert.equal(ctx.select.value, 'steel');
+  assert.equal(ctx.applies(), 1);
+});
+
 test('a tap on another option survives search blur and applies the new filter', t => {
   const ctx = fixture(t, { auto: true });
   ctx.trigger().click();
