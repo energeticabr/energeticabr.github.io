@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css"><title>Resumos de postagem — prévia local</title></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '../../src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+const samples = {
+  multiple: `✅ *🟢 6 LANÇAMENTOS GRAVADOS NA BASE DE DADOS LANCAMENTOS ÀS 17:16.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• LANÇAMENTOS: IDS 3551, 3552, 3553, 3554, 3555, 3556
+• PEDIDOS: IDS 390, 391
+• DOCUMENTO: ID 9007199254740993
+💰 *VALOR TOTAL DOS LANÇAMENTOS: R$ 1.234.567,89*
+📎 Anexos enviados: 4`,
+  provision: `✅ *🟢 PROVISÃO DE PAGAMENTO COM 2 LINHAS GRAVADA NA BASE DE DADOS PROVISAO PGTOS ÀS 09:42.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• PROVISÕES DE PAGAMENTO: IDS 501, 502
+• REGISTROS EM DESCRITIVO PROVISAO: IDS 101, 102`,
+  registration: `✅ *🟢 CADASTRO GRAVADO NA BASE DE DADOS CADASTRO ÀS 09:42.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• REGISTRO EM CADASTRO: ID 201`,
+  technical: `✅ *🟢 ITEM GRAVADO NA BASE DE DADOS DESCRITIVOPRESENCA ÀS 09:42.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• REGISTRO EM DESCRITIVOPRESENCA: ID 901`,
+};
+const sample = new URLSearchParams(location.search).get('sample') || 'multiple';
+view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
+  activeFlow: null, completionNavigation: { homeOnly: true, title: 'POSTAGEM CONCLUÍDA' },
+  messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text: samples[sample] }],
+});
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+const card = document.querySelector('.launch-completion');
+const result = card ? {
+  pageWidth: document.documentElement.scrollWidth,
+  cardWidth: card.getBoundingClientRect().width,
+  cardOverflow: card.scrollWidth > card.clientWidth,
+  data: [...card.querySelectorAll('dt, dd')].map(el => {
+    const rect = el.getBoundingClientRect();
+    return { text: el.textContent.trim(), left: rect.left, right: rect.right, font: parseFloat(getComputedStyle(el).fontSize), overflow: el.scrollWidth > el.clientWidth };
+  }),
+  headingFont: parseFloat(getComputedStyle(card.querySelector('h2')).fontSize),
+  paragraphWeight: getComputedStyle(card.querySelector('p')).fontWeight,
+  details: card.querySelector('.launch-completion__details')?.textContent.trim(),
+} : { missing: true };
+const output = document.createElement('script'); output.id = 'layout-result'; output.type = 'application/json'; output.textContent = JSON.stringify(result); document.body.append(output);
+document.documentElement.dataset.layout = 'ready';
+window.addEventListener('pagehide', () => view.destroy(), { once: true });
+</script></body></html>

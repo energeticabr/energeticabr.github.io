@@ -23,7 +23,7 @@ test('confirmed single launch renders the reference success card with exact sour
   const card = doc.querySelector('.launch-completion');
   assert.ok(card);
   assert.equal(card.querySelector('h2').textContent, 'LANÇAMENTO GRAVADO!');
-  assert.match(card.textContent, /Os dados foram registrados com sucesso na base de dados LANCAMENTOS às 17:16\./);
+  assert.match(card.textContent, /Operação concluída com sucesso na base de dados LANCAMENTOS às 17:16\./);
   assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['LANÇAMENTO', 'PEDIDO', 'VALOR TOTAL DOS LANÇAMENTOS']);
   assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 3551', 'ID 390', 'R$ 746,00']);
   assert.equal(card.querySelector('footer').textContent.trim(), 'Registrado às 17:16');
@@ -61,18 +61,13 @@ test('receipt source is preserved on re-render, including large IDs and currency
 
 for (const [name, message] of [
   ['user text', { role: 'user' }],
-  ['multiple launch notice', { text: confirmation.replace('LANÇAMENTO GRAVADO', '2 LANÇAMENTOS GRAVADOS') }],
-  ['one-row multiple launch', { launchCompletionMode: 'multiple' }],
   ['unconfirmed write', { text: confirmation.replace('GRAVADO', 'NÃO GRAVADO') }],
-  ['provision notice', { text: confirmation.replace('LANÇAMENTO GRAVADO', 'PROVISÃO DE PAGAMENTO GRAVADA') }],
-  ['missing launch ID', { text: confirmation.replace('• *LANÇAMENTO:* ID 3551\n', '') }],
-  ['several launch IDs', { text: confirmation.replace('ID 3551', 'IDs 3551, 3552') }],
-  ['missing amount', { text: confirmation.split('\n').slice(0, -1).join('\n') }],
+  ['missing all confirmed IDs', { text: confirmation.replace('• *LANÇAMENTO:* ID 3551\n• *PEDIDO:* ID 390\n', '') }],
   ['invalid time', { text: confirmation.replace('17:16', '25:16') }],
   ['extra error must remain visible', { text: confirmation + '\n❌ Não foi possível gravar outro item.' }],
   ['markup in value', { text: confirmation.replace('746,00', '<img src=x onerror=alert(1)>') }],
 ]) {
-  test(`only confirmed single receipts are formatted: ${name}`, () => {
+  test(`only confirmed receipts are formatted: ${name}`, () => {
     const doc = documentFor(message);
     assert.equal(doc.querySelector('.launch-completion'), null);
     const original = message.text || confirmation;
@@ -82,13 +77,13 @@ for (const [name, message] of [
   });
 }
 
-test('a one-row multiple flow keeps its original confirmation after the flow ends', () => {
+test('a one-row multiple flow also formats its confirmation after the flow ends', () => {
   const store = createConversationStore();
   store.ingestRemoteMessages([], { activeFlow: { id: 'launch', title: 'EFETUAR LANÇAMENTO', rows: [{ label: 'MODALIDADE', value: 'LANÇAMENTO MÚLTIPLO' }] } });
   const op = store.beginText('Submeter');
   store.confirmText(op, { activeFlow: null, results: [{ status: 'completed' }], messages: [{ text: confirmation }] });
   const message = store.getState().messages.find(item => item.role === 'assistant');
-  assert.equal(documentFor(message).querySelector('.launch-completion'), null);
+  assert.deepEqual([...documentFor(message).querySelectorAll('.launch-completion dd')].map(el => el.textContent), ['ID 3551', 'ID 390', 'R$ 746,00']);
   assert.equal(store.getState().activeFlow, null);
 });
 
