@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css"><title>Confirmação de lançamento — prévia local</title></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '../../src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+const large = new URLSearchParams(location.search).has('large');
+view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
+  activeFlow: null, completionNavigation: { homeOnly: true, title: 'EFETUAR LANÇAMENTO' },
+  messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text:
+`✅ *🟢 LANÇAMENTO GRAVADO NA BASE DE DADOS LANCAMENTOS ÀS 17:16.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• *LANÇAMENTO:* ID ${large ? '9007199254740993' : '3551'}
+• *PEDIDO:* ID 390
+💰 *VALOR TOTAL DOS LANÇAMENTOS: R$ ${large ? '1.234.567,89' : '746,00'}*` }],
+});
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+const card = document.querySelector('.launch-completion');
+const result = card ? {
+  pageWidth: document.documentElement.scrollWidth,
+  cardWidth: card.getBoundingClientRect().width,
+  cardOverflow: card.scrollWidth > card.clientWidth,
+  data: [...card.querySelectorAll('dt, dd')].map(el => {
+    const rect = el.getBoundingClientRect();
+    return { text: el.textContent.trim(), left: rect.left, right: rect.right, font: parseFloat(getComputedStyle(el).fontSize), overflow: el.scrollWidth > el.clientWidth };
+  }),
+  headingFont: parseFloat(getComputedStyle(card.querySelector('h2')).fontSize),
+} : { missing: true };
+const output = document.createElement('script'); output.id = 'layout-result'; output.type = 'application/json'; output.textContent = JSON.stringify(result); document.body.append(output);
+document.documentElement.dataset.layout = 'ready';
+window.addEventListener('pagehide', () => view.destroy(), { once: true });
+</script></body></html>
