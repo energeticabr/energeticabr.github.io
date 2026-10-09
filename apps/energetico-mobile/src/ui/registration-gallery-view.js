@@ -1,3 +1,5 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
@@ -167,11 +169,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const toolbar = el("div", "rg-toolbar");
   const filterFields = model.filterFields || ["STATUS"];
   if (model.filterFields) toolbar.classList.add("rg-toolbar--documents");
-  const searchLabel = el("label", "rg-field", "Pesquisar");
   const search = el("input", "rg-input");
-  search.type = "search";
-  search.placeholder = model.searchPlaceholder || "Pesquisar cadastro ou ID";
-  searchLabel.append(search);
+  placeGalleryQuickSearch({ input: search, toolbar: createShortcut.toolbar });
   const filterControls = new Map();
   for (const field of filterFields) {
     const label = el("label", "rg-field", fieldLabel(field));
@@ -213,7 +212,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const refresh = el("button", "rg-button", "Atualizar");
   refresh.type = "button";
   refresh.dataset.action = "registration-refresh";
-  toolbar.prepend(searchLabel);
   filterDisclosure.append(toolbar);
   const feedback = el("p", "rg-feedback");
   feedback.setAttribute("role", "status");
@@ -562,10 +560,8 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         if (applyRange && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || start && date < start || end && date > end)) return false;
       }
       if (!query) return true;
-      const haystack = (model.searchFields ? model.searchFields.map(field => rowFieldValue(row, field))
-        : [row.id, ...model.fields.map(field => rowFieldValue(row, field))])
-        .join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      return haystack.includes(query);
+      const searchFields = new Set([...model.fields, ...(model.filterFields || [])]);
+      return matchesGallerySearch(query, [row.id, ...[...searchFields].map(field => rowFieldValue(row, field))]);
     });
     return sortRegistrationRows(filtered, model, model.sortOptions?.find(sort => sort.value === sortControl.value));
   }

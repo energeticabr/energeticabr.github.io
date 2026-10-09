@@ -1,3 +1,5 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
@@ -257,6 +259,7 @@ export function createRecurringExpensesGallery({
   filterCount.hidden = true;
   filterButton.append(icon("filter"), el("span", "", "Filtros"), filterCount);
   toolbar.append(searchBar, filterButton);
+  placeGalleryQuickSearch({ input: controls.get("search"), toolbar, container: searchBar });
   const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle: filterButton, onCreate, close,
     label: 'Adicionar uma nova despesa recorrente', action: 'create-recurring-expense',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
@@ -457,10 +460,11 @@ export function createRecurringExpensesGallery({
     const query = normalized(values.search);
     filteredRows = sortRows(rows.filter(row => {
       const fields = row.fields || {};
-      if (query && !normalized([row.id, ...Object.values(fields).map(text)].join(" ")).includes(query)) return false;
       for (const [name, , aliases] of FILTERS) {
         if (values[name] && normalized(filterValue(fields, name, aliases)) !== normalized(values[name])) return false;
       }
+      if (query && !matchesGallerySearch(query, [row.id, recurrenceValue(fields),
+        ...Object.entries(fields).flatMap(([name, value]) => [value, displayValue(name, value)])])) return false;
       return true;
     }));
     page = 1;

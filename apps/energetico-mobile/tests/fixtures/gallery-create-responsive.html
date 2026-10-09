@@ -29,10 +29,14 @@ try {
     const measure = async () => {
       await nextFrame();
       const a = add.getBoundingClientRect(), b = filter.getBoundingClientRect(), style = getComputedStyle(add);
+      const search = root.querySelector('[data-gallery-quick-search]');
+      const s = search?.getBoundingClientRect();
       return { width: a.width, height: a.height, color: style.color, background: style.backgroundColor, border: style.borderColor,
         visible: a.width > 0 && a.height > 0 && !add.closest('details') && !add.closest('[hidden]'),
         ordered: b.right <= a.left && Math.abs(b.bottom - a.bottom) < 1,
         fits: a.left >= 0 && a.right <= innerWidth && b.left >= 0,
+        quickSearch: Boolean(s && s.width >= 90 && s.height >= 44 && s.right <= b.left
+          && Math.abs(s.bottom - b.bottom) < 2 && !search.closest('details') && !search.closest('[hidden]')),
         overflow: root.scrollWidth > root.clientWidth + 1,
         outside: [...root.querySelectorAll('*')].filter(node => { const r = node.getBoundingClientRect();
           return r.width && (r.left < 0 || r.right > innerWidth); }).slice(0, 8).map(node => ({

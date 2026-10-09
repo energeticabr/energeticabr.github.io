@@ -1,3 +1,5 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
@@ -182,7 +184,8 @@ export function createOrdersGallery({
     return control;
   }
 
-  addControl("search", "Pesquisar", "input", "search").placeholder = "Fornecedor, ID, observação…";
+  const search = addControl("search", "Pesquisar", "input", "search");
+  placeGalleryQuickSearch({ input: search, toolbar: createShortcut.toolbar });
   for (const [name, label] of FILTERS) addControl(name, label, "select");
   addControl("total", "Valor total", "input", "search").placeholder = "Valor ou faixa";
   addControl("id", "ID", "input", "search").inputMode = "numeric";
@@ -304,7 +307,8 @@ export function createOrdersGallery({
     filteredRows = sortRows(rows.filter(row => {
       const fields = row.fields || {};
       const fieldFor = name => field(fields, FIELD_ALIASES[name] || [name]);
-      if (query && !normalized([row.id, ...Object.values(fields).map(text)].join(" ")).includes(query)) return false;
+      if (query && !matchesGallerySearch(query, [row.id,
+        ...Object.entries(fields).flatMap(([name, value]) => [value, formatDate(name, value)])])) return false;
       for (const [filterName, , fieldName] of FILTERS) {
         const selected = filterValues[filterName];
         if (selected && normalized(field(fields, [fieldName])) !== normalized(selected)) return false;
@@ -527,7 +531,7 @@ export function createOrdersGallery({
   }
 
   function applyFilters() { applyLocalFilters(); }
-  const autoFilters = bindAutoFilterForm(form, applyFilters);
+  const autoFilters = bindAutoFilterForm(form, applyFilters, { externalControls: [search] });
   sort.addEventListener('change', () => autoFilters.apply());
   clearButton.addEventListener("click", () => {
     for (const [name, control] of controls) control.value = name === "sort" ? "id-desc" : name === "pageSize" ? "10" : "";

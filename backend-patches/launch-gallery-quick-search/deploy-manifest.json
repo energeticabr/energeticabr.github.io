@@ -1,0 +1,9 @@
+{
+  "worker/launch_gallery.py": {
+    "before": {
+      "/opt/energetica-whatsapp": "a38c6a37f321f7d5c30d8319237176ac68d7f21b652a6dee71bfbd965f6f76d1",
+      "/home/opc/energetica-build": "308e083427f9ac0f97f9db2f958e55c7c2b9df3662a01073892924667c9a2f15"
+    },
+    "after": "7f680cd0271b04142831eb5cbcbfd802d937873fc0755570f8dd4353c9c12c26"
+  }
+}

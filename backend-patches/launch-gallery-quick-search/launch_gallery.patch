@@ -1,0 +1,166 @@
+diff --git a/worker/launch_gallery.py b/worker/launch_gallery.py
+index c4b23d2..8a6c385 100644
+--- a/worker/launch_gallery.py
++++ b/worker/launch_gallery.py
+@@ -32,6 +32,8 @@ import re
+ import unicodedata
+ from datetime import date, datetime, time, timedelta, timezone
+ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
++from html import unescape
++from html.parser import HTMLParser
+ from urllib.parse import quote, unquote
+ from zoneinfo import ZoneInfo
+ 
+@@ -81,15 +83,29 @@ SORT_OPTIONS = {
+ }
+ FILTER_FIELDS = {"branch": "FILIAL", "supplier": "FORNECEDOR", "status": "CONCLUÍDO",
+                  "product": "PRODUTO", "stage": "ETAPA", "contract": "CONTRATO", "id": "ID"}
++# Search stays local to the authorized launch dataset, never in an OData query.
++# Optional linked IDs are projected only for a nonempty search. Signatures and
++# REST/user metadata are deliberately excluded from this explicit allowlist.
++SEARCH_DATE_FIELDS = ("DATA", "DATA PGTO PREVISTO", "DATA PGTO EFETUADO", "DATA RMS", "Criado", "Modificado")
++SEARCH_NUMBER_FIELDS = ("QUANTIDADE", "VALOR UNITÁRIO", "FRETE")
++SEARCH_FIELDS = (
++    "ID", "FILIAL", "FORNECEDOR", "PRODUTO", "DESCRIÇÃO", "CONTA", "CONCLUÍDO",
++    "APROVACAO", "ETAPA", "TIPO TRANSAÇÃO", "CONTRATO", "MEDICAOPARCIAL",
++    "IDPGTOAGENDADO", "IDFOLHA", "NOTA", "UN", "OBSERVAÇÕES ENTREGA", "AGRUPAR",
++    "GERADESEMBOLSO", "ADIANTAMENTO", *SEARCH_DATE_FIELDS, *SEARCH_NUMBER_FIELDS,
++)
+ CATALOGS = {
+     "FILIAL": ("FILIAIS", "FILIAL"), "FORNECEDOR": ("FORNECEDORES", "CADASTRO"),
+     "PRODUTO": ("CADASTROPRODUTO", "PRODUTO"), "ETAPA": ("LANCAMENTOOBRA", "ETAPA"),
++    "CONTA": ("CADASTROCONTA", "CONTA"),
+     "UN": ("CADASTROUNIDADEMEDIDA", "UNIDADE MEDIDA"),
+     "CONCLUÍDO": ("CONCLUIDOLANCAMENTOS", "CONCLUÍDO LANÇAMENTOS"),
+     "ATIVIDADE": ("ATIVIDADE EXECUTADA", "ATIVIDADE EXECUTADA"),
+ }
+ FIXED_CHOICES = {
+     "GERADESEMBOLSO": ["SIM", "NÃO"],
++    "ADIANTAMENTO": ["SIM", "NÃO"],
++    "TIPO TRANSAÇÃO": ["CUSTO", "DESPESA", "RECEITA"],
+     "AGRUPAR": ["EMPENHADO HOJE", "EMPENHADO E LIQUIDADO HOJE", "LIQUIDADO HOJE",
+                 "LIQUIDADO E PAGO HOJE", "EMPENHADO, LIQUIDADO E PAGO HOJE", "PAGO HOJE"],
+ }
+@@ -109,6 +125,57 @@ def _norm(value):
+     return "".join(c for c in unicodedata.normalize("NFKD", str(value)) if not unicodedata.combining(c)).casefold()
+ 
+ 
++def _search_terms(value):
++    if (not isinstance(value, str) or len(value) > 512
++            or any(unicodedata.category(c) in {"Cc", "Cf", "Cs"} and c not in "\t\r\n" for c in value)):
++        _fail("invalid_filter", "search deve ser texto válido com até 512 caracteres.")
++    return _norm(value).split()
++
++
++class _DescriptionText(HTMLParser):
++    """Collect visible text only; parsing never executes or fetches HTML content."""
++    BLOCKS = {"p", "div", "br", "hr", "li", "ul", "ol", "table", "tr", "td", "th",
++              "section", "article", "header", "footer", "blockquote", "pre",
++              "h1", "h2", "h3", "h4", "h5", "h6"}
++
++    def __init__(self):
++        super().__init__(convert_charrefs=False)
++        self.parts = []
++        self.hidden = None
++
++    def handle_starttag(self, tag, attrs):
++        if tag in {"script", "style"} and not self.hidden:
++            self.hidden = tag
++            self.parts.append(" ")
++        elif not self.hidden and tag in self.BLOCKS:
++            self.parts.append(" ")
++
++    def handle_endtag(self, tag):
++        if self.hidden:
++            if tag == self.hidden:
++                self.hidden = None
++                self.parts.append(" ")
++        elif tag in self.BLOCKS:
++            self.parts.append(" ")
++
++    def handle_data(self, data):
++        if not self.hidden:
++            self.parts.append(data)
++
++    def handle_entityref(self, name):
++        self.handle_data(unescape(f"&{name};"))
++
++    def handle_charref(self, name):
++        self.handle_data(unescape(f"&#{name};"))
++
++
++def _description_text(value):
++    parser = _DescriptionText()
++    parser.feed(str(value))
++    parser.close()
++    return "".join(parser.parts)
++
++
+ def _blank(value):
+     return value is None or value == ""
+ 
+@@ -411,10 +478,30 @@ class LaunchGalleryService:
+                 "hasAttachments": fields.get("Anexos") in (True, 1, "true", "True"),
+                 "expectedModified": fields.get("Modificado")}
+ 
++    def _search_text(self, row):
++        values = [_description_text(row[label]) if label == "DESCRIÇÃO" else str(row[label]) for label in SEARCH_FIELDS
++                  if not _blank(row.get(label)) and isinstance(row[label], (str, int, float, Decimal))]
++        for label in SEARCH_DATE_FIELDS:
++            if not _blank(row.get(label)):
++                try:
++                    day = _instant(row[label]).astimezone(TZ).date()
++                    values.extend((day.isoformat(), day.strftime("%d/%m/%Y")))
++                except LaunchGalleryError:
++                    # An optional malformed server date still has its raw text.
++                    pass
++        numbers = [_number(row[label]) for label in SEARCH_NUMBER_FIELDS if not _blank(row.get(label))]
++        numbers.append(self._amount(row).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
++        for number in numbers:
++            decimal = format(number, "f")
++            brazilian = format(number, ",.2f").translate(str.maketrans(",.", ".,"))
++            values.extend((decimal, decimal.replace(".", ","), brazilian, f"R$ {brazilian}"))
++        return _norm(" ".join(values))
++
+     def _snapshot(self, payload):
+         filters = payload.get("filters", {})
+-        if not isinstance(filters, dict) or set(filters) - (set(FILTER_FIELDS) | {"pendingApproval", "dateStart", "dateEnd"}):
++        if not isinstance(filters, dict) or set(filters) - (set(FILTER_FIELDS) | {"pendingApproval", "dateStart", "dateEnd", "search"}):
+             _fail("invalid_filter", "Filtro desconhecido ou inválido.")
++        terms = _search_terms(filters["search"]) if "search" in filters else []
+         page, size = payload.get("page", 1), payload.get("pageSize", 25)
+         for value in (page, size):
+             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+@@ -455,7 +542,7 @@ class LaunchGalleryService:
+         for day, comparison in ((start, "ge"), (end + timedelta(days=1) if end else None, "lt")):
+             if day:
+                 conditions.append(f"{self._field(LAUNCHES, 'DATA')['InternalName']} {comparison} datetime'{_midnight(day)}'")
+-        rows = self._rows(LAUNCHES, READ_FIELDS, " and ".join(conditions))
++        rows = self._rows(LAUNCHES, (*READ_FIELDS, *SEARCH_FIELDS) if terms else READ_FIELDS, " and ".join(conditions))
+         selected = []
+         for row in rows:
+             if any(_norm(row.get(k, "")) != _norm(v) for k, v in normalized.items()):
+@@ -466,6 +553,10 @@ class LaunchGalleryService:
+                 day = _instant(row["DATA"]).astimezone(TZ).date()
+                 if (start and day < start) or (end and day > end):
+                     continue
++            if terms:
++                text = self._search_text(row)
++                if not all(term in text for term in terms):
++                    continue
+             selected.append(row)
+         label, reverse = SORT_OPTIONS[sort]
+         self._field(LAUNCHES, label)
+@@ -506,9 +597,10 @@ class LaunchGalleryService:
+             return [{"value": v, "label": v} for v in ("ATIVO", "INATIVO")]
+         if label in CATALOGS:
+             source, column = CATALOGS[label]
+-            rows = self._catalog(source, [column, "STATUS", "FILIAL"])
++            status_field = "SATUS" if label == "PRODUTO" else "STATUS"
++            rows = self._catalog(source, [column, status_field, "FILIAL"])
+             values = sorted({str(r[column]) for r in rows if not _blank(r.get(column))
+-                             and (label != "PRODUTO" or r.get("STATUS") == "ATIVO")
++                             and (label != "PRODUTO" or r.get(status_field) == "ATIVO")
+                              and (label != "ETAPA" or not context.get("FILIAL") or r.get("FILIAL") == context["FILIAL"])}, key=_norm)
+             return [{"value": v, "label": v} for v in values]
+         if label in {"CONTRATO", "NUMEROCONTRATO", "MEDICAOPARCIAL", "DEMONSTRATIVOETAPA"}:

@@ -219,7 +219,7 @@ test("work diary climate clusters distinguish sun, rain and unknown conditions w
   }
 });
 
-test("quote search matches description only and starts active with the actual source ID sort selection", async t => {
+test("quote quick search matches displayed fields and starts active with the actual source ID sort selection", async t => {
   const { dom, doc, gallery } = openGallery(t, "quotes", [
     { id: "9", hasAttachments: false, fields: { DESCRICAO: "Concreto armado", FORNECEDOR: "CABOS LTDA", FILIAL: "CENTRAL", ETAPA: "ESTRUTURA", STATUS: "ATIVO", Created: "2026-09-20T12:00:00Z", DATAFINALIZADO: "2026-09-24", COTACOESVINCULADAS: "12; 14", ORCAMENTOESCOLHIDO: "14" } },
     { id: "1", hasAttachments: false, fields: { DESCRICAO: "Cabos elétricos", FILIAL: "NORTE", ETAPA: "ELÉTRICA", STATUS: "ATIVO", Created: "2026-09-25T12:00:00Z" } },
@@ -229,10 +229,13 @@ test("quote search matches description only and starts active with the actual so
   assert.deepEqual(ids(doc), ["9", "1"]);
   assert.equal(doc.querySelector('[data-filter-field="STATUS"]').value, "ATIVO");
   assert.deepEqual([...doc.querySelectorAll("[data-filter-field]")].map(node => node.dataset.filterField), ["ID", "FILIAL", "ETAPA", "STATUS"]);
-  const search = doc.querySelector('.rg-toolbar > .rg-field input[type="search"]');
+  const search = doc.querySelector('[data-gallery-quick-search]');
   search.value = " cabos ";
   search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-  assert.deepEqual(ids(doc), ["1"]);
+  assert.deepEqual(ids(doc), ["9", "1"], 'quick search covers supplier as well as description');
+  search.value = " central ";
+  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  assert.deepEqual(ids(doc), ["9"]);
   search.value = "";
   search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   const sort = doc.querySelector('[data-gallery-sort]');

@@ -16,7 +16,7 @@ test('Demandas puts delegated task history beside its creation without losing ei
   dom.window.close();
 });
 
-test('G9 default selects both open statuses, sorts priority then fatal date and searches task number separately from SharePoint ID', async t => {
+test('G9 default selects both open statuses, sorts priority then fatal date and searches every displayed field', async t => {
   const rows = [
     { id: '1', fields: { TAREFA: 'ALVENARIA', 'ID 2': 'D-104', 'CONCLUÍDO': 'ATIVIDADE CRIADA', 'PRIORITÁRIA': 'NÃO PRIORITÁRIA', 'DATA FATAL': '2026-10-01', 'ASSOCIAÇÃO': 'ETAPA A', DIFICULDADE: 'ALTA DIFICULDADE' }, hasAttachments: false },
     { id: '2', fields: { TAREFA: 'PINTURA', 'ID 2': 'D-105', 'CONCLUÍDO': 'EM ATENDIMENTO', 'PRIORITÁRIA': 'ATIVIDADE PRIORITÁRIA', 'DATA FATAL': '2026-10-03T03:00:00Z', 'ASSOCIAÇÃO': 'ETAPA B', DIFICULDADE: 'BAIXA DIFICULDADE' }, hasAttachments: false },
@@ -38,7 +38,7 @@ test('G9 default selects both open statuses, sorts priority then fatal date and 
   search.value = 'D-105'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   assert.deepEqual(ids(), ['2']);
   search.value = '2'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  assert.deepEqual(ids(), [], 'SharePoint mutation ID is not the display/search ID 2');
+  assert.deepEqual(ids(), ['4','2','1'], 'quick search also covers SharePoint ID and displayed dates');
   search.value = ''; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const date = doc.querySelector('[data-filter-field="DATA FATAL"]');
   assert.equal(date.type, 'date'); date.value = '2026-10-03'; date.dispatchEvent(new dom.window.Event('change', { bubbles: true }));

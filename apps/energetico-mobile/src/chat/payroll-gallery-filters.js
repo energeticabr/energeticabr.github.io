@@ -1,3 +1,5 @@
+import { matchesGallerySearch } from './gallery-quick-search.js';
+
 const COLUMNS = {
   IDFOLHA: ['id', 'FORNECEDOR', 'MESREFERENCIA'],
   FOLHAPGTO: ['id', 'FORNECEDOR', 'TIPOPGTO', 'VALORUNITARIO', 'QTD', 'DATA', 'IDFOLHA', 'IDLANCAMENTO'],
@@ -35,13 +37,11 @@ export function validatePayrollFilters(gallery, filters = {}) {
 }
 export function filterPayrollRows(gallery, rows, filters = {}) {
   validatePayrollFilters(gallery, filters);
-  const terms = fold(filters.search).split(/\s+/).filter(Boolean);
   return rows.filter(row => {
-    const searchable = COLUMNS[gallery].filter(key=>!['VALORUNITARIO','QTD'].includes(key)).map(key => {
-      if (key === 'DATA') { const value=day(row[key]); return `${row[key] ?? ''} ${value ? value.split('-').reverse().join('/') : ''}`; }
-      return row[key] ?? '';
-    }).join(' ');
-    if (!terms.every(term => fold(searchable).includes(term))) return false;
+    const searchable = COLUMNS[gallery].map(key => row[key]);
+    if (gallery === 'FOLHAPGTO') searchable.push(day(row.DATA));
+    if (gallery === 'IDFOLHA') searchable.push(row.STATUS);
+    if (!matchesGallerySearch(filters.search, searchable)) return false;
     for (const key of COLUMNS[gallery]) {
       if (!filters[key]) continue;
       if (['id','IDFOLHA','IDLANCAMENTO'].includes(key) ? numeric(row[key]) !== numeric(filters[key]) : fold(row[key]) !== fold(filters[key])) return false;

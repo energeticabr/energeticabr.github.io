@@ -1,3 +1,4 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
@@ -114,6 +115,7 @@ export function createHrPayrollGallery({ document: documentOption,
   const clearFilters=element('button','hr-gallery-button','Limpar filtros');
   clearFilters.type='button';clearFilters.dataset.action='clear-payroll-filters';
   filterPanel.append(filterGrid,clearFilters);toolbar.append(search,toggle);filterForm.append(toolbar,filterPanel);
+  placeGalleryQuickSearch({ input: search, toolbar });
   const status = element("p", "hr-gallery-status", "");
   status.setAttribute("aria-live", "polite");
   const cards = element("div", "hr-gallery-cards");
