@@ -408,7 +408,7 @@ export function createHrPayrollGalleryData({
     return listRequests.get(gallery);
   }
 
-  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null, hydrateSource = true } = {}) {
+  async function loadPage(gallery, { page = 1, pageSize = 25, cursor = null, hydrateSource = true, includeSearchFields = false } = {}) {
     const config = HR_PAYROLL_GALLERIES[gallery];
     if (!config) throw new RangeError("Galeria de folha inválida.");
     if (!Number.isInteger(page) || page < 1 || page > HR_PAYROLL_PAGE_COUNT_MAX
@@ -418,10 +418,12 @@ export function createHrPayrollGalleryData({
     }
     const list = await resolveList(gallery);
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
+    // STATUS is optional on IDFOLHA. Read it when available without selecting a possibly missing column.
+    const expandedFields = gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
     const result = await repository.getItemsPage(
       SITE_KEY,
       list.id,
-      `$select=id&$expand=fields($select=${selectedFields})&$top=${pageSize}`,
+      `$select=id&$expand=${expandedFields}&$top=${pageSize}`,
       { pageNumber: page, maxPages: HR_PAYROLL_PAGE_COUNT_MAX, ...(cursor ? { cursor } : {}) },
     );
     const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {
@@ -432,6 +434,10 @@ export function createHrPayrollGalleryData({
       for (const [key, aliases] of config.fields) {
         const value = hrPayrollFieldValue(fields, aliases);
         if (value !== undefined) row[key] = value;
+      }
+      if (gallery === 'IDFOLHA' && includeSearchFields) {
+        const status = hrPayrollFieldValue(fields, ['STATUS']);
+        if (status !== undefined) row.STATUS = status;
       }
       return Object.freeze(row);
     }).filter(row => row.id);
@@ -466,7 +472,7 @@ export function createHrPayrollGalleryData({
         const rows = [], seen = new Set(); let cursor = null;
         for (let number=1; number<=HR_PAYROLL_PAGE_COUNT_MAX; number++) {
           assertSession();
-          const result = await loadPage(gallery, {page:number,pageSize:HR_PAYROLL_PAGE_SIZE_MAX,cursor,hydrateSource:false});
+          const result = await loadPage(gallery, {page:number,pageSize:HR_PAYROLL_PAGE_SIZE_MAX,cursor,hydrateSource:false,includeSearchFields:true});
           assertSession();
           rows.push(...result.rows);
           if (!result.hasMore) { cached.completedAt=now().getTime(); return rows; }
@@ -478,11 +484,19 @@ export function createHrPayrollGalleryData({
     }
     const all = await cached.promise;
     assertSession();
-    // Text/identity/date filters use the payroll rows; financial ranges use current launch values.
-    const baseFilters=Object.fromEntries(Object.entries(filters).filter(([key])=>!key.startsWith('VALORUNITARIO')&&!key.startsWith('QTD')));
+    // Numeric/currency terms can match current launch values even when copied values do not.
+    // Prefilter only the remaining words/dates and specific nonfinancial fields before hydration.
+    // This conservatively reads all candidates for numeric-only search (including ambiguous IDs),
+    // while ordinary text/date search still hydrates only the visible page.
+    const searchTerms = String(filters.search ?? '').trim().split(/\s+/).filter(Boolean);
+    const nonFinancialTerms = searchTerms.filter(term => !/^(?:r\$|\$)?[+-]?[\d.,]+(?:e[+-]?\d+)?$|^(?:r\$|\$|[+-])$/i.test(term));
+    const financialSearch = gallery === 'FOLHAPGTO' && nonFinancialTerms.length !== searchTerms.length;
+    const baseFilters=Object.fromEntries(Object.entries(filters)
+      .filter(([key])=>!key.startsWith('VALORUNITARIO')&&!key.startsWith('QTD'))
+      .map(([key,value])=>[key,key === 'search' && financialSearch ? nonFinancialTerms.join(' ') : value]));
     let candidates=filterPayrollRows(gallery,all,baseFilters);
     const financialFilters=Object.entries(filters).some(([key,value])=>value && (key.startsWith('VALORUNITARIO')||key.startsWith('QTD')));
-    if(gallery==='FOLHAPGTO' && financialFilters) candidates=await currentPayrollRows(candidates,undefined,cached.sources);
+    if(gallery==='FOLHAPGTO' && (financialFilters || financialSearch)) candidates=await currentPayrollRows(candidates,undefined,cached.sources);
     const filtered=filterPayrollRows(gallery,candidates,filters);
     if (gallery === 'FOLHAPGTO') filtered.sort((a, b) => Number(b.id) - Number(a.id));
     const offset=(page-1)*pageSize;

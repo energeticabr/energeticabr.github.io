@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prévia da busca rápida nas galerias</title>
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+<link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+<link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/hr-payroll-gallery.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<style>body { margin: 0; font-family: Arial, sans-serif; } #preview { position: fixed; z-index: 4000; bottom: 0; left: 0; right: 0; padding: 8px; background: #fff; border-top: 1px solid #b9cede; font-size: 12px; } #preview select { max-width: 50%; } </style>
+</head><body>
+<label id="preview">Prévia local · dados fictícios · Galeria <select id="kind"></select></label>
+<script type="module">
+import { galleryCases, galleryOptions } from '../helpers/gallery-create-cases.mjs';
+import { matchesGallerySearch } from '../../src/chat/gallery-quick-search.js';
+const rows = ['Mauro', 'José', 'Ana'].map((name, index) => ({ id: String(81 + index), fields: {
+  GRUPO: name, PRODUTO: 'Cimento', FORNECEDOR: name, FILIAL: index === 2 ? 'NORTE' : 'CENTRAL',
+  STATUS: 'PAGAMENTO PREVISTO', OBS: 'Obra de alvenaria', DESCRICAO: 'Obra de alvenaria', 'DESCRIÇÃO': 'Obra de alvenaria',
+  TAREFA: 'Conferir alvenaria', 'CONCLUÍDO': 'ATIVIDADE CRIADA', REFERENTE: name,
+  PESSOARELACIONADA: name, TIPODOCUMENTO: 'RECIBO', MESREFERENCIA: '10/2026', DATA: '2026-10-08',
+  'VALOR UNITÁRIO': 1250.5, VALORUNITARIO: 1250.5, VALORTOTAL: 1250.5, QTD: 1, IDFOLHA: 9, IDLANCAMENTO: 3510 + index,
+  TIPOPGTO: 'SALÁRIO',
+} }));
+const selector = document.querySelector('#kind');
+for (const entry of galleryCases) {
+  const option = document.createElement('option'); option.value = entry.name; option.textContent = entry.name; selector.append(option);
+}
+let gallery;
+async function open() {
+  gallery?.destroy();
+  const entry = galleryCases.find(value => value.name === selector.value);
+  const snapshot = { rows, count: rows.length };
+  gallery = entry.factory(galleryOptions(entry, document, { snapshot, onCreate: () => {},
+    data: { loadSnapshot: async () => snapshot, listAttachments: async () => [] },
+    request: async (_op, payload) => {
+      const filtered = rows.filter(row => matchesGallerySearch(payload.filters?.search, [row.id, ...Object.values(row.fields)]));
+      return { ...snapshot, rows: entry.name === 'launch' ? filtered : rows.map(row => ({ id: row.id, ...row.fields })),
+        count: filtered.length, page: 1, pages: 1, hasMore: false, gallery: entry.options?.gallery, filterOptions: {}, totals: {} };
+    } }));
+  await gallery.open();
+}
+selector.value = 'documents';
+selector.addEventListener('change', open);
+await open();
+</script></body></html>

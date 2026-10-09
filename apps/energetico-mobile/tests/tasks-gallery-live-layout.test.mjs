@@ -54,7 +54,7 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tasks-gallery-responsive.html?w=${width}` }, sessionId);
       await waitFor(`location.search === '?w=${width}' && document.documentElement?.dataset.ready === 'true'`);
       const toolbar = await evaluate(`(() => {
-        const search = document.querySelector('.tg-search-field'), filter = document.querySelector('.tg-filter-toggle'), add = document.querySelector('[data-action="create-task"]');
+        const search = document.querySelector('[data-gallery-quick-search]'), filter = document.querySelector('.tg-filter-toggle'), add = document.querySelector('[data-action="create-task"]');
         const a = search.getBoundingClientRect(), b = filter.getBoundingClientRect(), c = add.getBoundingClientRect(), style = getComputedStyle(add);
         return { aligned: Math.abs(a.bottom - b.bottom) < 1 && Math.abs(b.bottom - c.bottom) < 1,
           ordered: a.right <= b.left && b.right <= c.left, fits: c.right <= innerWidth && a.width > 0,

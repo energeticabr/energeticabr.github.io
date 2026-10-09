@@ -1,3 +1,5 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
@@ -155,6 +157,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     filterToggle.setAttribute("aria-expanded", String(filterDisclosure.open));
   });
   toolbar.append(searchField, filterToggle);
+  placeGalleryQuickSearch({ input: searchControl, toolbar });
   const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle, onCreate, close,
     label: 'Adicionar uma nova tarefa', action: 'create-task', className: 'og-button tg-add-task',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
@@ -371,8 +374,8 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     const query = normalized(filterValues.search); const today = dateKey(now());
     filteredRows = sortRows(rows.filter(row => {
       const fields = row.fields || {};
-      const values = Object.values(fields).map(text);
-      if (query && !normalized([row.id, ...values].join(" ")).includes(query)) return false;
+      if (query && !matchesGallerySearch(query, [row.id, status(fields, today),
+        ...Object.entries(fields).flatMap(([name, value]) => [value, formatDate(name, value)])])) return false;
       const taskStatus = status(fields, today);
       if (filterValues.status === DEFAULT_STATUS_FILTER) {
         if (!DEFAULT_TASK_STATUSES.some(value => normalized(value) === normalized(taskStatus))) return false;

@@ -1,3 +1,5 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
+import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
@@ -242,7 +244,8 @@ export function createPaymentProgrammingGallery({
     return control;
   }
 
-  addControl("search", "Pesquisar na descrição", "input", "search").placeholder = "Descrição, fornecedor ou ID…";
+  const search = addControl("search", "Pesquisar", "input", "search");
+  placeGalleryQuickSearch({ input: search, toolbar: createShortcut.toolbar });
   for (const [name, label] of FILTERS) addControl(name, label);
   const sort = addControl("sort", "Ordenar por");
   for (const [value, label] of [["due-asc", "Vencimento mais próximo"], ["due-desc", "Vencimento mais distante"], ["id-desc", "Maior ID"], ["modified-desc", "Modificado recentemente"]]) {
@@ -446,10 +449,11 @@ export function createPaymentProgrammingGallery({
     const query = normalized(values.search);
     filteredRows = sortRows(rows.filter(row => {
       const fields = row.fields || {};
-      if (query && !normalized([row.id, ...Object.values(fields).map(text)].join(" ")).includes(query)) return false;
       for (const [name, , aliases] of FILTERS) {
         if (values[name] && normalized(filterValue(fields, name, aliases)) !== normalized(values[name])) return false;
       }
+      if (query && !matchesGallerySearch(query, [row.id, paymentTotal(fields),
+        ...Object.entries(fields).flatMap(([name, value]) => [value, displayValue(name, value)])])) return false;
       return true;
     }));
     page = 1;
@@ -608,7 +612,7 @@ export function createPaymentProgrammingGallery({
     }
   }
 
-  const autoFilters = bindAutoFilterForm(form, applyFilters);
+  const autoFilters = bindAutoFilterForm(form, applyFilters, { externalControls: [search] });
   sort.addEventListener("change", () => autoFilters.apply());
   clearButton.addEventListener("click", () => {
     for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS : name === "sort" ? "due-asc" : name === "pageSize" ? "10" : "";

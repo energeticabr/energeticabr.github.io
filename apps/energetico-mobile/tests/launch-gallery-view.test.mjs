@@ -553,7 +553,7 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
     dateStart: '2026-09-01', dateEnd: '2026-09-19', sort: sorts[7] })) input(ctx, name, value);
   await settle();
   assert.deepEqual(ctx.calls.filter(call => call.operation === 'snapshot').at(-1), { operation: 'snapshot', payload: {
-    filters: { branch: 'Obra A', supplier: 'Fornecedor A', status: 'PEDIDO EMPENHADO', id: '17', product: 'Cimento',
+    filters: { search: '', branch: 'Obra A', supplier: 'Fornecedor A', status: 'PEDIDO EMPENHADO', id: '17', product: 'Cimento',
       stage: 'Fundação', contract: 'Contrato 1', pendingApproval: true, dateStart: '2026-09-01', dateEnd: '2026-09-19' },
     sort: sorts[7], page: 1, pageSize: 20,
   } });

@@ -67,7 +67,7 @@ test('recurring tasks preserve source order across pages and display metadata al
   recurrence.value = ''; recurrence.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   const search = doc.querySelector('input[type="search"]');
   search.value = 'SEDE'; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  assert.deepEqual(ids(), [], 'description search must only search TAREFA');
+  assert.deepEqual(ids(), ['1'], 'quick search also covers the branch');
   search.value = '  pagar  '; search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   assert.deepEqual(ids(), ['1']);
 });

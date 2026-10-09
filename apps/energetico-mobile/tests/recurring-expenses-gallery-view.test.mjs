@@ -94,7 +94,7 @@ test("G19 segue a composição nova: busca, filtro, ordenação e cartões por p
   await ctx.gallery.open();
   const root = ctx.root();
   assert.ok(root.querySelector(".re-search-bar [name=search]"), "pesquisa aparece acima dos cartões");
-  assert.match(root.querySelector(".re-search-bar input").placeholder, /Buscar despesa, fornecedor ou produto/);
+  assert.match(root.querySelector(".re-search-bar input").placeholder, /Pesquisar em todos os campos/);
   assert.equal(root.querySelector(".re-filter-button").getAttribute("aria-expanded"), "false");
   assert.ok(root.querySelector(".re-list-toolbar [name=sort]"), "ordenação permanece visível");
   assert.ok(root.querySelector(".re-sort-field .sfs-trigger"), "seletor visual de ordenação recebe o estilo da G19");

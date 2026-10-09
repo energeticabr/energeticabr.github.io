@@ -1,3 +1,4 @@
+import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
@@ -332,6 +333,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     finally { pendingMutations--; refreshControl.sync(); }
   }
   const filterForm = element('form', 'lg-filter-form');
+  const search = element('input', 'lg-input');
+  placeGalleryQuickSearch({ input: search, toolbar: createShortcut.toolbar });
+  filterControls.set('search', search);
   filterForm.setAttribute('aria-label', 'Filtros de lançamentos');
   const filterGrid = element('div', 'lg-filter-grid');
   for (const [name, title] of FILTERS) {
@@ -351,7 +355,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }, { locked: false }));
   filterForm.append(filterGrid,
     element('p', 'lg-hint', 'Período de empenho: as datas inicial e final são incluídas.'), filterActions);
-  const autoFilters = bindAutoFilterForm(filterForm, applyFilters);
+  const autoFilters = bindAutoFilterForm(filterForm, applyFilters, { externalControls: [search] });
   const totals = element('dl', 'lg-totals');
   const notice = element('p', 'lg-notice'); notice.hidden = true;
   const listStatus = element('div', 'lg-list-status'); listStatus.setAttribute('aria-live', 'polite');
@@ -1592,7 +1596,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (destroyed || opened) return;
     opened = true; ++session; returnFocus = doc.activeElement;
     root.hidden = suspended; focus(back);
-    await Promise.all([loadSnapshot(applied), needsDetailRefresh && selectedId != null && !editor ? loadDetail(selectedId) : Promise.resolve()]);
+    autoFilters.sync();
+    await Promise.all([applyFilters({ preservePage: true }), needsDetailRefresh && selectedId != null && !editor ? loadDetail(selectedId) : Promise.resolve()]);
   }
   function close() {
     if (!opened || destroyed) return;

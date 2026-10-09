@@ -20,7 +20,7 @@ test('all gallery shortcuts keep Tasks sizing beside Filters, collapsed and expa
     fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
   try {
     await server.listen();
-    for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1365, 768]]) {
+    for (const [width, height] of [[320, 740], [390, 844], [844, 390], [1024, 768], [1365, 768]]) {
       const { stdout } = await runBrowserLayout(browser, { width, height,
         url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/gallery-create-responsive.html` });
       const dom = new JSDOM(stdout);
@@ -33,6 +33,7 @@ test('all gallery shortcuts keep Tasks sizing beside Filters, collapsed and expa
         for (const state of ['collapsed', 'expanded']) {
           const layout = result[state], message = `${width}px ${result.name} ${state}: ${JSON.stringify(layout)}`;
           assert.ok(layout.visible && layout.ordered && layout.fits && layout.hittable && !layout.overflow, message);
+          assert.ok(layout.quickSearch, message);
           assert.equal(layout.width, 46, message); assert.equal(layout.height, 46, message);
           assert.equal(layout.color, 'rgb(33, 132, 67)', message);
           assert.equal(layout.background, 'rgb(255, 255, 255)', message);

@@ -58,7 +58,7 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   assert.deepEqual([...doc.querySelectorAll("[data-filter-field]")].map(control => control.dataset.filterField), [
     "TIPOHOMOLOGACAO", "FILIAL", "IMOVEL", "ETAPA", "ID", "TIPODOCUMENTO", "PESSOARELACIONADA", "STATUS",
   ]);
-  assert.equal(doc.querySelector('[type="search"]').placeholder, "Pesquisar documento ou ID");
+  assert.match(doc.querySelector('[type="search"]').placeholder, /Pesquisar em todos os campos/);
   assert.equal(doc.querySelectorAll("[data-registration-row]").length, 2);
   const filialFilter = doc.querySelector('[data-filter-field="FILIAL"]');
   filialFilter.value = "001 - CENTRAL";
@@ -262,6 +262,9 @@ test("galeria mantém Tab dentro do diálogo e cabeçalho visível na rolagem", 
   const next = dialog.querySelector('.rg-pagination button:last-child');
   first.focus();
   first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  const quickSearch = dialog.querySelector('[data-gallery-quick-search]');
+  assert.equal(doc.activeElement, quickSearch, 'Tab alcança a pesquisa rápida visível');
+  quickSearch.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   assert.equal(doc.activeElement, filterSummary, 'o painel de filtros deve continuar acessível por teclado');
   filterSummary.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   const refreshButton = dialog.querySelector('[data-gallery-refresh]');

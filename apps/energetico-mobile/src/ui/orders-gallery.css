@@ -194,6 +194,11 @@
 .re-search-bar .og-label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .re-search-bar .og-input { min-height: 48px; padding: 8px 0; border: 0; outline: 0; background: transparent; box-shadow: none; }
 .re-search-bar:focus-within { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.re-toolbar.gallery-quick-search-toolbar > .re-search-bar { padding: 0; border: 0; box-shadow: none; background: transparent; }
+.re-toolbar.gallery-quick-search-toolbar .re-search-bar > svg { display: none; }
+.re-toolbar.gallery-quick-search-toolbar .re-search-bar .gallery-quick-search {
+  height: 46px; min-height: 46px; padding: 8px 12px; border: 1px solid #b9cede; border-radius: 9px; background: #fff;
+}
 .re-filter-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; border-color: #cbd9e4; border-radius: 11px; box-shadow: 0 2px 7px #163c6114; }
 .re-filter-button svg { width: 20px; height: 20px; }
 .re-filter-count { display: grid; width: 21px; height: 21px; place-items: center; border-radius: 50%; color: #fff; background: #b51e2b; font-size: .7rem; line-height: 1; }
