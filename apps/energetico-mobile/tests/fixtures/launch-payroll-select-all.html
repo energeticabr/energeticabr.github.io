@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<title>Seleção de lançamentos para folha</title>
+</head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '../../src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+const options = [
+  ['3542', 'HELISON ROSA LUIS — PEDREIRO — R$ 225,00'],
+  ['3543', 'FELICIANO ROGÉRIO DA SILVA — PEDREIRO — R$ 225,00'],
+  ['3544', 'EDGAR NELSON DA SILVA — MESTRE DE OBRAS — R$ 225,00'],
+  ['3545', 'MAURICIO HONORATO DE SOUZA — SERVENTE DE PEDREIRO — R$ 225,00'],
+].map(([id, label]) => ({ id: `choice:launch_payroll_entries:${id}`, label: `ID ${id} — ${label}` }));
+const state = {
+  sessionStatus: 'authenticated', account: { name: 'Teste local' }, draft: '', pendingFiles: [],
+  activeFlow: { id: 'launch', title: 'EFETUAR LANÇAMENTO' },
+  messages: [{ id: 'local-payroll-selection', role: 'assistant', type: 'poll',
+    presentation: 'launch_payroll_multi_select',
+    question: '👉 MARQUE OS LANÇAMENTOS DE EMPREITEIRO QUE DESEJA INCLUIR NA FOLHA. OS DEMAIS NÃO SERÃO INCLUÍDOS. CASO DESEJE FILTRAR, DIGITE UM TEXTO.',
+    options,
+  }],
+};
+const replies = [];
+view.on('select-reply', command => replies.push(command.replyId));
+view.render(state);
+document.documentElement.dataset.ready = 'true';
+if (!new URLSearchParams(location.search).has('manual')) {
+  const button = document.querySelector('[data-action="launch-payroll-select-all"]');
+  if (!button) document.documentElement.dataset.layout = JSON.stringify({ missing: true });
+  else {
+    const rect = button.getBoundingClientRect();
+    const row = document.querySelector('.chat-launch-payroll-select__row').getBoundingClientRect();
+    const layout = { width: rect.width, height: rect.height, above: rect.bottom <= row.top,
+      fits: rect.left >= 0 && rect.right <= innerWidth,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      hittable: document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.closest('button') === button,
+    };
+    button.click();
+    layout.selected = [...document.querySelectorAll('[data-action="launch-payroll-select-toggle"]:checked')].map(input => input.dataset.replyId);
+    layout.sentOnSelection = replies.length;
+    document.querySelector('[data-reply-id="3543"]').click();
+    document.querySelector('[data-action="launch-payroll-select-proceed"]').click();
+    layout.replies = replies;
+    document.documentElement.dataset.layout = JSON.stringify(layout);
+  }
+}
+window.addEventListener('pagehide', () => view.destroy(), { once: true });
+</script></body></html>

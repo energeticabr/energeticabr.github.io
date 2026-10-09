@@ -1528,6 +1528,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
     const selected = new Set(launchPayrollSelectedIds.map(String));
     const records = [];
+    let eligibleCount = 0;
     let unavailableIdCount = 0;
     let nonContractorCount = 0;
     for (const option of choiceOptions) {
@@ -1543,6 +1544,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
         records.push(`<label class="chat-launch-payroll-select__row chat-launch-payroll-select__row--unavailable"><input type="checkbox"${id ? ` data-reply-id="${escapeHtml(id)}"` : ""} aria-label="${escapeHtml(label + suffix)}" disabled><span>${formatChatText(label)}${escapeHtml(suffix)}</span></label>`);
         continue;
       }
+      eligibleCount += 1;
       records.push(`<label class="chat-launch-payroll-select__row"><input type="checkbox" data-action="launch-payroll-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !launchPayrollCurrent ? " disabled" : ""}><span>${formatChatText(label)}</span></label>`);
     }
     const unavailableWarning = unavailableIdCount || nonContractorCount
@@ -1554,7 +1556,8 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const proceedLabel = selected.size
       ? `PROSSEGUIR COM ${selected.size} SELECIONADO${selected.size === 1 ? "" : "S"}`
       : "PROSSEGUIR SEM FOLHA";
-    return `<div class="chat-launch-payroll-select">${records.join("")}${unavailableWarning}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button></div>`;
+    const selectAll = `<button class="chat-select-all chat-launch-payroll-select__select-all" type="button" data-action="launch-payroll-select-all"${busy || !launchPayrollCurrent || !eligibleCount ? " disabled" : ""}>Selecionar todas as opções</button>`;
+    return `<div class="chat-launch-payroll-select">${selectAll}${records.join("")}${unavailableWarning}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button></div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
     ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu ? "" : `<p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
@@ -3933,6 +3936,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (command.type === "attendance-select-proceed") {
       if (!attendanceSelectedIds.size) return;
       emit({ type: "select-reply", replyId: `attendance_batch:${[...attendanceSelectedIds].join(",")}`, label: `PROSSEGUIR (${attendanceSelectedIds.size})` });
+      return;
+    }
+    if (command.type === "launch-payroll-select-all") {
+      // Select only the available rows in this card, preserving any selections
+      // hidden by the current filter. Selection itself never submits the flow.
+      for (const input of clickedAction.closest(".chat-launch-payroll-select").querySelectorAll('input[data-action="launch-payroll-select-toggle"]')) {
+        const id = String(input.dataset.replyId || "");
+        if (!input.disabled && launchPayrollEligibleIds.has(id)) launchPayrollSelectedIds.add(id);
+      }
+      if (lastState) {
+        const state = lastState;
+        lastState = null;
+        render(state);
+        root.querySelector('[data-action="launch-payroll-select-all"]:not(:disabled)')?.focus?.({ preventScroll: true });
+      }
       return;
     }
     if (command.type === "launch-payroll-select-proceed") {
