@@ -1,0 +1,94 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+index 93f2506..0900f11 100644
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -3979,0 +3980,2 @@ class WorkflowEngine(PaymentProvisionFlow):
++        if state.get("stage") == "completed":
++            return self._resend_current_prompt(state, etag)
+@@ -9505,0 +9508,3 @@ class WorkflowEngine(PaymentProvisionFlow):
++        if state.get("sharepoint"):
++            self._new_submission_identity(state)
++            state["navigation_history"] = []
+@@ -30785,0 +30791,63 @@ class WorkflowEngine(PaymentProvisionFlow):
++    @staticmethod
++    def _new_submission_identity(state: dict) -> None:
++        state["batch_id"] = secrets.token_hex(12)
++        state["sharepoint"] = {}
++        for key in (
++            "idempotency_token", "partial_submission_items", "completion_id",
++            "completion_trigger_message_id", "completion_subject_override",
++            "completion_verb_override", "submission_failure", "submission_operation",
++            "post_completion_menu_scheduled_at", "draft_completion_receipt",
++            "launch_cash_writes", "launch_cash_receipts", "launch_cash_receipt_continuation",
++            "partial_diary_item_id", "partial_diary_attachment_names", "partial_diary_save",
++            "summary_card",
++        ):
++            state.pop(key, None)
++
++    def _recover_legacy_task_identity(self, state: dict, etag: str | None):
++        """Recover only the proven second form opened with a completed task's key.
++
++        Never rekey an ordinary uncertain write. The old menu and first empty
++        task question must both carry the same already-verified checkpoint, and
++        that exact older task must still pass read-only verification.
++        """
++        checkpoint = state.get("sharepoint") or {}
++        if state.get("flow") != "task" or not checkpoint.get("item_id"):
++            return etag
++        token = f"WA-task-{state['batch_id']}"
++        if state.get("idempotency_token", token) != token:
++            return etag
++        history = [self._decode_navigation_snapshot(entry)
++                   for entry in state.get("navigation_history", [])]
++        for index in range(len(history) - 2, -1, -1):
++            menu, first = history[index:index + 2]
++            if menu.get("stage") != "choosing_action":
++                continue
++            old = menu.get("sharepoint") or {}
++            verified = old.get("verified") or {}
++            proven = (
++                menu.get("flow") == first.get("flow") == "task"
++                and menu.get("batch_id") == first.get("batch_id") == state["batch_id"]
++                and old.get("item_id") == checkpoint["item_id"]
++                and (first.get("sharepoint") or {}).get("item_id") == old["item_id"]
++                and verified.get("fields") is True and verified.get("attachments") is True
++                and first.get("stage") == "selecting_fields" and first.get("step_index") == 0
++                and (menu.get("fields") or {}).get("DESCRIÇÃO")
++                and not (first.get("fields") or {}).get("DESCRIÇÃO")
++            )
++            if not proven:
++                return etag
++            flow = self._flow_config(menu)
++            found = self.sharepoint._find_item(token, flow["target_list"],
++                                              flow.get("idempotency_field", "Title"))
++            if not found or str(found.get("Id")) != str(old["item_id"]):
++                raise RuntimeError("Previous task identity could not be reconciled")
++            result = self.sharepoint.verify_item(old["item_id"], menu["fields"],
++                old.get("attachment_names", []), target_list=flow["target_list"])
++            if not isinstance(result, dict) or result.get("fields") is not True or result.get("attachments") is not True:
++                raise RuntimeError("Previous task verification was not confirmed")
++            self._new_submission_identity(state)
++            state["navigation_history"] = []
++            # Persist the new key before any create so retries reuse it.
++            return self._save(state, etag)
++        return etag
++
+@@ -30790,0 +30859 @@ class WorkflowEngine(PaymentProvisionFlow):
++            etag = self._recover_legacy_task_identity(state, etag)
+@@ -34158,0 +34228,16 @@ class WorkflowEngine(PaymentProvisionFlow):
++        if stage == "completed":
++            # Resume/CONTINUAR after a completed post must open a fresh menu,
++            # never turn the completed state back into an editable form.
++            selected_group = state.get("selected_group")
++            event = {key: state.get(key) for key in (
++                "conversation_id", "sender", "sender_name", "group_id",
++                "group_subject", "phone_number_id",
++            )}
++            event["message_id"] = f"{state['batch_id']}:completed-menu"
++            fresh = self._new_state(event, state["key"])
++            fresh["selected_group"] = selected_group
++            fresh["processed_message_ids"] = list(state.get("processed_message_ids", []))
++            fresh["stage"] = "choosing_action" if selected_group else "choosing_group"
++            state.clear()
++            state.update(fresh)
++            return self._resend_current_prompt(state, etag)
