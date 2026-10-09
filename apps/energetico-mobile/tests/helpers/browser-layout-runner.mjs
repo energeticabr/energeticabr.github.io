@@ -10,19 +10,22 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
-  let child, socket, sequence = 0, sessionId, onLoaded, spawnError;
+  let child, socket, sequence = 0, sessionId, onLoaded, spawnError, browserStderr = '';
   try {
     child = spawn(browser, [
       "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox",
       "--disable-dev-shm-usage", "--remote-debugging-port=0",
       `--user-data-dir=${profile}`, "about:blank",
-    ], { stdio: "ignore", windowsHide: true });
+    ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
     child.on("error", error => { spawnError = error; });
-    let endpoint;
+    child.stderr?.on('data', chunk => { browserStderr = (browserStderr + String(chunk)).slice(-2000); });
+    let endpoint, lastEndpointContents;
+    const startupDiagnostic = () => `Navegador: ${browser}. Último endpoint: ${JSON.stringify(lastEndpointContents ?? 'arquivo indisponível')}. ${browserStderr.trim()}`;
     for (let attempt = 0; attempt < 100; attempt += 1) {
       if (spawnError) throw spawnError;
       try {
-        const [port, path] = (await readFile(join(profile, "DevToolsActivePort"), "utf8")).trim().split(/\r?\n/);
+        lastEndpointContents = await readFile(join(profile, "DevToolsActivePort"), "utf8");
+        const [port, path] = lastEndpointContents.trim().split(/\r?\n/);
         // File creation precedes completion of Chrome's two-line endpoint.
         if (/^\d+$/.test(port || "") && Number(port) >= 1 && Number(port) <= 65535
           && /^\/devtools\/browser\/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(path || "")) {
@@ -34,10 +37,10 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
         // Keep the existing bounded wait; other read and cleanup errors still fail.
         if (error.code !== "ENOENT" && !(process.platform === "win32" && error.code === "EBUSY")) throw error;
       }
-      if (child.exitCode !== null) throw new Error("O navegador de testes encerrou antes de iniciar.");
+      if (child.exitCode !== null) throw new Error(`O navegador de testes encerrou antes de iniciar. ${startupDiagnostic()}`);
       await delay(100);
     }
-    if (!endpoint) throw new Error("O navegador de testes não iniciou.");
+    if (!endpoint) throw new Error(`O navegador de testes não iniciou. ${startupDiagnostic()}`);
     socket = new WebSocket(endpoint);
     await new Promise((done, fail) => {
       const timer = setTimeout(() => fail(new Error("Conexão com o navegador de testes expirou.")), 30_000);

@@ -211,6 +211,16 @@ test('permanently partial startup expires the existing bound without opening a s
   assert.equal(f.state.socketsClosed, 0);
 });
 
+test('startup timeout diagnoses the selected browser and last incomplete endpoint without connecting', { timeout: 5000 }, async t => {
+  const f = fixture(t, { endpointContents: ['12345\n/devtools/browser/1'] });
+  await assert.rejects(f.run(), error => /simulated-owned-browser/.test(error.message)
+    && error.message.includes(JSON.stringify('12345\n/devtools/browser/1')));
+  assert.equal(f.state.endpointReads, 100);
+  assert.deepEqual(f.state.endpoints, []);
+  assert.ok(f.state.exitObserved);
+  assert.equal(f.state.removals.length, 1);
+});
+
 // Break: a transient Windows startup file lock aborts a valid layout capture.
 test('Windows endpoint startup retries transient EBUSY then captures the real result', { timeout: 1500 }, async t => {
   const f = fixture(t, { startupBusyAttempts: 2 });
