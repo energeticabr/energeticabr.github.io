@@ -36,7 +36,7 @@ test('dropdown search stays in the original field on phone, desktop and shipped 
       await send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode,...(key==='Enter'?{text:'\r',unmodifiedText:'\r'}:{})},sessionId);
       await send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode},sessionId);
     };
-    for(const [width,height,pwa] of [[320,740,false],[390,844,false],[1365,900,false],[320,740,true],[390,844,true]]) {
+    for(const [width,height,pwa] of [[320,740,false],[390,844,false],[1024,768,false],[1365,900,false],[320,740,true],[390,844,true],[1365,900,true]]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/inline-dropdown-search.html?width=${width}`},sessionId);
       let ready=false;for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}'&&document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
@@ -53,6 +53,19 @@ test('dropdown search stays in the original field on phone, desktop and shipped 
       if(width===390&&process.env.INLINE_DROPDOWN_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},sessionId);writeFileSync(process.env.INLINE_DROPDOWN_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       await key('Enter','Enter',13);
       assert.ok(await evaluate(`document.querySelector('[name=branch]').value==='004'&&window.original.value==='004 - EDIFÍCIO XAVANTE'&&window.changes===1&&window.original.getAttribute('aria-expanded')==='false'`));
+      // Selection leaves focus in this same field. The next real browser edit
+      // must start a fresh query, without a click, blur or manual clearing.
+      await send('Input.insertText',{text:'ou'},sessionId);
+      await send('Input.insertText',{text:'ro'},sessionId);
+      assert.deepEqual(await evaluate(`({query:window.original.value,labels:[...window.original.closest('.sfs').querySelectorAll('[role=option]')].map(n=>n.textContent),selected:document.querySelector('[name=branch]').value,changes:window.changes,status:[...document.querySelector('[name=status]').selectedOptions].map(n=>n.value)})`),{query:'ouro',labels:['001 - OURO PRETO'],selected:'004',changes:1,status:['active']});
+      await key('Escape','Escape',27);
+      assert.equal(await evaluate(`window.original.value`),'004 - EDIFÍCIO XAVANTE');
+      await send('Input.insertText',{text:'ouro'},sessionId);
+      await key('Enter','Enter',13);
+      assert.ok(await evaluate(`document.querySelector('[name=branch]').value==='001'&&window.original.value==='001 - OURO PRETO'&&window.changes===2`));
+      await send('Input.insertText',{text:'xavante'},sessionId);
+      await key('Enter','Enter',13);
+      assert.ok(await evaluate(`document.querySelector('[name=branch]').value==='004'&&window.changes===3`));
       await evaluate(`document.querySelector('#outside').focus()`);
       let reached=false;for(let n=0;n<8&&!reached;n++){await key('Tab','Tab',9);reached=await evaluate(`document.activeElement===document.querySelector('#dynamic [role=combobox]')`);}
       assert.ok(reached, await evaluate(`document.activeElement.outerHTML`));

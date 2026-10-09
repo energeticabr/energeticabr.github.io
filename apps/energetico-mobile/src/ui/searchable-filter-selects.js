@@ -230,6 +230,11 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function onTriggerClick() { if (popup.hidden) open(); }
   function onArrowClick() { if (popup.hidden) open(); else close({ focus: true }); }
+  function onSearchEditStart() {
+    // Choosing restores the label and focus. Start the next edit before the
+    // browser inserts text so it cannot append to that committed label.
+    if (!reportPicker && !selectionOnly && popup.hidden) open();
+  }
   function onSearchInput(event) {
     event.stopPropagation();
     if (selectionOnly) { search.value = selectionLabel(); return; }
@@ -316,6 +321,7 @@ function createPicker(select, closeOthers, options = {}) {
   arrow.addEventListener('click', onArrowClick);
   dismiss?.addEventListener('click', onDismiss); backdrop?.addEventListener('click', onDismiss);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
+  search.addEventListener('beforeinput', onSearchEditStart); search.addEventListener('compositionstart', onSearchEditStart);
   const blockEditing = event => event.preventDefault();
   const editEvents = ['beforeinput','paste','cut','drop'];
   if (selectionOnly) editEvents.forEach(name=>search.addEventListener(name,blockEditing));
@@ -343,6 +349,7 @@ function createPicker(select, closeOthers, options = {}) {
       arrow.removeEventListener('click', onArrowClick);
       dismiss?.removeEventListener('click', onDismiss); backdrop?.removeEventListener('click', onDismiss);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
+      search.removeEventListener('beforeinput', onSearchEditStart); search.removeEventListener('compositionstart', onSearchEditStart);
       if (selectionOnly) editEvents.forEach(name=>search.removeEventListener(name,blockEditing));
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
       list.removeEventListener('pointerdown', onOptionPointerDown);
