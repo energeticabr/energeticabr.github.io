@@ -42,11 +42,39 @@ function formatDate(value) {
 }
 
 function typeKey(value) {
-  return String(value || "Sem tipo")
+  return (String(value ?? "").trim() || "Sem tipo")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleUpperCase("pt-BR")
     .replace(/[^A-Z0-9]/g, "");
+}
+
+const PAYMENT_COLORS = Object.freeze({
+  SALARIO: ["#e6f1fb", "#27649a"],
+  PREMIACAO: ["#f1e9fb", "#7651a3"],
+  AJUDADECUSTO: ["#fff5d9", "#886514"],
+  VALEREFEICAO: ["#eaf5e7", "#3e7436"],
+  VALETRANSPORTE: ["#fdebef", "#9b4262"],
+  "13SALARIO": ["#e3f5f4", "#277874"],
+  FERIASEOUENCARGOS: ["#fff0e3", "#98602e"],
+  SEMTIPO: ["#edf0f3", "#586675"],
+});
+
+function paymentColor(key) {
+  const canonical = key === "PREMIO" ? "PREMIACAO" : key;
+  if (PAYMENT_COLORS[canonical]) return PAYMENT_COLORS[canonical];
+  // Unlisted SharePoint choices keep a stable color without changing their label.
+  let hash = 0;
+  for (const character of canonical) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  const hue = hash % 360;
+  return [`hsl(${hue} 55% 94%)`, `hsl(${hue} 45% 32%)`];
+}
+
+function applyPaymentColor(node, key) {
+  const [background, accent] = paymentColor(key);
+  node.dataset.paymentType = key;
+  node.style.setProperty("--payroll-type-background", background);
+  node.style.setProperty("--payroll-type-accent", accent);
 }
 
 function display(value) {
@@ -107,12 +135,22 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
 
   function renderPayments(rows) {
     const byType = new Map();
+    const summaryGroups = [
+      { id: "cash", label: "DINHEIRO", types: ["SALARIO", "PREMIACAO", "PREMIO", "AJUDADECUSTO"], cents: 0, incomplete: false },
+      { id: "meal", label: "VALE REFEIÇÃO", types: ["VALEREFEICAO"], cents: 0, incomplete: false },
+      { id: "transport", label: "VALE TRANSPORTE", types: ["VALETRANSPORTE"], cents: 0, incomplete: false },
+    ];
     let totalCents = 0;
     let uncalculated = 0;
     const amounts = rows.map(row => {
       const cents = lineAmountCents(row);
       const label = String(row.TIPOPGTO ?? "").trim() || "Sem tipo";
       const key = typeKey(label);
+      const group = summaryGroups.find(item => item.types.includes(key));
+      if (group) {
+        if (cents === null) group.incomplete = true;
+        else group.cents += cents;
+      }
       const current = byType.get(key) || { label, cents: 0, payments: [] };
       current.payments.push({ row, cents });
       if (cents === null) uncalculated += 1;
@@ -125,16 +163,20 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     });
 
     totals.replaceChildren();
-    const totalCard = element(doc, "article", "hr-payroll-report-total-card hr-payroll-report-total-card--overall");
-    totalCard.append(element(doc, "span", "hr-payroll-report-total-label", "Total da folha"));
-    const totalValue = element(doc, "strong", "hr-payroll-report-total-value", formatMoney(totalCents));
-    totalValue.dataset.reportTotal = "overall";
-    totalCard.append(totalValue);
-    totals.append(totalCard);
+    for (const group of [...summaryGroups, { id: "overall", label: "TOTAL", cents: totalCents }]) {
+      const totalCard = element(doc, "article", `hr-payroll-report-total-card hr-payroll-report-total-card--${group.id}`);
+      totalCard.append(element(doc, "span", "hr-payroll-report-total-label", group.label));
+      const totalValue = element(doc, "strong", "hr-payroll-report-total-value",
+        group.incomplete ? "Não calculado" : formatMoney(group.cents));
+      totalValue.dataset.reportTotal = group.id;
+      totalCard.append(totalValue);
+      totals.append(totalCard);
+    }
 
     breakdownCards.replaceChildren();
     for (const [key, item] of [...byType.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "pt-BR"))) {
       const card = element(doc, "details", "hr-payroll-report-total-card hr-payroll-report-type-card");
+      applyPaymentColor(card, key);
       const toggle = element(doc, "summary", "hr-payroll-report-type-toggle");
       toggle.append(element(doc, "span", "hr-payroll-report-total-label", item.label));
       const value = element(doc, "strong", "hr-payroll-report-total-value", formatMoney(item.cents));
@@ -152,6 +194,7 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     payments.replaceChildren();
     for (const [index, row] of rows.entries()) {
       const card = element(doc, "article", "hr-payroll-payment-card");
+      applyPaymentColor(card, typeKey(row.TIPOPGTO));
       card.setAttribute("role", "listitem");
       const cardHeader = element(doc, "header", "hr-payroll-payment-header");
       const unitValue = parseNumber(row.VALORUNITARIO);

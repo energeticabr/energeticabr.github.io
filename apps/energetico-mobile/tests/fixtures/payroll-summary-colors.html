@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prévia da folha — dados de teste</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/hr-payroll-gallery.css';
+import { createHrPayrollReport } from '../../src/ui/hr-payroll-report-view.js';
+if (new URLSearchParams(location.search).has('pwa')) {
+  document.querySelectorAll('style,link[rel="stylesheet"]').forEach(node => node.remove());
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/__payroll-summary.css';
+  await new Promise((resolve, reject) => { link.onload = resolve; link.onerror = reject; document.head.append(link); });
+}
+const rows = [
+  { id: '19', TIPOPGTO: 'SALÁRIO', VALORUNITARIO: 284, QTD: 1, DATA: '2026-10-08', IDLANCAMENTO: 3512 },
+  { id: '20', TIPOPGTO: 'SALÁRIO', VALORUNITARIO: 160, QTD: 1, DATA: '2026-10-08', IDLANCAMENTO: 3513 },
+  { id: '21', TIPOPGTO: 'PREMIAÇÃO', VALORUNITARIO: 146.13, QTD: 1, DATA: '2026-10-08', IDLANCAMENTO: 3514 },
+  { id: '22', TIPOPGTO: 'AJUDA DE CUSTO', VALORUNITARIO: 50, QTD: 1, DATA: '2026-10-08', IDLANCAMENTO: 3515 },
+  { id: '23', TIPOPGTO: 'VALE REFEIÇÃO', VALORUNITARIO: 72.72, QTD: 2, DATA: '2026-10-08', IDLANCAMENTO: 3516 },
+  { id: '24', TIPOPGTO: 'VALE TRANSPORTE', VALORUNITARIO: 4, QTD: 20, DATA: '2026-10-08', IDLANCAMENTO: 3517 },
+  { id: '25', TIPOPGTO: '13 SALÁRIO', VALORUNITARIO: 100, QTD: 1, DATA: '2026-10-08', IDLANCAMENTO: 3518 },
+  { id: '26', TIPOPGTO: 'FÉRIAS E/OU ENCARGOS', VALORUNITARIO: 200, QTD: 1, DATA: '2026-10-08', IDLANCAMENTO: 3519 },
+];
+if (new URLSearchParams(location.search).has('large')) rows[0].VALORUNITARIO = 1234567.89;
+const report = createHrPayrollReport({ root: document.querySelector('#app'), onHome: () => {}, request: async () => rows });
+await report.open({ id: '4', FORNECEDOR: 'FORNECEDOR DE TESTE — PRÉVIA DO LAYOUT', MESREFERENCIA: '09/2026' });
+document.querySelector('.hr-payroll-report-linked-section').open = true;
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const rect = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
+const totals = [...document.querySelectorAll('.hr-payroll-report-totals > article')];
+const paymentCards = [...document.querySelectorAll('.hr-payroll-payment-card')];
+document.documentElement.dataset.layout = JSON.stringify({
+  viewport: innerWidth,
+  columns: getComputedStyle(document.querySelector('.hr-payroll-report-totals')).gridTemplateColumns.split(' ').length,
+  totals: totals.map(node => ({ ...rect(node), text: node.textContent.replace(/\u00a0/g, ' '), fits: node.scrollWidth <= node.clientWidth + 1 })),
+  valuesFit: totals.every(node => { const value = node.querySelector('strong'), r = value.getBoundingClientRect(); return value.scrollWidth <= value.clientWidth + 1 && r.height < 35; }),
+  colors: paymentCards.map(node => getComputedStyle(node).backgroundColor),
+  matchingColors: paymentCards.every(node => getComputedStyle(node).backgroundColor === getComputedStyle(document.querySelector('[data-report-total-type="' + node.dataset.paymentType + '"]').closest('details')).backgroundColor),
+  contentFits: [...document.querySelectorAll('.hr-gallery-content')].every(node => node.scrollWidth <= node.clientWidth + 1),
+});
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
