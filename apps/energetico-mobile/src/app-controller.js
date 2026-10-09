@@ -4784,6 +4784,21 @@ export function createAppController({
       getReceiptAttachments: () => receiptTray().map(item => ({
         id: item.receiptId, fileName: item.fileName, source: item.file || item.mediaUrl,
       })),
+      pickReceiptAttachments: async kind => {
+        assertSession();
+        if (!["photo", "file"].includes(kind)) throw new Error("Tipo de comprovante inválido.");
+        const picker = kind === "photo" ? native.pickPhotos : native.pickDocuments;
+        if (typeof picker !== "function") throw new Error("A busca de comprovantes não está disponível neste dispositivo.");
+        const selected = await picker.call(native);
+        assertSession();
+        return Array.from(selected || [], file => {
+          const type = String(file.type || "").split(";", 1)[0].trim().toLowerCase();
+          // Providers without MIME metadata use a generic blob type. As with
+          // tray downloads, validate these files by their supported extension.
+          if (!["application/octet-stream", "binary/octet-stream"].includes(type)) return file;
+          return new File([file], file.name, { type: "", lastModified: Number(file.lastModified) || 0 });
+        });
+      },
       readReceiptAttachment: async (fileId, reference) => {
         assertSession();
         const find = () => receiptTray().find(item => item.receiptId === String(fileId));

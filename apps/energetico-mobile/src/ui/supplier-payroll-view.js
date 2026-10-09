@@ -22,6 +22,7 @@ export function createSupplierPayrollView({
   assertSession = () => {},
   getReceiptAttachments = () => [],
   readReceiptAttachment = async () => { throw new Error("O comprovante não está disponível na bandeja."); },
+  pickReceiptAttachments,
 } = {}) {
   if (!documentRef?.createElement || !data)
     throw new TypeError("A página de folha requer dados e documento.");
@@ -348,7 +349,7 @@ export function createSupplierPayrollView({
         const attempt = epoch;
         receiptPicker = openPayrollReceiptPicker({
           root: page, label: rubric.label, files: line.files,
-          getReceiptAttachments, readReceiptAttachment,
+          getReceiptAttachments, readReceiptAttachment, pickReceiptAttachments,
           onConfirm: candidates => {
             assertSession();
             if (!opened || destroyed || attempt !== epoch || step !== "rubrics")

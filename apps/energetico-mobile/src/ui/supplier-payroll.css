@@ -346,8 +346,13 @@
 }
 .payroll-receipt-option input { flex: none; width: 20px; height: 20px; margin: 0; }
 .payroll-receipt-option span { min-width: 0; }
-.payroll-receipt-actions { display: flex; justify-content: space-between; gap: 24px; }
+.payroll-receipt-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .payroll-receipt-actions [data-receipt-cancel] { background: #be2435; color: white; }
+.payroll-receipt-actions [data-receipt-search] { background: #1761ba; color: white; }
 .payroll-receipt-actions [data-receipt-confirm] { background: #198348; color: white; }
-.payroll-receipt-actions button { min-width: 0; padding-inline: 12px; }
+.payroll-receipt-actions button { min-width: 0; padding-inline: 4px; font-size: clamp(.875rem, 3.8vw, 1rem); }
+.payroll-receipt-sources { margin-block: 16px; padding: 12px; border-radius: 12px; background: #edf4fc; }
+.payroll-receipt-sources p { margin-top: 0; }
+.payroll-receipt-source-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.payroll-receipt-source-actions button { min-width: 0; background: #1761ba; color: white; }
 .payroll-receipt-dialog [hidden] { display: none; }

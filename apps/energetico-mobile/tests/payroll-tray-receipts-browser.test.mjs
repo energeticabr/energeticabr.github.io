@@ -31,21 +31,36 @@ test('payroll tray picker selects internally and fits mobile, tablet, desktop an
     const send=(method,params={},sessionId)=>new Promise((done,fail)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);fail(new Error(method+' timed out'));},15000);pending.set(id,{done,fail,timer});socket.send(JSON.stringify({id,method,params,sessionId}));});
     const {targetId}=await send('Target.createTarget',{url:'about:blank'});
     const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
+    await send('Page.setInterceptFileChooserDialog', {enabled:true}, sessionId);
     const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
     for(const [width,pwa] of [[320,false],[390,false],[768,false],[1365,false],[390,true]]){
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-tray-receipts.html?width=${width}&pwa=${pwa}`},sessionId);
       let ready=false;
       for(let n=0;n<120&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}&pwa=${pwa}'&&document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
-      assert.ok(ready);
+      assert.ok(ready, ready ? undefined : JSON.stringify({width,pwa,page:await evaluate(`({url:location.href,ready:document.documentElement?.dataset.ready,text:document.body?.innerText})`)}));
       if(pwa)await evaluate(`(()=>{document.querySelectorAll('style,link[rel=stylesheet]').forEach(n=>n.remove());const s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.append(s);})()`);
-      const state=await evaluate(`(()=>{const d=document.querySelector('.payroll-receipt-dialog'),r=d.getBoundingClientRect(),c=d.querySelector('[data-receipt-cancel]').getBoundingClientRect(),s=d.querySelector('[data-receipt-confirm]').getBoundingClientRect();return {inside:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:d.scrollWidth>d.clientWidth+1,space:s.left-c.right,inputs:document.querySelectorAll('input[type=file]').length,options:d.querySelectorAll('input[type=checkbox]').length,inert:document.querySelector('.supplier-payroll-body').inert};})()`);
-      assert.ok(state.inside&&!state.overflow&&state.space>=23&&state.inert,JSON.stringify(state));
+      const state=await evaluate(`(()=>{const d=document.querySelector('.payroll-receipt-dialog'),r=d.getBoundingClientRect(),c=d.querySelector('[data-receipt-cancel]').getBoundingClientRect(),b=d.querySelector('[data-receipt-search]'),q=b.getBoundingClientRect(),s=d.querySelector('[data-receipt-confirm]').getBoundingClientRect();return {inside:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:d.scrollWidth>d.clientWidth+1,space:q.left-c.right,lastSpace:s.left-q.right,sameRow:c.top===q.top&&q.top===s.top,tap:[c,q,s].every(r=>r.width>=44&&r.height>=44),blue:getComputedStyle(b).backgroundColor,inputs:document.querySelectorAll('input[type=file]').length,options:d.querySelectorAll('input[type=checkbox]').length,inert:document.querySelector('.supplier-payroll-body').inert};})()`);
+      assert.ok(state.inside&&!state.overflow&&state.space>=7&&state.lastSpace>=7&&state.sameRow&&state.tap&&state.inert,JSON.stringify(state));
+      assert.equal(state.blue, 'rgb(23, 97, 186)');
       assert.equal(state.inputs,0);assert.equal(state.options,2);
       if(width===390&&!pwa&&process.env.PAYROLL_RECEIPTS_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.PAYROLL_RECEIPTS_SCREENSHOT,Buffer.from(shot.data,'base64'));}
-      await evaluate(`document.querySelector('[data-receipt-id="2"]').click();document.querySelector('[data-receipt-confirm]').click()`);
+      await evaluate(`document.querySelector('[data-receipt-id="2"]').click()`);
+      for (const [kind,name] of [['photo','mascote-192.png'],['file','mascote-512.png']]) {
+        await evaluate(`document.querySelector('[data-receipt-search]').click();document.querySelector('[data-receipt-source="${kind}"]').click()`);
+        assert.equal(await evaluate(`document.querySelector('[data-receipt-confirm]').disabled`), true);
+        const accept = await evaluate(`document.querySelector('input[type=file]').accept`);
+        assert.ok(kind === 'photo' ? accept === 'image/*' : accept.includes('application/pdf'), accept);
+        const {root: documentRoot} = await send('DOM.getDocument', {}, sessionId);
+        const {nodeId} = await send('DOM.querySelector', {nodeId:documentRoot.nodeId,selector:'input[type=file]'}, sessionId);
+        await send('DOM.setFileInputFiles', {nodeId,files:[join(app,'pwa','icons',name)]}, sessionId);
+        for(let n=0;n<40&&await evaluate(`document.querySelector('[data-receipt-confirm]').disabled`);n++)await delay(50);
+        assert.equal(await evaluate(`[...document.querySelectorAll('[data-receipt-id]:checked')].some(n=>n.parentElement.textContent.includes(${JSON.stringify(name)}))`),true);
+        assert.equal(await evaluate(`document.querySelectorAll('input[type=file]').length`),0);
+      }
+      await evaluate(`document.querySelector('[data-receipt-confirm]').click()`);
       for(let n=0;n<40&&await evaluate(`!!document.querySelector('[data-receipt-picker]')`);n++)await delay(50);
-      assert.equal(await evaluate(`document.querySelector('[data-payroll-rubric=salary] .supplier-payroll-file-list').textContent`),'recibo-transporte.jpeg×');
+      assert.equal(await evaluate(`document.querySelector('[data-payroll-rubric=salary] .supplier-payroll-file-list').textContent`),'recibo-transporte.jpeg×mascote-192.png×mascote-512.png×');
       assert.equal(await evaluate(`document.querySelector('[data-payroll-rubric=transport] .supplier-payroll-file-list').textContent`),'');
       assert.equal(await evaluate(`document.activeElement.dataset.payrollReceipts`),'salary');
     }
