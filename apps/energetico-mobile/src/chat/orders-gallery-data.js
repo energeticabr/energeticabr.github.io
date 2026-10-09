@@ -483,7 +483,9 @@ export function createHrPayrollGalleryData({
     let candidates=filterPayrollRows(gallery,all,baseFilters);
     const financialFilters=Object.entries(filters).some(([key,value])=>value && (key.startsWith('VALORUNITARIO')||key.startsWith('QTD')));
     if(gallery==='FOLHAPGTO' && financialFilters) candidates=await currentPayrollRows(candidates,undefined,cached.sources);
-    const filtered=filterPayrollRows(gallery,candidates,filters), offset=(page-1)*pageSize;
+    const filtered=filterPayrollRows(gallery,candidates,filters);
+    if (gallery === 'FOLHAPGTO') filtered.sort((a, b) => Number(b.id) - Number(a.id));
+    const offset=(page-1)*pageSize;
     const hasMore=offset+pageSize<filtered.length;
     const pageRows=filtered.slice(offset,offset+pageSize);
     const rows=gallery==='FOLHAPGTO' ? await currentPayrollRows(pageRows,undefined,cached.sources) : Object.freeze(pageRows);

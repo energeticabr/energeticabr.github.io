@@ -26,14 +26,15 @@ test('opening a page hydrates only visible payments and a distant broken source 
   const data=createHrPayrollGalleryData({repository:{
     resolveList:async(_site,names)=>({status:'resolved',id:names[0]}),
     getColumns:async()=>[{name:'VALORUNITARIO'},{name:'QUANTIDADE'}],
-    getItemsPage:async()=>({hasMore:false,items:Array.from({length:30},(_,i)=>({id:String(i+1),fields:{FORNECEDOR:i<25?'A':'B',IDLANCAMENTO:i+1}}))}),
-    getItem:async(_site,_list,id)=>{sourceReads.push(id);if(id==='26') throw new Error('Source unavailable');return {id,fields:{VALORUNITARIO:200,QUANTIDADE:3}};},
+    getItemsPage:async()=>({hasMore:false,items:Array.from({length:30},(_,i)=>({id:String(i+1),fields:{FORNECEDOR:i>=5?'A':'B',IDLANCAMENTO:i+1}}))}),
+    getItem:async(_site,_list,id)=>{sourceReads.push(id);if(id==='1') throw new Error('Source unavailable');return {id,fields:{VALORUNITARIO:200,QUANTIDADE:3}};},
   }});
   const first=await data.loadFilteredPage('FOLHAPGTO');assert.equal(first.count,30);assert.equal(first.rows.length,25);
-  assert.equal(sourceReads.length,25);assert.ok(!sourceReads.includes('26'));
+  assert.equal(sourceReads.length,25);assert.ok(!sourceReads.includes('1'));
+  assert.equal(first.rows[0].id,'30');assert.equal(first.rows.at(-1).id,'6');
   await data.loadFilteredPage('FOLHAPGTO',{filters:{FORNECEDOR:'A',QTDmin:'2'}});
   assert.equal(sourceReads.length,25,'fresh source values are reused when adjusting filters');
-  await assert.rejects(data.loadFilteredPage('FOLHAPGTO',{filters:{id:'26'}}),/Source unavailable/);
+  await assert.rejects(data.loadFilteredPage('FOLHAPGTO',{filters:{id:'1'}}),/Source unavailable/);
 });
 
 test('filter snapshot rejects missing or repeated pagination cursors and retries failures', async () => {
