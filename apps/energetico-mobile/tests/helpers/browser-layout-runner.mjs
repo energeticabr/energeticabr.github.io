@@ -23,15 +23,19 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       if (spawnError) throw spawnError;
       try {
         const [port, path] = (await readFile(join(profile, "DevToolsActivePort"), "utf8")).trim().split(/\r?\n/);
-        endpoint = `ws://127.0.0.1:${port}${path}`;
-        break;
+        // File creation precedes completion of Chrome's two-line endpoint.
+        if (/^\d+$/.test(port || "") && Number(port) >= 1 && Number(port) <= 65535
+          && /^\/devtools\/browser\/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(path || "")) {
+          endpoint = `ws://127.0.0.1:${port}${path}`;
+          break;
+        }
       } catch (error) {
         // Chrome can briefly lock this startup file while writing it on Windows.
         // Keep the existing bounded wait; other read and cleanup errors still fail.
         if (error.code !== "ENOENT" && !(process.platform === "win32" && error.code === "EBUSY")) throw error;
-        if (child.exitCode !== null) throw new Error("O navegador de testes encerrou antes de iniciar.");
-        await delay(100);
       }
+      if (child.exitCode !== null) throw new Error("O navegador de testes encerrou antes de iniciar.");
+      await delay(100);
     }
     if (!endpoint) throw new Error("O navegador de testes não iniciou.");
     socket = new WebSocket(endpoint);

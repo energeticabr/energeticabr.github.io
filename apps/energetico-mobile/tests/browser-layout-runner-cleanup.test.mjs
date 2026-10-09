@@ -8,14 +8,15 @@ import { runInNewContext } from 'node:vm';
 
 const source = await readFile(new URL('./helpers/browser-layout-runner.mjs', import.meta.url), 'utf8');
 const ownedPid = 424242;
+const browserPath = '/devtools/browser/12345678-1234-4123-8123-123456789abc';
 const html = '<html data-layout="{&quot;ready&quot;:true}"><body>Measured</body></html>';
 
-function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, removalError, startupBusyAttempts = 0, startupError } = {}) {
+function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, removalError, startupBusyAttempts = 0, startupError, endpointContents = [] } = {}) {
   const child = new EventEmitter();
   Object.assign(child, { pid: ownedPid, exitCode: null, signalCode: null });
   const root = path.resolve('simulated-layout-tmp');
   const profile = path.join(root, 'energetico-layout-owned');
-  const state = { exitObserved: false, removals: [], signals: [], commands: [], unsafe: [], socketsClosed: 0, endpointReads: 0 };
+  const state = { exitObserved: false, removals: [], signals: [], commands: [], unsafe: [], socketsClosed: 0, endpointReads: 0, endpoints: [] };
   const timers = new Set();
   const later = (callback, ms, ...args) => {
     const timer = setTimeout(() => {
@@ -73,7 +74,7 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
     execFile(file, args, options, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr }));
   });
   class FakeSocket extends EventTarget {
-    constructor() { super(); queueMicrotask(() => this.dispatchEvent(new Event('open'))); }
+    constructor(endpoint) { super(); state.endpoints.push(endpoint); queueMicrotask(() => this.dispatchEvent(new Event('open'))); }
     send(raw) {
       const request = JSON.parse(raw);
       let result;
@@ -123,7 +124,8 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
         state.endpointReads++;
         if (startupError) throw startupError;
         if (state.endpointReads <= startupBusyAttempts) throw Object.assign(new Error('Chrome is writing its endpoint'), { code: 'EBUSY' });
-        return '12345\n/devtools/browser/owned';
+        if (endpointContents.length) return endpointContents[Math.min(state.endpointReads - 1, endpointContents.length - 1)];
+        return `12345\n${browserPath}`;
       },
       async rm(file, options) {
         state.removals.push(file);
@@ -168,6 +170,45 @@ test('confirmed cleanup preserves the captured stdout', { timeout: 1500 }, async
   assert.ok(f.state.exitObserved);
   assert.equal(f.state.removals.length, 1);
   f.audit();
+});
+
+for (const platform of ['linux', 'win32']) {
+  test(`${platform} startup waits for complete port and browser path before connecting`, { timeout: 1500 }, async t => {
+    const f = fixture(t, { platform, endpointContents: ['', '12345', '12345\n', `12345\n${browserPath}`] });
+    const result = await f.run();
+    assert.equal(result.stdout, '<!doctype html>' + html);
+    assert.equal(f.state.endpointReads, 4);
+    assert.deepEqual(f.state.endpoints, [`ws://127.0.0.1:12345${browserPath}`]);
+    f.audit();
+  });
+}
+
+test('invalid port and browser paths cannot create a connection before a valid endpoint appears', { timeout: 1500 }, async t => {
+  const f = fixture(t, { endpointContents: [`0\n${browserPath}`, `65536\n${browserPath}`, '12345\n/not-a-browser', `12345\n${browserPath}`] });
+  await f.run();
+  assert.equal(f.state.endpointReads, 4);
+  assert.deepEqual(f.state.endpoints, [`ws://127.0.0.1:12345${browserPath}`]);
+  f.audit();
+});
+
+for (const platform of ['linux', 'win32']) {
+  test(`${platform} startup rejects a truncated browser UUID even with both lines present`, { timeout: 1500 }, async t => {
+    const f = fixture(t, { platform, endpointContents: [`12345\n${browserPath.slice(0, 19)}`, `12345\n${browserPath.slice(0, -1)}`, `12345\n${browserPath}`] });
+    await f.run();
+    assert.equal(f.state.endpointReads, 3);
+    assert.deepEqual(f.state.endpoints, [`ws://127.0.0.1:12345${browserPath}`]);
+    f.audit();
+  });
+}
+
+test('permanently partial startup expires the existing bound without opening a socket', { timeout: 5000 }, async t => {
+  const f = fixture(t, { endpointContents: ['12345\n'] });
+  await assert.rejects(f.run(), /não iniciou/);
+  assert.equal(f.state.endpointReads, 100);
+  assert.deepEqual(f.state.endpoints, []);
+  assert.ok(f.state.exitObserved);
+  assert.equal(f.state.removals.length, 1);
+  assert.equal(f.state.socketsClosed, 0);
 });
 
 // Break: a transient Windows startup file lock aborts a valid layout capture.
