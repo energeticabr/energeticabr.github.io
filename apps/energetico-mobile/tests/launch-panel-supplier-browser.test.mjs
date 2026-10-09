@@ -21,10 +21,19 @@ test('launch supplier column keeps product inside details and fits phone/desktop
     await server.listen();
     child=spawn(browser,['--headless=new','--disable-gpu','--no-first-run','--no-sandbox','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
     const portFile=join(profile,'DevToolsActivePort');
-    for(let n=0;n<200&&!existsSync(portFile);n++)await delay(100);
-    assert.ok(existsSync(portFile));
-    const [port,path]=readFileSync(portFile,'utf8').trim().split(/\r?\n/);
-    socket=new WebSocket(`ws://127.0.0.1:${port}${path}`);
+    let endpoint;
+    for(let n=0;n<200;n++){
+      if(existsSync(portFile)){
+        const [port,path]=readFileSync(portFile,'utf8').trim().split(/\r?\n/);
+        if(/^\d+$/.test(port||'')&&Number(port)>=1&&Number(port)<=65535&&/^\/devtools\/browser\/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(path||'')){
+          endpoint=`ws://127.0.0.1:${port}${path}`;
+          break;
+        }
+      }
+      await delay(100);
+    }
+    assert.ok(endpoint,'Chrome must finish writing its browser endpoint before connecting');
+    socket=new WebSocket(endpoint);
     await new Promise((done,fail)=>{socket.addEventListener('open',done,{once:true});socket.addEventListener('error',fail,{once:true});});
     let seq=0;
     socket.addEventListener('message',e=>{const r=JSON.parse(e.data),p=pending.get(r.id);if(!p)return;pending.delete(r.id);clearTimeout(p.timer);r.error?p.fail(new Error(r.error.message)):p.done(r.result);});

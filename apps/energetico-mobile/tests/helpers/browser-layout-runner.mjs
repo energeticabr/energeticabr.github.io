@@ -6,34 +6,42 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
-export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, maxBuffer = 2_000_000, readyTimeoutMs = 30_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
-  let child, socket, sequence = 0, sessionId, onLoaded, spawnError;
+  let child, socket, sequence = 0, sessionId, onLoaded, spawnError, browserStderr = '';
   try {
     child = spawn(browser, [
       "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox",
       "--disable-dev-shm-usage", "--remote-debugging-port=0",
       `--user-data-dir=${profile}`, "about:blank",
-    ], { stdio: "ignore", windowsHide: true });
+    ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
     child.on("error", error => { spawnError = error; });
-    let endpoint;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    child.stderr?.on('data', chunk => { browserStderr = (browserStderr + String(chunk)).slice(-2000); });
+    let endpoint, lastEndpointContents;
+    const startupDiagnostic = () => `Navegador: ${browser}. Último endpoint: ${JSON.stringify(lastEndpointContents ?? 'arquivo indisponível')}. ${browserStderr.trim()}`;
+    const startupAttempts = Math.ceil(Math.max(1000, Math.min(30_000, Number(startupTimeoutMs) || 10_000)) / 100);
+    for (let attempt = 0; attempt < startupAttempts; attempt += 1) {
       if (spawnError) throw spawnError;
       try {
-        const [port, path] = (await readFile(join(profile, "DevToolsActivePort"), "utf8")).trim().split(/\r?\n/);
-        endpoint = `ws://127.0.0.1:${port}${path}`;
-        break;
+        lastEndpointContents = await readFile(join(profile, "DevToolsActivePort"), "utf8");
+        const [port, path] = lastEndpointContents.trim().split(/\r?\n/);
+        // File creation precedes completion of Chrome's two-line endpoint.
+        if (/^\d+$/.test(port || "") && Number(port) >= 1 && Number(port) <= 65535
+          && /^\/devtools\/browser\/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(path || "")) {
+          endpoint = `ws://127.0.0.1:${port}${path}`;
+          break;
+        }
       } catch (error) {
         // Chrome can briefly lock this startup file while writing it on Windows.
         // Keep the existing bounded wait; other read and cleanup errors still fail.
         if (error.code !== "ENOENT" && !(process.platform === "win32" && error.code === "EBUSY")) throw error;
-        if (child.exitCode !== null) throw new Error("O navegador de testes encerrou antes de iniciar.");
-        await delay(100);
       }
+      if (child.exitCode !== null) throw new Error(`O navegador de testes encerrou antes de iniciar. ${startupDiagnostic()}`);
+      await delay(100);
     }
-    if (!endpoint) throw new Error("O navegador de testes não iniciou.");
+    if (!endpoint) throw new Error(`O navegador de testes não iniciou. ${startupDiagnostic()}`);
     socket = new WebSocket(endpoint);
     await new Promise((done, fail) => {
       const timer = setTimeout(() => fail(new Error("Conexão com o navegador de testes expirou.")), 30_000);
