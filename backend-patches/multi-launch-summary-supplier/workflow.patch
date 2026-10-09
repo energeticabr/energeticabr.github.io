@@ -1,0 +1,9 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -27906,0 +27907,6 @@
++            supplier = (
++                str(display.get("FORNECEDOR") or "").strip()
++                or str(fields.get("FORNECEDOR") or "").strip()
++                or "EM BRANCO"
++            )
++            detail.insert(1, f"FORNECEDOR: {supplier}")
