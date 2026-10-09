@@ -116,7 +116,46 @@ class QuickSearchTests(unittest.TestCase):
         result = self.snapshot("d'agua", pageSize=1)
         self.assertEqual(result["count"], 2)
         self.assertEqual(result["totals"], dict(committed=24, liquidated=0, pending=24, paid=24, total=48))
+        self.assertEqual(result["filterOptions"]["supplier"], ["D'ÁGUA", "OUTRO"])
+
+    def test_selected_supplier_keeps_other_suppliers_available_for_replacement(self):
+        self.sp.rows["LANCAMENTOS"][0]["field_5"] = "MARCOS RODRIGO DE CARVALHO"
+        self.sp.rows["LANCAMENTOS"][1]["field_5"] = "HELISON ROSA LUIS"
+        result = self.service.handle("snapshot", {"filters": {"supplier": "MARCOS RODRIGO DE CARVALHO"}, "pageSize": 1})
+        self.assertEqual([row["id"] for row in result["rows"]], ["1"])
+        self.assertEqual(result["totals"]["total"], 24)
+        self.assertEqual(result["filterOptions"]["supplier"], ["D'ÁGUA", "HELISON ROSA LUIS", "MARCOS RODRIGO DE CARVALHO"])
+        replacement = self.service.handle("snapshot", {"filters": {"supplier": "HELISON ROSA LUIS"}})
+        self.assertEqual([row["id"] for row in replacement["rows"]], ["2"])
+        self.assertEqual(replacement["totals"]["total"], 24)
+        self.assertEqual(self.sp.mutations, [])
+
+    def test_each_dropdown_uses_the_full_catalog_when_rows_are_filtered(self):
+        self.sp.rows["LANCAMENTOS"][1].update(Title="OBRA B", field_5="OUTRO", field_7="AÇO",
+            field_6="ALVENARIA", field_19="PEDIDO FINALIZADO", CONTRATO="8")
+        result = self.snapshot("cimento", filters={"branch": "OBRA A", "supplier": "D'ÁGUA", "id": "1"})
+        self.assertEqual([row["id"] for row in result["rows"]], ["1"])
+        self.assertEqual(result["filterOptions"], {"branch": ["OBRA A", "OBRA B"], "supplier": ["D'ÁGUA", "OUTRO"],
+            "product": ["AÇO", "CIMENTO"], "stage": ["ALVENARIA", "FUNDAÇÃO"],
+            "status": ["PEDIDO EMPENHADO", "PEDIDO FINALIZADO"], "contract": ["7", "8"]})
+
+    def test_no_results_does_not_empty_the_dropdown_catalog(self):
+        result = self.service.handle("snapshot", {"filters": {"supplier": "SEM CORRESPONDÊNCIA"}})
+        self.assertEqual((result["rows"], result["count"], result["pages"]), ([], 0, 0))
+        self.assertEqual(result["totals"], dict(committed=0, liquidated=0, pending=0, paid=0, total=0))
         self.assertEqual(result["filterOptions"]["supplier"], ["D'ÁGUA"])
+        self.assertEqual(self.sp.mutations, [])
+
+    def test_dropdown_catalog_covers_all_sharepoint_pages_not_only_filtered_ui_page(self):
+        self.sp.rows["LANCAMENTOS"] = [self.sp.launch(i) for i in range(1, 102)]
+        for row in self.sp.rows["LANCAMENTOS"]:
+            row["field_5"] = "MARCOS"
+        self.sp.rows["LANCAMENTOS"][-1]["field_5"] = "HELISON"
+        result = self.service.handle("snapshot", {"filters": {"supplier": "MARCOS"}, "page": 2, "pageSize": 2})
+        self.assertEqual([row["id"] for row in result["rows"]], ["98", "97"])
+        self.assertEqual((result["count"], result["pages"]), (100, 50))
+        self.assertEqual(result["totals"]["total"], 2400)
+        self.assertEqual(result["filterOptions"]["supplier"], ["HELISON", "MARCOS"])
 
     def test_all_structured_filters_are_intersected_with_search(self):
         self.sp.rows["LANCAMENTOS"][0]["field_16"] = "agulha especial"
@@ -132,6 +171,26 @@ class QuickSearchTests(unittest.TestCase):
                 self.assertEqual(self.snapshot("agulha", filters={key: value})["count"], 0)
         self.sp.rows["LANCAMENTOS"][0]["APROVACAO"] = "APROVADO"
         self.assertEqual(self.snapshot("agulha", filters={"pendingApproval": True})["count"], 0)
+
+    def test_replacement_catalog_read_projects_only_filter_columns(self):
+        self.service.handle("snapshot", {"filters": {"supplier": "D'ÁGUA"}})
+        reads = [kw["params"] for method, ep, kw in self.sp.calls if method == "GET" and ep.endswith("/items")]
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(reads[0]["$filter"], "field_5 eq 'D''ÁGUA'")
+        self.assertNotIn("$filter", reads[1])
+        self.assertEqual(set(reads[1]["$select"].split(",")),
+                         {"Id", "Title", "field_5", "field_19", "field_7", "field_6", "CONTRATO"})
+        self.assertEqual(self.sp.mutations, [])
+
+    def test_unfiltered_and_text_only_snapshots_reuse_the_existing_read(self):
+        for query in ("", "cimento"):
+            with self.subTest(query=query):
+                self.setUp()
+                self.snapshot(query)
+                reads = [kw["params"] for method, ep, kw in self.sp.calls if method == "GET" and ep.endswith("/items")]
+                self.assertEqual(len(reads), 1)
+                self.assertNotIn("$filter", reads[0])
+                self.assertEqual(self.sp.mutations, [])
 
     def test_ids_and_linked_ids_are_searchable(self):
         self.sp.schemas["LANCAMENTOS"] += [fixtures.field("IDPGTOAGENDADO"), fixtures.field("IDFOLHA", kind="Number")]

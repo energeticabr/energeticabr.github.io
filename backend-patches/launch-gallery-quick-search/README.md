@@ -1,5 +1,10 @@
 # Launch gallery quick search backend
 
+Historical rollout below is retained. The candidate now also includes the
+filter-option replacement fix documented in `../launch-gallery-filter-options`.
+Use that directory's fresh stage and manifest for the current candidate, not the
+old pins/commands below.
+
 The versionable candidate is candidate/worker/launch_gallery.py. No other backend
 module is included in the candidate. Frontend/shared matcher and releases belong
 to the main agent.

@@ -12,7 +12,8 @@ Contract additions:
 * Creates require engine.state_store with atomic load/save CAS, as in WorkflowEngine.
 * LaunchGalleryError is a ValueError with code, status and safe details. Never
   serialize its chained exception. Incomplete creates must reuse requestId.
-* filterOptions and totals cover all matching results before UI pagination.
+* filterOptions covers the full authorized dataset; totals cover matching results.
+  Both are independent of UI pagination.
 * Attachment operations check the parent version immediately before their
   endpoint call; SharePoint does not offer a transaction across these resources.
 
@@ -573,7 +574,10 @@ class LaunchGalleryService:
             totals["total"] += amount
             if category != "paid":
                 totals["pending"] += amount
-        options = {key: sorted({str(row[label]) for row in selected if not _blank(row.get(label))}, key=_norm)
+        # Filters select records, not the replacement choices for the next search.
+        # Reuse the full read when possible; otherwise read only catalog columns.
+        option_rows = self._rows(LAUNCHES, [label for key, label in FILTER_FIELDS.items() if key != "id"]) if conditions else rows
+        options = {key: sorted({str(row[label]) for row in option_rows if not _blank(row.get(label))}, key=_norm)
                    for key, label in FILTER_FIELDS.items() if key != "id"}
         return {"rows": [self._row(r) for r in selected[(page-1)*size:page*size]], "count": len(selected),
                 "page": page, "pageSize": size, "pages": math.ceil(len(selected)/size),
