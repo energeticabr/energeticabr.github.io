@@ -573,7 +573,10 @@ class LaunchGalleryService:
             totals["total"] += amount
             if category != "paid":
                 totals["pending"] += amount
-        options = {key: sorted({str(row[label]) for row in selected if not _blank(row.get(label))}, key=_norm)
+        # Filters select records, not the replacement choices for the next search.
+        # Reuse the full read when possible; otherwise read only catalog columns.
+        option_rows = self._rows(LAUNCHES, [label for key, label in FILTER_FIELDS.items() if key != "id"]) if conditions else rows
+        options = {key: sorted({str(row[label]) for row in option_rows if not _blank(row.get(label))}, key=_norm)
                    for key, label in FILTER_FIELDS.items() if key != "id"}
         return {"rows": [self._row(r) for r in selected[(page-1)*size:page*size]], "count": len(selected),
                 "page": page, "pageSize": size, "pages": math.ceil(len(selected)/size),
