@@ -1,0 +1,8 @@
+--- a/tests/test_workflow.py
++++ b/tests/test_workflow.py
+@@ -11394 +11394 @@
+-        self.assertEqual(summary_text.count("FORNECEDOR:"), 1)
++        self.assertEqual(summary_text.count("FORNECEDOR:"), 3)
+@@ -11761 +11761 @@
+-        self.assertEqual(summary_text.count("FORNECEDOR:"), 1)
++        self.assertEqual(summary_text.count("FORNECEDOR:"), 3)
