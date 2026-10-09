@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data da folha de pagamento</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/supplier-payroll.css">
+</head>
+<body>
+  <script type="module">
+    import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
+    if (new URLSearchParams(location.search).has('pwa')) {
+      document.querySelectorAll('link[rel=stylesheet]').forEach(link => link.remove());
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/tests/payroll-date-built.css';
+      await new Promise((resolve, reject) => {
+        link.onload = resolve; link.onerror = reject; document.head.append(link);
+      });
+    }
+    const calls = [];
+    const view = createSupplierPayrollView({ documentRef: document, data: {
+      async loadSuppliers() { calls.push('suppliers'); return [{ id: '1', label: 'Fornecedor de teste' }]; },
+      async post() { throw new Error('Esta fixture nunca deve gravar pagamentos.'); },
+    } });
+    await view.open();
+    const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const bounds = element => {
+      const {left, right, top, bottom, width, height} = element.getBoundingClientRect();
+      return {left, right, top, bottom, width, height};
+    };
+    const measure = () => {
+      const date = document.querySelector('input[name=date]');
+      return {
+        input: bounds(date), content: bounds(document.querySelector('.supplier-payroll-content')),
+        bodyWidth: document.querySelector('.supplier-payroll-body').clientWidth,
+        bodyScrollWidth: document.querySelector('.supplier-payroll-body').scrollWidth,
+        viewportWidth: innerWidth, fontSize: parseFloat(getComputedStyle(date).fontSize),
+        type: date.type, value: date.value,
+        continueButton: bounds(document.querySelector('[data-payroll-next]')),
+      };
+    };
+    await frame();
+    const empty = measure();
+    const date = document.querySelector('input[name=date]');
+    date.value = '2026-10-08';
+    date.dispatchEvent(new Event('input', {bubbles:true}));
+    await frame();
+    const filled = measure();
+    if (!new URLSearchParams(location.search).has('preview')) {
+      document.querySelector('[data-payroll-next]').click();
+      while (!document.querySelector('[data-payroll-option="1"]')) await frame();
+      const advanced = document.querySelector('.supplier-payroll-question').textContent;
+      document.querySelector('[data-payroll-header-back]').click();
+      await frame();
+      document.documentElement.dataset.layout = JSON.stringify({
+        empty, filled, advanced, restored: measure(), calls,
+      });
+    }
+    document.documentElement.dataset.ready = 'true';
+  </script>
+</body>
+</html>
