@@ -8,7 +8,7 @@ import { createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
 test('single confirmation card is readable without horizontal overflow on phone, tablet and PC', { timeout: 240000 }, async t => {
-  const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(path => path && existsSync(path));
+  const browser = [process.env.CHROME_BIN, '/usr/bin/google-chrome', '/usr/bin/chromium', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
   const server = await createServer({ root, server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } }, logLevel: 'silent' });
