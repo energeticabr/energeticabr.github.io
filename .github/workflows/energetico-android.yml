@@ -201,6 +201,7 @@ jobs:
       - name: Testar e gerar pacote web
         working-directory: apps/energetico-mobile
         run: |
+          timeout 10s /usr/bin/google-chrome --version
           node --test tests/browser-layout-runner.test.mjs
           pnpm test
           pnpm build
@@ -287,6 +288,7 @@ jobs:
         working-directory: apps/energetico-mobile
         run: |
           pnpm install --frozen-lockfile
+          timeout 10s /usr/bin/google-chrome --version
           pnpm test
           pnpm build
           pnpm android:assets
