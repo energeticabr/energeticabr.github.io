@@ -9488,6 +9488,16 @@ export function createAppController({
       if (command.replyId === "document_signing_epi") clearEpiProductSelection();
       if (command.replyId === DOCUMENT_LINE_FINALIZE_ID) return finalizeDocumentLines();
       const currentPoll = latestAssistantPoll(state.messages);
+      const observationOption = currentPoll?.options.find(option =>
+        String(option?.reply || option?.id || "") === command.replyId);
+      if (state.activeFlow?.id === "launch"
+        && /deseja fazer alguma observacao/.test(normalizedChoiceText(currentPoll?.question || currentPoll?.prompt))
+        && /(?:^|\s)sim$/.test(normalizedChoiceText(observationOption?.label || observationOption?.title))
+        && String(state.draft || "").trim()) {
+        // Direct text is already accepted here. Do not send the SIM reply ID:
+        // it would discard this answer and ask for the observation again.
+        return sendText(state.draft);
+      }
       if (documentSigningFlow(state.activeFlow) && documentProductPollKind(currentPoll) === "epi") {
         const productOption = currentPoll.options.find(option => epiOptionMatchesReply(option, command.replyId));
         if (productOption) {

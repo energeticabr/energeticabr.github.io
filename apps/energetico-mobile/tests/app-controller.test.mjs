@@ -78,6 +78,103 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
+const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
+const observationOptions = [
+  { id: 'choice:tem_observacao_lancamento:1', label: '1 - ✅ SIM' },
+  { id: 'choice:tem_observacao_lancamento:2', label: '2 - ❌ NÃO' },
+];
+
+async function observationHarness(t, { draft = 'Arame comprado com Marcos arcelor', flow = 'launch', question = observationQuestion } = {}) {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: 'poll', question, options: observationOptions }], { activeFlow: { id: flow, title: 'EFETUAR LANÇAMENTO' } });
+  h.store.setDraft(draft);
+  h.chatCalls.length = 0;
+  return h;
+}
+
+test('observação: SIM envia o rascunho em uma única resposta de texto, não a opção SIM', async t => {
+  const h = await observationHarness(t);
+  await h.view.emit('select-reply', { replyId: observationOptions[0].id, label: observationOptions[0].label });
+  assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor' }]]);
+  assert.equal(h.store.getState().draft, '');
+});
+
+test('observação: SIM sem texto mantém a escolha para a VM pedir a observação', async t => {
+  for (const draft of ['', '  \n ']) {
+    const h = await observationHarness(t, { draft });
+    await h.view.emit('select-reply', { replyId: observationOptions[0].id, label: observationOptions[0].label });
+    assert.deepEqual(h.chatCalls, [['text', { text: '1 - ✅ SIM', replyId: observationOptions[0].id }]]);
+  }
+});
+
+test('observação: NÃO, outra pergunta, outro fluxo e opção antiga não consomem o rascunho como observação', async t => {
+  for (const scenario of [
+    { replyId: observationOptions[1].id, label: observationOptions[1].label },
+    { question: 'DESEJA ADICIONAR MAIS LINHAS?' },
+    { flow: 'construction_diary_fill' },
+    { replyId: 'old-yes', label: 'SIM' },
+  ]) {
+    const h = await observationHarness(t, scenario);
+    const replyId = scenario.replyId || observationOptions[0].id;
+    const label = scenario.label || observationOptions[0].label;
+    await h.view.emit('select-reply', { replyId, label });
+    assert.deepEqual(h.chatCalls, [['text', { text: label, replyId }]]);
+  }
+});
+
+test('observação: falha de envio conserva o texto para tentar novamente', async t => {
+  const h = await observationHarness(t);
+  h.client.sendText = async payload => { h.chatCalls.push(['text', payload]); throw new Error('Rede indisponível'); };
+  assert.equal(await h.view.emit('select-reply', { replyId: observationOptions[0].id, label: observationOptions[0].label }), false);
+  assert.equal(h.store.getState().draft, 'Arame comprado com Marcos arcelor');
+  assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor' }]]);
+});
+
+test('observação: clique no SIM da tela envia o texto atual e preserva os anexos confirmados', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  const h = makeHarness({ view });
+  t.after(() => { h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  const attachments = [{ id: 'receipt', fileName: 'recibo.pdf', mimeType: 'application/pdf', size: 3, mediaUrl: '/api/portal-media/receipt' }];
+  h.store.ingestRemoteMessages([{ type: 'poll', question: observationQuestion, options: observationOptions }], {
+    activeFlow: { id: 'launch', title: 'EFETUAR LANÇAMENTO' }, attachments,
+  });
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = 'Arame comprado com Marcos arcelor\nConferir na obra.';
+  draft.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  h.chatCalls.length = 0;
+  root.querySelector(`[data-reply-id="${observationOptions[0].id}"]`).click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor\nConferir na obra.' }]]);
+  assert.equal(root.querySelector('[data-role="draft"]').value, '');
+  assert.equal(h.store.getState().attachments[0].id, 'receipt');
+});
+
+test('observação: SIM não contorna upload pendente nem envia duas vezes enquanto ocupado', async t => {
+  const blocked = await observationHarness(t);
+  blocked.store.queueFiles([new File(['pdf'], 'aguardando.pdf', { type: 'application/pdf' })]);
+  assert.equal(await blocked.view.emit('select-reply', { replyId: observationOptions[0].id, label: observationOptions[0].label }), false);
+  assert.deepEqual(blocked.chatCalls, []);
+  assert.equal(blocked.store.getState().draft, 'Arame comprado com Marcos arcelor');
+
+  const h = await observationHarness(t);
+  let release;
+  h.client.sendText = async payload => {
+    h.chatCalls.push(['text', payload]);
+    await new Promise(resolve => { release = resolve; });
+    return { status: 'processed', messages: [{ type: 'text', text: 'Confirmado' }] };
+  };
+  const first = h.view.emit('select-reply', { replyId: observationOptions[0].id, label: observationOptions[0].label });
+  assert.equal(await h.view.emit('select-reply', { replyId: observationOptions[0].id, label: observationOptions[0].label }), false);
+  release();
+  assert.equal(await first, true);
+  assert.deepEqual(h.chatCalls, [['text', { text: 'Arame comprado com Marcos arcelor' }]]);
+});
+
 test("descritivo provisão abre localmente e reutiliza a galeria sem enviar comandos para a VM", async t => {
   const created = [], opened = [], destroyed = [];
   const h = makeHarness({

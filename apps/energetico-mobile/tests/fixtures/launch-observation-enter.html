@@ -2,13 +2,24 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
 <body><main id="app"></main><script type="module">
 import { createChatView } from '/src/ui/chat-view.js';
+import { createAppController } from '/src/app-controller.js';
+import { createConversationStore } from '/src/chat/conversation-store.js';
 const state = {sessionStatus:'authenticated',account:{name:'Bernardo'},activeFlow:{id:'launch',title:'EFETUAR LANÇAMENTO'},draft:'',pendingFiles:[],
   messages:[{role:'assistant',type:'poll',question:'💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.',options:[{id:'yes',label:'SIM'},{id:'no',label:'NÃO'}]}]};
 const view=createChatView(document.querySelector('#app'));
+const store=createConversationStore();
+const controller=createAppController({store,view,
+  auth:{initialize:async()=>({homeAccountId:'fixture',name:'Bernardo'}),getToken:async()=> 'fixture'},
+  native:{importSharedItems:async()=>[]},
+  pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),
+  client:{sendText:async payload=>{
+    if(payload.replyId!=='input_continue') window.sent.push(payload.text);
+    return {status:'processed',activeFlow:state.activeFlow,messages:state.messages};
+  }},
+});
 window.sent=[];
-view.on('draft-changed', e=>{state.draft=e.value;view.render(state);});
-view.on('send-text', ()=>{window.sent.push(state.draft);state.draft='';view.render(state);});
-window.changeQuestion=()=>{state.messages.push({role:'assistant',type:'poll',question:'QUAL É O PRODUTO?'});view.render(state);};
-view.render(state);
+await controller.start();
+window.changeQuestion=()=>{state.messages=[{role:'assistant',type:'poll',question:'QUAL É O PRODUTO?'}];store.ingestRemoteMessages(state.messages,{activeFlow:state.activeFlow});};
+window.addEventListener('pagehide',()=>controller.stop(),{once:true});
 document.documentElement.dataset.ready='true';
 </script></body></html>
