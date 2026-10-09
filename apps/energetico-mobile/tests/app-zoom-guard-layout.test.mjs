@@ -6,15 +6,15 @@ import { createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
 
 test('menus disable page pinch and double-tap while scrolling, signature and Power BI keep their gestures', { timeout: 120_000 }, async t => {
-  const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'].find(path => path && existsSync(path));
+  const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), server: { host: '127.0.0.1', port: 0 }, logLevel: 'silent' });
   try {
     await server.listen();
-    const baseline = await runBrowserLayout(browser, { width: 390, height: 844, mobile: true, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html?baseline=1`, gestureProbes: [{ pinch: { x: 195, y: 150, scaleFactor: 1.8 } }] });
+    const baseline = await runBrowserLayout(browser, { width: 390, height: 844, mobile: true, startupTimeoutMs: 30_000, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html?baseline=1`, gestureProbes: [{ pinch: { x: 195, y: 150, scaleFactor: 1.8 } }] });
     t.diagnostic(`Unrestricted browser pinch baseline: ${JSON.stringify(baseline.gestureScales)}`);
     for (const width of [390, 1024]) {
-      const { stdout, gestureScales, gestureDetails } = await runBrowserLayout(browser, { width, height: 844, mobile: true, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html`, gestureProbes: [
+      const { stdout, gestureScales, gestureDetails } = await runBrowserLayout(browser, { width, height: 844, mobile: true, startupTimeoutMs: 30_000, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/app-zoom-guard.html`, gestureProbes: [
         { pinch: { x: width / 2, y: 150, scaleFactor: 1.8 } },
         { expression: "window.zoomReport.open({ accessToken: 'test', getAccessToken: async () => 'test' })", pinch: { x: width / 2, y: 400, scaleFactor: 1.8 }, ...(baseline.gestureScales[0] === 1 ? { pageScaleFactor: 1.8 } : {}) },
         { expression: 'window.zoomReport.close()' },
