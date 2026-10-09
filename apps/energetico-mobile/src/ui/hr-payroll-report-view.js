@@ -168,6 +168,14 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
       totalCard.append(element(doc, "span", "hr-payroll-report-total-label", group.label));
       const totalValue = element(doc, "strong", "hr-payroll-report-total-value",
         group.incomplete ? "Não calculado" : formatMoney(group.cents));
+      if (!group.incomplete) {
+        const [currency, amount] = formatMoney(group.cents).split(/\s+/);
+        totalValue.replaceChildren(
+          element(doc, "span", "hr-payroll-report-money-currency", currency),
+          doc.createTextNode(" "),
+          element(doc, "span", "hr-payroll-report-money-amount", amount),
+        );
+      }
       totalValue.dataset.reportTotal = group.id;
       totalCard.append(totalValue);
       totals.append(totalCard);

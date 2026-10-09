@@ -24,6 +24,9 @@ const rows = [
 if (new URLSearchParams(location.search).has('large')) rows[0].VALORUNITARIO = 1234567.89;
 const report = createHrPayrollReport({ root: document.querySelector('#app'), onHome: () => {}, request: async () => rows });
 await report.open({ id: '4', FORNECEDOR: 'FORNECEDOR DE TESTE — PRÉVIA DO LAYOUT', MESREFERENCIA: '09/2026' });
+if (new URLSearchParams(location.search).has('wide-font')) {
+  document.querySelector('.hr-payroll-report-overlay').style.fontFamily = 'monospace';
+}
 document.querySelector('.hr-payroll-report-linked-section').open = true;
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const rect = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
@@ -33,7 +36,7 @@ document.documentElement.dataset.layout = JSON.stringify({
   viewport: innerWidth,
   columns: getComputedStyle(document.querySelector('.hr-payroll-report-totals')).gridTemplateColumns.split(' ').length,
   totals: totals.map(node => ({ ...rect(node), text: node.textContent.replace(/\u00a0/g, ' '), fits: node.scrollWidth <= node.clientWidth + 1 })),
-  valuesFit: totals.every(node => { const value = node.querySelector('strong'), r = value.getBoundingClientRect(); return value.scrollWidth <= value.clientWidth + 1 && r.height < 35; }),
+  valuesFit: totals.every(node => { const value = node.querySelector('strong'); return value.scrollWidth <= value.clientWidth + 1 && [...value.children].every(part => part.scrollWidth <= part.clientWidth + 1 && part.getBoundingClientRect().height < 35); }),
   colors: paymentCards.map(node => getComputedStyle(node).backgroundColor),
   matchingColors: paymentCards.every(node => getComputedStyle(node).backgroundColor === getComputedStyle(document.querySelector('[data-report-total-type="' + node.dataset.paymentType + '"]').closest('details')).backgroundColor),
   contentFits: [...document.querySelectorAll('.hr-gallery-content')].every(node => node.scrollWidth <= node.clientWidth + 1),

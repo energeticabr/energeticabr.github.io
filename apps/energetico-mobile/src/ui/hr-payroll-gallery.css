@@ -83,7 +83,8 @@
 .hr-payroll-report-total-value { color: #123c68; font-size: clamp(1.15rem, 4vw, 1.45rem); font-weight: 800; overflow-wrap: anywhere; }
 .hr-payroll-report-totals > article { padding: 11px; }
 .hr-payroll-report-totals .hr-payroll-report-total-label { color: #315064; }
-.hr-payroll-report-totals .hr-payroll-report-total-value { font-size: clamp(.95rem, 1.65vw, 1.4rem); white-space: nowrap; overflow-wrap: normal; }
+.hr-payroll-report-totals .hr-payroll-report-total-value { display: flex; flex-wrap: wrap; column-gap: .25em; font-size: clamp(.95rem, 1.65vw, 1.4rem); overflow-wrap: normal; }
+.hr-payroll-report-totals .hr-payroll-report-total-value > span { white-space: nowrap; }
 .hr-payroll-report-total-card--overall .hr-payroll-report-total-label, .hr-payroll-report-total-card--overall .hr-payroll-report-total-value { color: #fff; }
 .hr-payroll-report-section-title { margin: 3px 0 8px; color: #173042; font-size: 1.05rem; }
 .hr-payroll-report-type-card { display: block; align-self: start; padding: 0; border-color: var(--payroll-type-accent, #c5d6df); background: var(--payroll-type-background, #fff); }

@@ -20,12 +20,12 @@ test("quatro totais legíveis em duas colunas no celular e alinhados no tablet e
     await server.listen();
     for (const pwaStyles of [false, true]) {
       for (const width of [320, 390, 768, 1024, 1365]) {
-        const query = new URLSearchParams({ ...(pwaStyles ? { pwa: "1" } : {}), large: "1" });
+        const query = new URLSearchParams({ ...(pwaStyles ? { pwa: "1" } : {}), large: "1", "wide-font": "1" });
         const { stdout } = await runBrowserLayout(browser, { width, height: 900, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-summary-colors.html?${query}` });
         const layout = JSON.parse(stdout.match(/data-layout="([^"]+)"/)[1].replaceAll("&quot;", '"').replaceAll("&amp;", "&"));
         assert.equal(layout.columns, width < 760 ? 2 : 4, JSON.stringify({ width, pwaStyles, layout }));
         assert.equal(layout.totals.length, 4);
-        assert.ok(layout.totals.every(card => card.fits));
+        assert.ok(layout.totals.every(card => card.fits), JSON.stringify({ width, pwaStyles, layout }));
         assert.ok(layout.valuesFit && layout.contentFits, JSON.stringify({ width, pwaStyles, layout }));
         if (width >= 760) assert.ok(layout.totals.every(card => Math.abs(card.y - layout.totals[0].y) < 1));
         assert.equal(new Set(layout.colors).size, 7);
