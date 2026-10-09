@@ -9166,6 +9166,31 @@ test("BUSCAR da folha usa seletores nativos sem enviar anexos ao chat e rejeita 
   assert.equal(h.chatCalls.length, before);
 });
 
+test("BUSCAR normaliza MIME genérico de PDF e foto nativos sem alterar bytes nem aceitar tipo incompatível", async t => {
+  let options;
+  const h = makeHarness({
+    supplierPayrollDataFactory: async () => ({}),
+    supplierPayrollFactory: async value => { options = value; return { open() {}, destroy() {} }; },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  openPayrollMenu(h);
+  await h.view.emit("select-reply", { replyId: "action_supplier_payroll_launch" });
+  const files = [
+    new File(["pdf bytes"], "nativo.pdf", {type:"application/octet-stream",lastModified:123}),
+    new File(["jpeg bytes"], "nativo.jpeg", {type:"binary/octet-stream",lastModified:456}),
+    new File(["incompatible"], "incompativel.pdf", {type:"text/html"}),
+  ];
+  h.native.pickDocuments = async () => files;
+  const selected = await options.pickReceiptAttachments("file");
+  assert.deepEqual(selected.map(f => validateAttachment(f).valid), [true, true, false]);
+  assert.deepEqual(selected.map(f => f.name), files.map(f => f.name));
+  assert.deepEqual(selected.map(f => f.lastModified), files.map(f => f.lastModified));
+  assert.deepEqual(await Promise.all(selected.map(f => f.text())), ["pdf bytes","jpeg bytes","incompatible"]);
+  assert.equal(selected[2], files[2], "MIME explícito incompatível não deve ser disfarçado");
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+});
+
 test("folha lê comprovantes apenas da bandeja vigente sem consumir anexos", async t => {
   let options;
   const h = makeHarness({

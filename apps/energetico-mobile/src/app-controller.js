@@ -4791,7 +4791,13 @@ export function createAppController({
         if (typeof picker !== "function") throw new Error("A busca de comprovantes não está disponível neste dispositivo.");
         const selected = await picker.call(native);
         assertSession();
-        return selected || [];
+        return Array.from(selected || [], file => {
+          const type = String(file.type || "").split(";", 1)[0].trim().toLowerCase();
+          // Providers without MIME metadata use a generic blob type. As with
+          // tray downloads, validate these files by their supported extension.
+          if (!["application/octet-stream", "binary/octet-stream"].includes(type)) return file;
+          return new File([file], file.name, { type: "", lastModified: Number(file.lastModified) || 0 });
+        });
       },
       readReceiptAttachment: async (fileId, reference) => {
         assertSession();
