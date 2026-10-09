@@ -35,6 +35,7 @@ final class PowerBiZoomPlugin: CAPPlugin, CAPBridgedPlugin {
     private weak var previousScrollViewDelegate: UIScrollViewDelegate?
     private var hasSavedScrollViewDelegate = false
     private var previousPinchRecognizerEnabled = false
+    private var previousZoomScale: CGFloat = 1
 
     @objc func setEnabled(_ call: CAPPluginCall) {
         guard let enabled = call.getBool("enabled") else {
@@ -57,6 +58,7 @@ final class PowerBiZoomPlugin: CAPPlugin, CAPBridgedPlugin {
                 if !self.hasSavedScrollViewDelegate {
                     self.previousScrollViewDelegate = scrollView.delegate
                     self.previousPinchRecognizerEnabled = scrollView.pinchGestureRecognizer?.isEnabled ?? false
+                    self.previousZoomScale = scrollView.zoomScale
                     self.hasSavedScrollViewDelegate = true
                 }
                 // Capacitor's default delegate disables this recognizer when
@@ -65,6 +67,7 @@ final class PowerBiZoomPlugin: CAPPlugin, CAPBridgedPlugin {
                 scrollView.pinchGestureRecognizer?.isEnabled = true
             } else {
                 if self.hasSavedScrollViewDelegate {
+                    scrollView.setZoomScale(self.previousZoomScale, animated: false)
                     scrollView.pinchGestureRecognizer?.isEnabled = self.previousPinchRecognizerEnabled
                     scrollView.delegate = self.previousScrollViewDelegate
                     self.previousScrollViewDelegate = nil

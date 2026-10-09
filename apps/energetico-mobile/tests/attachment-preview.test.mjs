@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { createAttachmentPreview } from "../src/web/attachment-preview.js";
+import { installAppZoomGuard } from "../src/web/app-zoom-guard.js";
 
 function setup(t, options = {}) {
   const dom = new JSDOM('<main><textarea>rascunho preservado</textarea><section id="messages">Conversa</section></main>');
   const documentRef = dom.window.document;
+  const stopPageZoom = installAppZoomGuard(documentRef);
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   dom.window.HTMLDialogElement.prototype.close = function () {
     this.open = false;
@@ -19,7 +21,7 @@ function setup(t, options = {}) {
     urlApi: { createObjectURL: () => `blob:preview-${++urlCount}`, revokeObjectURL: url => revoked.push(url) },
     ...options,
   });
-  t.after(() => { preview.destroy(); dom.window.close(); });
+  t.after(() => { preview.destroy(); stopPageZoom(); dom.window.close(); });
   return { preview, documentRef, dom, revoked };
 }
 

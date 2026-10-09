@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { createConversationStore } from "../src/chat/conversation-store.js";
 import { createAppController } from "../src/app-controller.js";
 import { createRecoveryStorage } from "../src/web/recovery-storage.js";
+import { installAppZoomGuard } from "../src/web/app-zoom-guard.js";
 
 function memoryStorage() {
   const entries = new Map();
@@ -35,7 +36,7 @@ async function startNative({ storage = memoryStorage(), accountId = "test", init
   const executable = `${assembly.replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, "")}\n${entry.replace(/^import .*;\r?\n/gm, "")}`;
   runInNewContext(executable, {
     document: { querySelector() { return {}; } }, addEventListener(name, handler) { lifecycle.set(name, handler); },
-    APP_CONFIG: {}, MicrosoftAuth: {},
+    APP_CONFIG: {}, MicrosoftAuth: {}, installAppZoomGuard,
     createAuthService: () => ({ async initialize() { return { homeAccountId: accountId }; }, async signOut() {} }),
     createChatClient: () => client,
     createNativePorts: () => native,

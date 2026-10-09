@@ -1,4 +1,5 @@
 @import './ui/report-print.css';
+@import './web/app-zoom-guard.css';
 
 :root {
   color: #102f3c;

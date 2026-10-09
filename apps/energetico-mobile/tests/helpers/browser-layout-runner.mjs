@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
-export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mobile = false, gestureProbes = [], maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -72,7 +72,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     ({ sessionId } = await send("Target.attachToTarget", { targetId, flatten: true }));
     await send("Page.enable", {}, sessionId);
-    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile }, sessionId);
     if (safeAreaInsets) await send("Emulation.setSafeAreaInsetsOverride", { insets: safeAreaInsets }, sessionId);
     let loadTimer;
     const loaded = new Promise((done, fail) => {
@@ -107,9 +107,27 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     }, sessionId);
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     if (typeof result.result?.value !== "string") throw new Error("Medição de layout inválida.");
+    const gestureScales = [];
+    const gestureDetails = [];
+    if (gestureProbes.length) {
+      await send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 }, sessionId);
+      for (const probe of gestureProbes) {
+        if (probe.expression) {
+          const action = await send("Runtime.evaluate", { expression: probe.expression, awaitPromise: true }, sessionId);
+          if (action.exceptionDetails) throw new Error(action.exceptionDetails.exception?.description || action.exceptionDetails.text);
+          await send("Runtime.evaluate", { expression: 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))', awaitPromise: true }, sessionId);
+        }
+        if (probe.pinch) await send("Input.synthesizePinchGesture", { ...probe.pinch, gestureSourceType: "touch" }, sessionId);
+        if (probe.pageScaleFactor) await send("Emulation.setPageScaleFactor", { pageScaleFactor: probe.pageScaleFactor }, sessionId);
+        const scale = await send("Runtime.evaluate", { expression: 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(visualViewport.scale))))', returnByValue: true, awaitPromise: true }, sessionId);
+        gestureScales.push(scale.result.value);
+        const detail = await send('Runtime.evaluate', { expression: `({ viewport: document.querySelector('meta[name="viewport"]')?.content, target: document.elementFromPoint(${width / 2},400)?.className, touches: window.touchDiagnostics })`, returnByValue: true }, sessionId);
+        gestureDetails.push(detail.result.value);
+      }
+    }
     const stdout = "<!doctype html>" + result.result.value;
     if (Buffer.byteLength(stdout) > maxBuffer) throw new RangeError("A medição de layout excedeu o limite de saída.");
-    return { stdout, stderr: "" };
+    return { stdout, stderr: "", gestureScales, gestureDetails };
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);
     socket?.close();

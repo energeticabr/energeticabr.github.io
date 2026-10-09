@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { readFile } from "node:fs/promises";
 import { createPdfPreview } from "../src/web/pdf-preview.js";
+import { installAppZoomGuard } from "../src/web/app-zoom-guard.js";
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -31,6 +32,7 @@ test("prévia do PDF no celular remove o limite lateral herdado do tablet", asyn
 function setup(t, { renderPage, ...options } = {}) {
   const dom = new JSDOM("<div id=pdf></div>", { url: "https://example.test/energetico/" });
   const documentRef = dom.window.document;
+  const stopPageZoom = installAppZoomGuard(documentRef);
   const container = documentRef.querySelector("#pdf");
   dom.window.HTMLCanvasElement.prototype.getContext = () => ({});
   let destroyed = 0;
@@ -51,7 +53,7 @@ function setup(t, { renderPage, ...options } = {}) {
     loadPdfJs: async () => ({ getDocument: options => { input = options; return { promise: Promise.resolve(pdf), destroy() { destroyed++; return Promise.resolve(); } }; } }),
     ...options,
   });
-  t.after(() => { viewer.destroy(); dom.window.close(); });
+  t.after(() => { viewer.destroy(); stopPageZoom(); dom.window.close(); });
   return { viewer, container, documentRef, input: () => input, destroyed: () => destroyed, cleaned: () => cleaned };
 }
 
