@@ -9132,6 +9132,40 @@ function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
 
+test("BUSCAR da folha usa seletores nativos sem enviar anexos ao chat e rejeita sessão encerrada", async t => {
+  let options;
+  const h = makeHarness({
+    supplierPayrollDataFactory: async () => ({}),
+    supplierPayrollFactory: async value => { options = value; return { open() {}, destroy() {} }; },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  openPayrollMenu(h);
+  await h.view.emit("select-reply", { replyId: "action_supplier_payroll_launch" });
+  const photo = new File(["photo"], "telefone.png", { type: "image/png" });
+  const file = new File(["pdf"], "telefone.pdf", { type: "application/pdf" });
+  const sources = [];
+  h.native.pickPhotos = async () => { sources.push("photo"); return [photo]; };
+  h.native.pickDocuments = async () => { sources.push("file"); return [file]; };
+  const before = h.chatCalls.length;
+  assert.deepEqual(await options.pickReceiptAttachments("photo"), [photo]);
+  assert.deepEqual(await options.pickReceiptAttachments("file"), [file]);
+  assert.deepEqual(sources, ["photo", "file"]);
+  await assert.rejects(options.pickReceiptAttachments("unknown"), /tipo/i);
+  assert.equal(h.chatCalls.length, before);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.equal(h.store.getState().attachments.length, 0);
+  h.native.pickDocuments = async () => [];
+  assert.deepEqual(await options.pickReceiptAttachments("file"), []);
+  let resolve;
+  h.native.pickDocuments = () => new Promise(r => { resolve = r; });
+  const pending = options.pickReceiptAttachments("file");
+  h.controller.stop();
+  resolve([file]);
+  await assert.rejects(pending, /sessão/i);
+  assert.equal(h.chatCalls.length, before);
+});
+
 test("folha lê comprovantes apenas da bandeja vigente sem consumir anexos", async t => {
   let options;
   const h = makeHarness({

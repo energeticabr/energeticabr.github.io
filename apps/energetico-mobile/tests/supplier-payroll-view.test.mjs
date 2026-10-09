@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
 const flush = () => new Promise((r) => setTimeout(r, 5));
-test("comprovante oferece somente bandeja atual, cancela sem vínculo e seleciona por rubrica", async t => {
+test("comprovante oferece bandeja atual, cancela sem vínculo e seleciona por rubrica", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
   await openRubrics(h);
@@ -118,6 +118,7 @@ async function harness() {
   const reads = [];
   const receipts = {
     getReceiptAttachments: () => tray,
+    pickReceiptAttachments: async () => [],
     readReceiptAttachment: async id => {
       reads.push(id);
       return tray.find(item => item.id === id).file;
@@ -128,6 +129,7 @@ async function harness() {
     data,
     getReceiptAttachments: () => receipts.getReceiptAttachments(),
     readReceiptAttachment: id => receipts.readReceiptAttachment(id),
+    pickReceiptAttachments: kind => receipts.pickReceiptAttachments(kind),
     onClose: () => {
       closed++;
     },
@@ -210,6 +212,126 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="1"]');
   await h.click('[data-payroll-option="2"]');
 }
+
+test("BUSCAR oferece foto e arquivo, pré-seleciona comprovantes e envia só na rubrica confirmada", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  const remote = new File(["tray"], "bandeja.pdf", { type: "application/pdf" });
+  const photo = new File(["photo"], "foto.png", { type: "image/png" });
+  const pdf = new File(["device"], "telefone.pdf", { type: "application/pdf" });
+  h.tray.push({ id: "remote", fileName: remote.name, file: remote });
+  const sources = [];
+  h.receipts.pickReceiptAttachments = async kind => {
+    sources.push(kind);
+    return kind === "photo" ? [photo] : [pdf];
+  };
+  await h.click('[data-payroll-receipts="salary"]');
+  assert.deepEqual([...doc.querySelector('.payroll-receipt-actions').children].map(n => n.textContent), ["Cancelar", "BUSCAR", "Continuar"]);
+  doc.querySelector('[data-receipt-id="remote"]').checked = true;
+  for (const kind of ["photo", "file"]) {
+    await h.click("[data-receipt-search]");
+    assert.match(doc.querySelector("[data-receipt-sources]").textContent, /foto.*arquivo/i);
+    await h.click('[data-receipt-source="' + kind + '"]');
+  }
+  assert.deepEqual(sources, ["photo", "file"]);
+  assert.equal(doc.querySelectorAll('[data-receipt-id]:checked').length, 3);
+  assert.equal(doc.querySelector('[data-payroll-rubric=salary] .supplier-payroll-file-list').textContent, "");
+  assert.equal(h.posts.length, 0);
+  await h.click("[data-receipt-confirm]");
+  assert.equal(doc.querySelector("[data-receipt-picker]"), null);
+  assert.equal(doc.querySelector('[data-payroll-rubric=salary] .supplier-payroll-file-list').textContent, "bandeja.pdf×foto.png×telefone.pdf×");
+  assert.equal(doc.querySelector('[data-payroll-rubric=allowance] .supplier-payroll-file-list').textContent, "");
+  assert.deepEqual(h.reads, ["remote"]);
+  h.input("[name=salary-value]", "100");
+  h.input("[name=salary-account]", "3");
+  await h.click("[data-payroll-next]");
+  await h.click('[data-payroll-option="4"]');
+  await h.click('[data-payroll-option="5"]');
+  await h.click("[data-payroll-post]");
+  const files = h.posts[0].lines.find(line => line.rubric === "salary").files;
+  assert.deepEqual(files.map(f => f.name), [remote.name, photo.name, pdf.name]);
+  assert.deepEqual(await Promise.all(files.map(f => f.text())), ["tray", "photo", "device"]);
+  assert.equal(h.tray.length, 1);
+});
+
+test("BUSCAR funciona com bandeja vazia e cancelamento da busca preserva a seleção", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  const file = new File(["pdf"], "novo.pdf", { type: "application/pdf" });
+  h.receipts.pickReceiptAttachments = async () => [file];
+  await h.click('[data-payroll-receipts="salary"]');
+  assert.equal(doc.querySelector("[data-receipt-search]").disabled, false);
+  await h.click("[data-receipt-search]");
+  await h.click('[data-receipt-source="file"]');
+  assert.equal(doc.querySelectorAll('[data-receipt-id]:checked').length, 1);
+  assert.doesNotMatch(doc.querySelector(".payroll-receipt-options").textContent, /vazia/);
+  h.receipts.pickReceiptAttachments = async () => [];
+  await h.click("[data-receipt-search]");
+  await h.click('[data-receipt-source="photo"]');
+  assert.equal(doc.querySelectorAll('[data-receipt-id]:checked').length, 1);
+  assert.equal(doc.querySelector("[data-receipt-error]").hidden, true);
+  await h.click("[data-receipt-confirm]");
+  await h.click('[data-payroll-receipts="salary"]');
+  const linked = doc.querySelector("[data-receipt-id]");
+  assert.equal(linked.disabled, true);
+  assert.match(linked.parentElement.textContent, /novo.pdf.*já vinculado/);
+});
+
+test("BUSCAR valida o lote inteiro e mantém arquivos escolhidos após erro ou nomes duplicados", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  await h.click('[data-payroll-receipts="salary"]');
+  for (const result of [
+    [new File(["ok"], "valido.pdf"), new File(["bad"], "invalido.exe")],
+    [new File(["a"], "igual.pdf"), new File(["b"], "igual.pdf")],
+  ]) {
+    h.receipts.pickReceiptAttachments = async () => result;
+    await h.click("[data-receipt-search]");
+    await h.click('[data-receipt-source="file"]');
+    assert.equal(doc.querySelector("[data-receipt-error]").hidden, false);
+    assert.equal(doc.querySelectorAll("[data-receipt-id]").length, 0);
+    assert.equal(doc.querySelector("[data-receipt-confirm]").disabled, true);
+  }
+  h.receipts.pickReceiptAttachments = async () => [new File(["ok"], "escolhido.pdf")];
+  await h.click("[data-receipt-search]");
+  await h.click('[data-receipt-source="file"]');
+  h.receipts.pickReceiptAttachments = async () => { throw new Error("Permissão negada"); };
+  await h.click("[data-receipt-search]");
+  await h.click('[data-receipt-source="photo"]');
+  assert.match(doc.querySelector("[data-receipt-error]").textContent, /Permissão negada/);
+  assert.equal(doc.querySelectorAll('[data-receipt-id]:checked').length, 1);
+  await h.click("[data-receipt-confirm]");
+  assert.match(doc.querySelector(".supplier-payroll-file-list").textContent, /escolhido.pdf/);
+});
+
+test("BUSCAR não abre duas buscas nem confirma enquanto aguarda e descarta resultado após fechar", async t => {
+  const h = await harness();
+  t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  let resolve, count = 0;
+  h.receipts.pickReceiptAttachments = () => { count++; return new Promise(r => { resolve = r; }); };
+  for (const close of ["cancel", "view"]) {
+    await h.click('[data-payroll-receipts="salary"]');
+    await h.click("[data-receipt-search]");
+    await h.click('[data-receipt-source="file"]');
+    assert.equal(doc.querySelector("[data-receipt-confirm]").disabled, true);
+    doc.querySelector('[data-receipt-source="photo"]').click();
+    assert.equal(count, close === "cancel" ? 1 : 2);
+    if (close === "cancel") await h.click("[data-receipt-cancel]");
+    else { h.view.close(); await h.view.open(); }
+    resolve([new File(["late"], "tardio.pdf")]);
+    await flush();
+    assert.equal(doc.querySelector("[data-receipt-picker]"), null);
+    assert.equal(doc.querySelector(".supplier-payroll-file-list").textContent, "");
+  }
+});
 
 test('payment account can be searched in its original payroll field', async t => {
   const h = await harness();

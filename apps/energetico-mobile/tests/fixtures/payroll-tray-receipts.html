@@ -8,6 +8,8 @@
 </head>
 <body><script type="module">
 import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
+import { createBrowserPorts } from '../../src/web/browser-ports.js';
+const ports = createBrowserPorts();
 const tray = [
   { id: '1', file: new File(['pdf'], 'Comprovante de pagamento salário & férias setembro 2026.pdf', {type:'application/pdf'}) },
   { id: '2', file: new File(['jpg'], 'recibo-transporte.jpeg', {type:'image/jpeg'}) },
@@ -15,6 +17,7 @@ const tray = [
 const view = createSupplierPayrollView({
   getReceiptAttachments: () => tray.map(item => ({id:item.id,fileName:item.file.name})),
   readReceiptAttachment: async id => tray.find(item => item.id === id).file,
+  pickReceiptAttachments: kind => kind === 'photo' ? ports.pickPhotos() : ports.pickDocuments(),
   data: {
     loadSuppliers: async () => [{id:'1',label:'MAURICIO HONORATO DE SOUZA',branch:'004 - EDIFÍCIO XAVANTE'}],
     loadProducts: async () => [{id:'2',label:'SERVENTE DE PEDREIRO'}],
