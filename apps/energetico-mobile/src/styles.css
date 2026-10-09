@@ -1,4 +1,5 @@
 @import './ui/report-print.css';
+@import './ui/rhid-monthly-report.css';
 @import './web/app-zoom-guard.css';
 
 :root {

@@ -905,6 +905,8 @@ export function createAppController({
   cargosDataFactory = async options => (await import('./chat/cargos-data.js')).createCargosData(options),
   attendanceSummaryFactory = defaultAttendanceSummaryFactory,
   attendanceSummaryDataFactory = defaultAttendanceSummaryDataFactory,
+  rhidMonthlyFactory = async options => (await import('./ui/rhid-monthly-report-view.js')).createRhidMonthlyReportView(options),
+  rhidMonthlyDataFactory = async options => (await import('./chat/rhid-monthly-data.js')).createRhidMonthlyData(options),
   stageProgressFactory = defaultStageProgressFactory,
   stageProgressDataFactory = defaultStageProgressDataFactory,
   supplierPayrollReportFactory = defaultSupplierPayrollReportFactory,
@@ -1001,6 +1003,9 @@ export function createAppController({
   let attendanceSummaryReport = null;
   let attendanceSummaryOpening = null;
   let attendanceSummarySession = null;
+  let rhidMonthlyReport = null;
+  let rhidMonthlyOpening = null;
+  let rhidMonthlySession = null;
   let stageProgressReport = null;
   let stageProgressOpening = null;
   let stageProgressSession = null;
@@ -4339,6 +4344,81 @@ export function createAppController({
     panel?.destroy?.();
   }
 
+  function disposeRhidMonthlyReport() {
+    const session = rhidMonthlySession, panel = rhidMonthlyReport;
+    rhidMonthlySession = rhidMonthlyReport = rhidMonthlyOpening = null;
+    session?.abort();
+    panel?.destroy?.();
+  }
+
+  async function openRhidMonthlyReport({ value: month } = {}) {
+    if (!account || stopped || flowBusy()) return false;
+    if (rhidMonthlyOpening) return rhidMonthlyOpening;
+    if (rhidMonthlyReport) return true;
+    const reportsAccount = account, reportsRevision = sessionRevision;
+    const lifetime = new AbortController();
+    rhidMonthlySession = lifetime;
+    const cancelled = () => new DOMException('Consulta cancelada.', 'AbortError');
+    const assertSession = () => {
+      if (stopped || account !== reportsAccount || sessionRevision !== reportsRevision
+        || rhidMonthlySession !== lifetime || lifetime.signal.aborted) throw cancelled();
+    };
+    async function query(operation, options = {}) {
+      assertSession();
+      if (options.signal?.aborted) throw cancelled();
+      const controller = new AbortController(), abort = () => controller.abort();
+      lifetime.signal.addEventListener('abort', abort, { once: true });
+      options.signal?.addEventListener('abort', abort, { once: true });
+      const check = () => { assertSession(); if (controller.signal.aborted) throw cancelled(); };
+      let rejectCancelled;
+      const cancellation = new Promise((_, reject) => { rejectCancelled = () => reject(cancelled()); });
+      controller.signal.addEventListener('abort', rejectCancelled, { once: true });
+      const tokenProvider = async scopes => { check(); const token = await auth.getToken(scopes); check(); return token; };
+      try {
+        const work = Promise.resolve().then(async () => { check(); const result = await operation({ ...options, signal: controller.signal }, tokenProvider); check(); return result; });
+        return await withTimeout(Promise.race([work, cancellation]), rhidReportTimeoutMs, 'A consulta mensal demorou demais. Tente novamente.');
+      } finally {
+        lifetime.signal.removeEventListener('abort', abort);
+        options.signal?.removeEventListener('abort', abort);
+        controller.signal.removeEventListener('abort', rejectCancelled);
+        controller.abort();
+      }
+    }
+    const data = {
+      loadSuppliers: options => query(async (request, tokenProvider) => {
+        const source = await rhidMonthlyDataFactory({ tokenProvider });
+        assertSession();
+        return source.loadSuppliers(request);
+      }, options),
+      loadMonth: (selectedMonth, options) => query(async () => client.getRhidAttendanceMonth(selectedMonth), options),
+    };
+    let cancelOpening;
+    const cancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
+    lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
+    const opening = Promise.resolve().then(async () => {
+      let panel;
+      try {
+        assertSession();
+        panel = await rhidMonthlyFactory({ data, document: globalThis.document, onClose: disposeRhidMonthlyReport });
+        try { assertSession(); } catch (error) { panel?.destroy?.(); throw error; }
+        rhidMonthlyReport = panel;
+        await panel.open({ month });
+        assertSession();
+        return true;
+      } catch (error) {
+        if (error?.name !== 'AbortError' && rhidMonthlySession === lifetime) setSessionError(error, 'Não foi possível abrir o relatório mensal RHID.');
+        if (rhidMonthlySession === lifetime) disposeRhidMonthlyReport();
+        return false;
+      }
+    });
+    const request = Promise.race([opening, cancellation]).finally(() => {
+      lifetime.signal.removeEventListener('abort', cancelOpening);
+      if (rhidMonthlyOpening === request) rhidMonthlyOpening = null;
+    });
+    rhidMonthlyOpening = request;
+    return request;
+  }
+
   function disposeStageProgressReport() {
     const session = stageProgressSession;
     const panel = stageProgressReport;
@@ -4625,6 +4705,7 @@ export function createAppController({
   }
 
   function resetMascotNavigationOverlays() {
+    disposeRhidMonthlyReport();
     // Legacy payment reports do not close other overlays on open. Invalidate
     // both the source and a superseded destination before showing another one.
     galleryOpeningRevision++;
@@ -8662,6 +8743,7 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    disposeRhidMonthlyReport();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
     disposeSupplierPayrollReport();
@@ -8759,6 +8841,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    disposeRhidMonthlyReport();
     pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
     rhidAttendanceReportRequests.clear();
@@ -9415,6 +9498,7 @@ export function createAppController({
         && ["select-reply", "send-text", "date-selected", "show-summary", "finish-flow"].includes(type)) {
         rhidAttendanceReportNavigationRevision += 1;
       }
+      if (rhidMonthlySession && ["select-reply", "send-text", "date-selected", "finish-flow"].includes(type)) disposeRhidMonthlyReport();
       return handler(command);
     }));
   }
@@ -9787,6 +9871,7 @@ export function createAppController({
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value, {
       replaceMessageId: command.messageId || "",
     }));
+    bind("open-rhid-monthly-report", openRhidMonthlyReport);
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
     bind("open-rhid-attendance-today", () => {
       if (!account || stopped || flowBusy()) return false;
@@ -9954,6 +10039,7 @@ export function createAppController({
   }
 
   function stop() {
+    disposeRhidMonthlyReport();
     pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
     pendingNoteLaunchProgress = null;

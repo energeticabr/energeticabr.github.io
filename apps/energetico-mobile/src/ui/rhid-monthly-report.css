@@ -1,0 +1,33 @@
+.chat-rhid-monthly-entry { width: 100%; margin: 0 0 1rem; min-height: 48px; }
+.rhid-monthly-overlay[hidden] { display: none; }
+.rhid-monthly-overlay { position: fixed; inset: 0; z-index: 1500; background: #092a3cb3; display: flex; align-items: center; justify-content: center; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+.rhid-monthly-dialog { box-sizing: border-box; width: min(1100px, 100%); max-height: 100%; overflow: auto; background: #fff; border-radius: 20px; padding: clamp(16px, 3vw, 28px); color: #173b4b; box-shadow: 0 12px 50px #0004; }
+.rhid-monthly-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rhid-monthly-header h2 { margin: 0 0 20px; font-size: clamp(20px, 2.5vw, 28px); }
+.rhid-monthly-dialog button { min-height: 44px; border-radius: 10px; border: 1px solid #abc5ce; padding: 10px 16px; font: inherit; cursor: pointer; }
+.rhid-monthly-close { background: #fff; font-size: 24px !important; flex: 0 0 auto; }
+.rhid-monthly-form { display: grid; gap: 16px; }
+.rhid-monthly-form label { display: grid; min-width: 0; gap: 8px; font-weight: 700; }
+.rhid-monthly-period { display: grid; grid-template-columns: minmax(0, 2fr) minmax(90px, 1fr); gap: 16px; }
+.rhid-monthly-form select, .rhid-monthly-form input { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; border: 1px solid #abc5ce; border-radius: 10px; padding: 10px; font: inherit; font-size: 16px; color: #173b4b; background: #f4f8fb; }
+.rhid-monthly-form .sfs-wrapper { min-width: 0; }
+.rhid-monthly-refresh { justify-self: start; background: #e7f2f9; color: #135577; }
+.rhid-monthly-actions { display: flex; justify-content: space-between; gap: 16px; }
+.rhid-monthly-cancel { background: #fff; color: #a01d28; }
+.rhid-monthly-generate { background: #07586b; color: #fff; font-weight: 700 !important; }
+.rhid-monthly-dialog button:disabled { opacity: .5; cursor: default; }
+.rhid-monthly-notice { padding: 12px; background: #e7f2f9; border-radius: 10px; overflow-wrap: anywhere; }
+.rhid-monthly-notice[role="alert"], .rhid-monthly-warning { background: #fff0ef; color: #a21d27; padding: 12px; }
+.rhid-monthly-result { margin-top: 22px; min-width: 0; }
+.rhid-monthly-result h3 { overflow-wrap: anywhere; }
+.rhid-monthly-total { background: #deeee5; border: 1px solid #a9d0bd; padding: 16px; border-radius: 10px; font-weight: 700; }
+.rhid-monthly-legend { font-size: 14px; }
+.rhid-monthly-table-scroll { overflow-x: auto; max-width: 100%; }
+.rhid-monthly-table-scroll table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 16px; }
+.rhid-monthly-table-scroll caption { text-align: left; font-weight: 700; padding: 12px 0; }
+.rhid-monthly-table-scroll th, .rhid-monthly-table-scroll td { padding: 12px 10px; border: 1px solid #bbd1dc; white-space: nowrap; text-align: left; }
+.rhid-monthly-table-scroll th { background: #124f70; color: #fff; }
+.rhid-monthly-table-scroll tr:nth-child(even) { background: #eef5f9; }
+.rhid-monthly-table-scroll .rhid-monthly-row--incomplete { background: #fff0d8; }
+.rhid-monthly-table-scroll .rhid-monthly-issues td { white-space: normal; color: #9b3228; font-size: 14px; }
+@media (min-width: 800px) { .rhid-monthly-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .rhid-monthly-actions { grid-column: 1 / -1; } }
