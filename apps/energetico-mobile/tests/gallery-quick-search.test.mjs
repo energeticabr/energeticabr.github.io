@@ -187,3 +187,23 @@ for (const name of ['payments', 'recurring']) {
       'clearing search must skip per-row search preparation, while preserving structured filtering and card rendering');
   });
 }
+
+test('tasks: real internal date aliases and displayed creation timestamps are searchable', async t => {
+  const entry = galleryCases.find(value => value.name === 'tasks');
+  const dom = new JSDOM('<body></body>');
+  const row = { id: '91', createdDateTime: '2026-10-09T02:00:00Z', fields: {
+    STATUS: 'ATIVIDADE CRIADA', field_7: '2026-10-03T03:00:00Z', field_11: 'Inspeção' } };
+  const gallery = entry.factory(galleryOptions(entry, dom.window.document, { snapshot: { rows: [row] } }));
+  t.after(() => { gallery.destroy(); dom.window.close(); });
+  await gallery.open();
+  const root = dom.window.document.querySelector(entry.root);
+  assert.ok(root.textContent.includes('03/10/2026'));
+  assert.ok(root.textContent.includes('08/10/2026'));
+  const search = root.querySelector('[data-gallery-quick-search]');
+  for (const [value, expected] of [['03/10/2026', 1], ['08/10/2026', 1], ['09/10/2026', 0]]) {
+    search.value = value;
+    search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await settle();
+    assert.equal(root.querySelectorAll('[data-item-id]').length, expected, value);
+  }
+});

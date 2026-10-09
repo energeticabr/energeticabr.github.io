@@ -192,6 +192,67 @@ class DeployTests(unittest.TestCase):
         self.assertEqual((self.roots[1] / self.relative).read_bytes(), b"USER_LATE_CHANGE = 1\n")
         self.assertEqual(self.receipt()["status"], "rolled_back")
 
+    def test_drift_after_preinstall_digest_preserves_uninstalled_mirror(self):
+        real_digest = self.runner.digest
+        production = self.roots[0] / self.relative
+        mirror = self.roots[1] / self.relative
+        injected = False
+
+        def digest(path):
+            nonlocal injected
+            actual = real_digest(path)
+            if path == mirror and not injected and production.read_bytes() == self.candidate:
+                # Return the baseline already read by the runner, but change the
+                # file before changed.append and the wrapper's copy-time guard.
+                mirror.write_bytes(b"USER_LATE_CHANGE = 1\n")
+                injected = True
+            return actual
+
+        with patch.object(self.runner, "digest", side_effect=digest), patch.object(self.runner, "restart"), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "drift"):
+                deploy.execute(self.manifest)
+        self.assertTrue(injected)
+        self.assertEqual(mirror.read_bytes(), b"USER_LATE_CHANGE = 1\n")
+        self.assertEqual(production.read_bytes(), self.originals[0])
+        receipt = self.receipt()
+        self.assertEqual(receipt["status"], "rollback_incomplete")
+        self.assertTrue(any("Concurrent source change preserved" in error and str(mirror) in error
+                            for error in receipt["errors"]), receipt["errors"])
+        for root in self.roots:
+            self.assertEqual((root / "worker/workflow.py").read_bytes(), b"OTHER_MODULE = 1\n")
+
+    def test_drift_after_preinstall_digest_preserves_uninstalled_production(self):
+        real_digest = self.runner.digest
+        production = self.roots[0] / self.relative
+        preflight_complete = False
+        injected = False
+
+        def health():
+            nonlocal preflight_complete
+            preflight_complete = True
+            return {"status": "ok"}
+
+        def digest(path):
+            nonlocal injected
+            actual = real_digest(path)
+            if path == production and preflight_complete and not injected:
+                # The first target digest after preflight/backup is the runner's
+                # immediate-before-install check, not the wrapper's copy guard.
+                production.write_bytes(b"USER_LATE_CHANGE = 1\n")
+                injected = True
+            return actual
+
+        with patch.object(self.runner, "digest", side_effect=digest), patch.object(self.runner, "health", side_effect=health), patch.object(self.runner, "restart"), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "drift"):
+                deploy.execute(self.manifest)
+        self.assertTrue(injected)
+        self.assertEqual(production.read_bytes(), b"USER_LATE_CHANGE = 1\n")
+        self.assertEqual((self.roots[1] / self.relative).read_bytes(), self.originals[1])
+        receipt = self.receipt()
+        self.assertEqual(receipt["status"], "rollback_incomplete")
+        self.assertTrue(any("Concurrent source change preserved" in error and str(production) in error
+                            for error in receipt["errors"]), receipt["errors"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

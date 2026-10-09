@@ -62,9 +62,9 @@ From the shared worktree root on this Windows host:
 ```powershell
 $env:PYTHONPATH = 'C:/Users/Bernardonotini/AppData/Local/Temp/energetica-gallery-search-python-deps'
 $taskPython = 'C:/Users/Bernardonotini/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
-& $taskPython backend-patches/launch-gallery-quick-search/test_quick_search.py
-& $taskPython backend-patches/launch-gallery-quick-search/test_deploy.py
-& $taskPython backend-patches/launch-payroll-per-payment/test_deploy.py -v
+& $taskPython -B backend-patches/launch-gallery-quick-search/test_quick_search.py
+& $taskPython -B backend-patches/launch-gallery-quick-search/test_deploy.py
+& $taskPython -B backend-patches/launch-payroll-per-payment/test_deploy.py -v
 ```
 
 Search tests exercise the versionable candidate. GALLERY_SOURCE can select another
@@ -72,12 +72,39 @@ root containing worker/. GALLERY_FIXTURE_SOURCE selects existing offline tests;
 its default is apps/energetico-mobile/.superpowers/single-launch-candidate.
 Only the existing SharePoint boundary fixture is reused; no VM test files are fetched.
 
-Focused validation: 25 search tests, 38 existing launch tests, 5 existing HTTP
-bridge tests, 13 new wrapper tests and 7 unchanged shared-runner tests.
+To reproduce the single combined focused run, after defining taskPython/PYTHONPATH:
+
+```powershell
+$taskFocusedRun = @'
+import runpy, sys, unittest
+quick = runpy.run_path("backend-patches/launch-gallery-quick-search/test_quick_search.py", run_name="gallery_loader")
+print("Backend under test:", sys.modules["launch_gallery"].__file__)
+sys.path.insert(0, str(quick["FIXTURE_SOURCE"]))
+wrapper = runpy.run_path("backend-patches/launch-gallery-quick-search/test_deploy.py", run_name="gallery_wrapper_loader")
+shared = runpy.run_path("backend-patches/launch-payroll-per-payment/test_deploy.py", run_name="shared_runner_loader")
+bridge = runpy.run_path(str(quick["FIXTURE_SOURCE"] / "tests/test_launch_gallery_bridge.py"), run_name="bridge_loader")
+classes = [quick["QuickSearchTests"], quick["fixtures"].LaunchGalleryTests, wrapper["DeployTests"], shared["DeployTests"], bridge["GalleryBridgeTests"]]
+suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(case) for case in classes)
+result = unittest.TextTestRunner(verbosity=2).run(suite)
+raise SystemExit(not result.wasSuccessful())
+'@
+& $taskPython -B -c $taskFocusedRun
+if ($LASTEXITCODE -ne 0) { throw 'Focused backend tests failed' }
+```
+
+Focused validation in one run: 90 passing tests: 25 search tests, 38 existing
+launch tests, 5 existing HTTP bridge tests, 15 wrapper tests and 7 unchanged
+shared-runner tests.
 Search failed on the freshly fetched baseline before rebasing; HTML entity/
 markup/script/style regressions failed before extraction. The UTC-prefix negative
 regression already passed the backend's civil-date logic. Unrelated full suites
 were not run.
+
+Two new regressions first failed with USER_LATE_CHANGE overwritten by the saved
+baseline. They inject the change after the shared runner reads its immediately-
+before-install digest but before the wrapper's copy-time digest, for production
+and mirror separately. Both now pass; the mirror case also verifies that already-
+installed production is restored to its own baseline.
 
 ## Wrapper and deployment authority
 
@@ -95,11 +122,22 @@ owns the manifest digest CLI gate, lock, verified backups, atomic installation,
 owner/mode preservation, restart, health checks, independent rollback and receipts.
 Its existing launch-payroll-per-payment backup prefix is retained.
 
+The wrapper protects uninstalled targets when its digest guard detects drift.
+Because the shared runner appends changed before calling atomic_copy, a rejected
+install can still be in its rollback list. Any rollback copy to that protected
+target is rejected with "Concurrent source change preserved; rollback copy
+blocked: <target>". The runner continues its independent restores and records
+rollback_incomplete rather than falsely reporting rolled_back. No shared runner
+code/hash changes are needed.
+
 Local wrapper tests cover differing/swapped baselines, target/candidate drift,
 manifest scope/metadata, mid-check/late drift, install/restart failure, complete/
 incomplete rollback and unrelated-file preservation. Service and health boundaries
 are replaced only in these temporary-directory tests.
 
 See commands.md for the main agent's staging/check/deploy commands.
+For the existing stage, the main agent should reupload only deploy.py using the
+wrapper-only commands and the new pin. Candidate/manifest/runner pins are unchanged
+by this wrapper fix; the main agent's separate field_7 alias fix is out of scope.
 This agent performed only read-only VM hashes/stat/source reads; no remote stage,
 lock, bytecode, backup, restart or deployment was created/executed. No commit.

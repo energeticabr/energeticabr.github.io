@@ -65,14 +65,20 @@ def execute(manifest, check_only=False):
 
     original_digest, original_copy = runner.digest, runner.atomic_copy
     installed = set()
+    protected_targets = set()
 
     def guarded_digest(path):
         actual = original_digest(path)
         if path in targets and path not in installed and actual != targets[path]:
+            protected_targets.add(path)
             raise RuntimeError("Live source drift: " + str(path))
         return actual
 
     def guarded_copy(source, target, attributes=None):
+        if target in protected_targets:
+            # The runner records changed before calling us. If we rejected an
+            # uninstalled target, its rollback must not overwrite concurrent work.
+            raise RuntimeError("Concurrent source change preserved; rollback copy blocked: " + str(target))
         if target in sources and source == sources[target]:
             guarded_digest(target)
             installed.add(target)

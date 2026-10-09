@@ -375,7 +375,13 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     filteredRows = sortRows(rows.filter(row => {
       const fields = row.fields || {};
       if (query && !matchesGallerySearch(query, [row.id, status(fields, today),
-        ...Object.entries(fields).flatMap(([name, value]) => [value, formatDate(name, value)])])) return false;
+        ...Object.entries(fields).flatMap(([name, value]) => [value,
+          /cria|created|modific|modified/i.test(name) ? formatTimestamp(value) : formatDate(name, value)]),
+        formatDate('DATA FATAL', dueDate(fields)), formatDate('DATA INÍCIO', startDate(fields)),
+        formatDate('DATA CONCLUSÃO', field(fields, ['DATA CONCLUSÃO', 'DATA CONCLUSAO', 'field_8'])),
+        createdDate(fields, row), createdDate(fields, row) ? formatTimestamp(createdDate(fields, row)) : '',
+        row.lastModifiedDateTime, row.lastModifiedDateTime ? formatTimestamp(row.lastModifiedDateTime) : '',
+      ])) return false;
       const taskStatus = status(fields, today);
       if (filterValues.status === DEFAULT_STATUS_FILTER) {
         if (!DEFAULT_TASK_STATUSES.some(value => normalized(value) === normalized(taskStatus))) return false;
