@@ -57,11 +57,15 @@ test('teclado real: Enter envia observação e Shift+Enter quebra linha no app e
       await enter();
       assert.deepEqual(await evaluate('window.sent'),[expected]);
       assert.equal(await evaluate(`document.querySelector('[data-role=draft]').value`),'');
+      await send('Input.insertText',{text:'Arame comprado com Marcos arcelor'},sessionId);
+      await evaluate(`document.querySelector('[data-reply-id="yes"]').click()`);
+      assert.deepEqual(await evaluate('window.sent'),[expected,'Arame comprado com Marcos arcelor']);
+      assert.equal(await evaluate(`document.querySelector('[data-role=draft]').value`),'');
       await evaluate('window.changeQuestion()');
       await send('Input.insertText',{text:'Produto'},sessionId);
       await enter();
       assert.equal(await evaluate(`document.querySelector('[data-role=draft]').value`),'Produto\n');
-      assert.deepEqual(await evaluate('window.sent'),[expected]);
+      assert.deepEqual(await evaluate('window.sent'),[expected,'Arame comprado com Marcos arcelor']);
     }
   } finally {
     for(const p of pending.values())clearTimeout(p.timer);socket?.close();
