@@ -6,7 +6,13 @@ test('reference payroll layout fits horizontal phone tablet desktop with blue wh
   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/supplier-payroll-reference-layout.html`});const dom=new JSDOM(stdout);const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);layout.content=JSON.parse(dom.window.document.documentElement.dataset.contentBounds);layout.metricValues=JSON.parse(dom.window.document.documentElement.dataset.metricValues);dom.window.close();t.diagnostic(JSON.stringify(layout));
   assert.equal(layout.width,width);assert.ok(layout.overflow<=1);assert.ok(layout.contentOverflow<=1);assert.equal(layout.filterCount,3);assert.equal(layout.logoLoaded,true);assert.ok(layout.logo.bottom<=layout.toolbar.bottom+1);
   const pickerDom=new JSDOM(stdout),pickerArrows=JSON.parse(pickerDom.window.document.documentElement.dataset.pickerArrows);pickerDom.window.close();
-  for(const {field,arrow} of pickerArrows)assert.ok(arrow.left>=field.left-1&&arrow.right<=field.right+1&&arrow.top>=field.top-1&&arrow.bottom<=field.bottom+1,'picker arrow remains inside its field');
+  assert.equal(pickerArrows.length,3,'all three visible payroll filter arrows are checked');
+  for(const {field,arrow,fill,color,inputFill} of pickerArrows){
+   assert.ok(arrow.left>=field.left-1&&arrow.right<=field.right+1&&arrow.top>=field.top-1&&arrow.bottom<=field.bottom+1,'picker arrow remains inside its field');
+   assert.equal(fill,'rgb(18, 62, 99)','every payroll filter arrow has the report blue fill');
+   assert.equal(color,'rgb(255, 255, 255)','the arrow stays visible with white contrast on blue');
+   assert.equal(inputFill,'rgb(255, 255, 255)','the selected value field remains white');
+  }
   assert.deepEqual(layout.summaryColors,['rgb(210, 228, 242)','rgb(255, 255, 255)','rgb(210, 228, 242)','rgb(255, 255, 255)']);assert.deepEqual(layout.paymentColors,['rgb(210, 228, 242)','rgb(255, 255, 255)','rgb(210, 228, 242)']);
   assert.equal(layout.arrows.length,2);for(const arrow of layout.arrows)assert.ok(Math.abs(arrow.center-height/2)<=1,'arrow uses shared viewport midpoint');
   assert.ok(layout.summaryBounds.every(summary=>summary.left-layout.content.left<=9&&layout.content.right-summary.right<=26),'supplier rows use the entire white content area instead of reserving arrow gutters');
