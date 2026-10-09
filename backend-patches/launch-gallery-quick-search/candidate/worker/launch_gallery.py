@@ -12,7 +12,8 @@ Contract additions:
 * Creates require engine.state_store with atomic load/save CAS, as in WorkflowEngine.
 * LaunchGalleryError is a ValueError with code, status and safe details. Never
   serialize its chained exception. Incomplete creates must reuse requestId.
-* filterOptions and totals cover all matching results before UI pagination.
+* filterOptions covers the full authorized dataset; totals cover matching results.
+  Both are independent of UI pagination.
 * Attachment operations check the parent version immediately before their
   endpoint call; SharePoint does not offer a transaction across these resources.
 

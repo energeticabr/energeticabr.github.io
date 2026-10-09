@@ -24,7 +24,7 @@ ssh -i $taskKey -o BatchMode=yes $taskVm 'sha256sum /home/opc/energetica-build/w
 
 Compare all five staged digests with the local digests before invoking the CLI.
 The manifest SHA-256 is
-`22d741d9bae0800c12e1b2e2b93b9dab6783db64cc98c19128c36b4b5d19fe73`.
+`a7164c303522eeea09dc7a73ce2d554b967fa311c198e36d34249cee5030065a`.
 The new wrapper SHA-256 is
 `8a0b635de2eef8c73d2732dca6f01d934fdf1a2cfd71cb84ad69526686813c91`.
 The reused runner and candidate pins are listed in `README.md`.

@@ -36,7 +36,7 @@ Both live targets were checked read-only and match SHA-256
 `/opt/energetica-whatsapp/worker/launch_gallery.py` and
 `/home/opc/energetica-build/worker/launch_gallery.py`.
 The new candidate hash is
-`7bfb4b7621f0fa99b224613b72da7cd203eb55ba302de00040b0cf8e55b192ee`.
+`b4011552cacd3bff50ae7103a84e8ac86cec6315f373dd82f8ec8de90ee322f3`.
 
 The new stage is `/home/opc/gallery-filter-options-20261009/candidate`. The previous
 quick-search stage, manifest and backups are retained. The wrapper imports the
