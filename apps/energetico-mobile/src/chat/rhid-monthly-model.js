@@ -7,17 +7,20 @@ const hours=minutes=>`${String(Math.floor(minutes/60)).padStart(2,'0')}:${String
 export function buildRhidMonthlyReport({month,supplier,snapshot}={}){
  if(!isRhidReportMonth(month))throw new TypeError('Selecione um mês e ano válidos para o período.');
  if(!supplier?.id||!rhidNameKey(supplier.name))throw new TypeError('Selecione um fornecedor válido.');
- if(snapshot?.month!==month||!Array.isArray(snapshot.rows)||snapshot.partial||snapshot.truncated||snapshot.error)throw new TypeError('Consulta mensal inválida ou incompleta. Atualize o app e tente novamente.');
- const matched=[],identities=new Set();
+ if(snapshot?.month!==month||!Array.isArray(snapshot.rows)||!Array.isArray(snapshot.presentDates)||snapshot.partial||snapshot.truncated||snapshot.error||snapshot.aborted)throw new TypeError('Consulta mensal inválida ou incompleta. Atualize o app e tente novamente.');
+ const identities=new Set(),dates=new Set();
  for(const row of snapshot.rows){
   const date=String(row?.DATA_REFERENCIA??'').slice(0,10);
-  if(!row||typeof row!=='object'||!isValidRhidReportDate(date)||date.slice(0,7)!==month)throw new TypeError('Dados mensais inválidos ou incompletos.');
+  if(!row||typeof row!=='object'||!isValidRhidReportDate(date)||date.slice(0,7)!==month||!rhidNameKey(row.NOME_COLABORADOR))throw new TypeError('Dados mensais inválidos ou incompletos.');
+  dates.add(date);
   if(rhidNameKey(row.NOME_COLABORADOR)!==rhidNameKey(supplier.name))continue;
   const personId=String(row.ID_PESSOA_RHID??'').trim();
   if(!personId)throw new TypeError('Não foi possível confirmar a identidade RHID deste fornecedor.');
-  identities.add(personId);matched.push(row);
+  identities.add(personId);
  }
  if(identities.size>1)throw new TypeError('Identidade RHID ambígua: há pessoas diferentes com o mesmo nome. Corrija o cadastro antes de gerar.');
+ if(snapshot.presentDates.some(date=>!isValidRhidReportDate(date)||date.slice(0,7)!==month||!dates.has(date)))throw new TypeError('Calendário mensal inconsistente ou incompleto. Atualize e tente novamente.');
+ const identity=[...identities][0],matched=identity?snapshot.rows.filter(row=>String(row.ID_PESSOA_RHID??'').trim()===identity):[];
  const grouped=new Map();
  for(const row of matched){const date=String(row.DATA_REFERENCIA).slice(0,10);if(!grouped.has(date))grouped.set(date,[]);grouped.get(date).push(row);}
  const [year,number]=month.split('-').map(Number),length=new Date(Date.UTC(year,number,0)).getUTCDate();

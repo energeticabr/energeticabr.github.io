@@ -23,3 +23,11 @@ test('monthly calendar handles leap February and marks no records without invent
  const report=await build([],'2024-02');assert.equal(report.days.length,29);assert.equal(report.total,'00:00');assert.equal(report.recordedDays,0);assert.ok(report.days.every(d=>!d.recorded&&d.total===null));
  await assert.rejects(build([],'2026-13'),/mês|período/i);
 });
+test('monthly identity includes earlier names for the same RHID person',async()=>{
+ const report=await build([row('2026-10-01','07:00;12:00;13:00;17:00',{NOME_COLABORADOR:'MAURICIO DE SOUZA'}),row('2026-10-02','07:00;12:00;13:00;17:00')]);
+ assert.equal(report.total,'18:00');assert.equal(report.recordedDays,2);assert.equal(report.days[0].recorded,true);
+});
+test('inconsistent present dates and unnamed monthly rows cannot become empty reports',async()=>{
+ const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
+ for(const snapshot of [{month:'2026-10',presentDates:['2026-10-01'],rows:[]},{month:'2026-10',presentDates:[],rows:[row('2026-10-01','07:00',{NOME_COLABORADOR:''})]}])assert.throws(()=>buildRhidMonthlyReport({month:'2026-10',supplier,snapshot}),/incomplet|inválid/i);
+});

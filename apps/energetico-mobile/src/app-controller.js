@@ -4390,7 +4390,7 @@ export function createAppController({
         assertSession();
         return source.loadSuppliers(request);
       }, options),
-      loadMonth: (selectedMonth, options) => query(async () => client.getRhidAttendanceMonth(selectedMonth), options),
+      loadMonth: (selectedMonth, options) => query(async request => client.getRhidAttendanceMonth(selectedMonth, { signal: request.signal }), options),
     };
     let cancelOpening;
     const cancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });

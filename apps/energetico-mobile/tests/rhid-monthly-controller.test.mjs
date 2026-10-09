@@ -34,3 +34,8 @@ test('monthly panel from a late factory is discarded after controller stop',asyn
 test('closing monthly report invalidates its data source',async t=>{
  const h=setup(t);await h.controller.start();await h.view.emit('open-rhid-monthly-report');const panel=h.panels[0];panel.onClose();await assert.rejects(panel.data.loadMonth('2026-09'),{name:'AbortError'});assert.equal(panel.destroyed,1);
 });
+test('controller monthly transport receives the per-query cancellation signal',async t=>{
+ let signal,resolve;const pending=new Promise(r=>resolve=r);
+ const h=setup(t,{client:{sendText:async()=>({status:'processed',messages:[]}),getRhidAttendanceMonth:async(month,options)=>{signal=options?.signal;await pending;return {month,presentDates:[],rows:[]};}}});
+ await h.controller.start();await h.view.emit('open-rhid-monthly-report');const request=h.panels[0].data.loadMonth('2026-10');const rejected=assert.rejects(request,{name:'AbortError'});await tick();assert.ok(signal);h.panels[0].onClose();await rejected;assert.equal(signal.aborted,true);resolve();
+});
