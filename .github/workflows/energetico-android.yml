@@ -57,6 +57,7 @@ jobs:
         working-directory: apps/energetico-mobile
         run: |
           pnpm install --frozen-lockfile
+          timeout 10s /usr/bin/google-chrome --version
           node --test tests/browser-layout-runner.test.mjs
 
   signature-gesture-lock:

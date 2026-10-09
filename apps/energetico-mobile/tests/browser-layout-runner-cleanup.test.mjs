@@ -11,7 +11,7 @@ const ownedPid = 424242;
 const browserPath = '/devtools/browser/12345678-1234-4123-8123-123456789abc';
 const html = '<html data-layout="{&quot;ready&quot;:true}"><body>Measured</body></html>';
 
-function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, removalError, startupBusyAttempts = 0, startupError, endpointContents = [] } = {}) {
+function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, removalError, startupBusyAttempts = 0, startupError, endpointContents = [], startupTimeoutMs } = {}) {
   const child = new EventEmitter();
   Object.assign(child, { pid: ownedPid, exitCode: null, signalCode: null });
   const root = path.resolve('simulated-layout-tmp');
@@ -154,7 +154,7 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
   }, { filename: 'browser-layout-runner.mjs', timeout: 1000 });
   return {
     state,
-    run: () => run('simulated-owned-browser', { width: 740, height: 360, url: 'http://simulated-fixture' }),
+    run: () => run('simulated-owned-browser', { width: 740, height: 360, url: 'http://simulated-fixture', startupTimeoutMs }),
     audit() {
       assert.deepEqual(state.unsafe, [], 'cleanup must never address an unowned process or profile');
       assert.equal(state.socketsClosed, 1);
@@ -219,6 +219,15 @@ test('startup timeout diagnoses the selected browser and last incomplete endpoin
   assert.deepEqual(f.state.endpoints, []);
   assert.ok(f.state.exitObserved);
   assert.equal(f.state.removals.length, 1);
+});
+
+test('an explicit cold-start budget waits beyond the unchanged default before a complete endpoint', { timeout: 5000 }, async t => {
+  const f = fixture(t, { startupTimeoutMs: 20000, endpointContents: [...Array(110).fill(''), `12345\n${browserPath}`] });
+  const result = await f.run();
+  assert.equal(result.stdout, '<!doctype html>' + html);
+  assert.equal(f.state.endpointReads, 111);
+  assert.deepEqual(f.state.endpoints, [`ws://127.0.0.1:12345${browserPath}`]);
+  f.audit();
 });
 
 // Break: a transient Windows startup file lock aborts a valid layout capture.
