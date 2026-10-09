@@ -1,0 +1,15 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css"><title>RHID mensal — teste de layout</title></head><body><main id="app"></main><output id="layout-result"></output><script type="module">
+import {createRhidMonthlyReportView} from '../../src/ui/rhid-monthly-report-view.js';
+const supplier={id:'7',name:'HELISON ROSA LUIS — FORNECEDOR COM NOME EXTENSO PARA TESTE'};
+const view=createRhidMonthlyReportView({document,data:{loadSuppliers:async()=>[supplier],loadMonth:async month=>({month,presentDates:['2026-10-01'],rows:[{Id:'1',ID_PESSOA_RHID:'101',NOME_COLABORADOR:supplier.name,DATA_REFERENCIA:'2026-10-01',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}]})}});
+await view.open({month:'2026-10'});
+document.querySelector('[name="supplier"]').value='7';
+document.querySelector('form').requestSubmit();
+for(let i=0;i<100&&!document.querySelector('tbody');i++)await new Promise(resolve=>setTimeout(resolve,10));
+await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const controls=[...document.querySelectorAll('.rhid-monthly-period select,.rhid-monthly-period input,.rhid-monthly-actions button')].map(node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height,font:parseFloat(getComputedStyle(node).fontSize)};});
+const dialog=document.querySelector('.rhid-monthly-dialog'),table=document.querySelector('.rhid-monthly-table-scroll');
+document.querySelector('#layout-result').textContent=JSON.stringify({width:innerWidth,pageWidth:document.documentElement.scrollWidth,dialogWidth:dialog.clientWidth,dialogOverflow:dialog.scrollWidth>dialog.clientWidth+1,controls,rows:document.querySelectorAll('tbody tr').length,tableWidth:table.clientWidth,tableOverflow:table.scrollWidth>table.clientWidth});
+document.documentElement.dataset.ready='true';
+document.documentElement.dataset.layout='ready';
+</script></body></html>

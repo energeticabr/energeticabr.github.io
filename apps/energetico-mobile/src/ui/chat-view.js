@@ -2051,7 +2051,7 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
         <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
-      <p>${directToday ? `Presenças de hoje: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong>` : changingExistingReport ? "Escolha a nova data das presenças que deseja exibir." : "Escolha a data das presenças que deseja consultar."}</p>
+      ${directToday ? `<p>Presenças de hoje: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong></p>` : `<button class="chat-confirmation__confirm chat-rhid-monthly-entry" type="button" data-action="open-rhid-monthly-report" data-value="${escapeHtml(month || date.slice(0, 7))}">GERAR RELATÓRIO MENSAL</button>`}
       ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown, monthIrregularCounts)}
       ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
@@ -5126,7 +5126,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (datePickerOpen) {
       root.querySelector('[data-role="date-picker"]')?.focus?.();
     }
-    if (rhidAttendanceReportOpen) {
+    if (rhidAttendanceReportOpen && !root.inert) {
       const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog]');
       const focusTarget = rhidAttendanceReportBusy || rhidAttendanceReportError || rhidAttendanceMonthError
         ? reportDialog

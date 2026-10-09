@@ -24,6 +24,25 @@ async function acquireToken(tokenProvider) {
   return token;
 }
 
+function checkRequestCancellation(signal) {
+  if (signal?.aborted) throw new DOMException('Consulta cancelada.', 'AbortError');
+}
+
+async function cancellableToken(tokenProvider, signal) {
+  checkRequestCancellation(signal);
+  if (!signal) return acquireToken(tokenProvider);
+  let cancel;
+  const cancellation = new Promise((_, reject) => {
+    cancel = () => reject(new DOMException('Consulta cancelada.', 'AbortError'));
+    signal.addEventListener('abort', cancel, { once: true });
+  });
+  try {
+    const token = await Promise.race([acquireToken(scopes => tokenProvider(scopes, { signal })), cancellation]);
+    checkRequestCancellation(signal);
+    return token;
+  } finally { signal.removeEventListener('abort', cancel); }
+}
+
 function validIsoDate(value) {
   const text = String(value || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
@@ -129,8 +148,10 @@ export function createChatClient({
 
   async function request(url, options, read, readOnly = false, { retryTransient = false } = {}) {
     for (let attempt = 0; ; attempt++) {
+      checkRequestCancellation(options.signal);
       try {
         const result = await read(await fetchImpl(url, apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options));
+        checkRequestCancellation(options.signal);
         if (apiPrefix === "/api/demo" && result?.status === "processed") {
           // Server preview URLs must not become direct <img> network requests.
           // The controller builds local previews from validated fetchMedia blobs.
@@ -146,6 +167,7 @@ export function createChatClient({
         }
         return result;
       } catch (error) {
+        checkRequestCancellation(options.signal);
         const networkFailure = error instanceof TypeError || ["NetworkError", "AbortError"].includes(error?.name);
         const transientHttpFailure = retryTransient && (
           error?.transient === true
@@ -388,14 +410,16 @@ export function createChatClient({
     return result;
   }
 
-  async function getRhidAttendanceMonth(selectedMonth) {
+  async function getRhidAttendanceMonth(selectedMonth, { signal } = {}) {
     const month = String(selectedMonth || "").trim();
     if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) throw new Error("Selecione um mês válido para o calendário RHID.");
-    const token = await acquireToken(tokenProvider);
+    const token = await cancellableToken(tokenProvider, signal);
+    checkRequestCancellation(signal);
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ action: "rhid_attendance_month", month }),
+      ...(signal ? { signal } : {}),
       cache: "no-store", credentials: "omit",
     }, response => parsePortalResponse(response, "O calendário de presenças RHID", { allowRecovery: true }), true);
     const summary = result?.attendanceMonth;
