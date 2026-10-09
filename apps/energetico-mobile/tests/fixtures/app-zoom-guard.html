@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/web/attachment-preview.css"></head>
+<body><main id="app"><section class="chat-messages" style="height:250px;overflow:auto"><button id="menu">SUPRIMENTOS</button><div style="height:1000px">Menu</div></section><input id="search" class="launch-gallery-search" style="font-size:13px"><input id="large" style="font-size:22px"><textarea id="draft" style="font-size:14px"></textarea><div class="chat-signature-pad__surface"><canvas></canvas></div><div class="attachment-preview-pdf-viewport"><canvas></canvas></div></main><script type="module">
+import { installAppZoomGuard } from '/src/web/app-zoom-guard.js';
+import { createPowerBiDashboardView } from '/src/ui/powerbi-dashboard-view.js';
+if (new URLSearchParams(location.search).has('baseline')) {
+  document.querySelectorAll('link').forEach(link => link.disabled = true);
+} else installAppZoomGuard();
+window.touchDiagnostics = [];
+document.addEventListener('touchstart', event => window.touchDiagnostics.push({ target: event.target.className, touches: event.touches.length, cancelled: event.defaultPrevented }));
+window.zoomReport = createPowerBiDashboardView({ documentRef: document, powerBiClient: { models: { TokenType: { Aad: 0 } }, embed: () => ({ on() {}, off() {} }), reset() {} } });
+const measure = selector => getComputedStyle(document.querySelector(selector)).touchAction;
+const menu = { action: measure('#menu'), scroller: measure('.chat-messages'), searchSize: parseFloat(getComputedStyle(document.querySelector('#search')).fontSize), largeSize: parseFloat(getComputedStyle(document.querySelector('#large')).fontSize), draftSize: parseFloat(getComputedStyle(document.querySelector('#draft')).fontSize), signature: measure('.chat-signature-pad__surface'), pdf: measure('.attachment-preview-pdf-viewport') };
+const report = document.createElement('section'); report.className = 'powerbi-dashboard'; report.innerHTML = '<div class="powerbi-dashboard__frame-wrap"><iframe title="Report" src="about:blank"></iframe></div>'; document.body.append(report);
+const powerbi = { root: measure('html'), body: measure('body'), section: measure('.powerbi-dashboard'), frame: measure('.powerbi-dashboard__frame-wrap') };
+report.remove();
+document.documentElement.dataset.layout = JSON.stringify({ menu, powerbi, closed: measure('#menu') });
+</script></body></html>

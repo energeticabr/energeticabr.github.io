@@ -1,0 +1,8 @@
+/* Apply to nested scrollers too: touch-action is not inherited. Keep selector
+   specificity below the locked signature/drag surfaces' touch-action:none. */
+:where(html, body), html body :where(*) { touch-action: pan-x pan-y; }
+
+/* Power BI needs native page pinch. Photos/PDFs use local zoom controllers,
+   so they do not magnify the app shell or leave it zoomed after closing. */
+html:has(.powerbi-dashboard), body:has(.powerbi-dashboard),
+.powerbi-dashboard, .powerbi-dashboard :where(*) { touch-action: manipulation; }

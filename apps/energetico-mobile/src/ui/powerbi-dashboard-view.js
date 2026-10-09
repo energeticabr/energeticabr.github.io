@@ -1,4 +1,5 @@
 import { applyScreenNavigation } from "./screen-navigation.js";
+import { setAppPageZoomEnabled } from "../web/app-zoom-guard.js";
 export const POWERBI_REPORT_ID = "188c0311-65d4-40f8-9bb9-02090f44a0fb";
 export const POWERBI_EMBED_URL = `https://app.powerbi.com/reportEmbed?reportId=${POWERBI_REPORT_ID}`;
 export const POWERBI_REPORT_URL = `https://app.powerbi.com/groups/me/reports/${POWERBI_REPORT_ID}?experience=power-bi`;
@@ -55,6 +56,7 @@ export function createPowerBiDashboardView({
     const current = dialog;
     dialog = null;
     openRevision += 1;
+    setAppPageZoomEnabled(documentRef, false);
     void setNativePinchEnabled(false);
     report?.off?.("loaded", handleLoaded);
     report?.off?.("error", handleError);
@@ -161,6 +163,7 @@ export function createPowerBiDashboardView({
     dialog.addEventListener("click", handleClick);
     documentRef.addEventListener?.("keydown", handleKeydown);
     host.append(dialog);
+    setAppPageZoomEnabled(documentRef, true);
     closeButton.focus?.();
 
     const currentDialog = dialog;

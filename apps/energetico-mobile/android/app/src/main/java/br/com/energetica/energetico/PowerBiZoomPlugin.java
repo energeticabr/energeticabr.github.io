@@ -14,6 +14,7 @@ public class PowerBiZoomPlugin extends Plugin {
     private Boolean previousSupportZoom;
     private Boolean previousBuiltInZoomControls;
     private Boolean previousDisplayZoomControls;
+    private Float previousPageScale;
 
     @PluginMethod
     public void setEnabled(PluginCall call) {
@@ -36,17 +37,23 @@ public class PowerBiZoomPlugin extends Plugin {
                     previousSupportZoom = settings.supportZoom();
                     previousBuiltInZoomControls = settings.getBuiltInZoomControls();
                     previousDisplayZoomControls = settings.getDisplayZoomControls();
+                    previousPageScale = webView.getScale();
                 }
                 settings.setSupportZoom(true);
                 settings.setBuiltInZoomControls(true);
                 settings.setDisplayZoomControls(false);
             } else if (previousSupportZoom != null) {
+                float currentScale = webView.getScale();
+                if (previousPageScale != null && previousPageScale > 0 && currentScale > 0) {
+                    webView.zoomBy(previousPageScale / currentScale);
+                }
                 settings.setSupportZoom(previousSupportZoom);
                 settings.setBuiltInZoomControls(previousBuiltInZoomControls);
                 settings.setDisplayZoomControls(previousDisplayZoomControls);
                 previousSupportZoom = null;
                 previousBuiltInZoomControls = null;
                 previousDisplayZoomControls = null;
+                previousPageScale = null;
             }
             call.resolve();
         });

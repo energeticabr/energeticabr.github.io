@@ -3,6 +3,7 @@ import { createAuthService } from "./auth/auth-service.js";
 import { createNativeBootstrap } from "./demo/native-bootstrap.js";
 import { createNativePorts } from "./native/native-ports.js";
 import { MicrosoftAuth } from "./native/plugins.js";
+import { installAppZoomGuard } from "./web/app-zoom-guard.js";
 import "./styles.css";
 import "./ui/supplier-payroll.css";
 import "./ui/launch-gallery.css";
@@ -40,6 +41,7 @@ import "./web/attachment-preview.css";
 
 const root = globalThis.document?.querySelector("#app");
 if (root) {
+  installAppZoomGuard(globalThis.document);
   try {
     const auth = createAuthService(MicrosoftAuth, APP_CONFIG);
     const controller = createNativeBootstrap({ root, auth, config: APP_CONFIG, native: createNativePorts() });

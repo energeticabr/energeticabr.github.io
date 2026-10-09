@@ -10,6 +10,7 @@ import { createChatView } from "../ui/chat-view.js";
 import { createBrowserAuth } from "./browser-auth.js";
 import { createBrowserPorts } from "./browser-ports.js";
 import { createAttachmentPreview } from "./attachment-preview.js";
+import { installAppZoomGuard } from "./app-zoom-guard.js";
 import { bindAttachmentSync } from "./attachment-sync.js";
 import { bindPageLifecycle } from "./page-lifecycle.js";
 import { createRecoveryStorage } from "./recovery-storage.js";
@@ -55,6 +56,7 @@ const toolsRoot = globalThis.document?.querySelector("#app-tools");
 
 async function start() {
   if (!root) return;
+  installAppZoomGuard();
   const msalClient = new PublicClientApplication({
     auth: {
       clientId: APP_CONFIG.clientId,
