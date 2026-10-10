@@ -2467,7 +2467,7 @@ test("mantém anexos transferidos visíveis nos menus até entrar no próximo fl
   assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
 });
 
-test("cancelar a transferência permite que uma saída normal limpe os anexos", async t => {
+test("cancelar a transferência permite que uma saída por voltar limpe os anexos", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -2523,7 +2523,7 @@ test("cancelar a transferência permite que uma saída normal limpe os anexos", 
 
   await h.view.emit("transfer-attachments");
   await h.view.emit("select-reply", { replyId: "cancel-transfer", label: "CANCELAR" });
-  await h.view.emit("select-reply", { replyId: "navigation_main_menu", label: "RETORNAR AO MENU INICIAL" });
+  await h.view.emit("select-reply", { replyId: "navigation_back", label: "VOLTAR" });
 
   assert.deepEqual(h.store.getState().attachments, []);
   assert.doesNotMatch(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(/);
@@ -6495,7 +6495,7 @@ test('casinha descarta o fluxo mesmo com campos vazios e texto de filtro', async
   assert.match(h.store.getState().messages.at(-1).question, /QUAL ÁREA VOCÊ DESEJA ACESSAR/);
 });
 
-test('casinha abandona provisão pendente sem mostrar confirmação e limpa anexos', async () => {
+test('casinha abandona provisão pendente sem mostrar confirmação e limpa anexos já vinculados', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
   const activeFlow = { id: 'payment_provision', title: 'CRIAR UMA PROVISÃO DE PAGAMENTO', contextId: 'provision-1' };
   const calls = [];
@@ -6518,7 +6518,7 @@ test('casinha abandona provisão pendente sem mostrar confirmação e limpa anex
   h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É O VALOR?', options: [
     { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
   ] }], { activeFlow });
-  h.store.syncAttachments([{ id: 'file-1', fileName: 'conta.pdf', mediaUrl: '/api/portal-media/file-1' }]);
+  h.store.syncAttachments([{ id: 'file-1', fileName: 'conta.pdf', mediaUrl: '/api/portal-media/file-1', existing: true }]);
   h.store.setDraft('2000');
 
   assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
@@ -6545,15 +6545,207 @@ test('casinha sai mesmo com anexo ainda na fila e sem conferir anexos do formul�
   await h.controller.start();
   const before = calls.length;
   h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É O VALOR?', options: [] }], { activeFlow });
-  h.store.syncAttachments([{ id: 'confirmed-1', fileName: 'antigo.pdf', mediaUrl: '/api/portal-media/confirmed-1' }]);
+  h.store.syncAttachments([{ id: 'confirmed-1', fileName: 'antigo.pdf', mediaUrl: '/api/portal-media/confirmed-1', existing: true }]);
   h.store.queueFiles([Object.assign(new Blob(['novo'], { type: 'application/pdf' }), { name: 'novo.pdf' })]);
 
   assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
   assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu']);
   assert.equal(h.store.getState().activeFlow, null);
-  assert.deepEqual(h.store.getState().pendingFiles, []);
+  assert.deepEqual(h.store.getState().pendingFiles.map(item => item.file.name), ['novo.pdf']);
   assert.deepEqual(h.store.getState().attachments, []);
 });
+
+async function homeAttachmentHarness(t, { failTransfer = false } = {}) {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const flow = { id: 'launch', contextId: 'home-carry', title: 'EFETUAR LANÇAMENTO' };
+  const fresh = { id: 'novo', fileName: 'nao-submetido.pdf', mimeType: 'application/pdf', mediaUrl: '/api/portal-media/novo', size: 123 };
+  const existing = { id: 'antigo', fileName: 'ja-gravado.pdf', mimeType: 'application/pdf', mediaUrl: '/api/portal-media/antigo', existing: true };
+  const readOnly = { id: 'somente-leitura', fileName: 'outro-gravado.pdf', mediaUrl: '/api/portal-media/somente-leitura', readOnly: true };
+  const transferPrompt = { status: 'processed', activeFlow: { ...flow, contextId: 'transfer-confirmation', homeAttachmentTransfer: { requestId: 'home-selection', contextId: flow.contextId, attachmentIds: [fresh.id] } }, attachments: [fresh, existing, readOnly], messages: [{ type: 'poll', question: 'TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO? OS ANEXOS SERÃO TRANSFERIDOS PARA O PRÓXIMO FLUXO.', options: [{ id: 'portal_transfer_draft_discard', label: 'SIM, TRANSFERIR' }, { id: 'portal_transfer_cancel', label: 'NÃO, CONTINUAR' }] }] };
+  const menu = { status: 'processed', returned_to_main_menu: true, resetConversation: true, activeFlow: null, attachments: [fresh, existing, readOnly], results: [{ status: 'awaiting_action', portal_transfer_decision: 'transfer', stage: 'choosing_group' }], messages: [{ type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [] }] };
+  let transferred = false;
+  const calls = [];
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === 'portal_transfer_attachments') {
+      assert.deepEqual(payload.homeAttachmentIds, [fresh.id]);
+      assert.equal(payload.expectedContextId, flow.contextId);
+      return transferPrompt;
+    }
+    if (payload.replyId === 'portal_transfer_draft_discard') {
+      assert.deepEqual(payload.homeTransferReceipt, transferPrompt.activeFlow.homeAttachmentTransfer);
+      if (failTransfer) { failTransfer = false; throw new Error('rede interrompida'); }
+      transferred = true;
+      return menu;
+    }
+    if (payload.replyId === 'input_continue') return transferred ? menu : transferPrompt;
+    if (payload.replyId === 'group_supplies') return { ...menu, attachments: [] };
+    if (payload.replyId === 'new_launch') return { status: 'processed', activeFlow: { id: 'launch', contextId: 'next', title: 'EFETUAR LANÇAMENTO' }, attachments: [], messages: [{ type: 'poll', question: 'QUAL OPERAÇÃO?', options: [] }] };
+    if (payload.replyId === 'submit') return { status: 'processed', resetConversation: true, activeFlow: null, attachments: [fresh], results: [{ status: 'completed' }], messages: [{ type: 'text', text: 'LANÇAMENTO GRAVADO' }] };
+    throw new Error(`resposta inesperada: ${payload.replyId}`);
+  };
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL O VALOR?', options: [] }], { activeFlow: flow });
+  h.store.syncAttachments([fresh, existing, readOnly]);
+  h.store.setDraft('não enviar este texto');
+  return { ...h, calls };
+}
+
+test('casinha não confirma transferência de servidor antigo sem recibo seletivo', async t => {
+  const h = await homeAttachmentHarness(t);
+  const send = h.client.sendText;
+  h.client.sendText = async payload => {
+    const response = await send(payload);
+    if (payload.replyId === 'portal_transfer_attachments') delete response.activeFlow.homeAttachmentTransfer;
+    return response;
+  };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu' }), false);
+  assert.deepEqual(h.calls, ['portal_transfer_attachments']);
+  assert.equal(h.store.getState().attachments.length, 3);
+});
+
+test('reabrir app restaura anexos novos retidos no menu remoto sem marcadores locais', async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  h.client.sendText = async () => ({
+    status: 'processed', activeFlow: null, results: [{ status: 'awaiting_action', stage: 'choosing_group' }],
+    messages: [{ type: 'poll', question: 'ANEXO(S) RECEBIDO(S), DESEJA UTILIZAR ELES EM QUAL FLUXO?', options: [] }],
+    attachments: [
+      { id: 'novo', fileName: 'pendente.pdf', mediaUrl: '/api/portal-media/novo' },
+      { id: 'velho', fileName: 'gravado.pdf', mediaUrl: '/api/portal-media/velho', existing: true },
+    ],
+  });
+  await h.controller.start();
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['pendente.pdf']);
+});
+
+test('casinha transfere apenas anexos novos sem postar nem mostrar confirmação', async t => {
+  const h = await homeAttachmentHarness(t);
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu' }), true);
+  assert.deepEqual(h.calls, ['portal_transfer_attachments', 'portal_transfer_draft_discard']);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.store.getState().draft, '');
+  assert.match(renderChatMarkup(h.view.renders.at(-1)), /Anexos \(1\)/);
+  assert.equal(h.view.renders.some(state => state.messages.some(message => message.options?.some(option => option.id === 'portal_transfer_draft_discard'))), false);
+});
+
+test('casinha conserva anexos pelos menus e retomada até o novo fluxo e consome na postagem', async t => {
+  const h = await homeAttachmentHarness(t);
+  await h.view.emit('select-reply', { replyId: 'navigation_main_menu' });
+  await h.view.emit('retry-session');
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  await h.view.emit('select-reply', { replyId: 'group_supplies', label: 'SUPRIMENTOS' });
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  await h.view.emit('select-reply', { replyId: 'new_launch', label: 'LANÇAMENTO' });
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  assert.equal(h.store.getState().activeFlow.contextId, 'next');
+  await h.view.emit('select-reply', { replyId: 'submit', label: 'SUBMETER' });
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test('casinha retoma transferência interrompida sem apagar arquivos locais', async t => {
+  const h = await homeAttachmentHarness(t, { failTransfer: true });
+  h.store.queueFiles([Object.assign(new Blob(['pendente']), { name: 'local-pendente.txt' })]);
+  h.store.queueFiles([Object.assign(new Blob(['assinatura']), { name: 'assinatura-oculta.png' })], { hideFromAttachmentTray: true });
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu' }), false);
+  assert.equal(h.store.getState().attachments.length, 3);
+  await h.view.emit('retry-session');
+  assert.deepEqual(h.calls, ['portal_transfer_attachments', 'portal_transfer_draft_discard', 'input_continue', 'portal_transfer_draft_discard']);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  assert.deepEqual(h.store.getState().pendingFiles.map(item => item.file.name), ['local-pendente.txt']);
+});
+
+test('casinha reconhece origem existing de respostas antigas como anexo já submetido', async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.syncAttachments([{ id: 'old', fileName: 'gravado.pdf', mediaUrl: '/api/portal-media/old', origin: 'existing' }]);
+  h.client.sendText = async payload => {
+    assert.equal(payload.replyId, 'portal_confirm_main_menu');
+    return { status: 'processed', returned_to_main_menu: true, activeFlow: null, messages: [], attachments: [] };
+  };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu' }), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test('retomar em outro contexto encerra a transferência antes da postagem', async t => {
+  const h = await homeAttachmentHarness(t);
+  await h.view.emit('select-reply', { replyId: 'navigation_main_menu' });
+  const send = h.client.sendText;
+  h.client.sendText = async payload => payload.replyId === 'input_continue'
+    ? { status: 'processed', activeFlow: { id: 'launch', title: 'EFETUAR LANÇAMENTO', contextId: 'outra-postagem' }, attachments: [], messages: [{ type: 'poll', question: 'CONFIRMAR LANÇAMENTO?', options: [] }] }
+    : payload.replyId === 'submit'
+      ? { status: 'processed', resetConversation: true, attachments: [], results: [{ status: 'completed' }], messages: [{ type: 'text', text: 'GRAVADO' }] }
+      : send(payload);
+  await h.view.emit('retry-session');
+  await h.view.emit('select-reply', { replyId: 'submit', label: 'SUBMETER' });
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test('casinha retoma automaticamente mesmo se perder a resposta inicial da transferência', async t => {
+  const h = await homeAttachmentHarness(t);
+  const send = h.client.sendText;
+  h.client.sendText = async payload => {
+    const result = await send(payload);
+    if (payload.replyId === 'portal_transfer_attachments') {
+      const error = new Error('resposta perdida'); error.code = 'NETWORK_UNCERTAIN'; throw error;
+    }
+    return result;
+  };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu' }), false);
+  assert.equal(await h.view.emit('retry-session'), true);
+  assert.equal(h.store.getState().activeFlow, null);
+  assert.equal(h.store.getState().draft, '');
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  assert.deepEqual(h.calls, ['portal_transfer_attachments', 'input_continue', 'portal_transfer_draft_discard']);
+});
+
+test('retomada após transferência com envelope choosing_group limpa texto mas mantém arquivos', async t => {
+  const h = await homeAttachmentHarness(t);
+  const send = h.client.sendText;
+  let menu;
+  h.client.sendText = async payload => {
+    if (payload.replyId === 'input_continue' && menu) return { ...menu, returned_to_main_menu: undefined, resetConversation: undefined, portal_transfer_decision: undefined,
+      results: [{ status: 'awaiting_action', stage: 'choosing_group' }], messages: [{ type: 'poll', question: 'ANEXO(S) RECEBIDO(S), DESEJA UTILIZAR ELES EM QUAL FLUXO?', options: [] }] };
+    const result = await send(payload);
+    if (payload.replyId === 'portal_transfer_draft_discard') { menu = result; const error = new Error('resposta perdida'); error.code = 'NETWORK_UNCERTAIN'; throw error; }
+    return result;
+  };
+  h.store.queueFiles([Object.assign(new Blob(['local']), { name: 'local.txt' })]);
+  assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu' }), false);
+  assert.equal(await h.view.emit('retry-session'), true);
+  assert.equal(h.store.getState().draft, '');
+  assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ['nao-submetido.pdf']);
+  assert.deepEqual(h.store.getState().pendingFiles.map(item => item.file.name), ['local.txt']);
+});
+
+for (const phase of ['request', 'confirmation']) {
+  test(`casinha não transfere anexos para outra conta após sair durante ${phase}`, async t => {
+    const h = await homeAttachmentHarness(t);
+    const send = h.client.sendText;
+    let release, reached;
+    const waiting = new Promise(resolve => { reached = resolve; });
+    h.client.sendText = async payload => {
+      if (payload.replyId === (phase === 'request' ? 'portal_transfer_attachments' : 'portal_transfer_draft_discard')) {
+        const result = await send(payload);
+        reached();
+        await new Promise(resolve => { release = resolve; });
+        return result;
+      }
+      return send(payload);
+    };
+    const navigation = h.view.emit('select-reply', { replyId: 'navigation_main_menu' });
+    await waiting;
+    await h.view.emit('sign-out');
+    release();
+    assert.equal(await navigation, false);
+    assert.deepEqual(h.store.getState().attachments, []);
+    assert.equal(h.store.getState().activeText, null);
+    if (phase === 'request') assert.deepEqual(h.calls, ['portal_transfer_attachments']);
+  });
+}
 
 test('casinha retenta o descarte pendente sem reenviar a saída inicial após falha', async () => {
   const h = makeHarness({ historyMode: 'current-step' });
@@ -6622,7 +6814,7 @@ test('retomar conversa no menu elimina descarte antigo antes da próxima casinha
   assert.equal(await h.view.emit('retry-session'), true);
   assert.equal(h.store.getState().activeFlow, null);
   assert.equal(h.store.getState().draft, '');
-  assert.deepEqual(h.store.getState().pendingFiles, []);
+  assert.deepEqual(h.store.getState().pendingFiles.map(item => item.file.name), ['comprovante.pdf']);
   assert.equal(await h.view.emit('select-reply', { replyId: 'navigation_main_menu', label: '🏠 RETORNAR AO MENU INICIAL' }), true);
   assert.deepEqual(calls.slice(before), ['portal_confirm_main_menu', 'portal_draft_exit_discard', 'input_continue', 'portal_confirm_main_menu']);
 });
@@ -6784,7 +6976,7 @@ for (const decision of ['portal_draft_exit_save', 'portal_draft_exit_discard']) 
     h.store.ingestRemoteMessages([{ type: 'poll', question: 'Qual documento?', options: [
       { id: 'navigation_main_menu', label: 'RETORNAR AO MENU INICIAL' },
     ] }], { activeFlow });
-    h.store.syncAttachments([{ id: 'flow-file', fileName: 'contrato.pdf', mimeType: 'application/pdf', size: 123, mediaUrl: '/api/portal-media/flow-file' }]);
+    h.store.syncAttachments([{ id: 'flow-file', fileName: 'contrato.pdf', mimeType: 'application/pdf', size: 123, mediaUrl: '/api/portal-media/flow-file', existing: true }]);
     assert.equal(h.store.getState().attachments.length, 1);
 
     await h.view.emit('select-reply', { label: 'RETORNAR AO MENU INICIAL', replyId: 'navigation_main_menu' });

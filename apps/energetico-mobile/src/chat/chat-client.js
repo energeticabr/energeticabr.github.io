@@ -199,13 +199,23 @@ export function createChatClient({
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`
   );
 
-  async function sendText({ text = "", replyId, omitText = false } = {}) {
+  async function sendText({ text = "", replyId, omitText = false, homeAttachmentIds, expectedContextId, homeTransferReceipt } = {}) {
     const token = await acquireToken(tokenProvider);
     const blankEpiReply = EMPTY_EPI_REPLY_IDS.has(String(replyId || ""));
     const payload = {
       messageId: newMessageId(),
       ...(!(blankEpiReply || omitText) ? { text: String(text || "").trim() } : {}),
       ...(replyId ? { replyId: String(replyId) } : {}),
+      ...(Array.isArray(homeAttachmentIds) ? {
+        action: "home_attachment_transfer",
+        attachmentIds: [...homeAttachmentIds],
+        expectedContextId: String(expectedContextId || ""),
+      } : {}),
+      ...(homeTransferReceipt ? {
+        action: "home_attachment_transfer", operation: "confirm",
+        homeTransferReceipt: { requestId: homeTransferReceipt.requestId,
+          contextId: homeTransferReceipt.contextId, attachmentIds: [...homeTransferReceipt.attachmentIds] },
+      } : {}),
     };
     return request(chatUrl.href, {
       method: "POST",

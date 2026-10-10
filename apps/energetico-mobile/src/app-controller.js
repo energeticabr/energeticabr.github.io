@@ -664,6 +664,7 @@ function isMenuResult(result) {
   return result?.returned_to_main_menu === true
     || result?.resetConversation === true
     || stage === "choosing_group"
+    || (Array.isArray(result?.results) && result.results.some(item => item?.stage === "choosing_group"))
     || hasMenuPrompt
     || isMainMenuPrompt(responsePrompt);
 }
@@ -676,9 +677,11 @@ function hasAttachmentTransferPrompt(messages = []) {
 }
 
 function hasAttachmentTransferConfirmation(result = {}) {
+  if (result.portal_transfer_decision === "transfer") return true;
   if (result.attachmentsTransferred === true || result.attachments_transferred === true) return true;
   const resultFlags = Array.isArray(result.results) ? result.results : [];
-  if (resultFlags.some(item => item?.attachmentsTransferred === true || item?.attachments_transferred === true)) return true;
+  if (resultFlags.some(item => item?.attachmentsTransferred === true || item?.attachments_transferred === true
+    || item?.portal_transfer_decision === "transfer")) return true;
   const messages = Array.isArray(result.messages) ? result.messages : [];
   const confirmationText = normalizedChoiceText([
     result.message,
@@ -687,6 +690,13 @@ function hasAttachmentTransferConfirmation(result = {}) {
     ...messages.map(message => message?.question || message?.prompt || message?.text || message?.caption),
   ].filter(Boolean).join(" "));
   return /\banexos?\s+(?:foram\s+)?transferid[oa]s?\b/.test(confirmationText);
+}
+
+function hasCompletedSubmission(result = {}) {
+  return (Array.isArray(result.results) ? result.results : []).some(item => {
+    const status = String(item?.status || "").trim().toLowerCase();
+    return status === "completed" || status.endsWith("_completed") || status === "document_signed";
+  });
 }
 
 function isDifferentActiveFlow(previousFlow, nextFlow) {
@@ -982,6 +992,9 @@ export function createAppController({
   let account = null;
   let attachmentTransferPending = false;
   let attachmentTransferCompleted = false;
+  let homeAttachmentTransferPending = false;
+  let pendingHomeExit = null;
+  let homeAttachmentSelection = [];
   let finishingFlow = false;
   // Render an actionable login immediately. Session restoration is silent and
   // must never leave the first screen disabled while a native bridge responds.
@@ -3613,11 +3626,10 @@ export function createAppController({
     // resumed. Discard an older preview and its staged files instead of
     // promoting them to a recovery card every time the app opens.
     if (isMenuFlow(state.activeFlow) || isMenuResult(result)) {
-      // The main menu is a terminal boundary for the previous flow. Always
-      // discard its preview and attachment snapshot, even when the VM omits
-      // the explicit reset/returned flags and there is no local preview.
+      // Discard the previous form preview, but keep the authoritative tray
+      // when the VM retained unsubmitted files for the next flow.
       cancelAttachmentReminder();
-      store.syncAttachments([]);
+      if (result.preserveTransferredAttachmentTray !== true) store.syncAttachments([]);
       recoveryVerified = true;
       recoveryPreview = null;
       recoveryReference = null;
@@ -4033,7 +4045,44 @@ export function createAppController({
   }
 
   function returnToMainMenu() {
-    return sendText("", PORTAL_MAIN_MENU_CONFIRM_ID, { autoDiscardExit: true, requireMenuResult: true });
+    if (!account || stopped || flowBusy()) return false;
+    const flow = store.getState().activeFlow;
+    const eligible = unsubmittedUserAttachments(store.getState().attachments);
+    if (!pendingAutomaticExit) {
+      homeAttachmentSelection = eligible;
+      pendingHomeExit = { account, sessionRevision, flowId: String(flow?.id || ""), contextId: String(flow?.contextId || ""), attachmentIds: eligible.map(item => item.id) };
+    }
+    const hasUnsubmittedAttachments = eligible.length > 0;
+    if (hasUnsubmittedAttachments) {
+      attachmentTransferPending = true;
+      homeAttachmentTransferPending = true;
+      if (!pendingAutomaticExit) attachmentTransferCompleted = false;
+    }
+    return sendText("", hasUnsubmittedAttachments ? PORTAL_TRANSFER_ATTACHMENTS_ID : PORTAL_MAIN_MENU_CONFIRM_ID, {
+      autoDiscardExit: true, requireMenuResult: true, preserveHomeAttachments: true,
+      ...(hasUnsubmittedAttachments ? { homeAttachmentIds: pendingHomeExit.attachmentIds, expectedContextId: pendingHomeExit.contextId } : {}),
+    });
+  }
+
+  function unsubmittedUserAttachments(items = []) {
+    return items.filter(item => item?.existing !== true && item?.readOnly !== true && item?.origin !== "existing");
+  }
+
+  function transferredAttachmentSnapshot(result, previous = store.getState().attachments) {
+    const items = Array.isArray(result.attachments) && result.attachments.length ? result.attachments : previous;
+    if (!homeAttachmentTransferPending) return items;
+    return unsubmittedUserAttachments(items).filter(item => homeAttachmentSelection.some(selected =>
+      selected.id === item.id || (selected.fileName === item.fileName
+        && selected.mimeType === item.mimeType && selected.size === item.size)));
+  }
+
+  function matchesHomeTransferContext(flow, intent) {
+    const receipt = flow?.homeAttachmentTransfer;
+    return Boolean(receipt?.requestId && receipt.contextId === intent.contextId
+      && (!intent.homeTransferReceipt || receipt.requestId === intent.homeTransferReceipt.requestId)
+      && Array.isArray(receipt.attachmentIds)
+      && receipt.attachmentIds.length === intent.attachmentIds?.length
+      && receipt.attachmentIds.every((id, index) => id === intent.attachmentIds[index]));
   }
 
   function reconcilePendingAutomaticExit(result) {
@@ -4041,17 +4090,35 @@ export function createAppController({
     const flow = result?.activeFlow;
     const poll = latestAssistantPoll(result?.messages);
     const discard = (poll?.options || []).find(option =>
-      String(option?.reply || option?.id || "").trim() === "portal_draft_exit_discard");
+      String(option?.reply || option?.id || "").trim() === pendingAutomaticExit.replyId);
     if (pendingAutomaticExit.account !== account
       || pendingAutomaticExit.sessionRevision !== sessionRevision
       || !isDraftExitConfirmation(poll)
       || !discard
       || String(flow?.id || "") !== pendingAutomaticExit.flowId
-      || String(flow?.contextId || "") !== pendingAutomaticExit.contextId) {
+      || (pendingAutomaticExit.replyId === "portal_transfer_draft_discard"
+        ? !matchesHomeTransferContext(flow, pendingAutomaticExit)
+        : String(flow?.contextId || "") !== pendingAutomaticExit.contextId)) {
       pendingAutomaticExit = null;
       return;
     }
     pendingAutomaticExit.label = String(discard.label || pendingAutomaticExit.label);
+  }
+
+  function recoverHomeExitIntent(result) {
+    if (!pendingHomeExit || pendingAutomaticExit || pendingHomeExit.account !== account
+      || pendingHomeExit.sessionRevision !== sessionRevision) return;
+    const flow = result?.activeFlow;
+    if (String(flow?.id || "") !== pendingHomeExit.flowId
+      || (homeAttachmentTransferPending
+        ? !matchesHomeTransferContext(flow, pendingHomeExit)
+        : String(flow?.contextId || "") !== pendingHomeExit.contextId)) return;
+    const replyId = homeAttachmentTransferPending ? "portal_transfer_draft_discard" : "portal_draft_exit_discard";
+    const options = (latestAssistantPoll(result?.messages)?.options || []).filter(option =>
+      String(option?.reply || option?.id || "").trim() === replyId);
+    if (options.length !== 1) return;
+    pendingAutomaticExit = { ...pendingHomeExit, replyId, label: String(options[0].label || "SIM, ABANDONAR"), preserveHomeAttachments: true,
+      ...(homeAttachmentTransferPending ? { homeTransferReceipt: flow.homeAttachmentTransfer } : {}) };
   }
 
   async function openPowerBiDashboard() {
@@ -4211,6 +4278,7 @@ export function createAppController({
     currentAssistantPollSnapshot = null;
     cancelCompletionMenu();
     const conversationAccount = account;
+    const previousFlow = store.getState().activeFlow;
     const resumeDraftRevision = draftEditRevision;
     sessionError = null;
     resuming = true;
@@ -4236,12 +4304,15 @@ export function createAppController({
       }
       if (account !== conversationAccount || stopped) return false;
       const hadPendingAutomaticExit = Boolean(pendingAutomaticExit);
+      const preserveHomeAttachments = pendingAutomaticExit?.preserveHomeAttachments === true || Boolean(pendingHomeExit);
       reconcilePendingAutomaticExit(result);
+      recoverHomeExitIntent(result);
       let automaticExitCompleted = false;
       if (pendingAutomaticExit) {
         result = preparePresenceResult(await client.sendText({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
+          ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
         }));
         if (account !== conversationAccount || stopped) return false;
         if (!isMenuResult(result)) throw new Error("A VM não confirmou o retorno ao menu principal. Tente novamente.");
@@ -4252,8 +4323,25 @@ export function createAppController({
       // accidentally echo the previous flow metadata. Treat that response as
       // authoritative menu state so the old header cannot become resumable.
       const menuResult = isMenuResult(result);
+      // Startup restoration requires the actual VM menu stage, not only menu
+      // text paired with stale metadata/attachments from a completed flow.
+      const authoritativeMenuAttachments = !result.activeFlow && (
+        result.stage === "choosing_group" || result.results?.some(item => item?.stage === "choosing_group")
+      ) ? unsubmittedUserAttachments(result.attachments || []) : [];
+      if (menuResult && !hasCompletedSubmission(result) && authoritativeMenuAttachments.length && !attachmentTransferPending) {
+        attachmentTransferPending = true;
+        homeAttachmentTransferPending = true;
+        homeAttachmentSelection = authoritativeMenuAttachments;
+      }
+      const preserveTransferredAttachments = menuResult && attachmentTransferPending
+        && !hasCompletedSubmission(result)
+        && (attachmentTransferCompleted || hasAttachmentTransferConfirmation(result)
+          || authoritativeMenuAttachments.length > 0);
+      if (preserveTransferredAttachments) attachmentTransferCompleted = true;
       let ingestedResult = menuResult
-        ? { ...result, activeFlow: null, resetConversation: true, attachments: [] }
+        ? { ...result, activeFlow: null, resetConversation: true,
+          attachments: preserveTransferredAttachments ? transferredAttachmentSnapshot(result) : [],
+          ...(preserveTransferredAttachments ? { preserveTransferredAttachmentTray: true } : {}), }
         : result;
       if (menuResult) {
         clearLegacyDocumentLineSelection();
@@ -4278,9 +4366,18 @@ export function createAppController({
         resetConversation: ingestedResult.resetConversation === true,
         attachments: ingestedResult.attachments,
       });
-      if (menuResult && (hadPendingAutomaticExit || automaticExitCompleted)) {
+      if (menuResult && (hadPendingAutomaticExit || automaticExitCompleted || pendingHomeExit)) {
         store.setDraft("");
-        for (const file of store.getState().pendingFiles) store.discardFile(file.id);
+        for (const file of store.getState().pendingFiles) {
+          if (!preserveHomeAttachments || file.hideFromAttachmentTray === true) store.discardFile(file.id);
+        }
+        pendingHomeExit = null;
+      }
+      if (!menuResult && isDifferentActiveFlow(previousFlow, result.activeFlow)) {
+        attachmentTransferPending = false;
+        attachmentTransferCompleted = false;
+        homeAttachmentTransferPending = false;
+        pendingHomeExit = null;
       }
       recoveryUncertain = Boolean(paymentProvisionAutoReplyError);
       if (paymentProvisionAutoReplyError) {
@@ -8226,12 +8323,21 @@ export function createAppController({
       let result = preparePresenceResult(await client.sendText({
         text: operation.text,
         ...(replyId ? { replyId } : {}),
+        ...(!retryingAutomaticExit && behavior.homeAttachmentIds ? {
+          homeAttachmentIds: behavior.homeAttachmentIds, expectedContextId: behavior.expectedContextId,
+        } : {}),
+        ...(retryingAutomaticExit && pendingAutomaticExit?.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
       }));
       remoteResponseReceived = true;
       if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
       if (behavior.autoDiscardExit === true && isDraftExitConfirmation(latestAssistantPoll(result.messages))) {
+        const discardReplyId = behavior.preserveHomeAttachments === true && homeAttachmentTransferPending
+          ? "portal_transfer_draft_discard" : "portal_draft_exit_discard";
+        if (discardReplyId === "portal_transfer_draft_discard" && !matchesHomeTransferContext(result.activeFlow, pendingHomeExit)) {
+          throw new Error("A VM não confirmou a seleção dos anexos. Retome a conversa antes de continuar.");
+        }
         const discardOptions = (latestAssistantPoll(result.messages)?.options || []).filter(option =>
-          String(option?.reply || option?.id || "").trim() === "portal_draft_exit_discard");
+          String(option?.reply || option?.id || "").trim() === discardReplyId);
         if (discardOptions.length !== 1) throw new Error("Não foi possível abandonar o fluxo. Tente novamente.");
         pendingAutomaticExit = {
           account,
@@ -8239,12 +8345,17 @@ export function createAppController({
           flowId: String(previousState.activeFlow?.id || ""),
           contextId: String(previousState.activeFlow?.contextId || ""),
           label: String(discardOptions[0].label || "SIM, ABANDONAR"),
-          replyId: "portal_draft_exit_discard",
+          replyId: discardReplyId,
+          preserveHomeAttachments: behavior.preserveHomeAttachments === true,
+          ...(discardReplyId === "portal_transfer_draft_discard" ? {
+            attachmentIds: pendingHomeExit?.attachmentIds, homeTransferReceipt: result.activeFlow.homeAttachmentTransfer,
+          } : {}),
         };
         automaticExitDiscarded = true;
         result = preparePresenceResult(await client.sendText({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
+          ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
         }));
         if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
       }
@@ -8339,6 +8450,10 @@ export function createAppController({
       if (positioningSignature) invalidateSignaturePlacement({ clearOverride: true });
       attachmentRevision += 1;
       const menuResult = isMenuResult(result);
+      if (menuResult && behavior.preserveHomeAttachments === true && homeAttachmentTransferPending
+        && !attachmentTransferCompleted && !hasAttachmentTransferConfirmation(result)) {
+        throw new Error("A VM não confirmou a transferência dos anexos. Retome a conversa antes de continuar.");
+      }
       if (behavior.autoDiscardExit === true && menuResult) pendingAutomaticExit = null;
       if (behavior.autoDiscardExit === true && !menuResult && (automaticExitDiscarded || retryingAutomaticExit)) pendingAutomaticExit = null;
       const summaryStatus = result.results?.find(item => ["flow_summary", "no_active_flow", "flow_summary_failed"].includes(item.status))?.status;
@@ -8370,14 +8485,12 @@ export function createAppController({
           && (transferConfirmedInResponse || attachmentTransferCompleted))
         || (result.started_new_flow_with_inactivity_attachment === true
           && Array.isArray(result.attachments) && result.attachments.length > 0)
-      );
+      ) && !hasCompletedSubmission(result);
       const enteredNextTransferredFlow = attachmentTransferPending
         && attachmentTransferCompleted
         && !menuResult
         && isDifferentActiveFlow(previousState.activeFlow, result.activeFlow);
-      const transferAttachmentSnapshot = Array.isArray(result.attachments) && result.attachments.length
-        ? result.attachments
-        : previousState.attachments;
+      const transferAttachmentSnapshot = transferredAttachmentSnapshot(result, previousState.attachments);
       const effectiveResult = menuResult
         ? {
           ...result,
@@ -8389,13 +8502,11 @@ export function createAppController({
         : transferConfirmedInResponse
           ? {
             ...result,
-            attachments: Array.isArray(result.attachments) && result.attachments.length
-              ? result.attachments
-              : previousState.attachments,
+            attachments: transferAttachmentSnapshot,
             preserveTransferredAttachmentTray: true,
           }
           : enteredNextTransferredFlow && (!Array.isArray(result.attachments) || !result.attachments.length)
-            ? { ...result, attachments: previousState.attachments }
+            ? { ...result, attachments: transferAttachmentSnapshot }
           : result;
       if (menuResult) {
         lastPresenceValidationDate = "";
@@ -8416,8 +8527,11 @@ export function createAppController({
       let resumeEpiFinalize = false;
       if (confirmed) {
         if (behavior.autoDiscardExit === true && menuResult) {
+          pendingHomeExit = null;
           store.setDraft("");
-          for (const file of store.getState().pendingFiles) store.discardFile(file.id);
+          for (const file of store.getState().pendingFiles) {
+            if (behavior.preserveHomeAttachments !== true || file.hideFromAttachmentTray === true) store.discardFile(file.id);
+          }
         }
         if (epiQuantityAnswer && epiQuantityProduct && !isEpiQuantityQuestion(latestAssistantPoll(effectiveResult.messages))) {
           const key = epiDescriptionKey(epiQuantityProduct.description);
@@ -8450,12 +8564,14 @@ export function createAppController({
         if (transferPromptCancelled) {
           attachmentTransferPending = false;
           attachmentTransferCompleted = false;
+          homeAttachmentTransferPending = false;
         } else if (transferConfirmedInResponse
           && !isDifferentActiveFlow(previousState.activeFlow, result.activeFlow)) {
           attachmentTransferCompleted = true;
         } else if (enteredNextTransferredFlow || transferConfirmedInResponse) {
           attachmentTransferPending = false;
           attachmentTransferCompleted = false;
+          homeAttachmentTransferPending = false;
         }
         hydrateMediaPreviews();
         reconcileSavedFlow(effectiveResult, previousState);
@@ -9054,6 +9170,9 @@ export function createAppController({
     delegatedTasksRequest = null;
     attachmentTransferPending = false;
     attachmentTransferCompleted = false;
+    homeAttachmentTransferPending = false;
+    pendingHomeExit = null;
+    homeAttachmentSelection = [];
     signaturePlacementEditPending = false;
     invalidateSignaturePlacement({ clearOverride: true });
     account = null;
