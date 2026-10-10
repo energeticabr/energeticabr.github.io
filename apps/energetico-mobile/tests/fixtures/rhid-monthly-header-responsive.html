@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+  <title>RHID — geração mensal pelo cabeçalho</title>
+</head>
+<body>
+<main id="app"></main>
+<script type="module">
+import {createChatView} from '../../src/ui/chat-view.js';
+import {createRhidMonthlyReportView} from '../../src/ui/rhid-monthly-report-view.js';
+
+const view=createChatView(document.querySelector('#app'));
+const monthly=createRhidMonthlyReportView({document,data:{
+  loadSuppliers:async()=>Array.from({length:9},(_,i)=>({id:String(i+1),name:`FUNCIONÁRIO EXEMPLO ${i+1}`})),
+  loadMonth:async month=>({month,rows:[],presentDates:[]}),
+}});
+view.on('open-rhid-monthly-report',command=>monthly.open({month:command.value}));
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},draft:'Observação preservada',pendingFiles:[],messages:[{
+  id:'rhid',role:'assistant',type:'poll',question:'📊 RELATÓRIO DE PRESENÇAS RHID',options:[],
+  detail_table:{kind:'rhid_attendance',reportDate:'2026-09-28',headers:['Nome'],rows:[]},
+}]});
+
+await document.fonts.ready;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const box=node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+const button=document.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]');
+const result={width:innerWidth,pageWidth:document.documentElement.scrollWidth,button:button?{
+  ...box(button),label:button.textContent,font:parseFloat(getComputedStyle(button).fontSize),
+  overflow:button.scrollWidth>button.clientWidth+1||button.scrollHeight>button.clientHeight+1,
+}:null,nav:box(document.querySelector('.chat-flow-navigation')),actions:box(document.querySelector('.chat-flow-actions'))};
+if(new URLSearchParams(location.search).has('open')&&button){
+  button.click();
+  for(let i=0;i<100&&document.querySelector('[name="supplier"]').disabled;i++)await new Promise(resolve=>setTimeout(resolve,10));
+  result.form={month:document.querySelector('[name="month"]').value,year:document.querySelector('[name="year"]').value,
+    supplier:document.querySelector('[name="supplier"]').value,options:document.querySelector('[name="supplier"]').options.length};
+  monthly.close();
+  result.dailyDate=document.querySelector('.chat-rhid-date-navigation time').dateTime;
+  result.draft=document.querySelector('[data-role="draft"]').value;
+}
+document.documentElement.dataset.layout=JSON.stringify(result);
+document.documentElement.dataset.ready='true';
+</script>
+</body>
+</html>
