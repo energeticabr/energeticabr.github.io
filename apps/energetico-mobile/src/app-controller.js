@@ -3077,8 +3077,8 @@ export function createAppController({
     render();
   }
 
-  async function sendSettlementReply(text, replyId, targetAccount, targetRevision, onRequest, isCurrent) {
-    const sent = await sendText(text, replyId, { onRequest, isCurrent });
+  async function sendSettlementReply(text, replyId, targetAccount, targetRevision, onRequest, isCurrent, behavior = {}) {
+    const sent = await sendText(text, replyId, { ...behavior, onRequest, isCurrent });
     if (!sent || stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
     const transitioned = await waitForResponseTransition();
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
@@ -3099,17 +3099,23 @@ export function createAppController({
           diaryActive ? "ABANDONAR DIÁRIO DE OBRAS" : "",
           diaryActive ? "abandon_construction_diary" : PORTAL_MAIN_MENU_CONFIRM_ID,
           targetAccount, targetRevision,
+          undefined, undefined, { autoDiscardExit: true, requireMenuResult: !diaryActive },
         );
         if (!returned) return null;
         poll = currentAssistantPoll();
         if (isDraftExitConfirmation(poll)) {
-          setSessionError(new Error("Confirme na conversa se deseja abandonar o fluxo atual. Os dados pendentes serão perdidos; depois, solicite a baixa novamente."));
+          setSessionError(new Error("A VM não confirmou o abandono do fluxo anterior. A baixa não foi iniciada."));
           return null;
         }
         const diaryExit = pendingNoteOption(poll, "diary_partial_save_no");
         if (diaryExit) {
-          setSessionError(new Error("Confirme na conversa se deseja abandonar o diário atual antes de solicitar a baixa novamente."));
-          return null;
+          const discarded = await sendSettlementReply(
+            String(diaryExit.label || "SAIR SEM POSTAR AGORA"),
+            "diary_partial_save_no", targetAccount, targetRevision,
+            undefined, undefined, { autoDiscardExit: true, requireMenuResult: true },
+          );
+          if (!discarded) return null;
+          poll = currentAssistantPoll();
         }
         if (!isPortalGroupMenu(poll, currentAssistantActiveFlow())) {
           setSessionError(new Error("A VM não confirmou a saída do fluxo anterior. A baixa não foi iniciada."));
@@ -3407,7 +3413,9 @@ export function createAppController({
     const targetAccount = account;
     const targetRevision = sessionRevision;
     pendingProvisionSettlementPaymentId = id;
-    render();
+    // The check is an explicit shortcut: leave the notice immediately, then
+    // discard the old flow through the VM before selecting this provision.
+    hidePendingProvisionsForSettlement();
     try {
       let poll = currentAssistantPoll();
       if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) {
@@ -8113,6 +8121,8 @@ export function createAppController({
 
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
+    const sendingAccount = account;
+    const sendingRevision = sessionRevision;
     let retryingAutomaticExit = false;
     if (behavior.autoDiscardExit === true && pendingAutomaticExit) {
       if (pendingAutomaticExit.account === account && pendingAutomaticExit.sessionRevision === sessionRevision) {
@@ -8218,6 +8228,7 @@ export function createAppController({
         ...(replyId ? { replyId } : {}),
       }));
       remoteResponseReceived = true;
+      if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
       if (behavior.autoDiscardExit === true && isDraftExitConfirmation(latestAssistantPoll(result.messages))) {
         const discardOptions = (latestAssistantPoll(result.messages)?.options || []).filter(option =>
           String(option?.reply || option?.id || "").trim() === "portal_draft_exit_discard");
@@ -8235,6 +8246,7 @@ export function createAppController({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
         }));
+        if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
       }
       result = recommendEffectivePaymentDate(previousPoll, submissionText, replyId, result);
       result = preserveDatabaseFilterRegistrationOptions([previousPoll], result);
