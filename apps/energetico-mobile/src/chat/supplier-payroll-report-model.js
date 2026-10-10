@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import {formatOperationsDate} from './operations-reports-model.js';
 
 const unnamed = 'Fornecedor não informado';
 const unknownProfession = 'Profissão não informada';
@@ -136,4 +137,55 @@ export function summarizePayrollPaymentsByType(rows) {
   }
   return [...groups].sort(([a], [b]) => compareNames(a, b))
     .map(([type, payments]) => ({ type, ...summarizePayrollPayments(payments) }));
+}
+
+export function payrollReferencePeriod(month) {
+  const normalized = normalizePayrollMonth(month);
+  if (!normalized) return {start:'Sem referência',end:'Sem referência'};
+  const [y,m] = normalized.split('-').map(Number);
+  const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const day = [31,leap?29:28,31,30,31,30,31,31,30,31,30,31][m-1];
+  const suffix = `${normalized.slice(5)}/${normalized.slice(0,4)}`;
+  return {start:`01/${suffix}`,end:`${day}/${suffix}`};
+}
+
+/** Named rubrics retain their identity; new rubrics are never folded into Outros. */
+export function payrollTypeAppearance(type) {
+  const key = String(type||'RUBRICA NÃO INFORMADA').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();
+  const known = {
+    'SALARIO':['#16794d','#e4f7ec','💰'], 'VALE REFEICAO':['#946600','#fff4cc','🍴'],
+    'VALE TRANSPORTE':['#245a92','#e6f0fc','🚌'], 'PREMIACAO':['#7d3bae','#f1e6fc','★'],
+    'AJUDA DE CUSTO':['#a25316','#fff0e2','🤝'], '13 SALARIO':['#147d80','#def5f4','💵'],
+    'FERIAS E/OU ENCARGOS':['#b83f65','#fce5ed','☀'],
+  };
+  const hash = [...key].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0,0)%360;
+  const [color,background,icon] = known[key] || [`hsl(${hash} 50% 32%)`,`hsl(${hash} 65% 94%)`,'◈'];
+  return {color,background,icon};
+}
+
+export function buildPayrollReportCsv(groups) {
+  if (!Array.isArray(groups)) throw new TypeError('Grupos de folha inválidos.');
+  const quoted = value => `"${String(value ?? '').replaceAll('"','""')}"`;
+  const text = value => {
+    const raw = String(value ?? '');
+    const safe = /^[\s]*[=+\-@]|^[\t\r\n]/.test(raw) ? `'${raw}` : raw;
+    return quoted(safe);
+  };
+  const number = value => decimal(value)?.toFixed().replace('.',',') ?? 'Não calculado';
+  const cents = value => !Number.isSafeInteger(value) ? 'Não calculado' : new Decimal(value).div(100).toFixed(2).replace('.',',');
+  const lines = [['REGISTRO','FORNECEDOR','PERÍODO INICIAL','PERÍODO FINAL','ID PAGAMENTO','IDFOLHA','TIPO','DATA','ID LANÇAMENTO','DESCRIÇÃO','VALOR UNITÁRIO','QTD.','VALOR TOTAL','CONTA/FORMAPGTO','OBSERVAÇÕES']];
+  for (const group of groups) {
+    if (!Array.isArray(group.rows)||!Array.isArray(group.sheets)) throw new TypeError('Grupo incompleto.');
+    const periods = [...new Set(group.sheets.map(s=>normalizePayrollMonth(s.month)))].map(payrollReferencePeriod);
+    const start = periods.map(p=>p.start).join(' | '), end = periods.map(p=>p.end).join(' | ');
+    const byId = new Map(group.sheets.map(s=>[String(s.id),payrollReferencePeriod(s.month)]));
+    for (const row of group.rows) {
+      const p = byId.get(String(row.payrollId));
+      if (!p) throw new TypeError('Pagamento fora das folhas selecionadas.');
+      lines.push(['PAGAMENTO',group.supplier,p.start,p.end,row.id,row.payrollId,row.type,formatOperationsDate(row.date),row.launchId,row.description,number(row.unitValue),number(row.quantity),cents(row.totalCents),row.paymentMethod,row.observations]);
+    }
+    for (const total of summarizePayrollPaymentsByType(group.rows)) lines.push(['TOTAL POR TIPO',group.supplier,start,end,'','',total.type,'','','','','',cents(total.totalCents)]);
+    lines.push(['TOTAL GERAL',group.supplier,start,end,'','','','','','','','',cents(summarizePayrollPayments(group.rows).totalCents)]);
+  }
+  return '\ufeff' + lines.map(line=>Array.from({length:15},(_,i)=>[10,11,12].includes(i)?quoted(line[i]):text(line[i])).join(';')).join('\r\n')+'\r\n';
 }

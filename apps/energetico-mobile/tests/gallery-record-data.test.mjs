@@ -67,6 +67,11 @@ test("save pins the loaded version and only sends modified editable values", asy
   assert.deepEqual(f.writes[0].values, { OBS: "NOVO" });
   assert.deepEqual(f.writes[0].options, { eTag: '"v1"' });
 });
+test('generic launch editor forwards cancellation and live session guards to its mutation',async()=>{
+ let live=true;const f=fixture(),data=createOrdersGalleryData({...f,listName:'LANCAMENTOS',listAliases:['LANCAMENTOS'],assertSession:()=>{if(!live)throw new DOMException('cancelled','AbortError');}});
+ const context=await data.loadEditor('2');live=false;await assert.rejects(data.saveEditor(context,{}),{name:'AbortError'});assert.equal(f.writes.length,0);
+ live=true;const caller=new AbortController();caller.abort();await assert.rejects(data.saveEditor(context,{},{signal:caller.signal}),{name:'AbortError'});assert.equal(f.writes.length,0);
+});
 
 test("stale edits propagate conflict and cannot silently refresh their baseline", async () => {
   const f = fixture({ conflict: true }), data = createOrdersGalleryData(f), context = await data.loadEditor("2");

@@ -1,0 +1,21 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Relatório de pagamentos — dados fictícios</title></head><body><main id="app"></main>
+<script type="module">
+import '/src/styles.css';import '/src/ui/searchable-filter-selects.css';import '/src/ui/payment-ledger.css';import '/src/ui/report-print.css';import '/src/ui/supplier-payroll-report.css';import '/src/ui/gallery-record-actions.css';
+import {createSupplierPayrollReportView} from '/src/ui/supplier-payroll-report-view.js';
+import {decorateReportNavigation} from '/src/ui/report-navigation.js';
+let rows=[['SALÁRIO',480.89],['VALE REFEIÇÃO',72.72],['VALE REFEIÇÃO',225],['SALÁRIO',1468],['VALE TRANSPORTE',55],['AJUDA DE CUSTO',100],['PREMIAÇÃO',120],['13 SALÁRIO',150],['FÉRIAS E/OU ENCARGOS',200],['BENEFÍCIO ADICIONAL',50]].map(([type,value],i)=>({id:String(45+i),payrollId:'13',type,date:'2026-10-08',launchId:String(3534+i),unitValue:value,quantity:1,totalCents:Math.round(value*100),description:i%2?'Pagamento complementar':'Pagamento semanal',paymentMethod:'ENERGÉTICA BTG',observations:'Referência outubro'}));
+const snapshot={complete:true,sheets:[{id:'13',supplier:'FUNCIONÁRIO DE EXEMPLO',profession:'Mestre de Obras',month:'2026-10'}]};
+const context=id=>({entity:{id:'test',title:'Pagamento fictício'},columns:[{name:'DESCRICAO',label:'Descrição',control:'text',editable:true}],item:{id,fields:{DESCRICAO:'Pagamento semanal'}},contract:{hasForm:true,readOnly:false}});
+const view=decorateReportNavigation(createSupplierPayrollReportView({document,now:()=>new Date('2026-10-10T12:00:00Z'),data:{loadSnapshot:async()=>snapshot,loadPaymentsForPayrollIds:async()=>rows},
+ loadEditor:async id=>context(id),saveEditor:async(ctx,fields)=>{rows=rows.map(row=>row.id===ctx.item.id?{...row,description:fields.DESCRICAO}:row);return {id:ctx.item.id,fields};},
+ loadLaunchEditor:async id=>context(id),saveLaunchEditor:async(ctx,fields)=>{rows=rows.map(row=>row.launchId===ctx.item.id?{...row,description:fields.DESCRICAO}:row);return {id:ctx.item.id,fields};},
+ exportMedia:async(blob,name)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+}),{action:'open-supplier-payroll-report',onNavigate:async()=>{}});
+await view.open();await new Promise(resolve=>setTimeout(resolve,0));const card=view.element.querySelector('details');card.open=true;card.dispatchEvent(new Event('toggle'));
+setTimeout(()=>{
+ const table=card.querySelector('table'),summary=card.querySelector('summary'),content=document.querySelector('.spr-content');
+ const bounds=node=>({width:node.clientWidth,scroll:node.scrollWidth,left:node.getBoundingClientRect().left,right:node.getBoundingClientRect().right});
+ document.documentElement.dataset.dashboard=JSON.stringify({types:card.querySelectorAll('.spr-type-total').length,rows:table.rows.length-1,actions:card.querySelectorAll('[data-spr-edit]').length,summaryHeight:summary.getBoundingClientRect().height,content:bounds(content),table:bounds(table),clusters:[...card.querySelectorAll('.spr-type-total,.spr-general-total')].map(bounds)});
+ document.documentElement.dataset.layout=document.documentElement.dataset.dashboard;
+},100);
+</script></body></html>

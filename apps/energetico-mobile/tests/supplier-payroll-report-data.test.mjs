@@ -24,6 +24,15 @@ const payment = (id = '1', payroll = '2', launch = '71', supplier = 'Ana') => ({
     field_4: launch, field_5: 9999, field_6: 9999 } });
 const page = items => ({ items, hasMore: false, nextLink: '', batchCount: items.length });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+test('report reads descriptive account and observation fields from the linked launch without extra reads or writes',async()=>{
+ const f=fixture();const original=f.repository.getColumns;
+ f.repository.getColumns=async(site,list)=>list==='LANCAMENTOS'?[...await original(site,list),
+  {name:'memo',displayName:'DESCRIÇÃO'},{name:'account',displayName:'CONTA/FORMAPGTO'},{name:'notes',displayName:'OBSERVAÇÃO'}]:original(site,list);
+ f.repository.getItem=async(_site,_list,id)=>{f.gets.push(id);return {id,fields:{field_0:12.5,field_1:2,memo:'Pagamento semanal',account:{LookupValue:'ENERGÉTICA BTG'},notes:'Complementar'}};};
+ const data=create({repository:f.repository});await data.loadSnapshot();const result=await data.loadPaymentsForPayrollIds(['2']);
+ assert.equal(result[0].description,'Pagamento semanal');assert.equal(result[0].paymentMethod,'ENERGÉTICA BTG');assert.equal(result[0].observations,'Complementar');
+ assert.equal(result[0].totalCents,2500);assert.deepEqual(f.gets,['71']);assert.deepEqual(f.writes,[]);
+});
 function fixture(overrides = {}) {
   // Keep each external list's response separate from payment-only overrides.
   const { getSuppliersPage = async () => page([vendor()]), ...repositoryOverrides } = overrides;
@@ -61,6 +70,13 @@ function fixture(overrides = {}) {
   };
   return { repository, scans, gets, writes };
 }
+
+test('report combines separate account and payment method and reads legacy OBS notes',async()=>{
+ const f=fixture(),original=f.repository.getColumns;
+ f.repository.getColumns=async(site,list)=>list==='LANCAMENTOS'?[...await original(site,list),{name:'CONTA',text:{}},{name:'FORMAPGTO',text:{}},{name:'OBS',text:{}}]:original(site,list);
+ f.repository.getItem=async(_site,_list,id)=>({id,fields:{field_0:10,field_1:1,CONTA:'BTG',FORMAPGTO:'PIX',OBS:'Desconto importante'}});
+ const data=create({repository:f.repository});await data.loadSnapshot();const result=await data.loadPaymentsForPayrollIds(['2']);assert.equal(result[0].paymentMethod,'BTG / PIX');assert.equal(result[0].observations,'Desconto importante');
+});
 
 test('snapshot scans three read-only lists; expansion links by reference sheet and rereads current financial values', async () => {
   const f = fixture(), data = create({ repository: f.repository });
