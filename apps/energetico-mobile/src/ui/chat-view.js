@@ -568,7 +568,7 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   });
 }
 
-function measurementUnitOptionId(option) {
+function numericChoiceId(option) {
   const label = String(option?.label || option?.title || "");
   const labelMatch = label.match(/^\s*(\d+)\s*(?:[-–—:]|$)/u);
   if (labelMatch) return Number(labelMatch[1]);
@@ -589,7 +589,7 @@ function orderMeasurementUnitOptions(message, options) {
     return {
       option,
       index,
-      id: measurementUnitOptionId(option),
+      id: numericChoiceId(option),
       isRecommended: option?.recommended === true || /⭐/u.test(label),
     };
   });
@@ -603,6 +603,20 @@ function orderMeasurementUnitOptions(message, options) {
       return left.id - right.id || left.index - right.index;
     })
     .map(row => row.option);
+}
+
+function orderProvisionPaymentMethodOptions(message, options, activeFlow) {
+  if (activeFlow?.id !== "payment_settlement") return options;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/\bforma\s+de\s+pagamento\b/u.test(question)) return options;
+
+  // Only rearrange database choices. Non-numeric controls keep their slots,
+  // and the original objects/reply IDs are preserved for submission.
+  const rows = options.map((option, index) => ({ option, index, id: numericChoiceId(option) }));
+  const ordered = rows.filter(row => row.id !== null)
+    .sort((left, right) => left.id - right.id || left.index - right.index);
+  let next = 0;
+  return rows.map(row => row.id === null ? row.option : ordered[next++].option);
 }
 
 function formatDateDraft(value, deleting = false) {
@@ -1335,7 +1349,9 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     draft,
     databaseFilterMessage === message,
   );
-  let allOptions = orderMeasurementUnitOptions(message, filteredOptions);
+  let allOptions = orderProvisionPaymentMethodOptions(
+    message, orderMeasurementUnitOptions(message, filteredOptions), activeFlow,
+  );
   let finishOption = null;
   if (isDiaryAttachmentPrompt(message, activeFlow)
     || (isDocumentAttachmentPrompt(message, activeFlow) && attachmentFinishOption(message))) {

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste — formas de pagamento da provisão</title>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+  <main id="app"></main>
+  <script type="module">
+    import { createChatView } from '/src/ui/chat-view.js';
+    const options = [
+      ['14', 'PAGO POR TERCEIRO'], ['13', 'DIVERSOS'], ['12', 'DEPRECIAÇÃO E AMORTIZAÇÃO'],
+      ['11', 'ENERGÉTICA BTG'], ['10', 'ENERGÉTICA SICOOB'], ['9', 'CONTA BANCÁRIA DE TERCEIRO'],
+      ['8', 'NÃO ESPECIFICADO'], ['7', 'SICOOB AMAEL'], ['6', 'BTG BERNARDO'], ['5', 'AMAEL SICOOB'],
+    ].map(([id, label]) => ({ id, reply: id, label: `${id} - ${label}` }));
+    let state = {
+      sessionStatus: 'authenticated', account: { name: 'Teste local', username: 'teste@example.com' },
+      draft: '', pendingFiles: [], activeText: null,
+      activeFlow: { id: 'payment_settlement', title: 'APONTAR PAGAMENTO DA PROVISÃO' },
+      messages: [{ id: 'method', role: 'assistant', type: 'poll',
+        question: '💳 QUAL É A FORMA DE PAGAMENTO? CASO DESEJE FILTRAR, DIGITE UM TEXTO.',
+        databaseFilter: true, databaseFilterKey: 'forma_pgto_baixa', options }],
+    };
+    const view = createChatView(document.querySelector('#app'));
+    view.on('draft-changed', ({ value }) => { state = { ...state, draft: value }; view.render(state); });
+    view.on('select-reply', ({ replyId, label }) => {
+      document.querySelector('#result').textContent = `Seleção local: ${replyId} — ${label}. Nenhum pagamento foi submetido.`;
+    });
+    view.render(state);
+  </script>
+  <output id="result" style="position:fixed;bottom:0;left:0;z-index:100;background:white;font-size:12px">Teste local — opções de exemplo; sem comunicação com a VM.</output>
+</body>
+</html>
