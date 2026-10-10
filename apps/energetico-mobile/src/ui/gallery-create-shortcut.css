@@ -1,3 +1,4 @@
+@import './gallery-loading-screen.css';
 .gallery-create-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

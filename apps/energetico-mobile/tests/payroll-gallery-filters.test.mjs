@@ -95,10 +95,28 @@ test('finishing one filter request preserves another open dropdown and its choic
   const month=doc.querySelector('[name=MESREFERENCIA]'), field=month.parentElement.querySelector('.sfs');
   field.querySelector('.sfs-trigger').click();
   const list=field.querySelector('[role=listbox]'), popup=field.querySelector('.sfs-popup');assert.equal(popup.hidden,false);
+  assert.equal(doc.querySelector('.gallery-loading-screen').hidden,true,'filter edits must not mask or interrupt another dropdown');
+  assert.notEqual(doc.querySelector('.hr-gallery-content').inert,true);
   resolveSecond(result);await new Promise(resolve=>setImmediate(resolve));
   assert.equal(popup.hidden,false,'finishing the prior request must not interrupt month selection');
   const october=[...list.querySelectorAll('[role=option]')].find(node=>node.textContent==='10/2026');october.click();
   await new Promise(resolve=>setImmediate(resolve));assert.equal(month.value,'10/2026');
+});
+
+test('invalid filters release a pending loader and stale results cannot hide the validation error', async t => {
+  const dom=new JSDOM('<main></main>');const doc=dom.window.document;let resolveInitial;
+  const gallery=createHrPayrollGallery({document:doc,gallery:'FOLHAPGTO',request:()=>new Promise(resolve=>{resolveInitial=resolve;})});
+  t.after(()=>{gallery.destroy();dom.window.close();});const opening=gallery.open();
+  assert.equal(doc.querySelector('.gallery-loading-screen').hidden,false);
+  doc.querySelector('[name=QTDmin]').value='4';
+  const maximum=doc.querySelector('[name=QTDmax]');maximum.value='3';
+  maximum.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.equal(doc.querySelector('.gallery-loading-screen').hidden,true);
+  assert.equal(doc.querySelector('.hr-gallery-overlay').getAttribute('aria-busy'),'false');
+  assert.match(doc.querySelector('.hr-gallery-status').textContent,/mínimo/);
+  resolveInitial({gallery:'FOLHAPGTO',page:1,rows:[{id:'999'}],hasMore:false});await opening;
+  assert.match(doc.querySelector('.hr-gallery-status').textContent,/mínimo/);
+  assert.doesNotMatch(doc.querySelector('.hr-gallery-cards').textContent,/999/);
 });
 
 test('each gallery has a search toolbar and filters for its displayed columns', async t => {

@@ -3,7 +3,7 @@ import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -204,9 +204,6 @@ export function createPaymentProgrammingGallery({
 
   const body = el("div", "pg-body");
   const content = el("main", "og-content");
-  const loadingLayer = el("div", "pg-loading-layer");
-  loadingLayer.hidden = true;
-  loadingLayer.append(createLoadingIndicator(doc, "Carregando programação de pagamentos…"));
   const filterDisclosure = el("details", "og-filters pg-filters");
   const filterToggle = el("summary", "og-filter-toggle", "Filtros");
   const filterIcon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -291,9 +288,12 @@ export function createPaymentProgrammingGallery({
   detail.setAttribute("aria-modal", "true");
   detail.setAttribute("aria-label", "Detalhes do pagamento previsto");
   content.append(createShortcut.toolbar, filterDisclosure, notice, listToolbar, cards, pagination);
-  body.append(content, loadingLayer);
+  body.append(content);
   root.append(header, body, detail);
   doc.body.append(root);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando programação de pagamentos…' });
+  const loadingLayer = loadingScreen.element;
+  loadingLayer.classList.add('pg-loading-layer');
   const searchableSort = bindSearchableFilterSelects(listToolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
@@ -370,6 +370,7 @@ export function createPaymentProgrammingGallery({
     const busy = opened && (listLoading || attachmentLoading);
     const loading = opened && listLoading;
     root.setAttribute("aria-busy", String(Boolean(busy)));
+    loadingScreen.sync(loading);
     loadingLayer.hidden = !loading;
     body.classList.toggle("pg-body--loading", loading);
     content.inert = loading;
@@ -585,13 +586,13 @@ export function createPaymentProgrammingGallery({
     attachmentCounts.reset();
     const current = session;
     controller?.abort();
-    controller = new AbortController();
+    const loadController = controller = new AbortController();
     listLoading = true;
     setNotice("");
     updateBusy();
     try {
-      const result = await data.loadSnapshot({ signal: controller.signal, refresh });
-      if (!opened || destroyed || !root.isConnected || current !== session) return false;
+      const result = await data.loadSnapshot({ signal: loadController.signal, refresh });
+      if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pagamentos válida.");
       rows = result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || "")));
       populateFilters();
@@ -599,7 +600,7 @@ export function createPaymentProgrammingGallery({
       applyFilters();
       return true;
     } catch (error) {
-      if (!opened || destroyed || !root.isConnected || current !== session || error?.name === "AbortError") return false;
+      if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController || error?.name === "AbortError") return false;
       setNotice(safeFailure(error, "Não foi possível carregar a programação de pagamentos"), true);
       listStatus.textContent = "Não foi possível carregar a programação de pagamentos.";
       const retry = el("button", "og-button og-button--primary", "Tentar novamente");
@@ -608,7 +609,7 @@ export function createPaymentProgrammingGallery({
       cards.replaceChildren(retry);
       return false;
     } finally {
-      if (opened && !destroyed && root.isConnected && current === session) { listLoading = false; updateBusy(); }
+      if (opened && !destroyed && root.isConnected && current === session && controller === loadController) { listLoading = false; updateBusy(); }
     }
   }
 
@@ -658,6 +659,7 @@ export function createPaymentProgrammingGallery({
 
   function destroy() {
     if (destroyed) return;
+    loadingScreen.destroy();
     createShortcut.destroy();
     refreshShortcut.destroy();
     recordActions.destroy(); searchableSort.destroy(); autoFilters.destroy();

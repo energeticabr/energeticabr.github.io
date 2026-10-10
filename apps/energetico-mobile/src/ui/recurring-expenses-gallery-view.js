@@ -3,7 +3,7 @@ import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -299,6 +299,7 @@ export function createRecurringExpensesGallery({
   content.append(form, notice, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando despesas recorrentes…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
@@ -371,6 +372,7 @@ export function createRecurringExpensesGallery({
   }
 
   function updateBusy() {
+    loadingScreen.sync(opened && listLoading);
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
@@ -614,7 +616,7 @@ export function createRecurringExpensesGallery({
     controller = new AbortController();
     listLoading = true;
     setNotice("");
-    listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando despesas recorrentes…"));
+    listStatus.textContent = '';
     updateBusy();
     try {
       const snapshot = await data.loadSnapshot({ signal: controller.signal, refresh });
@@ -690,6 +692,7 @@ export function createRecurringExpensesGallery({
 
   function destroy() {
     if (destroyed) return;
+    loadingScreen.destroy();
     createShortcut.destroy();
     refreshShortcut.destroy();
     recordActions.destroy(); autoFilters.destroy();

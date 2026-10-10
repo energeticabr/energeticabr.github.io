@@ -3,7 +3,7 @@ import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
@@ -224,6 +224,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   pagination.append(previous, pageText, next);
   root.append(header, createShortcut.toolbar, filterDisclosure, feedback, list, pagination);
   doc.body.append(root);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando registros…' });
   const searchableFilters = bindSearchableFilterSelects(toolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
@@ -677,9 +678,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     attachmentCountQueue = [];
     loadFailed = false;
     root.setAttribute("aria-busy", "true");
+    loadingScreen.sync(true);
     createShortcut.sync();
     refreshShortcut.sync();
-    feedback.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
+    feedback.textContent = '';
     try {
       const snapshot = await data.loadSnapshot({ refresh });
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
@@ -704,12 +706,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       page = 1;
       render();
     } finally {
-      if (!destroyed && !root.hidden && root.isConnected && current === request) { root.setAttribute("aria-busy", "false"); createShortcut.sync(); refreshShortcut.sync(); }
+      if (!destroyed && !root.hidden && root.isConnected && current === request) { loadingScreen.sync(false); root.setAttribute("aria-busy", "false"); createShortcut.sync(); refreshShortcut.sync(); }
     }
   }
 
   function hide() {
     if (root.hidden) return;
+    loadingScreen.sync(false);
     recordActions.close();
     searchableFilters.close();
     root.hidden = true;
@@ -733,7 +736,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if (event.key === "Escape") { hide(); return; }
     if (event.key !== "Tab" || root.hidden) return;
     const focusable = [...root.querySelectorAll("summary, button:not(:disabled), input:not(:disabled), select:not(:disabled)")]
-      .filter(node => !node.disabled && node.getAttribute('aria-hidden') !== 'true' && !node.closest("[hidden]")
+      .filter(node => !node.disabled && !node.closest('[hidden], [inert], [aria-hidden="true"]')
         && (node.tagName === "SUMMARY" || !node.closest("details:not([open])")));
     if (!focusable.length) { event.preventDefault(); root.focus(); return; }
     const current = focusable.indexOf(doc.activeElement);
@@ -746,6 +749,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }
