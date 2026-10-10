@@ -48,6 +48,11 @@
 .attachment-preview-dialog .attachment-preview-add-to-tray[hidden] { display: none; }
 .attachment-preview-export svg { width: 22px; height: 22px; flex: none; }
 .attachment-preview-pdf { height: 100%; display: flex; flex-direction: column; }
+.attachment-preview-pdf-navigation { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 12px; padding-top: 8px; }
+.attachment-preview-pdf-navigation[hidden], .attachment-preview-pdf-page[hidden] { display: none; }
+.attachment-preview-pdf-navigation span { white-space: nowrap; font-size: 14px; font-weight: 700; }
+.attachment-preview-dialog .attachment-preview-pdf-navigation button { min-height: 44px; min-width: 0; padding: 8px 12px; }
+.attachment-preview-pdf[data-fit="page"] .attachment-preview-pdf-page { padding: 0; border: 0; }
 .attachment-preview-pdf-page { display: flex; justify-content: center; padding: 0 0 14px; }
 .attachment-preview-pdf-page + .attachment-preview-pdf-page { padding-top: 14px; border-top: 1px solid #dfe8e4; }
 .attachment-preview-pdf-page--error { min-height: 120px; align-items: center; border: 1px dashed #c7d5d0; border-radius: 12px; background: #f7faf9; }
@@ -67,4 +72,16 @@
   .attachment-preview-footer button { flex: 1 1 100px; min-width: 0; max-width: 100%; padding-inline: 8px; white-space: normal; }
   .attachment-preview-dialog .attachment-preview-export { flex-grow: 1.5; gap: 4px; }
   .attachment-preview-dialog .attachment-preview-add-to-tray { white-space: normal; }
+}
+
+/* Keep the complete report usable when a phone has very little vertical space. */
+@media (max-height: 500px) {
+  .attachment-preview-dialog[data-layout="report-pdf"] { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .attachment-preview-dialog[data-layout="report-pdf"] .attachment-preview-header { padding: 4px 8px; gap: 8px; }
+  .attachment-preview-dialog[data-layout="report-pdf"] .attachment-preview-title { font-size: 14px; }
+  .attachment-preview-dialog[data-layout="report-pdf"] button { min-height: 44px; padding: 6px 12px; font-size: 14px; }
+  .attachment-preview-dialog[data-layout="report-pdf"] .attachment-preview-content { padding: 4px; }
+  .attachment-preview-dialog[data-layout="report-pdf"] .attachment-preview-status { padding: 2px 8px; }
+  .attachment-preview-dialog[data-layout="report-pdf"] .attachment-preview-footer { padding: 4px 8px; gap: 8px; }
+  .attachment-preview-dialog[data-layout="report-pdf"] .attachment-preview-pdf-navigation { padding-top: 2px; }
 }

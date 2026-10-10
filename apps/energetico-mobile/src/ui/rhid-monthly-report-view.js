@@ -2,7 +2,7 @@ import {buildRhidMonthlyReport,isRhidReportMonth} from '../chat/rhid-monthly-mod
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
 const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-export function createRhidMonthlyReportView({document:doc=globalThis.document,data,now=()=>new Date(),onClose=()=>{}}={}){
+export function createRhidMonthlyReportView({document:doc=globalThis.document,data,now=()=>new Date(),onClose=()=>{},onReport=async()=>{}}={}){
  if(!doc?.body||typeof data?.loadSuppliers!=='function'||typeof data?.loadMonth!=='function')throw new TypeError('O relatório mensal requer uma sessão RHID e SharePoint.');
  const make=(tag,cls='',text)=>{const node=doc.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
  const button=(cls,text)=>Object.assign(make('button',cls,text),{type:'button'});
@@ -28,7 +28,7 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  function populate(rows){
   if(!Array.isArray(rows)||rows.some(row=>!row?.id||!row.name))throw new TypeError('Lista de fornecedores incompleta.');
   options=rows;supplier.replaceChildren(Object.assign(make('option','','Selecione o fornecedor'),{value:''}));
-  for(const row of rows)supplier.append(Object.assign(make('option','',row.name),{value:String(row.id)}));picker?.destroy();picker=bindSearchableFilterSelects(supplierLabel);picker.sync();
+  for(const row of rows)supplier.append(Object.assign(make('option','',row.name),{value:String(row.id)}));picker?.destroy();picker=bindSearchableFilterSelects(supplierLabel,{report:true});picker.sync();
  }
  async function loadSuppliers(){
   const request=begin();clearResult();options=[];setBusy(true);status('Carregando fornecedores ativos e empreiteiros…');
@@ -63,7 +63,10 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
    const confirmed=eligible.find(row=>String(row.id)===String(selected.id)&&row.name===selected.name);
    if(!confirmed){populate(eligible);throw new Error('O fornecedor não está mais ativo e empreiteiro. Selecione outro fornecedor.');}
    const snapshot=await data.loadMonth(selectedMonth,{signal:request.signal});if(!currentRequest(request))return;
-   showReport(buildRhidMonthlyReport({month:selectedMonth,supplier:confirmed,snapshot}));status('Relatório mensal gerado.');
+   const report=buildRhidMonthlyReport({month:selectedMonth,supplier:confirmed,snapshot});
+   showReport(report);picker?.close();status('Preparando PDF do relatório mensal…');
+   await onReport(report,{signal:request.signal,resolveReturnFocus:()=>!destroyed&&!root.hidden?closeButton:null});if(!currentRequest(request))return;
+   status('Relatório mensal gerado em PDF.');
   }catch(error){if(currentRequest(request))status(error?.message||'Não foi possível gerar o relatório mensal. Tente novamente.',true);}
   finally{if(currentRequest(request))setBusy(false);}
  }

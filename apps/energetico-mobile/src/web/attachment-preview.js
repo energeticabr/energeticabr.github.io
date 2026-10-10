@@ -276,7 +276,7 @@ export function createAttachmentPreview({
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
-    dialog.dataset.layout = layout === "flow-summary" ? "flow-summary" : "media";
+    dialog.dataset.layout = ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose };
     active = session;
     title.textContent = session.fileName;
@@ -436,6 +436,7 @@ export function createAttachmentPreview({
         if (active !== session) return;
         session.pdf = createPdfPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
+          fit: layout === 'report-pdf' ? 'page' : 'width',
           onError: () => explain(session, "Não foi possível mostrar esta página do PDF. Tente abrir o arquivo em outro app."),
         });
         await session.pdf.ready;

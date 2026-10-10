@@ -80,6 +80,35 @@ test("PDF cabe na largura interna disponível do celular antes de ampliar", asyn
   await viewer.ready;
   assert.ok(parseFloat(container.querySelector("canvas").style.width) <= 349);
 });
+test('report PDF fits the complete page in a landscape viewport without panning',async t=>{
+ const {viewer,container}=setup(t,{fit:'page'});
+ const viewport=container.querySelector('.attachment-preview-pdf-viewport');
+ Object.defineProperty(viewport,'clientWidth',{value:960});Object.defineProperty(viewport,'clientHeight',{value:420});
+ await viewer.ready;
+ for(const canvas of container.querySelectorAll('canvas')){
+  assert.ok(parseFloat(canvas.style.width)<=960);
+  assert.ok(parseFloat(canvas.style.height)<=412,'the bottom of the page, including signatures, must be visible');
+ }
+});
+test('whole-page reports navigate one complete page at a time without dragging through partial pages',async t=>{
+ const {viewer,container,documentRef}=setup(t,{fit:'page'});await viewer.ready;
+ const pages=[...container.querySelectorAll('[data-page-number]')];
+ assert.deepEqual(pages.filter(p=>!p.hidden).map(p=>p.dataset.pageNumber),['1']);
+ const next=container.querySelector('[data-pdf-action="next-page"]'),previous=container.querySelector('[data-pdf-action="previous-page"]');
+ assert.equal(previous.disabled,true);next.click();assert.deepEqual(pages.filter(p=>!p.hidden).map(p=>p.dataset.pageNumber),['2']);
+ assert.match(container.querySelector('[data-pdf-page-status]').textContent,/2 de 3/);
+ next.click();assert.equal(next.disabled,true);previous.click();assert.deepEqual(pages.filter(p=>!p.hidden).map(p=>p.dataset.pageNumber),['2']);
+ documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));await tick();assert.match(container.querySelector('[data-pdf-page-status]').textContent,/2 de 3/);
+});
+test('whole-page PDF fit recalculates after phone rotation and releases its resize listener',async t=>{
+ const {viewer,container,documentRef}=setup(t,{fit:'page'});
+ const viewport=container.querySelector('.attachment-preview-pdf-viewport');let width=360,height=600;
+ Object.defineProperty(viewport,'clientWidth',{get:()=>width});Object.defineProperty(viewport,'clientHeight',{get:()=>height});
+ await viewer.ready;width=760;height=240;documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));
+ await tick();await tick();
+ assert.ok(parseFloat(container.querySelector('canvas').style.height)<=232);
+ viewer.destroy();documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));await tick();assert.equal(container.children.length,0);
+});
 
 test("PDF amplia ao afastar dois dedos no visualizador", async t => {
   const { viewer, container, documentRef } = setup(t);

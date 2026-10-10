@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PDFArray, PDFDocument, decodePDFRawStream } from "pdf-lib";
+import { PDFArray, PDFDocument, PDFName, PDFSignature, decodePDFRawStream } from "pdf-lib";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { buildRhidAttendanceTable } from "../src/chat/rhid-attendance-table.js";
 
@@ -393,4 +393,60 @@ test("pagina também uma pessoa com muitos pares de horários", async () => {
   } finally {
     await loadingTask.destroy();
   }
+});
+
+// Signing each continuation would duplicate the employee's acknowledgement.
+test("daily PDF puts one blank employee signature under the full name on the final card chunk", async () => {
+  const headers = ["Nome"], row = ["PESSOA COM MUITAS BATIDAS"];
+  for (let index = 1; index <= 40; index++) {
+    headers.push(`Entrada ${index}`, `Saída ${index}`);
+    row.push("07:00", "17:00");
+  }
+  headers.push("Total de horas/dia"); row.push("400:00");
+  const missing = ["BIA SEM BATIDA", ...Array(80).fill("—"), "— (parcial)"];
+  const { pdf, loadingTask, pages } = await inspect(await buildPdf({ headers, rows: [row, missing] }));
+  try {
+    const fields = pdf.getForm().getFields();
+    assert.equal(fields.length, 3, "duas pessoas e um representante");
+    for (const field of fields) {
+      assert.ok(field instanceof PDFSignature);
+      assert.equal(field.acroField.dict.has(PDFName.of("V")), false);
+      const [widget] = field.acroField.getWidgets(), box = widget.getRectangle();
+      assert.ok(box.width >= 400 && box.height >= 60);
+      const index = pdf.getPages().findIndex(page => page.ref.toString() === widget.P().toString());
+      assert.ok(box.y >= 32 && box.x >= 32 && box.x + box.width <= 563);
+      const items = pages[index].items;
+      const label = field.acroField.dict.lookup(PDFName.of("TU")).decodeText();
+      const name = items.find(item => item.str.startsWith(label));
+      assert.ok(name && name.transform[5] > box.y + box.height, "nome acima da área em branco");
+      if (label === "PESSOA COM MUITAS BATIDAS") {
+        assert.ok(items.some(item => item.str === "Entrada 40"), "assinatura no cartão final");
+        assert.ok(items.some(item => item.str === "400:00"));
+      }
+      if (label === "Representante da Energética") assert.equal(index, pages.length - 1);
+    }
+    for (const { page, items } of pages) for (const item of items) {
+      assert.ok(item.transform[4] >= 28 && item.transform[4] + item.width <= 567, `${item.str} cortado horizontalmente`);
+      assert.ok(item.transform[5] >= 28 && item.transform[5] + item.height <= page.view[3] - 28, `${item.str} cortado verticalmente`);
+    }
+  } finally { await loadingTask.destroy(); }
+});
+
+// Reserving a signature must not push long original audit data off the page.
+test("daily PDF paginates long raw audit data before the final signed card", async () => {
+  const table = {
+    headers: ["Nome", "Entrada 1", "Saída 1", "Total de horas/dia"],
+    rows: [["ANA SOUZA", "07:00", "12:00", "05:00"]],
+    people: [{ rawPunches: ["W".repeat(9000), "FIM_AUDITORIA"], issues: ["Revisar"] }],
+  };
+  const { pdf, loadingTask, pages } = await inspect(await buildPdf(table));
+  try {
+    const text = pages.flatMap(p => p.items.map(item => item.str)).join(" ");
+    assert.equal(text.replace(/[^W]/g, "").length, 9000);
+    assert.equal(text.match(/FIM_AUDITORIA/g)?.length, 1);
+    assert.equal(pdf.getForm().getFields().length, 2);
+    for (const { page, items } of pages) for (const item of items) {
+      assert.ok(item.transform[5] >= 28 && item.transform[5] + item.height <= page.view[3] - 28, `${item.str} fora da página`);
+    }
+  } finally { await loadingTask.destroy(); }
 });
