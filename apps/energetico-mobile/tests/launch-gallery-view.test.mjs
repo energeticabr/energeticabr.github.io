@@ -835,13 +835,40 @@ test('account and payment method stay visible before disclosure, including legac
     const toggle = button(card, 'Ver mais informações');
     assert.equal(payment.nextElementSibling, toggle);
     assert.equal(payment.previousElementSibling, card.querySelector('.lg-record-description'));
-    assert.equal(card.querySelector('.lg-record-extra').textContent.includes(cases[index].want), false,
+    assert.ok(![...card.querySelectorAll('.lg-record-extra .lg-record-label')].some(label =>
+      /FORMA.*PGTO|FORMA.*PAGAMENTO|CONTA/.test(label.textContent)),
       'payment method must not be duplicated in the hidden detail');
     toggle.click();
     assert.equal(payment.closest('[hidden]'), null);
     button(card, 'Ver menos informações').click();
     assert.equal(payment.closest('[hidden]'), null);
   }
+});
+
+test('numeric accounts and date-like payment labels are displayed literally, never inferred as dates', async t => {
+  const cases = [
+    { fields: { CONTA: '12345' }, want: '12345' },
+    { fields: { CONTA: { LookupValue: '12345' } }, want: '12345' },
+    { fields: { FORMAPGTO: '2026-10-09' }, want: '2026-10-09' },
+  ];
+  const rows = cases.map((sample, index) => ({ ...row(index + 1), fields: { ...row(index + 1).fields, ...sample.fields } }));
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot({ rows }) : detail() });
+  await ctx.gallery.open();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-record-payment-method .lg-record-value')].map(node => node.textContent),
+    ['12345', '12345', '2026-10-09']);
+});
+
+test('distinct account and payment punctuation survives display while equivalent casing is not duplicated', async t => {
+  const cases = [
+    { fields: { CONTA: 'C/C', FORMAPGTO: 'CC' }, want: 'C/C / CC' },
+    { fields: { CONTA: '01-234', FORMAPGTO: '01234' }, want: '01-234 / 01234' },
+    { fields: { CONTA: 'DINHEIRO', FORMAPGTO: 'dinheiro' }, want: 'DINHEIRO' },
+  ];
+  const rows = cases.map((sample, index) => ({ ...row(index + 1), fields: { ...row(index + 1).fields, ...sample.fields } }));
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot({ rows }) : detail() });
+  await ctx.gallery.open();
+  assert.deepEqual([...ctx.root().querySelectorAll('.lg-record-payment-method .lg-record-value')].map(node => node.textContent),
+    ['C/C / CC', '01-234 / 01234', 'DINHEIRO']);
 });
 
 test('missing or visually empty descriptions do not add an empty row below freight', async t => {

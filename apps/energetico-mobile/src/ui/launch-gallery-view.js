@@ -501,6 +501,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function fieldText(name, value) {
     if (/^DESCRI[ÇC][ÃA]O$/i.test(name)) return descriptionText(value);
+    if (name === 'CONTA/FORMAPGTO') return display(value) || '—';
     if (name === 'ASSINATURA') return value ? 'Assinatura registrada' : 'Sem assinatura';
     const date = formatGalleryDate(name, value);
     if (date) return date;
@@ -1094,7 +1095,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (description?.querySelector('.lg-record-value').textContent.trim()) summary.append(description);
     const account = display(field(fields, 'CONTA')).trim();
     const paymentMethod = display(field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')).trim();
-    const paymentText = [account, paymentMethod && key(paymentMethod) !== key(account) ? paymentMethod : '']
+    const samePayment = paymentMethod.normalize('NFC').toUpperCase() === account.normalize('NFC').toUpperCase();
+    const paymentText = [account, paymentMethod && !samePayment ? paymentMethod : '']
       .filter(Boolean).join(' / ') || '—';
     summary.append(summaryField('CONTA/FORMAPGTO', paymentText, 'lg-record-payment-method'));
     summary.append(expand);
