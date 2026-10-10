@@ -131,6 +131,29 @@ test('resizing a desktop window without editing search still fits the smaller vi
   assert.equal(ctx.popup.style.height, '366px');
 });
 
+test('report search respects safe-area padding through keyboard panning and rotation', t => {
+  const ctx = setup(t);
+  // JSDOM cannot resolve env(); use computed pixel insets while browser tests
+  // exercise the real safe-area environment values.
+  const backdrop = ctx.wrapper.querySelector('.sfs-backdrop');
+  backdrop.style.padding = '59px 0px 34px';
+  ctx.viewport.width = 390; ctx.viewport.height = 844; ctx.trigger.click();
+  const height = parseFloat(ctx.popup.style.height);
+  assert.ok(parseFloat(ctx.popup.style.top) >= 71, 'search must start below the status bar');
+  assert.ok(parseFloat(ctx.popup.style.top) + height <= 798, 'list must leave bottom safe area');
+  ctx.search().focus(); ctx.type('produto');
+  ctx.viewport.height = 450; ctx.viewport.offsetTop = 30;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  assert.ok(parseFloat(ctx.popup.style.top) >= 101, 'panned search still leaves status-bar clearance');
+  assert.equal(parseFloat(ctx.popup.style.height), height, 'keyboard does not flatten the option list');
+  backdrop.style.padding = '0px 59px 21px';
+  ctx.viewport.width = 844; ctx.viewport.height = 390; ctx.viewport.offsetTop = 0;
+  ctx.viewport.dispatchEvent(new ctx.dom.window.Event('resize'));
+  assert.ok(parseFloat(ctx.popup.style.top) + parseFloat(ctx.popup.style.height) <= 357);
+  assert.ok(parseFloat(ctx.popup.style.left) >= 71, 'rotation remeasures notch insets');
+  assert.equal(ctx.search().value, 'produto');
+});
+
 test('report options use compact black text while search remains large enough to avoid iOS focus zoom', t => {
   const ctx = setup(t); ctx.trigger.click();
   const style = ctx.dom.window.getComputedStyle(ctx.list.children[1]);

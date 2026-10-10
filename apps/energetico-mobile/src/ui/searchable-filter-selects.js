@@ -112,13 +112,21 @@ function createPicker(select, closeOthers, options = {}) {
       } else {
         reportViewport = { width: viewportWidth, height: viewportHeight, keyboardOpen: false };
       }
-      const width = Math.max(0, Math.min(480, right - left - 24));
-      const height = Math.max(0, Math.min(640, reportViewport.height - 24));
+      // Fixed panels do not inherit the app header's safe-area spacing. Read
+      // resolved env() insets from the backdrop, including after rotation.
+      const safeArea = view.getComputedStyle(backdrop);
+      const safeTop = parseFloat(safeArea.paddingTop) || 0;
+      const safeBottom = parseFloat(safeArea.paddingBottom) || 0;
+      const safeLeft = parseFloat(safeArea.paddingLeft) || 0;
+      const safeRight = parseFloat(safeArea.paddingRight) || 0;
+      const usableWidth = right - left - safeLeft - safeRight;
+      const width = Math.max(0, Math.min(480, usableWidth - 24));
+      const height = Math.max(0, Math.min(640, reportViewport.height - safeTop - safeBottom - 24));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
-      popup.style.left = `${left + (right - left - width) / 2}px`;
+      popup.style.left = `${left + safeLeft + (usableWidth - width) / 2}px`;
       // Keep Localizar itens at the visible top even when iOS pans the viewport.
-      popup.style.top = `${top + 12}px`;
+      popup.style.top = `${top + safeTop + 12}px`;
       popup.style.right = 'auto'; popup.style.bottom = 'auto';
       popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
       list.style.maxHeight = `${Math.max(0, height - 54)}px`;
