@@ -38,7 +38,8 @@ function dateLabel(date) {
   return `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 }
 
-export async function buildRhidMonthlyPdf(input) {
+/** Pure renderer; the app supplies its local official PNG through logoBytes. */
+export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
   const reports = Array.isArray(input) ? input : [input];
   if (!reports.length || reports.some(report => !report || !isRhidReportMonth(report.month) || !report.supplier?.id
     || !String(report.supplier.name ?? "").trim() || !Array.isArray(report.days) || !report.days.length
@@ -52,6 +53,9 @@ export async function buildRhidMonthlyPdf(input) {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const logo = logoBytes ? await pdf.embedPng(logoBytes) : null;
+  const logoSize = logo?.scaleToFit(110, 38);
+  const headingX = logo ? MARGIN + logoSize.width + 14 : MARGIN;
   const ink = rgb(0.07, 0.13, 0.22);
   const navy = rgb(0.08, 0.24, 0.43);
   const rule = rgb(0.82, 0.85, 0.89);
@@ -67,8 +71,9 @@ export async function buildRhidMonthlyPdf(input) {
 
   function addPage(includeAttendanceHeader = true) {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    text("RELATÓRIO MENSAL RHID", MARGIN, PAGE_HEIGHT - 49, bold, 17, navy);
-    text(`Período: ${report.month.slice(5, 7)}/${report.month.slice(0, 4)}`, MARGIN, PAGE_HEIGHT - 69, bold, 10);
+    if (logo) page.drawImage(logo, { x: MARGIN, y: PAGE_HEIGHT - MARGIN - logoSize.height, ...logoSize });
+    text("RELATÓRIO MENSAL RHID", headingX, PAGE_HEIGHT - 49, bold, 17, navy);
+    text(`Período: ${report.month.slice(5, 7)}/${report.month.slice(0, 4)}`, headingX, PAGE_HEIGHT - 69, bold, 10);
     y = PAGE_HEIGHT - 89;
     for (const line of wrapText(supplierName, bold, 10, INNER_WIDTH)) {
       text(line, MARGIN, y, bold, 10);

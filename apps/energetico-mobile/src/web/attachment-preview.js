@@ -450,6 +450,7 @@ export function createAttachmentPreview({
         session.pdf = createPdfPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
           fit: layout === 'report-pdf' ? 'page' : 'width',
+          navigation: 'scroll',
           initialPage,
           onPageChange: page => {
             if (active !== session) return;

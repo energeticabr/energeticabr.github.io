@@ -26,6 +26,12 @@ async function defaultLoadBernardoSignature() {
   return (await import("./web/signature-stamp.js")).loadBernardoStamp();
 }
 
+async function defaultLoadRhidReportLogo({ signal } = {}) {
+  const response = await fetch(new URL('../../../assets/logo-energetica-oficial.png', import.meta.url), { signal });
+  if (!response.ok) throw new Error('Não foi possível carregar a logo do relatório RHID. Tente novamente.');
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 async function defaultLaunchGalleryFactory(options) {
   const { createLaunchGallery } = await import("./ui/launch-gallery-view.js");
   return createLaunchGallery(options);
@@ -922,6 +928,7 @@ export function createAppController({
   attendanceSummaryDataFactory = defaultAttendanceSummaryDataFactory,
   rhidMonthlyFactory = async options => (await import('./ui/rhid-monthly-report-view.js')).createRhidMonthlyReportView(options),
   rhidMonthlyDataFactory = async options => (await import('./chat/rhid-monthly-data.js')).createRhidMonthlyData(options),
+  rhidReportLogoLoader = defaultLoadRhidReportLogo,
   stageProgressFactory = defaultStageProgressFactory,
   stageProgressDataFactory = defaultStageProgressDataFactory,
   supplierPayrollReportFactory = defaultSupplierPayrollReportFactory,
@@ -4628,7 +4635,9 @@ export function createAppController({
             check();
             const { buildRhidMonthlyPdf } = await import('./chat/rhid-monthly-pdf.js');
             check();
-            const pdf = await buildRhidMonthlyPdf(report);
+            const logoBytes = await rhidReportLogoLoader({ signal: signal || lifetime.signal });
+            check();
+            const pdf = await buildRhidMonthlyPdf(report, { logoBytes });
             check();
             const reports = Array.isArray(report) ? report : [report];
             const fileName = reports.length > 1 ? `presencas-rhid-${reports[0].month}-fornecedores-${reports.length}.pdf` : `presencas-rhid-${reports[0].month}-fornecedor-${reports[0].supplier.id}.pdf`;
