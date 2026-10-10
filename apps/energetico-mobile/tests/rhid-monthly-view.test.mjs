@@ -88,7 +88,7 @@ test('monthly form requires supplier, month and year and shows that supplier dai
  supplier.value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();
  assert.deepEqual(requests,['2026-09']);assert.match(doc.querySelector('[data-monthly-result]').textContent,/HELISON ROSA LUIS/);assert.match(doc.querySelector('[data-monthly-result]').textContent,/09:00/);assert.equal(doc.querySelectorAll('tbody tr').length,30);
 });
-test('supplier options open expanded without a keyboard and can search again after selection',async t=>{
+test('supplier options keep multiple choices when searching again without opening a keyboard',async t=>{
  const {doc,dom}=await setup(t,{loadSuppliers:async()=>Array.from({length:12},(_,i)=>({id:String(i+1),name:`FORNECEDOR ${i+1}`}))});
  const trigger=doc.querySelector('.sfs-field input');trigger.click();
  assert.equal(trigger.readOnly,true,'opening the supplier list must not open the phone keyboard');
@@ -97,7 +97,31 @@ test('supplier options open expanded without a keyboard and can search again aft
  doc.querySelectorAll('[role="option"]')[2].click();assert.equal(doc.querySelector('[name="supplier"]').value,'2');
  trigger.click();const search=doc.querySelector('.sfs-report-search');search.value='12';search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
  assert.equal(doc.querySelectorAll('[role="option"]').length,1);
- doc.querySelector('[role="option"]').click();assert.equal(doc.querySelector('[name="supplier"]').value,'12');
+ doc.querySelector('[role="option"]').click();assert.deepEqual([...doc.querySelector('[name="supplier"]').selectedOptions].map(o=>o.value),['2','12']);
+ assert.equal(popup.hidden,false,'marking another employee keeps the list open');
+ doc.querySelector('[role="option"]').click();assert.deepEqual([...doc.querySelector('[name="supplier"]').selectedOptions].map(o=>o.value),['2']);
+});
+
+test('monthly selection generates all selected employees from one monthly snapshot',async t=>{
+ const reports=[];let reads=0;
+ const {doc}=await setup(t,{loadMonth:async()=>{reads++;return snapshot;}},{onReport:async report=>reports.push(report)});
+ const field=doc.querySelector('[name="supplier"]');assert.equal(field.multiple,true);
+ doc.querySelector('.sfs-field input').click();
+ for(const option of [...doc.querySelectorAll('[role="option"]')].filter(o=>suppliers.some(s=>s.name===o.textContent)))option.click();
+ assert.equal(doc.querySelector('[role="listbox"]').getAttribute('aria-multiselectable'),'true');
+ doc.querySelector('.sfs-dismiss').click();
+ doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.equal(reads,1);assert.equal(reports.length,1);
+ assert.deepEqual(reports[0].map(r=>[r.supplier.id,r.total]),[['4','00:00'],['7','09:00']]);
+ assert.equal(doc.querySelectorAll('[data-monthly-result] table').length,2);
+});
+
+test('monthly batch rejects every report if one selected employee is no longer eligible',async t=>{
+ let loads=0,reads=0,opened=0;
+ const {doc}=await setup(t,{loadSuppliers:async()=>++loads===1?suppliers:[suppliers[1]],loadMonth:async()=>{reads++;return snapshot;}},{onReport:async()=>opened++});
+ for(const option of doc.querySelector('[name="supplier"]').options)option.selected=Boolean(option.value);
+ doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.equal(reads,0);assert.equal(opened,0);assert.match(doc.querySelector('[role="alert"]').textContent,/ativo|empreiteiro/i);
 });
 test('successful monthly generation opens the confirmed supplier report with a cancellable lifetime',async t=>{
  const reports=[];const {doc}=await setup(t,{}, {onReport:async(report,options)=>reports.push({report,options})});

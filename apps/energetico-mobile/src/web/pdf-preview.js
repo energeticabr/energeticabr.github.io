@@ -43,7 +43,9 @@ export function createPdfPreview({
   loadPdfJs = loadLocalPdfJs,
   pixelRatio = globalThis.devicePixelRatio || 1,
   fit = 'width',
+  initialPage = 1,
   pageFilter = () => true,
+  onPageChange = () => {},
   onError = () => {},
 } = {}) {
   const element = (tag, className, text) => {
@@ -87,6 +89,11 @@ export function createPdfPreview({
   let fittedSize = '';
   const viewportSize = () => `${viewport.clientWidth}:${viewport.clientHeight}`;
 
+  function getCurrentPage() {
+    const number = pageNumbers[pageIndex] || 1;
+    return !destroyed && !busy && renderedCanvases.some(canvas => Number(canvas.parentElement?.dataset.pageNumber) === number) ? number : null;
+  }
+
   function showCurrentPage() {
     if (fit !== 'page' || destroyed) return;
     pageNavigation.hidden = pageNumbers.length <= 1;
@@ -95,6 +102,7 @@ export function createPdfPreview({
     pageStatus.textContent = `${pageIndex + 1} de ${pageNumbers.length}`;
     for (const node of surface.children) node.hidden = Number(node.dataset.pageNumber) !== pageNumbers[pageIndex];
     viewport.scrollTop = viewport.scrollLeft = 0;
+    onPageChange(getCurrentPage());
   }
   function movePage(delta) {
     if (destroyed || busy) return;
@@ -200,6 +208,7 @@ export function createPdfPreview({
 
   async function renderAll(generation) {
     busy = true;
+    onPageChange(null);
     fittedSize = viewportSize();
     root.setAttribute("aria-busy", "true");
     renderTask?.cancel();
@@ -285,6 +294,7 @@ export function createPdfPreview({
     if (destroyed) { pdf = null; return; }
     if (fit === 'page') {
       pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
+      pageIndex = Math.max(0, pageNumbers.indexOf(initialPage));
       showCurrentPage();
     }
     renderGeneration += 1;
@@ -298,6 +308,7 @@ export function createPdfPreview({
   return Object.freeze({
     ready,
     destroy,
+    getCurrentPage,
     getSummary: () => {
       if (!pdf) return "";
       const failed = Number(root.dataset.failedPages || 0);

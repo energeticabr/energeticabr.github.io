@@ -100,6 +100,13 @@ test('whole-page reports navigate one complete page at a time without dragging t
  next.click();assert.equal(next.disabled,true);previous.click();assert.deepEqual(pages.filter(p=>!p.hidden).map(p=>p.dataset.pageNumber),['2']);
  documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));await tick();assert.match(container.querySelector('[data-pdf-page-status]').textContent,/2 de 3/);
 });
+
+test('report preview restores a requested employee page and exposes actual page navigation for signing',async t=>{
+ const {viewer,container}=setup(t,{fit:'page',initialPage:2});await viewer.ready;
+ assert.deepEqual([...container.querySelectorAll('[data-page-number]')].filter(p=>!p.hidden).map(p=>p.dataset.pageNumber),['2']);
+ assert.equal(viewer.getCurrentPage(),2);container.querySelector('[data-pdf-action="next-page"]').click();assert.equal(viewer.getCurrentPage(),3);
+ container.querySelector('[data-pdf-action="previous-page"]').click();assert.equal(viewer.getCurrentPage(),2);
+});
 test('whole-page PDF fit recalculates after phone rotation and releases its resize listener',async t=>{
  const {viewer,container,documentRef}=setup(t,{fit:'page'});
  const viewport=container.querySelector('.attachment-preview-pdf-viewport');let width=360,height=600;

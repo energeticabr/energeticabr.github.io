@@ -11,6 +11,10 @@
 .rhid-monthly-period { display: grid; grid-template-columns: minmax(0, 2fr) minmax(90px, 1fr); gap: 16px; }
 .rhid-monthly-form select, .rhid-monthly-form input { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; border: 1px solid #abc5ce; border-radius: 10px; padding: 10px; font: inherit; font-size: 16px; color: #173b4b; background: #f4f8fb; }
 .rhid-monthly-form .sfs-wrapper { min-width: 0; }
+.rhid-monthly-selection-help { font-size: 14px; font-weight: 400; color: #526977; }
+.rhid-monthly-supplier .sfs-list[aria-multiselectable="true"] .sfs-option::before { content: ''; flex: 0 0 18px; height: 18px; margin-right: 10px; border: 2px solid #648697; border-radius: 4px; box-sizing: border-box; }
+.rhid-monthly-supplier .sfs-list[aria-multiselectable="true"] .sfs-option[aria-selected="true"]::before { content: '✓'; display: grid; place-items: center; background: #07586b; border-color: #07586b; color: #fff; font-size: 14px; }
+.rhid-monthly-supplier .sfs-option[aria-selected="true"] { background: #e1edf5; }
 .rhid-monthly-refresh { justify-self: start; background: #e7f2f9; color: #135577; }
 .rhid-monthly-actions { display: flex; justify-content: space-between; gap: 16px; }
 .rhid-monthly-cancel { background: #fff; color: #a01d28; }

@@ -38,10 +38,13 @@ function dateLabel(date) {
   return `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 }
 
-export async function buildRhidMonthlyPdf(report) {
-  if (!report || !isRhidReportMonth(report.month) || !report.supplier?.id
+export async function buildRhidMonthlyPdf(input) {
+  const reports = Array.isArray(input) ? input : [input];
+  if (!reports.length || reports.some(report => !report || !isRhidReportMonth(report.month) || !report.supplier?.id
     || !String(report.supplier.name ?? "").trim() || !Array.isArray(report.days) || !report.days.length
-    || report.days.some(day => !/^\d{4}-\d{2}-\d{2}$/.test(day?.date) || !Array.isArray(day.slots) || !Array.isArray(day.issues))) {
+    || report.days.some(day => !/^\d{4}-\d{2}-\d{2}$/.test(day?.date) || !Array.isArray(day.slots) || !Array.isArray(day.issues)))
+    || new Set(reports.map(report => String(report.supplier.id))).size !== reports.length
+    || reports.some(report => report.month !== reports[0].month)) {
     throw new TypeError("Relatório mensal RHID inválido");
   }
 
@@ -52,6 +55,8 @@ export async function buildRhidMonthlyPdf(report) {
   const ink = rgb(0.07, 0.13, 0.22);
   const navy = rgb(0.08, 0.24, 0.43);
   const rule = rgb(0.82, 0.85, 0.89);
+  for (const report of reports) {
+  const firstPage = pdf.getPageCount();
   const supplierName = String(report.supplier.name).trim().normalize("NFC");
   let page;
   let y;
@@ -119,8 +124,8 @@ export async function buildRhidMonthlyPdf(report) {
     const gap = 24;
     const width = (INNER_WIDTH - gap) / 2;
     const signatures = [
-      [supplierName, "rhid_employee", "Assinatura do colaborador"],
-      ["Representante da Energética", "rhid_representative", "Assinatura do representante da empresa"],
+      [supplierName, reports.length > 1 ? `rhid_employee_${report.supplier.id}` : "rhid_employee", "Assinatura do colaborador"],
+      ["Representante da Energética", reports.length > 1 ? `rhid_representative_${report.supplier.id}` : "rhid_representative", "Assinatura do representante da empresa"],
     ].map(([name, fieldName, label]) => ({
       name, fieldName, nameLines: wrapText(name, bold, 10, width), labelLines: wrapText(label, regular, 9, width),
     }));
@@ -164,6 +169,10 @@ export async function buildRhidMonthlyPdf(report) {
   text(`Dias incompletos: ${report.incompleteDays}`, MARGIN, y);
   y -= 14;
   signatureGroup();
+  if (reports.length > 1 && pdf.getPageCount() - firstPage !== 1) {
+    throw new RangeError(`O relatório de ${supplierName} precisa de mais de uma página. Gere-o individualmente para preservar todas as observações.`);
+  }
+  }
   pdf.getPages().forEach((sheet, index, pages) => sheet.drawText(`Página ${index + 1} de ${pages.length}`, {
     x: MARGIN, y: 32, font: regular, size: 8, color: ink,
   }));

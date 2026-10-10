@@ -179,3 +179,28 @@ test("monthly PDF rejects invalid reports", async () => {
     await assert.rejects(() => build(input), { name: "TypeError" });
   }
 });
+
+test('monthly batch has exactly one isolated page and two canonical signature fields per employee',async t=>{
+ const first=report(),second={...report('2026-10','HELISON ROSA LUIS'),supplier:{id:'7',name:'HELISON ROSA LUIS'}};
+ second.total='08:00';
+ const {pdf,pages}=await inspect(t,await build([first,second]));
+ assert.equal(pages.length,2);assertInside(pages);
+ for(let i=0;i<2;i++){
+  const selected=[first,second][i],other=[second,first][i],text=pages[i].items.map(item=>item.str).join(' ');
+  assert.ok(text.includes(selected.supplier.name));assert.ok(!text.includes(other.supplier.name));
+  assert.ok(text.includes(`Total do mês: ${selected.total}`));assert.ok(text.includes(`Página ${i+1} de 2`));
+  for(const kind of ['employee','representative']){
+   const field=pdf.getForm().getField(`rhid_${kind}_${selected.supplier.id}`);assert.ok(field instanceof PDFSignature);
+   const widget=field.acroField.getWidgets()[0];assert.equal(widget.P().toString(),pdf.getPage(i).ref.toString());
+   assert.equal(field.acroField.dict.has(PDFName.of('V')),false);assert.ok(widget.dict.has(PDFName.of('AP')));
+  }
+ }
+ assert.equal(pdf.getForm().getFields().length,4);
+});
+
+test('monthly batch rejects empty, duplicate, mixed-period or overflowing reports without silently omitting notes',async()=>{
+ const first=report(),second={...report('2026-10','HELISON ROSA LUIS'),supplier:{id:'7',name:'HELISON ROSA LUIS'}};
+ for(const value of [[],[first,first],[first,{...second,month:'2026-09'}]])await assert.rejects(()=>build(value),TypeError);
+ first.days[0].issues=['W'.repeat(8500)];
+ await assert.rejects(()=>build([first,second]),/MAURÍCIO.*página|página.*MAURÍCIO/);
+});

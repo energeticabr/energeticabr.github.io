@@ -281,7 +281,7 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, resolveReturnFocus, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, resolveReturnFocus, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
@@ -317,7 +317,7 @@ export function createAttachmentPreview({
       signButton.hidden = kind !== "pdf" || typeof onSign !== "function";
       stampButton.hidden = kind !== "pdf" || typeof onStamp !== "function";
       signActions.hidden = signButton.hidden && stampButton.hidden;
-      signButton.disabled = stampButton.disabled = false;
+      signButton.disabled = stampButton.disabled = true;
       const canAddToTray = typeof addToTrayHandler === "function";
       addToTrayButton.hidden = !canAddToTray;
       addToTrayButton.disabled = !canAddToTray;
@@ -450,10 +450,25 @@ export function createAttachmentPreview({
         session.pdf = createPdfPreview({
           blob, container: content, documentRef, signal: session.abort.signal,
           fit: layout === 'report-pdf' ? 'page' : 'width',
-          onError: () => explain(session, "Não foi possível mostrar esta página do PDF. Tente abrir o arquivo em outro app."),
+          initialPage,
+          onPageChange: page => {
+            if (active !== session) return;
+            session.signatureReady = Number.isInteger(page) && page > 0;
+            signButton.disabled = stampButton.disabled = !session.signatureReady;
+          },
+          onError: () => {
+            if (active !== session) return;
+            session.signatureReady = false;
+            signButton.disabled = stampButton.disabled = true;
+            explain(session, "Não foi possível mostrar esta página do PDF. Tente abrir o arquivo em outro app.");
+          },
         });
         await session.pdf.ready;
-        if (active === session) status.textContent = session.pdf.getSummary?.() || "";
+        if (active === session) {
+          status.textContent = session.pdf.getSummary?.() || "";
+          session.signatureReady = Number.isInteger(session.pdf.getCurrentPage?.());
+          signButton.disabled = stampButton.disabled = !session.signatureReady;
+        }
       } else {
         explain(session, "Este tipo de arquivo precisa de outro app para visualização. O arquivo original está disponível para abrir ou salvar.");
       }
@@ -461,6 +476,8 @@ export function createAttachmentPreview({
       if (active !== session) return;
       session.pdf?.destroy();
       session.pdf = null;
+      session.signatureReady = false;
+      signButton.disabled = stampButton.disabled = true;
       if (session.kind === "pdf") {
         try {
           if (await showNativePdf(session)) return;
@@ -475,12 +492,12 @@ export function createAttachmentPreview({
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout } = {}) {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout, initialPage } = {}) {
     backButton.textContent = returnLabel;
     collection = null;
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
-    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, resolveReturnFocus, layout });
+    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, resolveReturnFocus, layout, initialPage });
   }
 
   async function openCollection(items, { onAddToTray } = {}) {
@@ -533,13 +550,14 @@ export function createAttachmentPreview({
   });
   async function signatureAction(button, action) {
     const session = active, handler = session?.[action];
-    if (button.hidden || button.disabled || !session?.blob || typeof handler !== "function") return;
+    const page = session?.pdf?.getCurrentPage?.();
+    if (button.hidden || button.disabled || !session?.signatureReady || !Number.isInteger(page) || page < 1 || !session?.blob || typeof handler !== "function") return;
     signButton.disabled = stampButton.disabled = true;
-    try { await handler({ blob: session.blob, fileName: session.fileName }); }
+    try { await handler({ blob: session.blob, fileName: session.fileName, page }); }
     catch (error) {
       if (active === session && error?.name !== "AbortError") status.textContent = error?.message || "Não foi possível abrir a assinatura. Tente novamente.";
     } finally {
-      if (active === session) signButton.disabled = stampButton.disabled = false;
+      if (active === session) signButton.disabled = stampButton.disabled = !session.signatureReady;
     }
   }
   signButton.addEventListener("click", () => { void signatureAction(signButton, "onSign"); });

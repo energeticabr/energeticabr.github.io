@@ -4491,8 +4491,9 @@ export function createAppController({
     rhidMonthlyReport?.resume?.();
     await showMedia(target.blob, target.signed ? signedPdfFileName(target.fileName) : target.fileName, {
       layout: "report-pdf", returnLabel: "Voltar ao relatório", resolveReturnFocus: target.resolveReturnFocus,
-      onSign: () => startRhidPdfSignature(target),
-      onStamp: () => startRhidPdfSignature(target, true),
+      initialPage: target.previewPage || 1,
+      onSign: context => startRhidPdfSignature(target, false, false, context?.page),
+      onStamp: context => startRhidPdfSignature(target, true, false, context?.page),
       onClose: () => {
         if (rhidStampLoading?.target === target) {
           rhidStampLoading = null;
@@ -4504,9 +4505,11 @@ export function createAppController({
     return currentRhidPdf(target);
   }
 
-  async function startRhidPdfSignature(target, bernardo = false, redraw = false) {
+  async function startRhidPdfSignature(target, bernardo = false, redraw = false, page = target.previewPage || 1) {
     if (!currentRhidPdf(target) || attachmentSigningBusy || rhidSignatureCapture
       || signaturePlacementOverride?.kind === "report") return false;
+    if (!Number.isInteger(page) || page < 1 || (target.reports.length > 1 && page > target.reports.length)) return false;
+    target.previewPage = page;
     rhidSignatureCapture = target;
     rhidSignatureBernardo = bernardo;
     if (!bernardo || redraw) {
@@ -4542,7 +4545,9 @@ export function createAppController({
       const { PDFDocument } = await import("pdf-lib");
       const pdf = await PDFDocument.load(await target.blob.arrayBuffer());
       if (!currentRhidPdf(target) || rhidSignatureCapture !== target) return false;
-      const widget = pdf.getForm().getField(bernardo ? "rhid_representative" : "rhid_employee").acroField.getWidgets()[0];
+      const report = target.reports.length > 1 ? target.reports[target.previewPage - 1] : target.reports[0];
+      const fieldName = `rhid_${bernardo ? "representative" : "employee"}${target.reports.length > 1 ? `_${report.supplier.id}` : ""}`;
+      const widget = pdf.getForm().getField(fieldName).acroField.getWidgets()[0];
       const index = pdf.getPages().findIndex(page => page.ref.toString() === widget.P().toString());
       const page = pdf.getPage(index), box = widget.getRectangle();
       // Fit the existing integrity-aware marker wholly inside the blank field.
@@ -4553,7 +4558,7 @@ export function createAppController({
         stage: "document_signing_waiting_position",
         document: { id: newUploadMessageId(), fileName: target.fileName, mimeType: "application/pdf", blob: target.blob },
         signature: { id: newUploadMessageId(), fileName: signature.name || "assinatura.png", mimeType: signature.type || "image/png", blob: signature },
-        signerName: bernardo ? "BERNARDO NOTINI" : target.report.supplier.name,
+        signerName: bernardo ? "BERNARDO NOTINI" : report.supplier.name,
         selection: { page: index + 1, x: (box.x + box.width / 2) / page.getWidth(), y: (box.y + box.height / 2) / page.getHeight(), scale },
       };
       invalidateSignaturePlacement();
@@ -4625,7 +4630,9 @@ export function createAppController({
             check();
             const pdf = await buildRhidMonthlyPdf(report);
             check();
-            const target = { report, blob: pdf, fileName: `presencas-rhid-${report.month}-fornecedor-${report.supplier.id}.pdf`,
+            const reports = Array.isArray(report) ? report : [report];
+            const fileName = reports.length > 1 ? `presencas-rhid-${reports[0].month}-fornecedores-${reports.length}.pdf` : `presencas-rhid-${reports[0].month}-fornecedor-${reports[0].supplier.id}.pdf`;
+            const target = { report, reports, blob: pdf, fileName,
               account: reportsAccount, revision: reportsRevision, lifetime, signal, resolveReturnFocus, signed: false };
             rhidMonthlyPdf = target;
             await previewRhidPdf(target);
