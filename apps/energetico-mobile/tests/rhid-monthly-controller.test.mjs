@@ -45,6 +45,32 @@ test('monthly controller opens the actual unsigned PDF without posting documents
  assert.equal(h.calls.length,before);assert.equal(h.store.getState().activeFlow,null);
 });
 
+test('monthly batch opens one PDF and signs the employee and representative of the displayed second page',async t=>{
+ const previews=[];const signature=new Blob(['signature'],{type:'image/png'});
+ const h=setup(t,{native:{importSharedItems:async()=>[],closePreview(){},previewMedia:async(blob,name,options)=>previews.push({blob:await blob,name,options})},loadBernardoSignature:async()=>signature});
+ h.client.prepareSignatureEvidence=async()=>({id:'abcdef0123456789abcdef0123456789',signedAt:'2026-10-10T09:00:00Z'});
+ await h.controller.start();await h.view.emit('open-rhid-monthly-report');const before=h.calls.length;
+ const reports=[['1','FUNCIONÁRIO PRIMEIRO'],['7','FUNCIONÁRIO SEGUNDO']].map(([id,name])=>buildRhidMonthlyReport({month:'2026-10',supplier:{id,name},snapshot:{month:'2026-10',rows:[],presentDates:[]}}));
+ await h.panels[0].onReport(reports);const preview=previews[0],pdf=await PDFDocument.load(await preview.blob.arrayBuffer());
+ assert.equal(previews.length,1);assert.equal(pdf.getPageCount(),2);assert.match(preview.name,/fornecedores/);
+ await preview.options.onSign({page:2});await h.view.emit('signature-captured',{fileId:'rhid-monthly-report',file:signature});
+ for(let i=0;i<12;i++)await tick();
+ let placement=h.renders.at(-1).signaturePlacement;assert.equal(placement.status,'ready');assert.equal(placement.selection.page,2);assert.equal(placement.signerName,'FUNCIONÁRIO SEGUNDO');
+ await h.view.emit('signature-placement-close');
+ assert.equal(previews.at(-1).options.initialPage,2,'return to the same employee instead of signing someone else');
+ await previews.at(-1).options.onStamp({page:2});for(let i=0;i<12;i++)await tick();
+ placement=h.renders.at(-1).signaturePlacement;assert.equal(placement.status,'ready');assert.equal(placement.selection.page,2);assert.equal(placement.signerName,'BERNARDO NOTINI');
+ assert.equal(h.calls.length,before);assert.equal(h.store.getState().attachments.length,0);
+});
+
+test('monthly callback accepts singleton arrays and large batches keep a bounded PDF filename',async t=>{
+ const previews=[],h=setup(t,{native:{importSharedItems:async()=>[],previewMedia:async(blob,name)=>previews.push({blob:await blob,name})}});
+ await h.controller.start();await h.view.emit('open-rhid-monthly-report');
+ const reports=Array.from({length:30},(_,index)=>buildRhidMonthlyReport({month:'2026-10',supplier:{id:String(1000+index),name:`FUNCIONÁRIO EXEMPLO ${index}`},snapshot:{month:'2026-10',rows:[],presentDates:[]}}));
+ await h.panels[0].onReport(reports);assert.ok(previews[0].name.length<=128);assert.match(previews[0].name,/\.pdf$/);assert.equal((await PDFDocument.load(await previews[0].blob.arrayBuffer())).getPageCount(),30);
+ await h.panels[0].onReport([reports[0]]);assert.equal(previews[1].name,'presencas-rhid-2026-10-fornecedor-1000.pdf');
+});
+
 test('monthly PDF drawing cancels back to the unchanged preview and does not post a document',async t=>{
  const previews=[];let closes=0;
  const h=setup(t,{native:{importSharedItems:async()=>[],closePreview(){closes++;},previewMedia:async(blob,name,options)=>previews.push({blob:await blob,name,options})}});

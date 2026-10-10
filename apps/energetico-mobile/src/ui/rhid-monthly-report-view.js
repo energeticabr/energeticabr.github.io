@@ -10,8 +10,8 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  const panel=make('section','rhid-monthly-dialog');panel.tabIndex=-1;panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Relatório mensal de presenças RHID');
  const header=make('header','rhid-monthly-header'),closeButton=button('rhid-monthly-close','×');closeButton.setAttribute('aria-label','Fechar relatório mensal');
  header.append(make('h2','','Relatório mensal de presenças RHID'),closeButton);
- const form=make('form','rhid-monthly-form'),supplierLabel=make('label','rhid-monthly-supplier'),supplier=make('select');supplier.name='supplier';supplier.required=true;supplier.setAttribute('aria-label','Fornecedor');
- supplierLabel.append(make('span','','Fornecedor'),supplier);
+ const form=make('form','rhid-monthly-form'),supplierLabel=make('label','rhid-monthly-supplier'),supplier=make('select');supplier.name='supplier';supplier.required=true;supplier.multiple=true;supplier.setAttribute('aria-label','Fornecedor');
+ supplierLabel.append(make('span','','Funcionários / fornecedores'),supplier,make('small','rhid-monthly-selection-help','Marque um ou vários. Será gerada uma página por funcionário.'));
  const period=make('div','rhid-monthly-period'),monthLabel=make('label'),month=make('select');month.name='month';month.required=true;month.setAttribute('aria-label','Mês de referência');
  MONTHS.forEach((name,index)=>month.append(Object.assign(make('option','',name),{value:String(index+1).padStart(2,'0')})));monthLabel.append(make('span','','Mês de referência'),month);
  const yearLabel=make('label'),year=make('input');year.type='number';year.name='year';year.min='1000';year.max='9999';year.step='1';year.required=true;year.inputMode='numeric';year.setAttribute('aria-label','Ano de referência');yearLabel.append(make('span','','Ano'),year);period.append(monthLabel,yearLabel);
@@ -57,17 +57,22 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  }
  async function generate(event){
   event.preventDefault();if(busy||root.hidden)return;
-  const selected=options.find(row=>String(row.id)===supplier.value),selectedMonth=`${year.value}-${month.value}`;
-  if(!selected||!isRhidReportMonth(selectedMonth)){status('Selecione o fornecedor, mês e ano válidos.',true);return;}
+  const selectedIds=new Set([...supplier.selectedOptions].map(option=>option.value).filter(Boolean));
+  const selected=options.filter(row=>selectedIds.has(String(row.id))),selectedMonth=`${year.value}-${month.value}`;
+  if(!selected.length||!isRhidReportMonth(selectedMonth)){status('Selecione pelo menos um fornecedor, mês e ano válidos.',true);return;}
   const request=begin();clearResult();setBusy(true);status('Consultando presenças do mês…');
   try{
    const eligible=await data.loadSuppliers({signal:request.signal});if(!currentRequest(request))return;
-   const confirmed=eligible.find(row=>String(row.id)===String(selected.id)&&row.name===selected.name);
-   if(!confirmed){populate(eligible);throw new Error('O fornecedor não está mais ativo e empreiteiro. Selecione outro fornecedor.');}
+   const confirmed=selected.map(row=>eligible.find(candidate=>String(candidate.id)===String(row.id)&&candidate.name===row.name));
+   if(confirmed.some(row=>!row)){populate(eligible);throw new Error('Um dos fornecedores não está mais ativo e empreiteiro. Confira a seleção antes de gerar.');}
    const snapshot=await data.loadMonth(selectedMonth,{signal:request.signal});if(!currentRequest(request))return;
-   const report=buildRhidMonthlyReport({month:selectedMonth,supplier:confirmed,snapshot});
-   showReport(report);picker?.close();status('Preparando PDF do relatório mensal…');
-   await onReport(report,{signal:request.signal,resolveReturnFocus:()=>!destroyed&&!root.hidden?closeButton:null});if(!currentRequest(request))return;
+   const reports=confirmed.map(row=>buildRhidMonthlyReport({month:selectedMonth,supplier:row,snapshot}));
+   clearResult();
+   for(const report of reports){
+    const earlier=[...result.childNodes];showReport(report);result.prepend(...earlier);
+   }
+   picker?.close();status(`Preparando PDF de ${reports.length} funcionário(s)…`);
+   await onReport(reports.length===1?reports[0]:reports,{signal:request.signal,resolveReturnFocus:()=>!destroyed&&!root.hidden?closeButton:null});if(!currentRequest(request))return;
    status('Relatório mensal gerado em PDF.');
   }catch(error){if(currentRequest(request))status(error?.message||'Não foi possível gerar o relatório mensal. Tente novamente.',true);}
   finally{if(currentRequest(request))setBusy(false);}
