@@ -94,7 +94,7 @@ test('supplier options keep multiple choices when searching again without openin
  assert.equal(trigger.readOnly,true,'opening the supplier list must not open the phone keyboard');
  const popup=doc.querySelector('.sfs-popup');assert.equal(popup.dataset.placement,'expanded');
  assert.ok(parseFloat(doc.querySelector('.sfs-list').style.maxHeight)>=7*40);
- doc.querySelectorAll('[role="option"]')[2].click();assert.equal(doc.querySelector('[name="supplier"]').value,'2');
+ [...doc.querySelectorAll('[role="option"]')].find(option=>option.textContent==='FORNECEDOR 2').click();assert.equal(doc.querySelector('[name="supplier"]').value,'2');
  trigger.click();const search=doc.querySelector('.sfs-report-search');search.value='12';search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
  assert.equal(doc.querySelectorAll('[role="option"]').length,1);
  doc.querySelector('[role="option"]').click();assert.deepEqual([...doc.querySelector('[name="supplier"]').selectedOptions].map(o=>o.value),['2','12']);
@@ -114,6 +114,52 @@ test('monthly selection generates all selected employees from one monthly snapsh
  assert.equal(reads,1);assert.equal(reports.length,1);
  assert.deepEqual(reports[0].map(r=>[r.supplier.id,r.total]),[['4','00:00'],['7','09:00']]);
  assert.equal(doc.querySelectorAll('[data-monthly-result] table').length,2);
+});
+
+test('RHID confirms the marked suppliers without generating a PDF and restores period entry',async t=>{
+ let reads=0,opened=0;
+ const {doc,dom}=await setup(t,{loadMonth:async()=>{reads++;return snapshot;}},{onReport:async()=>opened++});
+ const trigger=doc.querySelector('.sfs-field input');trigger.click();
+ const confirm=[...doc.querySelectorAll('.sfs-popup button')].find(node=>node.textContent==='Confirmar fornecedores');
+ assert.ok(confirm,'a separate confirmation action must be available inside the supplier picker');
+ assert.equal(confirm.type,'button');assert.equal(confirm.disabled,true);
+ [...doc.querySelectorAll('[role="option"]')].find(node=>node.textContent===suppliers[1].name).click();
+ assert.equal(confirm.disabled,false);confirm.click();
+ assert.equal(doc.querySelector('.sfs-popup').hidden,true);assert.equal(doc.activeElement,trigger);
+ assert.deepEqual([...doc.querySelector('[name="supplier"]').selectedOptions].map(o=>o.value),['7']);
+ assert.equal(reads,0);assert.equal(opened,0,'confirming suppliers must not submit the monthly report');
+ doc.querySelector('[name="month"]').value='09';
+ doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.equal(reads,1);assert.equal(opened,1);
+});
+
+test('RHID selects every eligible supplier despite a search and generates one report per chosen supplier',async t=>{
+ const reports=[];let reads=0;
+ const {doc,dom}=await setup(t,{loadMonth:async()=>{reads++;return snapshot;}},{onReport:async report=>reports.push(report)});
+ doc.querySelector('.sfs-field input').click();
+ const search=doc.querySelector('.sfs-report-search');search.value='HELISON';search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+ assert.equal(doc.querySelectorAll('[role="option"]').length,1);
+ const all=[...doc.querySelectorAll('.sfs-popup button')].find(node=>node.textContent==='Selecionar todos os fornecedores');
+ assert.ok(all,'bulk selection must be available inside the supplier picker');
+ let changes=0;doc.querySelector('[name="supplier"]').addEventListener('change',()=>changes++);
+ all.click();all.click();
+ assert.deepEqual([...doc.querySelector('[name="supplier"]').selectedOptions].map(o=>o.value),['4','7']);
+ assert.equal(changes,1,'selecting all twice is idempotent');assert.equal(doc.querySelector('.sfs-popup').hidden,false);
+ [...doc.querySelectorAll('.sfs-popup button')].find(node=>node.textContent==='Confirmar fornecedores').click();
+ doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.equal(reads,1);assert.deepEqual(reports[0].map(r=>r.supplier.id),['4','7']);
+});
+
+test('RHID bulk selection excludes placeholder, hidden and disabled options and supports unmarking afterward',async t=>{
+ const {doc}=await setup(t);const native=doc.querySelector('[name="supplier"]');
+ native.options[1].disabled=true;native.append(Object.assign(doc.createElement('option'),{value:'99',textContent:'Oculto',hidden:true}));
+ doc.querySelector('.sfs-field input').click();
+ const all=[...doc.querySelectorAll('.sfs-popup button')].find(node=>node.textContent==='Selecionar todos os fornecedores');assert.ok(all);
+ all.click();assert.deepEqual([...native.selectedOptions].map(o=>o.value),['7']);
+ const option=[...doc.querySelectorAll('[role="option"]')].find(node=>node.textContent===suppliers[1].name);option.click();
+ assert.deepEqual([...native.selectedOptions].map(o=>o.value),[]);
+ assert.equal([...doc.querySelectorAll('.sfs-popup button')].find(node=>node.textContent==='Confirmar fornecedores').disabled,true);
+ assert.ok(![...doc.querySelectorAll('[role="option"]')].some(node=>node.textContent==='Selecione o fornecedor'),'the placeholder is not a supplier checkbox');
 });
 
 test('monthly batch rejects every report if one selected employee is no longer eligible',async t=>{
