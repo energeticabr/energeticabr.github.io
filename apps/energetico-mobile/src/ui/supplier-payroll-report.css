@@ -45,7 +45,6 @@
 .spr-payments { width:100%; table-layout:fixed; border-collapse:collapse; color:#123e63; font-size:clamp(7px,.85vw,13px); }
 .spr-payments th { background:#154d67; color:white; text-align:center; font-weight:600; }
 .spr-payments th,.spr-payments td { padding:8px 5px; border:1px solid #d8e3ec; overflow-wrap:anywhere; vertical-align:middle; }
-.spr-payments th { overflow-wrap:normal; }
 .spr-payments tbody tr { background:var(--spr-type-bg,#f0f6fb); }
 .spr-payments tbody td:nth-child(3) { color:var(--spr-type-color); font-weight:700; }
 .spr-payments th:first-child,.spr-payments th:nth-child(2),.spr-payments th:nth-child(8) { width:5%; }

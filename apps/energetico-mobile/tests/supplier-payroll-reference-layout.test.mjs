@@ -37,12 +37,17 @@ test('reference payroll layout fits horizontal phone tablet desktop with blue wh
  }}finally{await server.close();rmSync(cache,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
 });
 
-test('dashboard with eight types and edit actions fits phones tablets desktop without clipped total clusters',{timeout:120000},async t=>{
+test('dashboard with eight types and edit actions fits phones tablets desktop without clipped totals or overlapping headers',{timeout:120000},async t=>{
  if(!browser)return t.skip('Chromium indisponível');const app=fileURLToPath(new URL('..',import.meta.url)),repo=fileURLToPath(new URL('../../..',import.meta.url)),cache=mkdtempSync(join(tmpdir(),'payroll-dashboard-vite-'));const server=await createServer({root:app,cacheDir:cache,server:{host:'127.0.0.1',port:0,fs:{allow:[repo]}},logLevel:'silent'});
- try{await server.listen();for(const [width,height] of [[844,390],[568,320],[1024,768],[1440,900]]){
+ try{await server.listen();for(const [width,height] of [[844,390],[568,320],[1024,768],[1440,900],[1536,768]]){
   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-dashboard.html`});const dom=new JSDOM(stdout);const layout=JSON.parse(dom.window.document.documentElement.dataset.dashboard);dom.window.close();
   assert.equal(layout.types,8);assert.equal(layout.rows,10);assert.equal(layout.actions,20);assert.ok(layout.content.scroll<=layout.content.width+1);assert.ok(layout.table.right<=layout.content.right);
   for(const cluster of layout.clusters)assert.ok(cluster.scroll<=cluster.width+1,'each full type total stays inside its cluster');
+  assert.equal(layout.headers.length,12);
+  for(const header of layout.headers){
+   assert.ok(header.fragments.length>0,`header ${header.text} remains visible at ${width}px`);
+   assert.ok(header.fragments.every(fragment=>fragment.left>=header.left-1&&fragment.right<=header.right+1),`header ${header.text} stays inside its column at ${width}px`);
+  }
   if(width===844)assert.ok(layout.summaryHeight<190,'eight standard types keep the phone header compact');
  }}finally{await server.close();rmSync(cache,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
 });

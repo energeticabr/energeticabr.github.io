@@ -15,7 +15,8 @@ await view.open();await new Promise(resolve=>setTimeout(resolve,0));const card=v
 setTimeout(()=>{
  const table=card.querySelector('table'),summary=card.querySelector('summary'),content=document.querySelector('.spr-content');
  const bounds=node=>({width:node.clientWidth,scroll:node.scrollWidth,left:node.getBoundingClientRect().left,right:node.getBoundingClientRect().right});
- document.documentElement.dataset.dashboard=JSON.stringify({types:card.querySelectorAll('.spr-type-total').length,rows:table.rows.length-1,actions:card.querySelectorAll('[data-spr-edit]').length,summaryHeight:summary.getBoundingClientRect().height,content:bounds(content),table:bounds(table),clusters:[...card.querySelectorAll('.spr-type-total,.spr-general-total')].map(bounds)});
+ const headers=[...table.querySelectorAll('th')].map(node=>{const range=document.createRange();range.selectNodeContents(node);return {...bounds(node),text:node.textContent,fragments:[...range.getClientRects()].map(rect=>({left:rect.left,right:rect.right}))};});
+ document.documentElement.dataset.dashboard=JSON.stringify({types:card.querySelectorAll('.spr-type-total').length,rows:table.rows.length-1,actions:card.querySelectorAll('[data-spr-edit]').length,summaryHeight:summary.getBoundingClientRect().height,content:bounds(content),table:bounds(table),clusters:[...card.querySelectorAll('.spr-type-total,.spr-general-total')].map(bounds),headers});
  document.documentElement.dataset.layout=document.documentElement.dataset.dashboard;
 },100);
 </script></body></html>
