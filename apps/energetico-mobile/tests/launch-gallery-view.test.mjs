@@ -755,7 +755,8 @@ test('launch cards keep a compact summary and reveal remaining fields only when 
   }
   assert.match(summary.textContent, /R\$\s*109,00/);
   assert.match(summary.textContent, /R\$\s*0,00/);
-  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
+  assert.ok(summary.textContent.includes('PIX'), 'payment method stays visible in the summary');
+  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026']) {
     assert.doesNotMatch(summary.textContent, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.equal(card.querySelector('.lg-record-media').parentElement, card.querySelector('.lg-record-content').parentElement);
@@ -765,7 +766,7 @@ test('launch cards keep a compact summary and reveal remaining fields only when 
   assert.equal(secondExtra.hidden, true, 'expanding one launch must not expand another');
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   assert.equal(toggle.textContent, 'Ver menos informações');
-  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026', 'PIX']) {
+  for (const value of ['004 - EDIFÍCIO XAVANTE', 'ALVENARIA E ESTRUTURAS', '28/09/2026']) {
     assert.ok(extra.textContent.includes(value), value);
   }
   card.querySelector('[data-gallery-action="edit"]').click(); await settle();
@@ -787,7 +788,8 @@ test('launch description stays below freight and before the disclosure when coll
   assert.equal(description.querySelector('.lg-record-value').textContent, 'Primeira & segunda\nLinha 2');
   assert.equal(description.previousElementSibling, summary.querySelector('.lg-record-finance'));
   const toggle = button(card, 'Ver mais informações');
-  assert.equal(description.nextElementSibling, toggle);
+  assert.equal(description.nextElementSibling, summary.querySelector('.lg-record-payment-method'));
+  assert.equal(description.nextElementSibling.nextElementSibling, toggle);
   assert.equal(description.closest('[hidden]'), null);
   assert.equal(description.querySelector('script, img, iframe'), null, 'description markup must remain inert text');
   assert.equal(card.querySelectorAll('.lg-record-description').length, 1);
@@ -806,6 +808,40 @@ test('launch description accepts the unaccented SharePoint alias without using t
   await ctx.gallery.open();
   assert.equal(ctx.root().querySelector('.lg-record-description .lg-record-value')?.textContent,
     'Atividade da linha\nSegunda etapa');
+});
+
+test('account and payment method stay visible before disclosure, including legacy aliases and empty values', async t => {
+  const cases = [
+    { fields: { CONTA: 'DINHEIRO' }, want: 'DINHEIRO' },
+    { fields: { FORMAPGTO: 'PIX' }, want: 'PIX' },
+    { fields: { 'FORMA PGTO': 'TRANSFERÊNCIA' }, want: 'TRANSFERÊNCIA' },
+    { fields: { 'FORMA DE PAGAMENTO': 'BOLETO' }, want: 'BOLETO' },
+    { fields: { CONTA: ' ', FORMAPGTO: 'DINHEIRO' }, want: 'DINHEIRO' },
+    { fields: { CONTA: { LookupValue: 'ENERGÉTICA - CAIXA' }, FORMAPGTO: 'PIX' }, want: 'ENERGÉTICA - CAIXA / PIX' },
+    { fields: { CONTA: 'DINHEIRO', FORMAPGTO: 'DINHEIRO' }, want: 'DINHEIRO' },
+    { fields: {}, want: '—' },
+    { fields: { CONTA: '<img src=x onerror=unsafe()>' }, want: '<img src=x onerror=unsafe()>' },
+  ];
+  const rows = cases.map((sample, index) => ({ ...row(index + 1), fields: { ...row(index + 1).fields, ...sample.fields } }));
+  const ctx = await setup(t, { request: async operation => operation === 'snapshot' ? snapshot({ rows }) : detail() });
+  await ctx.gallery.open();
+  for (const [index, card] of [...ctx.root().querySelectorAll('.lg-record')].entries()) {
+    const payment = card.querySelector('.lg-record-summary .lg-record-payment-method');
+    assert.ok(payment, 'account/payment method must be visible before expanding');
+    assert.equal(payment.querySelector('.lg-record-label').textContent, 'CONTA/FORMAPGTO');
+    assert.equal(payment.querySelector('.lg-record-value').textContent, cases[index].want);
+    assert.equal(payment.querySelector('img, script'), null, 'account is inert text');
+    assert.equal(payment.closest('[hidden]'), null);
+    const toggle = button(card, 'Ver mais informações');
+    assert.equal(payment.nextElementSibling, toggle);
+    assert.equal(payment.previousElementSibling, card.querySelector('.lg-record-description'));
+    assert.equal(card.querySelector('.lg-record-extra').textContent.includes(cases[index].want), false,
+      'payment method must not be duplicated in the hidden detail');
+    toggle.click();
+    assert.equal(payment.closest('[hidden]'), null);
+    button(card, 'Ver menos informações').click();
+    assert.equal(payment.closest('[hidden]'), null);
+  }
 });
 
 test('missing or visually empty descriptions do not add an empty row below freight', async t => {

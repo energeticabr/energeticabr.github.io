@@ -17,11 +17,19 @@
         'VALOR UNITÁRIO': 13000, QUANTIDADE: 1, UN: 'UN', FRETE: 40,
         'VALOR TOTAL': 13040, CONCLUÍDO: 'PEDIDO FINALIZADO',
         DESCRIÇÃO: '<p>Forma dos pilares &amp; vigas</p><p>Conferir medidas antes da execução.</p>',
+        CONTA: 'ENERGÉTICA - CAIXA', FORMAPGTO: 'PIX',
       } },
       { id: 3488, total: 123456789.99, hasAttachments: false, fields: {
         PRODUTO: 'ARMADOR DE FERRAGENS', 'VALOR UNITÁRIO': 123456789.99,
         QUANTIDADE: 1, FRETE: 0, 'VALOR TOTAL': 123456789.99, CONCLUÍDO: 'PEDIDO FINALIZADO',
         DESCRICAO: 'Armação da etapa: ' + 'REFERENCIA'.repeat(30),
+        'FORMA DE PAGAMENTO': 'TRANSFERÊNCIA BANCÁRIA ' + 'REFERENCIA'.repeat(15),
+      } },
+      { id: 3560, total: 906, hasAttachments: false, fields: {
+        PRODUTO: 'SERVENTE DE PEDREIRO', FORNECEDOR: 'CLEITON CESAR NONATO', AGRUPAR: 399,
+        'DATA PGTO EFETUADO': '2026-10-09', 'VALOR UNITÁRIO': 181.20,
+        QUANTIDADE: 5, UN: 'DIÁRIA', FRETE: 0, 'VALOR TOTAL': 906, CONCLUÍDO: 'PEDIDO FINALIZADO',
+        CONTA: 'DINHEIRO', DESCRIÇÃO: 'PAGAMENTO DE 906 REAIS REFERENTE AOS DIAS 05 A 09 DE OUTUBRO',
       } },
     ];
     const gallery = createLaunchGallery({ document, request: async (operation, payload) => {

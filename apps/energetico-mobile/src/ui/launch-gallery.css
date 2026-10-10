@@ -264,7 +264,13 @@
 .lg-record-total .lg-record-label, .lg-record-total .lg-record-value { color: var(--lg-red); }
 .lg-record-total .lg-record-value { font-size: 1rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) {
-  .lg-record-heading .lg-record-header-actions { grid-column: 1 / -1; grid-row: 2; }
+  .lg-record-heading .lg-record-header-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: end;
+    width: fit-content;
+  }
+  .lg-record-header-actions .lg-record-total { flex: 0 1 auto; padding: 5px 8px; }
   .lg-record-heading-summary { grid-row: 3; }
 }
 .lg-record-main {
@@ -274,7 +280,7 @@
 .lg-record-summary { display: grid; gap: 8px; min-width: 0; }
 .lg-record-summary-fields { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .75fr) minmax(0, .85fr); gap: 0 8px; min-width: 0; }
 .lg-record-summary-fields .lg-record-field { padding-inline: 4px; }
-.lg-record-description { grid-column: 1 / -1; padding-inline: 4px; }
+.lg-record-description, .lg-record-payment-method { grid-column: 1 / -1; padding-inline: 4px; }
 .lg-record-description .lg-record-value { white-space: pre-wrap; }
 .lg-record-expand {
   grid-column: 1 / -1;

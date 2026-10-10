@@ -10,7 +10,8 @@ import { createServer } from 'vite';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'].find(path => path && existsSync(path));
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', '/usr/bin/google-chrome',
+  '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(path => path && existsSync(path));
 
 test('launch total is highlighted left of pencil, status moves below controls and freight/description remain visible', { timeout: 90_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
@@ -45,7 +46,7 @@ test('launch total is highlighted left of pencil, status moves below controls an
       const response = await send('Runtime.evaluate', { expression, returnByValue: true }, sessionId);
       assert.ok(!response.exceptionDetails, JSON.stringify(response.exceptionDetails)); return response.result.value;
     };
-    for (const [width, height] of [[320, 740], [390, 844], [1024, 768], [1365, 768], [844, 390]]) {
+    for (const [width, height] of [[320, 740], [390, 844], [430, 932], [700, 1000], [1024, 768], [1365, 768], [844, 390]]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/launch-gallery-total-responsive.html?w=${width}` }, sessionId);
       let ready = false;
@@ -66,7 +67,14 @@ test('launch total is highlighted left of pencil, status moves below controls an
         const descriptionBox = description?.getBoundingClientRect();
         const financeBox = card.querySelector('.lg-record-finance').getBoundingClientRect();
         const expandBox = card.querySelector('.lg-record-expand').getBoundingClientRect();
+        const payment = card.querySelector('.lg-record-payment-method');
+        const paymentBox = payment?.getBoundingClientRect();
+        const contentWidths = [...total.children].map(child => {
+          const range = document.createRange(); range.selectNodeContents(child);
+          return range.getBoundingClientRect().width;
+        });
         return { text: total.textContent.replace(/\u00a0/g, ' '), color: getComputedStyle(total.querySelector('.lg-record-value')).color,
+          totalWidth: box.width, contentWidth: Math.max(...contentWidths),
           mascot: mascot ? { width: mascotBox.width, height: mascotBox.height,
             fits: mascotBox.left >= orderBox.left && mascotBox.right <= orderBox.right + 1,
             loaded: mascot.querySelector('img').complete && mascot.querySelector('img').naturalWidth > 0 } : null,
@@ -78,6 +86,12 @@ test('launch total is highlighted left of pencil, status moves below controls an
           overflow: card.scrollWidth > card.clientWidth + 1 || total.scrollWidth > total.clientWidth + 1,
           labels: [...card.querySelectorAll('.lg-record-finance .lg-record-label')].map(label => label.textContent),
           freight: card.querySelector('.lg-record-finance .lg-record-field:last-child .lg-record-value').textContent.replace(/\u00a0/g, ' '),
+          payment: payment ? { text: payment.querySelector('.lg-record-value').textContent,
+            visible: paymentBox.height > 0 && !payment.closest('[hidden]'),
+            belowDescription: paymentBox.top >= descriptionBox.bottom,
+            beforeDisclosure: paymentBox.bottom <= expandBox.top,
+            fullWidth: Math.abs(paymentBox.width - financeBox.width) < 1,
+            overflow: payment.scrollWidth > payment.clientWidth + 1 } : null,
           description: description ? {
             text: description.querySelector('.lg-record-value').textContent,
             visible: descriptionBox.height > 0 && !description.closest('[hidden]'),
@@ -89,7 +103,7 @@ test('launch total is highlighted left of pencil, status moves below controls an
           } : null,
         };
       }))()`);
-      assert.equal(layouts.length, 2);
+      assert.equal(layouts.length, 3);
       for (const layout of layouts) {
         assert.ok(!layout.missingTotal, 'total must move to the heading');
         assert.equal(layout.color, 'rgb(181, 31, 36)');
@@ -100,7 +114,18 @@ test('launch total is highlighted left of pencil, status moves below controls an
           layout.description.beforeDisclosure && layout.description.fullWidth &&
           layout.description.preservesLines && !layout.description.overflow,
           `Descrição inválida em ${width}px: ${JSON.stringify(layout.description)}`);
+        assert.ok(layout.payment?.visible && layout.payment.belowDescription && layout.payment.beforeDisclosure &&
+          layout.payment.fullWidth && !layout.payment.overflow,
+          `Conta/forma pgto inválida em ${width}px: ${JSON.stringify(layout.payment)}`);
       }
+      if (width < height && width <= 700) {
+        const normalTotal = layouts[2]; // The reported R$ 906,00 card, without a media rail.
+        assert.ok(normalTotal.totalWidth <= normalTotal.contentWidth + 24,
+          `Total must fit its text instead of stretching in portrait ${width}px: ${JSON.stringify(normalTotal)}`);
+      }
+      assert.equal(layouts[0].payment.text, 'ENERGÉTICA - CAIXA / PIX');
+      assert.equal(layouts[2].payment.text, 'DINHEIRO');
+      assert.equal(layouts[2].text, 'VALOR TOTALR$ 906,00');
       assert.equal(layouts[0].description.text, 'Forma dos pilares & vigas\nConferir medidas antes da execução.');
       assert.equal(layouts[0].text, 'VALOR TOTALR$ 13.040,00');
       assert.deepEqual(layouts[0].mascot, { width: 44, height: 44, fits: true, loaded: true }, `Mascote em ${width}px`);

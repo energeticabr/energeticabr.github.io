@@ -1051,7 +1051,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const meta = element('section', 'lg-record-group lg-record-meta');
     const metaValues = [
       ['TIPO DE OPERAÇÃO', field(fields, 'TIPO DE OPERAÇÃO', 'TIPO OPERACAO')],
-      ['FORMA PGTO', field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')],
       ['ID PEDIDO', field(fields, 'ID PEDIDO', 'PEDIDO')],
       ['ADICIONADO POR', creatorName(item)],
       ['MODIFICAÇÕES', field(fields, 'MODIFICAÇÕES', 'MODIFICACOES', 'MODIFICADO POR', 'MODIFICADO')],
@@ -1093,6 +1092,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (!finance.hidden) summary.append(finance);
     const description = summaryField('DESCRIÇÃO', field(fields, 'DESCRIÇÃO', 'DESCRICAO'), 'lg-record-description');
     if (description?.querySelector('.lg-record-value').textContent.trim()) summary.append(description);
+    const account = display(field(fields, 'CONTA')).trim();
+    const paymentMethod = display(field(fields, 'FORMAPGTO', 'FORMA PGTO', 'FORMA DE PAGAMENTO')).trim();
+    const paymentText = [account, paymentMethod && key(paymentMethod) !== key(account) ? paymentMethod : '']
+      .filter(Boolean).join(' / ') || '—';
+    summary.append(summaryField('CONTA/FORMAPGTO', paymentText, 'lg-record-payment-method'));
     summary.append(expand);
     body.append(summary, extra);
     card.classList.add('gallery-record-card');
