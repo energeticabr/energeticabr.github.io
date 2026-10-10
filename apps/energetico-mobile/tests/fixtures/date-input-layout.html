@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Campos de data — prévia sem gravações</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/supplier-payroll.css';
+import '../../src/ui/orders-gallery.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/tasks-gallery.css';
+import { createTaskCompletionDialog } from '../../src/ui/task-completion-dialog.js';
+import { createGalleryRecordActions } from '../../src/ui/gallery-record-actions.js';
+import { createPayrollSheetCreateView } from '../../src/ui/payroll-sheet-create-view.js';
+import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+import { createChatView } from '../../src/ui/chat-view.js';
+const params = new URLSearchParams(location.search), kind = params.get('kind') || 'task';
+const host = document.querySelector('#app');
+const forbidWrite = () => { throw new Error('Esta prévia não permite gravações.'); };
+if (kind === 'task') {
+  host.className = 'og-overlay tg-overlay';
+  await createTaskCompletionDialog({ document, host, today: () => '2026-10-10', onBlocked() {}, onChanged: forbidWrite,
+    data: { saveEditor: forbidWrite, async loadEditor(id) { return { item: { id, fields: {} }, contract: { hasForm: true }, columns: [
+      { name: 'field_8', label: 'DATA CONCLUSÃO', control: 'date', editable: true },
+      { name: 'field_12', label: 'CONCLUÍDO', control: 'text', editable: true },
+    ] }; } },
+  }).open({ id: '2010' });
+} else if (kind === 'editor') {
+  const actions = createGalleryRecordActions({ document, host, saveEditor: forbidWrite, async loadEditor(id) {
+    return { entity: { id: 'test', title: 'Editar registro' }, item: { id, fields: {} }, contract: { hasForm: true }, columns: [
+      { name: 'DATA', label: 'Data', control: 'date', editable: true },
+      { name: 'HORA', label: 'Data e hora', control: 'datetime-local', editable: true },
+    ] };
+  } });
+  host.append(actions.render({ id: '42' }));
+  host.querySelector('[data-gallery-action=edit]').click();
+  while (!document.querySelector('[name=HORA]')) await new Promise(resolve => requestAnimationFrame(resolve));
+} else if (kind === 'month') {
+  await createPayrollSheetCreateView({ document, save: forbidWrite, loadOptions: async () => ({
+    suppliers: [{ id: '1', label: 'Fornecedor de teste' }], defaultMonth: '2026-10',
+  }) }).open();
+} else if (kind === 'payroll') {
+  await createSupplierPayrollView({ documentRef: document, data: { post: forbidWrite } }).open();
+} else if (kind === 'filters') {
+  await createRegistrationGallery({ document, kind: 'workDiary', data: { loadSnapshot: async () => ({ rows: [] }) } }).open();
+  document.querySelector('.rg-filters').open = true;
+} else if (kind === 'provision') {
+  createChatView(host).render({ sessionStatus: 'authenticated', account: { name: 'Teste' }, draft: '', messages: [], pendingFiles: [],
+    pendingProvisions: { due: true, rows: [{ id: '314', supplier: 'Fornecedor de teste', dueDate: '2026-10-10', total: 1500 }] },
+    pendingProvisionDateEditPaymentId: '314', pendingProvisionDateEditValue: '10/10/2026',
+  });
+}
+if (params.has('pwa')) {
+  document.querySelectorAll('style,link[rel=stylesheet]').forEach(node => node.remove());
+  const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = '/tests/date-input-built.css';
+  await new Promise((resolve, reject) => { link.onload = resolve; link.onerror = reject; document.head.append(link); });
+}
+const inputs = [...document.querySelectorAll('input:is([type=date],[type=datetime-local],[type=month])')];
+const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const bounds = node => { const { left, right, width, height } = node.getBoundingClientRect(); return { left, right, width, height }; };
+const measureInput = input => {
+  const field = input.closest('label') || input.parentElement, style = getComputedStyle(input), parent = getComputedStyle(field);
+  return { input: bounds(input), field: bounds(field), value: input.value, requestedType: input.getAttribute('type'), type: input.type, focused: document.activeElement === input,
+    padding: parseFloat(style.paddingLeft) + parseFloat(style.paddingRight), fontSize: parseFloat(style.fontSize),
+    insetLeft: parseFloat(parent.paddingLeft) + parseFloat(parent.borderLeftWidth),
+    insetRight: parseFloat(parent.paddingRight) + parseFloat(parent.borderRightWidth),
+  };
+};
+const measure = () => inputs.map(measureInput);
+inputs.forEach(input => { input.value = ''; }); await frame(); const empty = measure();
+inputs.forEach(input => { const type = input.getAttribute('type'); input.value = type === 'month' ? '2026-10' : type === 'datetime-local' ? '2026-10-10T06:26' : '2026-10-10'; });
+await frame(); const filled = measure();
+const focused = [];
+for (const input of inputs) { input.focus(); await frame(); focused.push(measureInput(input)); }
+document.documentElement.dataset.layout = JSON.stringify({ empty, filled, focused });
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
