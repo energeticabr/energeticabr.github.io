@@ -16,7 +16,10 @@ test('generated RHID PDF pages fit fully without panning on portrait and landsca
   for(const button of layout.buttons){assert.ok(button.left>=0&&button.right<=width&&button.top>=0&&button.bottom<=height,`botão fora da tela: ${JSON.stringify(button)}`);}
   assert.equal(layout.failedPages,'0');assert.ok(layout.canvases.length>0);assert.ok(layout.pageWidth<=width);
   assert.ok(layout.scrollWidth<=layout.viewport.width+1,JSON.stringify(layout));
-  assert.equal(layout.canvases.length,1,"uma página inteira por vez");
+  assert.equal(layout.canvases.length,2,"todas as páginas em uma sequência vertical");
+  assert.equal(layout.nextButtons,0,"sem precisar clicar em Próxima");
+  assert.ok(layout.scrollHeight>layout.viewport.height&&layout.scrollTop>0,"a rolagem alcança o segundo funcionário");
+  assert.deepEqual(layout.signedPages,[2],"assinar após rolar deve escolher o segundo funcionário");
   if(height<450)assert.ok(layout.viewport.height>=150,JSON.stringify(layout));
   for(const canvas of layout.canvases){assert.deepEqual(canvas.corner,[255,255,255,255],JSON.stringify(layout));assert.ok(canvas.inkPixels>100,"PDF desenhado, não canvas vazio");assert.ok(canvas.height<=layout.viewport.height,JSON.stringify(layout));assert.ok(canvas.left>=layout.viewport.left&&canvas.right<=layout.viewport.right,JSON.stringify(layout));}
  }}finally{await server.close();}

@@ -2,13 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
-import {PDFDocument,PDFSignature} from 'pdf-lib';
+import {PDFDocument,PDFSignature,PDFName} from 'pdf-lib';
+import {readFileSync} from 'node:fs';
 import {buildRhidMonthlyReport} from '../src/chat/rhid-monthly-model.js';
 import {signPdfAttachment} from '../src/web/pdf-signing.js';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {JSDOM} from 'jsdom';
 import {createChatView} from '../src/ui/chat-view.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const companyLogo=readFileSync(new URL('../../../assets/logo-energetica-oficial.png',import.meta.url));
 function setup(t,extra={}){
  const handlers=new Map(),panels=[],calls=[];let n=0;
  const renders=[],pads=[];
@@ -16,7 +18,7 @@ function setup(t,extra={}){
  const account={homeAccountId:'monthly-user',name:'Tester'},auth={initialize:async()=>account,signIn:async()=>account,signOut:async()=>{},getToken:async scopes=>{assert.deepEqual(scopes,['Sites.Read.All']);return 'token';}};
  const store=createConversationStore({randomUUID:()=>`monthly-${++n}`});
  const client={sendText:async payload=>{calls.push(payload);return {status:'processed',messages:[]};},getRhidAttendanceMonth:async month=>({month,rows:[],presentDates:[]})};
- const controller=createAppController({view,store,auth,client,native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),rhidMonthlyDataFactory:async()=>({loadSuppliers:async()=>[{id:'1',name:'TESTER'}]}),rhidMonthlyFactory:async({data,onClose,onReport})=>{
+ const controller=createAppController({view,store,auth,client,native:{importSharedItems:async()=>[]},rhidReportLogoLoader:async()=>companyLogo,pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),rhidMonthlyDataFactory:async()=>({loadSuppliers:async()=>[{id:'1',name:'TESTER'}]}),rhidMonthlyFactory:async({data,onClose,onReport})=>{
   const panel={data,onClose,onReport,opens:[],destroyed:0,suspended:false,suspend(){this.suspended=true;},resume(){this.suspended=false;},open(options){this.opens.push(options);},destroy(){this.destroyed++;}};panels.push(panel);return panel;
  },...extra});t.after(()=>controller.stop());return {controller,view,store,auth,client,panels,calls,renders,pads};
 }
@@ -43,6 +45,39 @@ test('monthly controller opens the actual unsigned PDF without posting documents
  assert.equal(previews[0].options.resolveReturnFocus,resolveReturnFocus);
  const pdf=await PDFDocument.load(await previews[0].blob.arrayBuffer());assert.equal(pdf.getForm().getFields().filter(f=>f instanceof PDFSignature).length,2);
  assert.equal(h.calls.length,before);assert.equal(h.store.getState().activeFlow,null);
+});
+
+// Omitting logo loading in the real report callback produces an unbranded PDF.
+test('monthly controller embeds the official logo in every generated employee page', async t => {
+ const previews=[];
+ const h=setup(t,{native:{importSharedItems:async()=>[],previewMedia:async blob=>previews.push(await blob)}});
+ await h.controller.start();await h.view.emit('open-rhid-monthly-report');
+ const reports=[['1','PRIMEIRO EXEMPLO'],['2','SEGUNDO EXEMPLO']].map(([id,name])=>buildRhidMonthlyReport({month:'2026-10',supplier:{id,name},snapshot:{month:'2026-10',rows:[],presentDates:[]}}));
+ await h.panels[0].onReport(reports);
+ const pdf=await PDFDocument.load(await previews[0].arrayBuffer());
+ for(const page of pdf.getPages()){
+  const objects=page.node.Resources()?.lookup(PDFName.of('XObject'));
+  assert.ok(objects?.entries().some(([,ref])=>pdf.context.lookup(ref).dict.get(PDFName.of('Subtype'))?.toString()==='/Image'),'logo oficial incorporada em cada página');
+ }
+});
+
+test('default monthly logo loader uses the bundled official PNG and embeds it in the output', async t => {
+ t.mock.method(globalThis,'fetch',async url=>String(url).endsWith('/assets/logo-energetica-oficial.png')?new Response(companyLogo):new Response('missing',{status:404}));
+ const previews=[],h=setup(t,{rhidReportLogoLoader:undefined,native:{importSharedItems:async()=>[],previewMedia:async blob=>previews.push(await blob)}});
+ await h.controller.start();await h.view.emit('open-rhid-monthly-report');
+ await h.panels[0].onReport(buildRhidMonthlyReport({month:'2026-10',supplier:{id:'1',name:'EXEMPLO'},snapshot:{month:'2026-10',rows:[],presentDates:[]}}));
+ const pdf=await PDFDocument.load(await previews[0].arrayBuffer());
+ const objects=pdf.getPage(0).node.Resources().lookup(PDFName.of('XObject'));
+ assert.ok(objects.entries().some(([,ref])=>pdf.context.lookup(ref).dict.get(PDFName.of('Subtype'))?.toString()==='/Image'));
+});
+
+test('closing the monthly report while its logo loads cannot open a stale employee PDF',async t=>{
+ let resolveLogo;const previews=[];
+ const h=setup(t,{rhidReportLogoLoader:()=>new Promise(resolve=>{resolveLogo=resolve;}),native:{importSharedItems:async()=>[],previewMedia:async blob=>previews.push(await blob)}});
+ await h.controller.start();await h.view.emit('open-rhid-monthly-report');
+ const panel=h.panels[0],pending=panel.onReport(buildRhidMonthlyReport({month:'2026-10',supplier:{id:'1',name:'EXEMPLO'},snapshot:{month:'2026-10',rows:[],presentDates:[]}}));
+ const rejected=assert.rejects(pending,{name:'AbortError'});await tick();panel.onClose();resolveLogo(companyLogo);await rejected;
+ assert.equal(previews.length,0);assert.equal(h.store.getState().attachments.length,0);
 });
 
 test('monthly batch opens one PDF and signs the employee and representative of the displayed second page',async t=>{

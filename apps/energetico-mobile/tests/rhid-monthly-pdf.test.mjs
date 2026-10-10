@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PDFDocument, PDFName, PDFSignature } from "pdf-lib";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
+import { PDFDocument, PDFDict, PDFName, PDFRawStream, PDFSignature, decodePDFRawStream } from "pdf-lib";
+import { getDocument, OPS, Util } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { buildRhidMonthlyReport } from "../src/chat/rhid-monthly-model.js";
 
 function report(month = "2026-10", name = "MAURÍCIO HONORATO DE SOUZA") {
@@ -25,13 +28,13 @@ function recordedMonth() {
   } });
 }
 
-async function build(input) {
+async function build(input, options) {
   const module = await import("../src/chat/rhid-monthly-pdf.js").catch(error => {
     if (error.code === "ERR_MODULE_NOT_FOUND") return {};
     throw error;
   });
   assert.equal(typeof module.buildRhidMonthlyPdf, "function", "deve exportar buildRhidMonthlyPdf");
-  return module.buildRhidMonthlyPdf(input);
+  return module.buildRhidMonthlyPdf(input, options);
 }
 
 async function inspect(t, blob) {
@@ -61,6 +64,106 @@ function assertInside(pages) {
     }
   }
 }
+
+// Compare the actual RGB/alpha image streams with the checked-in official PNG,
+// then inspect PDF.js drawing operators to prove the raster is painted at left.
+async function assertOfficialHeader({ pdf, pages }) {
+  const source = await readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url));
+  const { width, height } = await sharp(source).metadata();
+  const digest = bytes => createHash("sha256").update(bytes).digest("hex");
+  const officialRgb = digest(await sharp(source).removeAlpha().raw().toBuffer());
+  const officialAlpha = digest(await sharp(source).extractChannel(3).raw().toBuffer());
+  for (const [index, { page, items }] of pages.entries()) {
+    const resources = pdf.getPage(index).node.Resources().lookupMaybe(PDFName.of("XObject"), PDFDict);
+    const images = resources ? resources.entries().map(([, ref]) => pdf.context.lookup(ref))
+      .filter(object => object instanceof PDFRawStream && object.dict.get(PDFName.of("Subtype"))?.toString() === "/Image") : [];
+    assert.equal(images.length, 1, `página ${index + 1} deve conter a imagem oficial incorporada`);
+    const [image] = images;
+    assert.equal(image.dict.lookup(PDFName.of("Width")).asNumber(), width);
+    assert.equal(image.dict.lookup(PDFName.of("Height")).asNumber(), height);
+    assert.equal(digest(decodePDFRawStream(image).decode()), officialRgb, "pixels RGB devem ser os do logo oficial");
+    const alpha = image.dict.lookup(PDFName.of("SMask"), PDFRawStream);
+    assert.equal(digest(decodePDFRawStream(alpha).decode()), officialAlpha, "preservar a transparência oficial");
+
+    const operators = await page.getOperatorList();
+    const stack = [], placements = [];
+    let matrix = [1, 0, 0, 1, 0, 0];
+    for (let operator = 0; operator < operators.fnArray.length; operator++) {
+      const fn = operators.fnArray[operator], args = operators.argsArray[operator];
+      if (fn === OPS.save) stack.push(matrix.slice());
+      else if (fn === OPS.restore) matrix = stack.pop();
+      else if (fn === OPS.transform) matrix = Util.transform(matrix, args);
+      else if (fn === OPS.paintImageXObject) placements.push(matrix.slice());
+    }
+    assert.equal(placements.length, 1, "logo deve ser desenhado, não apenas armazenado no PDF");
+    const [imageWidth, skewY, skewX, imageHeight, x, y] = placements[0];
+    assert.equal(skewX, 0);
+    assert.equal(skewY, 0);
+    assert.equal(x, 32, "logo alinhado à margem esquerda existente");
+    assert.ok(imageWidth >= 90 && imageWidth <= 120 && imageHeight >= 30 && imageHeight <= 40, "logo legível na faixa atual do cabeçalho");
+    assert.ok(Math.abs(imageWidth / imageHeight - width / height) < 0.001, "sem deformar a proporção oficial");
+    assert.ok(y >= 772 && y + imageHeight <= 810.01, "logo não deve invadir nome, tabela ou margem superior");
+    const heading = items.find(item => item.str === "RELATÓRIO MENSAL RHID");
+    const period = items.find(item => item.str.startsWith("Período:"));
+    assert.ok(heading.transform[4] >= x + imageWidth + 12, "título à direita do logo com respiro");
+    assert.equal(heading.transform[5], 793);
+    assert.equal(heading.height, 17);
+    assert.ok(period.transform[4] >= x + imageWidth + 12, "período à direita do logo, sem sobreposição");
+    assert.equal(period.transform[5], 773);
+  }
+}
+
+// Missing/replaced/right-aligned logos and taller headers break the PDF contract.
+test("monthly PDF embeds supplied official raster offline at left on every employee page without moving report bounds", async t => {
+  t.mock.method(globalThis, "fetch", () => { throw new Error("PDF mensal deve funcionar offline"); });
+  const logoBytes = new Uint8Array(await readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url)));
+  const first = recordedMonth(), second = { ...report(), supplier: { id: "7", name: "HELISON ROSA LUIS" } };
+  const output = await inspect(t, await build([first, second], { logoBytes }));
+  assert.equal(output.pages.length, 2, "um mês comum de 31 dias deve ocupar uma página por colaborador");
+  await assertOfficialHeader(output);
+  assertInside(output.pages);
+  for (const [index, selected] of [first, second].entries()) {
+    const { items } = output.pages[index], text = items.map(item => item.str).join(" ");
+    for (let day = 1; day <= 31; day++) assert.ok(text.includes(`${String(day).padStart(2, "0")}/10/2026`));
+    assert.ok(text.includes(selected.supplier.name));
+    assert.ok(text.includes(`Total do mês: ${selected.total}`));
+    for (const kind of ["employee", "representative"]) {
+      const field = output.pdf.getForm().getField(`rhid_${kind}_${selected.supplier.id}`);
+      assert.ok(field instanceof PDFSignature);
+      assert.equal(field.acroField.dict.has(PDFName.of("V")), false);
+      const [widget] = field.acroField.getWidgets();
+      assert.equal(widget.P().toString(), output.pdf.getPage(index).ref.toString());
+      assert.ok(output.pdf.getPage(index).node.Annots().asArray().some(ref => ref.toString() === field.ref.toString()), "assinatura registrada na página e no AcroForm");
+      assert.ok(widget.dict.has(PDFName.of("AP")));
+      if (index === 0) assert.deepEqual(widget.getRectangle(), { x: kind === "employee" ? 32 : 309.5, y: 93, width: 253.5, height: 64 });
+    }
+  }
+  const positions = output.pages[0].items;
+  for (const [label, x, y] of [["01/10/2026", 34, 697], ["31/10/2026", 34, 277], ["Total do mês: 279:00", 32, 252]]) {
+    const item = positions.find(item => item.str === label);
+    assert.deepEqual([item.transform[4], item.transform[5]], [x, y], `${label} deve manter os limites existentes`);
+  }
+});
+
+// Each pagination path must use the branded heading, including signature pages.
+test("monthly PDF repeats the official logo on oversized-note and signature-only continuation pages", async t => {
+  const logoBytes = new Uint8Array(await readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url)));
+  const notes = report();
+  notes.days[0].issues = ["W".repeat(8500)];
+  const signatures = recordedMonth();
+  signatures.days[30].issues = Array.from({ length: 14 }, (_, index) => `Conferência documental ${index + 1}.`);
+  for (const input of [notes, signatures]) {
+    const output = await inspect(t, await build(input, { logoBytes }));
+    assert.ok(output.pages.length > 1);
+    await assertOfficialHeader(output);
+    assertInside(output.pages);
+  }
+});
+
+// Invalid explicitly supplied bytes must fail rather than silently lose branding.
+test("monthly PDF rejects invalid explicitly supplied logo bytes", async () => {
+  await assert.rejects(() => build(report(), { logoBytes: new Uint8Array([0, 1, 2]) }));
+});
 
 // Dropping dates, effective slots, flags or totals loses employee report data.
 test("monthly PDF preserves the full calendar, effective hours, adjustment and incomplete days", async t => {

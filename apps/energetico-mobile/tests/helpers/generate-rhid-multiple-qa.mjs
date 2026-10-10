@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { buildRhidMonthlyReport } from '../../src/chat/rhid-monthly-model.js';
 import { buildRhidMonthlyPdf } from '../../src/chat/rhid-monthly-pdf.js';
@@ -18,7 +18,8 @@ const snapshot = { month, rows, presentDates: [...new Set(rows.map(row => row.DA
 const reports = suppliers.map(supplier => buildRhidMonthlyReport({ month, supplier, snapshot }));
 const output = resolve(process.argv[2] || '../../artifacts/rhid-multiple-employees');
 await mkdir(output, { recursive: true });
-const blob = await buildRhidMonthlyPdf(reports);
+const logoBytes = await readFile(new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url));
+const blob = await buildRhidMonthlyPdf(reports, { logoBytes });
 const path = resolve(output, 'rhid-multiple-employees-unsigned-example.pdf');
 await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
 process.stdout.write(`${path}\n`);

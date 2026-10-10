@@ -43,6 +43,7 @@ export function createPdfPreview({
   loadPdfJs = loadLocalPdfJs,
   pixelRatio = globalThis.devicePixelRatio || 1,
   fit = 'width',
+  navigation = 'paged',
   initialPage = 1,
   pageFilter = () => true,
   onPageChange = () => {},
@@ -56,6 +57,8 @@ export function createPdfPreview({
   };
   const root = element("section", "attachment-preview-pdf");
   root.dataset.fit = fit;
+  const continuous = fit !== 'page' || navigation === 'scroll';
+  root.dataset.navigation = continuous ? 'scroll' : 'paged';
   const viewport = element("div", "attachment-preview-pdf-viewport");
   const surface = element("div", "attachment-preview-pdf-surface");
   viewport.setAttribute("aria-label", "Páginas do PDF; deslize para baixo ou use dois dedos para ampliar");
@@ -64,7 +67,7 @@ export function createPdfPreview({
   root.append(viewport);
   let pageNavigation = null, previousPageButton = null, nextPageButton = null, pageStatus = null;
   let pageNumbers = [], pageIndex = 0;
-  if (fit === 'page') {
+  if (fit === 'page' && !continuous) {
     viewport.setAttribute('aria-label', 'Página inteira do PDF; use Anterior e Próxima ou dois dedos para ampliar');
     pageNavigation = element('nav', 'attachment-preview-pdf-navigation');
     pageNavigation.setAttribute('aria-label', 'Páginas do relatório');pageNavigation.hidden = true;
@@ -74,6 +77,9 @@ export function createPdfPreview({
     pageStatus = element('span');pageStatus.dataset.pdfPageStatus = '';pageStatus.setAttribute('aria-live', 'polite');
     pageNavigation.append(previousPageButton, pageStatus, nextPageButton);root.append(pageNavigation);
     previousPageButton.addEventListener('click', () => movePage(-1));nextPageButton.addEventListener('click', () => movePage(1));
+  } else if (fit === 'page') {
+    pageStatus = element('p', 'attachment-preview-pdf-position');
+    pageStatus.dataset.pdfPageStatus = '';pageStatus.setAttribute('aria-live', 'polite');root.append(pageStatus);
   }
   container.append(root);
 
@@ -87,23 +93,45 @@ export function createPdfPreview({
   const windowRef = documentRef.defaultView;
   let resizeObserver = null;
   let fittedSize = '';
+  let reportedPage = null;
   const viewportSize = () => `${viewport.clientWidth}:${viewport.clientHeight}`;
 
   function getCurrentPage() {
+    if (destroyed || busy) return null;
+    // A resize changes intersections before the canvases are refitted. Keep
+    // the last stable employee and disable signing until its page is restored.
+    if (fit === 'page' && viewportSize() !== fittedSize) return null;
+    if (continuous) {
+      const bounds = viewport.getBoundingClientRect();
+      const bottom = bounds.bottom ?? bounds.top + viewport.clientHeight;
+      let mostVisible = 0;
+      for (const node of surface.children) {
+        const pageBounds = node.getBoundingClientRect();
+        const visible = Math.max(0, Math.min(bottom, pageBounds.bottom) - Math.max(bounds.top, pageBounds.top));
+        if (visible > mostVisible) {
+          mostVisible = visible;
+          pageIndex = pageNumbers.indexOf(Number(node.dataset.pageNumber));
+        }
+      }
+    }
     const number = pageNumbers[pageIndex] || 1;
     return !destroyed && !busy && renderedCanvases.some(canvas => Number(canvas.parentElement?.dataset.pageNumber) === number) ? number : null;
   }
 
   function showCurrentPage() {
-    if (fit !== 'page' || destroyed) return;
-    pageNavigation.hidden = pageNumbers.length <= 1;
-    previousPageButton.disabled = pageIndex <= 0;
-    nextPageButton.disabled = pageIndex >= pageNumbers.length - 1;
-    pageStatus.textContent = `${pageIndex + 1} de ${pageNumbers.length}`;
-    for (const node of surface.children) node.hidden = Number(node.dataset.pageNumber) !== pageNumbers[pageIndex];
-    viewport.scrollTop = viewport.scrollLeft = 0;
-    onPageChange(getCurrentPage());
+    if (destroyed) return;
+    if (!continuous) {
+      pageNavigation.hidden = pageNumbers.length <= 1;
+      previousPageButton.disabled = pageIndex <= 0;
+      nextPageButton.disabled = pageIndex >= pageNumbers.length - 1;
+      for (const node of surface.children) node.hidden = Number(node.dataset.pageNumber) !== pageNumbers[pageIndex];
+      viewport.scrollTop = viewport.scrollLeft = 0;
+    }
+    const currentPage = getCurrentPage();
+    if (pageStatus) pageStatus.textContent = `${pageIndex + 1} de ${pageNumbers.length}`;
+    if (currentPage !== reportedPage) { reportedPage = currentPage; onPageChange(currentPage); }
   }
+  viewport.addEventListener('scroll', showCurrentPage, { passive: true });
   function movePage(delta) {
     if (destroyed || busy) return;
     pageIndex = Math.max(0, Math.min(pageNumbers.length - 1, pageIndex + delta));showCurrentPage();
@@ -166,7 +194,7 @@ export function createPdfPreview({
     const scaled = page.getViewport({ scale: displayScale * outputRatio });
     const wrapper = element("div", "attachment-preview-pdf-page");
     wrapper.dataset.pageNumber = String(number);
-    if (fit === 'page') wrapper.hidden = number !== pageNumbers[pageIndex];
+    if (!continuous) wrapper.hidden = number !== pageNumbers[pageIndex];
     const canvas = element("canvas", "attachment-preview-pdf-canvas");
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", `Página ${number} de ${pdf.numPages} do PDF`);
@@ -208,6 +236,7 @@ export function createPdfPreview({
 
   async function renderAll(generation) {
     busy = true;
+    reportedPage = null;
     onPageChange(null);
     fittedSize = viewportSize();
     root.setAttribute("aria-busy", "true");
@@ -224,7 +253,10 @@ export function createPdfPreview({
         failedPages += 1;
         const wrapper = element("div", "attachment-preview-pdf-page attachment-preview-pdf-page--error");
         wrapper.dataset.pageNumber = String(number);
-        if (fit === 'page') wrapper.hidden = number !== pageNumbers[pageIndex];
+        // A full-page error slot keeps a failed last employee reachable: a
+        // short placeholder would clamp scrolling onto the healthy neighbour.
+        if (fit === 'page') wrapper.style.minHeight = `${Math.max(120, viewport.clientHeight - 8)}px`;
+        if (!continuous) wrapper.hidden = number !== pageNumbers[pageIndex];
         wrapper.append(element("p", "attachment-preview-pdf-page-error", `Não foi possível mostrar a página ${number}.`));
         surface.append(wrapper);
       }
@@ -232,9 +264,13 @@ export function createPdfPreview({
     if (destroyed || generation !== renderGeneration) return;
     viewport.scrollTop = viewport.scrollLeft = 0;
     root.dataset.failedPages = String(failedPages);
+    if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
+    if (continuous) {
+      const target = [...surface.children].find(node => Number(node.dataset.pageNumber) === pageNumbers[pageIndex]);
+      if (target) viewport.scrollTop = Math.max(0, target.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop);
+    }
     busy = false;
     showCurrentPage();
-    if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
     root.setAttribute("aria-busy", "false");
     refitPage();
   }
@@ -260,6 +296,7 @@ export function createPdfPreview({
     signal?.removeEventListener("abort", destroy);
     resizeObserver?.disconnect();
     windowRef?.removeEventListener('resize', refitPage);
+    viewport.removeEventListener('scroll', showCurrentPage);
     pinchZoom.destroy();
     renderTask?.cancel();
     clearRenderedPages();
@@ -292,11 +329,8 @@ export function createPdfPreview({
     });
     pdf = await loadingTask.promise;
     if (destroyed) { pdf = null; return; }
-    if (fit === 'page') {
-      pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
-      pageIndex = Math.max(0, pageNumbers.indexOf(initialPage));
-      showCurrentPage();
-    }
+    pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
+    pageIndex = Math.max(0, pageNumbers.indexOf(initialPage));
     renderGeneration += 1;
     try {
       await renderAll(renderGeneration);

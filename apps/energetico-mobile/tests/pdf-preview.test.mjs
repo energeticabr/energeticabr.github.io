@@ -7,6 +7,20 @@ import { installAppZoomGuard } from "../src/web/app-zoom-guard.js";
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+function scrollGeometry(container, documentRef) {
+  const viewport = container.querySelector('.attachment-preview-pdf-viewport');
+  Object.defineProperties(viewport, { clientWidth: { value: 360, configurable: true }, clientHeight: { value: 400, configurable: true } });
+  viewport.getBoundingClientRect = () => ({ top: 20, bottom: 20 + viewport.clientHeight, left: 0, right: viewport.clientWidth, height: viewport.clientHeight });
+  const original = documentRef.defaultView.HTMLElement.prototype.getBoundingClientRect;
+  documentRef.defaultView.HTMLElement.prototype.getBoundingClientRect = function () {
+    if (!this.matches('.attachment-preview-pdf-page')) return original.call(this);
+    const index = [...this.parentElement.children].indexOf(this);
+    const top = 20 + index * 424 - viewport.scrollTop;
+    return { top, bottom: top + 400, left: 0, right: 360, height: 400 };
+  };
+  return viewport;
+}
+
 test("largura do PDF já reserva a barra vertical antes de desenhar a página", async () => {
   const css = await readFile(new URL("../src/web/attachment-preview.css", import.meta.url), "utf8");
   assert.match(css, /\.attachment-preview-pdf-viewport\s*\{[^}]*overflow-y:\s*scroll/);
@@ -115,6 +129,126 @@ test('whole-page PDF fit recalculates after phone rotation and releases its resi
  await tick();await tick();
  assert.ok(parseFloat(container.querySelector('canvas').style.height)<=232);
  viewer.destroy();documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));await tick();assert.equal(container.children.length,0);
+});
+
+// Hiding sibling pages or leaving signing pinned to page 1 breaks vertical RHID reading.
+test('continuous whole-page report exposes every page and follows scrolling without next buttons', async t => {
+  const changes = [];
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', navigation: 'scroll', onPageChange: page => changes.push(page) });
+  const viewport = scrollGeometry(container, documentRef);
+  await viewer.ready;
+  assert.deepEqual([...container.querySelectorAll('[data-page-number]')].filter(page => !page.hidden).map(page => page.dataset.pageNumber), ['1', '2', '3']);
+  assert.equal(container.querySelector('[data-pdf-action="next-page"]'), null);
+  assert.equal(container.querySelector('[data-pdf-action="previous-page"]'), null);
+  assert.equal(viewer.getCurrentPage(), 1);
+  viewport.scrollTop = 424;
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(viewer.getCurrentPage(), 2);
+  assert.equal(changes.at(-1), 2);
+  viewport.scrollTop = 848;
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(viewer.getCurrentPage(), 3);
+  assert.equal(changes.at(-1), 3);
+  const count = changes.length;
+  viewer.destroy();
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(changes.length, count, 'closing releases the scroll callback');
+});
+
+// Reopening a signed employee and rotating must not move signing to another employee.
+test('continuous report restores the requested page on opening and after a refit', async t => {
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', navigation: 'scroll', initialPage: 2 });
+  const viewport = scrollGeometry(container, documentRef);
+  await viewer.ready;
+  assert.equal(viewport.scrollTop, 424);
+  assert.equal(viewer.getCurrentPage(), 2);
+  viewport.scrollTop = 848;
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  Object.defineProperty(viewport, 'clientHeight', { value: 350 });
+  documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));
+  await tick(); await tick();
+  assert.equal(viewer.getCurrentPage(), 3);
+  assert.equal(viewport.scrollTop, 848);
+});
+
+test('rotation preserves the last visible employee even when new geometry favours the previous page', async t => {
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', navigation: 'scroll' });
+  const viewport = scrollGeometry(container, documentRef);
+  Object.defineProperty(viewport, 'clientHeight', { value: 600 });
+  await viewer.ready;
+  viewport.scrollTop = 300;
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(viewer.getCurrentPage(), 2);
+  Object.defineProperty(viewport, 'clientWidth', { value: 760 });
+  Object.defineProperty(viewport, 'clientHeight', { value: 200 });
+  documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));
+  await tick(); await tick();
+  assert.equal(viewer.getCurrentPage(), 2, 'orientation must not change the employee selected for signing');
+  assert.equal(viewport.scrollTop, 424);
+});
+
+test('pending viewport changes disable signing and cannot overwrite the tracked employee before refitting', async t => {
+  const changes = [];
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', navigation: 'scroll', onPageChange: page => changes.push(page) });
+  const viewport = scrollGeometry(container, documentRef);
+  Object.defineProperty(viewport, 'clientHeight', { value: 600 });
+  await viewer.ready;
+  viewport.scrollTop = 300;
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(viewer.getCurrentPage(), 2);
+  Object.defineProperty(viewport, 'clientHeight', { value: 200 });
+  assert.equal(viewer.getCurrentPage(), null, 'stale page geometry cannot be used for signing');
+  viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(changes.at(-1), null);
+  documentRef.defaultView.dispatchEvent(new documentRef.defaultView.Event('resize'));
+  assert.equal(viewer.getCurrentPage(), null, 'signing remains disabled while rendering');
+  await tick(); await tick();
+  assert.equal(viewer.getCurrentPage(), 2);
+  assert.equal(changes.at(-1), 2);
+});
+
+test('a failed last employee page keeps signing disabled even with actual browser scroll limits', async t => {
+  const changes = [];
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', navigation: 'scroll', initialPage: 2,
+    pageFilter: number => number <= 2, onPageChange: page => changes.push(page),
+    renderPage: number => number === 2 ? { promise: Promise.reject(new Error('damaged')), cancel() {} } : undefined });
+  const viewport = container.querySelector('.attachment-preview-pdf-viewport');
+  Object.defineProperties(viewport, { clientWidth: { value: 360 }, clientHeight: { value: 600 } });
+  viewport.getBoundingClientRect = () => ({ top: 0, bottom: 600, height: 600 });
+  const heightOf = node => node.matches('.attachment-preview-pdf-page--error')
+    ? Math.max(120, parseFloat(node.style.minHeight) || 0) : parseFloat(node.querySelector('canvas').style.height);
+  let scrollTop = 0;
+  Object.defineProperty(viewport, 'scrollTop', { get: () => scrollTop, set: value => {
+    const pages = [...container.querySelectorAll('[data-page-number]')];
+    const total = pages.reduce((sum, node) => sum + heightOf(node), 0) + Math.max(0, pages.length - 1) * 24;
+    scrollTop = Math.min(Math.max(0, value), Math.max(0, total - viewport.clientHeight));
+  } });
+  const original = documentRef.defaultView.HTMLElement.prototype.getBoundingClientRect;
+  documentRef.defaultView.HTMLElement.prototype.getBoundingClientRect = function () {
+    if (!this.matches('.attachment-preview-pdf-page')) return original.call(this);
+    const pages = [...this.parentElement.children], index = pages.indexOf(this);
+    const top = pages.slice(0, index).reduce((sum, node) => sum + heightOf(node) + 24, 0) - viewport.scrollTop;
+    return { top, bottom: top + heightOf(this), height: heightOf(this) };
+  };
+  await viewer.ready;
+  assert.equal(viewer.getCurrentPage(), null, 'a short failed last page must not select its healthy neighbour');
+  assert.equal(changes.at(-1), null);
+  assert.match(container.querySelector('[data-pdf-page-status]').textContent, /2 de 2/);
+});
+
+// Failed pages cannot borrow the neighbouring employee's rendered canvas for signing.
+test('scrolling to a failed report page disables signing and scrolling back restores it', async t => {
+  const changes = [];
+  const { viewer, container, documentRef } = setup(t, { fit: 'page', navigation: 'scroll', onPageChange: page => changes.push(page),
+    renderPage: number => number === 2 ? { promise: Promise.reject(new Error('damaged')), cancel() {} } : undefined });
+  const viewport = scrollGeometry(container, documentRef);
+  await viewer.ready;
+  viewport.scrollTop = 424; viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(viewer.getCurrentPage(), null);
+  assert.equal(changes.at(-1), null);
+  viewport.scrollTop = 0; viewport.dispatchEvent(new documentRef.defaultView.Event('scroll'));
+  assert.equal(viewer.getCurrentPage(), 1);
+  assert.equal(changes.at(-1), 1);
 });
 
 test("PDF amplia ao afastar dois dedos no visualizador", async t => {

@@ -55,19 +55,28 @@ test('PDF signing stays disabled until a tracked page is ready and after viewer 
  onError(new Error('render failed'));assert.equal(button.disabled,true);button.click();assert.equal(calls.length,0);
 });
 
-test('real report viewer disables signing on failed pages, navigation and pending refits',async t=>{
+test('real report viewer disables signing on failed pages, scrolling and pending refits',async t=>{
  let fails=true,height=600;const calls=[];
  const pdf={numPages:2,getPage:async number=>({getViewport:({scale})=>({width:600*scale,height:900*scale}),cleanup(){},render:()=>({promise:number===2&&fails?Promise.reject(new Error('page failed')):Promise.resolve(),cancel(){}})})};
  const {preview,documentRef,dom}=setup(t,{loadPdfPreview:async()=>({createPdfPreview:options=>createPdfPreview({...options,loadPdfJs:async()=>({getDocument:()=>({promise:Promise.resolve(pdf),destroy:async()=>{}})})})})});
  dom.reconfigure({url:'https://example.test/energetico/'});
  dom.window.HTMLCanvasElement.prototype.getContext=()=>({});
+ Object.defineProperty(dom.window.HTMLElement.prototype,'clientHeight',{get(){return this.matches('.attachment-preview-pdf-viewport')?height:0;},configurable:true});
+ const bounds=dom.window.HTMLElement.prototype.getBoundingClientRect;
+ dom.window.HTMLElement.prototype.getBoundingClientRect=function(){
+  const viewport=documentRef.querySelector('.attachment-preview-pdf-viewport');
+  if(this===viewport)return {top:0,bottom:height,height};
+  if(this.matches('.attachment-preview-pdf-page')){const top=([...this.parentElement.children].indexOf(this))*620-viewport.scrollTop;return {top,bottom:top+600,height:600};}
+  return bounds.call(this);
+ };
  await preview.open(new Blob(['%PDF'],{type:'application/pdf'}),'mensal.pdf',{layout:'report-pdf',initialPage:2,onSign:input=>calls.push(input),onStamp:input=>calls.push(input)});
  const sign=documentRef.querySelector('[data-preview-action="sign"]'),stamp=documentRef.querySelector('[data-preview-action="stamp"]');
  assert.match(documentRef.querySelector('[data-page-number="2"]').textContent,/Não foi possível/);assert.equal(sign.disabled,true);assert.equal(stamp.disabled,true);
- documentRef.querySelector('[data-pdf-action="previous-page"]').click();assert.equal(sign.disabled,false);sign.click();await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls.map(input=>input.page),[1]);
- documentRef.querySelector('[data-pdf-action="next-page"]').click();assert.equal(sign.disabled,true);
- const viewport=documentRef.querySelector('.attachment-preview-pdf-viewport');Object.defineProperty(viewport,'clientHeight',{get:()=>height});
- fails=false;dom.window.dispatchEvent(new dom.window.Event('resize'));assert.equal(sign.disabled,true);
+ assert.equal(documentRef.querySelector('[data-pdf-action="next-page"]'),null,'reports advance by scrolling');
+ const viewport=documentRef.querySelector('.attachment-preview-pdf-viewport');
+ viewport.scrollTop=0;viewport.dispatchEvent(new dom.window.Event('scroll'));assert.equal(sign.disabled,false);sign.click();await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(calls.map(input=>input.page),[1]);
+ viewport.scrollTop=620;viewport.dispatchEvent(new dom.window.Event('scroll'));assert.equal(sign.disabled,true);
+ fails=false;height=590;dom.window.dispatchEvent(new dom.window.Event('resize'));assert.equal(sign.disabled,true);
  for(let i=0;i<12;i++)await new Promise(resolve=>setImmediate(resolve));assert.equal(sign.disabled,false);
  fails=true;height=400;dom.window.dispatchEvent(new dom.window.Event('resize'));assert.equal(sign.disabled,true);
  for(let i=0;i<12;i++)await new Promise(resolve=>setImmediate(resolve));assert.equal(sign.disabled,true);sign.click();assert.equal(calls.length,1);

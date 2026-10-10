@@ -6,13 +6,26 @@ const supplier={id:'7',name:'FUNCIONÁRIO EXEMPLO COM NOME EXTENSO PARA TESTE DE
 const rows=Array.from({length:31},(_,i)=>({Id:String(i+1),ID_PESSOA_RHID:'101',NOME_COLABORADOR:supplier.name,DATA_REFERENCIA:`2026-10-${String(i+1).padStart(2,'0')}`,BATIDAS_RHID:'07:00;12:00;13:00;17:00'}));
 const report=buildRhidMonthlyReport({month:'2026-10',supplier,snapshot:{month:'2026-10',rows,presentDates:rows.map(r=>r.DATA_REFERENCIA)}});
 const preview=createAttachmentPreview({documentRef:document,exportMedia:async()=>{}});
-await preview.open(await buildRhidMonthlyPdf(report),'presencas-rhid-exemplo.pdf',{layout:'report-pdf',returnLabel:'Voltar ao relatório',onSign:()=>{},onStamp:()=>{}});
+const reports=[report,{...report,supplier:{id:'8',name:'SEGUNDO FUNCIONÁRIO EXEMPLO'}}],signedPages=[];
+const logoBytes=new Uint8Array(await (await fetch(new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url))).arrayBuffer());
+await preview.open(await buildRhidMonthlyPdf(reports,{logoBytes}),'presencas-rhid-exemplo.pdf',{layout:'report-pdf',returnLabel:'Voltar ao relatório',onSign:context=>signedPages.push(context.page),onStamp:()=>{}});
 await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const viewport=document.querySelector('.attachment-preview-pdf-viewport');
-for(let i=0;i<200&&(document.querySelector('.attachment-preview-pdf').getAttribute('aria-busy')==='true');i++)await new Promise(r=>setTimeout(r,10));
+// The summary replaces the loading indicator after open() resolves. Wait for
+// the resulting resize/refit to settle before simulating the user's scroll.
+let stable=0,previousSize='';
+for(let i=0;i<200&&stable<3;i++){
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ const size=`${viewport.clientWidth}:${viewport.clientHeight}:${[...document.querySelectorAll('canvas')].map(c=>c.style.height).join(',')}`;
+ stable=document.querySelector('.attachment-preview-pdf').getAttribute('aria-busy')==='false'&&size===previousSize?stable+1:0;previousSize=size;
+}
+const second=document.querySelector('[data-page-number="2"]');
+viewport.scrollTop+=second.getBoundingClientRect().top-viewport.getBoundingClientRect().top;
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+document.querySelector('[data-preview-action="sign"]').click();await Promise.resolve();
 const available=viewport.getBoundingClientRect(),canvases=[...document.querySelectorAll('.attachment-preview-pdf-canvas')].filter(c=>!c.closest('[hidden]')).map(c=>{const r=c.getBoundingClientRect(),context=c.getContext('2d'),pixels=context.getImageData(0,0,c.width,c.height).data;let inkPixels=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<150&&pixels[i+1]<150&&pixels[i+2]<150)inkPixels++;return {width:r.width,height:r.height,left:r.left,right:r.right,inkPixels,corner:[...context.getImageData(c.width-2,c.height-2,1,1).data]};});
 const signatureControls=[...document.querySelectorAll('[data-preview-action="sign"],[data-preview-action="stamp"]')].filter(node=>!node.hidden).length;
 const buttons=[...document.querySelectorAll('.attachment-preview-sign-actions button,.attachment-preview-back,.attachment-preview-export')].map(node=>{const r=node.getBoundingClientRect();return {text:node.textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom};});
-document.querySelector('#layout-result').textContent=JSON.stringify({signatureControls,buttons,width:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth,viewport:{width:viewport.clientWidth,height:viewport.clientHeight,left:available.left,right:available.right},canvases,failedPages:document.querySelector('.attachment-preview-pdf').dataset.failedPages,scrollWidth:viewport.scrollWidth});
+document.querySelector('#layout-result').textContent=JSON.stringify({signedPages,scrollTop:viewport.scrollTop,scrollHeight:viewport.scrollHeight,nextButtons:document.querySelectorAll('[data-pdf-action="next-page"]').length,signatureControls,buttons,width:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth,viewport:{width:viewport.clientWidth,height:viewport.clientHeight,left:available.left,right:available.right},canvases,failedPages:document.querySelector('.attachment-preview-pdf').dataset.failedPages,scrollWidth:viewport.scrollWidth});
 document.documentElement.dataset.layout='ready';
 </script></body></html>
