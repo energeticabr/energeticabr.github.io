@@ -6,6 +6,11 @@
 import { createChatView } from '../../src/ui/chat-view.js';
 const view = createChatView(document.querySelector('#app'));
 const samples = {
+  settlement: `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS PROVISÃO PGTOS ÀS 06:18.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• PROVISÃO DE PAGAMENTO: ID 308
+• PEDIDO: ID 403
+• LANÇAMENTO: ID 3567`,
   multiple: `✅ *🟢 6 LANÇAMENTOS GRAVADOS NA BASE DE DADOS LANCAMENTOS ÀS 17:16.* 🕒
 🆔 *REGISTROS CONFIRMADOS:*
 • LANÇAMENTOS: IDS 3551, 3552, 3553, 3554, 3555, 3556
@@ -26,7 +31,7 @@ const samples = {
 };
 const sample = new URLSearchParams(location.search).get('sample') || 'multiple';
 view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
-  activeFlow: null, completionNavigation: { homeOnly: true, title: 'POSTAGEM CONCLUÍDA' },
+  activeFlow: null, completionNavigation: { homeOnly: true, title: sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : 'POSTAGEM CONCLUÍDA' },
   messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text: samples[sample] }],
 });
 await document.fonts.ready;

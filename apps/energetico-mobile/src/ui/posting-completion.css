@@ -26,6 +26,17 @@
 .launch-completion dd { margin: 0; min-width: 0; font-size: clamp(19px, 2.4vw, 30px); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.25; overflow-wrap: anywhere; }
 .launch-completion footer { display: flex; align-items: center; gap: 14px; margin-top: 14px; padding: 12px 16px; background: #e4f4ee; border-radius: 14px; font-size: clamp(14px, 1.7vw, 18px); line-height: 1.4; }
 .launch-completion footer svg { flex: 0 0 28px; width: 28px; height: 28px; color: #356f68; }
+.launch-completion__operation { display: flex; align-items: center; gap: 14px; padding: 18px 4px; border-bottom: 1px solid #e1e9ee; }
+.launch-completion__operation > svg { flex: 0 0 44px; width: 44px; height: 44px; padding: 9px; border-radius: 50%; box-sizing: border-box; color: #184664; background: #e8f2fb; }
+.launch-completion__operation > div { display: grid; gap: 4px; min-width: 0; font-size: clamp(14px, 1.7vw, 18px); overflow-wrap: anywhere; }
+.launch-completion__operation span { color: #566a77; }
+.launch-completion--provision-settlement .launch-completion__title > span { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border-radius: 10px; color: #fff; background: #7e3092; }
+.launch-completion--provision-settlement .launch-completion__title svg { width: 26px; height: 26px; }
+.launch-completion--provision-settlement .launch-completion__row { grid-template-columns: minmax(0, 1fr) minmax(0, auto); }
+.launch-completion--provision-settlement dt { color: #173b57; font-weight: 700; }
+.launch-completion--provision-settlement dt svg { display: none; }
+.launch-completion--provision-settlement dd { padding: 7px 12px; border-radius: 10px; background: #deedff; color: #174d7d; font-size: clamp(14px, 1.6vw, 20px); text-align: center; }
+.launch-completion--provision-settlement footer svg { color: #178844; }
 @media (max-width: 480px) {
   .chat-message--launch-completion .chat-avatar { width: 32px; height: 32px; flex-basis: 32px; }
   .launch-completion { padding: 10px; border-radius: 18px; }
@@ -38,4 +49,6 @@
 @media (max-width: 359px) {
   .launch-completion__row { grid-template-columns: minmax(0, 1fr); gap: 5px; }
   .launch-completion dd { padding-left: 30px; }
+  .launch-completion--provision-settlement .launch-completion__row { grid-template-columns: minmax(0, 1fr); }
+  .launch-completion--provision-settlement dd { justify-self: start; padding: 7px 12px; max-width: 100%; box-sizing: border-box; }
 }

@@ -16,6 +16,7 @@ test('other posting cards remain readable on phone, tablet and PC with every ID 
   try {
     for (const [width, height] of [[320, 740], [390, 844], [1024, 768], [1365, 900]]) {
       for (const [sample, expected] of [
+        ['settlement', ['ID 308', 'ID 403', 'ID 3567']],
         ['multiple', ['IDS 3551, 3552, 3553, 3554, 3555, 3556', 'IDS 390, 391', 'ID 9007199254740993', 'R$ 1.234.567,89']],
         ['provision', ['IDS 501, 502', 'IDS 101, 102']],
         ['registration', ['ID 201']],
