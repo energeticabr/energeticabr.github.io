@@ -8,9 +8,11 @@ export function postingCompletion(message) {
   const lines = String(message?.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const plain = lines.map(line => line.replaceAll('*', ''));
   if (/\bNÃO\b/i.test(plain[0] || '')) return null;
-  if (plain.some(line => /❌|\b(?:erro|falha)\b|NÃO (?:FOI|FORAM|GRAVAD|CADASTRAD|REGISTRAD)/i.test(line))) return null;
-  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS ((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
+  if (plain.some(line => /❌|\b(?:erro|falha)\b|NÃO (?:FOI|FORAM|GRAVAD|CADASTRAD|REGISTRAD|BAIXAD)/i.test(line))) return null;
+  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS ((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
   if (!heading || !/^(?:🆔\s*)?REGISTROS CONFIRMADOS:$/i.test(plain[1] || '')) return null;
+  const settlement = /^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^PROVIS[AÃ]O PGTOS$/i.test(heading[2]);
+  if (/ BAIXADO$/i.test(heading[1]) && !settlement) return null;
   const records = [];
   const notes = [];
   let identifiers = 0;
@@ -34,5 +36,7 @@ export function postingCompletion(message) {
     }
   }
   if (!identifiers) return null;
-  return Object.freeze({ title: heading[1], database: heading[2], time: heading[3], records: Object.freeze(records), notes: Object.freeze(notes) });
+  if (settlement && ![/^PROVIS[AÃ]O DE PAGAMENTO$/i, /^PEDIDO$/i, /^LAN[ÇC]AMENTO$/i]
+    .every(label => records.some(record => record.icon !== 'total' && label.test(record.label)))) return null;
+  return Object.freeze({ title: heading[1], database: heading[2], time: heading[3], records: Object.freeze(records), notes: Object.freeze(notes), ...(settlement ? { kind: 'provision-settlement' } : {}) });
 }

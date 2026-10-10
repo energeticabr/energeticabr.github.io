@@ -16,6 +16,56 @@ const multiple = `✅ *🟢 2 LANÇAMENTOS GRAVADOS NA BASE DE DADOS LANCAMENTOS
 • PEDIDO: ID 390
 💰 *VALOR TOTAL DOS LANÇAMENTOS: R$ 1.492,00*`;
 
+const settlement = `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS PROVISÃO PGTOS ÀS 06:18.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• PROVISÃO DE PAGAMENTO: ID 308
+• PEDIDO: ID 403
+• LANÇAMENTO: ID 3567`;
+
+test('provision settlement uses the new confirmation layout with all three source IDs and time', () => {
+  const doc = documentFor(settlement);
+  const card = doc.querySelector('.launch-completion');
+  assert.ok(card, 'the confirmed settlement must not fall back to a plain paragraph');
+  assert.equal(card.querySelector('h2').textContent, 'PAGAMENTO AGENDADO');
+  assert.equal(card.querySelector('.launch-completion__success p').textContent, 'Baixado na base de dados');
+  assert.match(card.querySelector('.launch-completion__operation').textContent, /PROVISÃO PGTOS\s+ÀS 06:18/);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['PROVISÃO DE PAGAMENTO', 'PEDIDO', 'LANÇAMENTO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 308', 'ID 403', 'ID 3567']);
+  assert.equal(card.querySelector('footer').textContent.trim(), 'Processo concluído com sucesso!');
+  assert.doesNotMatch(card.textContent, /R\$|\d{2}\/\d{2}\/\d{4}/);
+  assert.equal(card.querySelectorAll('button, input, [data-action]').length, 0);
+});
+
+test('settlement receipt is independent of an ended flow and preserves notes, attachments and large IDs', () => {
+  const text = settlement.replace('PROVISÃO PGTOS', 'PROVISAO PGTOS').replace('ID 308', 'ID 9007199254740993') + '\n📎 Comprovante: recibo.pdf\n⚠️ Anexo adicional pendente de envio.';
+  const attachments = Object.freeze([Object.freeze({ id: 'receipt', name: 'recibo.pdf' })]);
+  const metadata = Object.freeze({ attachments });
+  const card = documentFor(text, metadata).querySelector('.launch-completion');
+  assert.ok(card);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 9007199254740993', 'ID 403', 'ID 3567']);
+  assert.match(card.querySelector('.launch-completion__details').textContent, /Comprovante: recibo.pdf/);
+  assert.match(card.querySelector('.launch-completion__details').textContent, /Anexo adicional pendente de envio/);
+  assert.deepEqual(metadata.attachments, attachments);
+});
+
+for (const [name, text] of [
+  ['negative result', settlement.replace('BAIXADO', 'NÃO BAIXADO')],
+  ['partial failure', settlement + '\n❌ Falha ao gravar o lançamento.'],
+  ['missing identifiers', settlement.split('\n').slice(0, 2).join('\n')],
+  ['invalid identifier', settlement.replace('ID 308', 'ID 0')],
+  ['invalid time', settlement.replace('06:18', '26:18')],
+  ['missing provision record', settlement.replace('\n• PROVISÃO DE PAGAMENTO: ID 308', '')],
+  ['missing order record', settlement.replace('\n• PEDIDO: ID 403', '')],
+  ['missing launch record', settlement.replace('\n• LANÇAMENTO: ID 3567', '')],
+  ['unrelated confirmed record', settlement.split('\n').slice(0, 2).join('\n') + '\n• DOCUMENTO: ID 601'],
+]) {
+  test(`unconfirmed provision settlement stays plain and visible: ${name}`, () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.ok(doc.querySelector('.chat-bubble').textContent.includes(text.replaceAll('*', '').split('\n')[0]));
+  });
+}
+
 test('multiple posting displays every confirmed ID and the source total in the shared success card', () => {
   const doc = documentFor(multiple, { launchCompletionMode: 'multiple' });
   const card = doc.querySelector('.launch-completion');
