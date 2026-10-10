@@ -150,6 +150,42 @@ test('RHID selects every eligible supplier despite a search and generates one re
  assert.equal(reads,1);assert.deepEqual(reports[0].map(r=>r.supplier.id),['4','7']);
 });
 
+test('RHID select-all touch survives keyboard blur and ancestor movement before committing on release',async t=>{
+ const {doc,dom}=await setup(t);doc.querySelector('.sfs-field input').click();
+ const search=doc.querySelector('.sfs-report-search');search.focus();
+ const all=doc.querySelector('.sfs-select-all'),popup=doc.querySelector('.sfs-popup'),native=doc.querySelector('[name="supplier"]');
+ let changes=0;native.addEventListener('change',()=>changes++);
+ const pointer=(type,node,x=30)=>{
+  const event=new dom.window.MouseEvent(type,{bubbles:true,button:0,clientX:x,clientY:30});
+  Object.defineProperties(event,{pointerType:{value:'touch'},pointerId:{value:12}});node.dispatchEvent(event);
+ };
+ pointer('pointerdown',all);
+ search.dispatchEvent(new dom.window.FocusEvent('focusout',{bubbles:true,relatedTarget:null}));
+ doc.querySelector('.rhid-monthly-dialog').dispatchEvent(new dom.window.Event('scroll'));
+ assert.equal(popup.hidden,false,'keyboard dismissal during the footer tap must not close the list');
+ pointer('pointerup',all);
+ assert.deepEqual([...native.selectedOptions].map(o=>o.value),['4','7'],'all suppliers commit before a delayed mobile click');
+ assert.equal(changes,1);assert.equal(popup.hidden,false);
+ all.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,detail:1}));assert.equal(changes,1);
+ const confirm=doc.querySelector('.sfs-confirm-selection');pointer('pointerdown',confirm);
+ search.dispatchEvent(new dom.window.FocusEvent('focusout',{bubbles:true,relatedTarget:null}));
+ assert.equal(popup.hidden,false);pointer('pointerup',confirm);
+ assert.equal(popup.hidden,true);assert.deepEqual([...native.selectedOptions].map(o=>o.value),['4','7']);
+});
+
+test('RHID cancelled or dragged select-all touch does not select suppliers or trap subsequent outside focus',async t=>{
+ const {doc,dom}=await setup(t);const trigger=doc.querySelector('.sfs-field input'),popup=doc.querySelector('.sfs-popup');
+ const all=doc.querySelector('.sfs-select-all'),native=doc.querySelector('[name="supplier"]');
+ const pointer=(type,x)=>{const event=new dom.window.MouseEvent(type,{bubbles:true,button:0,clientX:x,clientY:30});Object.defineProperty(event,'pointerType',{value:'touch'});all.dispatchEvent(event);};
+ for(const release of ['pointercancel','pointerup']){
+  trigger.click();pointer('pointerdown',30);pointer(release,300);await tick();
+  all.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,detail:1}));
+  assert.deepEqual([...native.selectedOptions].map(o=>o.value),[]);
+  trigger.dispatchEvent(new dom.window.FocusEvent('focusout',{bubbles:true,relatedTarget:doc.querySelector('[name="year"]')}));
+  assert.equal(popup.hidden,true);
+ }
+});
+
 test('RHID bulk selection excludes placeholder, hidden and disabled options and supports unmarking afterward',async t=>{
  const {doc}=await setup(t);const native=doc.querySelector('[name="supplier"]');
  native.options[1].disabled=true;native.append(Object.assign(doc.createElement('option'),{value:'99',textContent:'Oculto',hidden:true}));
