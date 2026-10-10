@@ -637,6 +637,7 @@ function createSharePointListData({
   listMissingCode = "orders_list_missing",
   preserveSourceOrder = false,
   filterKind,
+  assertSession = () => {},
 } = {}) {
   let repository = suppliedRepository;
   if (!repository) {
@@ -734,10 +735,10 @@ function createSharePointListData({
   let editorDataPromise;
   function editorData() {
     return editorDataPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
-      createGalleryRecordData({ repository, siteKey, listAliases, listName, resolveList }));
+      createGalleryRecordData({ repository, siteKey, listAliases, listName, resolveList, assertSession }));
   }
   const loadEditor = async (id, options) => (await editorData()).loadEditor(id, options);
-  const saveEditor = async (context, fields) => (await editorData()).saveEditor(context, fields);
+  const saveEditor = async (context, fields, options) => (await editorData()).saveEditor(context, fields, options);
   const deleteItem = async (id, options) => (await editorData()).deleteItem(id, options);
 
   async function listAttachments(rawId, { refresh = false } = {}) {

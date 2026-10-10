@@ -11,6 +11,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
   let child, socket, sequence = 0, sessionId, onLoaded, spawnError, browserStderr = '';
+  const loadingErrors = [];
   try {
     child = spawn(browser, [
       "--headless=new", "--disable-gpu", "--no-first-run", "--no-sandbox",
@@ -52,6 +53,8 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       const reply = JSON.parse(event.data);
       if (reply.method) {
         if (reply.method === "Page.loadEventFired" && reply.sessionId === sessionId) onLoaded?.();
+        if (reply.method === 'Runtime.exceptionThrown' && reply.sessionId === sessionId) loadingErrors.push(reply.params.exceptionDetails.exception?.description || reply.params.exceptionDetails.text);
+        if (reply.method === 'Network.responseReceived' && reply.sessionId === sessionId && reply.params.response.status >= 400) loadingErrors.push(`${reply.params.response.status} ${reply.params.response.url}`);
         return;
       }
       const request = pending.get(reply.id);
@@ -72,6 +75,8 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     ({ sessionId } = await send("Target.attachToTarget", { targetId, flatten: true }));
     await send("Page.enable", {}, sessionId);
+    await send("Runtime.enable", {}, sessionId);
+    await send("Network.enable", {}, sessionId);
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile }, sessionId);
     if (safeAreaInsets) await send("Emulation.setSafeAreaInsetsOverride", { insets: safeAreaInsets }, sessionId);
     let loadTimer;
@@ -105,7 +110,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       returnByValue: true,
       awaitPromise: true,
     }, sessionId);
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    if (result.exceptionDetails) throw new Error([result.exceptionDetails.exception?.description || result.exceptionDetails.text, ...loadingErrors.slice(-6)].join(' | '));
     if (typeof result.result?.value !== "string") throw new Error("Medição de layout inválida.");
     const gestureScales = [];
     const gestureDetails = [];

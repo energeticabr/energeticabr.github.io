@@ -4,6 +4,13 @@ import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {createAuthService} from '../src/auth/auth-service.js';
 const tick=()=>new Promise(r=>setImmediate(r));
+for(const kind of ['payment','launch'])test(`closing payroll report aborts in-flight ${kind} save at the service boundary`,async t=>{
+ let opts,signal,finish;const pending=new Promise(resolve=>{finish=resolve;});
+ const service={loadEditor:async()=>({}),saveEditor:async(_ctx,_fields,options)=>{signal=options?.signal;await pending;if(signal?.aborted)throw new DOMException('cancelled','AbortError');return {id:'45'};}};
+ const h=harness(t,{supplierPayrollReportFactory:async o=>{opts=o;return {open(){},destroy(){}};},hrPayrollGalleryDataFactory:async()=>service,ordersGalleryDataFactory:async()=>service});
+ await h.controller.start();await h.view.emit('open-supplier-payroll-report');
+ const saving=(kind==='payment'?opts.saveEditor:opts.saveLaunchEditor)({},{}),rejected=assert.rejects(saving,{name:'AbortError'});await tick();opts.onClose();finish();await rejected;assert.equal(signal?.aborted,true);
+});
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 function harness(t,options={}){
  const handlers=new Map(),panels=[],calls=[];let seq=0;const account={homeAccountId:'payroll-user'};
@@ -13,6 +20,20 @@ function harness(t,options={}){
  const controller=createAppController({store,view,auth,client:{sendText:async payload=>{calls.push(payload);return {status:'processed',messages:[]};}},native:{importSharedItems:async()=>[]},pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),supplierPayrollReportFactory:async({data,onClose})=>{const panel={data,opens:0,destroys:0,open(){this.opens++;},close(){onClose();},destroy(){this.destroys++;}};panels.push(panel);return panel;},supplierPayrollReportDataFactory:async()=>({loadSnapshot:async()=>({complete:true,sheets:[]}),loadPaymentsForPayrollIds:async ids=>ids}),...options,auth});
  t.after(()=>controller.stop());return {controller,view,store,auth,panels,calls};
 }
+test('report editing uses payroll and launch services separately, export uses native port and all callbacks stop after close',async t=>{
+ let opts;const calls=[];const paymentContext={item:{id:'45'}},launchContext={item:{id:'3534'}};
+ const h=harness(t,{supplierPayrollReportFactory:async options=>{opts=options;return {open(){},destroy(){},close:options.onClose};},
+  hrPayrollGalleryDataFactory:async()=>({loadEditor:async(gallery,id)=>{calls.push(['payment',gallery,id]);return paymentContext;},saveEditor:async(ctx,fields)=>{assert.equal(ctx,paymentContext);calls.push(['save-payment',fields]);return {id:'45'};}}),
+  ordersGalleryDataFactory:async options=>{assert.equal(options.listName,'LANCAMENTOS');assert.deepEqual(options.listAliases,['LANCAMENTOS','LANÇAMENTOS']);return {loadEditor:async id=>{calls.push(['launch',id]);return launchContext;},saveEditor:async(ctx,fields)=>{assert.equal(ctx,launchContext);calls.push(['save-launch',fields]);return {id:'3534'};}};},
+  native:{importSharedItems:async()=>[],exportMedia:async(blob,name)=>calls.push(['export',blob.type,name])}});
+ await h.controller.start();await h.view.emit('open-supplier-payroll-report');
+ assert.equal(await opts.loadEditor('45'),paymentContext);await opts.saveEditor(paymentContext,{TIPOPGTO:'SALÁRIO'});
+ assert.equal(await opts.loadLaunchEditor('3534'),launchContext);await opts.saveLaunchEditor(launchContext,{QTD:2});
+ await opts.exportMedia(new Blob(['csv'],{type:'text/csv'}),'folha.csv');
+ assert.deepEqual(calls,[['payment','FOLHAPGTO','45'],['save-payment',{TIPOPGTO:'SALÁRIO'}],['launch','3534'],['save-launch',{QTD:2}],['export','text/csv','folha.csv']]);
+ opts.onClose();await assert.rejects(opts.loadEditor('45'),{name:'AbortError'});await assert.rejects(opts.loadLaunchEditor('3534'),{name:'AbortError'});await assert.rejects(opts.exportMedia(new Blob(), 'x.csv'),{name:'AbortError'});
+ assert.equal(calls.length,5);
+});
 test('payroll HOME and reply use one cached read-only service for independent parallel suppliers',async t=>{
  let creates=0;const requests=[];const h=harness(t,{supplierPayrollReportDataFactory:async({tokenProvider})=>{creates++;return {loadSnapshot:()=>tokenProvider(['Sites.ReadWrite.All']),loadPaymentsForPayrollIds:async(ids,{signal})=>{requests.push(signal);await tick();return ids;}};},auth:{getToken:async scopes=>{assert.deepEqual(scopes,['Sites.Read.All']);return 'read';}}});
  await h.controller.start();const before=h.calls.length;assert.deepEqual(await Promise.all([h.view.emit('open-supplier-payroll-report'),h.view.emit('select-reply',{replyId:'action_supplier_payroll_report'})]),[true,true]);

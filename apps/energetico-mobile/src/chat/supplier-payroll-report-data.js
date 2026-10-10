@@ -87,19 +87,33 @@ function normalizeItem(item, fields, list) {
 // Keep the existing source reader as financial source truth, but guard its otherwise
 // signal-less metadata boundaries and coercions without changing shared policy code.
 function guardedSourceReader(repository, signal) {
-  let financialFields;
+  let financialFields, descriptiveFields;
+  const descriptions = new Map();
   async function invoke(method, args) {
     checkAbort(signal);
     const result = await repository[method](...args);
     checkAbort(signal);
     return result;
   }
-  return createPayrollSourceReader({
+  const read = createPayrollSourceReader({
     resolveList: (siteKey, aliases) => invoke('resolveList', [siteKey, aliases, { signal }]),
     async getColumns(siteKey, list) {
       const columns = await invoke('getColumns', [siteKey, list, { signal }]);
       checkAbort(signal);
       financialFields = resolveSchema(columns, 'LANCAMENTOS');
+      const available = columns.filter(c=>c&&!c.computed&&!/^LinkTitle(?:NoMenu|2)?$/i.test(c.name||''));
+      const find = aliases => {
+        for (const alias of aliases) {
+          const found = available.filter(c=>[c.name,c.displayName].some(n=>payrollFieldKey(n)===alias));
+          if (found.length===1) return found[0].name;
+          if (found.length>1) throw new TypeError(`Coluna ${alias} ambígua em LANCAMENTOS.`);
+        }
+        return null;
+      };
+      descriptiveFields = {description:find(['DESCRICAO','DESCRICAODOITEM']),
+        paymentMethod:find(['CONTAFORMAPGTO','CONTAFORMAPAGAMENTO']),
+        account:find(['CONTA']),method:find(['FORMAPGTO','FORMADEPAGAMENTO']),
+        observations:find(['OBS','OBSERVACAO','OBSERVACOES'])};
       // Remove the same computed mirrors from the columns seen by the source reader.
       return columns.filter(c => c && !c.computed && !/^LinkTitle(?:NoMenu|2)?$/i.test(c.name || ''));
     },
@@ -112,9 +126,16 @@ function guardedSourceReader(repository, signal) {
           throw new TypeError('O lançamento contém valores financeiros inválidos.');
         }
       }
+      const descriptive=Object.fromEntries(Object.entries(descriptiveFields)
+        .filter(([,name])=>name).map(([key,name])=>[key,scalar(item?.fields?.[name])]));
+      if(descriptiveFields.paymentMethod||descriptiveFields.account||descriptiveFields.method)
+        descriptive.paymentMethod=descriptive.paymentMethod||[...new Set([descriptive.account,descriptive.method].filter(Boolean))].join(' / ');
+      delete descriptive.account;delete descriptive.method;
+      descriptions.set(String(id),descriptive);
       return item;
     },
   }, site);
+  return async (fields, currentSignal) => ({...await read(fields,currentSignal),...descriptions.get(String(fields.IDLANCAMENTO))});
 }
 
 async function readList(repository, list, signal) {
@@ -256,6 +277,7 @@ export function createSupplierPayrollReportData({ tokenProvider, repository: sup
           checkAbort(signal);
           const unitValue = source.VALORUNITARIO ?? null, quantity = source.QTD ?? null;
           return Object.freeze({ ...row, supplier: row.supplier || current.sheets.get(row.payrollId).row.supplier,
+            ...Object.fromEntries(['description','paymentMethod','observations'].filter(key=>Object.hasOwn(source,key)).map(key=>[key,source[key]])),
             unitValue, quantity, totalCents: summarizePayrollPayments([{ unitValue, quantity }]).totalCents });
         })));
       }

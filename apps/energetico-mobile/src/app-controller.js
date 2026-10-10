@@ -5977,6 +5977,37 @@ export function createAppController({
       loadSnapshot: options => query('loadSnapshot', [], options),
       loadPaymentsForPayrollIds: (ids, options) => query('loadPaymentsForPayrollIds', [ids], options),
     };
+    // Editing asks for write consent only when a form is opened. Report reads
+    // retain their independent read-only service and cancellation boundaries.
+    let paymentEditorSource, launchEditorSource;
+    const editorTokenProvider = ordersGalleryTokenProvider(assertSession, SUPPLIER_PAYROLL_REPORT_ID);
+    async function editorSource(kind) {
+      assertSession();
+      if (kind === 'payment') {
+        paymentEditorSource ||= Promise.resolve().then(() => { assertSession(); return hrPayrollGalleryDataFactory({tokenProvider:editorTokenProvider,assertSession}); });
+        try { const source = await paymentEditorSource; assertSession(); return source; }
+        catch (error) { paymentEditorSource = null; throw error; }
+      }
+      launchEditorSource ||= Promise.resolve().then(() => { assertSession(); return ordersGalleryDataFactory({tokenProvider:editorTokenProvider,assertSession,listName:'LANCAMENTOS',listAliases:['LANCAMENTOS','LANÇAMENTOS']}); });
+      try { const source = await launchEditorSource; assertSession(); return source; }
+      catch (error) { launchEditorSource = null; throw error; }
+    }
+    async function editorRequest(kind, options = {}, operation) {
+      assertSession();if(options.signal?.aborted)throw cancelled();
+      const request = new AbortController(), abort = () => request.abort();
+      session.requests.add(request);session.lifetime.signal.addEventListener('abort',abort,{once:true});
+      options.signal?.addEventListener('abort',abort,{once:true});
+      try {
+        const source=await editorSource(kind);assertSession();if(request.signal.aborted)throw cancelled();
+        const result=await operation(source,{...options,signal:request.signal});
+        assertSession();if(request.signal.aborted)throw cancelled();return result;
+      } finally {
+        session.requests.delete(request);session.lifetime.signal.removeEventListener('abort',abort);
+        options.signal?.removeEventListener('abort',abort);
+      }
+    }
+    const loadReportEditor=(kind,id,options)=>editorRequest(kind,options,(source,bound)=>kind==='payment'?source.loadEditor('FOLHAPGTO',id,bound):source.loadEditor(id,bound));
+    const saveReportEditor=(kind,context,fields,options)=>editorRequest(kind,options,(source,bound)=>source.saveEditor(context,fields,bound));
     let cancelOpening;
     const cancellation = new Promise(resolve => { cancelOpening = () => resolve(false); });
     session.lifetime.signal.addEventListener('abort', cancelOpening, { once: true });
@@ -5986,6 +6017,11 @@ export function createAppController({
         let report = supplierPayrollReport;
         if (!report) {
           const panel = decorateControllerReport(await supplierPayrollReportFactory({ data, document: globalThis.document,
+            loadEditor:(id,options)=>loadReportEditor('payment',id,options),
+            saveEditor:(context,fields,options)=>saveReportEditor('payment',context,fields,options),
+            loadLaunchEditor:(id,options)=>loadReportEditor('launch',id,options),
+            saveLaunchEditor:(context,fields,options)=>saveReportEditor('launch',context,fields,options),
+            exportMedia:typeof native.exportMedia==='function'?async(blob,name)=>{assertSession();const result=await native.exportMedia(blob,name);assertSession();return result;}:undefined,
             onClose: () => { if (supplierPayrollReportSession === session) disposeSupplierPayrollReport(); },
           }), 'open-supplier-payroll-report');
           try { assertSession(); } catch (error) { panel?.destroy?.(); throw error; }

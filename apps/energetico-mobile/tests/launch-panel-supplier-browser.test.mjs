@@ -14,8 +14,8 @@ test('launch supplier column keeps product inside details and fits phone/desktop
   const app=resolve(fileURLToPath(new URL('..',import.meta.url)));
   const built=await build({configFile:false,root:join(app,'pwa'),base:'/energetico/',logLevel:'silent',build:{write:false,sourcemap:false}});
   const css=built.output.filter(a=>a.type==='asset'&&a.fileName.endsWith('.css')).map(a=>a.source).join('\n');
-  const server=await createServer({root:app,server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   const profile=mkdtempSync(join(tmpdir(),'launch-supplier-'));
+  const server=await createServer({root:app,cacheDir:join(profile,'vite-cache'),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   const pending=new Map();let child,socket;
   try{
     await server.listen();
@@ -44,8 +44,9 @@ test('launch supplier column keeps product inside details and fits phone/desktop
     for(const [width,pwa] of [[320,false],[390,false],[1365,false],[390,true]]){
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/launch-panel-supplier.html?width=${width}&pwa=${pwa}`},sessionId);
-      let ready=false;for(let n=0;n<120&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}&pwa=${pwa}'&&document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
-      assert.ok(ready);
+      // Share the bounded 30s readiness allowance used by the layout runner.
+      let ready=false;for(let n=0;n<300&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}&pwa=${pwa}'&&document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
+      assert.ok(ready,`Supplier fixture did not finish loading at ${width}px, PWA=${pwa}`);
       if(pwa)await evaluate(`(()=>{document.querySelectorAll('style,link[rel=stylesheet]').forEach(n=>n.remove());const s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.append(s);})()`);
       const compact=await evaluate(`(()=>{const panel=document.querySelector('.chat-launches'),rows=[...panel.querySelectorAll('.chat-launch-entry')];return {
         header:panel.querySelector('.chat-launch-row--header').firstElementChild.textContent,

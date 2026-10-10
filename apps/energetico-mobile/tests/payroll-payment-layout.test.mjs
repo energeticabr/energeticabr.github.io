@@ -14,9 +14,10 @@ test('white payroll add action and closed create form fill phone and desktop vie
   const appRoot = resolve(fileURLToPath(new URL('..',import.meta.url)));
   const pwa = await build({configFile:false,root:join(appRoot,'pwa'),base:'/energetico/',logLevel:'silent',build:{write:false,sourcemap:false}});
   const pwaCss = pwa.output.filter(asset=>asset.type==='asset' && asset.fileName.endsWith('.css')).map(asset=>asset.source).join('\n');
-  const server = await createServer({root:appRoot,server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(appRoot,'../..')]}},logLevel:'silent'});
   const profile = mkdtempSync(join(tmpdir(),'payroll-expandable-layout-'));
+  const server = await createServer({root:appRoot,cacheDir:join(profile,'vite-cache'),server:{host:'127.0.0.1',port:0,fs:{allow:[resolve(appRoot,'../..')]}},logLevel:'silent'});
   const pending = new Map();
+  const loadingErrors=[];
   let child,socket;
   try {
     await server.listen();
@@ -28,18 +29,22 @@ test('white payroll add action and closed create form fill phone and desktop vie
     socket=new WebSocket(`ws://127.0.0.1:${port}${path}`);
     await new Promise((done,fail)=>{socket.addEventListener('open',done,{once:true});socket.addEventListener('error',fail,{once:true});});
     let sequence=0;
-    socket.addEventListener('message',event=>{const r=JSON.parse(event.data),p=pending.get(r.id);if(!p)return;pending.delete(r.id);clearTimeout(p.timer);r.error?p.fail(new Error(r.error.message)):p.done(r.result);});
+    socket.addEventListener('message',event=>{const r=JSON.parse(event.data);if(r.method==='Runtime.exceptionThrown')loadingErrors.push(r.params.exceptionDetails.exception?.description||r.params.exceptionDetails.text);if(r.method==='Network.responseReceived'&&r.params.response.status>=400)loadingErrors.push(`${r.params.response.status} ${r.params.response.url}`);const p=pending.get(r.id);if(!p)return;pending.delete(r.id);clearTimeout(p.timer);r.error?p.fail(new Error(r.error.message)):p.done(r.result);});
     const send=(method,params={},sessionId)=>new Promise((done,fail)=>{const id=++sequence;const timer=setTimeout(()=>{pending.delete(id);fail(new Error(method+' timed out'));},15000);pending.set(id,{done,fail,timer});socket.send(JSON.stringify({id,method,params,sessionId}));});
     const {targetId}=await send('Target.createTarget',{url:'about:blank'});
     const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
+    await send('Page.enable',{},sessionId);
+    await send('Runtime.enable',{},sessionId);await send('Network.enable',{},sessionId);
     const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
     for(const [width,height,pwaStyles,gallery='FOLHAPGTO'] of [[320,740,false],[390,844,false],[1024,768,false],[1365,900,false],[320,740,true],[390,844,true],[1024,768,true],[320,740,false,'IDFOLHA'],[390,844,true,'IDFOLHA'],[1365,900,true,'IDFOLHA']]) {
       await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false},sessionId);
       const query=`?width=${width}&gallery=${gallery}`;
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-payment.html${query}`},sessionId);
       let ready=false;
-      for(let n=0;n<100&&!ready;n++){ready=await evaluate(`location.search===${JSON.stringify(query)} && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
-      assert.ok(ready);
+      // Cold Vite modules can take over 10s while another layout suite builds.
+      // Wait for the same real readiness marker; do not weaken layout assertions.
+      for(let n=0;n<300&&!ready;n++){ready=await evaluate(`location.search===${JSON.stringify(query)} && document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
+      assert.ok(ready,`Payroll fixture did not finish loading at ${width}px, PWA=${pwaStyles}, gallery=${gallery}: ${loadingErrors.slice(-6).join(' | ')}`);
       if(pwaStyles) await evaluate(`(()=>{document.querySelectorAll('style,link[rel="stylesheet"]').forEach(n=>n.remove());const s=document.createElement('style');s.textContent=${JSON.stringify(pwaCss)};document.head.append(s);})()`);
       const toolbar=await evaluate(`(()=>{const t=document.querySelector('.hr-gallery-toolbar'),s=t.querySelector('input'),f=t.querySelector('[data-action=toggle-payroll-filters]');const a=s.getBoundingClientRect(),b=f.getBoundingClientRect();return {sameRow:Math.abs(a.top-b.top)<1,ordered:a.right<=b.left,usable:a.width>=100&&a.height>=44&&b.height>=44,fits:t.scrollWidth<=t.clientWidth+1};})()`);
       assert.deepEqual(toolbar,{sameRow:true,ordered:true,usable:true,fits:true},JSON.stringify({width,pwaStyles,gallery,toolbar}));
