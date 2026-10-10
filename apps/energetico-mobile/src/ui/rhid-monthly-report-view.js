@@ -30,7 +30,7 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  function populate(rows){
   if(!Array.isArray(rows)||rows.some(row=>!row?.id||!row.name))throw new TypeError('Lista de fornecedores incompleta.');
   options=rows;supplier.replaceChildren(Object.assign(make('option','','Selecione o fornecedor'),{value:''}));
-  for(const row of rows)supplier.append(Object.assign(make('option','',row.name),{value:String(row.id)}));picker?.destroy();picker=bindSearchableFilterSelects(supplierLabel,{report:true});picker.sync();
+  for(const row of rows)supplier.append(Object.assign(make('option','',row.name),{value:String(row.id)}));picker?.destroy();picker=bindSearchableFilterSelects(supplierLabel,{report:true,selectionActions:{selectAllLabel:'Selecionar todos os fornecedores',confirmLabel:'Confirmar fornecedores'}});picker.sync();
  }
  async function loadSuppliers(){
   const request=begin();clearResult();options=[];setBusy(true);status('Carregando fornecedores ativos e empreiteiros…');

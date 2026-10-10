@@ -26,6 +26,7 @@ function createPicker(select, closeOthers, options = {}) {
 
   const id = `searchable-filter-${++nextId}`;
   const reportPicker = options.report === true;
+  const selectionActions = reportPicker && select.multiple && options.selectionActions;
   const wrapper = doc.createElement('div'); wrapper.className = reportPicker ? 'sfs sfs--report' : 'sfs';
   const fieldBox = doc.createElement('div'); fieldBox.className = 'sfs-field';
   const arrow = doc.createElement('button'); arrow.type = 'button'; arrow.className = 'sfs-arrow'; arrow.textContent = '▾';
@@ -63,6 +64,15 @@ function createPicker(select, closeOthers, options = {}) {
     backdrop.setAttribute('aria-hidden', 'true'); wrapper.append(backdrop);
   }
   popup.append(list, empty); wrapper.append(fieldBox, popup); select.after(wrapper);
+  let actionFooter = null, selectAll = null, confirmSelection = null;
+  if (selectionActions) {
+    actionFooter = doc.createElement('div'); actionFooter.className = 'sfs-selection-actions';
+    selectAll = doc.createElement('button'); selectAll.type = 'button'; selectAll.className = 'sfs-select-all';
+    selectAll.textContent = selectionActions.selectAllLabel || 'Selecionar todos';
+    confirmSelection = doc.createElement('button'); confirmSelection.type = 'button'; confirmSelection.className = 'sfs-confirm-selection';
+    confirmSelection.textContent = selectionActions.confirmLabel || 'Confirmar';
+    actionFooter.append(selectAll, confirmSelection); popup.append(actionFooter);
+  }
   select.hidden = true; select.setAttribute('aria-hidden', 'true'); select.tabIndex = -1;
   let candidates = [];
   let active = -1;
@@ -77,7 +87,8 @@ function createPicker(select, closeOthers, options = {}) {
   let restoringFocus = false;
 
   function selectionLabel() {
-    return [...select.options].filter(option => option.selected).map(option => option.label).join(', ') || 'Todos';
+    return [...select.options].filter(option => option.selected && (!selectionActions || option.value)).map(option => option.label).join(', ')
+      || (selectionActions ? [...select.options].find(option => !option.value)?.label || 'Selecione' : 'Todos');
   }
 
   function disabled(option) {
@@ -121,7 +132,7 @@ function createPicker(select, closeOthers, options = {}) {
       const safeRight = parseFloat(safeArea.paddingRight) || 0;
       const usableWidth = right - left - safeLeft - safeRight;
       const width = Math.max(0, Math.min(480, usableWidth - 24));
-      const height = Math.max(0, Math.min(640, reportViewport.height - safeTop - safeBottom - 24));
+      const height = Math.max(0, Math.min(640, (selectionActions ? viewportHeight : reportViewport.height) - safeTop - safeBottom - 24));
       popup.dataset.placement = 'expanded';
       popup.style.width = `${width}px`;
       popup.style.left = `${left + safeLeft + (usableWidth - width) / 2}px`;
@@ -129,7 +140,8 @@ function createPicker(select, closeOthers, options = {}) {
       popup.style.top = `${top + safeTop + 12}px`;
       popup.style.right = 'auto'; popup.style.bottom = 'auto';
       popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
-      list.style.maxHeight = `${Math.max(0, height - 54)}px`;
+      const footerHeight = actionFooter ? actionFooter.getBoundingClientRect().height || 64 : 0;
+      list.style.maxHeight = `${Math.max(0, height - 54 - footerHeight)}px`;
       return;
     }
     // Keep the dropdown inside scrollable gallery content as well as the
@@ -154,7 +166,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function render() {
     const query = selectionOnly ? '' : searchableText(search.value);
-    candidates = [...select.options].filter(option => !option.hidden && (!selectionOnly || option.value !== '') && (!query || searchableText(option.label).includes(query)));
+    candidates = [...select.options].filter(option => !option.hidden && (!(selectionOnly || selectionActions) || option.value !== '') && (!query || searchableText(option.label).includes(query)));
     list.replaceChildren(...candidates.map((option, index) => {
       const item = doc.createElement('div'); item.className = 'sfs-option'; item.id = `${id}-option-${index}`;
       item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.selected));
@@ -201,6 +213,12 @@ function createPicker(select, closeOthers, options = {}) {
     if (trigger.disabled !== isDisabled) trigger.disabled = isDisabled;
     if (search.disabled !== isDisabled) search.disabled = isDisabled;
     if (arrow.disabled !== isDisabled) arrow.disabled = isDisabled;
+    if (selectionActions) {
+      const allDisabled = isDisabled || ![...select.options].some(option => option.value && !option.hidden && !disabled(option));
+      const confirmDisabled = isDisabled || ![...select.selectedOptions].some(option => option.value && !option.hidden && !disabled(option));
+      if (selectAll.disabled !== allDisabled) selectAll.disabled = allDisabled;
+      if (confirmSelection.disabled !== confirmDisabled) confirmSelection.disabled = confirmDisabled;
+    }
     if (trigger.disabled) close();
     else if (!popup.hidden) render();
   }
@@ -319,6 +337,16 @@ function createPicker(select, closeOthers, options = {}) {
   function onFocusOut(event) { if (!selectingOption && !wrapper.contains(event.relatedTarget)) close(); }
   function onReset() { view.queueMicrotask(() => { if (!destroyed) { close(); sync(); } }); }
   function onDismiss() { close({ focus: true }); }
+  function onSelectAll() {
+    if (destroyed || select.matches(':disabled')) return;
+    let changed = false;
+    for (const option of select.options) {
+      if (!option.value && option.selected) { option.selected = false; changed = true; }
+      else if (option.value && !option.hidden && !disabled(option) && !option.selected) { option.selected = true; changed = true; }
+    }
+    sync();
+    if (changed) select.dispatchEvent(new view.Event('change', { bubbles: true }));
+  }
   function closeIfHidden() {
     if (wrapper.closest('[hidden], [aria-hidden="true"], details:not([open])')) close();
     // Fieldset disabling affects the native select without changing its own attributes.
@@ -328,6 +356,7 @@ function createPicker(select, closeOthers, options = {}) {
   trigger.addEventListener('focus', open);
   arrow.addEventListener('click', onArrowClick);
   dismiss?.addEventListener('click', onDismiss); backdrop?.addEventListener('click', onDismiss);
+  selectAll?.addEventListener('click', onSelectAll); confirmSelection?.addEventListener('click', onDismiss);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
   search.addEventListener('beforeinput', onSearchEditStart); search.addEventListener('compositionstart', onSearchEditStart);
   const blockEditing = event => event.preventDefault();
@@ -356,6 +385,7 @@ function createPicker(select, closeOthers, options = {}) {
       trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
       arrow.removeEventListener('click', onArrowClick);
       dismiss?.removeEventListener('click', onDismiss); backdrop?.removeEventListener('click', onDismiss);
+      selectAll?.removeEventListener('click', onSelectAll); confirmSelection?.removeEventListener('click', onDismiss);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       search.removeEventListener('beforeinput', onSearchEditStart); search.removeEventListener('compositionstart', onSearchEditStart);
       if (selectionOnly) editEvents.forEach(name=>search.removeEventListener(name,blockEditing));

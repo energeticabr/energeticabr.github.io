@@ -36,5 +36,11 @@ test('RHID supplier search stays below the status bar without losing seven visib
   assert.ok(layout.popup.left>=safeAreaInsets.left+12&&layout.popup.right<=width-safeAreaInsets.right-12,JSON.stringify(layout));
   assert.ok(layout.popup.bottom<=height-safeAreaInsets.bottom-12,JSON.stringify(layout));
   assert.ok(layout.visibleOptions>=7,JSON.stringify(layout));
+  assert.deepEqual(layout.actions.map(action=>action.text),['Selecionar todos os fornecedores','Confirmar fornecedores']);
+  for(const action of layout.actions){
+   assert.ok(action.height>=44,`action needs a touch target: ${JSON.stringify(layout)}`);
+   assert.ok(action.top>=layout.list.bottom-1&&action.bottom<=height-safeAreaInsets.bottom-12,`actions must stay outside the scrollable list and visible: ${JSON.stringify(layout)}`);
+   assert.ok(action.left>=layout.popup.left&&action.right<=layout.popup.right,JSON.stringify(layout));
+  }
  });}finally{await server.close();}
 });
