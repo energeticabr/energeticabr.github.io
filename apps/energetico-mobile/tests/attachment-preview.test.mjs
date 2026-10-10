@@ -31,6 +31,24 @@ test('report PDF requests whole-page fit without changing ordinary attachments',
  await preview.open(blob,'outro.pdf');assert.equal(fits[1],'width');
 });
 
+test("report signature actions are opt-in, receive the current PDF and reset for another attachment", async t => {
+  const calls = [];
+  const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: Promise.resolve(), destroy() {} }) }) });
+  const blob = new Blob(["pdf"], { type: "application/pdf" });
+  await preview.open(blob, "mensal.pdf", { layout: "report-pdf", onSign: input => calls.push(["employee", input]), onStamp: input => calls.push(["company", input]) });
+  const sign = documentRef.querySelector('[data-preview-action="sign"]');
+  const stamp = documentRef.querySelector('[data-preview-action="stamp"]');
+  assert.ok(sign && stamp, "prévia oferece assinar e inserir Bernardo");
+  assert.equal(sign.hidden, false);
+  sign.click(); await new Promise(resolve => setImmediate(resolve));
+  stamp.click(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.map(([role, input]) => [role, input.blob, input.fileName]), [["employee", blob, "mensal.pdf"], ["company", blob, "mensal.pdf"]]);
+  await preview.open(blob, "outro.pdf");
+  assert.equal(sign.hidden, true); assert.equal(stamp.hidden, true);
+  sign.click(); stamp.click(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.length, 2, "outro anexo não herda ação do relatório");
+});
+
 test("abre antes de ler o arquivo e preserva conversa, rascunho, rolagem e foco ao fechar", async t => {
   let finishRead;
   const { preview, documentRef } = setup(t, { readText: () => new Promise(resolve => { finishRead = resolve; }) });

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/web/attachment-preview.css">
+<link rel="stylesheet" href="../../src/ui/rhid-monthly-report.css"><link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<title>RHID mensal — teste local de assinatura</title></head><body><main id="app"></main><output id="proof" hidden></output>
+<script type="module">
+import {createAppController} from '../../src/app-controller.js';
+import {createConversationStore} from '../../src/chat/conversation-store.js';
+import {createChatView} from '../../src/ui/chat-view.js';
+import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
+import {PDFDocument} from 'pdf-lib';
+const supplier={id:'7',name:'FUNCIONÁRIO EXEMPLO'};
+const rows=Array.from({length:31},(_,i)=>({Id:String(i+1),ID_PESSOA_RHID:'101',NOME_COLABORADOR:supplier.name,DATA_REFERENCIA:`2026-10-${String(i+1).padStart(2,'0')}`,BATIDAS_RHID:'07:00;12:00;13:00;17:00'}));
+const proof=document.querySelector('#proof');
+let record=0;
+const preview=createAttachmentPreview({exportMedia:async(blob,name)=>{
+ const pdf=await PDFDocument.load(await blob.arrayBuffer());
+ proof.textContent=`Exportação local: ${pdf.getPageCount()} página; ${pdf.getForm().getFields().length} campos; ${name}; nenhum documento enviado.`;
+ proof.hidden=false;
+ const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=name;link.textContent='Baixar PDF local de teste';proof.append(link);
+}});
+const store=createConversationStore(),view=createChatView(document.querySelector('#app'));
+const controller=createAppController({store,view,
+ auth:{initialize:async()=>({homeAccountId:'qa-rhid-local',name:'Usuário de teste'}),signOut:async()=>{},getToken:async()=> 'local-test'},
+ native:{importSharedItems:async()=>[],previewMedia:preview.open,closePreview:preview.close},
+ pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[]}),
+ rhidMonthlyDataFactory:async()=>({loadSuppliers:async()=>[supplier]}),
+ client:{sendText:async()=>({status:'processed',messages:[]}),
+  getRhidAttendanceMonth:async month=>({month,rows,presentDates:rows.map(r=>r.DATA_REFERENCIA)}),
+  prepareSignatureEvidence:async()=>({id:String(++record).padStart(32,'a'),signedAt:'2026-10-10T10:00:00Z'}),
+  confirmSignatureEvidence:async()=>({mediaUrl:'/local-test-only'}),
+ }});
+await controller.start();
+store.ingestRemoteMessages([{id:'rhid',role:'assistant',type:'poll',question:'RHID — teste local, nenhum envio à VM',options:[],detail_table:{kind:'rhid_attendance',reportDate:'2026-10-10',headers:['Nome'],rows:[]}}],{activeFlow:null});
+// Use the actual visible controller shortcut; no alternate signing path.
+document.querySelector('[data-action="open-rhid-monthly-report"]').click();
+document.documentElement.dataset.layout='ready';
+</script></body></html>

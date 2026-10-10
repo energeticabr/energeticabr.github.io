@@ -12,6 +12,8 @@ test('generated RHID PDF pages fit fully without panning on portrait and landsca
  try{for(const [width,height] of [[390,844],[844,390],[1024,768],[1365,900]]){
   const result=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/rhid-report-pdf-fit.html`});
   const dom=new JSDOM(result.stdout),layout=JSON.parse(dom.window.document.querySelector('#layout-result').textContent);dom.window.close();
+  assert.equal(layout.signatureControls,2,"os dois controles de assinatura aparecem na prévia");
+  for(const button of layout.buttons){assert.ok(button.left>=0&&button.right<=width&&button.top>=0&&button.bottom<=height,`botão fora da tela: ${JSON.stringify(button)}`);}
   assert.equal(layout.failedPages,'0');assert.ok(layout.canvases.length>0);assert.ok(layout.pageWidth<=width);
   assert.ok(layout.scrollWidth<=layout.viewport.width+1,JSON.stringify(layout));
   assert.equal(layout.canvases.length,1,"uma página inteira por vez");

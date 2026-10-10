@@ -5377,5 +5377,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     },
     pauseSignaturePad,
     openSignaturePad,
+    cancelSignaturePad() {
+      const cancel = root.querySelector('[data-action="cancel-signature-pad"]');
+      cancel?.click();
+      return Boolean(cancel);
+    },
   });
 }

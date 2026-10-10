@@ -6,9 +6,9 @@ const MARGIN = 32;
 const BOTTOM = 48;
 const INNER_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const SIZE = 9;
-const LEADING = 12;
-const PADDING = 6;
-const COLUMNS = [72, 138, 50, 271];
+const LEADING = 10;
+const PADDING = 2;
+const COLUMNS = [64, 40, 40, 40, 40, 43, 264];
 
 // Wrap words, literal line breaks and long tokens without shortening the text.
 function wrapText(value, font, size, width) {
@@ -73,7 +73,7 @@ export async function buildRhidMonthlyPdf(report) {
     if (!includeAttendanceHeader) return;
     page.drawRectangle({ x: MARGIN, y: y - 25, width: INNER_WIDTH, height: 25, color: navy });
     let x = MARGIN;
-    ["Data", "Marcações", "Total", "Observações"].forEach((label, index) => {
+    ["Data", "E", "S", "E2", "S2", "Total", "Observações"].forEach((label, index) => {
       text(label, x + PADDING, y - 16, bold, SIZE, rgb(1, 1, 1));
       x += COLUMNS[index];
     });
@@ -81,15 +81,15 @@ export async function buildRhidMonthlyPdf(report) {
   }
 
   function drawDay(day) {
-    const marks = [];
-    for (let index = 0; index < day.slots.length; index += 2) {
-      marks.push(`E${index / 2 + 1} ${day.slots[index]}${index + 1 < day.slots.length ? `   S${index / 2 + 1} ${day.slots[index + 1]}` : ""}`);
-    }
     const notes = [!day.recorded ? "Sem registros" : day.total === null ? "Incompleto" : "Registrado"];
     if (day.adjusted) notes.push("Ajustado");
     notes.push(...day.issues);
-    const cells = [dateLabel(day.date), marks.join("\n"), day.total ?? "-", notes.join("\n")]
-      .map((value, index) => wrapText(value, index === 2 ? bold : regular, SIZE, COLUMNS[index] - PADDING * 2));
+    const slots = Array.from({ length: 4 }, (_, index) => day.slots[index] || "-");
+    // The model normally has four slots. Preserve any unexpected extras as
+    // notes instead of silently dropping them to keep the table compact.
+    if (day.slots.length > 4) notes.push(`Outras marcações: ${day.slots.slice(4).join(" / ")}`);
+    const cells = [dateLabel(day.date), ...slots, day.total ?? "-", notes.join(" · ")]
+      .map((value, index) => wrapText(value, index === 5 ? bold : regular, SIZE, COLUMNS[index] - PADDING * 2));
     const length = Math.max(...cells.map(lines => lines.length));
     let offset = 0;
     while (offset < length) {
@@ -106,7 +106,7 @@ export async function buildRhidMonthlyPdf(report) {
       let x = MARGIN;
       cells.forEach((lines, column) => {
         const chunk = column === 0 && offset > 0 ? [dateLabel(day.date), "(cont.)"].slice(0, count) : lines.slice(offset, offset + count);
-        chunk.forEach((line, index) => text(line, x + PADDING, y - PADDING - SIZE - index * LEADING, column === 2 ? bold : regular));
+        chunk.forEach((line, index) => text(line, x + PADDING, y - PADDING - SIZE - index * LEADING, column === 5 ? bold : regular));
         x += COLUMNS[column];
         if (column < COLUMNS.length - 1) page.drawLine({ start: { x, y }, end: { x, y: y - height }, thickness: 0.5, color: rule });
       });

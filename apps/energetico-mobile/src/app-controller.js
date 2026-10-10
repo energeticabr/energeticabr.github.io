@@ -22,6 +22,10 @@ async function defaultSignPdfAttachment(input) {
   return module.signPdfAttachment(input);
 }
 
+async function defaultLoadBernardoSignature() {
+  return (await import("./web/signature-stamp.js")).loadBernardoStamp();
+}
+
 async function defaultLaunchGalleryFactory(options) {
   const { createLaunchGallery } = await import("./ui/launch-gallery-view.js");
   return createLaunchGallery(options);
@@ -896,6 +900,7 @@ export function createAppController({
   authTimeoutMs,
   authSignInTimeoutMs,
   signPdfAttachment = defaultSignPdfAttachment,
+  loadBernardoSignature = defaultLoadBernardoSignature,
   launchGalleryFactory = defaultLaunchGalleryFactory,
   ordersGalleryFactory = defaultOrdersGalleryFactory,
   ordersGalleryDataFactory = defaultOrdersGalleryDataFactory,
@@ -1006,6 +1011,10 @@ export function createAppController({
   let rhidMonthlyReport = null;
   let rhidMonthlyOpening = null;
   let rhidMonthlySession = null;
+  let rhidMonthlyPdf = null;
+  let rhidSignatureCapture = null;
+  let rhidSignatureBernardo = false;
+  let rhidStampLoading = null;
   let stageProgressReport = null;
   let stageProgressOpening = null;
   let stageProgressSession = null;
@@ -1361,6 +1370,10 @@ export function createAppController({
   function localPlacementForRequest(request) {
     if (!request || !signaturePlacementData) return null;
     if (signaturePlacementOverride?.kind === "attachment") return signaturePlacementOverride;
+    if (signaturePlacementOverride?.kind === "report") {
+      return signaturePlacementData.key === request.key && signaturePlacementData.status === "ready"
+        ? signaturePlacementOverride : null;
+    }
     if (signaturePlacementData?.key !== request?.key
       || signaturePlacementData.status !== "ready") return null;
     const documentBlob = signaturePlacementData.document?.blob;
@@ -1457,7 +1470,7 @@ export function createAppController({
         });
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
         Object.defineProperty(signatureBlob, "signatureEvidence", { value: signatureEvidence, configurable: true });
-        if (signaturePlacementOverride?.kind === "attachment") {
+        if (["attachment", "report"].includes(signaturePlacementOverride?.kind)) {
           signaturePlacementOverride.signatureEvidence = signatureEvidence;
           signaturePlacementOverride.signedAt = signatureEvidence.signedAt;
         }
@@ -4349,9 +4362,106 @@ export function createAppController({
 
   function disposeRhidMonthlyReport() {
     const session = rhidMonthlySession, panel = rhidMonthlyReport;
+    const hadPdf = Boolean(rhidMonthlyPdf), hadCapture = Boolean(rhidSignatureCapture);
     rhidMonthlySession = rhidMonthlyReport = rhidMonthlyOpening = null;
+    rhidMonthlyPdf = rhidSignatureCapture = null;
+    rhidSignatureBernardo = false;
+    rhidStampLoading = null;
+    // Reuse the pad's cancellation path without changing protected gestures.
+    if (hadCapture) view.cancelSignaturePad?.();
+    if (hadPdf) native.closePreview?.();
+    if (signaturePlacementOverride?.kind === "report") invalidateSignaturePlacement({ clearOverride: true });
     session?.abort();
     panel?.destroy?.();
+  }
+
+  function currentRhidPdf(target) {
+    return Boolean(target && target === rhidMonthlyPdf && !stopped && account === target.account
+      && sessionRevision === target.revision && rhidMonthlySession === target.lifetime
+      && !target.lifetime.signal.aborted && !target.signal?.aborted);
+  }
+
+  async function previewRhidPdf(target) {
+    if (!currentRhidPdf(target)) return false;
+    rhidMonthlyReport?.resume?.();
+    await showMedia(target.blob, target.signed ? signedPdfFileName(target.fileName) : target.fileName, {
+      layout: "report-pdf", returnLabel: "Voltar ao relatório", resolveReturnFocus: target.resolveReturnFocus,
+      onSign: () => startRhidPdfSignature(target),
+      onStamp: () => startRhidPdfSignature(target, true),
+      onClose: () => {
+        if (rhidStampLoading?.target === target) {
+          rhidStampLoading = null;
+          rhidSignatureCapture = null;
+          rhidSignatureBernardo = false;
+        }
+      },
+    });
+    return currentRhidPdf(target);
+  }
+
+  async function startRhidPdfSignature(target, bernardo = false, redraw = false) {
+    if (!currentRhidPdf(target) || attachmentSigningBusy || rhidSignatureCapture
+      || signaturePlacementOverride?.kind === "report") return false;
+    rhidSignatureCapture = target;
+    rhidSignatureBernardo = bernardo;
+    if (!bernardo || redraw) {
+      native.closePreview?.();
+      rhidMonthlyReport?.suspend?.();
+      if (view.openSignaturePad?.("rhid-monthly-report")) return true;
+      rhidSignatureCapture = null;
+      return previewRhidPdf(target);
+    }
+    const loading = { target };
+    rhidStampLoading = loading;
+    try {
+      const signature = await loadBernardoSignature();
+      if (!currentRhidPdf(target) || rhidSignatureCapture !== target || rhidStampLoading !== loading) return false;
+      rhidStampLoading = null;
+      native.closePreview?.();
+      rhidMonthlyReport?.suspend?.();
+      return await captureRhidPdfSignature(target, signature, true);
+    } catch (error) {
+      if (currentRhidPdf(target) && rhidStampLoading === loading) {
+        rhidStampLoading = null;
+        rhidSignatureCapture = null;
+        setSessionError(error, "Não foi possível carregar a assinatura de Bernardo.");
+        await previewRhidPdf(target);
+      }
+      return false;
+    }
+  }
+
+  async function captureRhidPdfSignature(target, signature, bernardo = false) {
+    if (!currentRhidPdf(target) || rhidSignatureCapture !== target) return false;
+    try {
+      const { PDFDocument } = await import("pdf-lib");
+      const pdf = await PDFDocument.load(await target.blob.arrayBuffer());
+      if (!currentRhidPdf(target) || rhidSignatureCapture !== target) return false;
+      const widget = pdf.getForm().getField(bernardo ? "rhid_representative" : "rhid_employee").acroField.getWidgets()[0];
+      const index = pdf.getPages().findIndex(page => page.ref.toString() === widget.P().toString());
+      const page = pdf.getPage(index), box = widget.getRectangle();
+      // Fit the existing integrity-aware marker wholly inside the blank field.
+      const scale = Math.min(box.width, box.height * 2) / (page.getWidth() * .64);
+      rhidSignatureCapture = null;
+      signaturePlacementOverride = {
+        kind: "report", reportSession: target, representative: bernardo, messageId: newUploadMessageId(),
+        stage: "document_signing_waiting_position",
+        document: { id: newUploadMessageId(), fileName: target.fileName, mimeType: "application/pdf", blob: target.blob },
+        signature: { id: newUploadMessageId(), fileName: signature.name || "assinatura.png", mimeType: signature.type || "image/png", blob: signature },
+        signerName: bernardo ? "BERNARDO NOTINI" : target.report.supplier.name,
+        selection: { page: index + 1, x: (box.x + box.width / 2) / page.getWidth(), y: (box.y + box.height / 2) / page.getHeight(), scale },
+      };
+      invalidateSignaturePlacement();
+      render();
+      return true;
+    } catch (error) {
+      if (currentRhidPdf(target)) {
+        rhidSignatureCapture = null;
+        setSessionError(error, "Não foi possível preparar o campo de assinatura do relatório.");
+        await previewRhidPdf(target);
+      }
+      return false;
+    }
   }
 
   async function openRhidMonthlyReport({ value: month } = {}) {
@@ -4410,9 +4520,10 @@ export function createAppController({
             check();
             const pdf = await buildRhidMonthlyPdf(report);
             check();
-            await showMedia(pdf, `presencas-rhid-${report.month}-fornecedor-${report.supplier.id}.pdf`, {
-              layout: 'report-pdf', returnLabel: 'Voltar ao relatório', resolveReturnFocus,
-            });
+            const target = { report, blob: pdf, fileName: `presencas-rhid-${report.month}-fornecedor-${report.supplier.id}.pdf`,
+              account: reportsAccount, revision: reportsRevision, lifetime, signal, resolveReturnFocus, signed: false };
+            rhidMonthlyPdf = target;
+            await previewRhidPdf(target);
           },
         });
         try { assertSession(); } catch (error) { panel?.destroy?.(); throw error; }
@@ -9167,7 +9278,7 @@ export function createAppController({
     const placement = localPlacementForRequest(request);
     const point = normalizedSignaturePoint(rawPoint);
     if (!account || stopped || attachmentSigningBusy
-      || !["attachment", "document"].includes(placement?.kind) || !point) return false;
+      || !["attachment", "document", "report"].includes(placement?.kind) || !point) return false;
     const stamp = stampInput || signaturePlacementStamp;
 
     const signingAccount = account;
@@ -9175,7 +9286,8 @@ export function createAppController({
     const signingGeneration = signaturePlacementGeneration;
     const stillCurrent = () => !stopped && account === signingAccount
       && (signaturePlacementOverride === placement || request?.key === signaturePlacementRequest()?.key)
-      && signaturePlacementGeneration === signingGeneration;
+      && signaturePlacementGeneration === signingGeneration
+      && (placement.kind !== "report" || currentRhidPdf(placement.reportSession));
     attachmentSigningBusy = true;
     sessionError = null;
     if (signaturePlacementData) signaturePlacementData = { ...signaturePlacementData, status: "signing" };
@@ -9210,6 +9322,15 @@ export function createAppController({
       if (previousPlacementData) previousPlacementData.signedAttempt = { key: attemptKey, blob: signedBlob };
       const confirmation = await client.confirmSignatureEvidence({ recordId: evidence.id, documentBlob: signedBlob, fileName });
       if (!stillCurrent()) return false;
+      if (placement.kind === "report") {
+        const target = placement.reportSession;
+        target.blob = signedBlob;
+        target.signed = true;
+        invalidateSignaturePlacement({ clearOverride: true });
+        render();
+        await previewRhidPdf(target);
+        return true;
+      }
       if (placement.kind === "document" && !store.getState().activeFlow) {
         if (!confirmation?.mediaUrl) throw new Error("O servidor não devolveu a prévia do PDF confirmado.");
         store.ingestRemoteMessages([{
@@ -9711,6 +9832,9 @@ export function createAppController({
     bind("signature-captured", command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
+      if (command.fileId === "rhid-monthly-report") {
+        return captureRhidPdfSignature(rhidSignatureCapture, file, rhidSignatureBernardo);
+      }
       if (command.fileId === "signature-local-document") {
         const source = localSignatureEditSource;
         localSignatureEditSource = null;
@@ -9736,6 +9860,11 @@ export function createAppController({
       return queueSelectedFiles(() => [file], { hideFromAttachmentTray: true });
     });
     bind("signature-cancelled", command => {
+      if (command.fileId === "rhid-monthly-report") {
+        const target = rhidSignatureCapture;
+        rhidSignatureCapture = null;
+        return previewRhidPdf(target);
+      }
       if (command.fileId === "signature-local-document") {
         const source = localSignatureEditSource;
         localSignatureEditSource = null;
@@ -9770,6 +9899,13 @@ export function createAppController({
     });
     bind("signature-placement-edit", () => {
       if (flowBusy()) return false;
+      if (signaturePlacementOverride?.kind === "report") {
+        const target = signaturePlacementOverride.reportSession;
+        const representative = signaturePlacementOverride.representative;
+        invalidateSignaturePlacement({ clearOverride: true });
+        render();
+        return startRhidPdfSignature(target, representative, true);
+      }
       if (!store.getState().activeFlow) {
         const placement = localPlacementForRequest(signaturePlacementRequest());
         if (!placement) return false;
@@ -9800,8 +9936,10 @@ export function createAppController({
     bind("signature-placement-close", () => {
       if (signaturePlacementOverride) {
         if (attachmentSigningBusy) return false;
+        const report = signaturePlacementOverride.kind === "report" ? signaturePlacementOverride.reportSession : null;
         invalidateSignaturePlacement({ clearOverride: true });
         render();
+        if (report) return previewRhidPdf(report);
         return true;
       }
       return sendText("Voltar", DOCUMENT_SIGNING_POSITION_BACK_ID);

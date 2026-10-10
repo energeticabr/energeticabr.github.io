@@ -69,6 +69,18 @@ async function setup(t,data={},options={}){
  t.after(()=>{view.destroy();dom.window.close();});await view.open({month:'2026-09'});
  return {view,doc,dom};
 }
+test('monthly panel suspension releases the app for its existing signature pad without cancelling the report',async t=>{
+ let closed=0;const {view,doc}=await setup(t,{}, {onClose:()=>closed++});
+ assert.equal(doc.querySelector('#app').inert,true);
+ assert.equal(typeof view.suspend,'function');
+ view.suspend();
+ assert.equal(doc.querySelector('#app').inert,false);
+ assert.equal(view.element.inert,true);
+ assert.equal(closed,0);
+ view.resume();
+ assert.equal(doc.querySelector('#app').inert,true);assert.equal(view.element.inert,false);
+ assert.equal(view.element.hidden,false);
+});
 test('monthly form requires supplier, month and year and shows that supplier daily totals',async t=>{
  const requests=[];const {doc}=await setup(t,{loadMonth:async month=>{requests.push(month);return snapshot;}});
  const supplier=doc.querySelector('select[name="supplier"]');assert.equal(supplier.value,'');assert.deepEqual([...supplier.options].map(o=>o.textContent),['Selecione o fornecedor',...suppliers.map(s=>s.name)]);

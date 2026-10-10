@@ -88,7 +88,7 @@ test("monthly PDF continues oversized issues without losing characters or follow
   assert.equal(text.match(/ULTIMA_LINHA/g)?.length, 1);
   assert.match(text, /31\/10\/2026/);
   for (const { items } of pages.filter(({ items }) => items.some(item => /\d{2}\/\d{2}\/\d{4}/.test(item.str)))) {
-    for (const heading of ["Data", "Marcações", "Total", "Observações"]) assert.ok(items.some(item => item.str === heading), `falta cabeçalho ${heading}`);
+    for (const heading of ["Data", "E", "S", "E2", "S2", "Total", "Observações"]) assert.ok(items.some(item => item.str === heading), `falta cabeçalho ${heading}`);
   }
   assertInside(pages);
 });
@@ -132,10 +132,16 @@ test("monthly PDF keeps employee and representative signatures together on the s
 });
 
 // Ordinary complete months must not waste an entire third signature page.
-test("monthly PDF fits 31 recorded days, total and ample signatures in at most two pages", async t => {
+test("monthly PDF fits 31 recorded days, total and ample signatures on exactly one page", async t => {
   const input = recordedMonth();
   const { pdf, pages, text } = await inspect(t, await build(input));
-  assert.ok(pages.length <= 2, `31 dias registrados geraram ${pages.length} páginas`);
+  assert.equal(pages.length, 1, "mês completo, totais e ambas as assinaturas na mesma página");
+  const headers = pages[0].items.filter(item => ["Data", "E", "S", "E2", "S2", "Total", "Observações"].includes(item.str));
+  assert.deepEqual(headers.map(item => item.str), ["Data", "E", "S", "E2", "S2", "Total", "Observações"]);
+  const firstDay = pages[0].items.find(item => item.str === "01/10/2026");
+  const firstRow = pages[0].items.filter(item => Math.abs(item.transform[5] - firstDay.transform[5]) < .1);
+  assert.deepEqual(firstRow.slice(1, 5).map(item => item.str), ["07:00", "12:00", "13:00", "17:00"]);
+  assert.ok(firstRow.slice(1, 5).every((item,index) => item.transform[4] === headers[index + 1].transform[4]), "quatro horários em colunas próprias, na mesma linha");
   for (let day = 1; day <= 31; day++) assert.match(text, new RegExp(`${String(day).padStart(2, "0")}/10/2026`));
   assert.match(text, /Total do mês: 279:00/);
   assert.match(text, /Dias com registros: 31/);
@@ -157,11 +163,11 @@ test("monthly PDF fits 31 recorded days, total and ample signatures in at most t
 // A signature-only continuation must not advertise an empty attendance table.
 test("monthly PDF omits attendance headers when only the signature group needs a continuation", async t => {
   const input = recordedMonth();
-  input.days[30].issues = Array.from({ length: 10 }, (_, index) => `Conferência documental ${index + 1}.`);
+  input.days[30].issues = Array.from({ length: 14 }, (_, index) => `Conferência documental ${index + 1}.`);
   const { pdf, pages } = await inspect(t, await build(input));
   const last = pages.at(-1).items;
   assert.ok(!last.some(item => /\d{2}\/\d{2}\/\d{4}/.test(item.str)), "última página deve ser de assinaturas nesta prévia");
-  for (const heading of ["Data", "Marcações", "Total", "Observações"]) assert.ok(!last.some(item => item.str === heading), `cabeçalho vazio ${heading}`);
+  for (const heading of ["Data", "E", "S", "E2", "S2", "Total", "Observações"]) assert.ok(!last.some(item => item.str === heading), `cabeçalho vazio ${heading}`);
   const lastRef = pdf.getPages().at(-1).ref.toString();
   for (const field of pdf.getForm().getFields()) assert.equal(field.acroField.getWidgets()[0].P().toString(), lastRef);
   assertInside(pages);
