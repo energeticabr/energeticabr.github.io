@@ -1,11 +1,18 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css"><title>Opções RHID - teste</title></head><body><main id="app"></main><output id="layout-result"></output><script type="module">
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css"><title>Opções RHID - teste</title></head><body><main id="app"></main><output id="layout-result"></output><script type="module">
 import {createRhidMonthlyReportView} from '../../src/ui/rhid-monthly-report-view.js';
 const names=['CLEITON CESAR NONATO','EDGAR NELSON DA SILVA','FELICIANO ROGÉRIO DA SILVA','HELISON ROSA LUIS','ISRAEL ESCORAMENTO E ARMAÇÕES','JOSÉ GERALDO DOS SANTOS','LUIZ BERNARDO DOS SANTOS','MAURICIO HONORATO DE SOUZA','MAURO ANTONIO PEREIRA','RAFAEL GONTIJO'];
+// Visual preview only: desktop Chrome has no phone status bar. Automated
+// layout tests use real env() values through CDP, without this parameter.
+if(new URL(location.href).searchParams.has('preview-iphone')){
+ const style=document.createElement('style');style.textContent='.sfs-backdrop{padding-top:59px;padding-bottom:34px}.preview-status-area{position:fixed;inset:0 0 auto;height:59px;display:grid;place-items:center;z-index:102;background:#092c3b;color:white;font:12px Arial;pointer-events:none}';
+ document.head.append(style);const bar=document.createElement('div');bar.className='preview-status-area';bar.textContent='Área da barra de status — simulação de iPhone';document.body.append(bar);
+}
 const view=createRhidMonthlyReportView({document,data:{loadSuppliers:async()=>names.map((name,i)=>({id:String(i+1),name})),loadMonth:async()=>{throw Error('não consultar');}}});
 await view.open({month:'2026-10'});document.querySelector('.sfs-field input').click();
 await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const popup=document.querySelector('.sfs-popup'),list=document.querySelector('.sfs-list'),bounds=list.getBoundingClientRect();
 const options=[...list.children].filter(n=>n.textContent!=='Selecione o fornecedor').map(n=>{const r=n.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right};});
-const rect=popup.getBoundingClientRect();document.querySelector('#layout-result').textContent=JSON.stringify({placement:popup.dataset.placement,readOnly:document.querySelector('.sfs-field input').readOnly,visibleOptions:options.filter(r=>r.top>=bounds.top&&r.bottom<=bounds.bottom+1&&r.bottom<=innerHeight).length,popup:{left:rect.left,right:rect.right,bottom:rect.bottom},width:innerWidth,height:innerHeight});
+const rect=popup.getBoundingClientRect(),search=document.querySelector('.sfs-report-search').getBoundingClientRect(),dismiss=document.querySelector('.sfs-dismiss').getBoundingClientRect();
+document.querySelector('#layout-result').textContent=JSON.stringify({placement:popup.dataset.placement,readOnly:document.querySelector('.sfs-field input').readOnly,visibleOptions:options.filter(r=>r.top>=bounds.top&&r.bottom<=bounds.bottom+1&&r.bottom<=innerHeight).length,popup:{top:rect.top,left:rect.left,right:rect.right,bottom:rect.bottom},search:{top:search.top,bottom:search.bottom},dismiss:{top:dismiss.top,bottom:dismiss.bottom},width:innerWidth,height:innerHeight});
 document.documentElement.dataset.layout='ready';
 </script></body></html>
