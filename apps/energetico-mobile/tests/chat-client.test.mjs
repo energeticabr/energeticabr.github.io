@@ -392,6 +392,32 @@ test("envia texto autenticado e exige confirmação estruturada", async () => {
   assert.equal(result.messages[0].text, "Certo");
 });
 
+test("casinha envia contrato seletivo no mesmo endpoint autenticado", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = { url, ...options };
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+  await client.sendText({ replyId: "portal_transfer_attachments", homeAttachmentIds: ["a".repeat(64)], expectedContextId: "original-context" });
+  assert.deepEqual(JSON.parse(request.body), {
+    messageId: "message-id", text: "", replyId: "portal_transfer_attachments",
+    action: "home_attachment_transfer", attachmentIds: ["a".repeat(64)], expectedContextId: "original-context",
+  });
+});
+
+test("confirmação da casinha envia a identidade do recibo sem usar transferência legada", async () => {
+  let body;
+  const client = clientWith(async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonResponse({ status: "processed", messages: [] });
+  });
+  const receipt = { requestId: "home-start", contextId: "context", attachmentIds: ["a".repeat(64)] };
+  await client.sendText({ replyId: "portal_transfer_draft_discard", homeTransferReceipt: receipt });
+  assert.equal(body.action, "home_attachment_transfer");
+  assert.equal(body.operation, "confirm");
+  assert.deepEqual(body.homeTransferReceipt, receipt);
+});
+
 test("seleção em branco do pedido EPI envia somente o replyId, sem texto", async () => {
   let request;
   const client = clientWith(async (url, options) => {
