@@ -20,6 +20,8 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  const result=make('div','rhid-monthly-result');result.dataset.monthlyResult='true';result.hidden=true;
  form.append(supplierLabel,period,retry,actions);panel.append(header,form,notice,result);root.append(panel);doc.body.append(root);
  let destroyed=false,revision=0,controller=null,picker=null,options=[],busy=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
+ function suspend(){if(destroyed||root.hidden)return;picker?.close();root.style.visibility='hidden';root.inert=true;if(app)app.inert=oldInert;}
+ function resume(){if(destroyed||root.hidden)return;root.style.visibility='';root.inert=false;if(app)app.inert=true;}
  function status(text,error=false){notice.textContent=text;notice.hidden=!text;notice.setAttribute('role',error?'alert':'status');}
  function setBusy(value){busy=value;for(const control of [supplier,month,year,retry,submit])control.disabled=value;picker?.sync();submit.disabled=value||!options.length;panel.setAttribute('aria-busy',String(value));}
  function clearResult(){result.hidden=true;result.replaceChildren();}
@@ -71,7 +73,7 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
   finally{if(currentRequest(request))setBusy(false);}
  }
  function close(){
-  if(root.hidden)return;controller?.abort();revision++;picker?.close();clearResult();status('');root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;onClose();
+  if(root.hidden)return;controller?.abort();revision++;picker?.close();clearResult();status('');root.hidden=true;root.style.visibility='';root.inert=false;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;onClose();
   const target=returnFocus?.isConnected?returnFocus:app?.querySelector('[data-action="open-rhid-monthly-report"]');target?.focus?.({preventScroll:true});returnFocus=null;
  }
  closeButton.addEventListener('click',close);cancel.addEventListener('click',close);retry.addEventListener('click',()=>void loadSuppliers());form.addEventListener('submit',generate);
@@ -89,5 +91,5 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
   const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(now()),reference=isRhidReportMonth(initialMonth)?initialMonth:local;
   month.value=reference.slice(5);year.value=reference.slice(0,4);returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=Boolean(app?.inert);oldOverflow=doc.body.style.overflow;
   doc.body.style.overflow='hidden';if(app)app.inert=true;root.hidden=false;panel.focus();await loadSuppliers();
- },close,destroy(){if(destroyed)return;close();destroyed=true;controller?.abort();picker?.destroy();root.remove();}});
+ },close,suspend,resume,destroy(){if(destroyed)return;close();destroyed=true;controller?.abort();picker?.destroy();root.remove();}});
 }

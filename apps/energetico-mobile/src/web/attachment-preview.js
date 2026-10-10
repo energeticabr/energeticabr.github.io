@@ -73,6 +73,14 @@ export function createAttachmentPreview({
   const addToTrayButton = element("button", "attachment-preview-add-to-tray", "📎 BARRA");
   addToTrayButton.setAttribute("aria-label", "Adicionar este anexo à barra");
   const exportButton = element("button", "attachment-preview-export");
+  const signActions = element("div", "attachment-preview-sign-actions");
+  const signButton = element("button", "attachment-preview-sign", "✍️ Assinar relatório");
+  const stampButton = element("button", "attachment-preview-stamp", "Inserir assinatura de Bernardo");
+  signButton.type = stampButton.type = "button";
+  signButton.dataset.previewAction = "sign";
+  stampButton.dataset.previewAction = "stamp";
+  signActions.hidden = signButton.hidden = stampButton.hidden = true;
+  signActions.append(signButton, stampButton);
   const addChoice = element("section", "attachment-preview-add-choice");
   addChoice.hidden = true;
   addChoice.setAttribute("role", "group");
@@ -115,7 +123,7 @@ export function createAttachmentPreview({
   collectionStatus.dataset.previewAction = "collection-status";
   nextButton.dataset.previewAction = "next";
   collectionNav.append(previousButton, collectionStatus, nextButton);
-  footer.append(collectionNav, addChoice, backButton, addToTrayButton, exportButton);
+  footer.append(collectionNav, addChoice, signActions, backButton, addToTrayButton, exportButton);
   dialog.append(header, content, status, footer);
   documentRef.body.append(dialog);
   let active = null;
@@ -227,6 +235,7 @@ export function createAttachmentPreview({
     addToTrayButton.hidden = true;
     addToTrayButton.disabled = true;
     exportButton.disabled = true;
+    signActions.hidden = signButton.hidden = stampButton.hidden = true;
   }
 
   function finishClosed() {
@@ -272,12 +281,12 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, resolveReturnFocus, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, resolveReturnFocus, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
     dialog.dataset.layout = ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
-    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose };
+    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp };
     active = session;
     title.textContent = session.fileName;
     updateCollectionNavigation();
@@ -305,6 +314,10 @@ export function createAttachmentPreview({
         if (detectedJpeg) kind = "image";
       }
       session.kind = kind;
+      signButton.hidden = kind !== "pdf" || typeof onSign !== "function";
+      stampButton.hidden = kind !== "pdf" || typeof onStamp !== "function";
+      signActions.hidden = signButton.hidden && stampButton.hidden;
+      signButton.disabled = stampButton.disabled = false;
       const canAddToTray = typeof addToTrayHandler === "function";
       addToTrayButton.hidden = !canAddToTray;
       addToTrayButton.disabled = !canAddToTray;
@@ -462,12 +475,12 @@ export function createAttachmentPreview({
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, resolveReturnFocus, layout } = {}) {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout } = {}) {
     backButton.textContent = returnLabel;
     collection = null;
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
-    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, resolveReturnFocus, layout });
+    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, resolveReturnFocus, layout });
   }
 
   async function openCollection(items, { onAddToTray } = {}) {
@@ -518,6 +531,19 @@ export function createAttachmentPreview({
       if (active === session) exportButton.disabled = false;
     }
   });
+  async function signatureAction(button, action) {
+    const session = active, handler = session?.[action];
+    if (button.hidden || button.disabled || !session?.blob || typeof handler !== "function") return;
+    signButton.disabled = stampButton.disabled = true;
+    try { await handler({ blob: session.blob, fileName: session.fileName }); }
+    catch (error) {
+      if (active === session && error?.name !== "AbortError") status.textContent = error?.message || "Não foi possível abrir a assinatura. Tente novamente.";
+    } finally {
+      if (active === session) signButton.disabled = stampButton.disabled = false;
+    }
+  }
+  signButton.addEventListener("click", () => { void signatureAction(signButton, "onSign"); });
+  stampButton.addEventListener("click", () => { void signatureAction(stampButton, "onStamp"); });
   addToTrayButton.addEventListener("click", async () => {
     const session = active;
     if (!session?.blob || typeof addToTrayHandler !== "function") return;
