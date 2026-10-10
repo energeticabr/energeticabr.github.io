@@ -3,6 +3,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createMascotReportButton } from './report-action-button.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
@@ -286,6 +287,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return `${context}: ${error?.message || 'não foi possível concluir'}. Tente novamente; se persistir, confira a conexão e atualize os dados.`;
   }
   function updateBusy() {
+    loadingScreen.sync(opened && listLoading);
     root.setAttribute('aria-busy', String(opened && (listLoading || detailLoading || busy)));
     for (const control of root.querySelectorAll('[data-lg-lock]')) {
       control.disabled = busy || control.dataset.lgDisabled === 'true';
@@ -377,6 +379,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   content.append(createShortcut.toolbar, filterDisclosure, totals, notice, listStatus, cards, pagination);
   root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando lançamentos…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root, actions: ['edit', 'delete'],
     onEdit: async row => {
@@ -448,7 +451,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
-    listLoading = true; listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando lançamentos…")); updateBusy();
+    listLoading = true; listStatus.textContent = ''; updateBusy();
     try {
       const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) });
       if (!active(epoch) || version !== listVersion) return;
@@ -1586,7 +1589,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (event.key !== 'Tab') return;
     const activeModal = !reviewHost.hidden ? reviewHost : !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;
     const controls = [...activeModal.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
-      .filter(node => !node.disabled && node.getAttribute('aria-hidden') !== 'true' && !node.closest('[hidden]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
+      .filter(node => !node.disabled && !node.closest('[hidden], [inert], [aria-hidden="true"]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
     const first = controls[0] ?? activeModal, last = controls.at(-1) ?? activeModal;
     if (event.shiftKey && (doc.activeElement === first || !controls.includes(doc.activeElement))) { event.preventDefault(); focus(last); }
     else if (!event.shiftKey && (doc.activeElement === last || !controls.includes(doc.activeElement))) { event.preventDefault(); focus(first); }
@@ -1616,6 +1619,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function destroy() {
     if (destroyed) return;
+    loadingScreen.destroy();
     createShortcut.destroy();
     refreshControl.destroy();
     recordActions.destroy(); recordItems.clear();

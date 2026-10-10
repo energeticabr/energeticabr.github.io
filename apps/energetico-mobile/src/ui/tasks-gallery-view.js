@@ -2,7 +2,7 @@ import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { matchesGallerySearch } from '../chat/gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -205,6 +205,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const detail = el("section", "og-detail tg-detail"); detail.hidden = true; detail.tabIndex = -1;
   detail.setAttribute("role", "dialog"); detail.setAttribute("aria-modal", "true"); detail.setAttribute("aria-label", "Detalhes da tarefa");
   content.append(metrics, form, supplierNotice, notice, listStatus, cards, pagination); root.append(header, content, detail); doc.body.append(root);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando tarefas…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     loadEditor: (id, options) => data.loadEditor(id, options),
@@ -307,6 +308,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
 
   function updateBusy() {
+    loadingScreen.sync(opened && listLoading);
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
@@ -523,13 +525,13 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   async function loadSnapshot({ refresh = false } = {}) {
     if (!opened || destroyed) return false;
     attachmentCounts.reset();
-    const current = session; controller?.abort(); controller = new AbortController(); listLoading = true;
-    showNotice(""); listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando tarefas…")); cards.replaceChildren(); updateBusy();
+    const current = session; controller?.abort(); const loadController = controller = new AbortController(); listLoading = true;
+    showNotice(""); listStatus.textContent = ''; cards.replaceChildren(); updateBusy();
     try {
       const [result, suppliers] = await Promise.all([
-        data.loadSnapshot({ signal: controller.signal, refresh }),
+        data.loadSnapshot({ signal: loadController.signal, refresh }),
         typeof data.loadFilterOptions === "function"
-          ? data.loadFilterOptions("FORNECEDOR", { signal: controller.signal, refresh: true })
+          ? data.loadFilterOptions("FORNECEDOR", { signal: loadController.signal, refresh: true })
             .then(options => {
               if (!Array.isArray(options) || options.some(option => typeof option?.value !== "string")) {
                 throw new Error("A consulta não retornou opções de fornecedores válidas.");
@@ -538,7 +540,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
             }).catch(error => ({ error }))
           : { options: [] },
       ]);
-      if (!opened || destroyed || !root.isConnected || current !== session) return false;
+      if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de tarefas válida.");
       supplierOptions = suppliers.options || supplierOptions;
       controls.get("supplier").disabled = Boolean(suppliers.error);
@@ -551,10 +553,10 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions(); updateMetrics(); applyLocalFilters(); return true;
     } catch (error) {
-      if (!opened || destroyed || !root.isConnected || current !== session || error?.name === "AbortError") return false;
+      if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController || error?.name === "AbortError") return false;
       listStatus.textContent = safeFailure(error, "Não foi possível carregar tarefas");
       const retry = el("button", "og-button og-button--primary", "Tentar novamente"); retry.type = "button"; retry.addEventListener("click", () => { void loadSnapshot(); }); cards.replaceChildren(retry); return false;
-    } finally { if (opened && !destroyed && root.isConnected && current === session) { listLoading = false; updateBusy(); } }
+    } finally { if (opened && !destroyed && root.isConnected && current === session && controller === loadController) { listLoading = false; updateBusy(); } }
   }
 
   const autoFilters = bindAutoFilterForm(form, applyLocalFilters);
@@ -578,6 +580,6 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; createShortcut.destroy(); refreshShortcut.destroy(); completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
+  function destroy() { if (destroyed) return; loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }

@@ -4,6 +4,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
@@ -222,6 +223,7 @@ export function createOrdersGallery({
   content.append(metrics, toolbar, createShortcut.toolbar, filterDisclosure, notice, cards, pagination);
   root.append(header, content, detail);
   doc.body.append(root);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando pedidos…' });
   detail.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || detail.hidden) return;
     event.preventDefault(); event.stopPropagation();
@@ -262,6 +264,7 @@ export function createOrdersGallery({
   }
 
   function updateBusy() {
+    loadingScreen.sync(opened && listLoading);
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
@@ -419,16 +422,16 @@ export function createOrdersGallery({
     attachmentCounts.reset();
     const currentSession = session;
     if (controller) controller.abort();
-    controller = new AbortController();
+    const loadController = controller = new AbortController();
     listLoading = true;
     snapshotError = null;
     showNotice("");
-    listStatus.replaceChildren(createLoadingIndicator(doc, "Carregando pedidos…"));
+    listStatus.textContent = '';
     cards.replaceChildren();
     updateBusy();
     try {
-      const result = await data.loadSnapshot({ signal: controller.signal, refresh });
-      if (!opened || destroyed || !root.isConnected || currentSession !== session) return false;
+      const result = await data.loadSnapshot({ signal: loadController.signal, refresh });
+      if (!opened || destroyed || !root.isConnected || currentSession !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de pedidos válida");
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions();
@@ -436,7 +439,7 @@ export function createOrdersGallery({
       applyLocalFilters();
       return true;
     } catch (error) {
-      if (!opened || destroyed || !root.isConnected || currentSession !== session || error?.name === "AbortError") return false;
+      if (!opened || destroyed || !root.isConnected || currentSession !== session || controller !== loadController || error?.name === "AbortError") return false;
       snapshotError = error;
       listStatus.textContent = safeFailure(error, "Não foi possível carregar pedidos");
       const retryButton = el("button", "og-button og-button--primary", "Tentar novamente");
@@ -445,7 +448,7 @@ export function createOrdersGallery({
       cards.replaceChildren(retryButton);
       return false;
     } finally {
-      if (opened && !destroyed && root.isConnected && currentSession === session) { listLoading = false; updateBusy(); }
+      if (opened && !destroyed && root.isConnected && currentSession === session && controller === loadController) { listLoading = false; updateBusy(); }
     }
   }
 
@@ -568,6 +571,7 @@ export function createOrdersGallery({
   }
   function destroy() {
     if (destroyed) return;
+    loadingScreen.destroy();
     createShortcut.destroy();
     refreshShortcut.destroy();
     recordActions.destroy(); autoFilters.destroy(); close(); destroyed = true; attachmentCounts.destroy(); root.remove();

@@ -2,7 +2,7 @@ import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { createHrPayrollReport } from "./hr-payroll-report-view.js";
 import { createMascotReportButton } from "./report-action-button.js";
@@ -132,6 +132,7 @@ export function createHrPayrollGallery({ document: documentOption,
   pagination.append(previous, pageLabel, next);
   content.append(filterForm, status, cards, pagination);
   root.append(header, content);
+  const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando registros…' });
   const recordActions = createGalleryRecordActions({
     getReceiptAttachments, readReceiptAttachment,
     document: doc, host: root, loadEditor,
@@ -178,9 +179,10 @@ export function createHrPayrollGallery({ document: documentOption,
     if(!opened || destroyed) return;
     const filters=selectedFilters();
     try {validatePayrollFilters(gallery,filters);}
-    catch(error) {session+=1;busy=false;status.textContent=error.message;cards.replaceChildren();hasMore=false;updateControls();return;}
+    catch(error) {session+=1;busy=false;loadingScreen.sync(false);status.textContent=error.message;cards.replaceChildren();hasMore=false;updateControls();return;}
     session+=1;busy=false;pageCursors.splice(0,pageCursors.length,null,null);
-    void loadPage(1,null);
+    // Filters update atomically without interrupting an in-progress dropdown.
+    void loadPage(1,null,true);
   }
   const autoFilters=bindAutoFilterForm(filterForm,applyFilters);
   clearFilters.addEventListener('click',()=>{filterForm.reset();autoFilters.sync();applyFilters();});
@@ -244,8 +246,9 @@ export function createHrPayrollGallery({ document: documentOption,
   async function loadPage(targetPage, cursor = pageCursors[targetPage] || null, quiet = false, refresh = false) {
     if (!opened || destroyed || busy) return;
     busy = true;
+    loadingScreen.sync(!quiet);
     if (!quiet) {
-      status.replaceChildren(createLoadingIndicator(doc, "Carregando registros…"));
+      status.textContent = '';
       cards.replaceChildren();
     }
     updateControls();
@@ -292,6 +295,7 @@ export function createHrPayrollGallery({ document: documentOption,
     } finally {
       if (opened && !destroyed && root.isConnected && epoch === session) {
         busy = false;
+        loadingScreen.sync(false);
         updateControls();
       }
     }
@@ -299,6 +303,7 @@ export function createHrPayrollGallery({ document: documentOption,
 
   function closeGallery() {
     if (!opened || destroyed) return;
+    loadingScreen.sync(false);
     recordActions.close();
     autoFilters.cancelPending();
     paymentComposer?.close();
@@ -339,6 +344,7 @@ export function createHrPayrollGallery({ document: documentOption,
     },
     close: closeGallery,
     destroy() {
+      loadingScreen.destroy();
       createShortcut.destroy();
       refreshShortcut.destroy();
       doc.defaultView?.clearInterval(refreshTimer);

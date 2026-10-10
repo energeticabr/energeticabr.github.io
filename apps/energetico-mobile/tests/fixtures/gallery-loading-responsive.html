@@ -1,0 +1,80 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+<link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+<link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+<link rel="stylesheet" href="../../src/ui/hr-payroll-gallery.css">
+<link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+<style>body { margin: 0; }</style>
+</head><body><script type="module">
+import { galleryCases, galleryOptions } from '../helpers/gallery-create-cases.mjs';
+import { loadingRow } from '../helpers/gallery-loading-cases.mjs';
+const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const preview = new URLSearchParams(location.search).get('preview');
+try {
+  const results = [];
+  for (const entry of galleryCases.filter(entry => !preview || entry.name === preview)) {
+    let release;
+    const read = () => new Promise(resolve => { release = resolve; });
+    const snapshot = { rows: [loadingRow(entry)], count: 1, page: 1, pages: 1,
+      gallery: entry.options?.gallery, hasMore: false, nextCursor: null,
+      totals: { paid: 90 }, filterOptions: {} };
+    const gallery = entry.factory(galleryOptions(entry, document, {
+      data: { loadSnapshot: read }, request: read, onHome: () => {},
+    }));
+    const opening = gallery.open();
+    const root = document.querySelector(entry.root);
+    const measure = async () => {
+      await Promise.all([...root.querySelectorAll('.app-loading__mascot')].map(image => image.decode()));
+      await frame();
+      const screen = root.querySelector('.gallery-loading-screen');
+      if (!screen) return { missing: true };
+      const header = root.querySelector(':scope > header'), h = header.getBoundingClientRect();
+      const indicator = screen.querySelector('.app-loading'), r = indicator.getBoundingClientRect();
+      const image = indicator.querySelector('img').getBoundingClientRect();
+      const visible = node => getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none';
+      const backdrop = getComputedStyle(screen).backgroundColor;
+      let keyboardSafe = true;
+      if (entry.name === 'launch' || entry.options?.kind) {
+        const buttons = [...header.querySelectorAll('button')];
+        buttons[0].focus();
+        root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        keyboardSafe = document.activeElement === buttons.at(-1);
+        buttons.at(-1).focus();
+        root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        keyboardSafe &&= document.activeElement === buttons[0];
+      }
+      return {
+        keyboardSafe,
+        imageCenterX: image.left + image.width / 2, indicatorCenterY: r.top + r.height / 2,
+        desiredCenterY: (h.bottom + innerHeight) / 2,
+        covered: [...root.children].filter(node => node !== header && node !== screen)
+          .every(node => !visible(node) && node.inert && node.getAttribute('aria-hidden') === 'true'),
+        headerVisible: visible(header) && h.height > 0 && !header.querySelector('button').disabled,
+        loaderVisible: visible(screen) && !screen.hidden && r.width > 0 && r.height > 0,
+        opaque: backdrop.startsWith('rgb('),
+        centeredHit: Boolean(document.elementFromPoint(innerWidth / 2, (h.bottom + innerHeight) / 2)?.closest('.gallery-loading-screen')),
+        fits: r.left >= 0 && r.right <= innerWidth && r.top >= h.bottom && r.bottom <= innerHeight,
+        overflow: root.scrollWidth > root.clientWidth + 1,
+      };
+    };
+    const initial = await measure();
+    release(snapshot); await opening; await frame();
+    root.querySelector('[data-gallery-refresh]').click();
+    const refreshing = await measure();
+    if (preview) {
+      document.documentElement.dataset.ready = 'true';
+      break;
+    }
+    release(snapshot); await frame(); await frame();
+    const restored = root.querySelector('.gallery-loading-screen')?.hidden === true
+      && [...root.children].filter(node => node.tagName !== 'HEADER' && !node.classList.contains('gallery-loading-screen'))
+        .every(node => !node.inert && node.getAttribute('aria-hidden') !== 'true');
+    results.push({ name: entry.name, initial, refreshing, restored });
+    gallery.destroy();
+  }
+  document.documentElement.dataset.layout = JSON.stringify(results);
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error: error.stack }); }
+</script></body></html>
