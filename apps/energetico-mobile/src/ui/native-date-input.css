@@ -1,0 +1,26 @@
+/* iOS WebKit adds exterior padding to native date/time controls at width 100%:
+   https://bugs.webkit.org/show_bug.cgi?id=301648
+   Keep spacing inside the value instead. Do not resize the offscreen calendar
+   inputs used by report buttons (tabindex=-1), or change any native picker. */
+:root input:is([type="date"], [type="datetime-local"], [type="month"], [type="time"], [type="week"]):not([tabindex="-1"]) {
+  box-sizing: border-box;
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  max-inline-size: 100%;
+  padding-inline: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+:root input:is([type="date"], [type="datetime-local"], [type="month"], [type="time"], [type="week"]):not([tabindex="-1"])::-webkit-date-and-time-value {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 1.5em;
+  padding-inline: 10px;
+}
+
+:root input:is([type="date"], [type="datetime-local"], [type="month"], [type="time"], [type="week"]):not([tabindex="-1"])::-webkit-datetime-edit {
+  min-width: 0;
+  padding-inline: 10px;
+}
