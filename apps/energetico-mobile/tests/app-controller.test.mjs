@@ -745,6 +745,32 @@ test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças a
   assert.equal(previews[0].blob.type, "application/pdf");
   assert.match(previews[0].fileName, /2026-09-27.*\.pdf$/);
 });
+test('Gerar relatório RHID de uma data selecionada abre PDF com página inteira',async t=>{
+ const h=makeHarness(),previews=[];
+ h.client.getRhidAttendanceReport=async date=>({date,rows:[{ID_PESSOA_RHID:'1',NOME_COLABORADOR:'ANA',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}]});
+ h.native.previewMedia=async(source,name,options)=>previews.push({blob:await source,name,options});
+ t.after(()=>h.controller.stop());await h.controller.start();
+ await h.view.emit('rhid-attendance-report-generate',{value:'2026-10-08'});
+ assert.equal(previews.length,1);assert.equal(previews[0].blob.type,'application/pdf');assert.equal(previews[0].options.layout,'report-pdf');
+ assert.match(previews[0].name,/2026-10-08\.pdf$/);
+});
+
+for(const replaceExisting of [false,true])test(`navegação iniciada após consultar RHID descarta o PDF diário antes de abrir (relatório ${replaceExisting?'existente':'novo'})`,async t=>{
+ const h=makeHarness(),previews=[];let navigation,started=false;
+ h.client.getRhidAttendanceReport=async date=>({date,rows:[{ID_PESSOA_RHID:'1',NOME_COLABORADOR:'ANA',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}]});
+ h.client.sendText=async()=>({status:'processed',messages:[{type:'poll',question:'OUTRA TELA',options:[]}]});
+ h.native.previewMedia=async(...args)=>previews.push(args);
+ t.after(()=>h.controller.stop());await h.controller.start();
+ if(replaceExisting)h.store.ingestRemoteMessages([{id:'existing-rhid',type:'poll',question:'RELATÓRIO RHID',options:[],detail_table:{kind:'rhid_attendance',reportDate:'2026-10-07',headers:[],rows:[]}}]);
+ const messageId=replaceExisting?h.store.getState().messages.at(-1).id:'';
+ const unsubscribe=h.store.subscribe(state=>{
+   if(started||!state.messages.some(m=>m.detail_table?.kind==='rhid_attendance'&&m.detail_table.reportDate==='2026-10-08'))return;
+   started=true;navigation=h.view.emit('select-reply',{replyId:'next-screen',label:'Abrir outra tela'});
+ });t.after(unsubscribe);
+ const result=await h.view.emit('rhid-attendance-report-generate',{value:'2026-10-08',messageId});await navigation;
+ assert.equal(started,true);assert.equal(result,false);assert.equal(previews.length,0);
+ assert.equal(h.store.getState().messages.at(-1).question,'OUTRA TELA');
+});
 
 test("ícone de atualização aguarda a sincronização RHID/SharePoint e informa conclusão", async t => {
   const h = makeHarness();
@@ -780,6 +806,8 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
   const h = makeHarness();
   const requested = [];
   const exported = [];
+  const previews = [];
+  h.native.previewMedia = async (blob, name, options) => { previews.push({ blob, name, options }); };
   const collectedAt = "2026-09-25T21:19:00Z";
   h.client.getRhidAttendanceReport = async date => {
     requested.push(date);
@@ -800,6 +828,9 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
   await h.controller.start();
 
   await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
+  assert.equal(previews.length, 1, "gerar abre uma prévia sem compartilhar o documento");
+  assert.equal(previews[0].options.layout, "report-pdf");
+  assert.equal(exported.length, 0);
   const report = h.store.getState().messages.at(-1);
   assert.equal(report.detail_table.rows.length, 9, "a tela e o PDF devem partir das mesmas nove pessoas");
   const expectedRows = [

@@ -34,7 +34,7 @@ async function loadLocalPdfJs() {
   return pdfjs;
 }
 
-/** Renders every page into one vertically scrollable document. */
+/** Renders a scrollable document, or a complete page with report navigation. */
 export function createPdfPreview({
   blob,
   container,
@@ -42,6 +42,7 @@ export function createPdfPreview({
   signal,
   loadPdfJs = loadLocalPdfJs,
   pixelRatio = globalThis.devicePixelRatio || 1,
+  fit = 'width',
   pageFilter = () => true,
   onError = () => {},
 } = {}) {
@@ -52,12 +53,26 @@ export function createPdfPreview({
     return node;
   };
   const root = element("section", "attachment-preview-pdf");
+  root.dataset.fit = fit;
   const viewport = element("div", "attachment-preview-pdf-viewport");
   const surface = element("div", "attachment-preview-pdf-surface");
   viewport.setAttribute("aria-label", "Páginas do PDF; deslize para baixo ou use dois dedos para ampliar");
   viewport.setAttribute("role", "document");
   viewport.append(surface);
   root.append(viewport);
+  let pageNavigation = null, previousPageButton = null, nextPageButton = null, pageStatus = null;
+  let pageNumbers = [], pageIndex = 0;
+  if (fit === 'page') {
+    viewport.setAttribute('aria-label', 'Página inteira do PDF; use Anterior e Próxima ou dois dedos para ampliar');
+    pageNavigation = element('nav', 'attachment-preview-pdf-navigation');
+    pageNavigation.setAttribute('aria-label', 'Páginas do relatório');pageNavigation.hidden = true;
+    previousPageButton = element('button', '', '‹ Anterior');nextPageButton = element('button', '', 'Próxima ›');
+    previousPageButton.type = nextPageButton.type = 'button';
+    previousPageButton.dataset.pdfAction = 'previous-page';nextPageButton.dataset.pdfAction = 'next-page';
+    pageStatus = element('span');pageStatus.dataset.pdfPageStatus = '';pageStatus.setAttribute('aria-live', 'polite');
+    pageNavigation.append(previousPageButton, pageStatus, nextPageButton);root.append(pageNavigation);
+    previousPageButton.addEventListener('click', () => movePage(-1));nextPageButton.addEventListener('click', () => movePage(1));
+  }
   container.append(root);
 
   let destroyed = false;
@@ -67,6 +82,24 @@ export function createPdfPreview({
   let renderGeneration = 0;
   let busy = true;
   let renderedCanvases = [];
+  const windowRef = documentRef.defaultView;
+  let resizeObserver = null;
+  let fittedSize = '';
+  const viewportSize = () => `${viewport.clientWidth}:${viewport.clientHeight}`;
+
+  function showCurrentPage() {
+    if (fit !== 'page' || destroyed) return;
+    pageNavigation.hidden = pageNumbers.length <= 1;
+    previousPageButton.disabled = pageIndex <= 0;
+    nextPageButton.disabled = pageIndex >= pageNumbers.length - 1;
+    pageStatus.textContent = `${pageIndex + 1} de ${pageNumbers.length}`;
+    for (const node of surface.children) node.hidden = Number(node.dataset.pageNumber) !== pageNumbers[pageIndex];
+    viewport.scrollTop = viewport.scrollLeft = 0;
+  }
+  function movePage(delta) {
+    if (destroyed || busy) return;
+    pageIndex = Math.max(0, Math.min(pageNumbers.length - 1, pageIndex + delta));showCurrentPage();
+  }
 
   function applyZoom(value, { previousZoom = 1, midpoint, ratio = 1 } = {}) {
     const bounded = Math.min(4, Math.max(1, Number(value) || 1));
@@ -111,7 +144,10 @@ export function createPdfPreview({
     }
     const availableWidth = Math.max(1, viewport.clientWidth
       ? viewport.clientWidth - 8 : (container.clientWidth || 360) - 32);
-    const displayScale = availableWidth / natural.width;
+    const availableHeight = Math.max(1, viewport.clientHeight - 8);
+    const displayScale = fit === 'page' && viewport.clientHeight > 0
+      ? Math.min(availableWidth / natural.width, availableHeight / natural.height)
+      : availableWidth / natural.width;
     const displayed = page.getViewport({ scale: displayScale });
     const outputRatio = Math.min(
       Math.max(1, Number(pixelRatio) || 1), 2,
@@ -122,6 +158,7 @@ export function createPdfPreview({
     const scaled = page.getViewport({ scale: displayScale * outputRatio });
     const wrapper = element("div", "attachment-preview-pdf-page");
     wrapper.dataset.pageNumber = String(number);
+    if (fit === 'page') wrapper.hidden = number !== pageNumbers[pageIndex];
     const canvas = element("canvas", "attachment-preview-pdf-canvas");
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", `Página ${number} de ${pdf.numPages} do PDF`);
@@ -163,6 +200,7 @@ export function createPdfPreview({
 
   async function renderAll(generation) {
     busy = true;
+    fittedSize = viewportSize();
     root.setAttribute("aria-busy", "true");
     renderTask?.cancel();
     clearRenderedPages();
@@ -177,6 +215,7 @@ export function createPdfPreview({
         failedPages += 1;
         const wrapper = element("div", "attachment-preview-pdf-page attachment-preview-pdf-page--error");
         wrapper.dataset.pageNumber = String(number);
+        if (fit === 'page') wrapper.hidden = number !== pageNumbers[pageIndex];
         wrapper.append(element("p", "attachment-preview-pdf-page-error", `Não foi possível mostrar a página ${number}.`));
         surface.append(wrapper);
       }
@@ -185,7 +224,24 @@ export function createPdfPreview({
     viewport.scrollTop = viewport.scrollLeft = 0;
     root.dataset.failedPages = String(failedPages);
     busy = false;
+    showCurrentPage();
+    if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
     root.setAttribute("aria-busy", "false");
+    refitPage();
+  }
+
+  function refitPage() {
+    if (fit !== 'page' || destroyed || busy || !pdf || viewportSize() === fittedSize) return;
+    // Render serially. Resizes during rendering are reconciled at its end,
+    // so an orientation change cannot cancel or interleave PDF page tasks.
+    void renderAll(++renderGeneration).catch(error => { if (!destroyed) onError(error); });
+  }
+  if (fit === 'page') {
+    windowRef?.addEventListener('resize', refitPage);
+    if (windowRef?.ResizeObserver) {
+      resizeObserver = new windowRef.ResizeObserver(refitPage);
+      resizeObserver.observe(viewport);
+    }
   }
 
   function destroy() {
@@ -193,6 +249,8 @@ export function createPdfPreview({
     destroyed = true;
     renderGeneration += 1;
     signal?.removeEventListener("abort", destroy);
+    resizeObserver?.disconnect();
+    windowRef?.removeEventListener('resize', refitPage);
     pinchZoom.destroy();
     renderTask?.cancel();
     clearRenderedPages();
@@ -225,6 +283,10 @@ export function createPdfPreview({
     });
     pdf = await loadingTask.promise;
     if (destroyed) { pdf = null; return; }
+    if (fit === 'page') {
+      pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
+      showCurrentPage();
+    }
     renderGeneration += 1;
     try {
       await renderAll(renderGeneration);

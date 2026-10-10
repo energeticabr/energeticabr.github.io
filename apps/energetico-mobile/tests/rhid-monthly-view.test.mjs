@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {createChatView} from '../src/ui/chat-view.js';
+import {createAttachmentPreview} from '../src/web/attachment-preview.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const suppliers=[{id:'4',name:'MAURICIO HONORATO DE SOUZA'},{id:'7',name:'HELISON ROSA LUIS'}];
 const snapshot={month:'2026-09',rows:[{Id:'1',ID_PESSOA_RHID:'101',NOME_COLABORADOR:suppliers[1].name,DATA_REFERENCIA:'2026-09-01',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}],presentDates:['2026-09-01']};
@@ -14,11 +15,11 @@ test('RHID calendar offers monthly generation without changing the selected dail
  button.click();assert.equal(commands[0].value,'2026-09');assert.ok(root.querySelector('[aria-pressed="true"][data-value="2026-09-28"]'));
  view.destroy();dom.window.close();
 });
-async function setup(t,data={}){
+async function setup(t,data={},options={}){
  const {createRhidMonthlyReportView}=await import('../src/ui/rhid-monthly-report-view.js');
  const dom=new JSDOM('<main id="app"><button id="origin">Mensal</button></main>'),doc=dom.window.document;
  doc.querySelector('button').focus();
- const view=createRhidMonthlyReportView({document:doc,data:{loadSuppliers:async()=>suppliers,loadMonth:async()=>snapshot,...data},now:()=>new Date('2026-10-09T15:00:00Z')});
+ const view=createRhidMonthlyReportView({document:doc,data:{loadSuppliers:async()=>suppliers,loadMonth:async()=>snapshot,...data},now:()=>new Date('2026-10-09T15:00:00Z'),...options});
  t.after(()=>{view.destroy();dom.window.close();});await view.open({month:'2026-09'});
  return {view,doc,dom};
 }
@@ -28,6 +29,46 @@ test('monthly form requires supplier, month and year and shows that supplier dai
  assert.equal(doc.querySelector('[name="month"]').value,'09');assert.equal(doc.querySelector('[name="year"]').value,'2026');
  supplier.value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();
  assert.deepEqual(requests,['2026-09']);assert.match(doc.querySelector('[data-monthly-result]').textContent,/HELISON ROSA LUIS/);assert.match(doc.querySelector('[data-monthly-result]').textContent,/09:00/);assert.equal(doc.querySelectorAll('tbody tr').length,30);
+});
+test('supplier options open expanded without a keyboard and can search again after selection',async t=>{
+ const {doc,dom}=await setup(t,{loadSuppliers:async()=>Array.from({length:12},(_,i)=>({id:String(i+1),name:`FORNECEDOR ${i+1}`}))});
+ const trigger=doc.querySelector('.sfs-field input');trigger.click();
+ assert.equal(trigger.readOnly,true,'opening the supplier list must not open the phone keyboard');
+ const popup=doc.querySelector('.sfs-popup');assert.equal(popup.dataset.placement,'expanded');
+ assert.ok(parseFloat(doc.querySelector('.sfs-list').style.maxHeight)>=7*40);
+ doc.querySelectorAll('[role="option"]')[2].click();assert.equal(doc.querySelector('[name="supplier"]').value,'2');
+ trigger.click();const search=doc.querySelector('.sfs-report-search');search.value='12';search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+ assert.equal(doc.querySelectorAll('[role="option"]').length,1);
+ doc.querySelector('[role="option"]').click();assert.equal(doc.querySelector('[name="supplier"]').value,'12');
+});
+test('successful monthly generation opens the confirmed supplier report with a cancellable lifetime',async t=>{
+ const reports=[];const {doc}=await setup(t,{}, {onReport:async(report,options)=>reports.push({report,options})});
+ doc.querySelector('[name="supplier"]').value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.equal(reports.length,1);assert.equal(reports[0].report.supplier.name,'HELISON ROSA LUIS');assert.equal(reports[0].report.total,'09:00');
+ assert.equal(reports[0].options.signal.aborted,false);
+});
+test('PDF opening failures leave the report available with a visible retry error',async t=>{
+ const {doc}=await setup(t,{}, {onReport:async()=>{throw new Error('Não foi possível abrir o PDF.');}});
+ doc.querySelector('[name="supplier"]').value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.match(doc.querySelector('[role="alert"]').textContent,/PDF/);assert.equal(doc.querySelector('.rhid-monthly-generate').disabled,false);
+ assert.equal(doc.querySelector('[data-monthly-result]').hidden,false);
+});
+
+test('closing monthly PDF restores focus inside the still-open report instead of inert app',async t=>{
+ let preview;
+ const {doc,dom}=await setup(t,{}, {onReport:async(report,options)=>{
+  assert.equal(typeof options.resolveReturnFocus,'function');
+  await preview.open(new Blob(['%PDF-1.7'],{type:'application/pdf'}),'rhid.pdf',{layout:'report-pdf',resolveReturnFocus:options.resolveReturnFocus});
+ }});
+ dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+ dom.window.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new dom.window.Event('close'));};
+ preview=createAttachmentPreview({documentRef:doc,urlApi:{createObjectURL:()=> 'blob:rhid',revokeObjectURL(){}},loadPdfPreview:async()=>({createPdfPreview:()=>({ready:Promise.resolve(),destroy(){}})})});
+ t.after(()=>preview.destroy());
+ doc.querySelector('[name="supplier"]').value='7';doc.querySelector('.rhid-monthly-generate').focus();
+ doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await tick();await tick();await tick();
+ assert.equal(doc.querySelector('dialog').open,true);preview.close();
+ assert.equal(doc.getElementById('app').inert,true);
+ assert.equal(doc.activeElement,doc.querySelector('.rhid-monthly-close'));
 });
 test('monthly generation revalidates supplier eligibility before displaying attendance',async t=>{
  let loads=0,requests=0;

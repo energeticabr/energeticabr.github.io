@@ -2327,7 +2327,7 @@ export function createAppController({
     if (!account || stopped || typeof client.getRhidAttendanceReport !== "function") {
       const message = "A consulta do relatório RHID está indisponível nesta sessão.";
       if (openPdf) setSessionError(new Error(message));
-      else view.setRhidAttendanceReportStatus?.({ error: message });
+      view.setRhidAttendanceReportStatus?.({ busy: false, error: message });
       return false;
     }
     if (rhidAttendanceReportRequests.has(requestKey)) return rhidAttendanceReportRequests.get(requestKey);
@@ -2406,7 +2406,8 @@ export function createAppController({
           const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
           const pdf = await buildRhidAttendancePdf(table, { dateLabel: reportDate, updateLabel });
           if (stopped || account !== reportAccount || sessionRevision !== reportRevision) return false;
-          await showMedia(pdf, `presencas-rhid-${day}.pdf`);
+          if (rhidAttendanceReportNavigationRevision !== navigationRevision) return false;
+          await showMedia(pdf, `presencas-rhid-${day}.pdf`, { layout: 'report-pdf' });
         }
         return true;
       } catch (error) {
@@ -2426,8 +2427,10 @@ export function createAppController({
               });
             }
             view.setRhidAttendanceReportStatus?.({ busy: false, error: retryMessage });
-          } else if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
-          else view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
+          } else {
+            if (openPdf) setSessionError(error, "Não foi possível gerar ou abrir o PDF de presenças RHID.");
+            view.setRhidAttendanceReportStatus?.({ busy: false, error: error?.message || "Não foi possível gerar o relatório RHID." });
+          }
         }
         return false;
       } finally {
@@ -4399,7 +4402,19 @@ export function createAppController({
       let panel;
       try {
         assertSession();
-        panel = await rhidMonthlyFactory({ data, document: globalThis.document, onClose: disposeRhidMonthlyReport });
+        panel = await rhidMonthlyFactory({ data, document: globalThis.document, onClose: disposeRhidMonthlyReport,
+          onReport: async (report, { signal, resolveReturnFocus } = {}) => {
+            const check = () => { assertSession(); if (signal?.aborted) throw cancelled(); };
+            check();
+            const { buildRhidMonthlyPdf } = await import('./chat/rhid-monthly-pdf.js');
+            check();
+            const pdf = await buildRhidMonthlyPdf(report);
+            check();
+            await showMedia(pdf, `presencas-rhid-${report.month}-fornecedor-${report.supplier.id}.pdf`, {
+              layout: 'report-pdf', returnLabel: 'Voltar ao relatório', resolveReturnFocus,
+            });
+          },
+        });
         try { assertSession(); } catch (error) { panel?.destroy?.(); throw error; }
         rhidMonthlyReport = panel;
         await panel.open({ month });
@@ -9494,7 +9509,7 @@ export function createAppController({
         disposePendingSupplierPaymentsReport();
         disposePendingWorkDiariesReport();
       }
-      if (rhidAttendanceReportRequests.has("new-report")
+      if (rhidAttendanceReportRequests.size > 0
         && ["select-reply", "send-text", "date-selected", "show-summary", "finish-flow"].includes(type)) {
         rhidAttendanceReportNavigationRevision += 1;
       }
@@ -9869,6 +9884,7 @@ export function createAppController({
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value, {
+      openPdf: true,
       replaceMessageId: command.messageId || "",
     }));
     bind("open-rhid-monthly-report", openRhidMonthlyReport);

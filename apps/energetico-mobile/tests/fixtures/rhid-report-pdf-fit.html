@@ -1,0 +1,16 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="../../src/styles.css"><link rel="stylesheet" href="../../src/web/attachment-preview.css"><title>PDF RHID - prévia de teste</title></head><body><main id="app"></main><output id="layout-result"></output><script type="module">
+import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
+import {buildRhidMonthlyReport} from '../../src/chat/rhid-monthly-model.js';
+import {buildRhidMonthlyPdf} from '../../src/chat/rhid-monthly-pdf.js';
+const supplier={id:'7',name:'FUNCIONÁRIO EXEMPLO COM NOME EXTENSO PARA TESTE DE ASSINATURA'};
+const rows=Array.from({length:31},(_,i)=>({Id:String(i+1),ID_PESSOA_RHID:'101',NOME_COLABORADOR:supplier.name,DATA_REFERENCIA:`2026-10-${String(i+1).padStart(2,'0')}`,BATIDAS_RHID:'07:00;12:00;13:00;17:00'}));
+const report=buildRhidMonthlyReport({month:'2026-10',supplier,snapshot:{month:'2026-10',rows,presentDates:rows.map(r=>r.DATA_REFERENCIA)}});
+const preview=createAttachmentPreview({documentRef:document,exportMedia:async()=>{}});
+await preview.open(await buildRhidMonthlyPdf(report),'presencas-rhid-exemplo.pdf',{layout:'report-pdf',returnLabel:'Voltar ao relatório'});
+await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const viewport=document.querySelector('.attachment-preview-pdf-viewport');
+for(let i=0;i<200&&(document.querySelector('.attachment-preview-pdf').getAttribute('aria-busy')==='true');i++)await new Promise(r=>setTimeout(r,10));
+const available=viewport.getBoundingClientRect(),canvases=[...document.querySelectorAll('.attachment-preview-pdf-canvas')].filter(c=>!c.closest('[hidden]')).map(c=>{const r=c.getBoundingClientRect(),context=c.getContext('2d'),pixels=context.getImageData(0,0,c.width,c.height).data;let inkPixels=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<150&&pixels[i+1]<150&&pixels[i+2]<150)inkPixels++;return {width:r.width,height:r.height,left:r.left,right:r.right,inkPixels,corner:[...context.getImageData(c.width-2,c.height-2,1,1).data]};});
+document.querySelector('#layout-result').textContent=JSON.stringify({width:innerWidth,height:innerHeight,pageWidth:document.documentElement.scrollWidth,viewport:{width:viewport.clientWidth,height:viewport.clientHeight,left:available.left,right:available.right},canvases,failedPages:document.querySelector('.attachment-preview-pdf').dataset.failedPages,scrollWidth:viewport.scrollWidth});
+document.documentElement.dataset.layout='ready';
+</script></body></html>

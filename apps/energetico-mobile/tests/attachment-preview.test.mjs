@@ -24,6 +24,12 @@ function setup(t, options = {}) {
   t.after(() => { preview.destroy(); stopPageZoom(); dom.window.close(); });
   return { preview, documentRef, dom, revoked };
 }
+test('report PDF requests whole-page fit without changing ordinary attachments',async t=>{
+ const fits=[];const {preview}=setup(t,{loadPdfPreview:async()=>({createPdfPreview:options=>{fits.push(options.fit);return {ready:Promise.resolve(),destroy(){}};}})});
+ const blob=new Blob(['pdf'],{type:'application/pdf'});
+ await preview.open(blob,'presencas-rhid.pdf',{layout:'report-pdf'});assert.equal(fits[0],'page');
+ await preview.open(blob,'outro.pdf');assert.equal(fits[1],'width');
+});
 
 test("abre antes de ler o arquivo e preserva conversa, rascunho, rolagem e foco ao fechar", async t => {
   let finishRead;

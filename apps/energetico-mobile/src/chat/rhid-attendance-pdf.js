@@ -77,7 +77,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     throw new TypeError("Tabela RHID inválida");
   }
 
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, PDFHexString, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -103,6 +103,7 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
   const pairCount = Math.max(0, Math.floor((table.headers.length - 2) / 2));
   let page;
   let y;
+  let signatureIndex = 0;
 
   function drawText(text, x, yValue, font, size, color = ink) {
     page.drawText(String(text ?? ""), { x, y: yValue, font, size, color });
@@ -169,17 +170,38 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
     drawCentered(text, x + width / 2, yValue + 1, bold, 6.5, badgeText);
   }
 
-  function drawCard(row, name, rowFill, slots, total, isPartial, detail = null) {
+  function addSignature(name, x, bottom, width, fieldName) {
+    const height = 64;
+    page.drawLine({ start: { x, y: bottom }, end: { x: x + width, y: bottom }, thickness: 0.7, color: cardRule });
+    const appearance = pdf.context.register(pdf.context.flateStream("", {
+      Type: "XObject", Subtype: "Form", BBox: [0, 0, width, height], Resources: {},
+    }));
+    // Real, unsigned /Sig widget; no text field or signature value is created.
+    const field = pdf.context.register(pdf.context.obj({
+      Type: "Annot", Subtype: "Widget", FT: "Sig", T: PDFHexString.fromText(fieldName),
+      TU: PDFHexString.fromText(name), Rect: [x, bottom, x + width, bottom + height],
+      P: page.ref, F: 4, AP: { N: appearance },
+    }));
+    pdf.getForm().acroForm.addField(field);
+    page.node.addAnnot(field);
+  }
+
+  function auditLines(detail, slots) {
+    const lines = detail?.issues?.length
+      ? wrapLiteralText(`Batidas RHID: ${(detail.rawPunches || []).join(", ")}`, regular, 7, INNER_WIDTH - 32)
+      : [];
+    if (slots.some(slot => slot.outOfRange)) lines.push(...wrapLiteralText("* Batida fora das faixas usada provisoriamente até correção.", regular, 7, INNER_WIDTH - 32));
+    return lines;
+  }
+
+  function drawCard(row, name, rowFill, slots, total, isPartial, rawLines = [], signatureName = null) {
     const nameLines = wrapText(name, bold, 10.5, INNER_WIDTH - 32);
     const nameLineHeight = 12;
     const slotRows = Math.max(1, Math.ceil(slots.length / 4));
     const detailsHeight = Math.max(45, slotRows * 29 + 4);
-    const rawLines = detail?.issues?.length
-      ? wrapLiteralText(`Batidas RHID: ${(detail.rawPunches || []).join(", ")}`, regular, 7, INNER_WIDTH - 32)
-      : [];
-    if (slots.some(slot => slot.outOfRange)) rawLines.push(...wrapLiteralText("* Batida fora das faixas usada provisoriamente até correção.", regular, 7, INNER_WIDTH - 32));
     const auditHeight = rawLines.length ? 8 + rawLines.length * 10 : 0;
-    const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight + auditHeight);
+    const signatureHeight = signatureName === null ? 0 : 90;
+    const cardHeight = Math.max(78, 28 + nameLines.length * nameLineHeight + signatureHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight + auditHeight);
     ensureSpace(cardHeight + 4);
     const cardTop = y;
     page.drawRectangle({
@@ -193,7 +215,12 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
       borderRadius: 9,
     });
     nameLines.forEach((line, index) => drawText(line, MARGIN + 16, cardTop - 19 - index * nameLineHeight, bold, 10.5, ink));
-    const detailsTop = cardTop - 19 - nameLines.length * nameLineHeight - (rowFill === noPunchFill ? 17 : 7);
+    if (signatureName !== null) {
+      const bottom = cardTop - 19 - nameLines.length * nameLineHeight - 66;
+      addSignature(signatureName, MARGIN + 16, bottom, INNER_WIDTH - 32, `rhid_employee_${signatureIndex++}`);
+      drawText("Assinatura do colaborador", MARGIN + 16, bottom - 12, regular, 8, muted);
+    }
+    const detailsTop = cardTop - 19 - nameLines.length * nameLineHeight - signatureHeight - (rowFill === noPunchFill ? 17 : 7);
     if (rowFill === noPunchFill) drawBadge("SEM MARCAÇÃO", MARGIN + 16, detailsTop + 8, 72);
     const contentX = MARGIN + 16;
     const totalX = PAGE_WIDTH - MARGIN - 106;
@@ -248,12 +275,40 @@ export async function buildRhidAttendancePdf(table, { dateLabel, updateLabel } =
       for (let offset = 0; offset < slots.length || offset === 0; offset += slotsPerCard) {
         const slotChunk = slots.slice(offset, offset + slotsPerCard);
         const isLastChunk = offset + slotsPerCard >= slots.length;
-        const cardName = offset === 0 ? name : `${name} (continuação)`;
-        drawCard(row, cardName, rowFill, slotChunk, isLastChunk ? total : "—",
-          isLastChunk && (total.includes("parcial") || isMissing), isLastChunk ? detail : null);
+        const rawLines = auditLines(isLastChunk ? detail : null, slotChunk);
+        // Audit text may be taller than a page. Carry it through bounded cards,
+        // reserving the full name, hours, total and signature for the last one.
+        let auditOffset = 0;
+        const finalName = offset === 0 ? name : `${name} (continuação)`;
+        const nameHeight = wrapText(finalName, bold, 10.5, INNER_WIDTH - 32).length * 12;
+        const detailsHeight = Math.max(45, Math.max(1, Math.ceil(slotChunk.length / 4)) * 29 + 4);
+        const baseHeight = 28 + nameHeight + (rowFill === noPunchFill ? 17 : 0) + detailsHeight + (isLastChunk ? 90 : 0);
+        while (rawLines.length - auditOffset > 0 && y - baseHeight - 8 - (rawLines.length - auditOffset) * 10 - 4 < MARGIN) {
+          // Try a fresh page first when the complete final card can fit there.
+          const freshCardHeight = PAGE_HEIGHT - MARGIN - 88 - 33 - 28
+            - (updateText ? wrapLiteralText(updateText, regular, 7, INNER_WIDTH).length * 10 : 0) - 8 - MARGIN - 4;
+          if (baseHeight + 8 + (rawLines.length - auditOffset) * 10 <= freshCardHeight) { addHeader(); break; }
+          const continuationNameHeight = wrapText(`${name} (continuação)`, bold, 10.5, INNER_WIDTH - 32).length * 12;
+          const continuationBase = 28 + continuationNameHeight + (rowFill === noPunchFill ? 17 : 0) + 45 + 8;
+          let capacity = Math.floor((y - MARGIN - continuationBase - 4) / 10);
+          if (capacity < 1) { addHeader(); capacity = Math.floor((y - MARGIN - continuationBase - 4) / 10); }
+          const count = Math.min(capacity, rawLines.length - auditOffset);
+          drawCard(row, `${name} (continuação)`, rowFill, [], "—", false, rawLines.slice(auditOffset, auditOffset + count));
+          auditOffset += count;
+        }
+        drawCard(row, finalName, rowFill, slotChunk, isLastChunk ? total : "—",
+          isLastChunk && (total.includes("parcial") || isMissing), rawLines.slice(auditOffset), isLastChunk ? name : null);
       }
     }
   }
+
+  ensureSpace(116);
+  y -= 18;
+  drawText("Representante da Energética", MARGIN + 16, y, bold, 10.5);
+  y -= 14;
+  drawText("Assinatura do representante da empresa", MARGIN + 16, y, regular, 8, muted);
+  y -= 72;
+  addSignature("Representante da Energética", MARGIN + 16, y, INNER_WIDTH - 32, "rhid_representative");
 
   return new Blob([await pdf.save()], { type: "application/pdf" });
 }
