@@ -149,6 +149,14 @@
 .tg-completion-submit { margin-left: auto; }
 .tg-completion-cancel { background: #c52e3a; border-color: #c52e3a; color: #fff; }
 .tg-completion-submit { background: #218443; border-color: #218443; color: #fff; }
+.tg-completion-dialog--success { padding: 0; }
+.tg-completion-dialog--success .launch-completion { padding: 12px; }
+.tg-completion-dialog--success .launch-completion__success { padding: 12px; }
+.tg-completion-dialog--success .launch-completion__success p { margin: 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.tg-completion-dialog--success .launch-completion__title { margin: 12px 4px 8px; font-size: 14px; }
+.tg-completion-dialog--success .launch-completion__row { padding: 10px 0; grid-template-columns: minmax(0, 1fr) minmax(0, auto); }
+.tg-completion-dialog--success .launch-completion dd { font-size: 16px; }
+.tg-completion-dialog--success .launch-completion footer { margin-top: 10px; padding: 8px 12px; font-size: 14px; }
 .tg-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
 .tg-expand:disabled { color: #7f8e9c; background: #e2e9ef; opacity: 1; cursor: default; }
 .tg-card .og-card-attachment-rail { min-height: 100%; padding: 7px 3px; border: 1px solid #c3d8e5; color: #0d3767; background: #e9f4fb; }

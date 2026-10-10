@@ -1,4 +1,5 @@
 import { createLoadingIndicator } from './loading-indicator.js';
+import { postingCompletionMarkup } from './posting-completion.js';
 
 const key = value => String(value || '').replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -15,6 +16,8 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
   const active = current => !disposed && current === state;
   function close() {
     const previous = state; state = null;
+    clearTimeout(previous?.receiptTimer);
+    previous?.finishReceipt?.();
     previous?.overlay.remove(); onBlocked(false);
     if (previous?.trigger?.isConnected) previous.trigger.focus();
     else if (previous && host.isConnected && !host.hidden) host.focus({ preventScroll: true });
@@ -29,6 +32,31 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     const accepted = new Set(aliases.map(key));
     return context.columns?.find(column => column.editable && !column.hidden && !column.readOnly
       && controls.includes(column.control) && (accepted.has(key(column.name)) || accepted.has(key(column.label))));
+  }
+  async function showSuccess(current, row) {
+    if (!active(current)) return;
+    const [year, month, day] = current.attemptedDate.split('-');
+    current.dialog.classList.add('tg-completion-dialog--success');
+    current.dialog.setAttribute('aria-label', `Atividade concluída ${row.id}`);
+    current.dialog.setAttribute('aria-busy', 'false');
+    current.dialog.innerHTML = postingCompletionMarkup({
+      kind: 'task-completion', title: 'ATIVIDADE CONCLUÍDA', database: 'LANCAMENTOTAREFAS',
+      records: [
+        { label: 'ATIVIDADE', value: `ID ${row.id}`, icon: 'launch' },
+        { label: 'DATA CONCLUSÃO', value: `${day}/${month}/${year}`, icon: 'clock' },
+      ],
+    });
+    const receipt = current.dialog.querySelector('.launch-completion');
+    receipt.setAttribute('data-task-completion-success', '');
+    receipt.setAttribute('role', 'status');
+    receipt.setAttribute('aria-live', 'polite');
+    receipt.setAttribute('aria-atomic', 'true');
+    current.dialog.focus();
+    await new Promise(resolve => {
+      current.finishReceipt = resolve;
+      current.receiptTimer = setTimeout(resolve, 2000);
+    });
+    if (active(current)) close();
   }
   async function open(row, trigger) {
     if (disposed || pending) return;
@@ -110,14 +138,14 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
           }
           if (!active(current)) return;
           await onChanged();
-          if (active(current)) close();
+          await showSuccess(current, row);
         } catch (failure) {
           if (!active(current)) return;
           if (current.needsReconcile) {
             try {
               await reconcile();
               if (!active(current)) return;
-              if (current.persisted) { await onChanged(); if (active(current)) close(); return; }
+              if (current.persisted) { await onChanged(); await showSuccess(current, row); return; }
             } catch (readFailure) { failure = readFailure; }
           }
           error(current, current.persisted ? new Error(`Conclusão salva, mas não foi possível atualizar a galeria. ${failure.message || ''}`) : failure);

@@ -98,6 +98,24 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       await evaluate(`document.querySelector('.tg-card[data-item-id="176"] [data-action="complete"]').click()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);
       await evaluate(`document.querySelector('[data-task-completion-submit]').click()`);
+      await waitFor(`Boolean(document.querySelector('[data-task-completion-success]'))`);
+      const receipt = await evaluate(`(() => {
+        const dialog = document.querySelector('.tg-completion-dialog'), card = dialog.querySelector('.launch-completion');
+        const rect = dialog.getBoundingClientRect();
+        return { title: card.querySelector('h2').textContent,
+          records: [...card.querySelectorAll('.launch-completion__row')].map(row => [row.querySelector('dt').textContent, row.querySelector('dd').textContent]),
+          fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
+          overflow: dialog.scrollWidth > dialog.clientWidth + 1 || dialog.scrollHeight > dialog.clientHeight + 1,
+          status: card.getAttribute('role'), writes: window.writes.length };
+      })()`);
+      assert.equal(receipt.title, 'ATIVIDADE CONCLUÍDA!');
+      assert.deepEqual(receipt.records, [['ATIVIDADE', 'ID 176'], ['DATA CONCLUSÃO', '03/10/2026']]);
+      assert.ok(receipt.fits && !receipt.overflow, JSON.stringify(receipt));
+      assert.equal(receipt.status, 'status'); assert.equal(receipt.writes, 1);
+      if (width === 390 && process.env.TASK_COMPLETION_SUCCESS_SCREENSHOT) {
+        const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+        writeFileSync(process.env.TASK_COMPLETION_SUCCESS_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+      }
       await waitFor(`!document.querySelector('.tg-completion-dialog') && window.writes.length === 1`);
       assert.deepEqual(await evaluate('window.writes'), [{ id: '176', fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' } }]);
       assert.equal(await evaluate('document.querySelectorAll(".tg-card").length'), 1);
