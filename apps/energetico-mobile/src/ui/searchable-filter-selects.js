@@ -300,8 +300,9 @@ function createPicker(select, closeOthers, options = {}) {
   function onOutside(event) { if (!wrapper.contains(event.target) && !event.composedPath?.().includes(wrapper)) close(); }
   function onOptionPointerDown(event) {
     pointerSeen = true;
-    const target = event.target.closest?.('.sfs-option');
-    pressedOption = event.button === 0 && event.isPrimary !== false && target && list.contains(target) ? target : null;
+    const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button');
+    const eligible = target && (list.contains(target) || actionFooter?.contains(target) && !target.disabled);
+    pressedOption = event.button === 0 && event.isPrimary !== false && eligible ? target : null;
     pressedAt = pressedOption ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
     selectingOption = Boolean(pressedOption);
     if (selectionReset !== null) view.clearTimeout(selectionReset);
@@ -309,7 +310,7 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function onOptionPointerUp(event) {
     if (!selectingOption) return;
-    const target = event.target.closest?.('.sfs-option');
+    const target = event.target.closest?.('.sfs-option, .sfs-selection-actions button');
     const travel = Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y);
     const hit = typeof doc.elementFromPoint === 'function' ? doc.elementFromPoint(event.clientX, event.clientY) : null;
     // A touch tap is identified by its short travel, not hit testing: closing
@@ -318,9 +319,17 @@ function createPicker(select, closeOthers, options = {}) {
     const landed = event.pointerType === 'touch' || typeof doc.elementFromPoint !== 'function'
       || pressedOption.contains(hit);
     if (event.button === 0 && event.isPrimary !== false && event.pointerId === pressedAt.id
-      && travel <= 12 && landed && target === pressedOption && list.contains(target)) {
-      const index = [...list.children].indexOf(target);
-      if (candidates[index]) { choose(candidates[index]); return; }
+      && travel <= 12 && landed && target === pressedOption) {
+      if (actionFooter?.contains(target) && !target.disabled) {
+        onOptionPointerCancel();
+        if (target === selectAll) onSelectAll();
+        else if (target === confirmSelection) onDismiss();
+        return;
+      }
+      if (list.contains(target)) {
+        const index = [...list.children].indexOf(target);
+        if (candidates[index]) { choose(candidates[index]); return; }
+      }
     }
     selectionReset = view.setTimeout(() => { selectingOption = false; pressedOption = null; selectionReset = null; }, 0);
   }
@@ -347,6 +356,14 @@ function createPicker(select, closeOthers, options = {}) {
     sync();
     if (changed) select.dispatchEvent(new view.Event('change', { bubbles: true }));
   }
+  function onSelectionActionClick(event) {
+    // Mobile keyboard blur/reflow may hide the footer before its delayed click.
+    // Commit valid taps on pointerup; never revive cancelled or dragged taps.
+    // Keyboard and assistive activation (detail 0) still use the native click.
+    if (pointerSeen && event.detail > 0) return;
+    if (event.currentTarget === selectAll) onSelectAll();
+    else onDismiss();
+  }
   function closeIfHidden() {
     if (wrapper.closest('[hidden], [aria-hidden="true"], details:not([open])')) close();
     // Fieldset disabling affects the native select without changing its own attributes.
@@ -356,7 +373,7 @@ function createPicker(select, closeOthers, options = {}) {
   trigger.addEventListener('focus', open);
   arrow.addEventListener('click', onArrowClick);
   dismiss?.addEventListener('click', onDismiss); backdrop?.addEventListener('click', onDismiss);
-  selectAll?.addEventListener('click', onSelectAll); confirmSelection?.addEventListener('click', onDismiss);
+  selectAll?.addEventListener('click', onSelectionActionClick); confirmSelection?.addEventListener('click', onSelectionActionClick);
   search.addEventListener('input', onSearchInput); search.addEventListener('change', onSearchChange);
   search.addEventListener('beforeinput', onSearchEditStart); search.addEventListener('compositionstart', onSearchEditStart);
   const blockEditing = event => event.preventDefault();
@@ -364,6 +381,7 @@ function createPicker(select, closeOthers, options = {}) {
   if (selectionOnly) editEvents.forEach(name=>search.addEventListener(name,blockEditing));
   wrapper.addEventListener('keydown', onKey); wrapper.addEventListener('focusout', onFocusOut);
   list.addEventListener('pointerdown', onOptionPointerDown);
+  actionFooter?.addEventListener('pointerdown', onOptionPointerDown);
   doc.addEventListener('pointerup', onOptionPointerUp);
   doc.addEventListener('pointercancel', onOptionPointerCancel);
   select.addEventListener('change', sync); select.form?.addEventListener('reset', onReset);
@@ -385,12 +403,13 @@ function createPicker(select, closeOthers, options = {}) {
       trigger.removeEventListener('click', onTriggerClick); trigger.removeEventListener('focus', open);
       arrow.removeEventListener('click', onArrowClick);
       dismiss?.removeEventListener('click', onDismiss); backdrop?.removeEventListener('click', onDismiss);
-      selectAll?.removeEventListener('click', onSelectAll); confirmSelection?.removeEventListener('click', onDismiss);
+      selectAll?.removeEventListener('click', onSelectionActionClick); confirmSelection?.removeEventListener('click', onSelectionActionClick);
       search.removeEventListener('input', onSearchInput); search.removeEventListener('change', onSearchChange);
       search.removeEventListener('beforeinput', onSearchEditStart); search.removeEventListener('compositionstart', onSearchEditStart);
       if (selectionOnly) editEvents.forEach(name=>search.removeEventListener(name,blockEditing));
       wrapper.removeEventListener('keydown', onKey); wrapper.removeEventListener('focusout', onFocusOut);
       list.removeEventListener('pointerdown', onOptionPointerDown);
+      actionFooter?.removeEventListener('pointerdown', onOptionPointerDown);
       doc.removeEventListener('pointerup', onOptionPointerUp);
       doc.removeEventListener('pointercancel', onOptionPointerCancel);
       select.removeEventListener('change', sync); select.form?.removeEventListener('reset', onReset);
