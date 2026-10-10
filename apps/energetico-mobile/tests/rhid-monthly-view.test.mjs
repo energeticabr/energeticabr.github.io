@@ -6,12 +6,58 @@ import {createAttachmentPreview} from '../src/web/attachment-preview.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const suppliers=[{id:'4',name:'MAURICIO HONORATO DE SOUZA'},{id:'7',name:'HELISON ROSA LUIS'}];
 const snapshot={month:'2026-09',rows:[{Id:'1',ID_PESSOA_RHID:'101',NOME_COLABORADOR:suppliers[1].name,DATA_REFERENCIA:'2026-09-01',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}],presentDates:['2026-09-01']};
+
+test('daily report header opens monthly generation for the displayed month without changing the daily report or draft',t=>{
+ const dom=new JSDOM('<main id="app"></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root),commands=[];
+ t.after(()=>{view.destroy();dom.window.close();});
+ view.on('open-rhid-monthly-report',command=>commands.push(command));
+ const state={sessionStatus:'authenticated',account:{name:'Tester'},draft:'Observação preservada',pendingFiles:[],messages:[{id:'rhid',role:'assistant',type:'poll',question:'📊 RELATÓRIO DE PRESENÇAS RHID',options:[],detail_table:{kind:'rhid_attendance',reportDate:'2026-09-28',headers:['Nome'],rows:[]}}]};
+ view.render(state);
+ const header=root.querySelector('.chat-flow-status');
+ const button=header.querySelector('button[data-action="open-rhid-monthly-report"]');
+ assert.ok(button,'the report header must offer monthly generation directly');
+ assert.equal(button.textContent,'GERAR RELATÓRIO MENSAL RHID');
+ assert.equal(header.querySelector('strong.chat-flow-title'),null);
+ assert.ok(header.querySelector('[data-action="rhid-refresh"]'));
+ assert.ok(header.querySelector('[data-action="open-rhid-attendance-report"]'));
+ assert.equal(header.querySelectorAll('.chat-flow-nav-button').length,2);
+ button.click();
+ assert.equal(commands.length,1);assert.equal(commands[0].value,'2026-09');
+ assert.equal(root.querySelector('.chat-rhid-date-navigation time').dateTime,'2026-09-28');
+ assert.equal(root.querySelector('[data-role="draft"]').value,'Observação preservada');
+ assert.equal(root.querySelector('[data-rhid-attendance-report-dialog]'),null,'monthly entry must not open the daily calendar');
+ view.render({...state,messages:[{...state.messages[0],detail_table:{...state.messages[0].detail_table,reportDate:'2026-10-01'}}]});
+ root.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]').click();
+ assert.equal(commands[1].value,'2026-10','the shortcut follows navigation into another month');
+});
+
+test('monthly header shortcut is disabled while the report or RHID refresh is busy',t=>{
+ const dom=new JSDOM('<main id="app"></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root),commands=[];
+ t.after(()=>{view.destroy();dom.window.close();});view.on('open-rhid-monthly-report',command=>commands.push(command));
+ const state={sessionStatus:'authenticated',account:{name:'Tester'},draft:'',pendingFiles:[],messages:[{id:'rhid',role:'assistant',type:'poll',question:'RHID',options:[],detail_table:{kind:'rhid_attendance',reportDate:'2026-09-28',headers:['Nome'],rows:[]}}]};
+ view.render({...state,activeText:true});
+ let button=root.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]');assert.ok(button);assert.equal(button.disabled,true);button.click();
+ view.render(state);view.setRhidRefreshStatus({busy:true});
+ button=root.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]');assert.equal(button.disabled,true);button.click();
+ assert.equal(commands.length,0);
+ view.setRhidRefreshStatus({busy:false});assert.equal(root.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]').disabled,false);
+ view.render({...state,messages:[{...state.messages[0],detail_table:{...state.messages[0].detail_table,navigationBusy:true}}]});
+ assert.equal(root.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]').disabled,true);
+});
+
+test('monthly header entry is absent outside daily RHID reports',t=>{
+ const dom=new JSDOM('<main id="app"></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root);
+ t.after(()=>{view.destroy();dom.window.close();});
+ view.render({sessionStatus:'authenticated',account:{name:'Tester'},draft:'',pendingFiles:[],activeFlow:{id:'new_document',title:'EFETUAR LANÇAMENTO'},messages:[{id:'launch',role:'assistant',type:'poll',question:'Qual produto?',options:[]}]});
+ assert.equal(root.querySelector('.chat-flow-status [data-action="open-rhid-monthly-report"]'),null);
+ assert.ok(root.querySelector('.chat-flow-status [data-action="show-summary"]'));
+});
 test('RHID calendar offers monthly generation without changing the selected daily date',()=>{
  const dom=new JSDOM('<main id="app"></main>'),root=dom.window.document.querySelector('main'),view=createChatView(root),commands=[];
  view.on('open-rhid-monthly-report',command=>commands.push(command));
  view.render({sessionStatus:'authenticated',account:{name:'Tester'},draft:'',pendingFiles:[],messages:[{id:'rhid',role:'assistant',type:'poll',question:'RHID',options:[],detail_table:{kind:'rhid_attendance',reportDate:'2026-09-28',headers:['Nome'],rows:[]}}]});
  root.querySelector('.chat-rhid-date-navigation [data-action="open-rhid-attendance-report"]').click();
- const button=root.querySelector('[data-action="open-rhid-monthly-report"]');assert.ok(button);assert.equal(button.textContent,'GERAR RELATÓRIO MENSAL');assert.ok(!root.textContent.includes('Escolha a data das presenças que deseja consultar.'));
+ const button=root.querySelector('[data-rhid-attendance-report-dialog] [data-action="open-rhid-monthly-report"]');assert.ok(button);assert.equal(button.textContent,'GERAR RELATÓRIO MENSAL');assert.ok(!root.textContent.includes('Escolha a data das presenças que deseja consultar.'));
  button.click();assert.equal(commands[0].value,'2026-09');assert.ok(root.querySelector('[aria-pressed="true"][data-value="2026-09-28"]'));
  view.destroy();dom.window.close();
 });
