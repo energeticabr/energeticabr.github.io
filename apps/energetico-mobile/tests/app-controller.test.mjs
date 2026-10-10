@@ -5232,7 +5232,7 @@ test("o check também navega para Pendências quando a tela atual é o menu de D
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD como 10/i);
 });
 
-test("o check aguarda confirmação humana antes de iniciar a baixa no popup", async t => {
+test("o check abandona o formulário atual e inicia a baixa da provisão selecionada sem novo clique", async t => {
   const h = makeHarness();
   const calls = [];
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
@@ -5282,9 +5282,63 @@ test("o check aguarda confirmação humana antes de iniciar a baixa no popup", a
   t.after(() => h.controller.stop());
   await h.controller.start();
 
-  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
-  assert.match(h.view.renders.at(-1).error, /Confirme na conversa/);
+  h.store.setDraft("texto do formulário que será abandonado");
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.deepEqual(calls.map(call => call.replyId), [
+    "input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard",
+    "group_pending", "pending_payment_settlement", "306",
+  ]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /QTD COMO 10/i);
+  assert.equal(h.store.getState().draft, "");
+  assert.equal(h.view.renders.some(state => state.messages.some(message => /RASCUNHO DO FLUXO ATUAL/.test(message.question || ""))), false);
+});
+
+test("o check não abandona nenhum fluxo após sair, trocar de conta ou encerrar o app durante a resposta", async t => {
+  for (const end of ["sign-out", "switch-account", "stop"]) await t.test(end, async t => {
+    const h = makeHarness();
+    const calls = [];
+    let releaseExit;
+    let exitStarted;
+    const started = new Promise(resolve => { exitStarted = resolve; });
+    const delayed = new Promise(resolve => { releaseExit = resolve; });
+    h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+    h.client.sendText = async payload => {
+      calls.push(payload.replyId);
+      if (payload.replyId === "input_continue") return {
+        status: "processed", activeFlow: { id: "task_create", contextId: "original-task" },
+        messages: [{ type: "poll", question: "QUAL É A DESCRIÇÃO DA TAREFA?", options: [] }],
+      };
+      if (payload.replyId === "portal_confirm_main_menu") {
+        exitStarted();
+        await delayed;
+        return {
+          status: "processed", activeFlow: { id: "task_create", contextId: "original-task" },
+          messages: [{ type: "poll", question: "TEM CERTEZA QUE DESEJA ABANDONAR ESTE FLUXO?", options: [
+            { id: "portal_draft_exit_discard", label: "SIM, ABANDONAR" },
+            { id: "portal_draft_exit_cancel", label: "NÃO, CONTINUAR" },
+          ] }],
+        };
+      }
+      return { status: "processed", activeFlow: null, resetConversation: true,
+        messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [] }] };
+    };
+    t.after(() => { releaseExit(); h.controller.stop(); });
+    await h.controller.start();
+    const settling = h.view.emit("settle-pending-provision", { paymentId: "306" });
+    await started;
+    if (end === "stop") h.controller.stop();
+    else {
+      await h.view.emit("sign-out");
+      if (end === "switch-account") await h.view.emit("sign-in");
+    }
+    const callsBeforeRelease = [...calls];
+    releaseExit();
+    assert.equal(await settling, false);
+    assert.deepEqual(calls, callsBeforeRelease, "a resposta da sessão antiga não dispara abandono nem baixa em outra sessão");
+    assert.ok(!calls.includes("portal_draft_exit_discard"));
+    assert.ok(!calls.includes("306"));
+  });
 });
 
 test("o check em um fluxo de anexos retoma a baixa quando a VM libera o menu sem rascunho", async t => {
@@ -5408,9 +5462,72 @@ test("o check não inicia baixa quando a VM não conclui a saída do formulário
   await h.controller.start();
 
   assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
-  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu"]);
-  assert.match(h.view.renders.at(-1).error, /Confirme na conversa/);
-  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  assert.deepEqual(calls.map(call => call.replyId), ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard"]);
+  assert.match(h.view.renders.at(-1).error, /não confirmou.*menu principal/i);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+});
+
+test("toque no check fecha o popup antes da rede e abandona o diário sem postar para abrir a baixa", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ view: createChatView(root) });
+  const calls = [];
+  let releaseExit;
+  const exitGate = new Promise(resolve => { releaseExit = resolve; });
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306", supplier: "DIBRITA" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return {
+      status: "processed", activeFlow: { id: "construction_diary_fill" },
+      messages: [{ type: "poll", question: "QUAL É A DESCRIÇÃO DO DIÁRIO?", options: [] }],
+    };
+    if (payload.replyId === "abandon_construction_diary") {
+      await exitGate;
+      return {
+        status: "processed", activeFlow: { id: "construction_diary_fill" },
+        messages: [{ type: "poll", question: "DESEJA POSTAR COMO PENDENTE OU SAIR SEM POSTAR AGORA?", options: [
+          { id: "diary_partial_save_yes", label: "POSTAR COMO PENDENTE" },
+          { id: "diary_partial_save_no", label: "SAIR SEM POSTAR AGORA" },
+        ] }],
+      };
+    }
+    if (payload.replyId === "diary_partial_save_no") return {
+      status: "processed", activeFlow: null, resetConversation: true,
+      messages: [{ type: "poll", question: "QUAL ÁREA VOCÊ DESEJA ACESSAR?", options: [
+        { id: "group_pending", label: "PENDÊNCIAS" },
+      ] }],
+    };
+    if (payload.replyId === "group_pending") return {
+      status: "processed", activeFlow: null,
+      messages: [{ type: "poll", question: "PENDÊNCIAS", options: [
+        { id: "pending_payment_settlement", label: "BAIXAR PAGAMENTO AGENDADO" },
+      ] }],
+    };
+    if (payload.replyId === "pending_payment_settlement") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement" },
+      messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [{ id: "306", label: "306 - DIBRITA" }] }],
+    };
+    if (payload.replyId === "306") return {
+      status: "processed", activeFlow: { id: "scheduled_payment_settlement" },
+      messages: [{ type: "poll", question: "DESEJA MANTER O VALOR DE QTD COMO 10?", options: [] }],
+    };
+    throw new Error(`Resposta inesperada (não deve postar diário ou pagamento): ${payload.replyId}`);
+  };
+  t.after(() => { releaseExit(); h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  const check = root.querySelector('[data-action="settle-pending-provision"][data-payment-id="306"]');
+  assert.ok(check);
+  check.click();
+  assert.equal(root.querySelector('[data-action="settle-pending-provision"]'), null, "fecha o popup imediatamente, antes da resposta da VM");
+  assert.match(root.textContent, /DIÁRIO|Carregando|Aguarde/i, "não deixa uma tela vazia durante a transição");
+  check.click();
+  releaseExit();
+  for (let attempt = 0; attempt < 100 && !/QTD COMO 10/i.test(root.textContent); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.deepEqual(calls, ["input_continue", "abandon_construction_diary", "diary_partial_save_no", "group_pending", "pending_payment_settlement", "306"]);
+  assert.match(root.textContent, /QTD COMO 10/i);
+  assert.doesNotMatch(root.textContent, /Confirme na conversa|solicite a baixa novamente/i);
 });
 
 test("o check seleciona o pagamento pelo ID, chega a QTD e preserva a continuação da baixa", async t => {
