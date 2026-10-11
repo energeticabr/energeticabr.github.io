@@ -158,9 +158,11 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     }
     const sheetColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDFOLHA'):null;
     const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
-    const sheetOptions=sheetColumn?await payrollSheets.options(sheetSupplier,{signal}):[];
     const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
-    const launchOptions=launchColumn?await payrollLaunches.options({signal}):[];
+    const [sheetOptions,launchOptions]=await Promise.all([
+      sheetColumn?payrollSheets.options(sheetSupplier,{signal}):[],
+      launchColumn?payrollLaunches.options({signal}):[],
+    ]);
     abort(signal);
     const formColumns = isPayrollSheet ? contract.formColumns.map(column =>
       (key(column.name) === 'STATUS' || key(column.label) === 'STATUS') && !column.allowMultipleValues

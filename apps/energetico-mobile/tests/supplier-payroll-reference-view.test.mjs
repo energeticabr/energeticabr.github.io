@@ -60,6 +60,6 @@ test('background financial loading is bounded and closing cancels active and que
 
 test('opening a supplier reuses header rows and retains payments made after the reference month',async t=>{
  const {view,root,dom,calls}=setup(t);await view.open();await tick();const card=root.querySelector('details');card.open=true;card.dispatchEvent(new dom.window.Event('toggle'));await tick();
- assert.equal(calls.length,2);assert.match(card.querySelector('tbody').textContent,/12874.*12\/11\/2026.*45513.*600,00/s);
+ assert.equal(calls.length,2);assert.match(card.querySelector('tbody').textContent,/12\/11\/2026.*12874.*45513.*600,00/s);
  assert.equal(card.querySelectorAll('tbody tr').length,2);
 });

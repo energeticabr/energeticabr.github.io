@@ -59,6 +59,18 @@ test('dashboard renders full period and separate colored clusters for every type
  assert.equal(card.querySelectorAll('tbody tr').length,5);
  assert.notEqual(card.querySelector('tbody tr').style.getPropertyValue('--spr-type-bg'),card.querySelectorAll('tbody tr')[1].style.getPropertyValue('--spr-type-bg'));
 });
+
+test('payment date leads each row without misaligning payment, payroll and type values',async t=>{
+ const {card}=await setup(t);
+ assert.deepEqual([...card.querySelectorAll('thead th')].slice(0,5).map(n=>n.textContent),['DATA','ID PAGAMENTO','IDFOLHA','TIPO','ID LANÇAMENTO']);
+ assert.deepEqual([...card.querySelectorAll('tbody tr')[0].cells].slice(0,5).map(n=>n.textContent),['08/10/2026','45','13','SALÁRIO','3534']);
+ assert.deepEqual([...card.querySelectorAll('tbody tr')[3].cells].slice(0,5).map(n=>n.textContent),['09/10/2026','54','13','SALÁRIO','3554']);
+});
+
+test('payment edit retains the standard yellow pencil rather than replacing it with a monochrome glyph',async t=>{
+ const {card}=await setup(t,{loadEditor:async()=>{},saveEditor:async()=>{}});
+ assert.equal(card.querySelector('[data-spr-edit=payment]').textContent,'✏️');
+});
 test('export supplier uses all its linked rows including next-month payments and report export respects filters',async t=>{
  const {root,exports}=await setup(t);root.querySelector('.spr-export-supplier').click();await tick();
  assert.equal(exports.length,1);assert.equal(exports[0][0].type,'text/csv;charset=utf-8');

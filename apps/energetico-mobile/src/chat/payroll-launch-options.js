@@ -34,11 +34,12 @@ export function createPayrollLaunchReader(repository,siteKey) {
   const eligible=(row,description,suppliers)=>description.contractor?contractor(row?.fields?.[description.contractor]):
     suppliers.filter(s=>key(scalar(s.fields?.[description.suppliers.name]))===key(scalar(row?.fields?.[description.supplier]))
       &&contractor(s.fields?.[description.suppliers.flag])&&key(scalar(s.fields?.[description.suppliers.status]))==='ATIVO').length===1;
-  async function readRows(list,signal) {
+  async function readRows(list,signal,fields) {
     const rows=[],seen=new Set();let cursor;
+    const query=`$select=id&$expand=fields($select=${fields.join(',')})&$top=100`;
     for(let pageNumber=1;pageNumber<=100;pageNumber++) {
       abort(signal);
-      const page=await repository.getItemsPage(siteKey,list.id,'$expand=fields&$top=100',{pageNumber,maxPages:100,...(cursor?{cursor}:{}),...(signal?{signal}:{})});
+      const page=await repository.getItemsPage(siteKey,list.id,query,{pageNumber,maxPages:100,...(cursor?{cursor}:{}),...(signal?{signal}:{})});
       abort(signal);
       if(!Array.isArray(page?.items))throw new Error('A consulta dos lançamentos não pôde ser concluída.');
       rows.push(...page.items);
@@ -50,7 +51,7 @@ export function createPayrollLaunchReader(repository,siteKey) {
   }
   async function options({signal}={}) {
     const description=await descriptor(signal);
-    const [rows,suppliers]=await Promise.all([readRows(description.list,signal),description.suppliers?readRows(description.suppliers.list,signal):[]]);
+    const [rows,suppliers]=await Promise.all([readRows(description.list,signal,[description.supplier,...(description.contractor?[description.contractor]:[])]),description.suppliers?readRows(description.suppliers.list,signal,[description.suppliers.name,description.suppliers.flag,description.suppliers.status]):[]]);
     const values=new Map();
     for(const row of rows.filter(row=>eligible(row,description,suppliers))){
       const value=checkedId(row.id),supplier=scalar(row.fields[description.supplier]);
@@ -63,7 +64,7 @@ export function createPayrollLaunchReader(repository,siteKey) {
   async function assertLaunch(value) {
     const id=checkedId(value),description=await descriptor();
     const row=await repository.getItem(siteKey,description.list.id,id,'$expand=fields');
-    const suppliers=description.suppliers?await readRows(description.suppliers.list):[];
+    const suppliers=description.suppliers?await readRows(description.suppliers.list,undefined,[description.suppliers.name,description.suppliers.flag,description.suppliers.status]):[];
     if(String(row?.id)!==id||!eligible(row,description,suppliers))throw new Error('Selecione um lançamento cadastrado de um fornecedor ativo com EMPREITEIRO = SIM.');
   }
   return Object.freeze({options,assertLaunch});

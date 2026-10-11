@@ -55,6 +55,24 @@ test('payroll editor hides title, locks source values and restricts supplier and
   assert.deepEqual(writes, [{ TIPOPGTO: 'VALE TRANSPORTE' }]);
 });
 
+test('payroll launch picker reads only the fields needed for eligibility and labels, retaining every page',async()=>{
+ const {repository}=fixture(),queries=[];
+ const read=repository.getItemsPage;
+ repository.getItemsPage=async(...args)=>{if(args[1]==='LANCAMENTOS')queries.push(args[2]);return read(...args);};
+ assert.deepEqual(await createPayrollLaunchReader(repository,'personal').options(),[{value:'3460',label:'3460 - OUTRO EMPREITEIRO'},{value:'3457',label:'3457 - CLEITON'}]);
+ assert.equal(queries.length,2);
+ for(const query of queries){const params=new URLSearchParams(query);assert.equal(params.get('$select'),'id');assert.equal(params.get('$expand'),'fields($select=FORNECEDOR,EMPREITEIRO)');}
+});
+
+test('payroll editor starts sheet and launch options together instead of blocking one behind the other',async()=>{
+ const {data,repository}=fixture();let release;const pending=new Promise(resolve=>{release=resolve;});const calls=[];
+ const read=repository.getItemsPage;
+ repository.getItemsPage=async(...args)=>{calls.push(args[1]);if(args[1]==='IDFOLHA')await pending;return read(...args);};
+ const loading=data.loadEditor('FOLHAPGTO','3');
+ try{for(let i=0;i<10;i++)await new Promise(resolve=>setImmediate(resolve));assert.ok(calls.includes('IDFOLHA'));assert.ok(calls.includes('LANCAMENTOS'),'launch options should load while sheets are still pending');}
+ finally{release();await loading;}
+});
+
 test('payroll sheet dropdown saves only the ID and rejects another supplier or month even when bypassed',async()=>{
   const {data,writes}=fixture(),context=await data.loadEditor('FOLHAPGTO','3');
   for(const IDFOLHA of ['55','35','45','999','15-10/2026 (CLEITON)']) await assert.rejects(data.saveEditor(context,{IDFOLHA}),/folha|ID/i);
