@@ -4094,6 +4094,48 @@ test("renderiza comparação lado a lado do anexo original e comprimido com esco
   assert.match(markup, /data-reply-id="attachment_compression_use"[^>]*>Usar comprimida/);
 });
 
+test("novos ids da prévia mantêm uma escolha por versão do anexo", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "compression-preview", role: "assistant", type: "poll", question: "Qual versão deseja usar?",
+    attachment_compression_preview: {
+      original: { fileName: "nota.pdf", mimeType: "application/pdf", size: 8_000_000 },
+      compressed: { fileName: "nota.pdf", mimeType: "application/pdf", size: 400_000 },
+    },
+    options: [
+      { id: "attachment_compression_use_compressed", label: "Usar comprimida" },
+      { id: "attachment_compression_use_original", label: "Usar original" },
+    ],
+  }] })));
+  const cards = dom.window.document.querySelectorAll(".chat-compression-preview__card");
+  assert.equal(cards[0].querySelector('[data-reply-id="attachment_compression_use_original"]')?.textContent, "Usar original");
+  assert.equal(cards[1].querySelector('[data-reply-id="attachment_compression_use_compressed"]')?.textContent, "Usar comprimida");
+  assert.equal(dom.window.document.querySelectorAll('[data-reply-id="attachment_compression_use_compressed"]').length, 1);
+  assert.equal(dom.window.document.querySelectorAll('[data-reply-id="attachment_compression_use_original"]').length, 1);
+  dom.window.close();
+});
+
+test("menu de compressão mostra quatro níveis com limites e reduções sem prévia", () => {
+  for (const prefix of ["attachment_compression_level_", "compression_level_"]) {
+    const levels = [
+      ["low", "BAIXA — até 10 MB; redução mínima de 25%"],
+      ["medium", "MÉDIA — até 5 MB; redução mínima de 50%"],
+      ["high", "ALTA — até 1 MB; redução mínima de 80%"],
+      ["very_high", "MUITO ALTA — até 500 KB; redução mínima de 90%"],
+    ];
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+      id: "levels", role: "assistant", type: "poll", question: "Escolha o nível de compressão",
+      options: levels.map(([level, label]) => ({ id: `${prefix}${level}`, label })),
+    }] })));
+    for (const [level, label] of levels) {
+      const button = dom.window.document.querySelector(`[data-reply-id="${prefix}${level}"]`);
+      assert.equal(button?.textContent, label);
+      assert.equal(button.disabled, false);
+    }
+    assert.equal(dom.window.document.querySelector(".chat-compression-preview"), null);
+    dom.window.close();
+  }
+});
+
 test("renderiza enquete como opções grandes e mídia como ação protegida", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [
@@ -5456,6 +5498,25 @@ test("exibe o PDF com a assinatura, editar assinatura e Continuar", () => {
   assert.doesNotMatch(markup, /signature-placement-scope/);
   assert.doesNotMatch(markup, /TODAS AS PÁGINAS/);
   assert.match(markup, /data-role="signature-placement-scale">50%<\/strong>/);
+});
+
+test("falha ao substituir PDF aparece dentro do diálogo e permite tentar novamente", () => {
+  const error = "PDF assinado rejeitado. Tente novamente.";
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    error,
+    signaturePlacement: {
+      status: "ready", key: "pdf-1:signature-1:position", stage: "document_signing_waiting_position",
+      document: { fileName: "contrato.pdf" }, signature: { fileName: "assinatura.png" },
+      stampApplied: true, selection: { page: 1, x: 0.5, y: 0.5 }, error,
+    },
+  })));
+  const dialog = dom.window.document.querySelector(".signature-placement-dialog");
+  assert.equal(dialog.querySelector('[role="alert"]')?.textContent, error);
+  const retry = dialog.querySelector('[data-action="signature-placement-confirm"]');
+  assert.equal(retry.textContent, "✅ SUBSTITUIR PDF");
+  assert.equal(retry.disabled, false);
+  assert.equal(dialog.querySelector('[data-action="signature-placement-edit"]').disabled, false);
+  dom.window.close();
 });
 
 test("troca o botão inferior para SUBSTITUIR PDF depois de adicionar o carimbo", () => {
