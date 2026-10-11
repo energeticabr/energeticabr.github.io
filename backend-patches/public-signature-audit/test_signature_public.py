@@ -78,7 +78,7 @@ class PublicSignatureTests(SignatureEvidenceHTTPTests):
         status, page, headers = self.public_get(record)
         self.assertEqual(status, 200)
         self.assertIn(b"Nome &lt;informado&gt;", page)
-        self.assertIn(b"crypto.subtle.digest", page)
+        self.assertIn(hashlib.sha256(self.final).hexdigest().encode(), page)
         self.assertIn("no-store", headers["Cache-Control"])
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
         status, raw, _ = self.public_get(record, "/registro")
