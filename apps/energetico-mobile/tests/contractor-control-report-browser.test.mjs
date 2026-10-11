@@ -19,7 +19,7 @@ test('contractor report fits tablet and Windows with phone scroll and complete c
   try {
     server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cacheRoot,'cache'),
       optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});await server.listen();
-    for(const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,bottom:21}],[667,375],[568,320],[1024,768],[1280,589],[1280,800],[390,844]]) {
+    for(const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,bottom:21}],[667,375],[640,360,{left:47,right:47,bottom:21}],[568,320],[1024,768],[1280,589],[1280,800],[390,844]]) {
       const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/contractor-control-report-browser.html`});
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);

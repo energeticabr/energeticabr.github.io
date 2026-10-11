@@ -7,7 +7,7 @@
 .ccr-back { left:4px; }
 .ccr-close { right:4px; }
 .ccr-dialog.pl-dialog--portrait { padding-top:38px; }
-.ccr-filters { grid-template-columns:84px minmax(70px,.9fr) minmax(55px,.7fr) minmax(100px,1.4fr) minmax(75px,1fr) minmax(95px,1.3fr) minmax(65px,.9fr); align-items:end; }
+.ccr-filters { grid-template-columns:84px minmax(0,.9fr) minmax(0,.7fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,.9fr); align-items:end; }
 .ccr-filters .ccr-filter-label { background:#a20000; color:white; white-space:normal; min-height:2.3em; display:grid; align-items:center; }
 .ccr-filter-input { width:100%; min-width:0; box-sizing:border-box; height:27px; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; font:normal clamp(9px,1.2vw,14px) Arial,sans-serif; }
 .ccr-filters .sfs .sfs-field > .sfs-trigger { color:#000; font-weight:400; }
