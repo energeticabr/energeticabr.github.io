@@ -7,14 +7,15 @@
 .ccr-back { left:4px; }
 .ccr-close { right:4px; }
 .ccr-dialog.pl-dialog--portrait { padding-top:38px; }
-.ccr-filters { grid-template-columns:84px minmax(70px,.9fr) minmax(55px,.7fr) minmax(100px,1.4fr) minmax(75px,1fr) minmax(95px,1.3fr) minmax(65px,.9fr); align-items:end; }
+.ccr-filters { grid-template-columns:84px minmax(0,.9fr) minmax(0,.7fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,.9fr); align-items:end; }
 .ccr-filters .ccr-filter-label { background:#a20000; color:white; white-space:normal; min-height:2.3em; display:grid; align-items:center; }
 .ccr-filter-input { width:100%; min-width:0; box-sizing:border-box; height:27px; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; font:normal clamp(9px,1.2vw,14px) Arial,sans-serif; }
 .ccr-filters .sfs .sfs-field > .sfs-trigger { color:#000; font-weight:400; }
 /* Shared report pickers own their modal typography and keyboard behavior. */
 .ccr-notice p { margin:2px 0; }
-.ccr-content { box-sizing:border-box; margin-inline:calc(64px + env(safe-area-inset-left,0px)) calc(64px + env(safe-area-inset-right,0px)); overflow-y:auto; overflow-x:hidden; color:#243447; font:normal clamp(10.5px,1.1vw,14px)/1.35 Arial,sans-serif; }
-.ccr-brand { border:2px solid #000; background:#fce7f3; padding:8px; text-align:center; }
+/* The overlay already applies safe-area insets; reserve only the navigation gutter here. */
+.ccr-content { box-sizing:border-box; margin-inline:56px; overflow-y:auto; overflow-x:hidden; color:#243447; font:normal clamp(10.5px,1.1vw,14px)/1.35 Arial,sans-serif; }
+.ccr-brand { border:2px solid #000; background:#ddebf7; padding:8px; text-align:center; }
 .ccr-brand img { display:block; height:clamp(38px,5vw,70px); max-width:65%; width:auto; object-fit:contain; margin:auto; }
 .ccr-title { font-size:clamp(16px,1.8vw,22px); font-weight:700; color:#831843; border-bottom:3px solid #831843; margin:10px 0; padding-bottom:6px; }
 .ccr-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0; }
@@ -55,14 +56,19 @@
 .ccr-detail-error,.ccr-detail-notice { padding:8px; border:1px solid #d6b656; background:#fff2cc; color:#7f6000; }
 .ccr-overlay :focus-visible { outline:2px solid #2188c1; outline-offset:2px; }
 @media(max-width:900px) {
-  .ccr-filters { grid-template-columns:84px repeat(3,minmax(0,1fr)); }
-  .ccr-filters .pl-refresh,.ccr-filters .report-print-actions { grid-row:span 2; }
   .ccr-brand { padding:5px; }
   .ccr-title { margin:6px 0; }
   .ccr-metrics { gap:4px; margin:6px 0; }
   .ccr-metric { padding:6px 3px; }
   .ccr-note { margin:6px 0; padding:5px; }
   .ccr-table th,.ccr-table td { padding:5px 3px; }
+}
+@media(max-width:600px) {
+  .ccr-filters { grid-template-columns:84px repeat(3,minmax(0,1fr)); }
+  .ccr-filters .pl-refresh,.ccr-filters .report-print-actions { grid-row:span 2; }
+}
+@media(max-height:500px) {
+  .ccr-content { margin-inline:48px; }
 }
 @media print {
   .ccr-overlay,.ccr-dialog,.ccr-report { position:static; height:auto; max-height:none; overflow:visible; padding:0; }
