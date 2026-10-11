@@ -1,5 +1,6 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
+import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
@@ -1153,6 +1154,7 @@ export function createAppController({
   const previewLoading = new Set();
   const previewTimers = new Set();
   let signaturePlacementLoad = null;
+  let pendingLiveSignatureCapture = null;
   let signaturePlacementData = null;
   // A generated signed document can be edited after the VM has already
   // returned to the main menu. Keep its source files locally so the resize
@@ -1484,11 +1486,23 @@ export function createAppController({
         if (typeof client.prepareSignatureEvidence !== "function") {
           throw new Error("O serviço de integridade da assinatura não está disponível.");
         }
-        const signatureEvidence = await client.prepareSignatureEvidence({
+        let signatureEvidence = await client.prepareSignatureEvidence({
           documentBlob, fileName: request.document.fileName, documentId: request.document.id,
-          signerName: request.signerName, requestId: load.evidenceRequestId,
+          signerName: request.signerName, requestId: load.evidenceRequestId, publicVerification: true,
         });
         if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
+        if (signatureEvidence.verificationUrl) {
+          if (typeof client.captureSignatureEvidence !== "function") throw new Error("O serviço de captura da assinatura não está disponível.");
+          const inkSha256 = await signatureInkHash(signatureBlob);
+          const recent = pendingLiveSignatureCapture?.account === account && pendingLiveSignatureCapture.inkSha256 === inkSha256
+            ? pendingLiveSignatureCapture.trace : null;
+          const trace = signatureBlob.signatureTrace || recent
+            || { version: 1, mode: "unavailable", strokes: [], durationMs: 0, truncated: false };
+          const inkImageBase64 = await signatureInkImage(signatureBlob);
+          signatureEvidence = await client.captureSignatureEvidence({ recordId: signatureEvidence.id, capture: { ...trace, inkSha256, inkImageBase64 } });
+          if (recent) pendingLiveSignatureCapture = null;
+          if (stopped || generation !== signaturePlacementGeneration || signaturePlacementLoad?.key !== request.key) return;
+        }
         Object.defineProperty(signatureBlob, "signatureEvidence", { value: signatureEvidence, configurable: true });
         if (["attachment", "report"].includes(signaturePlacementOverride?.kind)) {
           signaturePlacementOverride.signatureEvidence = signatureEvidence;
@@ -9496,6 +9510,7 @@ export function createAppController({
         signerName: placement.signerName,
         signedAt: evidence.signedAt,
         integrityId: evidence.id,
+        verificationUrl: evidence.verificationUrl || "",
       });
       if (!stillCurrent()) return false;
       if (!signedBlob || typeof signedBlob.arrayBuffer !== "function") {
@@ -10012,9 +10027,15 @@ export function createAppController({
     bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
     bind("pick-document-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("files-dropped", command => queueSelectedFiles(() => command.files));
-    bind("signature-captured", command => {
+    bind("signature-captured", async command => {
       const file = command?.file;
       if (!file || typeof file !== "object") return false;
+      if (file.signatureTrace && store.getState().activeFlow?.id === "document_signing") {
+        const capturedAccount = account;
+        const inkSha256 = await signatureInkHash(file);
+        if (stopped || account !== capturedAccount) return false;
+        pendingLiveSignatureCapture = { account, inkSha256, trace: file.signatureTrace };
+      }
       if (command.fileId === "rhid-monthly-report") {
         return captureRhidPdfSignature(rhidSignatureCapture, file, rhidSignatureBernardo);
       }
@@ -10376,6 +10397,7 @@ export function createAppController({
   }
 
   function stop() {
+    pendingLiveSignatureCapture = null;
     disposeRhidMonthlyReport();
     pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;

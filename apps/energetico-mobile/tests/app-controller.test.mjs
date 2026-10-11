@@ -7399,6 +7399,34 @@ test("assinatura usa horário e protocolo do servidor e só envia PDF após pres
   assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 1);
 });
 
+test('captura pública preserva traçado e imagem antes de assinar e enviar o PDF', async t => {
+  const order = [], id = 'a'.repeat(32), verificationUrl = `https://example.com/assinaturas/${id}/${'b'.repeat(64)}`;
+  const h = makeHarness({ signPdfAttachment: async input => { order.push('sign'); assert.equal(input.verificationUrl, verificationUrl); return new Blob(['signed'], { type: 'application/pdf' }); } });
+  t.after(() => h.controller.stop());
+  const evidence = { id, signedAt: '2026-10-10T20:00:00Z', sourceSha256: 'c'.repeat(64), verificationUrl };
+  h.client.prepareSignatureEvidence = async input => { assert.equal(input.publicVerification, true); order.push('prepare'); return evidence; };
+  const trace = { version: 1, mode: 'live', durationMs: 10, truncated: false, strokes: [{ input: 'pen', points: [{ x: 0.2, y: 0.4, t: 0, pressure: 0.5 }, { x: 0.5, y: 0.3, t: 10 }] }] };
+  h.client.captureSignatureEvidence = async input => {
+    order.push('capture'); assert.equal(input.recordId, id);
+    const { inkSha256, inkImageBase64, ...received } = input.capture;
+    assert.deepEqual(received, trace); assert.match(inkSha256, /^[a-f0-9]{64}$/);
+    assert.equal(Buffer.from(inkImageBase64, 'base64').toString(), 'png');
+    return evidence;
+  };
+  h.client.confirmSignatureEvidence = async () => { order.push('confirm'); return { id, status: 'confirmed' }; };
+  const activeFlow = { id: 'pending_document_attachment' }, original = { id: 'rhid', fileName: 'ponto.pdf', mimeType: 'application/pdf', mediaUrl: '/rhid', existing: true };
+  h.client.sendFile = async file => { order.push('send'); return { status: 'processed', messages: [], activeFlow, attachments: [original, { id: 'signed', fileName: file.name, mimeType: file.type, size: file.size }] }; };
+  await h.controller.start(); h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  const file = new File(['png'], 'assinatura.png', { type: 'image/png' });
+  Object.defineProperty(file, 'signatureTrace', { value: trace });
+  await h.view.emit('signature-captured', { file, fileId: 'rhid' });
+  for (let n = 0; n < 100 && h.view.renders.at(-1).signaturePlacement?.status !== 'ready'; n++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, 'ready');
+  assert.deepEqual(order, ['prepare', 'capture']);
+  await h.view.emit('signature-placement-position', { point: { page: 1, x: 0.6, y: 0.4, scale: 0.5 } });
+  assert.deepEqual(order, ['prepare', 'capture', 'sign', 'confirm', 'send']);
+});
+
 test("falha no registro de integridade conserva original e bloqueia envio da cópia", async t => {
   const h = makeHarness({ signPdfAttachment: async () => new Blob(["signed-pdf"], { type: "application/pdf" }) });
   t.after(() => h.controller.stop());

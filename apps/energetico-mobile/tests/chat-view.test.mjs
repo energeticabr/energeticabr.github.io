@@ -7218,6 +7218,8 @@ test("exporta a assinatura redesenhando o traço em alta resolução e preto opa
 
   const root = dom.window.document.querySelector("#app");
   const view = createChatView(root);
+  const captured = [];
+  view.on('signature-captured', value => captured.push(value));
   view.render(signedInState({
     activeFlow: { id: "document_signing", title: "✍️ ASSINAR DOCUMENTOS" },
     messages: [{ id: "signature-quality", role: "assistant", type: "text", text: "Envie a assinatura." }],
@@ -7246,6 +7248,10 @@ test("exporta a assinatura redesenhando o traço em alta resolução e preto opa
   assert.ok(outputContext.lineWidth >= 25, "o traço deve ser redesenhado na escala final, não ampliado como bitmap");
   assert.ok(outputContext.calls.some(call => ["stroke", "fill"].includes(call[0])));
   assert.equal(outputContext.calls.some(call => call[0] === "drawImage"), false, "o bitmap da tela não deve ser interpolado");
+  assert.equal(captured[0].file.signatureTrace.mode, 'live');
+  assert.equal(captured[0].file.signatureTrace.strokes[0].input, 'touch');
+  assert.equal(captured[0].file.signatureTrace.strokes[0].points[0].x, 0.2);
+  assert.equal(captured[0].file.signatureTrace.strokes[0].points.at(-1).x, 0.8);
   view.destroy();
   dom.window.close();
 });
