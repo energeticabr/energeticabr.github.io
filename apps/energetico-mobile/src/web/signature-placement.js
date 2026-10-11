@@ -1,5 +1,6 @@
 import { loadBernardoStamp } from "./signature-stamp.js";
 import { constrainSignaturePoint, signatureLayoutGeometry, signatureRecordLines } from "./signature-document-layout.js";
+import { layoutSignatureMetadata } from "./signature-metadata-layout.js";
 import { appendSignatureCardIcon } from './signature-card-icons.js';
 
 const MAX_CANVAS_PIXELS = 2_000_000;
@@ -245,12 +246,36 @@ export function createSignaturePlacement({
         const geometry = signatureLayoutGeometry(signatureDocumentLayout, {pageWidth:entry.pageWidth,
           pageHeight:entry.pageHeight,scale:signatureScale,integrity:true});
         activeMarker.style.width = `${geometry.width / entry.pageWidth / signatureScale * 100}%`;
+        updateMetadataCaption(activeMarker,geometry);
       }
     }
     if (emit) {
       point = { page: selectedPage, ...local };
       onPoint({ ...point });
     }
+  }
+
+  function updateMetadataCaption(marker,geometry) {
+    if(!marker.classList.contains('signature-placement-marker--verified')) return;
+    const caption=marker.querySelector('.signature-placement-marker__caption');
+    if(caption.dataset.layoutWidth===String(geometry.width)) return;
+    const rows=[...caption.children].filter(node=>node.tagName==='SPAN');
+    const metrics=documentRef.createElement('canvas').getContext?.('2d');
+    if(metrics) metrics.font='700 100px Arial';
+    const layout=layoutSignatureMetadata({width:geometry.width,captionHeight:geometry.height*geometry.captionRatio,
+      labels:rows.map(row=>row.dataset.signatureLabel),
+      measure:(text,size)=>(metrics?.measureText ? metrics.measureText(text).width : text.length*80)*size/100});
+    const percent=value=>`${value/geometry.width*100}%`;
+    caption.style.padding=percent(layout.inset);
+    caption.style.paddingRight=percent(geometry.width-layout.dividerX+geometry.width*.035);
+    caption.style.gridTemplateRows=layout.rows.map(row=>`${row.height}fr`).join(' ');
+    for(const [index,row] of rows.entries()) {
+      row.textContent=layout.rows[index].lines.join('\n');
+      row.style.fontSize=`${layout.size/geometry.width*100}cqw`;
+      row.style.paddingLeft=`${(layout.textX-layout.inset)/(layout.textX-layout.inset+layout.textWidth)*100}%`;
+      appendSignatureCardIcon(documentRef,row,['person','calendar','document'][index]);
+    }
+    caption.dataset.layoutWidth=String(geometry.width);
   }
 
   function resizeSignature(delta) {
@@ -815,7 +840,10 @@ export function createSignaturePlacement({
       marker.classList.add("signature-placement-marker--integrity");
       const verifiable = Boolean(signatureBlob?.signatureEvidence?.verificationUrl);
       caption.append(element(documentRef, "span", "signature-placement-marker__integrity", signatureRecordLines(integrityId).slice(0, verifiable ? 1 : 2).join("\n")));
-      for (const [index, row] of [...caption.children].entries()) appendSignatureCardIcon(documentRef, row, ['person','calendar','document'][index]);
+      for (const [index, row] of [...caption.children].entries()) {
+        row.dataset.signatureLabel=row.textContent;
+        appendSignatureCardIcon(documentRef, row, ['person','calendar','document'][index]);
+      }
       if (verifiable) {
         marker.classList.add('signature-placement-marker--verified');
         const seal = element(documentRef, 'div', 'signature-card-seal', 'Documento assinado eletronicamente');
@@ -827,8 +855,7 @@ export function createSignaturePlacement({
       for (const row of [...caption.children].filter(node => node.tagName === 'SPAN')) {
         const measured = Math.max(...row.textContent.split('\n').map(line =>
           metrics?.measureText ? metrics.measureText(line).width : line.length * 80), 1);
-        const available = verifiable ? 62 : 82;
-        row.style.fontSize = `${Math.min(verifiable ? 3.8 : 4.2, available * 100 / measured)}cqw`;
+        if(!verifiable) row.style.fontSize = `${Math.min(4.2, 82 * 100 / measured)}cqw`;
       }
     }
     // SIGNATURE_GESTURE_LOCK_START: signature-placement-marker-bindings

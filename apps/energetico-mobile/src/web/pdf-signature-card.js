@@ -1,5 +1,6 @@
 import {StandardFonts, PDFString, rgb} from 'pdf-lib';
 import {signatureCardIcons, signatureCardIconColors} from './signature-card-icons.js';
+import {layoutSignatureMetadata} from './signature-metadata-layout.js';
 
 const blue = rgb(.08, .18, .34);
 const green = rgb(.09, .40, .24);
@@ -33,11 +34,17 @@ export async function drawSignatureRecordCard(pdf, page, image, {
   const textX = left + inset + iconSize + width * .02;
   const textWidth = (verification ? sealX - inset : left+width-inset) - textX;
   const rowSize = Math.min(11, rowHeight * .68, width * .05);
+  const wrapped = verification ? layoutSignatureMetadata({width,captionHeight,labels,
+    measure:(text,size)=>font.widthOfTextAtSize(text,size)}) : null;
+  let rowTop=bottom+captionHeight-inset;
   for (const [index, label] of labels.entries()) {
-    const size = Math.min(rowSize, textWidth / Math.max(1, font.widthOfTextAtSize(label,1)));
-    const centerY = bottom + captionHeight - inset - (index+.5)*rowHeight;
-    const y = centerY - size*.34;
-    page.drawText(label, {x:textX,y,size,font,color:blue});
+    const row=wrapped?.rows[index];
+    const size = wrapped?.size ?? Math.min(rowSize, textWidth / Math.max(1, font.widthOfTextAtSize(label,1)));
+    const centerY = row ? rowTop-row.height/2 : bottom + captionHeight - inset - (index+.5)*rowHeight;
+    const lines=row?.lines ?? [label];
+    for(const [lineIndex,line] of lines.entries()) page.drawText(line,{x:left+(wrapped?.textX ?? textX-left),
+      y:centerY+(lines.length-1)*size*1.15/2-lineIndex*size*1.15-size*.34,size,font,color:blue});
+    if(row) rowTop-=row.height;
     if (index < 3) page.drawSvgPath(signatureCardIcons[['person','calendar','document'][index]],
       {x:left+inset,y:centerY+iconSize/2,scale:iconSize/24,
         borderColor:rgb(...signatureCardIconColors[['person','calendar','document'][index]].map(channel=>channel/255)),borderWidth:1.8});

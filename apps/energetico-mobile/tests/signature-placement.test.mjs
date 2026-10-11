@@ -108,10 +108,10 @@ test('prévia apresenta ícones e selo ao lado dos dados reais sem mudar o ponto
   await viewer.ready;
   const marker = container.querySelector('.signature-placement-marker');
   const caption = marker.querySelector('.signature-placement-marker__caption');
-  assert.match(caption.textContent, /DATA\/HORA: 11\/10\/2026 às 01:01/);
+  assert.match(caption.textContent.replace(/\s+/g,' '), /DATA\/HORA: 11\/10\/2026 às 01:01/);
   assert.equal(caption.querySelectorAll('svg[data-signature-icon]').length, 4);
   assert.match(caption.querySelector('.signature-card-seal').textContent, /Documento assinado eletronicamente/);
-  assert.match(caption.querySelector('.signature-placement-marker__integrity').textContent, /^REGISTRO: 0123456789abcdef$/);
+  assert.match(caption.querySelector('.signature-placement-marker__integrity').textContent.replace(/\s+/g,' '), /^REGISTRO: 0123456789abcdef$/);
   assert.equal(viewer.getPoint(), null, 'apresentação não cria uma escolha de posição');
   assert.equal(point(), undefined);
 });

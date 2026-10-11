@@ -25,6 +25,9 @@ test("prévia das legendas de ponto, EPI e pagamento acompanha o PDF sem cortar 
           const expectedWidth=Math.min(595*layout.widthRatio*scale,591)*layout.pageWidth/595;
           assert.ok(Math.abs(layout.markerWidth-expectedWidth)<=1, `${layout.kind}: prévia difere do PDF em escala ${scale}`);
           assert.ok(layout.nameTextRight<=layout.sealLeft,`${layout.kind}: nome invade o selo`);
+          for(const row of layout.rows.filter(row=>row.textRight)) assert.ok(row.textRight<=layout.sealLeft-row.fontSize*.75,
+            `${layout.kind}: margem entre informação e selo insuficiente: ${row.text}`);
+          if(scale===.5) assert.ok(layout.rows[0].lineCount>=2,`${layout.kind}: nome longo precisa de quebra de linha`);
           for(const icon of layout.icons.filter(icon=>icon.kind!=='shield')) {
             assert.ok(icon.height/layout.markerWidth>=.055,`${layout.kind}: ícone ${icon.kind} precisa ser maior`);
           }
@@ -34,7 +37,7 @@ test("prévia das legendas de ponto, EPI e pagamento acompanha o PDF sem cortar 
         if(!layout.verified) for(const icon of layout.icons) {
           assert.ok(icon.height/layout.markerWidth>=.049,layout.kind+': registro completo também precisa de ícones maiores');
         }
-        assert.ok(Math.abs(layout.grid[0]-layout.grid[1])<=1,`${layout.kind}: reservar metade para a legenda`);
+        assert.ok(layout.grid[1]>layout.grid[0],`${layout.kind}: aproveitar altura para letras maiores próximas do traço`);
         assert.ok(layout.captionScroll<=layout.captionHeight+1,`${layout.kind}: legenda cortada`);
         for(const row of layout.rows) {
           assert.ok(row.scrollHeight<=row.height+1,`${layout.kind}: linha cortada verticalmente ${JSON.stringify(row)}`);

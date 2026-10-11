@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { PDFDocument, PDFName } from "pdf-lib";
+import {inflateSync} from 'node:zlib';
 import { signPdfAttachment } from "../src/web/pdf-signing.js";
 import { createChatClient } from "../src/chat/chat-client.js";
 
@@ -20,7 +21,10 @@ test("PDF button preserves a real public URI annotation", async () => {
   assert.equal(action.get(PDFName.of("URI")).decodeText(), url);
   const rect = annotation.lookup(PDFName.of("Rect")).asArray().map(n => n.asNumber());
   assert.ok(rect[0] >= 0 && rect[1] >= 0 && rect[2] <= 595 && rect[3] <= 842);
-  assert.ok(rect[0] > 595 * 0.7 && rect[3] <= 842 * 0.08, 'The seal belongs beside the metadata, below the ink');
+  const streams=result.getPage(0).node.Contents();
+  const content=Array.from({length:streams.size()},(_,i)=>inflateSync(Buffer.from(result.context.lookup(streams.get(i)).getContents())).toString('latin1')).join('\n');
+  const ink=/1 0 0 1 [\d.]+ ([\d.]+) cm\n1 0 0 1 0 0 cm\n[\d.]+ 0 0 [\d.]+ 0 0 cm\n1 0 0 1 0 0 cm\n\/Image-[^\n]+ Do/.exec(content);
+  assert.ok(rect[0] > 595 * 0.7 && ink && rect[3] < Number(ink[1]), 'The seal belongs beside the metadata, below the actual ink');
   assert.equal(annotation.get(PDFName.of('Contents')).decodeText(), 'Ver registro da assinatura');
 });
 
