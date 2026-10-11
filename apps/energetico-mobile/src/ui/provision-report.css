@@ -1,28 +1,42 @@
-.pr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
+.pr-dialog:not(.pl-dialog--portrait) { width:100%; height:100dvh; max-height:100dvh; }
 .pr-filters { grid-template-columns:9fr 15fr 18fr 24fr 19fr 15fr; }
 .pr-content { color:black; font-family:Arial,sans-serif; }
+.pr-overlay[data-report-action] .pr-content { padding-inline:58px; }
+.pr-section-scroll { width:100%; overflow-x:auto; overscroll-behavior-x:contain; margin-bottom:12px; }
+.pr-scroll-hint { margin:6px 0; color:#395eac; font-size:11px; }
 .pr-logo { display:grid; place-items:center; border:2px solid black; background:#e6f0ff; margin-bottom:6px; padding:4px; }
 .pr-logo img { display:block; height:clamp(32px,5.5vw,80px); max-width:40%; object-fit:contain; }
-.pr-table { width:100%; table-layout:fixed; border-collapse:collapse; margin-bottom:12px; background:white; color:black; font:normal clamp(7px,1vw,13px)/1.18 Arial,sans-serif; }
-.pr-table th,.pr-table td { border:1px solid #b00020; padding:clamp(2px,.4vw,6px); vertical-align:middle; overflow-wrap:anywhere; }
+.pr-table { width:100%; min-width:1120px; table-layout:fixed; border-collapse:collapse; background:white; color:black; font:normal clamp(10.5px,1vw,13px)/1.25 Arial,sans-serif; }
+.pr-table th,.pr-table td { border:1px solid #b00020; padding:clamp(3px,.4vw,6px); vertical-align:middle; overflow-wrap:break-word; }
 .pr-table th { background:#f8d7da; font-weight:700; text-align:left; }
 .pr-table .pr-section-title { background:#fdecea; color:#b00020; font-size:clamp(9px,1.3vw,17px); font-weight:700; }
 .pr-table td[data-column=schedule],.pr-table td[data-column=dueDate],.pr-table td[data-column=status] { font-weight:700; }
 .pr-table td[data-column=schedule] { text-align:center; }
-.pr-table--annual { font-size:clamp(6px,.9vw,12px); }
+.pr-table--annual { min-width:1500px; table-layout:auto; font-size:clamp(10.5px,.9vw,12px); }
 .pr-table--annual th,.pr-table--annual td { border-color:black; }
 .pr-table--annual th { background:#f2f2f2; text-align:center; }
 .pr-table--annual .pr-section-title { color:black; background:white; text-align:left; }
 .pr-table--annual td[data-column=month] { text-align:left; }
 .pr-table--inactive td[data-column=id],.pr-table--inactive td[data-column=days],.pr-table--inactive td[data-column=modified] { text-align:center; }
 .pr-table .pr-bold { font-weight:700; }
-.pr-table .pr-money { text-align:right; }
+.pr-table .pr-money { text-align:right; white-space:nowrap; overflow-wrap:normal; }
+.pr-nowrap { display:inline-block; white-space:nowrap; overflow-wrap:normal; word-break:normal; }
+.pr-event+.pr-event { margin-top:6px; }
+.pr-status-line { display:flex; align-items:baseline; gap:4px; }
+.pr-status-dot { display:inline-block; flex:0 0 10px; width:10px; height:10px; border-radius:50%; background:#616161; }
+.pr-status-dot--green { background:#2e7d32; }
+.pr-status-dot--yellow { background:#b78000; }
+.pr-status-dot--red { background:#b00020; }
+.pr-status-dot--orange { background:#f57c00; }
+.pr-status-dot--purple { background:#6a1b9a; }
+.pr-status-dot--blue { background:#1565c0; }
 .pr-table .pr-red { color:#b00020; }
 .pr-table .pr-orange { color:#f57c00; }
 .pr-table .pr-green { color:#2e7d32; }
 .pr-table .pr-yellow { color:#b78000; }
 .pr-table .pr-muted { color:#616161; }
-.pr-table .pr-badge { display:inline-block; padding:2px 3px; margin-top:3px; border-radius:4px; font-size:clamp(6px,.8vw,10px); font-weight:700; }
+.pr-table .pr-badge { display:inline-block; padding:2px 3px; margin-top:3px; border-radius:4px; font-size:10px; font-weight:700; }
+.pr-table .pr-status-line.pr-badge { display:inline-flex; }
 .pr-badge--red { color:#b00020; background:#ffcdd2; }
 .pr-badge--orange { color:#e65100; background:#ffe0b2; }
 .pr-badge--green { color:#2e7d32; background:#c8e6c9; }
@@ -30,4 +44,5 @@
 .pr-badge--blue { color:#1565c0; background:#e3f2fd; }
 .pr-table .pr-total td { border:2px solid #b00020; background:#fdecea; color:#b00020; font-weight:700; text-align:right; }
 .pr-table .pr-empty { background:#e8f5e9; text-align:center; font-weight:700; }
+@media(max-height:500px) { .pr-overlay[data-report-action] .pr-content { padding-inline:48px; } }
 @media print { body.pr-printing>*:not(.pr-overlay) { display:none!important; } body.pr-printing .pr-overlay { position:static; display:block; padding:0; background:white; } body.pr-printing .pr-dialog,body.pr-printing .pr-report,body.pr-printing .pr-content { display:block; height:auto; max-height:none; overflow:visible; width:100%; padding:0; } body.pr-printing .pr-filters { display:none; } body.pr-printing .pr-table { break-inside:auto; } body.pr-printing tr { break-inside:avoid; } }

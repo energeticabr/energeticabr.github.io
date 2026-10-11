@@ -23,7 +23,7 @@ const REFRESH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 export function pendingReportPrintMarkup(){
  return `<button type="button" class="report-print-button report-print-pending" data-action="print-pending-provisions" aria-label="Abrir PDF das provisões pendentes" title="Abrir PDF do relatório">${PRINTER}</button>`;
 }
-const OMIT = 'button,input,select,textarea,nav,script,style,link,img,svg,[hidden],[aria-hidden="true"],.report-pdf-status,.sfs-popup,.sfs-control,.cargos-hint,[class*="-filters"],[class*="-toolbar"],[class*="-orientation"]';
+const OMIT = 'button,input,select,textarea,nav,script,style,link,img,svg,[hidden],[aria-hidden="true"],[data-report-screen-only],.report-pdf-status,.sfs-popup,.sfs-control,.cargos-hint,[class*="-filters"],[class*="-toolbar"],[class*="-orientation"]';
 const BLOCK_TAGS = 'div,p,section,article,header,footer,ul,ol,li,dl,dt,dd,h1,h2,h3,h4,h5,h6,table';
 function color(value){
  const match=/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)$/.exec(value||'');
