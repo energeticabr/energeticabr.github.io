@@ -25,8 +25,16 @@ test('popup de diários identifica data, filial e responsável e fecha pelo bot�
   assert.match(dialog.textContent, /ID 17/);
   const events = [];
   view.on('dismiss-pending-construction-diaries', event => events.push(event));
-  dialog.querySelector('[data-action="dismiss-pending-construction-diaries"]').click();
+  dialog.querySelector('.chat-confirmation__actions [data-action="dismiss-pending-construction-diaries"]').click();
   assert.equal(events.length, 1);
+});
+
+test('o X mantém o fechamento do lembrete de diários', t => {
+  const { root, view } = setup(t);
+  let dismissals = 0;
+  view.on('dismiss-pending-construction-diaries', () => { dismissals += 1; });
+  root.querySelector('.chat-pending-construction-diaries .chat-date-picker__close').click();
+  assert.equal(dismissals, 1);
 });
 
 test('diários têm prioridade sobre notas mas aguardam o popup de pagamentos', t => {
