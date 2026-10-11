@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prévia fictícia — Provisões agrupadas</title><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const due = new Date().toLocaleDateString('sv-SE', {timeZone:'America/Sao_Paulo'});
+const state = {sessionStatus:'authenticated', account:{name:'Prévia fictícia'}, draft:'', pendingFiles:[], messages:[],
+  pendingProvisions:{sourceKind:'provision-description',due:true,count:2,rows:[
+    {id:'701',sourceKind:'provision-description',dueDate:due,supplier:'Fornecedor fictício A',product:'Material A / Serviço B',branch:'Filial fictícia',property:'Obra fictícia',childCount:2,total:'1530',totalDisplay:'R$ 1.530,00'},
+    {id:'702',sourceKind:'provision-description',dueDate:due,supplier:'Fornecedor fictício B',product:'Serviço C',branch:'Filial fictícia',property:'Obra fictícia',childCount:3,total:null,totalDisplay:'—',settlementBlocked:true,amountError:'Valor inválido em uma provisão vinculada; corrija os dados antes da baixa.'}
+  ]}};
+const view = createChatView(document.querySelector('#app'));
+view.on('settle-pending-provision', ({paymentId}) => {
+  state.pendingProvisions=null;
+  state.messages=[{id:'selection',role:'assistant',type:'text',text:'DESCRITIVO '+paymentId+' — PROVISÃO 11 (1 DE 2).'},
+    {id:'quantity',role:'assistant',type:'poll',question:'QUAL É A QUANTIDADE DESTA PROVISÃO?',options:[{id:'keep',reply:'keep',label:'MANTER QUANTIDADE 2'}]}];
+  view.render({...state});
+});
+view.render({...state});
+document.documentElement.dataset.ready='true';
+</script></body></html>

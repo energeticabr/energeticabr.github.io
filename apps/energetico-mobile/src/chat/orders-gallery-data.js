@@ -610,15 +610,16 @@ export function createHrPayrollGalleryData({
 }
 
 export function createPendingProvisionAttachmentsData(options = {}) {
+  const grouped = options.sourceKind === "provision-description";
   const data = createSharePointListData({
     ...options,
     siteKey: options.siteKey || SITE_KEY,
-    listAliases: options.listAliases || PENDING_PROVISION_LIST_ALIASES,
-    listName: options.listName || "PROVISÃO PGTOS",
+    listAliases: grouped ? ["DESCRITIVOPROVISAO"] : options.listAliases || PENDING_PROVISION_LIST_ALIASES,
+    listName: grouped ? "DESCRITIVOPROVISAO" : options.listName || "PROVISÃO PGTOS",
     listMissingCode: options.listMissingCode || "pending_provision_list_missing",
   });
   return Object.freeze({
-    loadUpcomingPayments: data.loadUpcomingPayments,
+    ...(!grouped ? { loadUpcomingPayments: data.loadUpcomingPayments } : {}),
     listAttachments: data.listAttachments,
     downloadAttachment: data.downloadAttachment,
     uploadAttachment: data.uploadAttachment,

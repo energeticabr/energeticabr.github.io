@@ -79,6 +79,245 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
 }
 
 const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
+
+function groupedPendingProvisionSnapshot() {
+  return { sourceKind: "provision-description", due: true, today: "2026-10-11", checkedDate: "2026-10-11", rows: [{
+    id: "306", supplier: "COFER", product: "CIMENTO · AREIA", branch: "XAVANTE", property: "A · B",
+    dueDate: "2026-10-12", total: "9007199254740993.21", totalDisplay: "R$ 9.007.199.254.740.993,21",
+    childCount: 3, pendingChildIds: ["91", "92"], sourceKind: "provision-description",
+  }] };
+}
+
+test("grouped provisions retain authoritative totals and metadata without merging colliding child IDs", async t => {
+  let childReads = 0;
+  const providerKinds = [];
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async ({ sourceKind }) => {
+    providerKinds.push(sourceKind);
+    return {
+      async loadUpcomingPayments() { childReads++; return [{ id: "306", total: 1 }, { id: "91", total: 2 }]; },
+      async listAttachments() { return []; }, async downloadAttachment() { return new Blob(); },
+    };
+  } });
+  const snapshot = groupedPendingProvisionSnapshot();
+  h.client.getPendingProvisionSnapshot = async () => snapshot;
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  const shown = h.view.renders.at(-1).pendingProvisions;
+  assert.deepEqual(shown.rows, snapshot.rows);
+  assert.equal(shown.checkedDate, "2026-10-11");
+  assert.equal(shown.upcomingUnavailable, false);
+  assert.equal(shown.totalsUnavailable, false);
+  assert.equal(childReads, 0);
+  assert.deepEqual(providerKinds, ["provision-description"]);
+});
+
+test("grouped provisions switch the cached parent provider back to the legacy child provider on the same account", async t => {
+  let grouped = true;
+  const providerKinds = [], downloads = [], dates = [];
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async ({ sourceKind }) => {
+    const kind = sourceKind || "legacy";
+    providerKinds.push(kind);
+    return {
+      async loadUpcomingPayments() { return []; },
+      async listAttachments() { return [{ fileName: "receipt.pdf", mimeType: "application/pdf" }]; },
+      async downloadAttachment(id) { downloads.push([kind, id]); return new Blob(["pdf"]); },
+      async updateDueDate(id, date) { dates.push([kind, id, date]); },
+    };
+  } });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  h.client.getPendingProvisionSnapshot = async () => grouped ? groupedPendingProvisionSnapshot() : { due: true, rows: [{ id: "306" }] };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("share-pending-provision-attachment", { paymentId: "306", fileName: "receipt.pdf" });
+  await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" });
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "13/10/2026" }), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].dueDate, "2026-10-13");
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].total, "9007199254740993.21");
+  await h.view.emit("dismiss-pending-provisions");
+  grouped = false;
+  await h.view.emit("open-pending-provisions");
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit("share-pending-provision-attachment", { paymentId: "306", fileName: "receipt.pdf" });
+  assert.deepEqual(providerKinds, ["provision-description", "legacy"]);
+  assert.deepEqual(downloads, [["provision-description", "306"], ["legacy", "306"]]);
+  assert.deepEqual(dates, [["provision-description", "306", "2026-10-13"]]);
+});
+
+test("grouped provisions check selects only the namespaced parent and leaves the first child quantity unanswered", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return {
+      status: "processed", activeFlow: { id: "payment_settlement", stepKey: "provisao_para_baixa" },
+      messages: [{ type: "poll", question: "QUAL DESCRITIVO DE PROVISÃO DESEJA BAIXAR?", options: [
+        { id: "306", reply: "306", label: "306 - CHILD" },
+        { id: "provision_description:306", reply: "provision_description:306", value: "306", label: "306 - COFER" },
+      ] }],
+    };
+    if (payload.replyId === "provision_description:306") return {
+      status: "processed", activeFlow: { id: "payment_settlement", stepKey: "qtd_pagamento" },
+      messages: [{ type: "poll", question: "DESEJA MANTER A QUANTIDADE DO FILHO 91?", options: [] }],
+    };
+    throw new Error(`Unexpected or financial reply: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.deepEqual(calls, ["input_continue", "provision_description:306"]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  assert.match(h.view.renders.at(-1).messages.at(-1).question, /FILHO 91/);
+});
+
+test("grouped provisions never fall back to a bare child ID or a parent value without its namespace", async t => {
+  for (const options of [
+    [{ id: "306", reply: "306", label: "306 - CHILD" }],
+    [{ id: "other", value: "306", label: "306 - COFER" }],
+    [{ id: "provision_description:307", value: "306", label: "306 - COFER" }],
+    [{ id: "provision_description:306", reply: "306", value: "306", label: "306 - COFER" }],
+  ]) {
+    const h = makeHarness();
+    const calls = [];
+    h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+    h.client.sendText = async payload => {
+      calls.push(payload.replyId);
+      return { status: "processed", activeFlow: { id: "payment_settlement", stepKey: "provisao_para_baixa" },
+        messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options }] };
+    };
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+    assert.deepEqual(calls, ["input_continue"]);
+    assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+  }
+});
+
+test("legacy provisions check ignores namespaced parent options with a colliding child ID", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    return payload.replyId === "input_continue"
+      ? { status: "processed", activeFlow: { id: "payment_settlement" }, messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "provision_description:306", reply: "provision_description:306", value: "306", label: "306 - PARENT" },
+        { id: "306", reply: "306", label: "306 - CHILD" },
+      ] }] }
+      : { status: "processed", activeFlow: { id: "payment_settlement" }, messages: [{ type: "poll", question: "QUAL A QUANTIDADE?", options: [] }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), true);
+  assert.deepEqual(calls, ["input_continue", "306"]);
+});
+
+test("grouped provisions check closes immediately and abandons an existing draft before selecting the parent", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const h = makeHarness({ view: createChatView(root) });
+  const calls = [];
+  let releaseExit;
+  const exitGate = new Promise(resolve => { releaseExit = resolve; });
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  const poll = (question, options, activeFlow = null, resetConversation = false) => ({
+    status: "processed", activeFlow, resetConversation, messages: [{ type: "poll", question, options }],
+  });
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    switch (payload.replyId) {
+      case "input_continue": return poll("QUAL A OBSERVAÇÃO?", [], { id: "launch" });
+      case "portal_confirm_main_menu":
+        await exitGate;
+        return poll("DESEJA ABANDONAR O FLUXO?", [
+          { id: "portal_draft_exit_discard", label: "ABANDONAR SEM SALVAR" },
+          { id: "portal_draft_exit_cancel", label: "CONTINUAR" },
+        ], { id: "launch" });
+      case "portal_draft_exit_discard": return poll("QUAL ÁREA VOCÊ DESEJA ACESSAR?", [{ id: "group_pending", label: "PENDÊNCIAS" }], null, true);
+      case "group_pending": return poll("PENDÊNCIAS", [{ id: "pending_payment_settlement", label: "BAIXAR PAGAMENTO AGENDADO" }]);
+      case "pending_payment_settlement": return poll("QUAL DESCRITIVO DE PROVISÃO DESEJA BAIXAR?", [
+        { id: "306", label: "306 - CHILD" },
+        { id: "provision_description:306", reply: "provision_description:306", value: "306", label: "306 - COFER" },
+      ], { id: "payment_settlement", stepKey: "provisao_para_baixa" });
+      case "provision_description:306": return poll("QUAL A QUANTIDADE DO FILHO 91?", [], { id: "payment_settlement" });
+      default: throw new Error(`Unexpected or financial reply: ${payload.replyId}`);
+    }
+  };
+  t.after(() => { releaseExit(); h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  root.querySelector('[data-action="settle-pending-provision"][data-payment-id="306"]').click();
+  assert.equal(root.querySelector("[data-pending-provisions-dialog]"), null);
+  releaseExit();
+  for (let attempt = 0; attempt < 100 && !/QUANTIDADE DO FILHO 91/.test(root.textContent); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu", "portal_draft_exit_discard", "group_pending", "pending_payment_settlement", "provision_description:306"]);
+  assert.match(root.textContent, /QUANTIDADE DO FILHO 91/);
+});
+
+test("grouped provisions preserve the backend refusal to abandon a parent with a committed intent", async t => {
+  const h = makeHarness();
+  const calls = [];
+  const reason = "A baixa do descritivo 99 já foi iniciada. Retome esse grupo antes de abandonar ou editar.";
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    if (payload.replyId === "input_continue") return {
+      status: "processed", activeFlow: { id: "payment_settlement", title: "BAIXAR PAGAMENTO AGENDADO", contextId: "committed-parent-99" },
+      messages: [{ type: "poll", question: "CONFIRME A BAIXA DO DESCRITIVO 99", options: [] }],
+    };
+    if (payload.replyId === "portal_confirm_main_menu") throw new Error(reason);
+    throw new Error(`Must not select or commit another parent: ${payload.replyId}`);
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls, ["input_continue", "portal_confirm_main_menu"]);
+  assert.equal(h.view.renders.at(-1).error, reason);
+  assert.equal(h.store.getState().activeFlow.contextId, "committed-parent-99");
+  assert.equal(h.view.renders.at(-1).pendingProvisions, null);
+});
+
+test("grouped provisions blocked clicks keep all groups open without navigation or selection", async t => {
+  const snapshot = groupedPendingProvisionSnapshot();
+  const base = snapshot.rows[0];
+  snapshot.rows = [
+    ...["306", "307", "308"].map(id => ({ ...base, id, total: null, totalDisplay: "—", settlementBlocked: true,
+      amountError: `Não foi possível conferir: valor inválido no filho de ${id}.` })),
+    ...Array.from({ length: 13 }, (_, index) => ({ ...base, id: String(400 + index) })),
+  ];
+  const parentReads = [], dates = [];
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async ({ sourceKind }) => {
+    assert.equal(sourceKind, "provision-description");
+    return {
+      async listAttachments(id) { return [{ fileName: "parent.pdf", mimeType: "application/pdf" }]; },
+      async downloadAttachment(id) { parentReads.push(id); return new Blob(["pdf"]); },
+      async updateDueDate(id, date) { dates.push([id, date]); },
+    };
+  } });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
+  h.client.getPendingProvisionSnapshot = async () => snapshot;
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await new Promise(resolve => setImmediate(resolve));
+  h.chatCalls.length = 0;
+  for (const paymentId of ["306", "307", "308"]) {
+    assert.equal(await h.view.emit("settle-pending-provision", { paymentId }), false);
+  }
+  assert.deepEqual(h.chatCalls, []);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows, snapshot.rows);
+  assert.equal(h.view.renders.at(-1).pendingProvisionSettlementPaymentId, "");
+  assert.equal(await h.view.emit("share-pending-provision-attachment", { paymentId: "306", fileName: "parent.pdf" }), true);
+  assert.equal(await h.view.emit("edit-pending-provision-due-date", { paymentId: "306" }), true);
+  assert.equal(await h.view.emit("save-pending-provision-due-date", { paymentId: "306", value: "13/10/2026" }), true);
+  assert.deepEqual(parentReads, ["306"]);
+  assert.deepEqual(dates, [["306", "2026-10-13"]]);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 16);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].settlementBlocked, true);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows[0].total, null);
+});
 const observationOptions = [
   { id: 'choice:tem_observacao_lancamento:1', label: '1 - ✅ SIM' },
   { id: 'choice:tem_observacao_lancamento:2', label: '2 - ❌ NÃO' },

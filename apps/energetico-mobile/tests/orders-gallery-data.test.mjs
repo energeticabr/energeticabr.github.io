@@ -4,6 +4,33 @@ import * as galleryData from "../src/chat/orders-gallery-data.js";
 
 const { createOrdersGalleryData, createPendingProvisionAttachmentsData, OrdersGalleryDataError } = galleryData;
 
+test("grouped provisions route attachments and due-date mutations to the description parent list", async () => {
+  const calls = [];
+  const data = createPendingProvisionAttachmentsData({ sourceKind: "provision-description", repository: {
+    async resolveList(site, aliases) { calls.push(["resolve", site, aliases]); return { status: "resolved", id: "parents" }; },
+    async getItemsPage() { throw new Error("Grouped totals must come from the backend"); },
+    async listAttachments(...args) { calls.push(["list", ...args]); return [{ name: "parent.pdf", size: 3 }]; },
+    async downloadAttachment(...args) { calls.push(["download", ...args]); return new Blob(["pdf"], { type: "application/pdf" }); },
+    async uploadAttachment(...args) { calls.push(["upload", ...args]); return {}; },
+    async getItem(...args) { calls.push(["item", ...args]); return { id: "306", eTag: "parent-etag", fields: {} }; },
+    async getColumns() { return [{ name: "due", displayName: "DATA PREVISTO PGTO" }]; },
+    async updateItem(...args) { calls.push(["update", ...args]); return {}; },
+  } });
+  await data.listAttachments("306");
+  await data.downloadAttachment("306", "parent.pdf");
+  await data.uploadAttachment("306", new File(["pdf"], "new.pdf", { type: "application/pdf" }));
+  await data.updateDueDate("306", "2026-10-12");
+  assert.deepEqual(calls.find(([name]) => name === "resolve"), ["resolve", "personal", ["DESCRITIVOPROVISAO"]]);
+  for (const name of ["list", "download", "upload", "item", "update"]) {
+    assert.deepEqual(calls.find(([kind]) => kind === name).slice(1, 4), ["personal", "parents", "306"]);
+  }
+  const update = calls.find(([name]) => name === "update");
+  assert.deepEqual(Object.keys(update[4]), ["due"]);
+  assert.match(update[4].due, /^2026-10-12T/);
+  assert.equal(update[5].eTag, "parent-etag");
+  assert.equal(data.loadUpcomingPayments, undefined, "The parent provider cannot enrich from child payments");
+});
+
 test("consulta os próximos dois vencimentos no SharePoint sem incluir pagamentos efetuados e pagina o resultado", async () => {
   const queries = [];
   const repository = {
