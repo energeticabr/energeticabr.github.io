@@ -44,6 +44,10 @@ test('dashboard with eight types and edit actions fits phones tablets desktop wi
   assert.equal(layout.types,8);assert.equal(layout.rows,10);assert.equal(layout.actions,20);assert.ok(layout.content.scroll<=layout.content.width+1);assert.ok(layout.table.right<=layout.content.right);
   for(const cluster of layout.clusters)assert.ok(cluster.scroll<=cluster.width+1,'each full type total stays inside its cluster');
   assert.equal(layout.headers.length,12);
+  assert.equal(layout.headers[0].text,'DATA');
+  assert.ok(layout.rowStyles.every(cell=>Number(cell.weight)>=600),'each payment value uses semi-bold emphasis');
+  assert.equal(layout.pencilFill,'rgb(255, 248, 225)','pencil uses the standard app yellow cluster');
+  assert.equal(layout.typeColor,'rgb(22, 121, 77)','salary type retains its green highlight after reordering');
   for(const header of layout.headers){
    assert.ok(header.fragments.length>0,`header ${header.text} remains visible at ${width}px`);
    assert.ok(header.fragments.every(fragment=>fragment.left>=header.left-1&&fragment.right<=header.right+1),`header ${header.text} stays inside its column at ${width}px`);

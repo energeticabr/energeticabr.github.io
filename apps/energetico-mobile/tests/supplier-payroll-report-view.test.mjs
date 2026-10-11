@@ -36,7 +36,7 @@ test('current reference month defaults with collapsed supplier groups and all th
 });
 test('expansion reuses summaries for selected sheet ids and keeps payment made next month',async t=>{
  const {view,root,calls}=setup(t);await view.open();const detail=root.querySelector('details');detail.open=true;detail.dispatchEvent(new root.ownerDocument.defaultView.Event('toggle'));await tick();
- assert.deepEqual(calls,[['8','12'],['9']]);assert.match(detail.textContent,/23.*8.*DIÁRIA.*02\/11\/2026.*60.*100,00.*2.*200,00/s);
+ assert.deepEqual(calls,[['8','12'],['9']]);assert.match(detail.textContent,/02\/11\/2026.*23.*8.*DIÁRIA.*60.*100,00.*2.*200,00/s);
  assert.match(detail.querySelector('.spr-total').textContent,/200,00/);
 });
 test('filters discard details and refresh failure removes stale data',async t=>{
