@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { inflateSync } from "node:zlib";
-import { PDFDocument, PDFRef, PDFName } from "pdf-lib";
+import { PDFDocument, PDFRef, PDFName, StandardFonts } from "pdf-lib";
 
 import { signPdfAttachment } from "../src/web/pdf-signing.js";
 import { signatureLayoutGeometry } from "../src/web/signature-document-layout.js";
@@ -102,6 +102,37 @@ function boldTextPlacement(content, label, occurrence = 0) {
   return { size: Number(match[1]), x: Number(match[2]), y: Number(match[3]) };
 }
 
+function metadataTextPlacements(content) {
+  return [...content.matchAll(/\/Helvetica-Bold-[^\n]+ ([\d.]+) Tf\n24 TL\n1 0 0 1 ([\d.]+) ([\d.]+) Tm\n<([A-F0-9]+)> Tj/g)].map(match => ({
+    size:Number(match[1]), x:Number(match[2]), y:Number(match[3]), text:Buffer.from(match[4],'hex').toString('latin1'),
+  }));
+}
+
+for (const documentFileName of ['PONTO-RHID.pdf','comprovante-pagamento.pdf','comprovante-entrega-epi.pdf']) {
+  test(`metadados longos em ${documentFileName} quebram linha com margem antes do selo`, async () => {
+    const source=await PDFDocument.create(); source.addPage([595,842]);
+    const id='f820ab3ae320e7460123456789abcdef';
+    const result=await signPdfAttachment({documentBlob:new Blob([await source.save()]),documentFileName,
+      signatureBlob:new Blob([PNG_1X1]),point:{page:1,x:.5,y:.3,scale:.5},
+      signerName:'JANAINA APARECIDA DA SILVA GONCALVES',signedAt:'2026-10-11T14:10:00Z',integrityId:id,
+      verificationUrl:`https://example.com/assinaturas/${id}/${'a'.repeat(64)}`});
+    const pdf=await PDFDocument.load(await result.arrayBuffer()), font=await pdf.embedFont(StandardFonts.HelveticaBold);
+    const rows=metadataTextPlacements(pageContent(pdf));
+    if(documentFileName==='PONTO-RHID.pdf') assert.ok(rows.every(row=>row.size>=8.5), 'metadados devem aproveitar a altura para letras maiores');
+    const seal=pdf.context.lookup(pdf.getPage(0).node.Annots().get(0)).lookup(PDFName.of('Rect')).asArray().map(n=>n.asNumber());
+    for (const row of rows) assert.ok(row.x+font.widthOfTextAtSize(row.text,row.size)<=seal[0]-row.size*.75,
+      `texto precisa de margem própria antes do selo: ${row.text}`);
+    const nameRows=rows.filter(row=>!row.text.includes('DATA/HORA')&&!row.text.includes('REGISTRO')&&!/[\d:]/.test(row.text));
+    assert.ok(nameRows.length>=2,'nome longo deve quebrar linha, não ser espremido em uma linha');
+    assert.equal(nameRows.map(row=>row.text).join(' '),'JANAINA APARECIDA DA SILVA GONCALVES');
+    const allText=rows.map(row=>row.text).join(' ');
+    assert.match(allText,/DATA\/HORA: 11\/10\/2026 às 11:10/);
+    assert.match(allText,/REGISTRO: f820ab3ae320e746/);
+    assert.match(pdf.getKeywords(),new RegExp(id));
+    for(let i=1;i<rows.length;i++) assert.ok(rows[i-1].y-rows[i].y>=Math.min(rows[i-1].size,rows[i].size), 'linhas não se sobrepõem');
+  });
+}
+
 for (const documentFileName of ['PONTO-RHID.pdf', 'comprovante-pagamento.pdf', 'comprovante-entrega-epi.pdf']) {
   test(`cartão ${documentFileName} mantém traço no topo, identificação à esquerda e selo no rodapé`, async () => {
     const source = await PDFDocument.create(); source.addPage([595, 842]);
@@ -117,14 +148,20 @@ for (const documentFileName of ['PONTO-RHID.pdf', 'comprovante-pagamento.pdf', '
     const content = pageContent(pdf);
     const annotation = pdf.context.lookup(pdf.getPage(0).node.Annots().get(0));
     const rect = annotation.lookup(PDFName.of('Rect')).asArray().map(n => n.asNumber());
-    assert.ok(rect[3] <= 842 * .3, 'selo não invade a área do traço');
+    const ink=/1 0 0 1 [\d.]+ ([\d.]+) cm\n1 0 0 1 0 0 cm\n[\d.]+ 0 0 [\d.]+ 0 0 cm\n1 0 0 1 0 0 cm\n\/Image-[^\n]+ Do/.exec(content);
+    assert.ok(ink && rect[3]<Number(ink[1]), 'selo não invade a área real do traço');
     for (const label of ['Documento', 'assinado', 'eletronicamente']) {
       const hex = Buffer.from(label, 'latin1').toString('hex').toUpperCase();
       assert.match(content, new RegExp(`<${hex}> Tj`), 'selo completo e legível');
     }
-    const name = boldTextPlacement(content, 'JANAINA APARECIDA DA SILVA GONÇALVES');
-    const date = boldTextPlacement(content, 'DATA/HORA: 11/10/2026 às 01:01');
-    const record = boldTextPlacement(content, 'REGISTRO: 0123456789abcdef');
+    const metadata=metadataTextPlacements(content);
+    const nameRows=metadata.filter(row=>!/[\d:]/.test(row.text));
+    assert.equal(nameRows.map(row=>row.text).join(' '),'JANAINA APARECIDA DA SILVA GONÇALVES');
+    assert.match(metadata.map(row=>row.text).join(' '),/DATA\/HORA: 11\/10\/2026 às 01:01/);
+    assert.match(metadata.map(row=>row.text).join(' '),/REGISTRO: 0123456789abcdef/);
+    const name = nameRows.at(-1);
+    const date = metadata.find(row=>row.text.startsWith('DATA/HORA'));
+    const record = metadata.find(row=>row.text.startsWith('REGISTRO'));
     assert.ok(name.y > date.y && date.y > record.y);
     assert.equal(name.x, date.x, 'informações alinhadas à esquerda');
     assert.equal(date.x, record.x);
