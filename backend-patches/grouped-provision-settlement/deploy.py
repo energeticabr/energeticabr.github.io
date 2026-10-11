@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 ROOTS = (Path('/opt/energetica-whatsapp'), Path('/home/opc/energetica-build'))
-STAGE = Path('/home/opc/grouped-provision-settlement-20261011-v4')
+STAGE = Path('/home/opc/grouped-provision-settlement-20261011-v5')
 BACKUPS = Path('/var/backups/energetica-whatsapp')
 SHARED_RUNNER_SHA = '01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2'
 FILES = ('worker/workflow.py', 'worker/clients.py', 'worker/provision_alerts.py',

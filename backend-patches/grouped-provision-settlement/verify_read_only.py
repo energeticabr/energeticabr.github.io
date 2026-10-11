@@ -7,7 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 PRODUCTION = Path('/opt/energetica-whatsapp')
-STAGE = Path('/home/opc/grouped-provision-settlement-20261011-v4')
+STAGE = Path('/home/opc/grouped-provision-settlement-20261011-v5')
 
 
 def main():

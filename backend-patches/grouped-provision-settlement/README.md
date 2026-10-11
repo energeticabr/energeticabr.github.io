@@ -14,17 +14,19 @@ O popup e os relatórios do menu Pendências usam `DESCRITIVOPROVISAO`. O valor 
 
 O journal durável permite retomar falhas parciais e respostas perdidas, sem repetir filhos confirmados nem criar pedidos/lançamentos duplicados. Após começar a gravação, o grupo e seus comprovantes ficam protegidos contra abandono/alteração até a conclusão. Vínculos, versões ou valores alterados por outra pessoa interrompem a baixa, preservando o rascunho.
 
+A consulta autenticada do app novo solicita `sourceKind: provision-description`. Apps instalados antigos sem essa capacidade continuam recebendo snapshots com IDs de filhos, evitando editar o filho com um ID coincidente do pai enquanto os aparelhos são atualizados. Fontes desconhecidas são recusadas e falhas na fonte agrupada nunca são convertidas em consulta legada.
+
 Grupos completamente lidos, mas com valores inválidos, aparecem com total desconhecido e baixa bloqueada. Nunca converter valores ausentes para zero. Falhas de transporte, esquema e paginação invalidam a consulta inteira.
 
 ## Pacote e implantação
 
 `source.patch` contém apenas seis arquivos de código, derivados de uma cópia atual de produção. `deploy-manifest.json` fixa hashes anterior/final e anterior do espelho separadamente. `package.py` gera o diff mecanicamente, sem importar dados de registros, bancos ou credenciais. O instalador recusa deriva, caminhos inesperados e symlinks, verifica a montagem e preserva backup recuperável de produção e espelho.
 
-Em estágio privado `/home/opc/grouped-provision-settlement-20261011-v4`, colocar `deploy.py`, `deploy-manifest.json`, `source.patch`, o bundle privado `source-files.tar` e o instalador compartilhado `backend-patches/launch-payroll-per-payment/deploy.py` como `shared-deploy.py` (hash fixado pelo instalador). O bundle é gerado fora do repositório público e ignorado pelo Git na pasta privada de artefatos, contém só os seis arquivos de código e é validado sem extrair caminhos arbitrários. Não requer Git/patch na VM. Executar:
+Em estágio privado `/home/opc/grouped-provision-settlement-20261011-v5`, colocar `deploy.py`, `deploy-manifest.json`, `source.patch`, o bundle privado `source-files.tar` e o instalador compartilhado `backend-patches/launch-payroll-per-payment/deploy.py` como `shared-deploy.py` (hash fixado pelo instalador). O bundle é gerado fora do repositório público e ignorado pelo Git na pasta privada de artefatos, contém só os seis arquivos de código e é validado sem extrair caminhos arbitrários. Não requer Git/patch na VM. Executar:
 
 ```
-sudo -n python3 /home/opc/grouped-provision-settlement-20261011-v4/deploy.py --check <SHA256_DO_MANIFESTO>
-sudo -n python3 /home/opc/grouped-provision-settlement-20261011-v4/deploy.py --deploy <SHA256_DO_MANIFESTO>
+sudo -n python3 /home/opc/grouped-provision-settlement-20261011-v5/deploy.py --check <SHA256_DO_MANIFESTO>
+sudo -n python3 /home/opc/grouped-provision-settlement-20261011-v5/deploy.py --deploy <SHA256_DO_MANIFESTO>
 ```
 
 A checagem não altera código em produção. O deploy altera somente os seis arquivos, reinicia o bridge, verifica ambos os serviços e `/health`, e grava recibo em `/var/backups/energetica-whatsapp/grouped-provision-settlement-*`. Falha restaura as cópias anteriores sem apagar alterações externas concorrentes. Não altera estado de conversa, anexos, registros financeiros nem segredos.

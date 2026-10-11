@@ -354,12 +354,31 @@
                  }
 --- a/channel_bridge.py
 +++ b/channel_bridge.py
-@@ -1586,6 +1586,16 @@
+@@ -1572,7 +1572,7 @@
+             job["completedAt"] = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+ 
+     def portal_pending_provision_snapshot(
+-        self, identity: dict, *, allowed_emails: set[str],
++        self, identity: dict, *, allowed_emails: set[str], source_kind: str | None = None,
+     ) -> dict:
+         """Retorna a lista curta de provisões vencidas ou vencendo hoje.
+ 
+@@ -1580,12 +1580,26 @@
+         abrir o aviso de pendências ao iniciar. O fluxo normal de Pendências
+         continua sendo responsável por gerar o relatório completo.
+         """
++        if source_kind not in (None, "provision-description"):
++            raise ValueError("A fonte de provisões solicitada não é permitida.")
+         with self.lock:
+             key, state = self._portal_state(identity)
+             self.portal_owners.authorize(
                  key, identity, state_exists=bool(state), bind=bool(state), allowed_emails=allowed_emails,
              )
              today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
 +            group_reader = getattr(self.engine.sharepoint, "get_pending_provision_descriptions", None)
-+            if callable(group_reader):
++            if source_kind == "provision-description":
++                if not callable(group_reader):
++                    raise RuntimeError("A consulta de descritivos não está disponível.")
 +                try:
 +                    from worker.provision_description_settlement import group_snapshot
 +                except ImportError:
@@ -371,6 +390,14 @@
              try:
                  source_rows = self.engine.sharepoint.get_pending_payment_provisions()
              except Exception:
+@@ -3071,6 +3085,7 @@
+                     result = self.bridge.portal_pending_provision_snapshot(
+                         identity,
+                         allowed_emails=self.portal_authenticator.allowed_emails,
++                        source_kind=body.get("sourceKind"),
+                     )
+                 elif action == "rhid_attendance_report":
+                     result = self.bridge.portal_rhid_attendance_report(
 --- /dev/null
 +++ b/worker/provision_description_settlement.py
 @@ -0,0 +1,530 @@

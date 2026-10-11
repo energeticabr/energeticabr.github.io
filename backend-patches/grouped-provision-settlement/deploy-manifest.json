@@ -18,7 +18,7 @@
     "channel_bridge.py": {
       "before": "fea8a5b5697be90e70dea7ce24a5c15803d5f2a0b30d0b4d131335d75e5deed6",
       "mirrorBefore": "ca7df601a7af8d5d6cac5ac60ab7a4504c70428fe434670e5fbd08042012eeca",
-      "after": "4bf0717c4d53b22dd6827392cf85913792614deab76a61146edbce92eb082d55"
+      "after": "c7ec64d90f05e86d4be5ea41f51a7a017e58af77214fadc49d2f4c64bff48b49"
     },
     "worker/provision_description_settlement.py": {
       "before": null,
@@ -31,6 +31,6 @@
       "after": "c6ec210b87065a5009f17573ea8d6ebcbe1c092e0aa04485c05fb75b41b43d1f"
     }
   },
-  "patch": "d944b45bad612dfd65ed8fa061523a71332823d7e78a196facacb755d3e6b894",
-  "archive": "3502eef6531986b207d21ba464fce7ddd56ffb47cfca5de50c91cfc81bd03ac8"
+  "patch": "d4ee10fadc85f02149ee758dec87bfdd3e70eb08c365d7666f739050143412b0",
+  "archive": "f1e7c759ce1b7e9c4901ba935c119936b5b4a5b52292d139b425bc3b9ae4b557"
 }

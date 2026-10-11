@@ -125,6 +125,38 @@ def prepared(engine):
     return state
 
 
+class DescriptionSnapshotCompatibilityTests(unittest.TestCase):
+    def bridge(self):
+        from channel_bridge import ChannelBridge
+        bridge = ChannelBridge.__new__(ChannelBridge)
+        bridge.lock = threading.RLock()
+        bridge._portal_state = lambda identity: ('fake', None)
+        bridge.portal_owners = SimpleNamespace(authorize=lambda *args, **kwargs: None)
+        bridge.engine = SimpleNamespace(sharepoint=Connector(),
+            _pending_provision_due_date=lambda row: date.fromisoformat(row['DATA PREVISTO PGTO'][:10]))
+        bridge.engine.sharepoint.get_pending_payment_provisions = lambda: [child(91)]
+        return bridge
+
+    def test_old_app_keeps_child_ids_while_new_app_explicitly_requests_parent_namespace(self):
+        from unittest.mock import patch
+        bridge = self.bridge()
+        fake_clock = SimpleNamespace(now=lambda zone: SimpleNamespace(date=lambda: date(2026, 10, 11)))
+        with patch('channel_bridge.datetime', fake_clock):
+            legacy = bridge.portal_pending_provision_snapshot({}, allowed_emails=set())['pendingProvisions']
+            self.assertEqual([row['id'] for row in legacy['rows']], ['91'])
+            self.assertNotEqual(legacy.get('sourceKind'), 'provision-description')
+            grouped = bridge.portal_pending_provision_snapshot(
+                {}, allowed_emails=set(), source_kind='provision-description')['pendingProvisions']
+            self.assertEqual([row['id'] for row in grouped['rows']], ['7'])
+            self.assertEqual(grouped['sourceKind'], 'provision-description')
+
+    def test_unknown_snapshot_namespace_is_rejected_without_querying(self):
+        bridge = self.bridge()
+        bridge.engine.sharepoint.get_pending_provision_descriptions = lambda: self.fail('Must not query')
+        with self.assertRaisesRegex(ValueError, 'fonte'):
+            bridge.portal_pending_provision_snapshot({}, allowed_emails=set(), source_kind='unknown')
+
+
 class DescriptionSettlementTests(unittest.TestCase):
     def test_blank_observation_round_trips_production_serializer_and_partial_retry(self):
         from clients import SharePointClient
@@ -257,7 +289,8 @@ class DescriptionSettlementTests(unittest.TestCase):
         fake = SimpleNamespace(lock=threading.RLock(), engine=engine,
                                _portal_state=lambda identity: ('fake', None),
                                portal_owners=SimpleNamespace(authorize=lambda *args, **kwargs: None))
-        return ChannelBridge.portal_pending_provision_snapshot(fake, {'oid': 'fictional'}, allowed_emails=set())
+        return ChannelBridge.portal_pending_provision_snapshot(fake, {'oid': 'fictional'},
+            allowed_emails=set(), source_kind='provision-description')
 
     def test_bridge_keeps_parent_identity_and_confirmed_total(self):
         result = self.bridge(lambda: [group()])
