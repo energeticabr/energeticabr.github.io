@@ -49,6 +49,86 @@ function change(root, name, value) {
   input.dispatchEvent(new root.ownerDocument.defaultView.Event('change', {bubbles:true}));
 }
 
+// Break caught: native date text is localized by iOS instead of the requested numeric format.
+test('date filters show dd/mm/yyyy immediately and keep ISO values for the report', async t => {
+  let finish;
+  const {view,root} = setup(t,{loadSnapshot:()=>new Promise(resolve=>finish=resolve)});
+  const opening=view.open(); await tick();
+  for (const [name,displayed,iso] of [['startDate','01/10/2026','2026-10-01'],['endDate','07/10/2026','2026-10-07']]) {
+    const display=root.querySelector(`[data-date-display="${name}"]`);
+    assert.ok(display,`missing numeric display for ${name}`);
+    assert.equal(display.type,'text'); assert.equal(display.value,displayed);
+    assert.equal(root.querySelector(`[name="${name}"]`).value,iso);
+  }
+  finish(snapshot); await opening;
+  change(root,'endDate','2026-10-05');
+  assert.equal(root.querySelector('[data-date-display=endDate]').value,'05/10/2026');
+  const filters=captureFilteredReport(root).filters;
+  assert.equal(filters.find(filter=>filter.label==='DATA FINAL').value,'05/10/2026');
+  assert.equal(filters.length,6,'display controls must not duplicate exported filters');
+});
+
+// Break caught: visible edits keep stale ISO filters or export old totals before blur.
+test('typing numeric dates updates detail only and invalid dates block stale tables and PDF', async t => {
+  const {view,root,dom}=setup(t); await view.open();
+  const start=root.querySelector('[data-date-display=startDate]');
+  assert.ok(start,'date must have an editable numeric display');
+  for (const value of ['04/10/2026','31/02/2026','10/','2026-10-04']) {
+    start.value=value; start.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+    if(value==='04/10/2026') {
+      assert.equal(root.querySelector('[name=startDate]').value,'2026-10-04');
+      assert.match(root.querySelector('.psp-pending').textContent,/01\/09\/2026/);
+      assert.doesNotMatch(root.querySelector('.psp-details').textContent,/02\/10\/2026|03\/10\/2026/);
+    } else {
+      assert.equal(start.checkValidity(),false);
+      assert.equal(root.querySelectorAll('table').length,0);
+      assert.throws(()=>captureFilteredReport(root));
+    }
+  }
+  start.value='01/10/2026'; start.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.equal(start.checkValidity(),true); assert.equal(root.querySelectorAll('table').length,2);
+  start.value=''; start.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  assert.equal(root.querySelector('[name=startDate]').value,'');
+  assert.match(root.querySelector('.psp-details').textContent,/01\/09\/2026/);
+});
+
+// Break caught: a numeric mobile keyboard cannot type separators or masking jumps the caret.
+test('digits-only keyboard entry inserts date separators and keeps the editing position', async t => {
+  const {view,root,dom}=setup(t); await view.open();
+  const display=root.querySelector('[data-date-display=startDate]');
+  display.value='';
+  for(const digit of '04102026') {
+    const position=display.selectionStart;
+    display.value=display.value.slice(0,position)+digit+display.value.slice(display.selectionEnd);
+    display.setSelectionRange(position+1,position+1);
+    display.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  }
+  assert.equal(display.value,'04/10/2026');
+  assert.equal(display.selectionStart,10);
+  assert.equal(display.checkValidity(),true);
+  assert.equal(root.querySelector('[name=startDate]').value,'2026-10-04');
+  display.value='05/10/2026'; display.setSelectionRange(2,2);
+  display.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  assert.equal(display.selectionStart,2,'editing the day must not move the caret to the year');
+  assert.equal(root.querySelector('[name=startDate]').value,'2026-10-05');
+});
+
+// Break caught: fixing display removes native calendar access or reopening retains invalid edits.
+test('date calendar opens the existing picker and fresh sessions restore numeric defaults', async t => {
+  const {view,root,dom}=setup(t); await view.open();
+  const native=root.querySelector('[name=startDate]'); let opened=0;
+  native.showPicker=()=>{opened++;};
+  const calendar=root.querySelector('[aria-label="Abrir calendário: DATA INICIAL"]');
+  assert.ok(calendar,'numeric date needs a calendar action'); calendar.click(); assert.equal(opened,1);
+  change(root,'startDate','2026-10-05');
+  assert.equal(root.querySelector('[data-date-display=startDate]').value,'05/10/2026');
+  const display=root.querySelector('[data-date-display=startDate]'); display.value='31/02/2026';
+  display.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
+  view.close(); await view.open();
+  assert.equal(display.value,'01/10/2026'); assert.equal(display.checkValidity(),true);
+  assert.equal(root.querySelectorAll('table').length,2);
+});
+
 // Break caught: a wrong default/filter binding includes inactive suppliers or loses historical debt.
 test('local current month and ATIVO defaults keep historical pending debt with two complete tables', async t => {
   const {view,root} = setup(t); await view.open();

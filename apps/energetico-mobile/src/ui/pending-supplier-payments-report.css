@@ -4,6 +4,8 @@
 .psp-close { position:absolute; right:4px; top:2px; z-index:2; display:grid; place-items:center; width:32px; height:28px; min-width:0; min-height:0; border:1px solid #a20000; border-radius:4px; padding:0; color:#a20000; background:white; font:24px/1 Arial,sans-serif; cursor:pointer; }
 .psp-filters { grid-template-columns:84px repeat(2,minmax(94px,1fr)) minmax(65px,.85fr) minmax(115px,1fr) minmax(95px,1.2fr) minmax(70px,1fr); align-items:end; }
 .psp-filter-input { width:100%; min-width:0; box-sizing:border-box; color:#111; background:white; border:1px solid #1c3c7b; border-radius:0; height:27px; padding:2px 3px; font:clamp(9px,1.2vw,14px) Arial,sans-serif; }
+.psp-filters .psp-date { width:100%; }
+.psp-filters .pl-date-display { font:clamp(9px,1.2vw,14px) Arial,sans-serif; }
 .psp-filters .pl-filter-label { white-space:normal; min-height:2.3em; display:grid; align-items:center; }
 /* The overlay already reserves safe areas; leave only the shared arrow rails. */
 .psp-content { box-sizing:border-box; margin-inline:58px; color:#111; font:clamp(11px,1.1vw,15px)/1.4 Arial,sans-serif; }

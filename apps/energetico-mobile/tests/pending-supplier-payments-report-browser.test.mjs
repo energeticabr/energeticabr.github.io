@@ -15,7 +15,7 @@ test('pending supplier report reserves both arrow edges and captures full tables
   const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   try {
     await server.listen();
-    for (const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,top:0,bottom:21}],[844,390,{left:47,right:0,top:0,bottom:21}],[667,375],[1024,768],[1280,800],[1920,1080],[390,844]]) {
+    for (const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,top:0,bottom:21}],[844,390,{left:47,right:0,top:0,bottom:21}],[667,375],[640,360,{left:47,right:47,top:0,bottom:21}],[568,320],[1024,768],[1280,800],[1920,1080],[390,844]]) {
       const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/pending-supplier-payments-report-browser.html`});
       const dom=new JSDOM(stdout); let result;
       try {result=JSON.parse(dom.window.document.documentElement.dataset.layout);} finally {dom.window.close();}
@@ -25,6 +25,14 @@ test('pending supplier report reserves both arrow edges and captures full tables
         assert.equal(result.busy,'true'); assert.equal(result.tables,0); continue;
       }
       assert.equal(result.logoLoaded,true); assert.equal(result.arrows.length,2);
+      assert.deepEqual(result.dateFilters.map(date=>[date.type,date.value,date.iso]),[
+        ['text','01/10/2026','2026-10-01'],['text','07/10/2026','2026-10-07'],
+      ],`${width}px visible filters must not use browser-localized date text`);
+      for(const date of result.dateFilters) {
+        assert.equal(date.visible,true);
+        assert.ok(date.height>=24&&date.height<=28,`${width}px numeric date must stay on one line`);
+        assert.ok(date.textWidth<=date.availableWidth+1,`${width}px numeric date is clipped`);
+      }
       const safeLeft=safeAreaInsets?.left||0,safeRight=safeAreaInsets?.right||0;
       assert.ok(Math.abs(result.dialog.left-Math.max(8,safeLeft))<=1,`${width}px safe-area left edge was not applied`);
       assert.ok(Math.abs(result.dialog.right-(width-Math.max(8,safeRight)))<=1,`${width}px safe-area right edge was not applied`);
