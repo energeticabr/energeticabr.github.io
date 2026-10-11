@@ -106,14 +106,15 @@ export function createChatClient({
   const uploadUrl = new URL(`${apiPrefix}/portal-upload`, baseUrl);
   const transcriptionUrl = new URL(`${apiPrefix}/portal-transcribe`, baseUrl);
 
-  async function signatureEvidence(operation, { documentBlob, fileName = "documento.pdf", recordId, documentId = "", signerName = "", requestId } = {}) {
-    if (!documentBlob || typeof documentBlob.arrayBuffer !== "function") throw new TypeError("PDF inválido para registrar integridade.");
+  async function signatureEvidence(operation, { documentBlob, fileName = "documento.pdf", recordId, documentId = "", signerName = "", requestId, publicVerification = false, capture } = {}) {
+    if (operation !== "capture" && (!documentBlob || typeof documentBlob.arrayBuffer !== "function")) throw new TypeError("PDF inválido para registrar integridade.");
     const token = await acquireToken(tokenProvider);
     const destination = new URL(`${apiPrefix}/portal-signature-evidence`, baseUrl);
     destination.searchParams.set("operation", operation);
     if (operation === "prepare") {
       destination.searchParams.set("document_id", String(documentId));
       destination.searchParams.set("signer_name", String(signerName));
+      if (publicVerification) destination.searchParams.set("public_verification", "true");
     } else {
       if (!/^[a-f0-9]{32}$/.test(String(recordId || ""))) throw new TypeError("Registro de integridade inválido.");
       destination.searchParams.set("record_id", recordId);
@@ -121,9 +122,9 @@ export function createChatClient({
     return request(destination.href, {
       method: "POST", headers: {
         Accept: "application/json", Authorization: `Bearer ${token}`,
-        "Content-Type": "application/pdf", "X-Portal-File-Name": encodeURIComponent(fileName),
+        "Content-Type": operation === "capture" ? "application/json" : "application/pdf", "X-Portal-File-Name": encodeURIComponent(fileName),
         "X-Portal-Message-Id": requestId || newMessageId(),
-      }, body: documentBlob, cache: "no-store", credentials: "omit",
+      }, body: operation === "capture" ? JSON.stringify(capture) : documentBlob, cache: "no-store", credentials: "omit",
     }, async response => {
       const result = await readJson(response);
       if (!response.ok) {
@@ -132,11 +133,18 @@ export function createChatClient({
         throw error;
       }
       if (!/^[a-f0-9]{32}$/.test(String(result?.id || ""))
+        || (operation !== "prepare" && result?.id !== recordId)
         || !Number.isFinite(Date.parse(result?.signedAt))
         || !/^[a-f0-9]{64}$/.test(String(result?.sourceSha256 || ""))
         || (operation === "finalize" && (result.status !== "confirmed" || !/^[a-f0-9]{64}$/.test(String(result.finalSha256 || ""))))
         || (operation === "verify" && typeof result.matches !== "boolean")) {
         throw new Error("O servidor não confirmou o registro de integridade.");
+      }
+      if (operation === "prepare" && publicVerification) {
+        let verification;
+        try { verification = new URL(result.verificationUrl); } catch { throw new Error("O servidor não confirmou o link público da assinatura."); }
+        if (verification.protocol !== "https:" || verification.username || verification.password || verification.search || verification.hash
+          || !new RegExp(`^/assinaturas/${result.id}/[a-f0-9]{64}$`).test(verification.pathname)) throw new Error("Link público da assinatura inválido.");
       }
       return result;
     }, true);
@@ -145,6 +153,7 @@ export function createChatClient({
   const prepareSignatureEvidence = options => signatureEvidence("prepare", options);
   const confirmSignatureEvidence = options => signatureEvidence("finalize", options);
   const verifySignatureEvidence = options => signatureEvidence("verify", options);
+  const captureSignatureEvidence = options => signatureEvidence("capture", options);
 
   async function request(url, options, read, readOnly = false, { retryTransient = false } = {}) {
     for (let attempt = 0; ; attempt++) {
@@ -587,5 +596,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, startRhidPendingValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getDelegatedTasks, getRhidAttendanceReport, startRhidPendingValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, completeDelegatedTask, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

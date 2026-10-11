@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFString, StandardFonts, rgb } from "pdf-lib";
 import { signatureDocumentLayout, signatureLayoutGeometry, signatureRecordLines } from "./signature-document-layout.js";
 
 const DEFAULT_SCALE = 0.5;
@@ -185,6 +185,7 @@ export async function signPdfAttachment({
   signerName = "USUÁRIO",
   signedAt = new Date(),
   integrityId = "",
+  verificationUrl = "",
 } = {}) {
   if (!documentBlob || typeof documentBlob.arrayBuffer !== "function") throw new TypeError("PDF de origem inválido.");
   if (!signatureBlob || typeof signatureBlob.arrayBuffer !== "function") throw new TypeError("Imagem de assinatura inválida.");
@@ -371,19 +372,39 @@ export async function signPdfAttachment({
       end: { x: left + markerWidth - inset, y: bottom + captionHeight },
       color: paymentBorderColor, thickness: 1.2,
     });
-    const rowHeight = (captionHeight - 4) / 4;
+    const verification = verificationUrl ? new URL(verificationUrl) : null;
+    if (verification && (verification.protocol !== "https:" || verification.username || verification.password
+      || verification.search || verification.hash
+      || !new RegExp(`^/assinaturas/${integrityId}/[a-f0-9]{64}$`).test(verification.pathname))) throw new TypeError("Link de verificação inválido.");
+    const buttonHeight = verification ? Math.min(18, captionHeight * 0.28) : 0;
+    const labels = verification ? [recordLines[0], timeLabel, nameLabel] : [recordLines[1], recordLines[0], timeLabel, nameLabel];
+    const rowHeight = (captionHeight - 4 - buttonHeight) / labels.length;
     const rowSize = Math.min(markerWidth / 20, rowHeight * 0.85);
-    for (const [index, label] of [recordLines[1], recordLines[0], timeLabel, nameLabel].entries()) {
+    for (const [index, label] of labels.entries()) {
       const size = Math.min(rowSize,
         (markerWidth - inset * 2) / Math.max(1, recordFont.widthOfTextAtSize(label, 1)));
       page.drawText(label, {
         x: left + (markerWidth - recordFont.widthOfTextAtSize(label, size)) / 2,
-        y: bottom + 2 + index * rowHeight + (rowHeight - size) / 2,
+        y: bottom + 2 + buttonHeight + index * rowHeight + (rowHeight - size) / 2,
         size, font: recordFont, color: captionColor,
       });
     }
     const existingKeywords = pdf.getKeywords();
     pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
+    if (verification) {
+      const buttonX = left + inset, buttonY = bottom + 1;
+      const buttonWidth = markerWidth - inset * 2;
+      page.drawRectangle({ x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight,
+        color: rgb(0.04, 0.35, 0.42) });
+      const label = "VERIFICAR ASSINATURA";
+      const labelSize = Math.min(8.5, buttonHeight * 0.58, (buttonWidth - 4) / recordFont.widthOfTextAtSize(label, 1));
+      page.drawText(label, { x: buttonX + (buttonWidth - recordFont.widthOfTextAtSize(label, labelSize)) / 2,
+        y: buttonY + (buttonHeight - labelSize) / 2 + 1, size: labelSize, font: recordFont, color: rgb(1, 1, 1) });
+      const link = pdf.context.register(pdf.context.obj({ Type: "Annot", Subtype: "Link",
+        Rect: [buttonX, buttonY, buttonX + buttonWidth, buttonY + buttonHeight], Border: [0, 0, 0],
+        A: { Type: "Action", S: "URI", URI: PDFString.of(verification.href) } }));
+      page.node.addAnnot(link);
+    }
   }
 
   if (!cardCaption) {

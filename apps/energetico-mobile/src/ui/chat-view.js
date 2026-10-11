@@ -18,6 +18,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
+import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
@@ -2141,7 +2142,8 @@ function signaturePadMarkup(error = "") {
         <button class="chat-date-picker__close" type="button" data-action="cancel-signature-pad" aria-label="Fechar assinatura" title="Fechar assinatura">×</button>
         <h2 id="signature-pad-title">Assinar documento</h2>
       </div>
-      <p>Desenhe sua assinatura usando o dedo. Somente o traço será enviado; o fundo branco será removido.</p>
+      <p>Desenhe sua assinatura com a caneta ou o dedo. O fundo branco será removido.</p>
+      <p class="note">O app registra os movimentos e tempos disponíveis, protegidos na auditoria. O PDF terá um botão público para consultar nome, horários e hashes, sem divulgar os movimentos detalhados.</p>
       <div class="chat-signature-pad__surface">
         <canvas data-role="signature-pad" width="900" height="360" aria-label="Área para desenhar a assinatura"></canvas>
         <span class="chat-signature-pad__guide" aria-hidden="true">Desenhe aqui</span>
@@ -2539,6 +2541,7 @@ export function commandFromTarget(target) {
 }
 
 export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
+  const signatureTrace = observeSignatureTrace(root);
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
   const handlers = new Map();
   let messageKey = "";
@@ -3612,6 +3615,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function confirmSignaturePad() {
+    const capturedTrace = signatureTrace.snapshot();
     const output = signatureFile();
     if (!output) {
       signaturePadError = "Desenhe sua assinatura antes de continuar.";
@@ -3637,6 +3641,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         ? new FileCtor([blob], "assinatura-desenhada.png", { type: "image/png", lastModified: Date.now() })
         : Object.assign(blob, { name: "assinatura-desenhada.png", lastModified: Date.now() });
       const fileId = signaturePadTargetFileId;
+      Object.defineProperty(file, "signatureTrace", { value: capturedTrace, configurable: true });
       signaturePadListenersCleanup?.();
       signaturePadOpen = false;
       signaturePadTargetFileId = "";
@@ -5309,6 +5314,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return () => handlers.get(type)?.delete(handler);
     },
     destroy() {
+      signatureTrace.destroy();
       root.removeEventListener("click", click);
       root.removeEventListener("change", change);
       root.removeEventListener("beforeinput", beforeInput);
@@ -5391,8 +5397,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       signaturePadListenersCleanup?.();
       root.innerHTML = "";
     },
-    pauseSignaturePad,
-    openSignaturePad,
+    pauseSignaturePad() { signatureTrace.pause(); return pauseSignaturePad(); },
+    openSignaturePad(fileId) { if (!signaturePadOpen) signatureTrace.reset(); return openSignaturePad(fileId); },
     cancelSignaturePad() {
       const cancel = root.querySelector('[data-action="cancel-signature-pad"]');
       cancel?.click();
