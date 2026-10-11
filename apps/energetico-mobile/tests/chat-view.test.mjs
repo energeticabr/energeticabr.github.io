@@ -2153,6 +2153,74 @@ test("menu de RH reserva a coluna direita para galerias e remove apenas o avatar
   assert.ok(article.indexOf("EFETUAR CADASTROS") < article.indexOf("GALERIA IDFOLHA"));
 });
 
+test("grouped provisions display description IDs, all children and exact backend totals in the printable report", async () => {
+  const { captureFilteredReport } = await import("../src/ui/report-print.js");
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {
+    due: true, sourceKind: "provision-description", rows: [{
+      id: "306", supplier: "COFER", product: "CIMENTO · AREIA", branch: "XAVANTE", property: "A · B",
+      dueDate: "2026-10-12", total: "9007199254740993.21", totalDisplay: "R$ 9.007.199.254.740.993,21",
+      childCount: 3, pendingChildIds: ["91", "92"], sourceKind: "provision-description",
+    }],
+  } })));
+  const root = dom.window.document.querySelector(".chat-pending-provisions--payments");
+  const row = root.querySelector('[role="listitem"][data-payment-id="306"]');
+  assert.equal(row.querySelector('[data-field="total"] strong').textContent, "R$ 9.007.199.254.740.993,21");
+  assert.match(row.textContent, /Descritivo\s*306/);
+  assert.match(row.textContent, /3\s*(?:filhos|itens)/i);
+  assert.match(row.querySelector('[data-action="settle-pending-provision"]').getAttribute("aria-label"), /descritivo.*306/i);
+  const printed = captureFilteredReport(root).pages.flatMap(page => page.blocks)
+    .flatMap(block => block.runs || []).map(run => run.text).join(" ");
+  assert.match(printed, /Descritivo\s*306/);
+  assert.match(printed, /3\s*(?:filhos|itens)/i);
+  assert.match(printed, /R\$ 9\.007\.199\.254\.740\.993,21/);
+  dom.window.close();
+});
+
+function groupedProvisionsWithBlockedAmounts() {
+  const base = { supplier: "COFER", product: "CIMENTO", branch: "XAVANTE", property: "A", dueDate: "2026-10-12",
+    childCount: 3, pendingChildIds: ["91", "92"], sourceKind: "provision-description" };
+  return { due: true, sourceKind: "provision-description", totalsUnavailable: true, rows: [
+    ...["306", "307", "308"].map(id => ({ ...base, id, total: null, totalDisplay: "—", settlementBlocked: true,
+      amountError: `Não foi possível conferir: valor inválido no filho de ${id}.` })),
+    ...Array.from({ length: 13 }, (_, index) => ({ ...base, id: String(400 + index), total: "1250.00", totalDisplay: "R$ 1.250,00" })),
+  ] };
+}
+
+test("grouped provisions blocked popup explains each invalid amount and disables only its settlement check", () => {
+  const snapshot = groupedProvisionsWithBlockedAmounts();
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: snapshot,
+    pendingProvisionExpandedPaymentId: "306",
+    pendingProvisionAttachments: { "306": { status: "available", items: [{ fileName: "parent.pdf", mimeType: "application/pdf" }] } },
+  })));
+  const root = dom.window.document.querySelector(".chat-pending-provisions--payments");
+  assert.equal(root.querySelectorAll('[role="listitem"]').length, 16);
+  assert.equal(root.querySelectorAll('[data-action="settle-pending-provision"]:disabled').length, 3);
+  assert.equal(root.querySelectorAll('[data-action="settle-pending-provision"]:enabled').length, 13);
+  for (const id of ["306", "307", "308"]) {
+    const row = root.querySelector(`[role="listitem"][data-payment-id="${id}"]`);
+    assert.ok(row.textContent.includes(`Não foi possível conferir: valor inválido no filho de ${id}.`));
+    assert.equal(row.querySelector('[data-field="total"] strong').textContent, "—");
+    assert.equal(row.querySelector('[data-action="edit-pending-provision-due-date"]').disabled, false);
+    assert.equal(row.querySelector('[data-action="toggle-pending-provision-attachments"]').disabled, false);
+  }
+  assert.equal(root.querySelector('[data-action="open-pending-provision-attachment"]').disabled, false);
+  assert.equal(root.querySelector('[data-action="print-pending-provisions"]').disabled, false);
+  dom.window.close();
+});
+
+test("grouped provisions blocked report prints unknown amounts as dashes while retaining all valid groups", async () => {
+  const { captureFilteredReport } = await import("../src/ui/report-print.js");
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: groupedProvisionsWithBlockedAmounts() })));
+  const root = dom.window.document.querySelector(".chat-pending-provisions--payments");
+  const printed = captureFilteredReport(root).pages.flatMap(page => page.blocks)
+    .flatMap(block => block.runs || []).map(run => run.text).join(" ");
+  assert.equal((printed.match(/Valor\s+—/g) || []).length, 3);
+  assert.equal((printed.match(/R\$ 1\.250,00/g) || []).length, 13);
+  assert.doesNotMatch(printed, /R\$\s*0,00/);
+  for (const id of ["306", "307", "308"]) assert.ok(printed.includes(`valor inválido no filho de ${id}.`));
+  dom.window.close();
+});
+
 test("popup de vencimentos apresenta data e valor destacados e os dados em linhas separadas", t => {
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T15:00:00Z") });
   const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: {

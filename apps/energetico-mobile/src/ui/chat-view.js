@@ -1954,13 +1954,14 @@ function pendingProvisionsMarkup(
     const row = rows.find(item => String(item?.id ?? "").trim() === String(dateEditPaymentId));
     if (!row) return "";
     const paymentId = String(row.id);
+    const grouped = snapshot.sourceKind === "provision-description" || row.sourceKind === "provision-description";
     return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provision-date-edit" data-pending-provisions-dialog>
       <div class="chat-confirmation chat-pending-provision-date-edit" role="dialog" aria-modal="true" aria-labelledby="pending-provision-date-edit-title">
         <div class="chat-date-picker__header chat-pending-provisions__header">
           <button class="chat-date-picker__close" type="button" data-action="cancel-pending-provision-date-edit" data-immediate-action="true" aria-label="Voltar às provisões pendentes" title="Voltar às provisões pendentes">‹</button>
           <h2 id="pending-provision-date-edit-title">Editar vencimento da provisão</h2>
         </div>
-        <p><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong> · ID ${escapeHtml(paymentId)}</p>
+        <p><strong>${escapeHtml(pendingProvisionValue(row.supplier || "Fornecedor não informado"))}</strong> · ${grouped ? "Descritivo" : "ID"} ${escapeHtml(paymentId)}</p>
         <label class="chat-pending-provision-date-edit__label" for="pending-provision-due-date">Nova data de vencimento</label>
         <input id="pending-provision-due-date" class="chat-date-picker__input" type="date" data-role="pending-provision-due-date" aria-label="Nova data de vencimento" value="${escapeHtml(provisionDateKey(dateEditValue || row.dueDate))}"${dateEditBusy ? " disabled" : ""}>
         ${dateEditError ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(dateEditError)}</p>` : ""}
@@ -1981,16 +1982,20 @@ function pendingProvisionsMarkup(
         <div class="chat-pending-provisions__title"><h2 id="pending-provisions-title">Provisões de pagamento pendentes</h2><p>Vencidas ou com vencimento em até 2 dias (${rows.length}).</p></div>
       </div>
       ${!rows.length ? '<p class="chat-pending-provisions__empty" role="status">Nenhuma provisão vencida ou com vencimento em até 2 dias.</p>' : ""}
-      ${snapshot.upcomingUnavailable || snapshot.totalsUnavailable ? '<p class="chat-pending-provision__error" role="status">Não foi possível conferir todos os valores e vencimentos. Valores não conferidos aparecem como —.</p>' : ""}
+      ${snapshot.upcomingUnavailable || snapshot.totalsUnavailable ? `<p class="chat-pending-provision__error" role="status">${snapshot.sourceKind === "provision-description" && !snapshot.upcomingUnavailable
+        ? "Há descritivos com valores não conferidos. Valores desconhecidos aparecem como —."
+        : "Não foi possível conferir todos os valores e vencimentos. Valores não conferidos aparecem como —."}</p>` : ""}
       <div class="chat-pending-provisions__list" role="list" aria-label="Provisões vencidas ou com vencimento em até 2 dias">
         ${rows.map(row => {
           const paymentId = String(row.id ?? "").trim();
+          const grouped = snapshot.sourceKind === "provision-description" || row.sourceKind === "provision-description";
+          const groupDetails = grouped ? `<div class="chat-pending-provision__field" data-field="descriptionId"><span>Descritivo</span><strong>${escapeHtml(paymentId)}</strong></div><div class="chat-pending-provision__field" data-field="childCount"><span>Itens vinculados</span><strong>${escapeHtml(row.childCount)} ${row.childCount === 1 ? "item" : "itens"}</strong></div>` : "";
           const timing = provisionDueState(row.dueDate);
           const attachmentState = attachmentsByPayment?.[paymentId] || { status: "loading", items: [] };
           const expanded = Boolean(paymentId) && expandedPaymentId === paymentId;
           const listId = `pending-provision-attachments-${paymentId}`;
           const edit = `<button class="chat-pending-provision__edit chat-pending-provision__edit--due-date" type="button" data-action="edit-pending-provision-due-date" data-payment-id="${escapeHtml(paymentId)}" aria-label="Editar vencimento de ${escapeHtml(row.supplier || paymentId)}" title="Editar data de vencimento"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✏️</button>`;
-          const check = `<button class="chat-pending-provision__settle" type="button" data-action="settle-pending-provision" data-payment-id="${escapeHtml(paymentId)}" aria-label="Iniciar baixa do pagamento ${escapeHtml(row.supplier || paymentId)}${paymentId ? ` (ID ${escapeHtml(paymentId)})` : ""}" title="Iniciar baixa deste pagamento"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✅</button>`;
+          const check = `<button class="chat-pending-provision__settle" type="button" data-action="settle-pending-provision" data-payment-id="${escapeHtml(paymentId)}" aria-label="Iniciar baixa do ${grouped ? "descritivo" : "pagamento"} ${escapeHtml(row.supplier || paymentId)}${paymentId ? ` (ID ${escapeHtml(paymentId)})` : ""}" title="Iniciar baixa ${grouped ? "deste descritivo" : "deste pagamento"}"${!paymentId || row.settlementBlocked === true || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✅</button>`;
           const branchId = `pending-provision-branch-${paymentId}`;
           const propertyId = `pending-provision-property-${paymentId}`;
           const controls = `${branchId} ${propertyId}${attachmentState.status === "available" ? ` ${listId}` : ""}`;
@@ -2005,9 +2010,10 @@ function pendingProvisionsMarkup(
           return `<article class="chat-pending-provision chat-pending-provision--payment chat-pending-provision--${timing.kind}" role="listitem" data-payment-id="${escapeHtml(paymentId)}">
             <div class="chat-pending-provision__amounts">
               <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
-              <div class="chat-pending-provision__total" data-field="total"><span>Valor</span><strong>${escapeHtml(pendingProvisionAmount(row.total))}</strong></div>
+              <div class="chat-pending-provision__total" data-field="total"><span>Valor</span><strong>${escapeHtml(grouped ? row.totalDisplay || "—" : pendingProvisionAmount(row.total))}</strong></div>
             </div>
-            <div class="chat-pending-provision__supplier" data-field="supplier"><div class="chat-pending-provision__supplier-info"><div class="chat-pending-provision__field"><span>Fornecedor</span><strong>${escapeHtml(row.supplier || "Fornecedor não informado")}</strong></div><div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.product))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${arrow}</div></div>
+            <div class="chat-pending-provision__supplier" data-field="supplier"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field"><span>Fornecedor</span><strong>${escapeHtml(row.supplier || "Fornecedor não informado")}</strong></div><div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.product))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${arrow}</div></div>
+            ${grouped && row.amountError ? `<p class="chat-pending-provision__error" data-field="amountError" role="status">Baixa bloqueada: ${escapeHtml(row.amountError)}</p>` : ""}
             ${[["branch", "Filial", row.branch], ["property", "Imóvel", row.property]].map(([name, label, value]) => `<div class="chat-pending-provision__detail" data-field="${name}" id="${escapeHtml(name === "branch" ? branchId : propertyId)}"${expanded ? "" : " hidden"}>${pendingProvisionIcon(name)}<div class="chat-pending-provision__field"><span>${label}</span><strong>${escapeHtml(pendingProvisionValue(value))}</strong></div></div>`).join("")}
             ${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
         }).join("")}

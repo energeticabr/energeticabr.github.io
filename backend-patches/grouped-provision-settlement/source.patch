@@ -1,0 +1,1251 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -16,10 +16,12 @@
+     from .payment_provision_flow import PaymentProvisionFlow, PROVISION_STAGES, PROVISION_STATE_KEYS
+     from .launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from .document_item_lock import document_item_lock
++    from .provision_description_settlement import ProvisionDescriptionSettlement, group_options
+ except ImportError:
+     from payment_provision_flow import PaymentProvisionFlow, PROVISION_STAGES, PROVISION_STATE_KEYS
+     from launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from document_item_lock import document_item_lock
++    from provision_description_settlement import ProvisionDescriptionSettlement, group_options
+ from calendar import monthrange
+ from pathlib import Path
+ from datetime import date, datetime, timedelta, timezone
+@@ -782,7 +784,7 @@
+ 
+ 
+ 
+-class WorkflowEngine(PaymentProvisionFlow):
++class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+     def __init__(
+         self,
+         config: dict,
+@@ -2662,7 +2664,7 @@
+         if state.get("flow") == "new_quotation_edit":
+             return self.config["sharepoint"]["new_quotation_edit_flow"]
+         if state.get("flow") == "payment_settlement":
+-            return self.config["sharepoint"]["payment_settlement_flow"]
++            return self._description_flow_config(state, self.config["sharepoint"]["payment_settlement_flow"])
+         if state.get("flow") == "payment_provision_edit":
+             return self.config["sharepoint"]["payment_provision_edit_flow"]
+         if state.get("flow") == "launch":
+@@ -6530,7 +6532,8 @@
+     def _pending_provisions(self) -> list[dict]:
+         """Retorna todas as provisões de pagamento ainda pendentes."""
+         try:
+-            return self.sharepoint.get_pending_payment_provisions()
++            reader = getattr(self.sharepoint, "get_pending_provision_descriptions", None)
++            return reader() if callable(reader) else self.sharepoint.get_pending_payment_provisions()
+         except Exception:
+             return []
+ 
+@@ -7128,6 +7131,13 @@
+     ) -> None:
+         lines = [f"💳 PROVISÕES PGTO — {category}"]
+         for row in rows:
++            if row.get("sourceKind") == "provision-description":
++                children = row.get("CHILDREN") or []
++                lines.append(f"DESCRITIVO {row['Id']} | {row.get('DATA PREVISTO PGTO') or '—'} | "
++                             f"{row.get('FORNECEDOR') or '—'} | {len(children)} provisão(ões) | "
++                             f"TOTAL {row['totalDisplay']}" +
++                             (f" | {row.get('amountError') or 'Valor inválido; baixa bloqueada.'}" if row.get('settlementBlocked') else ""))
++                continue
+             lines.append(
+                 "{due} | {branch} | {property} | {supplier} | {product} | "
+                 "QTD {qty} | UNIT {unit} | FRETE {freight} | TOTAL {total}".format(
+@@ -7154,7 +7164,8 @@
+             else "A VENCER"
+         )
+         try:
+-            rows = self.sharepoint.get_pending_payment_provisions()
++            reader = getattr(self.sharepoint, "get_pending_provision_descriptions", None)
++            rows = reader() if callable(reader) else self.sharepoint.get_pending_payment_provisions()
+         except AttributeError:
+             rows = []
+             self._send_text(
+@@ -7167,6 +7178,8 @@
+                 state,
+                 "⚠️ NÃO FOI POSSÍVEL CONSULTAR AS PROVISÕES PENDENTES AGORA. TENTE NOVAMENTE.",
+             )
++            self._send_pending_provisions_menu(state)
++            return {"status": "pending_provisions_unavailable", "batch_id": state["batch_id"]}
+ 
+         filtered = []
+         for item in rows:
+@@ -9514,6 +9527,7 @@
+             self._new_submission_identity(state)
+             state["navigation_history"] = []
+         state["flow"] = selected["flow"]
++        state.pop("provision_description", None)
+         state.pop("attendance_rhid_recommendation", None)
+         state["current_flow_title"] = str(
+             selected.get("title") or selected["flow"]
+@@ -11076,6 +11090,8 @@
+         target_field = flow.get("target_item_field")
+         if state.get("flow") == "payment_settlement":
+             target_field = target_field or "ID PROVISÃO"
++            if state.get("provision_description") and not state.get("_description_child_commit"):
++                return int(state["provision_description"]["parent_id"]), "DESCRITIVOPROVISAO"
+         if not target_field:
+             return None
+         raw_item_id = (state.get("fields") or {}).get(target_field)
+@@ -19042,7 +19058,10 @@
+     def _selection_options(self, state: dict, step: dict) -> list[dict]:
+         step = self._construction_diary_stage_terminal_state(state, step)
+         step = self._multi_selection_terminal_state(state, step)
+-        if (
++        if (state.get("flow") == "payment_settlement" and step.get("key") == "provisao_para_baixa"
++                and callable(getattr(self.sharepoint, "get_pending_provision_descriptions", None))):
++            options = group_options(self.sharepoint.get_pending_provision_descriptions())
++        elif (
+             state.get("flow")
+             in {"construction_diary_create", "construction_diary_fill"}
+             and step.get("key") == "diario_obra_pendente"
+@@ -20651,6 +20670,9 @@
+             )
+             if blank_review is not None:
+                 return blank_review
++            description_result = self._description_after_fields(state, etag)
++            if description_result is not None:
++                return description_result
+             state["stage"] = "summarizing"
+             etag = self._save(state, etag)
+             return self._summarize_and_confirm(state, etag)
+@@ -21627,6 +21649,10 @@
+             )
+ 
+         self._apply_selected_option(state, step, selected)
++        if (state.get("flow") == "payment_settlement" and step.get("key") == "provisao_para_baixa"
++                and str(selected.get("id") or "").startswith("provision_description:")):
++            source = self.sharepoint.get_provision_description(selected["value"])
++            self._description_start(state, source)
+         if (
+             state.get("flow") == "attendance_demonstrative_closure"
+             and step["key"] == "demonstrativo_etapa_encerramento"
+@@ -27688,6 +27714,8 @@
+         return {"status": "flow_summary", "batch_id": state["batch_id"]}
+ 
+     def _summary_rows(self, state: dict) -> list[dict]:
++        if state.get("flow") == "payment_settlement" and state.get("provision_description"):
++            return self._description_summary_rows(state)
+         if state.get("flow") == "payment" and len(state.get("provision_lines") or []) > 1:
+             return self._provision_summary_rows(state)
+         if state.get("flow") == "launch" and state.get("launch_lines"):
+@@ -28085,6 +28113,9 @@
+         return card
+ 
+     def _summarize_and_confirm(self, state: dict, etag: str | None) -> dict:
++        description = state.get('provision_description') or {}
++        for key in ('editing_phase', 'editing_index', 'editing_common'):
++            description.pop(key, None)
+         if self._needs_multi_launch_grouping_supplier(state):
+             return self._prompt_multi_launch_grouping_supplier(state, etag)
+         duplicate_result = self._prevent_flow_duplicate(state, etag)
+@@ -29488,6 +29519,9 @@
+         }
+ 
+     def _prompt_edit_field(self, state: dict, etag: str | None) -> dict:
++        description = state.get('provision_description') or {}
++        if description.get('prepared') and description.get('editing_phase') != 'field':
++            return self._prompt_description_edit_choice(state, etag)
+         self._migrate_supplier_employment_steps(state)
+         if (
+             state.get("flow") == "launch"
+@@ -29496,7 +29530,7 @@
+         ):
+             return self._prompt_launch_line_edit_choice(state, etag)
+         state["stage"] = "editing_field_choice"
+-        state["options"] = self._editable_options(state)
++        state["options"] = self._description_edit_field_options(state, self._editable_options(state))
+         if (
+             state.get("flow") == "attendance_validation"
+             and self._pending_attendance_daily_payment(state.get("fields", {}))
+@@ -29525,11 +29559,12 @@
+                 },
+             )
+         self._send_options(state, self._edit_step(), state["options"])
+-        self._save(state, etag)
++        etag = self._save(state, etag)
+         return {
+             "status": "awaiting_edit_field",
+             "option_count": len(state["options"]),
+             "batch_id": state["batch_id"],
++            "etag": etag,
+         }
+ 
+     @staticmethod
+@@ -29922,6 +29957,8 @@
+     def _handle_edit_field_reply(
+         self, event: dict, state: dict, etag: str | None
+     ) -> dict:
++        if (state.get('provision_description') or {}).get('editing_phase') == 'choose':
++            return self._handle_description_edit_choice(event, state, etag)
+         self._migrate_supplier_employment_steps(state)
+         raw_reply = event.get("reply_id") or event.get("text") or ""
+         self._mark_processed(state, event["message_id"])
+@@ -32461,9 +32498,11 @@
+         return self._notify_completed(state, etag)
+ 
+     def _commit_payment_settlement(
+-        self, state: dict, etag: str | None, flow: dict
++        self, state: dict, etag: str | None, flow: dict, *, on_prepared=None
+     ) -> dict:
+         """Baixa a provisão e, quando solicitado, cria pedido e lançamento."""
++        if state.get("provision_description"):
++            return self._description_commit(state, etag, flow)
+         try:
+             context = self._context(state)
+             try:
+@@ -32504,6 +32543,8 @@
+             required_update["QTD"] = _decimal_storage(quantity)
+             required_update["VALOR TOTAL"] = _decimal_storage(unit_value)
+             required_update["FRETE"] = _decimal_storage(freight)
++            if state.get("_description_child_commit"):
++                required_update["OBS"] = context.get("OBS")
+ 
+             create_launch_requested = normalize_text(
+                 str(context.get("submeter_lancamentos", ""))
+@@ -32642,11 +32683,16 @@
+             # A provisão só muda para PAGO depois de todos os registros opcionais
+             # e anexos terem sido criados. update_item não dispara MERGE se os
+             # três valores já forem iguais, tornando a repetição segura.
+-            self.sharepoint.update_item(
+-                provision_id,
+-                required_update,
+-                target_list=flow["target_list"],
+-            )
++            if state.get("_description_child_commit"):
++                if on_prepared:
++                    on_prepared(required_update, {
++                        "item_id": provision_id, "related_item": pending_item,
++                        "launch_item": launch_item, "attachment_names": attachment_names,
++                    })
++                self.sharepoint.update_item_with_etag(provision_id, required_update,
++                    state["_description_child_etag"], target_list=flow["target_list"])
++            else:
++                self.sharepoint.update_item(provision_id, required_update, target_list=flow["target_list"])
+             verification = self.sharepoint.verify_item(
+                 provision_id,
+                 required_update,
+@@ -32654,6 +32700,8 @@
+                 target_list=flow["target_list"],
+             )
+         except Exception as exc:
++            if state.get("_description_child_commit"):
++                raise
+             return self._submission_failed(state, etag, exc)
+ 
+         state["sharepoint"] = {
+@@ -32664,6 +32712,8 @@
+             "verified": verification,
+             "recorded_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
+         }
++        if state.get("_description_child_commit"):
++            return state["sharepoint"]
+         state["stage"] = "notifying"
+         etag = self._save(state, etag)
+         return self._notify_completed(state, etag)
+@@ -33230,7 +33280,10 @@
+             "completion_verb", "gravado"
+         )
+         line_count = len(state.get("sharepoint", {}).get("line_items", []))
+-        if line_count > 1 and state.get("flow") == "payment":
++        if state.get("flow") == "payment_settlement" and state.get("provision_description"):
++            notice = (f"Pagamento agendado baixado na base de dados DESCRITIVOPROVISAO "
++                      f"às {recorded_at:%H:%M}.")
++        elif line_count > 1 and state.get("flow") == "payment":
+             notice = (f"Provisão de pagamento com {line_count} linhas gravada na base de dados "
+                       f"{flow['target_list']} às {recorded_at:%H:%M}.")
+         elif line_count > 1:
+@@ -33302,6 +33355,7 @@
+     def _record_labels(target_list: object) -> tuple[str, str]:
+         normalized = normalize_text(str(target_list or ""))
+         labels = {
++            "descritivoprovisao": ("DESCRITIVO DE PROVISÃO", "DESCRITIVOS DE PROVISÃO"),
+             "lancamentos": ("LANÇAMENTO", "LANÇAMENTOS"),
+             "notaspendentes": ("PEDIDO", "PEDIDOS"),
+             "diario de obras": ("DIÁRIO DE OBRAS", "DIÁRIOS DE OBRAS"),
+@@ -33351,6 +33405,14 @@
+     ) -> list[str]:
+         sharepoint = state.get("sharepoint", {})
+         records = []
++        if state.get("provision_description"):
++            records.append({"item_id": sharepoint.get("item_id"), "target_list": "DESCRITIVOPROVISAO"})
++            for child in sharepoint.get("line_items") or []:
++                records.append({"item_id": child.get("item_id"), "target_list": "PROVISÃO PGTOS"})
++                for key in ("related_item", "launch_item"):
++                    if child.get(key):
++                        records.append(child[key])
++            return self._identifier_lines_from_records(records)
+ 
+         primary_items = sharepoint.get("line_items") or []
+         if primary_items:
+--- a/worker/clients.py
++++ b/worker/clients.py
+@@ -47,6 +47,10 @@
+ HTTP_TIMEOUT = (10, 120)
+ SAO_PAULO_TZ = ZoneInfo("America/Sao_Paulo")
+ LEGACY_SHAREPOINT_FIELD_ALIASES = {
++    # Canonical payment dates used by the parent settlement ETag read. These
++    # aliases are applied only when the internal name exists in live metadata.
++    ("descritivoprovisao", "data previsto pgto"): "DATAPREVISTOPGTO",
++    ("descritivoprovisao", "data pgto efetuado"): "DATAPGTOEFETUADO",
+     (
+         "diário de obras",
+         "situação estoque",
+@@ -2071,6 +2075,22 @@
+             if numeric_id(row.get(notes_internal["Id"])) not in grouped_ids
+         ]
+ 
++    def get_pending_provision_descriptions(self) -> list[dict]:
++        """Read complete pending groups; invalid amounts remain visibly blocked."""
++        try:
++            from .provision_description_query import ProvisionDescriptionQuery
++        except ImportError:  # Compatibilidade com o empacotamento legado da OCI.
++            from provision_description_query import ProvisionDescriptionQuery
++        return ProvisionDescriptionQuery(self).get_pending_provision_descriptions()
++
++    def get_provision_description(self, parent_id) -> dict:
++        """Read a fresh complete parent group, including fully paid retry groups."""
++        try:
++            from .provision_description_query import ProvisionDescriptionQuery
++        except ImportError:  # Compatibilidade com o empacotamento legado da OCI.
++            from provision_description_query import ProvisionDescriptionQuery
++        return ProvisionDescriptionQuery(self).get_provision_description(parent_id)
++
+     def get_pending_payment_provisions(self) -> list[dict]:
+         """Lê todas as provisões ainda pendentes, ordenadas pelo vencimento.
+ 
+--- a/worker/provision_alerts.py
++++ b/worker/provision_alerts.py
+@@ -406,16 +406,24 @@
+             qty = _decimal(source.get("QTD")) or Decimal("0")
+             freight = _decimal(source.get("FRETE")) or Decimal("0")
+             total = qty * unit + freight
++            grouped = source.get("sourceKind") == "provision-description"
++            if grouped:
++                total = _decimal(source.get("VALOR TOTAL DESCRITIVO"))
++                if total is None and not source.get("settlementBlocked"):
++                    raise ValueError("Somatório do descritivo não confirmado")
++                children = source.get("CHILDREN") or []
+             prepared_rows.append(
+                 {
+                     "filial": str(source.get("FILIAL") or "—"),
+-                    "imovel": str(source.get("IMOVEL") or "—"),
+-                    "fornecedor": str(source.get("FORNECEDOR") or "—"),
+-                    "produto": str(source.get("PRODUTO") or "—"),
+-                    "qtd": _quantity(source.get("QTD")),
+-                    "unitario": _currency(unit),
+-                    "frete": _currency(freight),
+-                    "total": _currency(total),
++                    "imovel": (" / ".join(dict.fromkeys(str(item.get("IMOVEL") or "—") for item in children))
++                               if grouped else str(source.get("IMOVEL") or "—")),
++                    "fornecedor": (f"DESCRITIVO {source['Id']}\n" if grouped else "") + str(source.get("FORNECEDOR") or "—"),
++                    "produto": (" / ".join(dict.fromkeys(str(item.get("PRODUTO") or "—") for item in children))
++                                if grouped else str(source.get("PRODUTO") or "—")),
++                    "qtd": (f"{len(children)} itens" if grouped else _quantity(source.get("QTD"))),
++                    "unitario": "—" if grouped else _currency(unit),
++                    "frete": "Incluso" if grouped else _currency(freight),
++                    "total": "— (valor inválido)" if grouped and source.get("settlementBlocked") else _currency(total),
+                     "vencimento": due.strftime("%d/%m/%Y"),
+                     "due_date": due,
+                 }
+--- a/channel_bridge.py
++++ b/channel_bridge.py
+@@ -1572,7 +1572,7 @@
+             job["completedAt"] = datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat()
+ 
+     def portal_pending_provision_snapshot(
+-        self, identity: dict, *, allowed_emails: set[str],
++        self, identity: dict, *, allowed_emails: set[str], source_kind: str | None = None,
+     ) -> dict:
+         """Retorna a lista curta de provisões vencidas ou vencendo hoje.
+ 
+@@ -1580,12 +1580,26 @@
+         abrir o aviso de pendências ao iniciar. O fluxo normal de Pendências
+         continua sendo responsável por gerar o relatório completo.
+         """
++        if source_kind not in (None, "provision-description"):
++            raise ValueError("A fonte de provisões solicitada não é permitida.")
+         with self.lock:
+             key, state = self._portal_state(identity)
+             self.portal_owners.authorize(
+                 key, identity, state_exists=bool(state), bind=bool(state), allowed_emails=allowed_emails,
+             )
+             today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
++            group_reader = getattr(self.engine.sharepoint, "get_pending_provision_descriptions", None)
++            if source_kind == "provision-description":
++                if not callable(group_reader):
++                    raise RuntimeError("A consulta de descritivos não está disponível.")
++                try:
++                    from worker.provision_description_settlement import group_snapshot
++                except ImportError:
++                    from provision_description_settlement import group_snapshot
++                # The complete grouped query is authoritative. Incomplete
++                # reads must remain errors, not a successful empty reminder.
++                return {"status": "processed", "messages": [],
++                        "pendingProvisions": group_snapshot(group_reader(), today)}
+             try:
+                 source_rows = self.engine.sharepoint.get_pending_payment_provisions()
+             except Exception:
+@@ -3071,6 +3085,7 @@
+                     result = self.bridge.portal_pending_provision_snapshot(
+                         identity,
+                         allowed_emails=self.portal_authenticator.allowed_emails,
++                        source_kind=body.get("sourceKind"),
+                     )
+                 elif action == "rhid_attendance_report":
+                     result = self.bridge.portal_rhid_attendance_report(
+--- /dev/null
++++ b/worker/provision_description_settlement.py
+@@ -0,0 +1,530 @@
++"""Read contracts and durable preparation/settlement of a provision description.
++
++No remote writes before confirmation. Financial children retain their individual
++amounts and optional launch decisions; shared payment facts belong to the parent.
++"""
++from __future__ import annotations
++
++import copy
++import hashlib
++from datetime import date, datetime, timedelta
++from zoneinfo import ZoneInfo
++from requests import HTTPError
++
++try:
++    from .payment_provision_group import provision_line_total, _currency, _canonical, _sum
++    from .document_item_lock import document_item_lock
++    from .logic import resolve_option, filter_options
++except ImportError:
++    from payment_provision_group import provision_line_total, _currency, _canonical, _sum
++    from document_item_lock import document_item_lock
++    from logic import resolve_option, filter_options
++
++SOURCE_KIND = 'provision-description'
++PARENT_LIST = 'DESCRITIVOPROVISAO'
++CHILD_LIST = 'PROVISÃO PGTOS'
++COMMON_FIELDS = ('DATA PGTO EFETUADO', 'FORMAPGTO', 'OBS')
++PARENT_FIELDS = ('DATA PREVISTO PGTO', 'FORNECEDOR', 'FILIAL', 'DATA PGTO EFETUADO',
++                 'FORMAPGTO', 'OBS', 'PGTOAGENDADO', 'VALORTOTAL')
++CHILD_FIELDS = ('DESCRITIVOPROVISAO', 'STATUS', 'DATA PGTO EFETUADO', 'PGTOAGENDADO',
++                'QTD', 'VALOR TOTAL', 'FRETE', 'FORMAPGTO', 'OBS', 'IDLANCAMENTOS',
++                'IDPEDIDO', 'DATA PREVISTO PGTO', 'FILIAL', 'FORNECEDOR', 'IMOVEL', 'PRODUTO')
++
++
++def _text(value):
++    return '' if value is None else str(value).strip()
++
++
++def _identity(value):
++    text = _text(value)
++    if not text.isdigit() or int(text) <= 0:
++        raise ValueError('ID do descritivo/provisão inválido')
++    return str(int(text))
++
++
++def _date(value):
++    text = _text(value)
++    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
++        try:
++            return datetime.strptime(text[:10], fmt).date()
++        except ValueError:
++            pass
++    return None
++
++
++def _pending(row):
++    return (_text(row.get('STATUS')).casefold() == 'pagamento previsto'
++            and not _text(row.get('DATA PGTO EFETUADO'))
++            and _text(row.get('PGTOAGENDADO')).casefold() != 'pago')
++
++
++def _same(key, left, right):
++    if key in {'DATA PGTO EFETUADO', 'DATA PREVISTO PGTO'} and _text(left) and _text(right):
++        return _date(left) is not None and _date(left) == _date(right)
++    if key in {'QTD', 'VALOR TOTAL', 'FRETE', 'VALORTOTAL'} and _text(left) and _text(right):
++        try:
++            from decimal import Decimal
++            return Decimal(str(left).replace(',', '.')) == Decimal(str(right).replace(',', '.'))
++        except Exception:
++            return False
++    return _text(left) == _text(right)
++
++
++def _verified(value):
++    return value is True or (isinstance(value, dict) and value.get('fields') is True
++                             and value.get('attachments') is True)
++
++
++def _joined(children, field):
++    return ' / '.join(dict.fromkeys(_text(item.get(field)) for item in children if _text(item.get(field))))
++
++
++def _common(fields):
++    common = {key: copy.deepcopy(fields.get(key)) for key in COMMON_FIELDS}
++    # Text/Note payloads in the legacy client stringify non-string values.
++    # Use one representation in writes, checkpoints and retry comparisons.
++    common['OBS'] = _text(common.get('OBS'))
++    return common
++
++
++def group_options(groups):
++    options = []
++    for group in groups:
++        if group.get('settlementBlocked'):
++            continue
++        item_id = _identity(group['Id'])
++        children = group.get('CHILDREN') or []
++        options.append({
++            'id': f'provision_description:{item_id}', 'value': item_id,
++            'title': f"DESCRITIVO {item_id} — {_text(group.get('FORNECEDOR'))} "
++                     f"({_text(group.get('DATA PREVISTO PGTO'))[:10]}) — "
++                     f"{len(children)} provisão(ões) — {group['totalDisplay']}",
++            'source_values': copy.deepcopy(group), 'sourceKind': SOURCE_KIND,
++        })
++    return options
++
++
++def group_snapshot(groups, today):
++    rows = []
++    for group in groups:
++        due = _date(group.get('DATA PREVISTO PGTO'))
++        if due is None or due > today + timedelta(days=2):
++            continue
++        children = group.get('CHILDREN') or []
++        rows.append({
++            'id': _identity(group['Id']), 'sourceKind': SOURCE_KIND,
++            'dueDate': due.isoformat(), 'supplier': _text(group.get('FORNECEDOR')),
++            'branch': _text(group.get('FILIAL')), 'property': _joined(children, 'IMOVEL'),
++            'product': _joined(children, 'PRODUTO'), 'childCount': len(children),
++            'pendingChildIds': list(group.get('PENDING CHILD IDS') or []),
++            'total': None if group.get('settlementBlocked') else str(group['VALOR TOTAL DESCRITIVO']),
++            'totalDisplay': group['totalDisplay'],
++            'settlementBlocked': bool(group.get('settlementBlocked')),
++            'amountError': _text(group.get('amountError')),
++        })
++    rows.sort(key=lambda row: (row['dueDate'], int(row['id'])))
++    return {'sourceKind': SOURCE_KIND, 'today': today.isoformat(),
++            'checkedDate': today.isoformat(), 'due': bool(rows), 'count': len(rows), 'rows': rows}
++
++
++class ProvisionDescriptionSettlement:
++    def _provision_attachments_locked(self, state):
++        journal = ((state or {}).get('provision_description') or {}).get('journal') or {}
++        return bool(journal.get('intent')) or super()._provision_attachments_locked(state)
++
++    def _provision_validate_frozen_attachments(self, state):
++        group = state.get('provision_description') or {}
++        journal = group.get('journal') or {}
++        if not journal.get('intent'):
++            return super()._provision_validate_frozen_attachments(state)
++        frozen = journal.get('attachments')
++        digests = journal.get('attachment_digests')
++        if frozen != state.get('attachments', []) or digests is None or len(digests) != len(frozen or []):
++            raise RuntimeError('Os anexos da baixa iniciada não podem ser alterados.')
++        for attachment, digest in zip(frozen, digests):
++            if hashlib.sha256(self.media_repository.read(attachment)).hexdigest() != digest:
++                raise RuntimeError('Um arquivo da baixa iniciada foi alterado.')
++
++    def _handle_frozen_provision(self, event, state, etag):
++        group = (state or {}).get('provision_description') or {}
++        command = _text(event.get('reply_id') or event.get('text')).casefold()
++        if (group.get('review_required') and not (group.get('journal') or {}).get('intent')
++                and command == 'description_review_again'):
++            self._mark_processed(state, event.get('message_id'))
++            try:
++                self._description_start(state, self.sharepoint.get_provision_description(group['parent_id']))
++                state['stage'] = 'selecting_fields'
++                etag = self._save(state, etag)
++                return self._prompt_next_or_summary(state, etag)
++            except Exception as error:
++                return self._submission_failed(state, etag, error)
++        if not (group.get('journal') or {}).get('intent') or state.get('stage') == 'completed':
++            return super()._handle_frozen_provision(event, state, etag)
++        if event.get('message_id') in state.get('processed_message_ids', []):
++            return {'status': 'duplicate', 'batch_id': state['batch_id']}
++        if command in {'resumo', 'res', 'flow_summary'}:
++            return self._send_progress_summary(state)
++        if state.get('stage') == 'notifying':
++            return self._notify_completed(state, etag)
++        self._mark_processed(state, event.get('message_id'))
++        if event.get('kind') == 'text' and command in {'error_retry', 'retry_submission',
++                                                       'tentar novamente', 'confirm_yes', 'sim'}:
++            if self._sharepoint_storage_retry_is_blocked(state):
++                return self._storage_retry_blocked_result(state, etag)
++            state['stage'] = 'committing'
++            etag = self._save(state, etag)
++            return self._commit(state, etag)
++        self._send_text(state, 'A BAIXA DESTE DESCRITIVO JÁ COMEÇOU. CONCLUA A TENTATIVA '
++                        'PRESERVADA ANTES DE VOLTAR OU ALTERAR DADOS.')
++        self.messenger.send_actions(state, 'CONCLUIR BAIXA PENDENTE',
++            [{'id': 'error_retry', 'title': '🔄 TENTAR NOVAMENTE', 'reply': 'error_retry'}])
++        etag = self._save(state, etag)
++        return {'status': 'provision_submission_locked', 'batch_id': state['batch_id'], 'etag': etag}
++
++    def _description_flow_config(self, state, base):
++        group = state.get('provision_description')
++        if not group or state.get('_description_child_commit'):
++            return base
++        flow = copy.deepcopy(base)
++        obs = group.get('parent', {}).get('OBS')
++        options = [{'id': 'description_observation_blank', 'title': 'SEM OBSERVAÇÃO', 'value': ''}]
++        if _text(obs):
++            options.insert(0, {'id': 'description_observation_keep',
++                              'title': 'MANTER OBSERVAÇÃO: ' + str(obs), 'value': obs})
++        flow['steps'].insert(5, {
++            'key': 'observacao_grupo_baixa', 'kind': 'selection', 'target_field': 'OBS',
++            'free_text_target_field': 'OBS', 'button_label': 'OBSERVAÇÃO',
++            'prompt': 'QUAL É A OBSERVAÇÃO PARA TODOS OS ITENS DESTE DESCRITIVO? '
++                      'Digite um texto ou escolha SEM OBSERVAÇÃO.',
++            'source': {'type': 'static', 'options': options},
++        })
++        for step in flow['steps']:
++            if step.get('target_field') == 'OBS' and step['key'] != 'observacao_grupo_baixa':
++                step['editable'] = False
++        if group.get('common') and state.get('edit_step_indices') is None:
++            for step in flow['steps']:
++                if step['key'] in {'data_pgto_efetuado_baixa', 'forma_pgto_baixa', 'observacao_grupo_baixa'}:
++                    step['when'] = {'field': '__description_common_not_asked_again__', 'equals': 'SIM'}
++        flow['blank_review_fields'] = [item for item in flow.get('blank_review_fields', []) if item['field'] != 'OBS']
++        flow['confirmation_prompt'] = ('CONFIRMA A BAIXA DE TODOS OS ITENS PENDENTES '
++                                       f"DO DESCRITIVO {group['parent_id']}?")
++        return flow
++
++    def _description_start(self, state, source):
++        if source.get('settlementBlocked'):
++            raise ValueError(source.get('amountError') or 'Valor inválido em uma provisão vinculada.')
++        parent_id = _identity(source['Id'])
++        all_children = copy.deepcopy(source.get('CHILDREN') or [])
++        children = sorted((item for item in all_children if _pending(item)), key=lambda item: int(item['Id']))
++        if not children:
++            raise RuntimeError('Este descritivo não possui mais provisões pendentes. Atualize a lista.')
++        state['provision_description'] = {
++            'parent_id': parent_id, 'parent': copy.deepcopy(source),
++            'original_children': all_children, 'children': children,
++            'index': 0, 'entries': [], 'common': None, 'prepared': False,
++        }
++        self._description_load_child(state, 0)
++
++    def _description_load_child(self, state, index):
++        group = state['provision_description']
++        child = group['children'][index]
++        if _identity(child.get('DESCRITIVOPROVISAO')) != group['parent_id']:
++            raise RuntimeError('Uma provisão não pertence ao descritivo selecionado.')
++        group['index'] = index
++        state['fields'] = {key: copy.deepcopy(value) for key, value in child.items() if key in CHILD_FIELDS}
++        state['fields']['ID PROVISÃO'] = _identity(child['Id'])
++        if not index:
++            state['fields']['OBS'] = group['parent'].get('OBS')
++        else:
++            state['fields'].update(copy.deepcopy(group['common']))
++        for field in ('DATA PREVISTO PGTO', 'DATA PGTO EFETUADO'):
++            if state['fields'].get(field):
++                state['fields'][field] = _text(state['fields'][field])[:10]
++        state['display_values'] = {key: _text(value) or 'EM BRANCO' for key, value in state['fields'].items()}
++        state['answers'] = {}
++        state['selections'] = {}
++        state['step_index'] = 1
++        state['options'] = []
++        state['confirm_or_replace_number_modes'] = {}
++        for key in ('payment_settlement_blank_review_done', 'payment_settlement_blank_fill_active',
++                    'payment_settlement_blank_fields', 'payment_settlement_relink_authorized',
++                    'payment_settlement_password_attempts', 'edit_step_indices', 'option_pagination'):
++            state.pop(key, None)
++        self._send_text(state, f"DESCRITIVO {group['parent_id']} — PROVISÃO {_identity(child['Id'])} "
++                        f"({index + 1} DE {len(group['children'])}).")
++
++    def _description_after_fields(self, state, etag):
++        group = state.get('provision_description')
++        if not group or state.get('flow') != 'payment_settlement':
++            return None
++        common = _common(state['fields'])
++        was_prepared = bool(group.get('prepared'))
++        if not group.get('common') or group.get('editing_common'):
++            group['common'] = common
++        entry = {key: copy.deepcopy(state.get(key) or {}) for key in ('fields', 'answers', 'display_values')}
++        entry['relink_authorized'] = bool(state.get('payment_settlement_relink_authorized'))
++        index = group['index']
++        if index < len(group['entries']):
++            group['entries'][index] = entry
++        else:
++            group['entries'].append(entry)
++        if was_prepared:
++            return None
++        if index + 1 < len(group['children']):
++            self._description_load_child(state, index + 1)
++            etag = self._save(state, etag)
++            return self._prompt_next_or_summary(state, etag)
++        group['prepared'] = True
++        return None
++
++    def _description_edit_step(self):
++        return {'key': 'edit_field', 'prompt': 'QUAL PROVISÃO OU DADO COMUM VOCÊ DESEJA EDITAR?',
++                'button_label': 'ESCOLHER PROVISÃO', 'allow_blank': False}
++
++    def _prompt_description_edit_choice(self, state, etag):
++        group = state['provision_description']
++        group['editing_phase'] = 'choose'
++        group.pop('editing_index', None)
++        options = [{'id': 'description_edit_back', 'title': '↩️ VOLTAR AO RESUMO', 'value': '__back_to_summary__'},
++                   {'id': 'description_edit_common', 'title': 'DADOS COMUNS — DATA, FORMA PGTO E OBS', 'value': '__common__'},
++                   {'id': 'description_edit_attachments', 'title': '📎 ANEXOS DO DESCRITIVO', 'value': '__edit_attachments__'}]
++        for index, entry in enumerate(group['entries']):
++            fields = entry['fields']
++            options.append({'id': 'description_edit_child:' + str(fields['ID PROVISÃO']), 'value': index,
++                'title': f"PROVISÃO {fields['ID PROVISÃO']} — {_text(fields.get('FORNECEDOR'))} — {_text(fields.get('PRODUTO'))}"})
++        state['stage'], state['options'] = 'editing_field_choice', options
++        self._send_options(state, self._description_edit_step(), options)
++        etag = self._save(state, etag)
++        return {'status': 'awaiting_description_edit_choice', 'batch_id': state['batch_id'], 'etag': etag}
++
++    def _handle_description_edit_choice(self, event, state, etag):
++        raw = event.get('reply_id') or event.get('text') or ''
++        self._mark_processed(state, event.get('message_id'))
++        selected = resolve_option(raw, state['options'], 'edit_field')
++        if selected is None:
++            matches = list(filter_options(raw, state['options']))
++            self._send_filtered_options(state, self._description_edit_step(), matches or state['options'])
++            etag = self._save(state, etag)
++            return {'status': 'filtered_description_edit_choice', 'batch_id': state['batch_id'], 'etag': etag}
++        value = selected['value']
++        if value == '__back_to_summary__':
++            return self._summarize_and_confirm(state, etag)
++        if value == '__edit_attachments__':
++            return self._prompt_attachment_edit_menu(state, etag)
++        group = state['provision_description']
++        index = 0 if value == '__common__' else int(value)
++        entry = group['entries'][index]
++        for key in ('fields', 'answers', 'display_values'):
++            state[key] = copy.deepcopy(entry[key])
++        state['fields'].update(group['common'])
++        state['display_values'].update({key: _text(value) or 'EM BRANCO' for key, value in group['common'].items()})
++        state['payment_settlement_relink_authorized'] = entry['relink_authorized']
++        group['index'] = group['editing_index'] = index
++        group['editing_phase'], group['editing_common'] = 'field', value == '__common__'
++        state.pop('edit_step_indices', None)
++        return self._prompt_edit_field(state, etag)
++
++    def _description_edit_field_options(self, state, options):
++        group = state.get('provision_description') or {}
++        if group.get('editing_phase') != 'field':
++            return options
++        steps = self._flow_config(state)['steps']
++        result = []
++        for option in options:
++            index = option.get('value')
++            if index == '__back_to_summary__':
++                result.append(option)
++            elif isinstance(index, int) and 0 < index < len(steps):
++                shared = steps[index].get('target_field') in COMMON_FIELDS
++                if shared == bool(group.get('editing_common')):
++                    result.append(option)
++        return result
++
++    def _description_summary_rows(self, state):
++        group = state['provision_description']
++        common = group.get('common') or {}
++        rows = [{'label': 'DESCRITIVO DE PROVISÃO', 'value': 'ID ' + group['parent_id']},
++                {'label': 'FORNECEDOR DE REFERÊNCIA', 'value': _text(group['parent'].get('FORNECEDOR'))}]
++        rows.extend({'label': key, 'value': _text(common.get(key)) or 'EM BRANCO'} for key in COMMON_FIELDS)
++        entries = {str(item['fields']['ID PROVISÃO']): item for item in group['entries']}
++        totals = []
++        for item in sorted(group['original_children'], key=lambda item: int(item['Id'])):
++            entry = entries.get(str(item['Id']))
++            fields = entry['fields'] if entry else item
++            total = provision_line_total({**fields, 'FRETE': fields.get('FRETE') or '0'})
++            totals.append(total)
++            detail = (f"{_text(fields.get('FORNECEDOR'))} | {_text(fields.get('PRODUTO'))} | "
++                      f"QTD {_text(fields.get('QTD'))} | UNIT {_text(fields.get('VALOR TOTAL'))} | "
++                      f"FRETE {_text(fields.get('FRETE')) or '0'} | TOTAL {_currency(total)}")
++            if not entry:
++                detail += ' | JÁ BAIXADA (NÃO SERÁ ALTERADA)'
++            else:
++                detail += ' | SUBMETER LANÇAMENTO: ' + _text(entry['answers'].get('submeter_lancamentos'))
++                for key in ('ETAPA', 'TIPO DESPESA', 'FILIAL', 'IMOVEL'):
++                    detail += f" | {key}: {_text(fields.get(key)) or 'EM BRANCO'}"
++            rows.append({'label': 'PROVISÃO ID ' + str(item['Id']), 'value': detail})
++        rows.append({'label': 'VALOR TOTAL', 'value': _currency(_sum(totals))})
++        return rows
++
++    def _description_preflight(self, state):
++        group = state['provision_description']
++        fresh = self.sharepoint.get_provision_description(group['parent_id'])
++        expected = {str(item['Id']): item for item in group['original_children']}
++        actual = {str(item['Id']): item for item in fresh.get('CHILDREN') or []}
++        if set(expected) != set(actual):
++            raise RuntimeError('Os itens vinculados ao descritivo mudaram. Revise os dados antes de baixar.')
++        journal = group.get('journal') or {}
++        for item_id, original in expected.items():
++            current = actual[item_id]
++            if _identity(current.get('DESCRITIVOPROVISAO')) != group['parent_id']:
++                raise RuntimeError('O vínculo de uma provisão foi alterado. A baixa foi interrompida.')
++            if item_id in (journal.get('children') or {}):
++                continue
++            in_flight = journal.get('in_flight') or {}
++            if (in_flight.get('id') == item_id and in_flight.get('record')
++                    and all(_same(key, current.get(key), value)
++                            for key, value in in_flight['expected_fields'].items())):
++                verification = self.sharepoint.verify_item(int(item_id), in_flight['expected_fields'], [], target_list=CHILD_LIST)
++                if not _verified(verification):
++                    raise RuntimeError(f'Não foi possível confirmar a provisão {item_id}.')
++                journal['children'][item_id] = {**in_flight['record'], 'verified': verification,
++                                                'target_list': CHILD_LIST,
++                                                'expected_fields': in_flight['expected_fields']}
++                journal.pop('in_flight', None)
++                continue
++            for key in CHILD_FIELDS:
++                if not _same(key, original.get(key), current.get(key)):
++                    raise RuntimeError(f'A provisão {item_id} foi alterada por outra pessoa ({key}). Revise antes de baixar.')
++        return fresh
++
++    def _description_commit(self, state, etag, flow):
++        group = state['provision_description']
++        try:
++            if not group.get('prepared') or len(group['entries']) != len(group['children']):
++                raise RuntimeError('Todos os itens precisam ser revisados antes da baixa.')
++            # Same-host coordination complements remote conditional writes.
++            # The namespace is distinct from DOCUMENTOS locks, using a stable
++            # large positive key; no document ID in the supported SP range collides.
++            lock_id = 10**18 + int(group['parent_id'])
++            with document_item_lock(lock_id):
++                fresh = self._description_preflight(state)
++                journal = group.setdefault('journal', {'parent': None, 'children': {}})
++                had_intent = bool(journal.get('intent'))
++                if journal.get('intent'):
++                    self._provision_validate_frozen_attachments(state)
++                common = _common(group['common'])
++                group['common'] = common
++                if not common.get('DATA PGTO EFETUADO') or not _text(common.get('FORMAPGTO')):
++                    raise RuntimeError('Data efetiva e forma de pagamento são obrigatórias.')
++                entries = {str(item['fields']['ID PROVISÃO']): item for item in group['entries']}
++                total = _sum(provision_line_total({**(entries.get(str(item['Id']), {}).get('fields') or item),
++                                                   'FRETE': (entries.get(str(item['Id']), {}).get('fields') or item).get('FRETE') or '0'})
++                             for item in group['original_children'])
++                # PGTOAGENDADO in the parent is DateTime, unlike the child's
++                # text marker. Preserve scheduling fields; write actual payment
++                # date, account, observation and the recomputed aggregate only.
++                parent_fields = {**common, 'VALORTOTAL': _canonical(total)}
++                parent_current, parent_etag = self.sharepoint.get_item_fields_with_etag(
++                    int(group['parent_id']), PARENT_FIELDS, target_list=PARENT_LIST)
++                parent_matches_intent = bool(journal.get('intent')) and all(
++                    _same(key, parent_current.get(key), value) for key, value in journal['intent'].items())
++                if journal.get('parent') or parent_matches_intent:
++                    for key, expected_value in parent_fields.items():
++                        if not _same(key, parent_current.get(key), expected_value):
++                            raise RuntimeError('O descritivo mudou depois do início da baixa. Dados preservados.')
++                else:
++                    original = group['parent']
++                    for key in PARENT_FIELDS:
++                        if not _same(key, parent_current.get(key), original.get(key)):
++                            raise RuntimeError(f'O descritivo foi alterado ({key}). Revise antes de baixar.')
++                    if _text(parent_current.get('DATA PGTO EFETUADO')) and any(
++                        not _same(key, parent_current.get(key), value) for key, value in common.items()
++                    ):
++                        raise RuntimeError('O descritivo já registra outro pagamento. Não será sobrescrito.')
++                    group.pop('review_required', None)
++                    journal['intent'] = copy.deepcopy(parent_fields)
++                    journal['attachments'] = copy.deepcopy(state.get('attachments') or [])
++                    journal['attachment_digests'] = [hashlib.sha256(self.media_repository.read(attachment)).hexdigest()
++                                                     for attachment in journal['attachments']]
++                    etag = self._save(state, etag)
++                    try:
++                        self.sharepoint.update_item_with_etag(int(group['parent_id']), parent_fields,
++                                                             parent_etag, target_list=PARENT_LIST)
++                    except HTTPError as rejected:
++                        # This first conditional attempt has no prior parent or
++                        # child effects. Explicit 4xx refusals are definitive;
++                        # lost responses/timeouts/5xx remain protected instead.
++                        status = rejected.response.status_code if rejected.response is not None else None
++                        if not had_intent and status in {400, 401, 403, 404, 409, 412, 422}:
++                            for key in ('intent', 'attachments', 'attachment_digests'):
++                                journal.pop(key, None)
++                            group['review_required'] = True
++                            etag = self._save(state, etag)
++                        raise
++                names = []
++                for attachment in state.get('attachments') or []:
++                    self.sharepoint.ensure_attachment(int(group['parent_id']), attachment['sharepoint_name'],
++                                                     self.media_repository.read(attachment), attachment.get('mime_type'),
++                                                     target_list=PARENT_LIST)
++                    names.append(attachment['sharepoint_name'])
++                parent_verification = self.sharepoint.verify_item(int(group['parent_id']), parent_fields, names,
++                                                                  target_list=PARENT_LIST)
++                if not _verified(parent_verification):
++                    raise RuntimeError('Não foi possível confirmar a gravação do descritivo.')
++                journal['parent'] = {'item_id': int(group['parent_id']), 'target_list': PARENT_LIST,
++                                     'verified': parent_verification, 'attachment_names': names}
++                etag = self._save(state, etag)
++                for item_id in sorted(entries, key=int):
++                    if item_id in journal['children']:
++                        saved = journal['children'][item_id]
++                        verification = self.sharepoint.verify_item(int(item_id), saved['expected_fields'], [], target_list=CHILD_LIST)
++                        if not _verified(verification):
++                            raise RuntimeError(f'Não foi possível confirmar a provisão {item_id} já baixada.')
++                        continue
++                    entry = entries[item_id]
++                    live, child_etag = self.sharepoint.get_item_fields_with_etag(int(item_id), CHILD_FIELDS, target_list=CHILD_LIST)
++                    original = next(item for item in group['children'] if str(item['Id']) == item_id)
++                    if any(not _same(key, live.get(key), original.get(key)) for key in CHILD_FIELDS):
++                        raise RuntimeError(f'A provisão {item_id} mudou durante a baixa. A retomada foi preservada.')
++                    child_state = copy.deepcopy(state)
++                    child_state.pop('provision_description', None)
++                    child_state['fields'] = {**copy.deepcopy(entry['fields']), **common}
++                    child_state['answers'] = copy.deepcopy(entry['answers'])
++                    child_state['display_values'] = copy.deepcopy(entry['display_values'])
++                    child_state['batch_id'] = f"{state['batch_id']}-DESCRITIVO-{group['parent_id']}-PROVISAO-{item_id}"
++                    child_state['attachments'] = []
++                    child_state['payment_settlement_relink_authorized'] = entry['relink_authorized']
++                    child_state['_description_child_commit'] = True
++                    child_state['_description_child_etag'] = child_etag
++                    journal['in_flight'] = {'id': item_id, 'expected_fields': copy.deepcopy(child_state['fields'])}
++                    etag = self._save(state, etag)
++                    def checkpoint(expected_fields, prepared_record):
++                        nonlocal etag
++                        journal['in_flight'] = {'id': item_id, 'expected_fields': copy.deepcopy(expected_fields),
++                                                'record': copy.deepcopy(prepared_record)}
++                        etag = self._save(state, etag)
++                    record = self._commit_payment_settlement(child_state, None, flow, on_prepared=checkpoint)
++                    if not _verified(record.get('verified')):
++                        raise RuntimeError(f'Não foi possível confirmar a provisão {item_id}.')
++                    expected_update = {**common, 'PGTOAGENDADO': 'PAGO', 'QTD': child_state['fields']['QTD'],
++                                       'VALOR TOTAL': child_state['fields']['VALOR TOTAL'],
++                                       'FRETE': child_state['fields'].get('FRETE') or '0'}
++                    for key, ref in (('IDPEDIDO', 'related_item'), ('IDLANCAMENTOS', 'launch_item')):
++                        if record.get(ref):
++                            expected_update[key] = str(record[ref]['item_id'])
++                    journal['children'][item_id] = {**record, 'target_list': CHILD_LIST, 'expected_fields': expected_update}
++                    journal.pop('in_flight', None)
++                    etag = self._save(state, etag)
++        except Exception as exc:
++            result = self._submission_failed(state, etag, exc)
++            if group.get('review_required') and not (group.get('journal') or {}).get('intent'):
++                self._send_text(state, 'A GRAVAÇÃO DO DESCRITIVO FOI RECUSADA ANTES DA BAIXA. '
++                                'REVISE OS DADOS ATUAIS; SEUS ANEXOS FORAM PRESERVADOS.')
++                self.messenger.send_actions(state, 'REVISAR DESCRITIVO',
++                    [{'id': 'description_review_again', 'title': 'REVISAR DESCRITIVO', 'reply': 'description_review_again'}])
++            return result
++        state['sharepoint'] = {**journal['parent'], 'line_items': list(journal['children'].values()),
++                               'recorded_at': datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat()}
++        state['stage'] = 'notifying'
++        etag = self._save(state, etag)
++        return self._notify_completed(state, etag)
+--- /dev/null
++++ b/worker/provision_description_query.py
+@@ -0,0 +1,315 @@
++"""Complete, read-only parent/child provision queries over a REST adapter.
++
++The adapter supplies ``_internal_field``, ``_list_endpoint``, ``_request`` and
++``_values``. Every invocation reads fresh items; no financial writes or item
++snapshots are cached here. Incomplete reads must raise instead of looking like
++an empty pending list or a known zero amount.
++"""
++
++from __future__ import annotations
++
++import re
++from datetime import date, datetime
++from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
++
++from requests import HTTPError
++
++try:
++    from .logic import normalize_text
++    from .payment_provision_group import (
++        _canonical, _currency, _sum, provision_line_total,
++    )
++except ImportError:  # Legacy OCI packaging imports worker modules directly.
++    from logic import normalize_text
++    from payment_provision_group import (
++        _canonical, _currency, _sum, provision_line_total,
++    )
++
++
++PARENT_LIST = "DESCRITIVOPROVISAO"
++CHILD_LIST = "PROVISÃO PGTOS"
++PARENT_FIELDS = (
++    "Id", "FORNECEDOR", "FILIAL", "OBS", "FORMAPGTO",
++    "DATA PREVISTO PGTO", "DATA PGTO EFETUADO", "PGTOAGENDADO", "VALORTOTAL",
++)
++PARENT_ALIASES = {
++    "DATA PREVISTO PGTO": "DATAPREVISTOPGTO",
++    "DATA PGTO EFETUADO": "DATAPGTOEFETUADO",
++}
++CHILD_FIELDS = (
++    "Id", "DESCRITIVOPROVISAO", "FORNECEDOR", "FILIAL", "IMOVEL",
++    "PRODUTO", "QTD", "VALOR TOTAL", "FRETE", "OBS", "IDLANCAMENTOS",
++    "IDPEDIDO", "DATA PREVISTO PGTO", "DATA PGTO EFETUADO", "FORMAPGTO",
++    "STATUS", "PGTOAGENDADO",
++)
++OPTIONAL_CHILD_FIELDS = ("ETAPA", "TIPO DESPESA")
++MAX_PAGES = 1000
++MAX_ITEMS = 100000
++MAX_SCHEMA_FIELDS = 10000
++PAGE_SIZE = 5000
++
++
++def _item_id(raw):
++    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
++        raise ValueError("A positive, unambiguous provision item ID is required")
++    text = str(raw).strip()
++    if not re.fullmatch(r"[1-9][0-9]*", text):
++        raise ValueError("A positive, unambiguous provision item ID is required")
++    return int(text)
++
++
++def _blank(value):
++    return value is None or (isinstance(value, str) and not value.strip())
++
++
++def _pending(child):
++    return (
++        normalize_text(str(child["STATUS"] or "")) == "pagamento previsto"
++        and _blank(child["DATA PGTO EFETUADO"])
++        and normalize_text(str(child["PGTOAGENDADO"] or "")) != "pago"
++    )
++
++
++def _due_key(parent):
++    raw = parent["DATA PREVISTO PGTO"]
++    if _blank(raw):
++        return (1, date.max, parent["Id"])
++    if isinstance(raw, datetime):
++        due = raw.date()
++    elif isinstance(raw, date):
++        due = raw
++    else:
++        text = str(raw).strip()
++        try:
++            due = date.fromisoformat(text[:10])
++        except ValueError:
++            try:
++                due = datetime.strptime(text, "%d/%m/%Y").date()
++            except ValueError as exc:
++                raise ValueError("Invalid provision description due date") from exc
++    return (0, due, parent["Id"])
++
++
++class ProvisionDescriptionQuery:
++    """Reusable query with bounded, validated SharePoint REST pagination."""
++
++    def __init__(self, client, *, max_pages=MAX_PAGES, max_items=MAX_ITEMS):
++        for name, value, ceiling in (
++            ("max_pages", max_pages, MAX_PAGES),
++            ("max_items", max_items, MAX_ITEMS),
++        ):
++            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= ceiling:
++                raise ValueError(f"Invalid provision query limit: {name}")
++        self.client = client
++        self.max_pages = max_pages
++        self.max_items = max_items
++
++    def _page_key(self, endpoint):
++        site_url = getattr(self.client, "site_url", "")
++        absolute = urljoin(site_url.rstrip("/") + "/_api/", endpoint)
++        parsed = urlsplit(absolute)
++        return (
++            parsed.scheme.lower(), parsed.netloc.lower(), unquote(parsed.path).casefold(),
++            tuple(sorted(parse_qsl(parsed.query, keep_blank_values=True))),
++        )
++
++    def _pages(self, endpoint, params, *, max_items=None):
++        limit = self.max_items if max_items is None else max_items
++        result, seen = [], set()
++        site_url = getattr(self.client, "site_url", "")
++        api = urlsplit(site_url.rstrip("/") + "/_api/") if site_url else None
++        while endpoint:
++            key = self._page_key(endpoint)
++            if key in seen:
++                raise RuntimeError("SharePoint provision pagination cycle")
++            # SharePoint can encode list titles or address the same list by
++            # GUID in a next link. Require the same site/API, not identical
++            # spelling of the collection path, before handing it to transport.
++            if api is not None and (
++                key[:2] != (api.scheme.lower(), api.netloc.lower())
++                or not key[2].startswith(unquote(api.path).casefold())
++            ):
++                raise ValueError("SharePoint provision pagination changed site")
++            if len(seen) >= self.max_pages:
++                raise RuntimeError("SharePoint provision page limit exceeded")
++            seen.add(key)
++            payload = self.client._request("GET", endpoint, params=params)
++            params = None
++            if not isinstance(payload, dict) or "error" in payload:
++                raise ValueError("Invalid SharePoint provision collection payload")
++            data = payload.get("d")
++            if isinstance(data, dict) and "error" in data:
++                raise ValueError("Invalid SharePoint provision collection payload")
++            values = payload.get("value") if "value" in payload else (
++                data.get("results") if isinstance(data, dict) else None
++            )
++            if not isinstance(values, list) or any(not isinstance(row, dict) for row in values):
++                raise ValueError("Invalid SharePoint provision collection values")
++            result.extend(self.client._values(payload))
++            if len(result) > limit:
++                raise RuntimeError("SharePoint provision item limit exceeded")
++            links = [payload.get("odata.nextLink"), payload.get("@odata.nextLink")]
++            if isinstance(data, dict):
++                links.append(data.get("__next"))
++            links = [link for link in links if link is not None and link != ""]
++            if any(not isinstance(link, str) or not link.strip() for link in links):
++                raise ValueError("Invalid SharePoint provision next link")
++            if len(set(links)) > 1:
++                raise ValueError("Conflicting SharePoint provision next links")
++            endpoint = links[0] if links else None
++        return result
++
++    def _projection(self, list_title, fields, *, aliases=None, optional=()):
++        """Validate every selected internal name against the complete schema."""
++        schema = self._pages(
++            self.client._list_endpoint(list_title) + "/fields",
++            {"$select": "Title,InternalName,StaticName,TypeAsString,ReadOnlyField",
++             "$top": str(PAGE_SIZE)},
++            max_items=MAX_SCHEMA_FIELDS,
++        )
++        names, by_label = set(), {}
++        for row in schema:
++            internal = row.get("InternalName") or row.get("StaticName")
++            if not isinstance(internal, str) or not internal.strip():
++                raise ValueError("Invalid SharePoint provision field schema")
++            names.add(internal)
++            for label in (internal, row.get("Title"), row.get("StaticName")):
++                if label:
++                    by_label[normalize_text(str(label))] = internal
++        projection = {}
++        for field in (*fields, *optional):
++            alias = (aliases or {}).get(field, field)
++            internal = self.client._internal_field(list_title, alias)
++            if internal not in names:
++                internal = by_label.get(normalize_text(alias)) or by_label.get(normalize_text(field))
++            if internal not in names:
++                if field in optional:
++                    continue
++                raise ValueError(f"Required SharePoint provision field is missing: {field}")
++            projection[field] = internal
++        return projection
++
++    @staticmethod
++    def _row(row, projection):
++        if not isinstance(row, dict) or any(internal not in row for internal in projection.values()):
++            raise ValueError("SharePoint provision item omitted selected fields")
++        mapped = {field: row[internal] for field, internal in projection.items()}
++        mapped["Id"] = _item_id(mapped["Id"])
++        return mapped
++
++    def _items(self, list_title, projection):
++        raw = self._pages(
++            self.client._list_endpoint(list_title) + "/items",
++            {"$select": ",".join(dict.fromkeys(projection.values())),
++             "$orderby": "Id asc", "$top": str(PAGE_SIZE)},
++        )
++        result, seen = [], set()
++        for row in raw:
++            mapped = self._row(row, projection)
++            if mapped["Id"] in seen:
++                raise ValueError("Duplicate SharePoint provision item ID")
++            seen.add(mapped["Id"])
++            result.append(mapped)
++        return result
++
++    def _children(self):
++        projection = self._projection(CHILD_LIST, CHILD_FIELDS, optional=OPTIONAL_CHILD_FIELDS)
++        return self._items(CHILD_LIST, projection)
++
++    @staticmethod
++    def _linked(children):
++        groups = {}
++        for child in children:
++            link = child["DESCRITIVOPROVISAO"]
++            if isinstance(link, str) and re.fullmatch(r"[1-9][0-9]*", link.strip()):
++                groups.setdefault(link.strip(), []).append(child)
++        return groups
++
++    @staticmethod
++    def _group(parent, children, allow_invalid_totals=False):
++        if not children:
++            raise ValueError("Provision description has no linked children; total is unknown")
++        children = sorted(children, key=lambda child: child["Id"])
++        totals, invalid_fields = [], set()
++        amount_errors = {
++            f"Invalid provision number: {field}": field
++            for field in ("QTD", "VALOR TOTAL", "FRETE")
++        }
++        for child in children:
++            fields = dict(child)
++            if _blank(fields["FRETE"]):
++                fields["FRETE"] = "0"
++            try:
++                totals.append(provision_line_total(fields))
++            except ValueError as exc:
++                # Only the pure line validator's known amount errors can
++                # disable a group. Never turn other failures into a partial
++                # result, and never expose private values in popup messages.
++                field = amount_errors.get(str(exc))
++                if not allow_invalid_totals or field is None:
++                    raise
++                invalid_fields.add(field)
++        group = {
++            **parent,
++            "CHILDREN": children,
++            "PENDING CHILD IDS": [str(child["Id"]) for child in children if _pending(child)],
++            "sourceKind": "provision-description",
++        }
++        if invalid_fields:
++            return {
++                **group,
++                "VALOR TOTAL DESCRITIVO": None,
++                "totalDisplay": "—",
++                "settlementBlocked": True,
++                "amountError": (
++                    "Total indisponível: valor ausente ou inválido em "
++                    + ", ".join(sorted(invalid_fields))
++                    + ". Corrija os filhos antes de efetuar o pagamento."
++                ),
++            }
++        total = _sum(totals)
++        return {**group, "VALOR TOTAL DESCRITIVO": _canonical(total),
++                "totalDisplay": _currency(total)}
++
++    def get_pending_provision_descriptions(self) -> list[dict]:
++        """Return due/ID-ordered parents with at least one pending child.
++
++        All linked children contribute to the total, including paid children.
++        Parent payment markers never hide an unfinished child settlement.
++        Known amount validation failures retain the whole group with a blocked,
++        unknown total; schema, transport and pagination failures still raise.
++        """
++        projection = self._projection(PARENT_LIST, PARENT_FIELDS, aliases=PARENT_ALIASES)
++        parents = self._items(PARENT_LIST, projection)
++        linked = self._linked(self._children())
++        result = []
++        for parent in parents:
++            children = linked.get(str(parent["Id"]), [])
++            if any(_pending(child) for child in children):
++                result.append(self._group(parent, children, allow_invalid_totals=True))
++        return sorted(result, key=_due_key)
++
++    def get_provision_description(self, parent_id) -> dict:
++        """Fresh complete group for retry, even if every child is now paid.
++
++        Invalid IDs raise ValueError; absent parents raise LookupError. REST,
++        schema, pagination and amount errors propagate without partial results.
++        """
++        parent_id = _item_id(parent_id)
++        projection = self._projection(PARENT_LIST, PARENT_FIELDS, aliases=PARENT_ALIASES)
++        try:
++            payload = self.client._request(
++                "GET", self.client._list_endpoint(PARENT_LIST) + f"/items({parent_id})",
++                params={"$select": ",".join(dict.fromkeys(projection.values()))},
++            )
++        except HTTPError as exc:
++            if exc.response is not None and exc.response.status_code == 404:
++                raise LookupError("Provision description parent was not found") from exc
++            raise
++        if isinstance(payload, dict) and isinstance(payload.get("d"), dict):
++            payload = payload["d"]
++        parent = self._row(payload, projection)
++        if parent["Id"] != parent_id:
++            raise ValueError("SharePoint returned a different provision parent ID")
++        linked = self._linked(self._children())
++        return self._group(parent, linked.get(str(parent_id), []))

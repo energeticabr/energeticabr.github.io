@@ -1,5 +1,6 @@
 .worktrees/
 .superpowers/
+artifacts/grouped-provision-settlement/
 apps/energetico-mobile/node_modules/
 apps/energetico-mobile/dist/
 apps/energetico-mobile/dist-pwa/

@@ -359,7 +359,7 @@ export function createChatClient({
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "pending_provisions_snapshot" }),
+      body: JSON.stringify({ action: "pending_provisions_snapshot", sourceKind: "provision-description" }),
       cache: "no-store",
       credentials: "omit",
     }, response => parsePortalResponse(response, "A consulta de provisões pendentes", { allowRecovery: true }), true);

@@ -1,0 +1,2 @@
+source.patch -text whitespace=-blank-at-eol
+deploy-manifest.json -text whitespace=cr-at-eol

@@ -1,0 +1,36 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "920f75626121a84f31cb2cbbe2533dc0528b58aa1458a2a7914a3ead579189a9",
+      "mirrorBefore": "3e0436cce541e7c4497c1b6217a6118bb5e4bef0a2ffa72a27e28bc06aeeb8ee",
+      "after": "a14f57dd52196b0552a181c159ab5ab678bbc143732386bbe3fc79d0d515c377"
+    },
+    "worker/clients.py": {
+      "before": "8e173a55bc5c7a395ff0c0cd4b701132bd3d21353fe8e837a3a8837a76a2d49a",
+      "mirrorBefore": "f84adfecba679c08c1342c47bae72628d3264e34e2afbbdfdb493990617685ec",
+      "after": "397869211b7891bc83431b38a76990eafd96bfc106d70cb2b3f9ac50da96bedc"
+    },
+    "worker/provision_alerts.py": {
+      "before": "bd6f46820325a957ba98fee8896ffb5d039946c4aa868f40d3b7b731471d325b",
+      "mirrorBefore": "bd6f46820325a957ba98fee8896ffb5d039946c4aa868f40d3b7b731471d325b",
+      "after": "9696cd1ae3115209a344636269923779d85dfe4e3097680f5478aa4bf30ddf2d"
+    },
+    "channel_bridge.py": {
+      "before": "fea8a5b5697be90e70dea7ce24a5c15803d5f2a0b30d0b4d131335d75e5deed6",
+      "mirrorBefore": "ca7df601a7af8d5d6cac5ac60ab7a4504c70428fe434670e5fbd08042012eeca",
+      "after": "c7ec64d90f05e86d4be5ea41f51a7a017e58af77214fadc49d2f4c64bff48b49"
+    },
+    "worker/provision_description_settlement.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "02375d8cec7f02355ef17e723ebd68cc27541a7fa6cd2085d74c2823d15976f5"
+    },
+    "worker/provision_description_query.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "c6ec210b87065a5009f17573ea8d6ebcbe1c092e0aa04485c05fb75b41b43d1f"
+    }
+  },
+  "patch": "d4ee10fadc85f02149ee758dec87bfdd3e70eb08c365d7666f739050143412b0",
+  "archive": "f1e7c759ce1b7e9c4901ba935c119936b5b4a5b52292d139b425bc3b9ae4b557"
+}

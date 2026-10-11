@@ -170,7 +170,9 @@ test("consulta provisões vencidas sem enviar texto ou iniciar um fluxo", async 
   assert.equal(snapshot.rows[0].supplier, "Fornecedor A");
   assert.equal(request.url, `${API_BASE}/api/portal-chat`);
   assert.equal(request.headers.Authorization, "Bearer graph-token");
-  assert.deepEqual(JSON.parse(request.body), { action: "pending_provisions_snapshot" });
+  assert.deepEqual(JSON.parse(request.body), {
+    action: "pending_provisions_snapshot", sourceKind: "provision-description",
+  });
 });
 
 test("consulta notas sem lançamento sem enviar texto ao fluxo", async () => {

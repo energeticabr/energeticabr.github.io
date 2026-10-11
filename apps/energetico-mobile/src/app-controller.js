@@ -1314,8 +1314,10 @@ export function createAppController({
   let pendingProvisionReminderRevision = 0;
   let pendingProvisionAttachmentsData = null;
   let pendingProvisionAttachmentsAccount = null;
+  let pendingProvisionAttachmentsSourceKind = "";
   let pendingProvisionAttachmentsDataRequest = null;
   let pendingProvisionAttachmentsDataRequestAccount = null;
+  let pendingProvisionAttachmentsDataRequestSourceKind = "";
   let pendingProvisionSharePointAuthorization = null;
   let pendingProvisionAttachmentStates = new Map();
   let pendingProvisionAttachmentStateRevision = 0;
@@ -1668,8 +1670,10 @@ export function createAppController({
     if (clearData) {
       pendingProvisionAttachmentsData = null;
       pendingProvisionAttachmentsAccount = null;
+      pendingProvisionAttachmentsSourceKind = "";
       pendingProvisionAttachmentsDataRequest = null;
       pendingProvisionAttachmentsDataRequestAccount = null;
+      pendingProvisionAttachmentsDataRequestSourceKind = "";
     }
   }
 
@@ -1708,12 +1712,13 @@ export function createAppController({
       && pendingProvisionSnapshot === snapshot;
   }
 
-  async function getPendingProvisionAttachmentsData(targetAccount = account, targetRevision = sessionRevision) {
+  async function getPendingProvisionAttachmentsData(targetAccount = account, targetRevision = sessionRevision, sourceKind = pendingProvisionSnapshot?.sourceKind) {
+    const kind = sourceKind === "provision-description" ? sourceKind : "";
     if (!targetAccount || stopped) throw new Error("A sessão Microsoft não está ativa.");
-    if (pendingProvisionAttachmentsData && pendingProvisionAttachmentsAccount === targetAccount) {
+    if (pendingProvisionAttachmentsData && pendingProvisionAttachmentsAccount === targetAccount && pendingProvisionAttachmentsSourceKind === kind) {
       return pendingProvisionAttachmentsData;
     }
-    if (pendingProvisionAttachmentsDataRequest && pendingProvisionAttachmentsDataRequestAccount === targetAccount) {
+    if (pendingProvisionAttachmentsDataRequest && pendingProvisionAttachmentsDataRequestAccount === targetAccount && pendingProvisionAttachmentsDataRequestSourceKind === kind) {
       return pendingProvisionAttachmentsDataRequest;
     }
     const assertCurrentSession = () => {
@@ -1740,7 +1745,7 @@ export function createAppController({
         return auth.getToken(scopes);
       }
     };
-    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider })).then(data => {
+    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider, ...(kind ? { sourceKind: kind } : {}) })).then(data => {
       if (typeof data?.listAttachments !== "function" || typeof data?.downloadAttachment !== "function") {
         throw new Error("A consulta autenticada dos anexos não está disponível.");
       }
@@ -1748,16 +1753,21 @@ export function createAppController({
     });
     pendingProvisionAttachmentsDataRequest = request;
     pendingProvisionAttachmentsDataRequestAccount = targetAccount;
+    pendingProvisionAttachmentsDataRequestSourceKind = kind;
     try {
       const data = await request;
       assertCurrentSession();
-      pendingProvisionAttachmentsData = data;
-      pendingProvisionAttachmentsAccount = targetAccount;
+      if (pendingProvisionAttachmentsDataRequest === request) {
+        pendingProvisionAttachmentsData = data;
+        pendingProvisionAttachmentsAccount = targetAccount;
+        pendingProvisionAttachmentsSourceKind = kind;
+      }
       return data;
     } catch (error) {
       if (pendingProvisionAttachmentsDataRequest === request) {
         pendingProvisionAttachmentsDataRequest = null;
         pendingProvisionAttachmentsDataRequestAccount = null;
+        pendingProvisionAttachmentsDataRequestSourceKind = "";
       }
       throw error;
     }
@@ -1770,7 +1780,7 @@ export function createAppController({
     setPendingProvisionAttachmentState(id, { ...current, status: "loading", error: "", actionError: "" });
     render();
     try {
-      const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision);
+      const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision, context.snapshot?.sourceKind);
       const items = await data.listAttachments(id);
       if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
       const safeItems = (Array.isArray(items) ? items : []).filter(item => item?.fileName);
@@ -2154,37 +2164,39 @@ export function createAppController({
       try {
         const original = await client.getPendingProvisionSnapshot();
         if (!current() || suppressed()) return false;
-        let upcoming = [];
+        let rows = Array.isArray(original?.rows) ? original.rows : [];
         let upcomingUnavailable = false;
-        try {
-          const data = await getPendingProvisionAttachmentsData(snapshotAccount, snapshotRevision);
-          if (typeof data.loadUpcomingPayments === "function") {
-            const readController = new AbortController();
-            let timer;
-            const timeout = new Promise((_, reject) => {
-              timer = setTimeout(() => {
-                readController.abort();
-                reject(new Error("A consulta dos próximos vencimentos excedeu o tempo limite."));
-              }, 8_000);
-            });
-            try { upcoming = await Promise.race([data.loadUpcomingPayments({ signal: readController.signal, includeOverdue: true }), timeout]); }
-            finally { clearTimeout(timer); }
+        if (original?.sourceKind !== "provision-description") {
+          let upcoming = [];
+          try {
+            const data = await getPendingProvisionAttachmentsData(snapshotAccount, snapshotRevision, "");
+            if (typeof data.loadUpcomingPayments === "function") {
+              const readController = new AbortController();
+              let timer;
+              const timeout = new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                  readController.abort();
+                  reject(new Error("A consulta dos próximos vencimentos excedeu o tempo limite."));
+                }, 8_000);
+              });
+              try { upcoming = await Promise.race([data.loadUpcomingPayments({ signal: readController.signal, includeOverdue: true }), timeout]); }
+              finally { clearTimeout(timer); }
+            }
+          } catch { upcomingUnavailable = true; }
+          const rowsById = new Map();
+          for (const row of rows) {
+            const id = String(row?.id ?? "").trim();
+            // The legacy VM sends the unit amount without freight; SharePoint confirms its total.
+            if (!id || !rowsById.has(id)) rowsById.set(id || Symbol(), { ...row, total: "" });
           }
-        } catch { upcomingUnavailable = true; }
+          for (const row of upcoming) {
+            const id = String(row?.id ?? "").trim();
+            const originalRow = id ? rowsById.get(id) : null;
+            rowsById.set(id || Symbol(), originalRow ? { ...row, ...originalRow, total: row.total } : row);
+          }
+          rows = [...rowsById.values()];
+        }
         if (!current() || suppressed()) return false;
-        const rowsById = new Map();
-        for (const row of Array.isArray(original?.rows) ? original.rows : []) {
-          const id = String(row?.id ?? "").trim();
-          // Preserve legacy snapshots without IDs, but do not duplicate actionable payments.
-          // The VM sends the unit amount without freight; only SharePoint confirms the total.
-          if (!id || !rowsById.has(id)) rowsById.set(id || Symbol(), { ...row, total: "" });
-        }
-        for (const row of upcoming) {
-          const id = String(row?.id ?? "").trim();
-          const originalRow = id ? rowsById.get(id) : null;
-          rowsById.set(id || Symbol(), originalRow ? { ...row, ...originalRow, total: row.total } : row);
-        }
-        const rows = [...rowsById.values()];
         const totalsUnavailable = rows.some(row => row.total == null || row.total === "");
         const snapshot = { ...original, today: provisionDateKey(), rows, count: rows.length, due: rows.length > 0, upcomingUnavailable, totalsUnavailable };
         const due = snapshot?.due === true && Array.isArray(snapshot.rows) && snapshot.rows.length > 0;
@@ -2799,8 +2811,12 @@ export function createAppController({
       && /PAGO|BAIXA|BAIXAR/.test(question);
   }
 
-  function isScheduledPaymentSelection(poll, activeFlow) {
-    return isScheduledSettlementFlow(activeFlow) && hasScheduledPaymentSelectionQuestion(poll);
+  function isScheduledPaymentSelection(poll, activeFlow, sourceKind) {
+    const groupedSelection = sourceKind === "provision-description" && (
+      [poll?.stepKey, poll?.step_key, activeFlow?.stepKey, activeFlow?.step_key].includes("provisao_para_baixa")
+      || (Array.isArray(poll?.options) && poll.options.some(option => /^provision_description:[1-9]\d*$/.test(String(option?.reply || option?.id || ""))))
+    );
+    return isScheduledSettlementFlow(activeFlow) && (groupedSelection || hasScheduledPaymentSelectionQuestion(poll));
   }
 
   function currentAssistantPoll() {
@@ -2901,10 +2917,15 @@ export function createAppController({
       || /ABANDONAR.*FLUXO/.test(normalizedSettlementText(poll?.question || poll?.prompt || poll?.text));
   }
 
-  function scheduledPaymentOption(poll, paymentId) {
+  function scheduledPaymentOption(poll, paymentId, sourceKind) {
     const id = String(paymentId || "").trim();
     if (!/^\d+$/.test(id)) return null;
     const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option => {
+      const references = [option?.reply, option?.id].map(value => String(value ?? "").trim()).filter(Boolean);
+      if (sourceKind === "provision-description") {
+        return references.length > 0 && references.every(value => value === `provision_description:${id}`);
+      }
+      if (references.some(value => value.startsWith("provision_description:"))) return false;
       const directValues = [option?.paymentId, option?.payment_id, option?.reply, option?.id]
         .map(value => String(value ?? "").trim());
       if (directValues.includes(id)) return true;
@@ -3123,8 +3144,8 @@ export function createAppController({
     return transitioned && !stopped && account === targetAccount && sessionRevision === targetRevision;
   }
 
-  async function enterScheduledPaymentSelection(poll, targetAccount, targetRevision) {
-    if (isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) return poll;
+  async function enterScheduledPaymentSelection(poll, targetAccount, targetRevision, sourceKind) {
+    if (isScheduledPaymentSelection(poll, currentAssistantActiveFlow(), sourceKind)) return poll;
 
     const activeFlow = currentAssistantActiveFlow();
     const restartFromMainMenu = isSuppliesFlowMenu(poll, activeFlow);
@@ -3203,7 +3224,7 @@ export function createAppController({
     );
     if (!entered) return null;
     poll = currentAssistantPoll();
-    if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) {
+    if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow(), sourceKind)) {
       setSessionError(new Error("A VM não abriu a seleção de pagamentos agendados. O fluxo foi preservado para você continuar."));
       return null;
     }
@@ -3257,7 +3278,8 @@ export function createAppController({
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
         if (String(row?.id ?? "").trim() !== id) return [row];
         if (date > provisionDayOffset(new Date(), 2)) return [];
-        return [{ ...row, dueDate: `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
+        return [{ ...row, dueDate: pendingProvisionSnapshot?.sourceKind === "provision-description"
+          ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
       });
       pendingProvisionDateEditPaymentId = "";
       pendingProvisionDateEditValue = "";
@@ -3447,7 +3469,8 @@ export function createAppController({
     if (!account || stopped || flowBusy() || pendingProvisionReminderOpen
       || pendingProvisionSettlementPaymentId || !id) return false;
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
-    if (!row) return false;
+    if (!row || row.settlementBlocked === true) return false;
+    const sourceKind = pendingProvisionSnapshot.sourceKind || row.sourceKind;
 
     const targetAccount = account;
     const targetRevision = sessionRevision;
@@ -3457,12 +3480,12 @@ export function createAppController({
     hidePendingProvisionsForSettlement();
     try {
       let poll = currentAssistantPoll();
-      if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow())) {
-        poll = await enterScheduledPaymentSelection(poll, targetAccount, targetRevision);
+      if (!isScheduledPaymentSelection(poll, currentAssistantActiveFlow(), sourceKind)) {
+        poll = await enterScheduledPaymentSelection(poll, targetAccount, targetRevision, sourceKind);
         if (!poll) return false;
       }
 
-      const option = scheduledPaymentOption(poll, id);
+      const option = scheduledPaymentOption(poll, id, sourceKind);
       if (!option) {
         hidePendingProvisionsForSettlement();
         setSessionError(new Error(`Não encontrei o pagamento ${id} na lista da VM. O fluxo continua disponível para seleção manual.`));
