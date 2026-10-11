@@ -31,6 +31,9 @@ test("prévia das legendas de ponto, EPI e pagamento acompanha o PDF sem cortar 
           assert.ok(layout.icons.find(icon=>icon.kind==='shield').width/layout.markerWidth>=.10,`${layout.kind}: selo precisa ser maior`);
         }
         assert.equal(new Set(layout.icons.filter(icon=>icon.kind!=='shield').map(icon=>icon.color)).size,3,`${layout.kind}: ícones precisam de cores diferentes`);
+        if(!layout.verified) for(const icon of layout.icons) {
+          assert.ok(icon.height/layout.markerWidth>=.049,layout.kind+': registro completo também precisa de ícones maiores');
+        }
         assert.ok(Math.abs(layout.grid[0]-layout.grid[1])<=1,`${layout.kind}: reservar metade para a legenda`);
         assert.ok(layout.captionScroll<=layout.captionHeight+1,`${layout.kind}: legenda cortada`);
         for(const row of layout.rows) {

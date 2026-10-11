@@ -166,6 +166,24 @@ test('PDF preserva ícones maiores e cores distintas no cartão de assinatura', 
   assert.ok(document[2]>document[0]&&document[0]>document[1],'registro em roxo');
 });
 
+test('PDF sem link público também amplia os ícones sem omitir o registro completo', async () => {
+  const source=await PDFDocument.create(); source.addPage([595,842]);
+  const id='0123456789abcdeffedcba9876543210';
+  const signed=await PDFDocument.load(await (await signPdfAttachment({
+    documentBlob:new Blob([await source.save()]),signatureBlob:new Blob([PNG_1X1]),
+    point:{page:1,x:.5,y:.3,scale:.5},signerName:'ASSINANTE',signedAt:'2026-10-11T04:01:00Z',integrityId:id,
+  })).arrayBuffer());
+  const content=pageContent(signed),name=boldTextPlacement(content,'ASSINANTE');
+  const icons=[...content.matchAll(/q\n([\s\S]*?)\nQ/g)].filter(match=>match[1].includes('1.8 w'));
+  assert.equal(icons.length,3);
+  for(const icon of icons) {
+    const size=Number(/([\d.]+) 0 0 -[\d.]+ 0 0 cm/.exec(icon[1])[1])*24;
+    assert.ok(size>=name.size*1.4,'registro completo mantém ícones maiores que o texto');
+  }
+  assert.ok(boldTextPlacement(content,'REGISTRO: 0123456789abcdef'));
+  assert.ok(boldTextPlacement(content,'fedcba9876543210'));
+});
+
 test("protocolo de integridade fica dentro do quadro EPI e na identificação do PDF", async () => {
   const source = await PDFDocument.create();
   source.addPage([595, 842]);

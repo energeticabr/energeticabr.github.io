@@ -29,7 +29,7 @@ export async function drawSignatureRecordCard(pdf, page, image, {
   const records = verification ? [recordLines[0]] : recordLines;
   const labels = [signerName, timestamp, ...records];
   const rowHeight = (captionHeight - inset * 2) / labels.length;
-  const iconSize = Math.min(width * .07, rowHeight * .85);
+  const iconSize = Math.min(width * .07, rowHeight);
   const textX = left + inset + iconSize + width * .02;
   const textWidth = (verification ? sealX - inset : left+width-inset) - textX;
   const rowSize = Math.min(11, rowHeight * .68, width * .05);

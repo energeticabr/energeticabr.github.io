@@ -28,7 +28,7 @@ for (const kind of ['', 'payment', 'epi']) {
   const marker=container.querySelector('.signature-placement-marker');
   const caption=marker.querySelector('.signature-placement-marker__caption');
   const grid=getComputedStyle(marker).gridTemplateRows.split(' ').map(parseFloat);
-  layouts.push({kind,grid,rows:[...caption.children].map(n=>({text:n.textContent,
+  layouts.push({kind,grid,markerWidth:marker.getBoundingClientRect().width,rows:[...caption.children].map(n=>({text:n.textContent,
     height:n.clientHeight,scrollHeight:n.scrollHeight,width:n.clientWidth,scrollWidth:n.scrollWidth})),
     icons:iconMetrics(caption),captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
 }
