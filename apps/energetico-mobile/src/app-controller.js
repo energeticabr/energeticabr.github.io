@@ -1,6 +1,7 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
+import { signatureLayoutGeometry } from './web/signature-document-layout.js';
 import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
@@ -4576,7 +4577,8 @@ export function createAppController({
       const index = pdf.getPages().findIndex(page => page.ref.toString() === widget.P().toString());
       const page = pdf.getPage(index), box = widget.getRectangle();
       // Fit the existing integrity-aware marker wholly inside the blank field.
-      const scale = Math.min(box.width, box.height * 2) / (page.getWidth() * .64);
+      const layout = signatureLayoutGeometry('', {pageWidth:page.getWidth(), pageHeight:page.getHeight(), scale:1, integrity:true});
+      const scale = Math.min(box.width, box.height * layout.aspectRatio) / (page.getWidth() * layout.widthRatio);
       rhidSignatureCapture = null;
       signaturePlacementOverride = {
         kind: "report", reportSession: target, representative: bernardo, messageId: newUploadMessageId(),

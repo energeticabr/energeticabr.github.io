@@ -5,7 +5,7 @@ const SIGNATURE_LAYOUTS = Object.freeze({
 });
 
 const INTEGRITY_LAYOUTS = Object.freeze({
-  generic: Object.freeze({ widthRatio: 0.64, aspectRatio: 2, captionRatio: 0.5 }),
+  generic: Object.freeze({ widthRatio: 0.76, aspectRatio: 2, captionRatio: 0.5 }),
   payment: Object.freeze({ widthRatio: 0.54, aspectRatio: 1.5, captionRatio: 0.5 }),
   epi: Object.freeze({ widthRatio: 0.42, aspectRatio: 1.4, captionRatio: 0.5 }),
 });

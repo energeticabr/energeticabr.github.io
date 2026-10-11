@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {signatureLayoutGeometry} from '../src/web/signature-document-layout.js';
 import {createAppController} from '../src/app-controller.js';
 import {createConversationStore} from '../src/chat/conversation-store.js';
 import {PDFDocument,PDFSignature,PDFName} from 'pdf-lib';
@@ -145,6 +146,8 @@ test('monthly signature uses the employee field, preserves the original on cance
  const [width,height]=[pdf.getPage(0).getWidth(),pdf.getPage(0).getHeight()];
  assert.equal(placement.selection.page,1);assert.ok(Math.abs(placement.selection.x-(box.x+box.width/2)/width)<.001);
  assert.ok(Math.abs(placement.selection.y-(box.y+box.height/2)/height)<.001);
+ const employeeGeometry=signatureLayoutGeometry('',{pageWidth:width,pageHeight:height,scale:placement.selection.scale,integrity:true});
+ assert.ok(employeeGeometry.width<=box.width+.01&&employeeGeometry.height<=box.height+.01,'cartão completo cabe no campo do funcionário');
  assert.equal(await h.view.emit('signature-placement-position',{point:placement.selection}),true);
  assert.equal(signedInputs[0].signatureBlob,signature);assert.equal(signedInputs[0].integrityId,evidence.id);
  assert.equal(evidenceCalls[0].documentBlob,original.blob);assert.equal(confirmations.length,1);
@@ -182,6 +185,8 @@ test('monthly report inserts Bernardo in the company field after employee signin
  const box=pdf.getForm().getField('rhid_representative').acroField.getWidgets()[0].getRectangle(),page=pdf.getPage(0);
  assert.ok(Math.abs(placement.selection.x-(box.x+box.width/2)/page.getWidth())<.001);
  assert.ok(Math.abs(placement.selection.y-(box.y+box.height/2)/page.getHeight())<.001);
+ const companyGeometry=signatureLayoutGeometry('',{pageWidth:page.getWidth(),pageHeight:page.getHeight(),scale:placement.selection.scale,integrity:true});
+ assert.ok(companyGeometry.width<=box.width+.01&&companyGeometry.height<=box.height+.01,'cartão completo cabe no campo da empresa');
  assert.equal(inputs.length,1,'inserir Bernardo ainda aguarda confirmar');
  assert.equal(await h.view.emit('signature-placement-position',{point:placement.selection}),true);
  const final=previews.at(-1);

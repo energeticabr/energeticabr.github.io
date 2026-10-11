@@ -1,5 +1,6 @@
-import { PDFDocument, PDFString, PDFRef, PDFArray, PDFDict, PDFStream, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFRef, PDFArray, PDFDict, PDFStream, StandardFonts, rgb } from "pdf-lib";
 import { signatureDocumentLayout, signatureLayoutGeometry, signatureRecordLines } from "./signature-document-layout.js";
+import { drawSignatureRecordCard } from './pdf-signature-card.js';
 
 const DEFAULT_SCALE = 0.5;
 const MIN_SCALE = 0.2;
@@ -270,9 +271,15 @@ export async function signPdfAttachment({
   const bottom = bounded(centerY - markerHeight / 2, 0, Math.max(0, pageHeight - markerHeight));
 
   const signature = await embedSignature(pdf, signatureBlob);
+  if (hasIntegrity) {
+    await drawSignatureRecordCard(pdf, page, signature, {left, bottom, width:markerWidth, height:markerHeight,
+      captionRatio:markerGeometry.captionRatio, signerName:printableText(signerName) || 'USUÁRIO',
+      timestamp:`DATA/HORA: ${epiDateLabel(signedAt)}`, recordLines, verification, opaqueInk:cardCaption});
+    const existingKeywords = pdf.getKeywords();
+    pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
+  } else {
   const inset = Math.max(2, markerWidth * 0.012);
-  const checkWidth = verification ? Math.min(96, markerWidth * 0.25) : 0;
-  const inkAreaWidth = markerWidth - (verification ? checkWidth + inset * 2 : 0);
+  const inkAreaWidth = markerWidth;
   const availableWidth = inkAreaWidth - inset * 2;
   const availableHeight = signatureHeight - inset * 2;
   const ratio = Math.min(availableWidth / signature.width, availableHeight / signature.height);
@@ -326,7 +333,6 @@ export async function signPdfAttachment({
   const captionColor = cardCaption ? rgb(0.05, 0.18, 0.36) : rgb(0.12, 0.12, 0.12);
   const name = fitText(printableText(signerName) || "USUÁRIO", font, fontSize, textWidth);
   const nameWidth = font.widthOfTextAtSize(name, fontSize);
-  if (!/^[a-f0-9]{32}$/.test(String(integrityId))) {
   if (paymentCaption || epiCaption) {
     page.drawLine({
       start: { x: left + inset, y: bottom + captionHeight },
@@ -395,66 +401,6 @@ export async function signPdfAttachment({
     });
   }
 
-  }
-  if (/^[a-f0-9]{32}$/.test(String(integrityId))) {
-    // Reserve four readable rows instead of shrinking the entire protocol into
-    // one tiny line. The complete id remains in the PDF metadata and evidence.
-    const nameLabel = printableText(signerName) || "USUÁRIO";
-    const timeLabel = `DATA/HORA: ${epiDateLabel(signedAt)}`;
-    page.drawRectangle({ x: left + inset, y: bottom + 1,
-      width: markerWidth - inset * 2, height: captionHeight - 2, color: rgb(1, 1, 1) });
-    const recordFont = await pdf.embedFont(StandardFonts.HelveticaBold);
-    if (cardCaption) page.drawLine({
-      start: { x: left + inset, y: bottom + captionHeight },
-      end: { x: left + markerWidth - inset, y: bottom + captionHeight },
-      color: paymentBorderColor, thickness: 1.2,
-    });
-    const labels = verification ? [recordLines[0], timeLabel, nameLabel] : [recordLines[1], recordLines[0], timeLabel, nameLabel];
-    const rowHeight = (captionHeight - 4) / labels.length;
-    const rowSize = Math.min(markerWidth / 20, rowHeight * 0.85);
-    for (const [index, label] of labels.entries()) {
-      const size = Math.min(rowSize,
-        (markerWidth - inset * 2) / Math.max(1, recordFont.widthOfTextAtSize(label, 1)));
-      page.drawText(label, {
-        x: left + (markerWidth - recordFont.widthOfTextAtSize(label, size)) / 2,
-        y: bottom + 2 + index * rowHeight + (rowHeight - size) / 2,
-        size, font: recordFont, color: captionColor,
-      });
-    }
-    const existingKeywords = pdf.getKeywords();
-    pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
-    if (verification) {
-      const buttonWidth = checkWidth;
-      const buttonHeight = Math.min(signatureHeight - inset * 2, buttonWidth * 0.75);
-      const buttonX = left + markerWidth - inset - buttonWidth;
-      const buttonY = bottom + captionHeight + (signatureHeight - buttonHeight) / 2;
-      const green = rgb(0.09, 0.40, 0.24);
-      page.drawRectangle({ x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight,
-        color: rgb(1, 1, 1), borderColor: rgb(0.82, 0.86, 0.84), borderWidth: 0.7 });
-      const shieldSize = Math.min(26, buttonHeight * 0.46);
-      const cx = buttonX + buttonWidth / 2, sy = buttonY + buttonHeight * 0.42;
-      const polygon = [[0, 0.95], [0.36, 0.82], [0.32, 0.38], [0.20, 0.16], [0, 0], [-0.20, 0.16], [-0.32, 0.38], [-0.36, 0.82], [0, 0.95]];
-      for (let index = 1; index < polygon.length; index++) page.drawLine({
-        start: { x: cx + polygon[index - 1][0] * shieldSize, y: sy + polygon[index - 1][1] * shieldSize },
-        end: { x: cx + polygon[index][0] * shieldSize, y: sy + polygon[index][1] * shieldSize },
-        color: green, thickness: Math.max(0.6, shieldSize * 0.07),
-      });
-      page.drawLine({ start: { x: cx - shieldSize * 0.14, y: sy + shieldSize * 0.49 },
-        end: { x: cx - shieldSize * 0.02, y: sy + shieldSize * 0.36 }, color: green, thickness: Math.max(0.7, shieldSize * 0.08) });
-      page.drawLine({ start: { x: cx - shieldSize * 0.02, y: sy + shieldSize * 0.36 },
-        end: { x: cx + shieldSize * 0.17, y: sy + shieldSize * 0.64 }, color: green, thickness: Math.max(0.7, shieldSize * 0.08) });
-      const label = "Ver registro";
-      const labelSize = Math.min(9, buttonHeight * 0.19, (buttonWidth - 4) / recordFont.widthOfTextAtSize(label, 1));
-      page.drawText(label, { x: buttonX + (buttonWidth - recordFont.widthOfTextAtSize(label, labelSize)) / 2,
-        y: buttonY + buttonHeight * 0.16, size: labelSize, font: recordFont, color: green });
-      const link = pdf.context.register(pdf.context.obj({ Type: "Annot", Subtype: "Link",
-        Rect: [buttonX, buttonY, buttonX + buttonWidth, buttonY + buttonHeight], Border: [0, 0, 0],
-        Contents: PDFString.of("Ver registro da assinatura"),
-        A: { Type: "Action", S: "URI", URI: PDFString.of(verification.href) } }));
-      page.node.addAnnot(link);
-    }
-  }
-
   if (!cardCaption) {
     // Match the movable preview card while keeping the PDF content under the
     // handwritten image visible. Paint the outline last so captions cannot hide it.
@@ -463,6 +409,7 @@ export async function signPdfAttachment({
     page.drawLine({ start: { x: left, y: bottom + captionHeight },
       end: { x: left + markerWidth, y: bottom + captionHeight },
       color: paymentBorderColor, thickness: 1.2 });
+  }
   }
   await pdf.flush();
   normalizeObjectGenerations(pdf.context);
