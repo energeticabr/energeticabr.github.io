@@ -1,5 +1,5 @@
 import {StandardFonts, PDFString, rgb} from 'pdf-lib';
-import {signatureCardIcons} from './signature-card-icons.js';
+import {signatureCardIcons, signatureCardIconColors} from './signature-card-icons.js';
 
 const blue = rgb(.08, .18, .34);
 const green = rgb(.09, .40, .24);
@@ -26,28 +26,31 @@ export async function drawSignatureRecordCard(pdf, page, image, {
   const normal = await pdf.embedFont(StandardFonts.Helvetica);
   const sealWidth = verification ? width * .21 : 0;
   const sealX = left + width - inset - sealWidth;
-  const iconSize = Math.min(12, width * .047);
-  const textX = left + inset + iconSize + width * .02;
-  const textWidth = (verification ? sealX - inset : left+width-inset) - textX;
   const records = verification ? [recordLines[0]] : recordLines;
   const labels = [signerName, timestamp, ...records];
   const rowHeight = (captionHeight - inset * 2) / labels.length;
+  const iconSize = Math.min(width * .07, rowHeight * .85);
+  const textX = left + inset + iconSize + width * .02;
+  const textWidth = (verification ? sealX - inset : left+width-inset) - textX;
   const rowSize = Math.min(11, rowHeight * .68, width * .05);
   for (const [index, label] of labels.entries()) {
     const size = Math.min(rowSize, textWidth / Math.max(1, font.widthOfTextAtSize(label,1)));
-    const y = bottom + captionHeight - inset - (index+.5)*rowHeight - size*.34;
+    const centerY = bottom + captionHeight - inset - (index+.5)*rowHeight;
+    const y = centerY - size*.34;
     page.drawText(label, {x:textX,y,size,font,color:blue});
     if (index < 3) page.drawSvgPath(signatureCardIcons[['person','calendar','document'][index]],
-      {x:left+inset,y:y+size*.9,scale:iconSize/24,borderColor:blue,borderWidth:1.8});
+      {x:left+inset,y:centerY+iconSize/2,scale:iconSize/24,
+        borderColor:rgb(...signatureCardIconColors[['person','calendar','document'][index]].map(channel=>channel/255)),borderWidth:1.8});
   }
   if (!verification) return;
   page.drawLine({start:{x:sealX-inset*.5,y:bottom+inset},end:{x:sealX-inset*.5,y:bottom+captionHeight-inset},color:rgb(.78,.82,.86),thickness:.6});
   const sealHeight = captionHeight - inset * 2;
-  const shieldSize = Math.min(27, sealHeight * .43, sealWidth * .6);
   const sealLabels = ['Documento','assinado','eletronicamente'];
   const sealFontSize = Math.min(9, sealHeight*.125, (sealWidth-2)/normal.widthOfTextAtSize('eletronicamente',1));
+  const shieldSize = Math.min(width*.11, sealHeight*.5, sealWidth*.67,
+    Math.max(0,sealHeight-sealFontSize*3.45-4));
   const textBottom = bottom + inset + Math.max(0, (sealHeight - shieldSize - sealFontSize*3.45 - 4) / 2);
-  page.drawSvgPath(signatureCardIcons.shield,{x:sealX+(sealWidth-shieldSize)/2,y:textBottom+sealFontSize*3.45+4+shieldSize,scale:shieldSize/24,borderColor:green,borderWidth:2.4});
+  page.drawSvgPath(signatureCardIcons.shield,{x:sealX+(sealWidth-shieldSize)/2,y:textBottom+sealFontSize*3.45+4+shieldSize,scale:shieldSize/24,borderColor:rgb(...signatureCardIconColors.shield.map(channel=>channel/255)),borderWidth:2.4});
   for (const [index,label] of sealLabels.entries()) page.drawText(label,
     {x:sealX+(sealWidth-normal.widthOfTextAtSize(label,sealFontSize))/2,
       y:textBottom+(2-index)*sealFontSize*1.15,size:sealFontSize,font:normal,color:green});

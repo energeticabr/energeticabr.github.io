@@ -827,7 +827,7 @@ export function createSignaturePlacement({
       for (const row of [...caption.children].filter(node => node.tagName === 'SPAN')) {
         const measured = Math.max(...row.textContent.split('\n').map(line =>
           metrics?.measureText ? metrics.measureText(line).width : line.length * 80), 1);
-        const available = verifiable ? 65 : 87;
+        const available = verifiable ? 62 : 82;
         row.style.fontSize = `${Math.min(verifiable ? 3.8 : 4.2, available * 100 / measured)}cqw`;
       }
     }

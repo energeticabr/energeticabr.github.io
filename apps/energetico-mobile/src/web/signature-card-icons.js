@@ -6,6 +6,13 @@ export const signatureCardIcons = Object.freeze({
   shield: 'M12 2 L21 6 L20 14 Q18 20 12 23 Q6 20 4 14 L3 6 Z M7 12 L11 16 L17 9',
 });
 
+export const signatureCardIconColors = Object.freeze({
+  person: [30, 90, 160],
+  calendar: [191, 102, 12],
+  document: [117, 57, 166],
+  shield: [23, 102, 61],
+});
+
 export function appendSignatureCardIcon(documentRef, row, kind) {
   const svg = documentRef.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
@@ -13,7 +20,8 @@ export function appendSignatureCardIcon(documentRef, row, kind) {
   svg.setAttribute('data-signature-icon', kind);
   const path = documentRef.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', signatureCardIcons[kind]);
-  path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'rgb(' + signatureCardIconColors[kind].join(',') + ')');
   path.setAttribute('stroke-width', '1.8'); path.setAttribute('stroke-linecap', 'round');
   path.setAttribute('stroke-linejoin', 'round'); svg.append(path); row.prepend(svg);
 }

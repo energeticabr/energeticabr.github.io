@@ -4,6 +4,13 @@ import { createSignaturePlacement } from '../../src/web/signature-placement.js';
 const ink = new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="300" height="70"><text x="20" y="50" font-size="40">Exemplo</text></svg>'], {type:'image/svg+xml'});
 ink.signatureEvidence = {id:'0123456789abcdef0123456789abcdef'};
 const layouts = [];
+function iconMetrics(caption) {
+  return [...caption.querySelectorAll('svg[data-signature-icon]')].map(svg => {
+    const bounds=svg.getBoundingClientRect();
+    return {kind:svg.dataset.signatureIcon,width:bounds.width,height:bounds.height,
+      color:getComputedStyle(svg.querySelector('path')).stroke};
+  });
+}
 const selectedScale=Number(new URL(location.href).searchParams.get('scale')||'.5');
 for (const kind of ['', 'payment', 'epi']) {
   const container = document.createElement('div');
@@ -23,7 +30,7 @@ for (const kind of ['', 'payment', 'epi']) {
   const grid=getComputedStyle(marker).gridTemplateRows.split(' ').map(parseFloat);
   layouts.push({kind,grid,rows:[...caption.children].map(n=>({text:n.textContent,
     height:n.clientHeight,scrollHeight:n.scrollHeight,width:n.clientWidth,scrollWidth:n.scrollWidth})),
-    captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
+    icons:iconMetrics(caption),captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
 }
 for (const kind of ['', 'payment', 'epi']) {
   const container = document.createElement('div');
@@ -49,7 +56,7 @@ for (const kind of ['', 'payment', 'epi']) {
   layouts.push({kind:`${kind}-verified`,verified:true,scale:selectedScale,widthRatio:kind==='epi'?.42:kind==='payment'?.54:.76,
     markerWidth:markerBounds.width,pageWidth:pageBounds.width,nameTextRight,sealLeft:sealBounds.left,grid,rows:[...caption.children].map(n=>({text:n.textContent,
     height:n.clientHeight,scrollHeight:n.scrollHeight,width:n.clientWidth,scrollWidth:n.scrollWidth})),
-    captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
+    icons:iconMetrics(caption),captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
 }
 document.documentElement.dataset.layout = JSON.stringify({viewport:innerWidth,layouts});
 </script></body></html>

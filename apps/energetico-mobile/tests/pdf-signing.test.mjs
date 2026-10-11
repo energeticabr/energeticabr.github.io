@@ -144,6 +144,28 @@ test('cartão auditado EPI cobre a linha antiga do modelo sem pintar o traço de
   assert.ok(fills(pageContent(generic)).every(rect=>rect.height<113.04));
 });
 
+test('PDF preserva ícones maiores e cores distintas no cartão de assinatura', async () => {
+  const source=await PDFDocument.create(); source.addPage([595,842]);
+  const id='0123456789abcdef0123456789abcdef';
+  const signed=await PDFDocument.load(await (await signPdfAttachment({
+    documentBlob:new Blob([await source.save()]),signatureBlob:new Blob([PNG_1X1]),
+    point:{page:1,x:.5,y:.3,scale:1},signerName:'ASSINANTE',signedAt:'2026-10-11T04:01:00Z',
+    integrityId:id,verificationUrl:`https://example.com/assinaturas/${id}/${'a'.repeat(64)}`,
+  })).arrayBuffer());
+  const content=pageContent(signed);
+  const icons=[...content.matchAll(/q\n([\s\S]*?)\nQ/g)].filter(match=>match[1].includes('1.8 w')).map(match=>({
+    color:/([\d.]+) ([\d.]+) ([\d.]+) RG/.exec(match[1]).slice(1).map(Number),
+    size:Number(/([\d.]+) 0 0 -[\d.]+ 0 0 cm/.exec(match[1])[1])*24,
+  }));
+  assert.equal(icons.length,3);
+  const name=boldTextPlacement(content,'ASSINANTE');
+  for(const icon of icons) assert.ok(icon.size>=name.size*1.6,'ícone não pode ficar menor que a identificação');
+  const [person,calendar,document]=icons.map(icon=>icon.color);
+  assert.ok(person[2]>person[1]&&person[1]>person[0],'pessoa em azul');
+  assert.ok(calendar[0]>calendar[1]&&calendar[1]>calendar[2],'calendário em cor quente');
+  assert.ok(document[2]>document[0]&&document[0]>document[1],'registro em roxo');
+});
+
 test("protocolo de integridade fica dentro do quadro EPI e na identificação do PDF", async () => {
   const source = await PDFDocument.create();
   source.addPage([595, 842]);

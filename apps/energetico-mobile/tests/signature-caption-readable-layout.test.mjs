@@ -25,7 +25,12 @@ test("prévia das legendas de ponto, EPI e pagamento acompanha o PDF sem cortar 
           const expectedWidth=Math.min(595*layout.widthRatio*scale,591)*layout.pageWidth/595;
           assert.ok(Math.abs(layout.markerWidth-expectedWidth)<=1, `${layout.kind}: prévia difere do PDF em escala ${scale}`);
           assert.ok(layout.nameTextRight<=layout.sealLeft,`${layout.kind}: nome invade o selo`);
+          for(const icon of layout.icons.filter(icon=>icon.kind!=='shield')) {
+            assert.ok(icon.height/layout.markerWidth>=.055,`${layout.kind}: ícone ${icon.kind} precisa ser maior`);
+          }
+          assert.ok(layout.icons.find(icon=>icon.kind==='shield').width/layout.markerWidth>=.10,`${layout.kind}: selo precisa ser maior`);
         }
+        assert.equal(new Set(layout.icons.filter(icon=>icon.kind!=='shield').map(icon=>icon.color)).size,3,`${layout.kind}: ícones precisam de cores diferentes`);
         assert.ok(Math.abs(layout.grid[0]-layout.grid[1])<=1,`${layout.kind}: reservar metade para a legenda`);
         assert.ok(layout.captionScroll<=layout.captionHeight+1,`${layout.kind}: legenda cortada`);
         for(const row of layout.rows) {
