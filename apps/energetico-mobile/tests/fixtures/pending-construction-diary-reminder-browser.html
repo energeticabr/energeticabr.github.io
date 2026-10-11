@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diários pendentes — alinhamento do botão Fechar</title>
+</head>
+<body>
+  <main id="app"></main>
+  <script type="module">
+    import '../../src/styles.css';
+    import { createChatView } from '../../src/ui/chat-view.js';
+
+    const root = document.querySelector('#app');
+    const view = createChatView(root);
+    view.render({
+      sessionStatus: 'authenticated', account: { name: 'Bernardo' },
+      draft: '', messages: [], pendingFiles: [],
+      pendingConstructionDiaries: { rows: [
+        { id: '213', status: 'PENDENTE', date: '2026-10-08', branch: '004 - EDIFÍCIO XAVANTE', responsible: 'BERNARDO NOTINI MOREIRA BAHIA' },
+        { id: '214', status: 'PENDENTE', date: '2026-10-09', branch: '004 - EDIFÍCIO XAVANTE', responsible: 'BERNARDO NOTINI MOREIRA BAHIA' },
+      ] },
+    });
+    await document.fonts.ready;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const dialog = root.querySelector('.chat-pending-construction-diaries');
+    const footer = dialog.querySelector('.chat-confirmation__actions');
+    const button = footer.querySelector('button');
+    const style = getComputedStyle(button);
+    const label = document.createRange();
+    label.selectNodeContents(button);
+    document.documentElement.dataset.layout = JSON.stringify({
+      dialog: dialog.getBoundingClientRect().toJSON(),
+      footer: footer.getBoundingClientRect().toJSON(),
+      button: button.getBoundingClientRect().toJSON(),
+      label: label.getBoundingClientRect().toJSON(),
+      textAlign: style.textAlign,
+      documentOverflow: document.documentElement.scrollWidth - innerWidth,
+      dismissAction: button.dataset.action,
+      fillButtons: dialog.querySelectorAll('[data-action="fill-pending-construction-diary"]').length,
+    });
+  </script>
+</body>
+</html>
