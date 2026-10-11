@@ -1,4 +1,4 @@
-import { PDFDocument, PDFString, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFString, PDFRef, PDFArray, PDFDict, PDFStream, StandardFonts, rgb } from "pdf-lib";
 import { signatureDocumentLayout, signatureLayoutGeometry, signatureRecordLines } from "./signature-document-layout.js";
 
 const DEFAULT_SCALE = 0.5;
@@ -6,6 +6,37 @@ const MIN_SCALE = 0.2;
 const MAX_SCALE = 2;
 const MIN_STAMP_SCALE = 0.2;
 const MAX_STAMP_SCALE = 2;
+
+function normalizeObjectGenerations(context) {
+  // Incremental PDFs may retain two generations of the same object number.
+  // Both pdf-lib writers index entries by number, so give each live generation
+  // its own number while preserving every reference and document structure.
+  const objects = context.enumerateIndirectObjects();
+  const replacements = new Map(objects
+    .filter(([ref]) => ref.generationNumber !== 0)
+    .map(([ref]) => [ref, context.nextRef()]));
+  if (!replacements.size) return;
+  const visited = new Set();
+  function visit(value) {
+    if (value instanceof PDFRef) return replacements.get(value) || value;
+    if (!value || visited.has(value)) return value;
+    visited.add(value);
+    if (value instanceof PDFArray) {
+      for (let index = 0; index < value.size(); index++) value.set(index, visit(value.get(index)));
+    } else if (value instanceof PDFDict) {
+      for (const [key, entry] of value.entries()) value.set(key, visit(entry));
+    } else if (value instanceof PDFStream) visit(value.dict);
+    return value;
+  }
+  for (const [ref, value] of objects) {
+    visit(value);
+    if (replacements.has(ref)) {
+      context.delete(ref);
+      context.assign(replacements.get(ref), value);
+    }
+  }
+  for (const key of Object.keys(context.trailerInfo)) context.trailerInfo[key] = visit(context.trailerInfo[key]);
+}
 
 function bounded(value, minimum, maximum) {
   const number = Number(value);
@@ -433,6 +464,9 @@ export async function signPdfAttachment({
       end: { x: left + markerWidth, y: bottom + captionHeight },
       color: paymentBorderColor, thickness: 1.2 });
   }
-  const bytes = await pdf.save();
+  await pdf.flush();
+  normalizeObjectGenerations(pdf.context);
+  // Use a conventional xref table for compatibility with strict audit readers.
+  const bytes = await pdf.save({ useObjectStreams: false });
   return new Blob([bytes], { type: "application/pdf" });
 }

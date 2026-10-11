@@ -729,9 +729,9 @@ function compressionPreviewData(message) {
 
 function compressionChoiceOption(options, choice) {
   const expected = choice === "compressed"
-    ? "attachment_compression_use"
-    : "attachment_compression_keep";
-  return options.find(option => draftReplyId(option).trim().toLowerCase() === expected) || null;
+    ? ["attachment_compression_use_compressed", "attachment_compression_use"]
+    : ["attachment_compression_use_original", "attachment_compression_keep"];
+  return options.find(option => expected.includes(draftReplyId(option).trim().toLowerCase())) || null;
 }
 
 function compressionPreviewMedia(item, label) {
@@ -1395,7 +1395,10 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
   const displayOptions = options;
   const compressionPreview = compressionPreviewData(message);
-  const compressionOptionIds = new Set(["attachment_compression_use", "attachment_compression_keep"]);
+  const compressionOptionIds = new Set([
+    "attachment_compression_use", "attachment_compression_keep",
+    "attachment_compression_use_compressed", "attachment_compression_use_original",
+  ]);
   const isLaunchMenu = isSuppliesLaunchMenu(message);
   const pairedMenu = pairedGalleryMenu(message);
   const isRegistrationMenu = isSuppliesRegistrationMenu(message);
@@ -2187,6 +2190,7 @@ function signaturePlacementMarkup(placement, busy, stampApplied = false) {
         </div>
       </header>
       <p class="signature-placement-stamp-status" data-role="signature-placement-stamp-status" role="status" aria-live="polite"></p>
+      ${placement?.error ? `<p class="signature-placement-instructions" role="alert">${escapeHtml(placement.error)}</p>` : ""}
       <div class="signature-placement-document" data-role="signature-placement-document"${signatureDocumentLayout ? ` data-signature-document-layout="${signatureDocumentLayout}"` : ""}></div>
       <div class="signature-placement-size" aria-label="Tamanho da assinatura selecionada">
         <span>Tamanho</span>

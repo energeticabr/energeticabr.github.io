@@ -743,6 +743,17 @@ function attachmentCompressionDescriptor(item) {
 }
 
 function attachCompressionPreview(result, originalAttachment) {
+  const messages = Array.isArray(result?.messages) ? result.messages : [];
+  const targetIndex = messages.findLastIndex(message => (
+    message?.type === "poll"
+      && Array.isArray(message.options)
+      && message.options.some(option => [
+        "attachment_compression_use", "attachment_compression_keep",
+        "attachment_compression_use_compressed", "attachment_compression_use_original",
+      ].includes(String(option?.reply || option?.id || "").trim().toLowerCase()))
+  ));
+  if (targetIndex < 0 || messages[targetIndex].attachment_compression_preview
+    || messages[targetIndex].attachmentCompressionPreview || messages[targetIndex].attachment_compression) return result;
   const original = attachmentCompressionDescriptor(originalAttachment);
   if (!original) return result;
   const remoteAttachments = Array.isArray(result?.attachments) ? result.attachments : [];
@@ -753,13 +764,6 @@ function attachCompressionPreview(result, originalAttachment) {
   const compressedDescriptor = attachmentCompressionDescriptor(compressed);
   if (!compressedDescriptor) return result;
   const preview = { original, compressed: compressedDescriptor };
-  const messages = Array.isArray(result?.messages) ? result.messages : [];
-  const targetIndex = messages.findLastIndex(message => (
-    message?.type === "poll"
-      && Array.isArray(message.options)
-      && message.options.some(option => String(option?.reply || option?.id || "").trim().toLowerCase().startsWith("attachment_compression_"))
-  ));
-  if (targetIndex < 0) return result;
   const nextMessages = messages.slice();
   nextMessages[targetIndex] = {
     ...nextMessages[targetIndex],
@@ -9587,7 +9591,9 @@ export function createAppController({
       return true;
     } catch (error) {
       if (!stopped && account === signingAccount) {
-        signaturePlacementData = previousPlacementData;
+        signaturePlacementData = previousPlacementData
+          ? { ...previousPlacementData, error: error?.message || "Não foi possível confirmar o PDF assinado. Tente novamente." }
+          : previousPlacementData;
         setSessionError(error, "Não foi possível gerar e adicionar o PDF assinado.");
       }
       return false;

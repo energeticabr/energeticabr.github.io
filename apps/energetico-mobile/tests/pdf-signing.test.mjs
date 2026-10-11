@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { inflateSync } from "node:zlib";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFRef, PDFName } from "pdf-lib";
 
 import { signPdfAttachment } from "../src/web/pdf-signing.js";
 import { signatureLayoutGeometry } from "../src/web/signature-document-layout.js";
@@ -10,6 +10,39 @@ const PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
 );
+
+test("PDF com objetos de geração não zero usa tabela xref compatível com auditoria estrita", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([300, 400]);
+  source.context.assign(PDFRef.of(58, 1), source.context.obj({ Diagnostic: "generation-one" }));
+  source.context.assign(PDFRef.of(58, 0), source.context.obj({ Diagnostic: "generation-zero" }));
+  source.catalog.set(PDFName.of("DiagnosticZero"), PDFRef.of(58, 0));
+  source.catalog.set(PDFName.of("DiagnosticOne"), PDFRef.of(58, 1));
+  const original = await source.save({ useObjectStreams: false });
+  const result = await signPdfAttachment({
+    documentBlob: new Blob([original]), signatureBlob: new Blob([PNG_1X1]),
+    point: { page: 1, x: 0.5, y: 0.2, scale: 0.5 },
+    integrityId: "0123456789abcdef0123456789abcdef",
+    verificationUrl: "https://example.com/assinaturas/0123456789abcdef0123456789abcdef/" + "a".repeat(64),
+  });
+  const bytes = Buffer.from(await result.arrayBuffer());
+  assert.match(bytes.toString("latin1"), /\nxref\n/);
+  assert.doesNotMatch(bytes.toString("latin1"), /\/Type \/ObjStm/);
+  const text = bytes.toString("latin1");
+  const xref = text.slice(text.lastIndexOf("\nxref\n") + 6).split("\n");
+  for (let index = 0; index < xref.length && xref[index] !== "trailer";) {
+    const [first, count] = xref[index++].split(" ").map(Number);
+    for (let row = 0; row < count; row++) {
+      const [offset, generation, kind] = xref[index++].trim().split(/\s+/);
+      if (kind === "n") assert.ok(text.slice(Number(offset)).startsWith(`${first + row} ${Number(generation)} obj`), "cada entrada xref deve apontar para seu próprio objeto");
+    }
+  }
+  const signed = await PDFDocument.load(bytes);
+  assert.equal(signed.getPageCount(), 1);
+  assert.equal(signed.getPage(0).node.Annots().size(), 1);
+  assert.equal(signed.catalog.lookup(PDFName.of("DiagnosticZero")).get(PDFName.of("Diagnostic")).toString(), "/generation-zero");
+  assert.equal(signed.catalog.lookup(PDFName.of("DiagnosticOne")).get(PDFName.of("Diagnostic")).toString(), "/generation-one");
+});
 
 test("PDF de ponto imprime retângulo externo envolvendo assinatura e registro", async () => {
   const source = await PDFDocument.create();

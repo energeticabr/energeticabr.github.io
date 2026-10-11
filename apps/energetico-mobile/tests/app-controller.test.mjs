@@ -7082,6 +7082,61 @@ test("anexo grande abre a prévia de compactação depois de ser confirmado", as
   h.controller.stop();
 });
 
+test("menu de níveis aguarda a escolha sem inventar prévia e mostra o candidato escolhido", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const original = { id: "original", fileName: "nota.pdf", mimeType: "application/pdf", size: 8_000_000, mediaUrl: "/media/original" };
+  const activeFlow = { id: "launch", title: "EFETUAR LANÇAMENTO", contextId: "launch:attachments" };
+  const levelOptions = ["low", "medium", "high", "very_high"].map(level => ({
+    id: `attachment_compression_level_${level}`, reply: `attachment_compression_level_${level}`, label: level,
+  }));
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [original] });
+  h.chatCalls.length = 0;
+  h.client.compressAttachment = async id => {
+    h.chatCalls.push(["compress-attachment", id]);
+    return { status: "processed", activeFlow, attachments: [original], messages: [{
+      type: "poll", question: "Escolha o nível de compressão", options: levelOptions,
+    }] };
+  };
+  const preview = {
+    original,
+    compressed: { ...original, id: "candidate", size: 400_000, mediaUrl: "/media/candidate" },
+  };
+  h.client.chooseAttachmentCompression = async choice => {
+    h.chatCalls.push(["choose-compression", choice]);
+    return { status: "processed", activeFlow, attachments: [original], messages: [{
+      type: "poll", question: "Deseja usar a versão comprimida?", attachment_compression_preview: preview,
+      options: [
+        { id: "attachment_compression_use_compressed", reply: "attachment_compression_use_compressed", label: "Usar comprimida" },
+        { id: "attachment_compression_use_original", reply: "attachment_compression_use_original", label: "Usar original" },
+      ],
+    }] };
+  };
+  await h.view.emit("compress-attachment", { fileId: "original" });
+  const menu = h.store.getState().messages.at(-1);
+  assert.deepEqual(menu.options, levelOptions);
+  assert.equal(menu.attachment_compression_preview, undefined);
+  assert.equal(h.store.getState().attachments[0].size, 8_000_000);
+  assert.equal(h.store.getState().activeFlow.contextId, "launch:attachments");
+  await h.view.emit("select-reply", { replyId: levelOptions[3].reply, label: levelOptions[3].label });
+  assert.deepEqual(h.chatCalls.filter(call => ["compress-attachment", "choose-compression", "text"].includes(call[0])), [
+    ["compress-attachment", "original"], ["choose-compression", "attachment_compression_level_very_high"],
+  ]);
+  assert.deepEqual(h.store.getState().messages.at(-1).attachment_compression_preview, preview);
+  assert.equal(h.store.getState().activeFlow.contextId, "launch:attachments");
+  assert.equal(h.store.getState().attachments[0].size, 8_000_000);
+});
+
+test("níveis genéricos de compressão no upload seguem a resposta normal do fluxo", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.client.chooseAttachmentCompression = async () => { throw new Error("Não deve chamar ação de anexo"); };
+  await h.view.emit("select-reply", { replyId: "compression_level_high", label: "ALTA — até 1 MB; redução mínima de 80%" });
+  assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "ALTA — até 1 MB; redução mínima de 80%", replyId: "compression_level_high" }]);
+});
+
 test("arquivos soltos no chat usam a mesma fila de envio dos anexos selecionados", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
@@ -7441,6 +7496,8 @@ test("falha no registro de integridade conserva original e bloqueia envio da có
   assert.equal(h.chatCalls.filter(call => call[0] === "file").length, 0);
   assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["rhid"]);
   assert.match(h.view.renders.at(-1).error, /integridade/);
+  assert.match(h.view.renders.at(-1).signaturePlacement.error, /integridade/);
+  assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
 });
 
 test("posição sem PDF pronto falha fechada e não assina pelo comando legado", async t => {

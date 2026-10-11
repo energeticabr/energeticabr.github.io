@@ -1,0 +1,217 @@
+[
+  {
+    "file": "compression.py",
+    "old": "    def compress(self, attachments: list[dict], max_total_bytes: int) -> list[dict]:\n",
+    "new": "    LEVELS = {\n        \"low\": (10_000_000, 25),\n        \"medium\": (5_000_000, 50),\n        \"high\": (1_000_000, 80),\n        \"very_high\": (500_000, 90),\n    }\n\n    def _compress_one_for_level(self, source, attachment, target_bytes, output_dir, deadline, level):\n        \"\"\"The explicit-level path never rasterizes PDF pages or uses tiny images.\"\"\"\n        self._check_deadline(deadline)\n        with source.open(\"rb\") as stream:\n            is_pdf = stream.read(5) == b\"%PDF-\"\n        if is_pdf:\n            return self._compress_pdf_for_level(source, attachment, target_bytes, output_dir, deadline)\n        try:\n            with Image.open(source) as opened:\n                if int(getattr(opened, \"n_frames\", 1)) != 1:\n                    return source, None, None\n                image = ImageOps.exif_transpose(opened)\n                if \"A\" in image.getbands() or (image.mode == \"P\" and \"transparency\" in image.info):\n                    rgba = image.convert(\"RGBA\")\n                    image = Image.new(\"RGB\", rgba.size, \"white\")\n                    image.paste(rgba, mask=rgba.getchannel(\"A\"))\n                else:\n                    image = image.convert(\"RGB\")\n                width, height = image.size\n                # Preserve small originals; never downsample below these useful\n                # document-photo floors. Human preview still decides readability.\n                floor = min(1.0, max(1600 / max(width, height), 800 / min(width, height)))\n                best = source\n                for index, (scale, quality) in enumerate(((1, 82), (1, 76), (.9, 76), (.8, 70), (.7, 65)), 1):\n                    self._check_deadline(deadline)\n                    scale = max(floor, scale)\n                    dimensions = (min(width, max(1, int(width * scale))), min(height, max(1, int(height * scale))))\n                    rendered = image if dimensions == image.size else image.resize(dimensions, Image.Resampling.LANCZOS)\n                    candidate = output_dir / f\"level-image-{index}.jpg\"\n                    rendered.save(candidate, format=\"JPEG\", quality=quality, optimize=True, progressive=True)\n                    best = self._copy_if_smaller(best, candidate)\n                    if best != source and best.stat().st_size <= target_bytes:\n                        return best, \".jpg\", \"image/jpeg\"\n                return best, \".jpg\" if best != source else None, \"image/jpeg\" if best != source else None\n        except (OSError, ValueError):\n            return self._compress_zip(source, attachment.get(\"original_name\") or attachment.get(\"sharepoint_name\"), output_dir, deadline)\n\n    def _compress_pdf_for_level(self, source, attachment, target_bytes, output_dir, deadline):\n        from pypdf import PdfReader, PdfWriter\n        try:\n            reader = PdfReader(str(source), strict=True)\n            if reader.is_encrypted:\n                raise AttachmentCompressionError(\"PDF protegido: o original foi preservado.\")\n            fields = reader.get_fields() or {}\n            signature_metadata = any(attachment.get(key) for key in (\n                \"signature_evidence\", \"signature_evidence_id\", \"signed\", \"signed_at\", \"signedAt\", \"evidence_id\",\n            ))\n            signed = signature_metadata or any(str(field.get(\"/FT\")) == \"/Sig\" for field in fields.values())\n            for page in reader.pages:\n                self._check_deadline(deadline)\n                markers = [page.extract_text() or \"\"]\n                markers.extend(str(annotation.get_object()) for annotation in (page.get(\"/Annots\") or []))\n                signed = signed or any(\"/assinaturas/\" in marker.casefold() for marker in markers)\n            if signed:\n                raise AttachmentCompressionError(\"PDF de assinatura/evidência preservado: compactar alteraria o hash da evidência.\")\n            # Clone all PDF objects rather than drawing page screenshots. Text,\n            # annotations, links and page geometry must survive byte-for-byte at\n            # their semantic level. Embedded images keep their pixel dimensions.\n            original_text = [page.extract_text() or \"\" for page in reader.pages]\n            original_links = [str(page.get(\"/Annots\") or []) for page in reader.pages]\n            best = source\n            for index, quality in enumerate((None, 82, 76, 70, 65), 1):\n                self._check_deadline(deadline)\n                writer = PdfWriter()\n                writer.clone_document_from_reader(reader)\n                for page in writer.pages:\n                    self._check_deadline(deadline)\n                    page.compress_content_streams()\n                    if quality is not None:\n                        for image in page.images:\n                            self._check_deadline(deadline)\n                            if image.indirect_reference is None or image.image is None:\n                                continue\n                            # Keep transparency and masks losslessly. JPEG replacement\n                            # can degrade them even when the preview looks acceptable.\n                            obj = image.indirect_reference.get_object()\n                            if obj.get(\"/SMask\") or obj.get(\"/Mask\") or image.image.mode not in {\"RGB\", \"L\"}:\n                                continue\n                            image.replace(image.image, quality=quality, optimize=True)\n                writer.compress_identical_objects(remove_identicals=True, remove_orphans=True)\n                candidate = output_dir / f\"level-pdf-{index}.pdf\"\n                with candidate.open(\"wb\") as output:\n                    writer.write(output)\n                self._check_deadline(deadline)\n                verified = PdfReader(str(candidate), strict=True)\n                if len(verified.pages) != len(reader.pages) or [page.extract_text() or \"\" for page in verified.pages] != original_text:\n                    continue\n                # Compare resolved annotation content, since indirect object ids\n                # can legitimately change during cloning.\n                def annotations(document):\n                    return [[str(a.get_object()) for a in (p.get(\"/Annots\") or [])] for p in document.pages]\n                if annotations(verified) != annotations(reader):\n                    continue\n                best = self._copy_if_smaller(best, candidate)\n                if best != source and best.stat().st_size <= target_bytes:\n                    break\n            return best, \".pdf\" if best != source else None, \"application/pdf\" if best != source else None\n        except AttachmentCompressionError:\n            raise\n        except Exception as exc:\n            raise AttachmentCompressionError(\"Não foi possível compactar este PDF preservando texto e links; o original foi preservado.\") from exc\n\n    def _compress_at_level(self, attachments, max_total_bytes, level):\n        if level not in self.LEVELS:\n            raise ValueError(\"Nível de compactação inválido\")\n        if max_total_bytes <= 0:\n            raise ValueError(\"O limite total de anexos deve ser maior que zero\")\n        cap, reduction = self.LEVELS[level]\n        deadline = time.monotonic() + self.max_seconds\n        prepared = []\n        with tempfile.TemporaryDirectory(prefix=\"energetica-level-compress-\") as temp:\n            for index, attachment in enumerate(attachments):\n                self._check_deadline(deadline)\n                directory = Path(temp) / str(index)\n                directory.mkdir()\n                source = directory / \"source\"\n                source.write_bytes(self.media_repository.read(attachment))\n                actual_size = source.stat().st_size\n                target = min(cap, actual_size * (100 - reduction) // 100)\n                if target < 1:\n                    raise AttachmentCompressionError(\"Arquivo pequeno demais para o nível escolhido; original preservado.\")\n                candidate, extension, mime = self._compress_one_for_level(source, attachment, target, directory, deadline, level)\n                self._check_deadline(deadline)\n                if candidate == source or not 0 < candidate.stat().st_size <= target:\n                    raise AttachmentCompressionError(f\"O nível escolhido exige no máximo {target} bytes e redução mínima de {reduction}%. Não foi possível atingir ambos preservando resolução útil; o original foi preservado.\")\n                prepared.append((attachment, candidate, extension, mime, actual_size, target))\n            if sum(candidate.stat().st_size for _, candidate, *_ in prepared) > max_total_bytes:\n                raise AttachmentCompressionError(\"Os anexos compactados excedem o limite total; originais preservados.\")\n            # Validation of the complete batch precedes any repository replacement.\n            results = []\n            for attachment, candidate, extension, mime, actual_size, target in prepared:\n                self._check_deadline(deadline)\n                content = candidate.read_bytes()\n                name = attachment.get(\"original_name\") or attachment.get(\"sharepoint_name\") or \"anexo\"\n                new_name = self._safe_stem(name) + extension if extension else name\n                result = self.media_repository.replace(attachment, content, sharepoint_name=new_name, mime_type=mime or attachment.get(\"mime_type\"))\n                result.update(original_name=new_name, source_original_name=attachment.get(\"source_original_name\", name), original_size=actual_size,\n                    compressed=True, size=len(content), sha256=hashlib.sha256(content).hexdigest(), compression_level=level,\n                    compression_target_bytes=target, compression_minimum_reduction_percent=reduction)\n                results.append(result)\n            return results\n\n    def compress(self, attachments: list[dict], max_total_bytes: int, *, level: str | None = None) -> list[dict]:\n"
+  },
+  {
+    "file": "compression.py",
+    "old": "        \"\"\"Só substitui os objetos depois que o total final foi validado.\"\"\"\n",
+    "new": "        \"\"\"Só substitui os objetos depois que o total final foi validado.\"\"\"\n        if level is not None:\n            return self._compress_at_level(attachments, max_total_bytes, level)\n"
+  },
+  {
+    "file": "workflow.py",
+    "old": "    def _send_attachment_compression_question(self, state: dict) -> None:\n",
+    "new": "    def _send_attachment_compression_levels(self, state: dict) -> None:\n        self._send_actions(state, \"ESCOLHA O NÍVEL. O TETO E A REDUÇÃO MÍNIMA DEVEM SER ATINGIDOS JUNTOS. CONFIRA A LEGIBILIDADE NA PRÉVIA.\", [\n            {\"id\": \"compression_level_low\", \"title\": \"BAIXA — 10 MB / ≥25%\"},\n            {\"id\": \"compression_level_medium\", \"title\": \"MÉDIA — 5 MB / ≥50%\"},\n            {\"id\": \"compression_level_high\", \"title\": \"ALTA — 1 MB / ≥80%\"},\n            {\"id\": \"compression_level_very_high\", \"title\": \"MUITO ALTA — 500 KB / ≥90%\"},\n        ])\n\n    def _send_attachment_compression_question(self, state: dict) -> None:\n        if (state.get(\"pending_attachment_compression\") or {}).get(\"awaiting_level\"):\n            self._send_attachment_compression_levels(state)\n            return\n"
+  },
+  {
+    "file": "workflow.py",
+    "old": "                \"DESEJA COMPRIMIR PARA NO MÁXIMO \"\n                f\"{self._attachment_compression_target_label(state)}?\"",
+    "new": "                \"DESEJA COMPRIMIR? EM SEGUIDA, ESCOLHA O NÍVEL E CONFIRA A PRÉVIA.\""
+  },
+  {
+    "file": "workflow.py",
+    "old": "                self._attachment_compression_offer_threshold(state),\n            )[0]\n            processed[\"compression_offer_handled\"]",
+    "new": "                self._attachment_size_limit(),\n                level=pending.get(\"level\"),\n            )[0]\n            processed[\"compression_offer_handled\"]"
+  },
+  {
+    "file": "workflow.py",
+    "old": "        if int(attachment.get(\"size\") or 0) < self._attachment_size_limit():\n            state[\"stage\"] = \"confirming_compressed_attachment_choice\"\n            etag = self._save(state, etag)\n            self._send_compressed_attachment_choice(state)\n            return {\n                \"status\": \"awaiting_compressed_attachment_choice\",\n                \"batch_id\": state[\"batch_id\"],\n                \"etag\": etag,\n            }\n        return self._complete_pending_attachment_selection(\n            state,\n            etag,\n            processed,\n            \"compressed\",\n        )",
+    "new": "        state[\"stage\"] = \"confirming_compressed_attachment_choice\"\n        etag = self._save(state, etag)\n        self._send_compressed_attachment_choice(state)\n        return {\"status\": \"awaiting_compressed_attachment_choice\", \"batch_id\": state[\"batch_id\"], \"etag\": etag}"
+  },
+  {
+    "file": "workflow.py",
+    "old": "            state.pop(\"attachment_compression_all_approved\", None)\n            final_etag",
+    "new": "            state.pop(\"attachment_compression_all_approved\", None)\n            state.pop(\"attachment_compression_all_level\", None)\n            final_etag"
+  },
+  {
+    "file": "workflow.py",
+    "old": "        if state.get(\"attachment_compression_all_approved\"):\n            pending[\"compress\"] = True",
+    "new": "        if state.get(\"attachment_compression_all_approved\") and state.get(\"attachment_compression_all_level\"):\n            pending[\"compress\"] = True\n            pending[\"level\"] = state[\"attachment_compression_all_level\"]"
+  },
+  {
+    "file": "workflow.py",
+    "old": "        if state.get(\"stage\") == \"confirming_attachment_compression\":\n            if command not in {",
+    "new": "        if state.get(\"stage\") == \"confirming_attachment_compression\":\n            pending = state.get(\"pending_attachment_compression\") or {}\n            levels = {\"compression_level_\" + level: level for level in (\"low\", \"medium\", \"high\", \"very_high\")}\n            if pending.get(\"awaiting_level\"):\n                if command not in levels:\n                    self._send_attachment_compression_levels(state)\n                    self._save(state, etag)\n                    return {\"status\": \"invalid_attachment_compression_level\", \"batch_id\": state[\"batch_id\"]}\n                pending[\"level\"] = levels[command]\n                pending.pop(\"awaiting_level\", None)\n                if state.get(\"attachment_compression_all_approved\"):\n                    state[\"attachment_compression_all_level\"] = pending[\"level\"]\n                return self._finish_pending_attachment_compression(state, etag)\n            if command not in {"
+  },
+  {
+    "file": "workflow.py",
+    "old": "            return self._finish_pending_attachment_compression(state, etag)\n\n        if state.get(\"stage\") == \"confirming_compressed_attachment_choice\":",
+    "new": "            if pending[\"compress\"]:\n                pending[\"awaiting_level\"] = True\n                etag = self._save(state, etag)\n                self._send_attachment_compression_levels(state)\n                return {\"status\": \"awaiting_attachment_compression_level\", \"batch_id\": state[\"batch_id\"], \"etag\": etag}\n            return self._finish_pending_attachment_compression(state, etag)\n\n        if state.get(\"stage\") == \"confirming_compressed_attachment_choice\":"
+  },
+  {
+    "file": "workflow.py",
+    "old": "            if command in {\n                \"use_compressed_attachment\",\n                \"usar comprimido\",",
+    "new": "            if command in {\n                \"use_compressed_attachment\",\n                \"attachment_compression_use_compressed\",\n                \"usar comprimido\","
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "        allowed_emails: set[str],\n    ) -> dict:\n        \"\"\"Gera uma prévia compactada para um anexo já retido e aguarda a escolha.\"\"\"",
+    "new": "        allowed_emails: set[str], level: str | None = None,\n    ) -> dict:\n        \"\"\"Pede o nível antes de gerar uma prévia e aguarda a escolha da versão.\"\"\""
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            if state.get(\"portal_attachment_compression\"):\n                raise ValueError(\"Escolha primeiro a versão do anexo que já está sendo compactada\")",
+    "new": "            pending = state.get(\"portal_attachment_compression\") or {}\n            if pending and not (pending.get(\"phase\") == \"level\" and pending.get(\"attachment_id\") == attachment_id and level):\n                raise ValueError(\"Escolha primeiro o nível ou a versão do anexo pendente\")"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            # A ação explícita também deve tentar reduzir anexos abaixo do limite\n            # de oferta automática. Metadados de tamanho podem estar desatualizados.\n            threshold = min(original_size, int(self.engine._attachment_compression_offer_threshold(state)))\n            compressed = compressor.compress([original], threshold)[0]",
+    "new": "            if level is None:\n                state[\"portal_attachment_compression\"] = {\"phase\": \"level\", \"attachment_id\": attachment_id, \"index\": index, \"original\": dict(original)}\n                _, etag = self.engine.state_store.load(key)\n                self.engine.state_store.save(key, state, etag)\n                options = [\n                    (\"low\", \"BAIXA — 10 MB / redução mínima 25%\"),\n                    (\"medium\", \"MÉDIA — 5 MB / redução mínima 50%\"),\n                    (\"high\", \"ALTA — 1 MB / redução mínima 80%\"),\n                    (\"very_high\", \"MUITO ALTA — 500 KB / redução mínima 90%\"),\n                ]\n                return {\"status\": \"processed\", \"operation\": \"awaiting_portal_attachment_compression_level\", \"messages\": [{\"type\": \"poll\", \"question\": \"Escolha o nível. O teto e a redução mínima devem ser atingidos juntos. Confira a legibilidade na prévia.\", \"options\": [{\"id\": \"attachment_compression_level_\" + key, \"reply\": \"attachment_compression_level_\" + key, \"label\": label} for key, label in options]}]}\n            if level not in (\"low\", \"medium\", \"high\", \"very_high\"):\n                raise ValueError(\"Nível de compactação inválido\")\n            try:\n                compressed = compressor.compress([original], self.engine._attachment_size_limit(), level=level)[0]\n            except Exception:\n                state.pop(\"portal_attachment_compression\", None)\n                _, etag = self.engine.state_store.load(key)\n                self.engine.state_store.save(key, state, etag)\n                raise"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "                \"attachment_id\": selected_id,\n                \"index\": index,",
+    "new": "                \"phase\": \"preview\", \"level\": level,\n                \"attachment_id\": selected_id,\n                \"index\": index,"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "        normalized = str(choice or \"\").strip().casefold()\n        compressed_choices = {",
+    "new": "        normalized = str(choice or \"\").strip().casefold()\n        levels = {\"attachment_compression_level_\" + level: level for level in (\"low\", \"medium\", \"high\", \"very_high\")}\n        if normalized in levels:\n            with self.lock:\n                key, state = self._portal_state(identity)\n                self.portal_owners.authorize(key, identity, state_exists=bool(state), bind=bool(state), allowed_emails=allowed_emails)\n                pending = state.get(\"portal_attachment_compression\") or {}\n                if pending.get(\"phase\") != \"level\":\n                    raise ValueError(\"A escolha de nível expirou; selecione compactar novamente\")\n                attachment_id = pending.get(\"attachment_id\")\n            return self.portal_attachment_compress(identity, attachment_id, media_store, allowed_emails=allowed_emails, level=levels[normalized])\n        compressed_choices = {"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "                        body.get(\"attachmentId\"),\n                        self.portal_media_store,\n                        allowed_emails=self.portal_authenticator.allowed_emails,\n                    )\n                elif action == \"attachment_compression_choice\":",
+    "new": "                        body.get(\"attachmentId\"),\n                        self.portal_media_store,\n                        allowed_emails=self.portal_authenticator.allowed_emails,\n                        level=body.get(\"level\"),\n                    )\n                elif action == \"attachment_compression_choice\":"
+  },
+  {
+    "file": "workflow.py",
+    "old": "                {\n                    \"id\": \"request_intermediate_attachment\",\n                    \"title\": \"🔎 MAIS RESOLUÇÃO\",\n                },",
+    "new": "                *([] if pending.get(\"level\") else [{\n                    \"id\": \"request_intermediate_attachment\",\n                    \"title\": \"🔎 MAIS RESOLUÇÃO\",\n                }]),"
+  },
+  {
+    "file": "workflow.py",
+    "old": "            if command in {\n                \"request_intermediate_attachment\",\n                \"mais resolucao\",",
+    "new": "            if (state.get(\"pending_attachment_compression\") or {}).get(\"level\") and command in {\"request_intermediate_attachment\", \"mais resolucao\", \"mais resolução\", \"resolucao intermediaria\", \"resolução intermediária\"}:\n                self._send_compressed_attachment_choice(state)\n                self._save(state, etag)\n                return {\"status\": \"invalid_compressed_attachment_choice\", \"batch_id\": state[\"batch_id\"]}\n            if command in {\n                \"request_intermediate_attachment\",\n                \"mais resolucao\","
+  },
+  {
+    "file": "workflow.py",
+    "old": "        size = _human_size(int(attachment.get(\"size\") or 0))\n        threshold = self._attachment_compression_offer_threshold(state)\n\n        if int(attachment.get(\"size\") or 0) <= threshold:",
+    "new": "        size = _human_size(int(attachment.get(\"size\") or 0))\n        threshold = self._attachment_compression_offer_threshold(state)\n\n        if int(attachment.get(\"size\") or 0) <= threshold and not state.get(\"attachment_compression_all_level\"):"
+  },
+  {
+    "file": "compression.py",
+    "old": "            original_text = [page.extract_text() or \"\" for page in reader.pages]\n            original_links = [str(page.get(\"/Annots\") or []) for page in reader.pages]\n",
+    "new": "            original_text = [page.extract_text() or \"\" for page in reader.pages]\n"
+  },
+  {
+    "file": "compression.py",
+    "old": "            signed = signature_metadata or any(str(field.get(\"/FT\")) == \"/Sig\" for field in fields.values())",
+    "new": "            metadata_markers = \" \".join(str(value) for value in (reader.metadata or {}).values()).casefold()\n            signed = signature_metadata or any(str(field.get(\"/FT\")) == \"/Sig\" for field in fields.values()) or any(marker in metadata_markers for marker in (\"/assinaturas/\", \"energetico assinatura registro\", \"energético assinatura registro\"))"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            index, original = self._portal_attachment_selection(identity, state, attachment_id)\n            compressor = getattr(self.engine, \"attachment_compressor\", None)",
+    "new": "            try:\n                index, original = self._portal_attachment_selection(identity, state, attachment_id)\n            except ValueError:\n                if pending.get(\"phase\") == \"level\":\n                    state.pop(\"portal_attachment_compression\", None)\n                    _, etag = self.engine.state_store.load(key)\n                    self.engine.state_store.save(key, state, etag)\n                raise\n            compressor = getattr(self.engine, \"attachment_compressor\", None)"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "\"label\": label} for key, label in options]}]}",
+    "new": "\"label\": label} for key, label in options] + [{\"id\": \"attachment_compression_use_original\", \"reply\": \"attachment_compression_use_original\", \"label\": \"📎 MANTER ORIGINAL\"}]}]}"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            pending = state.get(\"portal_attachment_compression\") or {}\n            original = pending.get(\"original\") or {}\n            compressed = pending.get(\"compressed\") or {}",
+    "new": "            pending = state.get(\"portal_attachment_compression\") or {}\n            if pending.get(\"phase\") == \"level\" and normalized in original_choices:\n                state.pop(\"portal_attachment_compression\", None)\n                _, etag = self.engine.state_store.load(key)\n                self.engine.state_store.save(key, state, etag)\n                return {\"status\": \"processed\", \"messages\": [{\"type\": \"text\", \"text\": \"📎 Anexo original mantido.\"}]}\n            original = pending.get(\"original\") or {}\n            compressed = pending.get(\"compressed\") or {}"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            selected_id = self._portal_attachment_id(identity, state, original)\n            state[\"portal_attachment_compression\"] = {",
+    "new": "            selected_id = self._portal_attachment_id(identity, state, original)\n            def preview_descriptor(attachment, path):\n                file_name = str(attachment.get(\"sharepoint_name\") or attachment.get(\"original_name\") or \"anexo\")\n                mime = str(attachment.get(\"mime_type\") or \"application/octet-stream\")\n                media_id = media_store.register({\"path\": str(path), \"fileName\": file_name, \"mimeType\": mime}, identity, allowed_root=media_root)\n                return {\"id\": self._portal_attachment_id(identity, state, attachment), \"fileName\": file_name,\n                        \"mimeType\": mime, \"size\": path.stat().st_size, \"mediaUrl\": \"/api/portal-media/\" + media_id}\n            comparison_preview = {\"original\": preview_descriptor(original, original_path),\n                                  \"compressed\": preview_descriptor(compressed, compressed_path)}\n            state[\"portal_attachment_compression\"] = {"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "                        \"question\": \"A prévia comprimida foi gerada. Qual versão deseja usar?\",\n                        \"options\": [",
+    "new": "                        \"question\": \"A prévia comprimida foi gerada. Confira a legibilidade. Qual versão deseja usar?\",\n                        \"attachment_compression_preview\": comparison_preview,\n                        \"options\": ["
+  },
+  {
+    "file": "workflow.py",
+    "old": "            {\"id\": \"compression_level_very_high\", \"title\": \"MUITO ALTA — 500 KB / ≥90%\"},\n        ])",
+    "new": "            {\"id\": \"compression_level_very_high\", \"title\": \"MUITO ALTA — 500 KB / ≥90%\"},\n            {\"id\": \"compress_attachments_no\", \"title\": \"📎 MANTER ORIGINAL\"},\n        ])"
+  },
+  {
+    "file": "workflow.py",
+    "old": "            if pending.get(\"awaiting_level\"):\n                if command not in levels:",
+    "new": "            if pending.get(\"awaiting_level\"):\n                if command in {\"compress_attachments_no\", \"compress_image_no\", \"attachment_compression_use_original\", \"use_original_attachment\", \"manter original\", \"usar original\", \"nao\", \"não\"}:\n                    pending.pop(\"awaiting_level\", None)\n                    pending[\"compress\"] = False\n                    state.pop(\"attachment_compression_all_approved\", None)\n                    state.pop(\"attachment_compression_all_level\", None)\n                    return self._finish_pending_attachment_compression(state, etag)\n                if command not in levels:"
+  },
+  {
+    "file": "compression.py",
+    "old": "    def _compress_pdf_for_level(self, source, attachment, target_bytes, output_dir, deadline):\n",
+    "new": "    @staticmethod\n    def _pdf_annotations_semantics(document):\n        \"\"\"Resolve reader-local object references into a stable semantic graph.\"\"\"\n        from pypdf.generic import IndirectObject, StreamObject, BooleanObject, NullObject\n        page_refs = {}\n        page_objects = {}\n        for index, page in enumerate(document.pages):\n            reference = page.indirect_reference\n            if reference is not None:\n                page_refs[(reference.idnum, reference.generation)] = index\n            page_objects[id(page)] = index\n\n        def canonical(value, stack=()):\n            if isinstance(value, IndirectObject):\n                page_index = page_refs.get((value.idnum, value.generation))\n                if page_index is not None:\n                    return (\"page\", page_index)\n                return canonical(value.get_object(), stack)\n            if id(value) in page_objects:\n                return (\"page\", page_objects[id(value)])\n            if isinstance(value, (dict, list, tuple)):\n                identity = id(value)\n                if identity in stack:\n                    return (\"cycle\", stack.index(identity))\n                stack = stack + (identity,)\n                if isinstance(value, dict):\n                    excluded = {\"/Length\", \"/Filter\", \"/DecodeParms\"} if isinstance(value, StreamObject) else set()\n                    entries = tuple((str(key), canonical(value[key], stack)) for key in sorted(value, key=str) if str(key) not in excluded)\n                    if isinstance(value, StreamObject):\n                        return (\"stream\", hashlib.sha256(value.get_data()).hexdigest(), entries)\n                    return (\"dictionary\", entries)\n                return (\"array\", tuple(canonical(item, stack) for item in value))\n            if value is None or isinstance(value, NullObject):\n                return None\n            if isinstance(value, BooleanObject):\n                return (\"boolean\", value.value)\n            if isinstance(value, bytes):\n                return (\"bytes\", value.hex())\n            if isinstance(value, str):\n                return (\"string\", str(value))\n            if isinstance(value, (int, float)):\n                return (\"number\", float(value))\n            raise AttachmentCompressionError(\"Anotação PDF não pôde ser validada semanticamente; original preservado.\")\n\n        return tuple(tuple(canonical(annotation) for annotation in (page.get(\"/Annots\") or [])) for page in document.pages)\n\n    def _compress_pdf_for_level(self, source, attachment, target_bytes, output_dir, deadline):\n"
+  },
+  {
+    "file": "compression.py",
+    "old": "                # Compare resolved annotation content, since indirect object ids\n                # can legitimately change during cloning.\n                def annotations(document):\n                    return [[str(a.get_object()) for a in (p.get(\"/Annots\") or [])] for p in document.pages]\n                if annotations(verified) != annotations(reader):",
+    "new": "                if self._pdf_annotations_semantics(verified) != self._pdf_annotations_semantics(reader):"
+  },
+  {
+    "file": "workflow.py",
+    "old": "\"MUITO ALTA —",
+    "new": "\"MUITO ALTA COMPRESSÃO —"
+  },
+  {
+    "file": "workflow.py",
+    "old": "\"BAIXA —",
+    "new": "\"BAIXA COMPRESSÃO —"
+  },
+  {
+    "file": "workflow.py",
+    "old": "\"MÉDIA —",
+    "new": "\"MÉDIA COMPRESSÃO —"
+  },
+  {
+    "file": "workflow.py",
+    "old": "\"ALTA —",
+    "new": "\"ALTA COMPRESSÃO —"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "\"MUITO ALTA —",
+    "new": "\"MUITO ALTA COMPRESSÃO —"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "\"BAIXA —",
+    "new": "\"BAIXA COMPRESSÃO —"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "\"MÉDIA —",
+    "new": "\"MÉDIA COMPRESSÃO —"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "\"ALTA —",
+    "new": "\"ALTA COMPRESSÃO —"
+  },
+  {
+    "file": "compression.py",
+    "old": "entries = tuple((str(key), canonical(value[key], stack)) for key in sorted(value, key=str) if str(key) not in excluded)",
+    "new": "entries = tuple((str(key), canonical(value.raw_get(key) if hasattr(value, \"raw_get\") else value[key], stack)) for key in sorted(value, key=str) if str(key) not in excluded)"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "pending.get(\"attachment_id\") == attachment_id and level",
+    "new": "pending.get(\"attachment_id\") == attachment_id"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            delete(attachment)\n\n            if container == \"attachments\":",
+    "new": "            delete(attachment)\n            compression_pending = state.get(\"portal_attachment_compression\") or {}\n            if (compression_pending.get(\"original\") or {}).get(\"object_name\") == attachment.get(\"object_name\"):\n                candidate = compression_pending.get(\"compressed\") or {}\n                if candidate.get(\"object_name\") and candidate.get(\"object_name\") != attachment.get(\"object_name\"):\n                    self.engine._delete_staged_attachments([candidate], state=state)\n                state.pop(\"portal_attachment_compression\", None)\n\n            if container == \"attachments\":"
+  },
+  {
+    "file": "channel_bridge.py",
+    "old": "            self.engine._delete_staged_attachments(attachments, state=state)\n            state[\"attachments\"] = []\n            state[\"attachments_decision\"] = None",
+    "new": "            compression_pending = state.get(\"portal_attachment_compression\") or {}\n            candidate = compression_pending.get(\"compressed\") or {}\n            if candidate.get(\"object_name\") and str(candidate[\"object_name\"]) not in protected_object_names and not any(item.get(\"object_name\") == candidate[\"object_name\"] for item in attachments):\n                attachments.append(candidate)\n            self.engine._delete_staged_attachments(attachments, state=state)\n            state.pop(\"portal_attachment_compression\", None)\n            state[\"attachments\"] = []\n            state[\"attachments_decision\"] = None"
+  }
+]
