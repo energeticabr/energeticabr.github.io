@@ -101,6 +101,21 @@ test("mostra o registro de integridade no quadro posicionável mantendo nome e d
   assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 3);
 });
 
+test('prévia apresenta ícones e selo ao lado dos dados reais sem mudar o ponto', async t => {
+  const signatureBlob = new Blob(['png'], {type:'image/png'});
+  signatureBlob.signatureEvidence = {id:'0123456789abcdef0123456789abcdef', verificationUrl:'https://example.com/registro'};
+  const {viewer, container, point} = setup(t, {signatureBlob, signerName:'JANAINA EXEMPLO', signedAt:'2026-10-11T04:01:00Z'});
+  await viewer.ready;
+  const marker = container.querySelector('.signature-placement-marker');
+  const caption = marker.querySelector('.signature-placement-marker__caption');
+  assert.match(caption.textContent, /DATA\/HORA: 11\/10\/2026 às 01:01/);
+  assert.equal(caption.querySelectorAll('svg[data-signature-icon]').length, 4);
+  assert.match(caption.querySelector('.signature-card-seal').textContent, /Documento assinado eletronicamente/);
+  assert.match(caption.querySelector('.signature-placement-marker__integrity').textContent, /^REGISTRO: 0123456789abcdef$/);
+  assert.equal(viewer.getPoint(), null, 'apresentação não cria uma escolha de posição');
+  assert.equal(point(), undefined);
+});
+
 test("comprovante de pagamento usa bloco de assinatura com linha interna", async t => {
   const { viewer, container } = setup(t, {
     signatureDocumentLayout: "payment",

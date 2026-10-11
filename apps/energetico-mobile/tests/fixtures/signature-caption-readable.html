@@ -4,6 +4,7 @@ import { createSignaturePlacement } from '../../src/web/signature-placement.js';
 const ink = new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="300" height="70"><text x="20" y="50" font-size="40">Exemplo</text></svg>'], {type:'image/svg+xml'});
 ink.signatureEvidence = {id:'0123456789abcdef0123456789abcdef'};
 const layouts = [];
+const selectedScale=Number(new URL(location.href).searchParams.get('scale')||'.5');
 for (const kind of ['', 'payment', 'epi']) {
   const container = document.createElement('div');
   container.className = 'signature-placement-document';
@@ -21,6 +22,32 @@ for (const kind of ['', 'payment', 'epi']) {
   const caption=marker.querySelector('.signature-placement-marker__caption');
   const grid=getComputedStyle(marker).gridTemplateRows.split(' ').map(parseFloat);
   layouts.push({kind,grid,rows:[...caption.children].map(n=>({text:n.textContent,
+    height:n.clientHeight,scrollHeight:n.scrollHeight,width:n.clientWidth,scrollWidth:n.scrollWidth})),
+    captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
+}
+for (const kind of ['', 'payment', 'epi']) {
+  const container = document.createElement('div');
+  container.className = 'signature-placement-document'; container.dataset.signatureDocumentLayout = kind;
+  container.style.cssText = `width:min(100%,${innerWidth<=600?390:595}px);height:850px;margin:auto`;
+  document.body.append(container);
+  const verifiedInk = new Blob([ink], {type:ink.type});
+  verifiedInk.signatureEvidence = {...ink.signatureEvidence,verificationUrl:'https://example.com/local-qa-only'};
+  const viewer = createSignaturePlacement({container,signatureBlob:verifiedInk,
+    documentBlob:new Blob(['%PDF'],{type:'application/pdf'}), signerName:kind?'JANAINA APARECIDA DA SILVA GONÇALVES':'MOHAMMAD MUHAMMAD MAHMOUD',
+    signedAt:'2026-10-11T04:01:00Z', selection:{page:1,x:.5,y:.3,scale:selectedScale},
+    loadPdfJs:async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,
+      getPage:async()=>({getViewport:({scale})=>({width:595*scale,height:842*scale}),
+        render:()=>({promise:Promise.resolve(),cancel(){}}),cleanup(){}})}),destroy(){}})})});
+  await viewer.ready;
+  const marker=container.querySelector('.signature-placement-marker');
+  const caption=marker.querySelector('.signature-placement-marker__caption');
+  const grid=getComputedStyle(marker).gridTemplateRows.split(' ').map(parseFloat);
+  const markerBounds=marker.getBoundingClientRect(),pageBounds=container.querySelector('.signature-placement-page').getBoundingClientRect();
+  const nameBounds=caption.querySelector('.signature-placement-marker__name').getBoundingClientRect(),sealBounds=caption.querySelector('.signature-card-seal').getBoundingClientRect();
+  const nameRange=document.createRange(); nameRange.selectNodeContents(caption.querySelector('.signature-placement-marker__name'));
+  const nameTextRight=Math.max(...[...nameRange.getClientRects()].map(rect=>rect.right));
+  layouts.push({kind:`${kind}-verified`,verified:true,scale:selectedScale,widthRatio:kind==='epi'?.42:kind==='payment'?.54:.76,
+    markerWidth:markerBounds.width,pageWidth:pageBounds.width,nameTextRight,sealLeft:sealBounds.left,grid,rows:[...caption.children].map(n=>({text:n.textContent,
     height:n.clientHeight,scrollHeight:n.scrollHeight,width:n.clientWidth,scrollWidth:n.scrollWidth})),
     captionHeight:caption.clientHeight,captionScroll:caption.scrollHeight});
 }

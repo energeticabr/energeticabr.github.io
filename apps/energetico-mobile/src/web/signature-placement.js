@@ -1,5 +1,6 @@
 import { loadBernardoStamp } from "./signature-stamp.js";
-import { constrainSignaturePoint, signatureRecordLines } from "./signature-document-layout.js";
+import { constrainSignaturePoint, signatureLayoutGeometry, signatureRecordLines } from "./signature-document-layout.js";
+import { appendSignatureCardIcon } from './signature-card-icons.js';
 
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
@@ -240,6 +241,11 @@ export function createSignaturePlacement({
       activeMarker.style.left = `${local.x * 100}%`;
       activeMarker.style.bottom = `${local.y * 100}%`;
       activeMarker.style.setProperty("--signature-scale", String(signatureScale));
+      if (entry && signatureRecordLines(signatureBlob?.signatureEvidence?.id).length === 2) {
+        const geometry = signatureLayoutGeometry(signatureDocumentLayout, {pageWidth:entry.pageWidth,
+          pageHeight:entry.pageHeight,scale:signatureScale,integrity:true});
+        activeMarker.style.width = `${geometry.width / entry.pageWidth / signatureScale * 100}%`;
+      }
     }
     if (emit) {
       point = { page: selectedPage, ...local };
@@ -794,7 +800,7 @@ export function createSignaturePlacement({
     }
     const caption = element(documentRef, "div", "signature-placement-marker__caption");
     const name = String(signerName || "USUÁRIO").trim() || "USUÁRIO";
-    const timestamp = signatureDateLabel(signedAt);
+    const timestamp = signatureDateLabel(signedAt, {timeZone:'America/Sao_Paulo'}).replace(', ', ' às ');
     if (signatureDocumentLayout === "payment" || signatureDocumentLayout === "epi") {
       caption.append(element(documentRef, "span", "signature-placement-marker__name", name));
       if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
@@ -807,7 +813,23 @@ export function createSignaturePlacement({
     const integrityId = String(signatureBlob?.signatureEvidence?.id || "");
     if (/^[a-f0-9]{32}$/.test(integrityId)) {
       marker.classList.add("signature-placement-marker--integrity");
-      caption.append(element(documentRef, "span", "signature-placement-marker__integrity", signatureRecordLines(integrityId).join("\n")));
+      const verifiable = Boolean(signatureBlob?.signatureEvidence?.verificationUrl);
+      caption.append(element(documentRef, "span", "signature-placement-marker__integrity", signatureRecordLines(integrityId).slice(0, verifiable ? 1 : 2).join("\n")));
+      for (const [index, row] of [...caption.children].entries()) appendSignatureCardIcon(documentRef, row, ['person','calendar','document'][index]);
+      if (verifiable) {
+        marker.classList.add('signature-placement-marker--verified');
+        const seal = element(documentRef, 'div', 'signature-card-seal', 'Documento assinado eletronicamente');
+        appendSignatureCardIcon(documentRef, seal, 'shield'); caption.append(seal);
+      }
+      // Fit real, potentially long metadata without changing marker coordinates.
+      const metrics = documentRef.createElement('canvas').getContext?.('2d');
+      if (metrics) metrics.font = '700 100px Arial';
+      for (const row of [...caption.children].filter(node => node.tagName === 'SPAN')) {
+        const measured = Math.max(...row.textContent.split('\n').map(line =>
+          metrics?.measureText ? metrics.measureText(line).width : line.length * 80), 1);
+        const available = verifiable ? 65 : 87;
+        row.style.fontSize = `${Math.min(verifiable ? 3.8 : 4.2, available * 100 / measured)}cqw`;
+      }
     }
     // SIGNATURE_GESTURE_LOCK_START: signature-placement-marker-bindings
     marker.addEventListener("pointerdown", event => beginDrag(marker, event), { passive: false });

@@ -57,7 +57,7 @@ test("PDF de ponto imprime retângulo externo envolvendo assinatura e registro",
   });
   const signed = await PDFDocument.load(await result.arrayBuffer());
   const content = pageContent(signed);
-  assert.match(content, /0\.08 0\.18 0\.34 RG[\s\S]*0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/);
+  assert.match(content, /0\.08 0\.18 0\.34 RG[\s\S]*h\nS/, 'borda azul fechada envolve o cartão arredondado');
   assert.ok(boldTextPlacement(content, "CLEITON CESAR NONATO"));
   assert.ok(boldTextPlacement(content, "REGISTRO: 0123456789abcdef"));
   assert.ok(boldTextPlacement(content, "0123456789abcdef"));
@@ -101,6 +101,48 @@ function boldTextPlacement(content, label, occurrence = 0) {
   assert.ok(match, `Texto não encontrado no PDF: ${label}`);
   return { size: Number(match[1]), x: Number(match[2]), y: Number(match[3]) };
 }
+
+for (const documentFileName of ['PONTO-RHID.pdf', 'comprovante-pagamento.pdf', 'comprovante-entrega-epi.pdf']) {
+  test(`cartão ${documentFileName} mantém traço no topo, identificação à esquerda e selo no rodapé`, async () => {
+    const source = await PDFDocument.create(); source.addPage([595, 842]);
+    const id = '0123456789abcdef0123456789abcdef';
+    const result = await signPdfAttachment({
+      documentBlob: new Blob([await source.save()]), documentFileName,
+      signatureBlob: new Blob([PNG_1X1], {type: 'image/png'}),
+      point: {page: 1, x: .5, y: .3, scale: 1}, signerName: 'JANAINA APARECIDA DA SILVA GONÇALVES',
+      signedAt: '2026-10-11T04:01:00Z', integrityId: id,
+      verificationUrl: `https://example.com/assinaturas/${id}/${'a'.repeat(64)}`,
+    });
+    const pdf = await PDFDocument.load(await result.arrayBuffer());
+    const content = pageContent(pdf);
+    const annotation = pdf.context.lookup(pdf.getPage(0).node.Annots().get(0));
+    const rect = annotation.lookup(PDFName.of('Rect')).asArray().map(n => n.asNumber());
+    assert.ok(rect[3] <= 842 * .3, 'selo não invade a área do traço');
+    for (const label of ['Documento', 'assinado', 'eletronicamente']) {
+      const hex = Buffer.from(label, 'latin1').toString('hex').toUpperCase();
+      assert.match(content, new RegExp(`<${hex}> Tj`), 'selo completo e legível');
+    }
+    const name = boldTextPlacement(content, 'JANAINA APARECIDA DA SILVA GONÇALVES');
+    const date = boldTextPlacement(content, 'DATA/HORA: 11/10/2026 às 01:01');
+    const record = boldTextPlacement(content, 'REGISTRO: 0123456789abcdef');
+    assert.ok(name.y > date.y && date.y > record.y);
+    assert.equal(name.x, date.x, 'informações alinhadas à esquerda');
+    assert.equal(date.x, record.x);
+    assert.ok(record.x < rect[0]);
+    assert.match(pdf.getKeywords(), new RegExp(id), 'identificador completo preservado');
+  });
+}
+
+test('cartão auditado EPI cobre a linha antiga do modelo sem pintar o traço de um PDF genérico', async () => {
+  const source=await PDFDocument.create();source.addPage([595,842]);
+  const documentBlob=new Blob([await source.save()]);
+  const options={documentBlob,signatureBlob:new Blob([PNG_1X1]),point:{page:1,x:.5,y:.3,scale:.5},integrityId:'a'.repeat(32)};
+  const epi=await PDFDocument.load(await (await signPdfAttachment({...options,documentFileName:'comprovante-entrega-epi.pdf'})).arrayBuffer());
+  const fills=content=>[...content.matchAll(/0 0 m\n0 ([\d.]+) l\n([\d.]+) [\d.]+ l\n[\d.]+ 0 l\nh\nf/g)].map(match=>({height:Number(match[1]),width:Number(match[2])}));
+  assert.ok(fills(pageContent(epi)).some(rect=>Math.abs(rect.height-89.25)<.001&&Math.abs(rect.width-124.95)<.001));
+  const generic=await PDFDocument.load(await (await signPdfAttachment({...options,documentFileName:'documento.pdf'})).arrayBuffer());
+  assert.ok(fills(pageContent(generic)).every(rect=>rect.height<113.04));
+});
 
 test("protocolo de integridade fica dentro do quadro EPI e na identificação do PDF", async () => {
   const source = await PDFDocument.create();
