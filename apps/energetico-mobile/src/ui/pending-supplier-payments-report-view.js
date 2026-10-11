@@ -1,4 +1,5 @@
 import {buildPendingSupplierPaymentsReport} from '../chat/pending-supplier-payments-report-model.js';
+import {formatReportDate} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
@@ -35,13 +36,44 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
   const panel=make('section','pl-dialog psp-dialog'); panel.tabIndex=-1;
   panel.setAttribute('role','dialog'); panel.setAttribute('aria-modal','true'); panel.setAttribute('aria-label','Pagamentos pendentes por fornecedor');
   const warning=make('p','pl-orientation psp-orientation','PARA VER O RELATÓRIO FAVOR POSICIONAR O TELEFONE NA HORIZONTAL.'); warning.setAttribute('role','status');
-  const report=make('div','pl-report psp-report'), filters=make('div','pl-filters psp-filters'), controls=new Map();
+  const report=make('div','pl-report psp-report'), filters=make('div','pl-filters psp-filters'), controls=new Map(), dateDisplays=new Map();
   const refresh=button('pl-refresh','Atualizar pagamentos pendentes','⟳'); filters.append(refresh);
   for (const [name,label] of FILTERS) {
-    const holder=make('label','pl-filter psp-filter'), control=make(name.endsWith('Date')?'input':'select','psp-filter-input');
+    const isDate=name.endsWith('Date');
+    const holder=make(isDate?'div':'label','pl-filter psp-filter'), control=make(isDate?'input':'select',isDate?'pl-date-native':'psp-filter-input');
     control.name=name; control.setAttribute('aria-label',label);
-    if (control.tagName==='INPUT') control.type='date';
-    holder.append(make('span','pl-filter-label',label),control); filters.append(holder); controls.set(name,control);
+    holder.append(make('span','pl-filter-label',label));
+    if (isDate) {
+      control.type='date'; control.tabIndex=-1; control.setAttribute('aria-label',`Calendário: ${label}`);
+      const field=make('div','pl-date psp-date'), display=make('input','pl-date-display');
+      display.type='text'; display.inputMode='numeric'; display.maxLength=10;
+      display.dataset.dateDisplay=name; display.setAttribute('aria-label',label);
+      display.placeholder=name==='startDate'?'Desde o início':'Até o fim';
+      const calendar=button('pl-date-calendar',`Abrir calendário: ${label}`,'▦');
+      calendar.addEventListener('click',()=>{try {if(control.showPicker) control.showPicker(); else control.focus();} catch {control.focus();}});
+      const edit=()=>{
+        const raw=display.value, digits=raw.replace(/\D/g,'');
+        if (/^[\d/]*$/.test(raw) && digits.length<=8) {
+          const masked=[digits.slice(0,2),digits.slice(2,4),digits.slice(4)].filter(Boolean).join('/');
+          if (masked!==raw) {
+            const positions=[display.selectionStart,display.selectionEnd].map(position=>{
+              const count=raw.slice(0,position??raw.length).replace(/\D/g,'').length;
+              return count+(count>2?1:0)+(count>4?1:0);
+            });
+            display.value=masked; display.setSelectionRange(...positions);
+          }
+        }
+        const text=display.value.trim(), match=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+        const iso=match?`${match[3]}-${match[2]}-${match[1]}`:'', parsed=new Date(`${iso}T12:00:00Z`);
+        const valid=!text||(match&&Number(match[3])>=1000&&Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===iso);
+        display.setCustomValidity(valid?'':'Data inválida. Use dd/mm/yyyy.');
+        if (valid) control.value=iso;
+        if (!root.hidden && snapshot) {render(); content.scrollTop=0;}
+      };
+      display.addEventListener('input',edit); display.addEventListener('change',edit);
+      field.append(display,calendar,control); holder.append(field); dateDisplays.set(name,display);
+    } else holder.append(control);
+    filters.append(holder); controls.set(name,control);
   }
   const notice=make('p','pl-notice psp-notice'); notice.hidden=true; notice.setAttribute('role','status');
   const content=make('div','pl-table-scroll psp-content'); content.tabIndex=0;
@@ -119,6 +151,9 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
     if (!snapshot) return;
     const values=selected(), start=controls.get('startDate'), end=controls.get('endDate');
     start.setCustomValidity(''); end.setCustomValidity('');
+    if ([...dateDisplays.values()].some(input=>!input.checkValidity())) {
+      showNotice('Data inválida. Use dd/mm/yyyy.',true); return;
+    }
     if (values.startDate && values.endDate && values.startDate>values.endDate) {
       start.setCustomValidity('A data inicial não pode ser posterior à data final.');
       showNotice('A data inicial não pode ser posterior à data final.',true); return;
@@ -223,8 +258,12 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
     if (event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)) {event.preventDefault(); last?.focus();}
     else if (!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)) {event.preventDefault(); first?.focus();}
   });
-  for (const control of controls.values()) {
-    const update=()=>{if(!root.hidden && snapshot) {render(); content.scrollTop=0;}};
+  for (const [name,control] of controls) {
+    const update=()=>{
+      const display=dateDisplays.get(name);
+      if (display) {display.value=control.value?formatReportDate(control.value):''; display.setCustomValidity('');}
+      if(!root.hidden && snapshot) {render(); content.scrollTop=0;}
+    };
     control.addEventListener('change',update);
     if (control.tagName==='INPUT') control.addEventListener('input',update);
   }
@@ -240,6 +279,8 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
       if (node.tagName==='INPUT') node.setCustomValidity('');
       else node.replaceChildren(Object.assign(make('option','',value || 'Todos'),{value}));
       node.value=value;
+      const display=dateDisplays.get(name);
+      if (display) {display.value=value?formatReportDate(value):''; display.setCustomValidity('');}
     }
     root.hidden=false; const vertical=portrait(); warning.hidden=!vertical; report.hidden=vertical;
     panel.classList.toggle('pl-dialog--portrait',vertical); setBusy(vertical); panel.focus(); content.scrollTop=0;

@@ -58,6 +58,13 @@ try {
       backgrounds:[tableBackground('.psp-pending .psp-table-title'),tableBackground('.psp-pending thead'),tableBackground('.psp-details .psp-table-title')],
       capturedTables:capture.pages[0].blocks.filter(block=>block.type==='table').map(block=>({columns:block.widths.length,rows:block.rows.length})),
       actions:[...actions.children].map(node=>({...rect(node),label:node.getAttribute('aria-label')})),
+      dateFilters:['startDate','endDate'].map(name=>{
+        const native=toolbar.querySelector(`[name="${name}"]`),display=toolbar.querySelector(`[data-date-display="${name}"]`)||native;
+        const style=getComputedStyle(display),canvas=document.createElement('canvas'),context=canvas.getContext('2d');context.font=style.font;
+        return {...rect(display),type:display.type,value:display.value,iso:native.value,
+          visible:getComputedStyle(display).opacity!=='0',textWidth:context.measureText(display.value).width,
+          availableWidth:display.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)};
+      }),
       firstDate:rect(toolbar.querySelector('[name=startDate]').parentElement),popup:popupData,keyboard:keyboardData});
   }
 } catch(error) {document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
