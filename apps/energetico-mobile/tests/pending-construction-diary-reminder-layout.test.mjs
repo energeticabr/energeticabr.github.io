@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
@@ -14,7 +16,16 @@ test('Fechar ocupa o rodapé inteiro e centraliza o texto no popup de diários',
     '/usr/bin/google-chrome', '/usr/bin/chromium',
   ].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
+  const temporaryRoot = resolve(tmpdir());
+  const cacheDir = await mkdtemp(join(temporaryRoot, 'energetico-pending-diaries-vite-'));
+  // Concurrent Vite fixtures must not invalidate each other's optimized modules.
+  t.after(async () => {
+    assert.equal(dirname(resolve(cacheDir)), temporaryRoot);
+    assert.ok(basename(cacheDir).startsWith('energetico-pending-diaries-vite-'));
+    await rm(cacheDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
+  });
   const server = await createServer({
+    cacheDir,
     root: resolve(fileURLToPath(new URL('..', import.meta.url))),
     server: { host: '127.0.0.1', port: 0 }, logLevel: 'silent',
   });
