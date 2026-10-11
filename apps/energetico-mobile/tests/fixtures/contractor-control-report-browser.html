@@ -39,7 +39,7 @@ try {
     search.focus();viewport.height=innerHeight-180;viewport.dispatchEvent(new Event('resize'));await new Promise(requestAnimationFrame);
     const keyboard={...rect(popup),focused:document.activeElement===search};root.querySelector('.sfs-dismiss').click();viewport.height=innerHeight;viewport.dispatchEvent(new Event('resize'));
     const layout={loads,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,
-      contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,mainOverflow:main.scrollWidth-main.clientWidth,main:rect(main),rows:screenRows,columns:table.tHead.rows[0].cells.length,
+      contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,content:rect(content),mainOverflow:main.scrollWidth-main.clientWidth,main:rect(main),rows:screenRows,columns:table.tHead.rows[0].cells.length,
       fontSize:getComputedStyle(table.querySelector('tbody td')).fontSize,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),
       brandBackground:getComputedStyle(root.querySelector('.ccr-brand')).backgroundColor,reportBackground:getComputedStyle(root.querySelector('.ccr-dialog')).backgroundColor,tones,
       capturedTables:capturedTables.map(b=>({columns:b.widths.length,rows:b.rows.length})),firstCapturedId:pdfRow.cells[0].runs.map(r=>r.text).join(''),lastCapturedId:capturedTables[0].rows.at(-1).cells[0].runs.map(r=>r.text).join(''),

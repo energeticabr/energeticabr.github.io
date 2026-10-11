@@ -9,7 +9,8 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-// Break: missing CSS, clipped table/toolbar on tablet/phone, inaccessible popup, or incomplete/uncolored PDF.
+// Break: doubled safe-area margins or a needless two-row landscape toolbar waste report space;
+// the brand banner regresses to pink, or the table/toolbar, picker, navigation or PDF clips.
 test('contractor report fits tablet and Windows with phone scroll and complete colored PDF',{timeout:180000},async t=>{
   assert.ok(existsSync(fileURLToPath(new URL('../src/ui/contractor-control-report.css',import.meta.url))),'standalone contractor control CSS must exist');
   const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
@@ -18,8 +19,8 @@ test('contractor report fits tablet and Windows with phone scroll and complete c
   try {
     server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cacheRoot,'cache'),
       optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});await server.listen();
-    for(const [width,height] of [[844,390],[667,375],[1024,768],[1280,800],[390,844]]) {
-      const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/contractor-control-report-browser.html`});
+    for(const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,bottom:21}],[667,375],[568,320],[1024,768],[1280,589],[1280,800],[390,844]]) {
+      const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/contractor-control-report-browser.html`});
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
       if(height>width){assert.equal(result.loads,0);assert.equal(result.warning,true);assert.equal(result.closeVisible,true);assert.equal(result.rows,0);continue;}
@@ -28,7 +29,10 @@ test('contractor report fits tablet and Windows with phone scroll and complete c
       assert.ok(result.contentHeight>80);assert.equal(result.rows,25);assert.equal(result.columns,13);assert.ok(parseFloat(result.fontSize)>=10.5);
       if(width>=1024)assert.ok(result.mainOverflow<=1,`${width}px tablet should fit all 13 columns`);
       assert.equal(result.arrows.length,2);assert.ok(result.main.left>=result.arrows[0].right+2);assert.ok(result.main.right<=result.arrows[1].left-2);
-      assert.equal(result.brandBackground,'rgb(252, 231, 243)');assert.equal(result.reportBackground,'rgb(255, 255, 255)');
+      assert.ok(result.content.left<=result.arrows[0].right+8,`${width}px: excessive left gutter (${result.content.left-result.arrows[0].right}px)`);
+      assert.ok(result.content.right>=result.arrows[1].left-8,`${width}px: excessive right gutter (${result.arrows[1].left-result.content.right}px)`);
+      if(width>=667)assert.ok(result.contentHeight>=height*.7,`${width}px: report flattened by toolbar (${result.contentHeight}px of ${height}px)`);
+      assert.equal(result.brandBackground,'rgb(221, 235, 247)');assert.equal(result.reportBackground,'rgb(255, 255, 255)');
       assert.deepEqual(result.tones,{pending:'rgb(244, 177, 131)',danger:'rgb(255, 199, 206)',success:'rgb(198, 239, 206)'});
       assert.deepEqual(result.capturedTables,[{columns:13,rows:62}]);assert.equal(result.firstCapturedId,'61');assert.equal(result.lastCapturedId,'1');
       assert.deepEqual(result.pdfColors.pending,[244/255,177/255,131/255]);assert.deepEqual(result.pdfColors.danger,[1,199/255,206/255]);assert.deepEqual(result.pdfColors.success,[198/255,239/255,206/255]);
