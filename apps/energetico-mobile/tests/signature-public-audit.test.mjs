@@ -20,6 +20,8 @@ test("PDF button preserves a real public URI annotation", async () => {
   assert.equal(action.get(PDFName.of("URI")).decodeText(), url);
   const rect = annotation.lookup(PDFName.of("Rect")).asArray().map(n => n.asNumber());
   assert.ok(rect[0] >= 0 && rect[1] >= 0 && rect[2] <= 595 && rect[3] <= 842);
+  assert.ok(rect[0] > 595 * 0.7 && rect[1] > 842 * 0.08, 'The check must be beside the ink, above the identification rows');
+  assert.equal(annotation.get(PDFName.of('Contents')).decodeText(), 'Ver registro da assinatura');
 });
 
 test("client opts in public preparation and sends trace in authenticated JSON", async () => {

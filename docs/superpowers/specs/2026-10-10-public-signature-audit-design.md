@@ -10,7 +10,7 @@ O serviço preserva original e final, cifra os movimentos detalhados, assina os 
 
 Novos registros optam explicitamente pela consulta pública. URL HTTPS com identificador e segredo aleatório de 256 bits. Registros antigos permanecem privados. Sem listagem ou busca. Qualquer portador do link pode consultar nome informado do assinante, conta operadora (nome, sem email), método, horários, hashes e resumo da captura. Não publicar CPF, email, movimentos brutos, PDF original/final ou outros anexos.
 
-O PDF recebe um botão com anotação de link dentro da faixa inferior de identificação. O hash final é calculado somente após gravar o PDF com botão e fica no comprovante externo; não inserir o próprio hash final no PDF. Nenhuma mensagem ou documento pessoal é enviado para testar a função.
+O PDF recebe um botão branco à direita do traço, com escudo/check verde e "Ver registro", como na referência do usuário. A anotação de link cobre o botão; nome, data e protocolo permanecem na identificação abaixo. O hash final é calculado somente após gravar o PDF com botão e fica no comprovante externo; não inserir o próprio hash final no PDF. Nenhuma mensagem ou documento pessoal é enviado para testar a função.
 
 Página pública responsiva, com texto que distingue registro preservado de arquivo conferido. A pessoa seleciona o PDF e compara SHA-256 localmente no navegador; o documento não é enviado. Disponibiliza o comprovante JSON assinado para download. Exibe aviso de identificação informada, sem prometer autenticação individual ou equivalência jurídica automática.
 

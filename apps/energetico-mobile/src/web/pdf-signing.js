@@ -222,6 +222,10 @@ export async function signPdfAttachment({
   const cardCaption = epiCaption || paymentCaption;
   const recordLines = signatureRecordLines(integrityId);
   const hasIntegrity = recordLines.length === 2;
+  const verification = verificationUrl ? new URL(verificationUrl) : null;
+  if (verification && (!hasIntegrity || verification.protocol !== "https:" || verification.username || verification.password
+    || verification.search || verification.hash
+    || !new RegExp(`^/assinaturas/${integrityId}/[a-f0-9]{64}$`).test(verification.pathname))) throw new TypeError("Link de verificação inválido.");
   const markerGeometry = signatureLayoutGeometry(documentLayout, { pageWidth, pageHeight, scale, integrity: hasIntegrity });
   const markerWidth = markerGeometry.width;
   const markerHeight = markerGeometry.height;
@@ -236,7 +240,9 @@ export async function signPdfAttachment({
 
   const signature = await embedSignature(pdf, signatureBlob);
   const inset = Math.max(2, markerWidth * 0.012);
-  const availableWidth = markerWidth - inset * 2;
+  const checkWidth = verification ? Math.min(96, markerWidth * 0.25) : 0;
+  const inkAreaWidth = markerWidth - (verification ? checkWidth + inset * 2 : 0);
+  const availableWidth = inkAreaWidth - inset * 2;
   const availableHeight = signatureHeight - inset * 2;
   const ratio = Math.min(availableWidth / signature.width, availableHeight / signature.height);
   const imageWidth = signature.width * ratio;
@@ -260,7 +266,7 @@ export async function signPdfAttachment({
   }
 
   page.drawImage(signature, {
-    x: left + (markerWidth - imageWidth) / 2,
+    x: left + (inkAreaWidth - imageWidth) / 2,
     y: bottom + captionHeight + (signatureHeight - imageHeight) / 2,
     width: imageWidth,
     height: imageHeight,
@@ -372,36 +378,47 @@ export async function signPdfAttachment({
       end: { x: left + markerWidth - inset, y: bottom + captionHeight },
       color: paymentBorderColor, thickness: 1.2,
     });
-    const verification = verificationUrl ? new URL(verificationUrl) : null;
-    if (verification && (verification.protocol !== "https:" || verification.username || verification.password
-      || verification.search || verification.hash
-      || !new RegExp(`^/assinaturas/${integrityId}/[a-f0-9]{64}$`).test(verification.pathname))) throw new TypeError("Link de verificação inválido.");
-    const buttonHeight = verification ? Math.min(18, captionHeight * 0.28) : 0;
     const labels = verification ? [recordLines[0], timeLabel, nameLabel] : [recordLines[1], recordLines[0], timeLabel, nameLabel];
-    const rowHeight = (captionHeight - 4 - buttonHeight) / labels.length;
+    const rowHeight = (captionHeight - 4) / labels.length;
     const rowSize = Math.min(markerWidth / 20, rowHeight * 0.85);
     for (const [index, label] of labels.entries()) {
       const size = Math.min(rowSize,
         (markerWidth - inset * 2) / Math.max(1, recordFont.widthOfTextAtSize(label, 1)));
       page.drawText(label, {
         x: left + (markerWidth - recordFont.widthOfTextAtSize(label, size)) / 2,
-        y: bottom + 2 + buttonHeight + index * rowHeight + (rowHeight - size) / 2,
+        y: bottom + 2 + index * rowHeight + (rowHeight - size) / 2,
         size, font: recordFont, color: captionColor,
       });
     }
     const existingKeywords = pdf.getKeywords();
     pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
     if (verification) {
-      const buttonX = left + inset, buttonY = bottom + 1;
-      const buttonWidth = markerWidth - inset * 2;
+      const buttonWidth = checkWidth;
+      const buttonHeight = Math.min(signatureHeight - inset * 2, buttonWidth * 0.75);
+      const buttonX = left + markerWidth - inset - buttonWidth;
+      const buttonY = bottom + captionHeight + (signatureHeight - buttonHeight) / 2;
+      const green = rgb(0.09, 0.40, 0.24);
       page.drawRectangle({ x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight,
-        color: rgb(0.04, 0.35, 0.42) });
-      const label = "VERIFICAR ASSINATURA";
-      const labelSize = Math.min(8.5, buttonHeight * 0.58, (buttonWidth - 4) / recordFont.widthOfTextAtSize(label, 1));
+        color: rgb(1, 1, 1), borderColor: rgb(0.82, 0.86, 0.84), borderWidth: 0.7 });
+      const shieldSize = Math.min(26, buttonHeight * 0.46);
+      const cx = buttonX + buttonWidth / 2, sy = buttonY + buttonHeight * 0.42;
+      const polygon = [[0, 0.95], [0.36, 0.82], [0.32, 0.38], [0.20, 0.16], [0, 0], [-0.20, 0.16], [-0.32, 0.38], [-0.36, 0.82], [0, 0.95]];
+      for (let index = 1; index < polygon.length; index++) page.drawLine({
+        start: { x: cx + polygon[index - 1][0] * shieldSize, y: sy + polygon[index - 1][1] * shieldSize },
+        end: { x: cx + polygon[index][0] * shieldSize, y: sy + polygon[index][1] * shieldSize },
+        color: green, thickness: Math.max(0.6, shieldSize * 0.07),
+      });
+      page.drawLine({ start: { x: cx - shieldSize * 0.14, y: sy + shieldSize * 0.49 },
+        end: { x: cx - shieldSize * 0.02, y: sy + shieldSize * 0.36 }, color: green, thickness: Math.max(0.7, shieldSize * 0.08) });
+      page.drawLine({ start: { x: cx - shieldSize * 0.02, y: sy + shieldSize * 0.36 },
+        end: { x: cx + shieldSize * 0.17, y: sy + shieldSize * 0.64 }, color: green, thickness: Math.max(0.7, shieldSize * 0.08) });
+      const label = "Ver registro";
+      const labelSize = Math.min(9, buttonHeight * 0.19, (buttonWidth - 4) / recordFont.widthOfTextAtSize(label, 1));
       page.drawText(label, { x: buttonX + (buttonWidth - recordFont.widthOfTextAtSize(label, labelSize)) / 2,
-        y: buttonY + (buttonHeight - labelSize) / 2 + 1, size: labelSize, font: recordFont, color: rgb(1, 1, 1) });
+        y: buttonY + buttonHeight * 0.16, size: labelSize, font: recordFont, color: green });
       const link = pdf.context.register(pdf.context.obj({ Type: "Annot", Subtype: "Link",
         Rect: [buttonX, buttonY, buttonX + buttonWidth, buttonY + buttonHeight], Border: [0, 0, 0],
+        Contents: PDFString.of("Ver registro da assinatura"),
         A: { Type: "Action", S: "URI", URI: PDFString.of(verification.href) } }));
       page.node.addAnnot(link);
     }
