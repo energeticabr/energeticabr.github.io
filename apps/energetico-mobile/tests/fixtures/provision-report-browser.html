@@ -13,7 +13,9 @@ import {createProvisionReportView} from '../../src/ui/provision-report-view.js';
 import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
 import {decorateReportPrint,captureFilteredReport} from '../../src/ui/report-print.js';
 import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
+import {installAppZoomGuard} from '../../src/web/app-zoom-guard.js';
 try {
+  installAppZoomGuard(document);
   const base={recurrenceId:'7',branch:'004 - EDIFÍCIO XAVANTE',supplier:'FORNECEDOR COM NOME EXTENSO LTDA.',product:'LOCAÇÃO DE EQUIPAMENTO',property:'TODOS',paidDate:'',schedule:'',observation:''};
   const provisions=[
     {...base,id:'301',dueDate:'2026-10-09',schedule:'PENDENTE',status:'PAGAMENTO PREVISTO',total:123456789.90},
@@ -28,10 +30,12 @@ try {
   const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
   const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
-  const rect=node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};};
-  if(matchMedia('(orientation:portrait)').matches){
-    document.documentElement.dataset.layout=JSON.stringify({loads,warning:!root.querySelector('.pl-orientation').hidden,rows:root.querySelectorAll('.pr-table tbody tr[data-id]').length});
-  }else{
+  const portrait=root.dataset.reportPortrait==='true';
+  const rect=node=>{
+    const {left,right,top,bottom,width,height}=node.getBoundingClientRect();
+    // Compare logical rows/columns even when the report canvas is rotated.
+    return portrait?{left:top,right:bottom,top:innerWidth-right,width:height,height:width}:{left,right,top,width,height};
+  };
     const logo=root.querySelector('.pr-logo img');await logo.decode();await new Promise(requestAnimationFrame);
     const content=root.querySelector('.pr-content'),toolbar=root.querySelector('.pr-filters'),annual=root.querySelector('.pr-table--annual'),main=root.querySelector('.pr-table--provisions');
     const atomic=[...root.querySelectorAll('.pr-nowrap,.pr-money')].map(node=>{
@@ -43,9 +47,16 @@ try {
     const annualScroll=annual.closest('.pr-section-scroll');if(annualScroll){annualScroll.scrollLeft=annualScroll.scrollWidth;await new Promise(requestAnimationFrame);}
     const reachTotal=annualScroll?{scroll:annualScroll.scrollLeft,total:rect(annual.querySelector('tbody tr [data-column=total]')),wrapper:rect(annualScroll)}:null;
     const capture=captureFilteredReport(root,{title:'Provisões de pagamento e despesas recorrentes'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
-    document.documentElement.dataset.layout=JSON.stringify({loads,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
+    const initial={loads,portrait,warning:!root.querySelector('.pl-orientation').hidden,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
       toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,panel:rect(root.querySelector('.pr-dialog')),content:rect(content),
       tableWidth:rect(main).width,availableWidth:main.closest('.pr-section-scroll').clientWidth,
+      tableLayouts:[main,annual,root.querySelector('.pr-table--inactive')].map(table=>({
+        section:table.dataset.section,display:getComputedStyle(table).display,
+        headerDisplay:getComputedStyle(table.tHead.rows[1]).display,headerPosition:getComputedStyle(table.tHead.rows[1]).position,
+        headers:[...table.tHead.rows[1].cells].map(cell=>({text:cell.textContent,...rect(cell)})),
+        rowDisplay:getComputedStyle(table.tBodies[0].rows[0]).display,
+        cells:[...table.tBodies[0].rows[0].cells].map(cell=>({display:getComputedStyle(cell).display,...rect(cell)})),
+      })),
       hiddenCells:[...root.querySelectorAll('tbody td')].filter(node=>getComputedStyle(node).display==='none'||rect(node).width===0).map(node=>node.textContent),
       cellOverflows:[...root.querySelectorAll('tbody td')].filter(node=>node.scrollWidth-node.clientWidth>1).map(node=>({text:node.textContent,overflow:node.scrollWidth-node.clientWidth})),
       labelledCells:[...root.querySelectorAll('tbody tr:not(.pr-total) td:not([colspan])')].map(node=>({label:node.dataset.label,text:node.textContent})),
@@ -54,7 +65,14 @@ try {
       rows:main.querySelectorAll('tbody tr[data-id]').length,pendingTotal:root.querySelector('[data-metric=pendingTotal]').textContent,pendingCount:root.querySelector('[data-metric=pendingCount]').textContent,
       inactiveRows:root.querySelectorAll('.pr-table--inactive tbody tr:not(.pr-total):not(:has([data-column=empty]))').length,
       atomic,dots,wrappers,reachTotal,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),filters:capture.filters,
-      capturedTables:tables.map(table=>({columns:table.widths.length,rows:table.rows.length})),annualText:tables[1].rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))).join(' ')});
-  }
+      capturedTables:tables.map(table=>({columns:table.widths.length,rows:table.rows.length})),annualText:tables[1].rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))).join(' ')};
+    for(let count=0;count<6;count++)root.querySelector('[aria-label="Ampliar tabela anual"]').click();
+    await new Promise(requestAnimationFrame);
+    const zoomProbe={tableDisplay:getComputedStyle(annual).display,
+      fontReadable:parseFloat(getComputedStyle(annual.querySelector('td')).fontSize)>=12&&parseFloat(getComputedStyle(annual.querySelector('.pr-money')).fontSize)>=12,
+      viewportGuard:/maximum-scale=1(?:,|$)/.test(document.querySelector('meta[name=viewport]').content)};
+    root.querySelector('[aria-label="Ajustar tabela anual à tela"]').click();await new Promise(requestAnimationFrame);
+    zoomProbe.resetOverflow=annualScroll.scrollWidth-annualScroll.clientWidth;
+    document.documentElement.dataset.layout=JSON.stringify({...initial,zoomProbe});
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>
