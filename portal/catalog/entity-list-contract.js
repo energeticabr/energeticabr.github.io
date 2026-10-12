@@ -87,6 +87,34 @@ export async function resolveEntityListContracts(sharepoint, entity) {
     }
   }
 
+  // Supporting lists are separate physical contracts, never form/gallery aliases.
+  // Pin their GUID so an unrelated list with the same name is not allowlisted.
+  const supportingIds = new Set();
+  for (const supporting of entity.supportingLists || []) {
+    const listId = String(supporting?.listId || "").trim();
+    const listName = String(supporting?.listName || "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(listId) || !listName || supportingIds.has(listId.toLowerCase())
+        || proofs.some(proof => proof.listId.toLowerCase() === listId.toLowerCase())) {
+      throw new TypeError("O contrato de lista de apoio é inválido ou duplicado.");
+    }
+    supportingIds.add(listId.toLowerCase());
+    let list;
+    try {
+      list = await sharepoint.resolveList(entity.siteKey, [listId]);
+    } catch (error) {
+      unresolved.push(Object.freeze({ listName, status: "unavailable", error }));
+      continue;
+    }
+    if (list?.status !== "resolved" || String(list.id || "").toLowerCase() !== listId.toLowerCase()) {
+      unresolved.push(Object.freeze({ listName, status: list?.status === "resolved" ? "identity_conflict" : list?.status || "missing" }));
+      continue;
+    }
+    proofs.push(Object.freeze({
+      listName, listId: String(list.id), displayName: String(list.displayName || listName),
+      capabilities: frozenCapabilities(entity.available === false ? {} : supporting.capabilities),
+    }));
+  }
+
   const byPhysicalList = new Map();
   for (const proof of proofs) {
     const current = byPhysicalList.get(proof.listId) || [];
