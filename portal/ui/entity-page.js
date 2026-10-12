@@ -3,6 +3,7 @@ import { mapSharePointColumns } from "../data/column-mapper.js";
 import { classifyEntityAvailability, createAttachmentActions } from "../data/attachments.js?v=20260906-encoded-attachment-v3";
 import { resolvePowerAppsUiContract } from "../catalog/powerapps-ui-contract.js?v=20260906-suprimentos-parity-v1";
 import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-suprimentos-parity-v1";
+import { loadPendingProvisionParents, reselectQueuedProvisionParent } from "../forms/provision-parent-workflow.js";
 import { createGalleryFilterSelect } from "./gallery-filter-select.js?v=20260906-suprimentos-parity-v1";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
 import { createMultiEntryQueue, multiEntryQueueMarkup } from "../forms/multi-entry.js?v=20260906-gallery-parity-v2";
@@ -1972,6 +1973,45 @@ function gallerySortControlsMarkup(contract, columns, state) {
   return `<div class="entity-sort-picker" data-entity-sort-picker><label><span class="entity-sort-picker-icon" aria-hidden="true">↕</span><span class="sr-only">Ordenar galeria por</span><select data-entity-sort-field aria-label="Ordenar galeria por"><option value=""${usingDefault ? " selected" : ""}>${escapeHtml(defaultDescription)}</option>${options.map(column => `<option value="${escapeHtml(column.name)}"${!usingDefault && activeField === column.name ? " selected" : ""}>${escapeHtml(column.label)}</option>`).join("")}</select></label><button type="button" class="entity-sort-direction" data-entity-sort-direction${activeField ? "" : " disabled"} title="${escapeHtml(`${directionLabel}. ${directionAction}`)}" aria-label="${escapeHtml(directionLabel)}">${activeDirection === "desc" ? "↓" : "↑"}</button></div>`;
 }
 
+export function bindProvisionQueueReselection(host, { repository, entity, queue }) {
+  host.querySelectorAll?.("[data-multi-entry-reselect]").forEach(button => {
+    const rowId = button.dataset.multiEntryReselect;
+    const panel = host.querySelector(`[data-multi-entry-parent-options="${rowId}"]`);
+    const select = host.querySelector(`[data-multi-entry-parent-id="${rowId}"]`);
+    const apply = host.querySelector(`[data-multi-entry-parent-apply="${rowId}"]`);
+    const status = host.querySelector(`[data-multi-entry-parent-status="${rowId}"]`);
+    if (!panel || !select || !apply || !status) return;
+    let options = [];
+    let busy = false;
+    button.addEventListener("click", async () => {
+      if (busy) return;
+      busy = true; button.disabled = true; select.disabled = true; apply.disabled = true;
+      panel.hidden = false;
+      options = [];
+      select.innerHTML = '<option value="">Selecione um descritivo pendente</option>';
+      status.textContent = "Carregando descritivos pendentes...";
+      try {
+        options = await loadPendingProvisionParents(repository, entity);
+        select.innerHTML += options.map(option => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
+        status.textContent = options.length ? "" : "Não há descritivos pendentes disponíveis.";
+      } catch (error) { status.textContent = error.message || "Não foi possível carregar os descritivos."; }
+      finally { busy = false; button.disabled = false; select.disabled = false; apply.disabled = !options.length; }
+    });
+    apply.addEventListener("click", async () => {
+      if (busy) return;
+      const option = options.find(candidate => candidate.id === select.value);
+      if (!option) { status.textContent = "Selecione um descritivo pendente."; return; }
+      busy = true; apply.disabled = true;
+      try {
+        await reselectQueuedProvisionParent(repository, entity, queue, rowId, option);
+        status.textContent = "Descritivo confirmado. Submeta novamente a linha.";
+        panel.hidden = true;
+      } catch (error) { status.textContent = error.message || "Não foi possível confirmar o descritivo."; }
+      finally { busy = false; apply.disabled = !options.length; }
+    });
+  });
+}
+
 export function createEntityPage(root, context = {}) {
   if (!root) throw new TypeError("A galeria requer um elemento raiz.");
   const { entity, repository, access, can } = context;
@@ -1986,6 +2026,8 @@ export function createEntityPage(root, context = {}) {
     formValues: {},
     formRelationshipLabels: {},
     formRetryState: null,
+    provisionParentChoice: { mode: "new" },
+    provisionParentOptions: [],
     formVariantIds: { create: "", edit: "" },
     formVariantLocked: false,
     formAttachmentFiles: [],
@@ -2002,6 +2044,7 @@ export function createEntityPage(root, context = {}) {
   let activeController;
   let metricController;
   let formController;
+  let provisionChoiceCleanup;
   let galleryFilterSelects = [];
   let galleryPreviewController;
   let signatureGalleryBinding;
@@ -2140,6 +2183,8 @@ export function createEntityPage(root, context = {}) {
       return;
     }
     formController?.cleanup?.();
+    provisionChoiceCleanup?.();
+    provisionChoiceCleanup = undefined;
     formController = undefined;
     destroyGalleryFilterSelects();
     root.innerHTML = entityGalleryMarkup(entity, state.data, state, entityActions());
@@ -2170,6 +2215,8 @@ export function createEntityPage(root, context = {}) {
     state.formValues = {};
     state.formRelationshipLabels = {};
     state.formRetryState = null;
+    state.provisionParentChoice = { mode: "new" };
+    state.provisionParentOptions = [];
     state.formVariantIds.create = "";
     state.formAttachmentFiles = [];
     state.f18NextAssetNumber = null;
@@ -2394,6 +2441,77 @@ export function createEntityPage(root, context = {}) {
       },
       onSubmit: editing ? saveRecord : contract.multiple ? queueRecord : saveRecord,
     });
+    if (!editing && entity.id === "provisoes-de-pagamento") mountProvisionParentChoice(host);
+  }
+
+  function provisionSubmissionState(retryState) {
+    if (entity.id !== "provisoes-de-pagamento") return retryState;
+    const frozenChoice = formPersistenceRetryItem(state.formRetryState)?.provisionRetryState?.choice;
+    const selected = frozenChoice || state.provisionParentChoice;
+    if (selected.mode === "existing" && (!selected.id || !selected.eTag)) throw new Error("Selecione um descritivo pendente antes de submeter.");
+    return Object.freeze({ ...(retryState || {}), provisionParentChoice: Object.freeze({ ...selected }) });
+  }
+
+  function mountProvisionParentChoice(host) {
+    const form = host.querySelector("[data-dynamic-form]");
+    const checkpoint = formPersistenceRetryItem(state.formRetryState)?.provisionRetryState;
+    if (checkpoint) state.provisionParentChoice = checkpoint.choice;
+    form?.insertAdjacentHTML?.("afterbegin", `<fieldset class="dynamic-form-grid" data-provision-parent-choice><legend>Descritivo da provisão</legend><label class="dynamic-field"><span>Destino</span><select data-provision-parent-mode${checkpoint ? " disabled" : ""}><option value="new">NOVO DESCRITIVO</option><option value="existing">VINCULAR A DESCRITIVO PENDENTE</option></select></label><label class="dynamic-field" data-provision-parent-options><span>Descritivo pendente</span><select data-provision-parent-id${checkpoint ? " disabled" : ""}></select></label><p role="status" data-provision-parent-status></p></fieldset>`);
+    const mode = host.querySelector("[data-provision-parent-mode]");
+    const id = host.querySelector("[data-provision-parent-id]");
+    const optionsHost = host.querySelector("[data-provision-parent-options]");
+    const status = host.querySelector("[data-provision-parent-status]");
+    if (!mode || !id) return;
+    let active = true;
+    let request = 0;
+    const paint = () => {
+      mode.value = state.provisionParentChoice.mode;
+      if (optionsHost) optionsHost.hidden = mode.value !== "existing";
+      id.required = mode.value === "existing";
+      id.innerHTML = '<option value="">Selecione um descritivo pendente</option>' + state.provisionParentOptions.map(option => `<option value="${escapeHtml(option.id)}">${escapeHtml(option.label)}</option>`).join("");
+      id.value = state.provisionParentChoice.id || "";
+    };
+    const changeMode = async () => {
+      const token = ++request;
+      state.provisionParentChoice = mode.value === "existing" ? { mode: "existing", id: "", eTag: "" } : { mode: "new" };
+      paint();
+      if (status) status.textContent = "";
+      if (mode.value !== "existing") return;
+      id.disabled = true;
+      if (status) status.textContent = "Carregando descritivos pendentes...";
+      try {
+        const options = await loadPendingProvisionParents(repository, entity);
+        if (!active || disposed || request !== token) return;
+        state.provisionParentOptions = options;
+        paint();
+        if (status) status.textContent = options.length ? "" : "Não há descritivos pendentes disponíveis.";
+      } catch (error) {
+        if (active && !disposed && request === token && status) status.textContent = error.message || "Não foi possível carregar os descritivos.";
+      } finally {
+        if (active && !disposed && request === token) id.disabled = false;
+      }
+    };
+    const changeId = () => {
+      const selected = state.provisionParentOptions.find(option => option.id === id.value);
+      state.provisionParentChoice = { mode: "existing", id: selected?.id || "", eTag: selected?.eTag || "" };
+    };
+    const reset = event => {
+      if (checkpoint) { event.preventDefault(); return; }
+      request++;
+      state.provisionParentChoice = { mode: "new" };
+      queueMicrotask(() => { if (active) { paint(); id.disabled = false; if (status) status.textContent = ""; } });
+    };
+    paint();
+    if (checkpoint) {
+      // A retry replays the frozen payload/attachments; keep the visible draft consistent.
+      Array.from(form.elements || []).forEach(control => {
+        if (!control.matches?.("[data-form-save], [data-form-cancel]")) control.disabled = true;
+      });
+    }
+    mode.addEventListener("change", changeMode);
+    id.addEventListener("change", changeId);
+    form.addEventListener("reset", reset);
+    provisionChoiceCleanup = () => { active = false; request++; mode.removeEventListener("change", changeMode); id.removeEventListener("change", changeId); form.removeEventListener("reset", reset); };
   }
 
   function renderMultiEntryQueue() {
@@ -2409,13 +2527,23 @@ export function createEntityPage(root, context = {}) {
     }
     host.innerHTML = multiEntryQueueMarkup(multiQueue.snapshot(), contract.formColumns, {
       mode: entity.id === "lancamentos" ? "lancamentos-gallery3-1" : "default",
+      allowProvisionReselection: entity.id === "provisoes-de-pagamento",
     });
     host.querySelectorAll?.("[data-multi-entry-remove]").forEach(button => button.addEventListener("click", () => multiQueue.remove(button.dataset.multiEntryRemove)));
     host.querySelector?.("[data-multi-entry-submit]")?.addEventListener("click", submitMultiEntryQueue);
+    if (entity.id === "provisoes-de-pagamento") bindProvisionQueueReselection(host, { repository, entity, queue: multiQueue });
   }
 
-  async function queueRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
-    multiQueue.add(fields, rawValues, relationshipLabels, attachments);
+  async function queueRecord(fields, rawValues = {}, relationshipLabels = {}, attachments = {}, retryState = null) {
+    try {
+      multiQueue.add(fields, rawValues, relationshipLabels, attachments, provisionSubmissionState(retryState));
+    } catch (error) {
+      state.error = error.message;
+      state.formValues = rawValues;
+      state.formRelationshipLabels = relationshipLabels;
+      render();
+      return;
+    }
     if (entity.id === "imobilizados" && Number.isFinite(state.f18NextAssetNumber)) {
       state.f18NextAssetNumber += 1;
       state.formValues = { N_x00da_MEROIMOBILIZADO: String(state.f18NextAssetNumber) };
@@ -2424,6 +2552,7 @@ export function createEntityPage(root, context = {}) {
     }
     state.formRelationshipLabels = {};
     state.formRetryState = null;
+    state.provisionParentChoice = { mode: "new" };
     state.message = "Item adicionado à lista de lançamentos.";
     state.error = "";
     render();
@@ -2436,6 +2565,7 @@ export function createEntityPage(root, context = {}) {
       fields: row.fields,
       attachments: row.attachments,
       retryItem: row.retryItem,
+      retryState: row.retryState,
     }));
     const successes = result.filter(row => row.status === "success").length;
     const failures = result.filter(row => row.status === "error").length;
@@ -2538,6 +2668,7 @@ export function createEntityPage(root, context = {}) {
         fields,
         attachments,
         retryItem: formPersistenceRetryItem(state.formRetryState),
+        retryState: editing ? retryState : provisionSubmissionState(retryState),
       });
       if (!isCurrent(token)) return;
       const warnings = Array.isArray(savedItem?.warnings) && savedItem.warnings.length ? ` ${savedItem.warnings.join(" ")}` : "";
@@ -3315,6 +3446,7 @@ export function createEntityPage(root, context = {}) {
     searchTimer = undefined;
     settleScheduledSearch = undefined;
     formController?.cleanup?.();
+    provisionChoiceCleanup?.();
     signatureGalleryBinding?.destroy?.();
     signatureGalleryBinding = undefined;
     destroyGalleryFilterSelects();

@@ -1,0 +1,3 @@
+backend-patches/provision-required-description/* text eol=lf
+backend-patches/provision-required-description/tests/* text eol=lf
+backend-patches/provision-required-description/source.patch whitespace=-blank-at-eol
