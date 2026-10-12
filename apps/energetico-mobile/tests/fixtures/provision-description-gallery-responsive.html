@@ -1,0 +1,13 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Galeria descritivo provisão</title></head><body><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/searchable-filter-selects.css';
+import {createRegistrationGallery} from '../../src/ui/registration-gallery-view.js';
+const rows=[{id:'17',hasAttachments:false,fields:{FORNECEDOR:'COPASA',FILIAL:'004 - EDIFÍCIO XAVANTE',DATAPREVISTOPGTO:'2026-11-05',Created:'2026-10-08',Modified:'2026-10-08'}},{id:'16',attachmentCount:2,createdBy:{user:{displayName:'BERNARDO NOTINI MOREIRA BAHIA'}},lastModifiedBy:{user:{displayName:'USUÁRIO COM NOME LONGO PARA TESTAR A QUEBRA DE LINHA'}},fields:{FORNECEDOR:'PETRANET E SERVIÇOS DE TELECOMUNICAÇÕES',FILIAL:'004 - EDIFÍCIO XAVANTE',VALORTOTAL:'99999999,80',DATAPREVISTOPGTO:'2026-11-05',DATAPGTOEFETUADO:'2026-10-08',Created:'2026-10-08',Modified:'2026-10-08',FORMAPGTO:'ENERGÉTICA SICOOB',OBS:'Pagamento de serviços recorrentes com observação extensa e informações preservadas.'}}];
+await createRegistrationGallery({document,kind:'provisionDescription',onHome(){},onCreate(){},data:{async loadSnapshot(){return{rows};}}}).open();
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const cards=[...document.querySelectorAll('[data-registration-row]')],r=n=>n.getBoundingClientRect();
+const first=cards[0];
+document.documentElement.dataset.layout=JSON.stringify({overflow:[...document.querySelectorAll('.rg-overlay,.rg-overlay *')].filter(n=>!n.classList.contains('screen-nav-label')&&n.clientWidth&&n.scrollWidth>n.clientWidth+1).map(n=>typeof n.className==='string'?n.className:n.tagName),railClear:cards.every(card=>r(card.querySelector('.rg-row-file')).right<=r(card.querySelector('.rg-row-main')).left),actionClear:cards.every(card=>card.querySelector('.rg-provision-heading')&&r(card.querySelector('.rg-provision-heading')).right<=r(card.querySelector('.gallery-record-actions')).left+1),contentClear:cards.every(card=>card.querySelector('.rg-provision-core')&&r(card.querySelector('.rg-provision-core')).top>=r(card.querySelector('.gallery-record-actions')).bottom),auditColumns:first.querySelector('.rg-provision-audit')?getComputedStyle(first.querySelector('.rg-provision-audit')).gridTemplateColumns.split(' ').length:0,emptyX:Boolean(first.querySelector('.rg-row-file svg[data-icon="close"]')),presentDocument:Boolean(cards[1].querySelector('.rg-row-file svg[data-icon="document"]'))});
+</script></body></html>

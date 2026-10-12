@@ -114,7 +114,7 @@ function typedColumns(rawColumns, entity, metadataOnly) {
 }
 
 /** Edit contexts belong to one service instance; their loaded ETag is never refreshed on save. */
-export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{} } = {}) {
+export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{}, persistEdit } = {}) {
   const aliases = new Set([listName, ...listAliases].map(key));
   const entity = suppliedEntity || ENTITIES.find(candidate => candidate.listNames.some(name => aliases.has(key(name))))
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
@@ -325,7 +325,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     }
     assertSession();
     abort(options.signal);
-    if (!Object.keys(changed).length) return item;
+    if (!Object.keys(changed).length) return persistEdit
+      ? persistEdit({list,item,fields:changed,requestedFields:merged,signal:options.signal}) : item;
     if (baseline.form43) {
       const statusName = inputName(baseline.statusColumn);
       const statusChanged = Object.hasOwn(changed, statusName);
@@ -344,7 +345,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (typeof repository.updateItem !== "function") throw new Error("A gravação segura não está disponível.");
     assertSession();
     abort(options.signal);
-    const saved = await repository.updateItem(siteKey, list.id, item.id, changed, { eTag, ...(options.signal ? { signal: options.signal } : {}) });
+    const saved = persistEdit ? await persistEdit({list,item,fields:changed,requestedFields:merged,signal:options.signal})
+      : await repository.updateItem(siteKey, list.id, item.id, changed, { eTag, ...(options.signal ? { signal: options.signal } : {}) });
     contexts.delete(context);
     return saved || { id: item.id, fields: merged };
   }

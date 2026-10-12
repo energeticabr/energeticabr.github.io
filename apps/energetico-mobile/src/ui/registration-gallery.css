@@ -106,3 +106,51 @@
 @media (max-width: 350px) { .rg-row--work-diary .rg-row-layout { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; } .rg-diary-audit { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .rg-toolbar { grid-template-columns: minmax(0, 1fr) minmax(110px, .6fr); } .rg-toolbar > .rg-button { grid-column: 1 / -1; } .rg-toolbar--documents { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rg-toolbar--documents > .rg-field:first-child { grid-column: 1 / -1; } .rg-row-layout { grid-template-columns: minmax(52px, 68px) minmax(0, 1fr); } .rg-document-table .rg-detail { grid-template-columns: 25px minmax(0, 1fr); gap: 4px; padding: 6px; } .rg-document-table .rg-detail__icon { width: 24px; height: 24px; font-size: 1rem; } }
 @media (max-width: 350px) { .rg-document-table, .rg-document-date-grid { grid-template-columns: minmax(0, 1fr); } .rg-document-table .rg-detail--wide, .rg-document-dates, .rg-document-table .rg-detail--observation { grid-column: 1; } }
+
+/* Parent payment gallery: full-width cards and separate financial/audit clusters. */
+.rg-overlay[data-gallery-kind="provisionDescription"] { gap: 14px; background: linear-gradient(135deg, #f4fafc, #edf7fa); }
+.rg-overlay[data-gallery-kind="provisionDescription"] .rg-header { background: #f4fafc; }
+.rg-overlay[data-gallery-kind="provisionDescription"] .rg-feedback { align-self: flex-start; max-width: 100%; padding: 5px 12px; border-radius: 20px; color: #07566b; background: #dceff7; font-weight: 750; overflow-wrap: anywhere; }
+.rg-overlay[data-gallery-kind="provisionDescription"] .gallery-create-button { color: #fff; background: #168543; }
+.rg-overlay[data-gallery-kind="provisionDescription"] .gallery-filter-button,
+.rg-overlay[data-gallery-kind="provisionDescription"] .gallery-refresh-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: #123b77; border-color: #c6dfed; background: #f3faff; box-shadow: 0 2px 10px #07566b08; }
+.rg-provision-search { display: flex; align-items: center; min-width: 0; min-height: 46px; gap: 8px; padding-left: 10px; border: 1px solid #c6dce7; border-radius: 9px; background: #fff; }
+.rg-provision-search > .rg-provision-icon { flex-shrink: 0; color: #123b77; }
+.rg-provision-search > .gallery-quick-search { border: 0; background: transparent; }
+.rg-overlay[data-gallery-kind="provisionDescription"] .screen-nav-button::before { content: ''; width: 25px; height: 25px; background: #123b77; mask: var(--rg-provision-nav-icon) center / contain no-repeat; -webkit-mask: var(--rg-provision-nav-icon) center / contain no-repeat; }
+.rg-overlay[data-gallery-kind="provisionDescription"] .screen-nav-button[data-navigation-icon="↩️"] { --rg-provision-nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2.5' d='m15 3-9 9 9 9'/%3E%3C/svg%3E"); }
+.rg-overlay[data-gallery-kind="provisionDescription"] .screen-nav-button[data-navigation-icon="🏠"] { --rg-provision-nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='m2 11 10-9 10 9h-3v11h-5v-7h-4v7H5V11Z'/%3E%3C/svg%3E"); }
+.gallery-record-card.rg-row.rg-row--provision-description { position: relative; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 10px; border-radius: 14px; border-color: #d2e3ed; box-shadow: 0 3px 15px #153e5b08; }
+.gallery-record-card.rg-row--provision-description:nth-child(even) { background: #e5f3fc; }
+.gallery-record-card.rg-row--provision-description > .gallery-record-actions { position: absolute; top: 10px; right: 10px; }
+.rg-row--provision-description .rg-row-layout { grid-template-columns: minmax(48px, 68px) minmax(0, 1fr); gap: 12px; }
+.rg-row--provision-description .rg-row-file { border: 0; border-radius: 10px; background: #edf7fd; }
+.rg-provision-file-icon { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; color: #607a90; background: #dcecf4; }
+.rg-provision-file-icon > .rg-provision-icon { width: 29px; height: 29px; }
+.rg-row--provision-description [data-attachment-state="empty"] .rg-provision-file-icon { color: #bc3b45; background: #fdebed; }
+.rg-row--provision-description .rg-row-main { padding: 0; }
+.rg-provision-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; align-content: start; gap: 7px; width: calc(100% - 54px); min-height: max(44px, var(--compact-control-height, 44px)); margin-bottom: 12px; }
+.rg-provision-heading .rg-row-title { flex: 1 1 auto; max-width: 100%; margin: 5px 0 0; color: #123b77; font-size: 1.04rem; font-weight: 800; line-height: 1.25; text-transform: uppercase; overflow-wrap: break-word; }
+.rg-provision-heading .rg-document-id { margin-top: 4px; padding: 5px 7px; white-space: nowrap; }
+.rg-provision-icon { display: block; width: 24px; height: 24px; color: #71859a; }
+.rg-overlay[data-gallery-kind="provisionDescription"] .gallery-filter-button .rg-provision-icon,
+.rg-overlay[data-gallery-kind="provisionDescription"] .gallery-refresh-button .rg-provision-icon { color: #123b77; }
+.rg-provision-core, .rg-provision-extra, .rg-provision-audit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; min-width: 0; margin: 0; }
+.rg-provision-detail { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 7px; row-gap: 2px; align-content: center; min-width: 0; padding: 6px 0; }
+.rg-provision-detail > .rg-provision-icon { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.rg-provision-detail dt, .rg-provision-detail dd { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+.rg-provision-detail dt { color: #708494; font-size: .72rem; font-weight: 650; line-height: 1.3; }
+.rg-provision-detail dd { margin: 0; color: #173a63; font-size: .86rem; font-weight: 600; line-height: 1.35; white-space: pre-wrap; }
+.rg-provision-detail--total, .rg-provision-detail--paid, .rg-provision-detail--due { padding: 8px; border: 1px solid #d4efdf; border-radius: 9px; background: #e9fbef; }
+.rg-provision-detail--total .rg-provision-icon, .rg-provision-detail--paid .rg-provision-icon { color: #138131; }
+.rg-provision-detail--total dd, .rg-provision-detail--paid dd { color: #138131; font-weight: 800; }
+.rg-provision-detail--due { border-color: #f8e0e5; background: #fff0f3; }
+.rg-provision-detail--due .rg-provision-icon, .rg-provision-detail--due dd { color: #d3152a; }
+.rg-provision-detail--due dd { font-weight: 800; }
+.rg-provision-extra { margin-top: 9px; padding-top: 8px; border-top: 1px solid #e1ebf0; }
+.rg-provision-detail--notes { grid-column: 1 / -1; }
+.rg-provision-audit { margin-top: 11px; padding-top: 8px; border-top: 1px solid #e1ebf0; }
+.rg-provision-audit .rg-provision-detail:nth-child(even) { border-left: 1px solid #e1ebf0; padding-left: 8px; }
+@media (min-width: 1000px) { .rg-overlay[data-gallery-kind="provisionDescription"] .rg-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+@media (max-width: 500px) { .rg-row--provision-description .rg-row-layout { grid-template-columns: 52px minmax(0, 1fr); gap: 9px; } .rg-provision-detail { grid-template-columns: 20px minmax(0, 1fr); column-gap: 5px; } .rg-provision-detail > .rg-provision-icon { width: 20px; height: 20px; } .rg-provision-detail--total, .rg-provision-detail--paid, .rg-provision-detail--due { padding: 6px; } .rg-provision-detail dd { font-size: .78rem; } .rg-provision-audit .rg-provision-detail:nth-child(even) { padding-left: 5px; } }
+@media (max-width: 360px) { .rg-row--provision-description .rg-row-layout { grid-template-columns: 46px minmax(0, 1fr); gap: 8px; } .rg-provision-heading { flex-wrap: wrap; align-content: start; } .rg-provision-core { gap: 6px; } .rg-provision-detail--total dd, .rg-provision-detail--paid dd, .rg-provision-detail--due dd { grid-column: 1 / -1; } .rg-provision-detail dt { font-size: .68rem; } .rg-provision-audit { column-gap: 5px; } .rg-provision-audit .rg-provision-detail { grid-template-columns: minmax(0, 1fr); } .rg-provision-audit .rg-provision-icon { display: none; } .rg-provision-audit dt, .rg-provision-audit dd { grid-column: 1; } }

@@ -1,4 +1,5 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
+import { createProvisionDescriptionEditor } from "../../../../portal/forms/provision-description-edit.js";
 import { createSharePointAttachmentTransport, validateAttachment } from "../../../../portal/data/attachments.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
@@ -656,6 +657,9 @@ function createSharePointListData({
   }
   const filters = filterKind ? createRegistrationGalleryFilterData({ repository, siteKey, kind: filterKind }) : null;
 
+  const descriptionEditor = fieldKey(listName) === 'DESCRITIVOPROVISAO'
+    ? createProvisionDescriptionEditor({repository,siteKey,assertSession}) : null;
+
   let resolvedList;
   const attachmentCache = new Map();
   async function resolveList(signal) {
@@ -810,7 +814,10 @@ function createSharePointListData({
       .map(column => [String(column.name), column])).values()];
     if (uniqueColumns.length !== 1) throw new Error("Não foi possível identificar com segurança a coluna DATA PREVISTO PGTO.");
     const fieldName = String(uniqueColumns[0].name);
-    const result = await repository.updateItem(siteKey, list.id, id, { [fieldName]: value }, { eTag });
+    assertSession();
+    const result = descriptionEditor
+      ? await descriptionEditor.save({list,item,fields:{[fieldName]:value}})
+      : await repository.updateItem(siteKey, list.id, id, { [fieldName]: value }, { eTag });
     return result;
   }
 

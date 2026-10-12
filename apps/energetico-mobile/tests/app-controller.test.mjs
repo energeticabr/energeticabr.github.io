@@ -416,9 +416,11 @@ test('observação: SIM não contorna upload pendente nem envia duas vezes enqua
 
 test("descritivo provisão abre localmente e reutiliza a galeria sem enviar comandos para a VM", async t => {
   const created = [], opened = [], destroyed = [];
+  let sessionGuard;
   const h = makeHarness({
-    registrationGalleryDataFactory: async ({ kind }) => {
+    registrationGalleryDataFactory: async ({ kind,assertSession }) => {
       assert.equal(kind, "provisionDescription");
+      assert.equal(typeof assertSession,'function');sessionGuard=assertSession;assertSession();
       return { kind, loadSnapshot: async () => ({ rows: [] }) };
     },
     registrationGalleryFactory: async ({ kind, data, openMediaCollection }) => {
@@ -439,6 +441,17 @@ test("descritivo provisão abre localmente e reutiliza a galeria sem enviar coma
   assert.equal(h.chatCalls.length, before);
   h.controller.stop();
   assert.deepEqual(destroyed, ["provisionDescription"]);
+  assert.throws(sessionGuard,/sessão/);
+});
+
+test('popup keeps partial parent synchronization visible with pending child IDs instead of reporting success',async t=>{
+ const message='O descritivo 306 foi salvo, mas a sincronização não foi concluída. Itens pendentes: 92.';
+ const h=makeHarness({pendingProvisionAttachmentsDataFactory:async()=>({listAttachments:async()=>[],downloadAttachment:async()=>new Blob(),updateDueDate:async()=>{throw Object.assign(new Error(message),{code:'PROVISION_DESCRIPTION_SYNC_INCOMPLETE'});}})});
+ h.client.getPendingProvisionSnapshot=async()=>groupedPendingProvisionSnapshot();t.after(()=>h.controller.stop());await h.controller.start();
+ await h.view.emit('edit-pending-provision-due-date',{paymentId:'306'});
+ assert.equal(await h.view.emit('save-pending-provision-due-date',{paymentId:'306',value:'25/09/2099'}),false);
+ assert.equal(h.view.renders.at(-1).pendingProvisionDateEditError,message);
+ assert.equal(h.view.renders.at(-1).pendingProvisionDateEditPaymentId,'306');
 });
 
 test("relatório RHID consulta a data escolhida e coloca os registros no chat", async t => {

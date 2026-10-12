@@ -1772,7 +1772,7 @@ export function createAppController({
         return auth.getToken(scopes);
       }
     };
-    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider, ...(kind ? { sourceKind: kind } : {}) })).then(data => {
+    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, ...(kind ? { sourceKind: kind } : {}) })).then(data => {
       if (typeof data?.listAttachments !== "function" || typeof data?.downloadAttachment !== "function") {
         throw new Error("A consulta autenticada dos anexos não está disponível.");
       }
@@ -3324,10 +3324,11 @@ export function createAppController({
       }
       render();
       return true;
-    } catch {
+    } catch (error) {
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
       pendingProvisionDateEditBusy = false;
-      pendingProvisionDateEditError = "Não foi possível atualizar a data no SharePoint. Confira a conexão e tente novamente.";
+      pendingProvisionDateEditError = error?.code === 'PROVISION_DESCRIPTION_SYNC_INCOMPLETE'
+        ? error.message : "Não foi possível atualizar a data no SharePoint. Confira a conexão e tente novamente.";
       render();
       return false;
     }
@@ -8347,7 +8348,7 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = await registrationGalleryDataFactory({ kind, userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
+          const data = await registrationGalleryDataFactory({ kind,assertSession, userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
