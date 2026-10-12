@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Provisões e recorrências — layout</title>
+<style>html,body{margin:0;padding:0;font-family:Arial,sans-serif}</style></head>
+<body><main id="app"><button>Abrir relatório</button></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+import '../../src/ui/provision-report.css';
+import '../../src/web/attachment-preview.css';
+import {createProvisionReportView} from '../../src/ui/provision-report-view.js';
+import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
+import {decorateReportPrint,captureFilteredReport} from '../../src/ui/report-print.js';
+import {createAttachmentPreview} from '../../src/web/attachment-preview.js';
+try {
+  const base={recurrenceId:'7',branch:'004 - EDIFÍCIO XAVANTE',supplier:'FORNECEDOR COM NOME EXTENSO LTDA.',product:'LOCAÇÃO DE EQUIPAMENTO',property:'TODOS',paidDate:'',schedule:'',observation:''};
+  const provisions=[
+    {...base,id:'301',dueDate:'2026-10-09',schedule:'PENDENTE',status:'PAGAMENTO PREVISTO',total:986.70},
+    {...base,id:'302',dueDate:'2026-10-11',status:'PAGAMENTO PREVISTO',total:121.78},
+    {...base,id:'303',dueDate:'2026-10-20',status:'PAGAMENTO PREVISTO',total:200},
+    {...base,id:'304',dueDate:'2026-10-22',schedule:'PAGAMENTO AGENDADO',scheduledDate:'2026-10-10',executionDate:'2026-10-15',status:'PAGAMENTO PREVISTO',total:50},
+    ...Array.from({length:12},(_,i)=>{const date=`2026-${String(i+1).padStart(2,'0')}-02`;return {...base,id:String(101+i),dueDate:date,paidDate:date,schedule:'PAGO',status:'PAGAMENTO EFETUADO',total:i===0?1234567.89:89.99};}),
+    {...base,id:'400',recurrenceId:'8',dueDate:'2026-10-30',paidDate:'2026-10-02',schedule:'PAGO',status:'PAGAMENTO EFETUADO',total:75},
+  ];
+  const recurrences=[{...base,id:'7',status:'ATIVO',startDate:'2026-10-03',modified:'2026-10-01T12:00:00Z'},{...base,id:'8',status:'ATIVO',startDate:'2026-01-01',modified:'2026-10-01T12:00:00Z'}];let loads=0;
+  const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
+  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
+  await view.open();const root=view.element;
+  const rect=node=>{const {left,right,top,width,height}=node.getBoundingClientRect();return {left,right,top,width,height};};
+  if(matchMedia('(orientation:portrait)').matches){
+    document.documentElement.dataset.layout=JSON.stringify({loads,warning:!root.querySelector('.pl-orientation').hidden,rows:root.querySelectorAll('.pr-table tbody tr[data-id]').length});
+  }else{
+    const logo=root.querySelector('.pr-logo img');await logo.decode();await new Promise(requestAnimationFrame);
+    const content=root.querySelector('.pr-content'),toolbar=root.querySelector('.pr-filters'),annual=root.querySelector('.pr-table--annual'),main=root.querySelector('.pr-table--provisions');
+    const atomic=[...root.querySelectorAll('.pr-nowrap,.pr-money')].map(node=>{
+      const range=document.createRange();range.selectNodeContents(node);const cell=node.closest('td');
+      return {text:node.textContent,lines:range.getClientRects().length,rect:rect(node),cell:cell?rect(cell):null,whiteSpace:getComputedStyle(node).whiteSpace};
+    });
+    const dots=[...root.querySelectorAll('.pr-status-dot')].map(node=>({tone:node.parentElement.dataset.statusTone,color:getComputedStyle(node).backgroundColor,...rect(node)}));
+    const wrappers=[...root.querySelectorAll('.pr-section-scroll')].map(node=>({...rect(node),overflow:node.scrollWidth-node.clientWidth,section:node.dataset.section,keyboard:node.tabIndex}));
+    const annualScroll=annual.closest('.pr-section-scroll');if(annualScroll){annualScroll.scrollLeft=annualScroll.scrollWidth;await new Promise(requestAnimationFrame);}
+    const reachTotal=annualScroll?{scroll:annualScroll.scrollLeft,total:rect(annual.querySelector('tbody tr [data-column=total]')),wrapper:rect(annualScroll)}:null;
+    const capture=captureFilteredReport(root,{title:'Provisões de pagamento e despesas recorrentes'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
+    document.documentElement.dataset.layout=JSON.stringify({loads,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
+      toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,panel:rect(root.querySelector('.pr-dialog')),content:rect(content),
+      columns:[...annual.tBodies[0].rows[0].cells].slice(1,13).map(node=>rect(node).width),fontSize:getComputedStyle(annual.querySelector('td')).fontSize,
+      rows:main.querySelectorAll('tbody tr[data-id]').length,pendingTotal:root.querySelector('[data-metric=pendingTotal]').textContent,pendingCount:root.querySelector('[data-metric=pendingCount]').textContent,
+      atomic,dots,wrappers,reachTotal,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),filters:capture.filters,
+      capturedTables:tables.map(table=>({columns:table.widths.length,rows:table.rows.length})),annualText:tables[1].rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))).join(' ')});
+  }
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>
