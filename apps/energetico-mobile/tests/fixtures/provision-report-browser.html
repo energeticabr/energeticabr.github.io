@@ -23,7 +23,8 @@ try {
     ...Array.from({length:12},(_,i)=>{const date=`2026-${String(i+1).padStart(2,'0')}-02`;return {...base,id:String(101+i),dueDate:date,paidDate:date,schedule:'PAGO',status:'PAGAMENTO EFETUADO',total:i===0?1234567.89:89.99};}),
     {...base,id:'400',recurrenceId:'8',dueDate:'2026-10-30',paidDate:'2026-10-02',schedule:'PAGO',status:'PAGAMENTO EFETUADO',total:75},
   ];
-  const recurrences=[{...base,id:'7',status:'ATIVO',startDate:'2026-10-03',modified:'2026-10-01T12:00:00Z'},{...base,id:'8',status:'ATIVO',startDate:'2026-01-01',modified:'2026-10-01T12:00:00Z'}];let loads=0;
+  const recurrences=[{...base,id:'7',status:'ATIVO',startDate:'2026-10-03',modified:'2026-10-01T12:00:00Z'},{...base,id:'8',status:'ATIVO',startDate:'2026-01-01',modified:'2026-10-01T12:00:00Z'},
+    {...base,id:'9',status:'INATIVO',supplier:'FORNECEDOR INATIVO COM NOME EXTENSO LTDA.',product:'EQUIPAMENTO COM UMA DESCRIÇÃO LONGA PARA QUEBRAR SEM PERDER INFORMAÇÕES',modified:'2026-10-10T12:30:00Z'}];let loads=0;
   const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
   const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
@@ -44,8 +45,14 @@ try {
     const capture=captureFilteredReport(root,{title:'Provisões de pagamento e despesas recorrentes'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
     document.documentElement.dataset.layout=JSON.stringify({loads,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
       toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,panel:rect(root.querySelector('.pr-dialog')),content:rect(content),
+      tableWidth:rect(main).width,availableWidth:main.closest('.pr-section-scroll').clientWidth,
+      hiddenCells:[...root.querySelectorAll('tbody td')].filter(node=>getComputedStyle(node).display==='none'||rect(node).width===0).map(node=>node.textContent),
+      cellOverflows:[...root.querySelectorAll('tbody td')].filter(node=>node.scrollWidth-node.clientWidth>1).map(node=>({text:node.textContent,overflow:node.scrollWidth-node.clientWidth})),
+      labelledCells:[...root.querySelectorAll('tbody tr:not(.pr-total) td:not([colspan])')].map(node=>({label:node.dataset.label,text:node.textContent})),
+      headerColumns:tables.map(table=>table.rows.filter(row=>row.header).at(-1).cells.length),
       columns:[...annual.tBodies[0].rows[0].cells].slice(1,13).map(node=>rect(node).width),fontSize:getComputedStyle(annual.querySelector('td')).fontSize,
       rows:main.querySelectorAll('tbody tr[data-id]').length,pendingTotal:root.querySelector('[data-metric=pendingTotal]').textContent,pendingCount:root.querySelector('[data-metric=pendingCount]').textContent,
+      inactiveRows:root.querySelectorAll('.pr-table--inactive tbody tr:not(.pr-total):not(:has([data-column=empty]))').length,
       atomic,dots,wrappers,reachTotal,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),filters:capture.filters,
       capturedTables:tables.map(table=>({columns:table.widths.length,rows:table.rows.length})),annualText:tables[1].rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))).join(' ')});
   }
