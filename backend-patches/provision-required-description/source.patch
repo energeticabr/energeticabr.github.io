@@ -4,7 +4,7 @@
  import hashlib
  from datetime import datetime
  from zoneinfo import ZoneInfo
-+from requests import HTTPError
++from requests import HTTPError, Request
  
  try:
      from .logic import resolve_option
@@ -90,7 +90,7 @@
          elif stage == "asking_provision_more":
              if value == "SIM":
                  for key,values in state["provision_lines"][-1].items():
-@@ -230,7 +268,89 @@
+@@ -230,7 +268,101 @@
          if state.get("provision_reference_supplier"):
              rows.append({"label":"FORNECEDOR REFERÊNCIA","value":state["provision_reference_supplier"]})
          rows.append({"label":"TOTAL DA PROVISÃO","value":preview["totalDisplay"]})
@@ -125,9 +125,21 @@
 +            response = exc.response
 +            request = exc.request if exc.request is not None else getattr(response, "request", None)
 +            # ensure_item may replace a lost POST exception with a recovery GET
-+            # exception. Only a definite POST rejection can release this fence.
++            # or OAuth POST exception. Prove the exact list creation endpoint,
++            # not just the verb, before releasing the durable creation fence.
++            creation_url = None
++            site_url = getattr(self.sharepoint, "site_url", None)
++            list_endpoint = getattr(self.sharepoint, "_list_endpoint", None)
++            if isinstance(site_url, str) and site_url and callable(list_endpoint):
++                # requests percent-encodes Unicode/space list titles when
++                # preparing the actual request; compare the same exact URL.
++                creation_url = Request("POST", f"{site_url}/_api/"
++                    f"{list_endpoint(target).lstrip('/')}/items").prepare().url
++            headers = getattr(request, "headers", None) or {}
 +            if (response is not None and response.status_code in {400, 401, 403}
-+                    and getattr(request, "method", None) == "POST"):
++                    and getattr(request, "method", None) == "POST"
++                    and creation_url is not None and getattr(request, "url", None) == creation_url
++                    and not headers.get("X-HTTP-Method")):
 +                checkpoint["create_attempted"] = False
 +                self._save(state, etag)
 +            raise
@@ -180,7 +192,7 @@
  
      @staticmethod
      def _provision_verified(result):
-@@ -251,36 +371,65 @@
+@@ -251,36 +383,65 @@
          progress = state.get("provision_commit")
          token = state.get("idempotency_token") or f"WA-payment-{state['batch_id']}"
          if not progress:
@@ -256,7 +268,7 @@
              etag = self._save(state, etag)
          if not progress["parent_verified"]:
              verification = self.sharepoint.verify_item(
-@@ -297,6 +446,9 @@
+@@ -297,6 +458,9 @@
          # pending groups created by the previous version also copy their
          # frozen files. ensure_attachment safely resumes partial uploads.
          if not progress.get("parent_attachments_verified"):
@@ -266,7 +278,7 @@
              for attachment in frozen_attachments:
                  self.sharepoint.ensure_attachment(progress["parent_id"], attachment["sharepoint_name"],
                      self.media_repository.read(attachment), attachment.get("mime_type"),
-@@ -310,19 +462,24 @@
+@@ -310,19 +474,24 @@
                  if not self._provision_verified(verification):
                      raise RuntimeError("Os anexos do pai da provisão não foram confirmados no SharePoint")
              progress["parent_attachments_verified"] = True
@@ -296,7 +308,7 @@
                  self._remember_submission_item(state, child["item_id"], target)
                  etag = self._save(state, etag)
              names = attachment_names if index == 0 else []
-@@ -335,6 +492,8 @@
+@@ -335,6 +504,8 @@
                  if link and link != expected_fields["DESCRITIVOPROVISAO"]:
                      raise RuntimeError("A provisão antiga já está vinculada a outro pai")
                  if not link:
@@ -305,7 +317,7 @@
                      self.sharepoint.update_item_with_etag(child["item_id"],expected_fields,
                          version,target_list=target)
              if index == 0:
-@@ -346,6 +505,7 @@
+@@ -346,6 +517,7 @@
                  raise RuntimeError(f"A linha {index+1} da provisão não foi confirmada no SharePoint")
              child["verified"] = True
              etag = self._save(state, etag)
