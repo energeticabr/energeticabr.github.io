@@ -1015,6 +1015,30 @@ function isAddTaskOption(option) {
   return /adicionar\s+(?:uma\s+)?nova\s+tarefa/.test(label);
 }
 
+function presenceSummaryField(row, labels) {
+  const cell = row.find(cell => labels.includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, "")));
+  return typeof cell?.value === "string" || typeof cell?.value === "number" ? String(cell.value).trim() : "";
+}
+
+function presenceSummaryGroupKey(row, rowIndex) {
+  const descriptor = presenceSummaryField(row, ["iddescritivo", "iddescritivoetapa"]);
+  const descriptorId = descriptor.match(/^(0*[1-9]\d*)(?:\s*[-–—][\s\S]*)?$/)?.[1];
+  const activity = presenceSummaryField(row, ["atividadeexecutada"]);
+  if (!descriptorId || !activity || ["-", "em branco", "nao informado"].includes(normalizedDateText(activity))) {
+    return JSON.stringify(["incomplete", rowIndex]);
+  }
+  return JSON.stringify([BigInt(descriptorId).toString(), activity]);
+}
+
+function presenceSummaryGroupFill(groupIndex) {
+  const fills = ["#e4f6ea", "#e6f1fc", "#fff0db", "#f1e7fa", "#fde7ed", "#ddf4f2"];
+  if (fills[groupIndex]) return fills[groupIndex];
+  // A bijection of the 32³ pastel RGB values avoids rounded-HSL collisions.
+  // These channels stay below 240, so they never duplicate the six fills above.
+  const packed = ((groupIndex - fills.length) * 17749) % 32768;
+  return `rgb(${208 + (packed & 31)}, ${208 + ((packed >> 5) & 31)}, ${208 + ((packed >> 10) & 31)})`;
+}
+
 function presenceDetailTableMarkup(table) {
   if (!table) return "";
   const rows = Array.isArray(table) ? table : table.rows;
@@ -1025,7 +1049,21 @@ function presenceDetailTableMarkup(table) {
     .filter(cell => cell && typeof cell === "object");
   if (!cells.length) return "";
   const title = Array.isArray(table) ? "📋 DADOS DA PRESENÇA" : (table.title || "📋 DADOS DA PRESENÇA");
-  return `<div class="chat-presence-table${table?.kind === "presence" && rows.some(row => row.length === 4) ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${rows.filter(row => Array.isArray(row) && row.length).map(row => `<div class="chat-presence-table-row" role="row">${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`).join("")}</div>`;
+  const validRows = rows.filter(row => Array.isArray(row) && row.length);
+  const batch = table?.kind === "presence" && validRows.some(row =>
+    presenceSummaryField(row, ["fornecedor"]) && row.some(cell =>
+      ["iddescritivo", "iddescritivoetapa", "atividadeexecutada"].includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, ""))));
+  const groups = new Map();
+  return `<div class="chat-presence-table${batch ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${validRows.map((row, rowIndex) => {
+    let groupAttributes = "";
+    if (batch) {
+      const key = presenceSummaryGroupKey(row, rowIndex);
+      if (!groups.has(key)) groups.set(key, groups.size);
+      const groupIndex = groups.get(key);
+      groupAttributes = ` style="background-color: ${presenceSummaryGroupFill(groupIndex)}" aria-label="Grupo de atividade ${groupIndex + 1}"`;
+    }
+    return `<div class="chat-presence-table-row" role="row"${groupAttributes}>${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`;
+  }).join("")}</div>`;
 }
 
 function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeFlow = null) {
