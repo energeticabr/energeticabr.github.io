@@ -11,7 +11,7 @@ Base: `64b8fafb8c3f422c1c172770479987aadeb1c809`.
 ## Verification
 
 - Initial frontend RED: three missing-behavior failures. Review-case RED also reproduced duplicate rounded-HSL colors (166/200 unique), multiline IDs, malformed objects and low label contrast. Final focused checks: 8/8. Complete chat-view suite: 302/302.
-- First full frontend run: 5,409 passed; final full run after review corrections is checked separately before merge.
+- First full frontend run: 5,409 passed. Final full run after review corrections: 5,410 passed, zero failures, exit code 0 (643,503.9276 ms).
 - Native and PWA builds passed after final corrections. Existing chunk/dynamic-import warnings remain. Signature guard: 14 intact blocks. Secret scan: 739 tracked files checked.
 - Backend RED: 6/6 expected failures on original source; GREEN: 6/6 on updated copy, also 6/6 with production Python 3.9 on the VM. No HTTP allowed in fixture tests.
 - Legacy positional assertions were adapted to cell labels/five-cell order. Relevant current backend comparison: 42 tests, 40 pass, two pre-existing `returned_to_main_menu` expectation errors (`test_attendance_batch_conflict_offers_exit_without_trapping_menu`, `test_attendance_batch_missing_id_can_exit_instead_of_retrying_forever`). No new failure remains in that comparison.
