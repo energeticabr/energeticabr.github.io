@@ -2,7 +2,14 @@
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="../../src/styles.css"><title>Resumos de postagem — prévia local</title></head>
-<body><main id="app"></main><script type="module">
+<body><main id="app"></main><script>
+window.addEventListener('error', event => {
+  const error = document.createElement('p');
+  error.setAttribute('role', 'alert');
+  error.textContent = `Erro na prévia local: ${event.message} (${event.filename}:${event.lineno})`;
+  document.body.append(error);
+});
+</script><script type="module">
 import { createChatView } from '../../src/ui/chat-view.js';
 const view = createChatView(document.querySelector('#app'));
 const samples = {
@@ -11,6 +18,23 @@ const samples = {
 • PROVISÃO DE PAGAMENTO: ID 308
 • PEDIDO: ID 403
 • LANÇAMENTO: ID 3567`,
+  'description-settlement': `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS DESCRITIVOPROVISAO ÀS 00:09.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• DESCRITIVO DE PROVISÃO: ID 12
+• PROVISÃO DE PAGAMENTO: ID 325
+• PEDIDO: ID 406
+• LANÇAMENTO: ID 3570`,
+  'description-multiple': `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS DESCRITIVOPROVISAO ÀS 00:09.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• DESCRITIVO DE PROVISÃO: ID 12
+• PROVISÕES DE PAGAMENTO: IDS 325, 326, 327
+• PEDIDOS: IDS 406, 407, 408
+• LANÇAMENTOS: IDS 3570, 3571, 9007199254740993
+📎 Comprovante: recibo-ficticio.pdf`,
+  'description-no-launch': `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS DESCRITIVOPROVISAO ÀS 00:09.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• DESCRITIVO DE PROVISÃO: ID 12
+• PROVISÕES DE PAGAMENTO: IDS 325, 326`,
   multiple: `✅ *🟢 6 LANÇAMENTOS GRAVADOS NA BASE DE DADOS LANCAMENTOS ÀS 17:16.* 🕒
 🆔 *REGISTROS CONFIRMADOS:*
 • LANÇAMENTOS: IDS 3551, 3552, 3553, 3554, 3555, 3556
@@ -31,7 +55,7 @@ const samples = {
 };
 const sample = new URLSearchParams(location.search).get('sample') || 'multiple';
 view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
-  activeFlow: null, completionNavigation: { homeOnly: true, title: sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : 'POSTAGEM CONCLUÍDA' },
+  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : 'POSTAGEM CONCLUÍDA' },
   messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text: samples[sample] }],
 });
 await document.fonts.ready;
@@ -48,6 +72,11 @@ const result = card ? {
   headingFont: parseFloat(getComputedStyle(card.querySelector('h2')).fontSize),
   paragraphWeight: getComputedStyle(card.querySelector('p')).fontWeight,
   details: card.querySelector('.launch-completion__details')?.textContent.trim(),
+  senderInsideCard: Boolean(card.querySelector('.launch-completion-sender')),
+  sender: [...card.querySelectorAll('.launch-completion-sender strong, .launch-completion-sender time, .launch-completion-sender img')].map(el => {
+    const rect = el.getBoundingClientRect();
+    return { text: el.textContent, left: rect.left, right: rect.right, width: rect.width, height: rect.height };
+  }),
 } : { missing: true };
 const output = document.createElement('script'); output.id = 'layout-result'; output.type = 'application/json'; output.textContent = JSON.stringify(result); document.body.append(output);
 document.documentElement.dataset.layout = 'ready';

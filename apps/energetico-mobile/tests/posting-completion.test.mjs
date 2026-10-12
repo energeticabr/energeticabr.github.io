@@ -22,6 +22,105 @@ const settlement = `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS PROVIS
 • PEDIDO: ID 403
 • LANÇAMENTO: ID 3567`;
 
+const descriptionSettlement = `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS DESCRITIVOPROVISAO ÀS 00:09.* 🕒
+🆔 *REGISTROS CONFIRMADOS:*
+• DESCRITIVO DE PROVISÃO: ID 12
+• PROVISÃO DE PAGAMENTO: ID 325
+• PEDIDO: ID 406
+• LANÇAMENTO: ID 3570`;
+
+test('description settlement renders the shared green receipt with its parent and every confirmed child', () => {
+  const card = documentFor(descriptionSettlement).querySelector('.launch-completion--provision-settlement');
+  assert.ok(card, 'the parent-model notice must use the same receipt as provision settlements');
+  assert.equal(card.querySelector('h2').textContent, 'PAGAMENTO AGENDADO');
+  assert.equal(card.querySelector('.launch-completion__success p').textContent, 'Baixado na base de dados');
+  assert.match(card.querySelector('.launch-completion__operation').textContent, /DESCRITIVOPROVISAO\s+ÀS 00:09/);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['DESCRITIVO DE PROVISÃO', 'PROVISÃO DE PAGAMENTO', 'PEDIDO', 'LANÇAMENTO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 12', 'ID 325', 'ID 406', 'ID 3570']);
+  assert.equal(card.querySelector('footer').textContent.trim(), 'Processo concluído com sucesso!');
+  assert.doesNotMatch(card.textContent, /R\$|\d{2}\/\d{2}\/\d{4}/);
+  assert.equal(card.querySelectorAll('button, input, [data-action]').length, 0);
+});
+
+test('description settlement presents each ID separately when several provisions, orders and launches were confirmed', () => {
+  const text = descriptionSettlement.replace('• PROVISÃO DE PAGAMENTO: ID 325', '• PROVISÕES DE PAGAMENTO: IDS 325, 326')
+    .replace('• PEDIDO: ID 406', '• PEDIDOS: IDS 406, 407')
+    .replace('• LANÇAMENTO: ID 3570', '• LANÇAMENTOS: IDS 3570, 9007199254740993');
+  const card = documentFor(text).querySelector('.launch-completion');
+  assert.ok(card);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['DESCRITIVO DE PROVISÃO', 'PROVISÃO DE PAGAMENTO', 'PROVISÃO DE PAGAMENTO', 'PEDIDO', 'PEDIDO', 'LANÇAMENTO', 'LANÇAMENTO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 12', 'ID 325', 'ID 326', 'ID 406', 'ID 407', 'ID 3570', 'ID 9007199254740993']);
+});
+
+test('description settlement without optional orders or launches does not invent those records', () => {
+  const text = descriptionSettlement.split('\n').slice(0, 4).join('\n');
+  const card = documentFor(text).querySelector('.launch-completion');
+  assert.ok(card, 'a confirmed parent and provision is valid when no order or launch was requested');
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 12', 'ID 325']);
+  assert.equal(card.querySelectorAll('.launch-completion__row').length, 2);
+});
+
+test('description receipt preserves supplementary notes and immutable attachment metadata on re-render', () => {
+  const metadata = Object.freeze({ attachments: Object.freeze([Object.freeze({ id: 'receipt', name: 'recibo.pdf' })]) });
+  const text = descriptionSettlement + '\n📎 Comprovante: recibo.pdf\n⚠️ Anexo adicional pendente: ID 88';
+  const first = documentFor(text, metadata).querySelector('.launch-completion');
+  assert.ok(first);
+  assert.deepEqual([...first.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 12', 'ID 325', 'ID 406', 'ID 3570']);
+  assert.match(first.querySelector('.launch-completion__details').textContent, /Anexo adicional pendente: ID 88/);
+  assert.equal(documentFor(text, metadata).querySelector('.launch-completion').outerHTML, first.outerHTML);
+  assert.equal(metadata.attachments[0].id, 'receipt');
+});
+
+for (const [name, text] of [
+  ['missing parent', descriptionSettlement.replace('\n• DESCRITIVO DE PROVISÃO: ID 12', '')],
+  ['missing child', descriptionSettlement.replace('\n• PROVISÃO DE PAGAMENTO: ID 325', '')],
+  ['invalid parent ID', descriptionSettlement.replace('ID 12', 'ID 0')],
+  ['partial child failure', descriptionSettlement + '\n❌ Falha ao baixar uma provisão vinculada.'],
+  ['unconfirmed settlement', descriptionSettlement.replace('BAIXADO', 'NÃO BAIXADO')],
+  ['unrelated database', descriptionSettlement.replace('DESCRITIVOPROVISAO', 'DOCUMENTOS')],
+  ['explicit partial confirmation', descriptionSettlement + '\n⚠️ CONFIRMAÇÃO PARCIAL: uma provisão vinculada permanece pendente.'],
+  ['unconfirmed additional provision', descriptionSettlement + '\n⚠️ Provisão ID 327 não confirmada.'],
+  ['pending provision without failure emoji', descriptionSettlement + '\nProvisão ID 327 ainda pendente de baixa.'],
+  ['empty optional order', descriptionSettlement.split('\n').slice(0, 4).join('\n') + '\n• PEDIDO:'],
+  ['empty optional launch', descriptionSettlement.split('\n').slice(0, 4).join('\n') + '\n• LANÇAMENTO:'],
+  ['unconfirmed optional launch', descriptionSettlement.split('\n').slice(0, 4).join('\n') + '\n• LANÇAMENTO: NÃO CONFIRMADO'],
+  ['mixed attachment and pending provision', descriptionSettlement + '\n⚠️ Anexo pendente; provisão ID 327 ainda pendente de baixa.'],
+  ['mixed attachment and pending provision in separate sentences', descriptionSettlement + '\n⚠️ Anexo recebido. Provisão ID 327 pendente de baixa.'],
+  ['mixed attachment and pending provision after comma', descriptionSettlement + '\n⚠️ Anexo recebido, provisão ID 327 pendente de baixa.'],
+  ['mixed attachment and pending provision after conjunction', descriptionSettlement + '\n⚠️ Anexo pendente e a provisão ID 327 ainda pendente de baixa.'],
+  ['plural failures', descriptionSettlement + '\nOcorreram falhas ao baixar outras provisões.'],
+]) {
+  test(`unconfirmed description settlement stays plain and visible: ${name}`, () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.ok(doc.querySelector('.chat-bubble').textContent.includes(text.replaceAll('*', '').split('\n')[0]));
+  });
+}
+
+for (const notice of [
+  '📎 Anexo da provisão ID 308 não confirmado.',
+  'AVISO: Anexo da provisão ID 308 pendente de envio.',
+  '⚠️ Anexo da provisão ID 308 pendente de envio.',
+]) {
+  test(`attachment-only notice stays supplementary without changing confirmed financial records: ${notice}`, () => {
+    for (const text of [settlement, descriptionSettlement]) {
+      const card = documentFor(text + '\n' + notice).querySelector('.launch-completion');
+      assert.ok(card, 'an attachment warning must not negate the confirmed settlement');
+      assert.ok(card.querySelector('.launch-completion__details').textContent.includes(notice));
+      assert.equal(card.querySelector('footer').textContent.trim(), 'Processo concluído com sucesso!');
+    }
+  });
+}
+
+test('settlement receipt keeps its sender and mascot inside the white card as in the posting reference', () => {
+  const card = documentFor(settlement).querySelector('.launch-completion');
+  const sender = card.querySelector('.launch-completion-sender');
+  assert.ok(sender, 'the sender header must belong to the success card');
+  assert.equal(sender.querySelector('strong').textContent, 'Energético');
+  assert.equal(sender.querySelector('time').textContent, '06:18');
+  assert.equal(sender.querySelector('img').getAttribute('alt'), 'Mascote Energético');
+});
+
 test('provision settlement uses the new confirmation layout with all three source IDs and time', () => {
   const doc = documentFor(settlement);
   const card = doc.querySelector('.launch-completion');

@@ -1779,7 +1779,9 @@ const provisionShortcut = provisionOption ? `<button class="chat-main-provisions
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
   const completion = !isUser && postingCompletion(message);
   if (completion) {
-    return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${avatar}<div class="chat-bubble"><div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong><time>${escapeHtml(completion.time)}</time></div>${postingCompletionMarkup(completion, completion.notes.length ? `<p>${formatChatText(completion.notes.join('\n'))}</p>` : '')}</div></article>`;
+    const settlement = completion.kind === 'provision-settlement';
+    const sender = settlement ? { name, mascotUrl: MASCOT_URL } : null;
+    return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${settlement ? '' : avatar}<div class="chat-bubble">${settlement ? '' : `<div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong><time>${escapeHtml(completion.time)}</time></div>`}${postingCompletionMarkup(completion, completion.notes.length ? `<p>${formatChatText(completion.notes.join('\n'))}</p>` : '', sender)}</div></article>`;
   }
   const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
