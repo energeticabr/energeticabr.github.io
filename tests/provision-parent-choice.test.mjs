@@ -61,9 +61,9 @@ async function openPage() {
     access: buildSuperAdminAccess("admin@energeticabr.com", "Admin"), can, initialFormOpen: true,
     repository: {
       async resolveList(_site, aliases) { calls.push(["resolve", aliases]); return { status: "resolved", id: aliases.includes("DESCRITIVOPROVISAO") ? "parents" : "children" }; },
-      async getColumns(_site, id) { return (id === "parents" ? fields : ["FILIAL", "QTD", "VALORTOTAL"]).map(name => ({ name, displayName: name, ...(name.startsWith("DATA") || name === "PGTOAGENDADO" ? { dateTime: {} } : { text: {} }) })); },
+      async getColumns(_site, id) { return (id === "parents" ? fields : ["Title", "FILIAL", "QTD", "VALORTOTAL", "FRETE", "DESCRITIVOPROVISAO", "STATUS", "PGTOAGENDADO", "DATAPGTOEFETUADO"]).map(name => ({ name, displayName: name, ...(name.startsWith("DATA") || id === "parents" && name === "PGTOAGENDADO" ? { dateTime: {} } : { text: {} }) })); },
       async getItemsPage() { return { items: [], nextLink: "", hasMore: false, batchCount: 0 }; },
-      async getItems(_site, id) { calls.push(["read", id]); return [{ id: "10", eTag: '"10,1"', fields: { FORNECEDOR: "Fornecedor A", FILIAL: "001", DATAPREVISTOPGTO: "2026-11-01", VALORTOTAL: "10" } }]; },
+      async getItems(_site, id) { calls.push(["read", id]); return id === "children" ? [{ id: "1", fields: { DESCRITIVOPROVISAO: "10", STATUS: "PAGAMENTO PREVISTO", DATAPGTOEFETUADO: null, PGTOAGENDADO: "PENDENTE" } }] : [{ id: "10", eTag: '"10,1"', fields: { FORNECEDOR: "Fornecedor A", FILIAL: "001", DATAPREVISTOPGTO: "2026-11-01", VALORTOTAL: "10" } }]; },
       async createItem() { calls.push(["write"]); throw new Error("UI composition must not write"); },
     },
   });

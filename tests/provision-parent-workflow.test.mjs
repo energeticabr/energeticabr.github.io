@@ -21,7 +21,7 @@ function fakeRepository() {
   const data = { parents: new Map(), children: new Map() };
   const calls = [];
   const parentColumns = ["Title", "FILIAL", "FORNECEDOR", "FORMAPGTO", "OBS", "VALORTOTAL", "DATAPREVISTOPGTO", ...markers];
-  const childColumns = ["Title", ...Object.keys(baseFields), "DESCRITIVOPROVISAO"];
+  const childColumns = ["Title", ...Object.keys(baseFields), "DESCRITIVOPROVISAO", "DATAPGTOEFETUADO", "PGTOAGENDADO"];
   let nextParent = 20;
   let nextChild = 100;
   const repository = {
@@ -33,7 +33,7 @@ function fakeRepository() {
     },
     async getColumns(site, id) {
       assert.equal(site, "company");
-      return (id === "parents" ? parentColumns : childColumns).map(name => ({ name, displayName: name, indexed: true, ...(name.startsWith("DATA") || name === "PGTOAGENDADO" ? { dateTime: {} } : { text: {} }) }));
+      return (id === "parents" ? parentColumns : childColumns).map(name => ({ name, displayName: name, indexed: true, ...(name.startsWith("DATA") || id === "parents" && name === "PGTOAGENDADO" ? { dateTime: {} } : { text: {} }) }));
     },
     async getItems(site, id, query = "$expand=fields") {
       assert.equal(site, "company");
@@ -84,10 +84,64 @@ function fakeRepository() {
 }
 const save = (repository, options = {}) => persistEntityRecordWithAttachments(repository, entity, list, { fields: baseFields, ...options });
 const choice = item => ({ mode: "existing", id: item.id, eTag: item.eTag });
+const linkedChild = (id, parentId, fields = {}) => ({ id, fields: { ...baseFields, QTD: "1", VALORTOTAL: "0", FRETE: "0", DESCRITIVOPROVISAO: parentId, DATAPGTOEFETUADO: null, PGTOAGENDADO: "PENDENTE", ...fields } });
+function seedPendingParent(repo, selected = parent()) {
+  repo.data.parents.set(selected.id, selected);
+  const childId = `900${selected.id}`;
+  repo.data.children.set(childId, linkedChild(childId, selected.id));
+}
+const newChildCount = repo => repo.calls.filter(call => call[0] === "create" && call[1] === "children").length;
 async function failure(operation) {
   try { await operation(); } catch (error) { return error; }
   assert.fail("Expected a recoverable failure");
 }
+
+test("pending group loader excludes empty and fully paid groups while retaining mixed groups", async () => {
+  const repo = fakeRepository();
+  for (const id of ["10", "11", "12", "13", "14"]) repo.data.parents.set(id, parent(id));
+  repo.data.children.set("1", linkedChild("1", "10"));
+  repo.data.children.set("2", linkedChild("2", "10", { DATAPGTOEFETUADO: "2026-10-01", STATUS: "PAGO" }));
+  repo.data.children.set("3", linkedChild("3", "11", { DATAPGTOEFETUADO: "2026-10-01" }));
+  repo.data.children.set("4", linkedChild("4", "13", { PGTOAGENDADO: "PAGO" }));
+  repo.data.children.set("5", linkedChild("5", "14", { STATUS: "CANCELADO" }));
+  assert.deepEqual((await workflow.loadPendingProvisionParents(repo, entity)).map(option => option.id), ["10"]);
+  assert.equal(repo.calls.filter(call => ["create", "update"].includes(call[0])).length, 0);
+});
+
+for (const scenario of ["empty", "date-paid", "status-paid", "schedule-paid"]) test(`closed existing group ${scenario} cannot append even with blank parent markers`, async () => {
+  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  if (scenario !== "empty") repo.data.children.set("1", linkedChild("1", "10", scenario === "date-paid" ? { DATAPGTOEFETUADO: "2026-10-01" } : scenario === "status-paid" ? { STATUS: "PAGO" } : { PGTOAGENDADO: "PAGO" }));
+  await assert.rejects(save(repo, { provisionParentChoice: choice(parent()) }), /pendente|encerr|filho/i);
+  assert.equal(repo.calls.filter(call => call[0] === "create").length, 0);
+});
+
+test("pending children are revalidated after token lookup immediately before append", async () => {
+  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  repo.data.children.set("1", linkedChild("1", "10"));
+  const query = repo.getItems;
+  repo.getItems = async (...args) => {
+    const result = await query(...args);
+    if (args[1] === "children" && new URLSearchParams(args[2]).get("$filter")?.startsWith("fields/Title")) repo.data.children.get("1").fields.DATAPGTOEFETUADO = "2026-10-01";
+    return result;
+  };
+  await assert.rejects(save(repo, { provisionParentChoice: choice(parent()) }), /pendente|encerr|filho/i);
+  assert.equal(repo.calls.filter(call => call[0] === "create").length, 0);
+});
+
+test("closed-group queue reselection preserves rejected row fields and files", async () => {
+  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  repo.data.children.set("1", linkedChild("1", "10"));
+  const queue = createMultiEntryQueue(); const upload = file("MANTER.pdf");
+  const row = queue.add(baseFields, {}, {}, { uploads: [upload] }, { provisionParentChoice: choice(parent()) });
+  repo.data.parents.get("10").eTag = '"10,2"';
+  await queue.submitAll(submitQueueRow(repo));
+  const option = (await workflow.loadPendingProvisionParents(repo, entity))[0];
+  repo.data.children.get("1").fields.STATUS = "PAGO";
+  await assert.rejects(workflow.reselectQueuedProvisionParent(repo, entity, queue, row.id, option), /pendente|encerr|filho/i);
+  assert.deepEqual(queue.snapshot()[0].fields, row.fields);
+  assert.equal(queue.snapshot()[0].attachments.uploads[0], upload);
+  assert.equal(queue.snapshot()[0].status, "error");
+});
 
 test("default creation verifies new parent before child and preserves supplied child data", async () => {
   const repo = fakeRepository();
@@ -106,7 +160,7 @@ test("default creation verifies new parent before child and preserves supplied c
 
 test("existing selection adds no parent and sums paid plus pending children without metadata writes", async () => {
   const repo = fakeRepository();
-  const selected = parent(); repo.data.parents.set("10", selected);
+  const selected = parent(); seedPendingParent(repo, selected);
   repo.data.children.set("1", { id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "3", VALORTOTAL: "0.10", FRETE: "0", DATAPGTOEFETUADO: "2026-10-01" } });
   const saved = await save(repo, { provisionParentChoice: choice(selected) });
   assert.equal(saved.fields.DESCRITIVOPROVISAO, "10");
@@ -118,7 +172,7 @@ test("existing selection adds no parent and sums paid plus pending children with
 
 test("selector only exposes authoritative pending parents with identifying labels and performs no writes", async () => {
   assert.equal(typeof workflow.loadPendingProvisionParents, "function", "pending parent loader is missing");
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   for (let index = 0; index < markers.length; index++) repo.data.parents.set(String(11 + index), parent(String(11 + index), { [markers[index]]: "2026-11-01" }));
   const noEtag = parent("17"); delete noEtag.eTag; repo.data.parents.set("17", noEtag);
   const options = await workflow.loadPendingProvisionParents(repo, entity);
@@ -130,9 +184,9 @@ test("selector only exposes authoritative pending parents with identifying label
 
 for (const marker of markers) test(`existing parent with ${marker} is refused before writing child`, async () => {
   const repo = fakeRepository(); const selected = parent();
-  repo.data.parents.set("10", parent("10", { [marker]: "2026-10-01" }));
+  seedPendingParent(repo, parent("10", { [marker]: "2026-10-01" }));
   await assert.rejects(save(repo, { provisionParentChoice: choice(selected) }), /pendente|pag|agend/i);
-  assert.equal(repo.data.children.size, 0);
+  assert.equal(newChildCount(repo), 0);
 });
 
 for (const scenario of ["changed", "deleted", "missing-etag", "wrong-id"]) test(`existing parent ${scenario} is refused before any POST`, async () => {
@@ -141,13 +195,13 @@ for (const scenario of ["changed", "deleted", "missing-etag", "wrong-id"]) test(
   if (scenario === "changed") current.eTag = '"10,2"';
   if (scenario === "missing-etag") delete current.eTag;
   if (scenario === "wrong-id") current.id = "11";
-  if (scenario !== "deleted") repo.data.parents.set("10", current);
+  if (scenario !== "deleted") seedPendingParent(repo, current);
   await assert.rejects(save(repo, { provisionParentChoice: choice(selected) }));
   assert.equal(repo.calls.filter(call => call[0] === "create").length, 0);
 });
 
 test("existing selection without ETag and conflicting supplied child link fail closed", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   await assert.rejects(save(repo, { provisionParentChoice: { mode: "existing", id: "10" } }), /ETag/i);
   await assert.rejects(save(repo, { fields: { ...baseFields, DESCRITIVOPROVISAO: "11" }, provisionParentChoice: choice(parent()) }), /vínculo|descritivo/i);
   await assert.rejects(save(repo, { fields: { ...baseFields, DESCRITIVOPROVISAO: "11" } }), /vínculo|descritivo/i);
@@ -161,7 +215,7 @@ for (const [name, value] of [["QTD", ""], ["VALORTOTAL", "R$ lixo"], ["FRETE", "
 });
 
 test("412 retries fully requery children and use fresh parent ETag", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const update = repo.updateItem;
   let conflicts = 1;
   repo.updateItem = async (...args) => {
@@ -174,12 +228,14 @@ test("412 retries fully requery children and use fresh parent ETag", async () =>
   };
   await save(repo, { provisionParentChoice: choice(parent()) });
   assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "28.225");
-  assert.equal(repo.calls.filter(call => call[0] === "query" && call[2].includes("DESCRITIVOPROVISAO")).length, 2);
-  assert.equal(repo.data.children.size, 2);
+  // One authoritative eligibility read, then both complete total attempts.
+  assert.equal(repo.calls.filter(call => call[0] === "query" && call[2].includes("DESCRITIVOPROVISAO")).length, 3);
+  assert.equal(newChildCount(repo), 1);
+  assert.equal(repo.data.children.size, 3); // Original pending + concurrent + newly saved.
 });
 
 test("bounded total conflicts checkpoint child and retry totals without another creation", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const update = repo.updateItem; let attempts = 0;
   repo.updateItem = async () => { attempts++; throw Object.assign(new Error("412"), { status: 412 }); };
   const error = await failure(() => save(repo, { provisionParentChoice: choice(parent()) }));
@@ -187,12 +243,12 @@ test("bounded total conflicts checkpoint child and retry totals without another 
   assert.ok(error.retryItem?.provisionRetryState);
   repo.updateItem = update;
   await save(repo, { retryItem: error.retryItem });
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
   assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26.225");
 });
 
 test("malformed historic child stops total update and retains committed child checkpoint", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   repo.data.children.set("1", { id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "1", VALORTOTAL: "", FRETE: "0" } });
   const error = await failure(() => save(repo, { provisionParentChoice: choice(parent()) }));
   assert.ok(error.retryItem?.provisionRetryState?.childId);
@@ -215,7 +271,7 @@ for (const target of ["parents", "children"]) test(`lost ${target} POST response
   const saved = await save(repo, { fields: { ...baseFields, QTD: "99" }, provisionParentChoice: { mode: "existing", id: "999" }, retryState: state, retryItem: state.persistenceRetryItem, attachments: { uploads: [file("CHANGED.pdf")] } });
   assert.equal(saved.fields.QTD, "2,5");
   assert.equal(repo.data.parents.size, 1);
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
   assert.deepEqual(repo.calls.filter(call => call[0] === "upload").map(call => call[3]), ["ORIGINAL.pdf"]);
 });
 
@@ -225,7 +281,7 @@ test("silent child POST response is recovered in same attempt", async () => {
   const saved = await save(repo);
   assert.equal(saved.id, "100");
   assert.equal(repo.data.parents.size, 1);
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
 });
 
 test("ambiguous POST never repeats while stable-title recovery is still absent", async () => {
@@ -257,13 +313,13 @@ test("attachment retry keeps parent, child and only remaining frozen uploads", a
   fail = false;
   await save(repo, { retryItem: error.retryItem, fields: { QTD: "999" }, attachments: { uploads: [file("C.pdf")] } });
   assert.equal(repo.data.parents.size, 1);
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
   assert.deepEqual(repo.calls.filter(call => call[0] === "upload").map(call => call[3]), ["A.pdf", "B.pdf"]);
 });
 
 test("queue freezes parent choice per row and resumes partial child commits", async () => {
   const repo = fakeRepository(); const queue = createMultiEntryQueue();
-  const selected = parent(); repo.data.parents.set("10", selected);
+  const selected = parent(); seedPendingParent(repo, selected);
   queue.add(baseFields, {}, {}, {}, { provisionParentChoice: choice(selected) });
   queue.add(baseFields, {}, {}, {}, { provisionParentChoice: { mode: "new" } });
   const update = repo.updateItem; let fail = true;
@@ -271,11 +327,11 @@ test("queue freezes parent choice per row and resumes partial child commits", as
   const submit = row => save(repo, { fields: row.fields, attachments: row.attachments, retryState: row.retryState, retryItem: row.retryItem });
   await queue.submitAll(submit);
   assert.deepEqual(queue.snapshot().map(row => row.status), ["error", "success"]);
-  assert.equal(repo.data.children.size, 2);
+  assert.equal(newChildCount(repo), 2);
   fail = false; await queue.submitAll(submit);
   assert.deepEqual(queue.snapshot().map(row => row.status), ["success", "success"]);
   assert.equal(repo.data.parents.size, 2);
-  assert.equal(repo.data.children.size, 2);
+  assert.equal(newChildCount(repo), 2);
 });
 
 test("edits preserve old path and require current ETag; generic creation is unchanged", async () => {
@@ -289,7 +345,7 @@ test("edits preserve old path and require current ETag; generic creation is unch
 });
 
 test("total includes repository Graph pagination instead of a first-page sum", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const paged = createSharePointRepository({ async request(path) {
     if (path === "/sites/example.test:/finance") return { id: "site" };
     if (path.includes("$skiptoken=next")) return { value: [{ id: "1", fields: { DESCRITIVOPROVISAO: "10", QTD: "2", VALORTOTAL: "1.1", FRETE: "0", DATAPGTOEFETUADO: "2026-01-01" } }] };
@@ -303,7 +359,7 @@ test("total includes repository Graph pagination instead of a first-page sum", a
 });
 
 test("revalidation occurs after title recovery query immediately before child POST", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const query = repo.getItems;
   repo.getItems = async (...args) => {
     const items = await query(...args);
@@ -311,7 +367,7 @@ test("revalidation occurs after title recovery query immediately before child PO
     return items;
   };
   await assert.rejects(save(repo, { provisionParentChoice: choice(parent()) }), /pendente|agend/i);
-  assert.equal(repo.data.children.size, 0);
+  assert.equal(newChildCount(repo), 0);
 });
 
 test("existing child title collision cannot orphan a newly created parent", async () => {
@@ -365,7 +421,7 @@ test("silent parent POST response recovers parent before child", async () => {
 });
 
 test("total readback mismatch checkpoints saved child for a total-only retry", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const update = repo.updateItem;
   repo.updateItem = async (...args) => { const saved = await update(...args); repo.data.parents.get("10").fields.VALORTOTAL = "1"; return saved; };
   const error = await failure(() => save(repo, { provisionParentChoice: choice(parent()) }));
@@ -374,20 +430,20 @@ test("total readback mismatch checkpoints saved child for a total-only retry", a
   repo.updateItem = update;
   await save(repo, { retryItem: error.retryItem });
   assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "26.225");
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
 });
 
 test("412 retry cannot append to a parent paid during total recalculation", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   let writes = 0;
   repo.updateItem = async () => { writes++; repo.data.parents.get("10").fields.DATAPGTOEFETUADO = "2026-10-12"; throw Object.assign(new Error("412"), { status: 412 }); };
   await assert.rejects(save(repo, { provisionParentChoice: choice(parent()) }), /pendente|pag/i);
   assert.equal(writes, 1);
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
 });
 
 test("invalid pending selection before any write leaves fields and choice editable for resubmission", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent("10", { PGTOAGENDADO: "2026-10-12" }));
+  const repo = fakeRepository(); seedPendingParent(repo, parent("10", { PGTOAGENDADO: "2026-10-12" }));
   const error = await failure(() => save(repo, { provisionParentChoice: choice(parent()) }));
   assert.equal(error.retryItem, undefined, "a rejected selection is not a committed workflow");
   assert.equal(error.provisionRetryState, undefined);
@@ -413,14 +469,14 @@ test("unindexed Title and textual link use complete repository reads without uns
 const submitQueueRow = repo => row => save(repo, { fields: row.fields, attachments: row.attachments, retryState: row.retryState, retryItem: row.retryItem });
 
 test("same-parent queue explicitly reselects second prewrite-rejected row without rebuilding fields or attachments", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const queue = createMultiEntryQueue(); const secondFile = file("SEGUNDO.pdf");
   queue.add(baseFields, { QTD: "2,5" }, {}, { uploads: [file("PRIMEIRO.pdf")] }, { provisionParentChoice: choice(parent()) });
   const second = queue.add(baseFields, { QTD: "2,5" }, { FORNECEDOR: "Fornecedor A" }, { uploads: [secondFile] }, { provisionParentChoice: choice(parent()) });
   await queue.submitAll(submitQueueRow(repo));
   assert.deepEqual(queue.snapshot().map(row => row.status), ["success", "error"]);
   assert.equal(queue.snapshot()[1].retryItem, undefined);
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
   assert.equal(typeof workflow.reselectQueuedProvisionParent, "function", "prewrite queue reselection is missing");
   const options = await workflow.loadPendingProvisionParents(repo, entity);
   await workflow.reselectQueuedProvisionParent(repo, entity, queue, second.id, options[0]);
@@ -432,14 +488,14 @@ test("same-parent queue explicitly reselects second prewrite-rejected row withou
   assert.equal(selected.retryState.provisionParentChoice.eTag, repo.data.parents.get("10").eTag);
   await queue.submitAll(submitQueueRow(repo));
   assert.deepEqual(queue.snapshot().map(row => row.status), ["success", "success"]);
-  assert.equal(repo.data.children.size, 2);
+  assert.equal(newChildCount(repo), 2);
   assert.equal(repo.data.parents.size, 1);
   assert.equal(repo.data.parents.get("10").fields.VALORTOTAL, "52.45");
   assert.deepEqual(repo.calls.filter(call => call[0] === "upload").map(call => call[3]), ["PRIMEIRO.pdf", "SEGUNDO.pdf"]);
 });
 
 for (const change of ["paid", "etag", "deleted", "missing-etag"]) test(`queue reselection refuses authoritative ${change} parent and retains row files`, async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const queue = createMultiEntryQueue(); const upload = file("MANTER.pdf");
   const row = queue.add(baseFields, {}, {}, { uploads: [upload] }, { provisionParentChoice: choice(parent()) });
   repo.data.parents.get("10").eTag = '"10,2"';
@@ -455,11 +511,11 @@ for (const change of ["paid", "etag", "deleted", "missing-etag"]) test(`queue re
   assert.equal(queue.snapshot()[0].retryState.provisionParentChoice.eTag, '"10,1"');
   assert.equal(queue.snapshot()[0].attachments.uploads[0], upload);
   assert.equal(queue.snapshot()[0].status, "error");
-  assert.equal(repo.data.children.size, 0);
+  assert.equal(newChildCount(repo), 0);
 });
 
 test("queue cannot reselect a started partial commit or bypass its frozen checkpoint", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent()); repo.data.parents.set("11", parent("11"));
+  const repo = fakeRepository(); seedPendingParent(repo); repo.data.parents.set("11", parent("11"));
   const queue = createMultiEntryQueue(); const upload = file("ORIGINAL.pdf");
   const row = queue.add(baseFields, {}, {}, { uploads: [upload] }, { provisionParentChoice: choice(parent()) });
   repo.updateItem = async () => { throw new Error("total update offline"); };
@@ -476,7 +532,7 @@ test("queue cannot reselect a started partial commit or bypass its frozen checkp
 });
 
 test("queue exposes reselection only for rejected provision rows with no started checkpoint", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const queue = createMultiEntryQueue(); queue.add(baseFields, {}, {}, {}, { provisionParentChoice: choice(parent()) });
   repo.data.parents.get("10").eTag = '"10,2"';
   await queue.submitAll(submitQueueRow(repo));
@@ -506,7 +562,7 @@ function queueReselectHost(rowId) {
 }
 
 test("queue UI opens current pending options then explicitly confirms reselection without writes or file loss", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const queue = createMultiEntryQueue(); const upload = file("PRESERVADO.pdf");
   const row = queue.add(baseFields, {}, {}, { uploads: [upload] }, { provisionParentChoice: choice(parent()) });
   repo.data.parents.get("10").eTag = '"10,2"';
@@ -518,18 +574,18 @@ test("queue UI opens current pending options then explicitly confirms reselectio
   assert.equal(host.panel.hidden, false);
   assert.match(host.select.innerHTML, /Fornecedor A/);
   assert.equal(queue.snapshot()[0].retryState.provisionParentChoice.eTag, '"10,1"');
-  assert.equal(repo.data.children.size, 0);
+  assert.equal(newChildCount(repo), 0);
   host.select.value = "10";
   await host.apply.trigger("click");
   assert.equal(queue.snapshot()[0].retryState.provisionParentChoice.eTag, '"10,2"');
   assert.equal(queue.snapshot()[0].attachments.uploads[0], upload);
-  assert.equal(repo.data.children.size, 0);
+  assert.equal(newChildCount(repo), 0);
   await queue.submitAll(submitQueueRow(repo));
   assert.equal(queue.snapshot()[0].status, "success");
 });
 
 test("queue UI refuses parent payment change between options loading and confirmation", async () => {
-  const repo = fakeRepository(); repo.data.parents.set("10", parent());
+  const repo = fakeRepository(); seedPendingParent(repo);
   const queue = createMultiEntryQueue(); const row = queue.add(baseFields, {}, {}, {}, { provisionParentChoice: choice(parent()) });
   repo.data.parents.get("10").eTag = '"10,2"'; await queue.submitAll(submitQueueRow(repo));
   const host = queueReselectHost(row.id);
@@ -541,7 +597,7 @@ test("queue UI refuses parent payment change between options loading and confirm
   assert.match(host.status.textContent, /pendente|agend/i);
   assert.equal(queue.snapshot()[0].status, "error");
   assert.equal(queue.snapshot()[0].retryState.provisionParentChoice.eTag, '"10,1"');
-  assert.equal(repo.data.children.size, 0);
+  assert.equal(newChildCount(repo), 0);
 });
 
 for (const [target, status, code] of [["parents", 403, "accessDenied"], ["children", 403, "accessDenied"], ["parents", 400, "invalidRequest"], ["children", 401, "token_unavailable"]]) test(`${target} explicit HTTP ${status} rejection retries same token and identity after restoration`, async () => {
@@ -565,7 +621,7 @@ for (const [target, status, code] of [["parents", 403, "accessDenied"], ["childr
   assert.deepEqual(attempts[1], attempts[0]);
   assert.equal(saved.fields.QTD, "2,5");
   assert.equal(repo.data.parents.size, 1);
-  assert.equal(repo.data.children.size, 1);
+  assert.equal(newChildCount(repo), 1);
   assert.equal(saved.fields.DESCRITIVOPROVISAO, "20");
   assert.equal(repo.calls.filter(call => call[0] === "create" && call[1] === "parents").length, 1);
   assert.deepEqual(repo.calls.filter(call => call[0] === "upload").map(call => call[3]), ["ORIGINAL.pdf"]);

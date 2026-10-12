@@ -28,13 +28,36 @@ function freeze(value) {
 }
 
 function resolveField(columns, logicalName, type) {
+  const types = Array.isArray(type) ? type : [type];
   const available = columns.filter(column => !column.readOnly && !column.hidden && !column.computed);
   const internal = available.filter(column => canonical(column.name) === canonical(logicalName));
   const candidates = internal.length ? internal : available.filter(column => canonical(column.displayName) === canonical(logicalName));
-  if (candidates.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidates[0].name) || !candidates[0][type]) {
+  if (candidates.length !== 1 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(candidates[0].name) || !types.some(kind => candidates[0][kind])) {
     throw new Error(`O campo ${logicalName} requer metadados SharePoint únicos do tipo ${type}.`);
   }
   return candidates[0].name;
+}
+
+async function childContract(repository, entity, suppliedList) {
+  const list = await repository.resolveList(entity.siteKey, entity.listNames?.length ? entity.listNames : CHILD_ALIASES);
+  if (list?.status !== "resolved" || !list.id || suppliedList && list.id !== suppliedList.id) throw new Error("A lista de provisões resolvida não corresponde à lista do formulário.");
+  const columns = await repository.getColumns(entity.siteKey, list.id);
+  const fields = Object.fromEntries(["Title", "QTD", "VALORTOTAL", "FRETE", "DESCRITIVOPROVISAO"].map(name => [name, resolveField(columns, name, "text")]));
+  for (const name of ["STATUS", "PGTOAGENDADO"]) fields[name] = resolveField(columns, name, ["text", "choice"]);
+  fields.DATAPGTOEFETUADO = resolveField(columns, "DATAPGTOEFETUADO", "dateTime");
+  return { list, columns, fields };
+}
+
+function hasPendingChild(items, child, parentId) {
+  return items.some(item => String(item.fields?.[child.fields.DESCRITIVOPROVISAO] ?? "") === parentId
+    && canonical(item.fields?.[child.fields.STATUS]) === "PAGAMENTOPREVISTO"
+    && blank(item.fields?.[child.fields.DATAPGTOEFETUADO])
+    && canonical(item.fields?.[child.fields.PGTOAGENDADO]) !== "PAGO");
+}
+
+async function requirePendingChildren(repository, entity, child, parentId) {
+  const children = await matchingItems(repository, entity.siteKey, child.list, child.columns, child.fields.DESCRITIVOPROVISAO, parentId);
+  if (!hasPendingChild(children, child, parentId)) throw new Error("O descritivo está encerrado ou não possui provisão filha pendente. Selecione outro descritivo ou crie um novo.");
 }
 
 async function parentContract(repository, entity) {
@@ -55,13 +78,17 @@ function requirePending(item, fields, id, expectedEtag = "") {
 
 export async function loadPendingProvisionParents(repository, entity) {
   const { list, fields } = await parentContract(repository, entity);
+  const child = await childContract(repository, entity);
   // getItems is the repository's complete, bounded, paginated collection API.
   const items = await repository.getItems(entity.siteKey, list.id, "$expand=fields");
   if (!Array.isArray(items)) throw new Error("A consulta paginada de descritivos retornou dados inválidos.");
+  const children = await repository.getItems(entity.siteKey, child.list.id, "$expand=fields");
+  if (!Array.isArray(children)) throw new Error("A consulta paginada de provisões retornou dados inválidos.");
   return Object.freeze(items.flatMap(item => {
     try {
       const id = positiveId(item.id);
       const eTag = requirePending(item, fields, id);
+      if (!hasPendingChild(children, child, id)) return [];
       const value = name => String(item.fields?.[fields[name]] ?? "").trim() || "—";
       return [Object.freeze({ id, eTag, label: `ID ${id} · ${value("FORNECEDOR")} · Filial ${value("FILIAL")} · Vencimento ${value("DATAPREVISTOPGTO")} · Total ${value("VALORTOTAL")}` })];
     } catch { return []; }
@@ -73,6 +100,8 @@ export async function reselectQueuedProvisionParent(repository, entity, queue, r
   if (!canReselectQueuedProvisionParent(row)) throw new Error("Uma gravação iniciada ou retentativa parcial não permite trocar o descritivo.");
   const selected = selection({ ...option, mode: "existing" });
   const parent = await parentContract(repository, entity);
+  const child = await childContract(repository, entity);
+  await requirePendingChildren(repository, entity, child, selected.id);
   const current = await repository.getItem(entity.siteKey, parent.list.id, selected.id, "$expand=fields");
   requirePending(current, parent.fields, selected.id, selected.eTag);
   // The queue checks again after these reads in case submission started meanwhile.
@@ -216,10 +245,8 @@ export async function persistProvisionParentWorkflow(repository, entity, supplie
   let state = previous ? { ...previous } : null;
   try {
     const parent = await parentContract(repository, entity);
-    const childList = await repository.resolveList(entity.siteKey, entity.listNames?.length ? entity.listNames : CHILD_ALIASES);
-    if (childList?.status !== "resolved" || childList.id !== suppliedList.id) throw new Error("A lista de provisões resolvida não corresponde à lista do formulário.");
-    const columns = await repository.getColumns(entity.siteKey, childList.id);
-    const child = { list: childList, columns, fields: Object.fromEntries(["Title", "QTD", "VALORTOTAL", "FRETE", "DESCRITIVOPROVISAO"].map(name => [name, resolveField(columns, name, "text")])) };
+    const child = await childContract(repository, entity, suppliedList);
+    const columns = child.columns;
     const childDateNames = columns.filter(column => column.dateTime).map(column => column.name);
     if (!state) {
       const selected = selection(options.provisionParentChoice || options.retryState?.provisionParentChoice);
@@ -253,6 +280,7 @@ export async function persistProvisionParentWorkflow(repository, entity, supplie
       const childPayload = { ...state.fields, [child.fields.DESCRITIVOPROVISAO]: positiveId(state.parentId) };
       // Validate after token lookup, immediately before POST. An attempted POST only recovers.
       const validateParent = async () => {
+        if (state.choice.mode === "existing") await requirePendingChildren(repository, entity, child, state.parentId);
         const current = await repository.getItem(entity.siteKey, parent.list.id, state.parentId, "$expand=fields");
         requirePending(current, parent.fields, state.parentId, state.choice.mode === "existing" ? state.choice.eTag : state.parentEtag);
       };
