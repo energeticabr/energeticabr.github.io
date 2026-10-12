@@ -58,16 +58,15 @@ test('mixed inline summary text stays separated in the actual PDF',async()=>{
   try{const content=await(await pdf.getPage(1)).getTextContent(),value=content.items.map(item=>item.str).join(' ');assert.match(value,/VALOR TOTAL\s+R\$ 100,00/);assert.match(value,/ALFA\s+fornecedor\s+ATIVO/);}finally{await task.destroy();}
  }finally{dom.window.close();}
 });
-test('printer exports all matching pages and restores the selected page, filters and scroll',async t=>{
+test('printer exports all matching continuous rows and restores the visible batch, filters and scroll',async t=>{
  assert.equal(typeof api.captureFilteredReport,'function');
- const rows=Array.from({length:34},(_,i)=>({...row,id:String(8000+i),supplier:`Fornecedor ${i}`,product:`PRODUTO ${i}`}));
+ const rows=Array.from({length:434},(_,i)=>({...row,id:String(8000+i),supplier:`Fornecedor ${i}`,product:`PRODUTO ${i}`}));
  const {dom,original}=fixture(t,[...rows,{...row,id:'EXCLUDED',branch:'Outra filial',product:'NÃO INCLUIR'}]);await original.open();
  const select=original.element.querySelector('[name=branch]');select.value=row.branch;select.dispatchEvent(new dom.window.Event('change'));
- original.element.querySelector('.pl-pager button:last-child').click();
- const before=original.element.querySelector('.pl-pager span').textContent,scroll=original.element.querySelector('.pl-table-scroll');scroll.scrollTop=123;
- const snapshot=api.captureFilteredReport(original.element,{title:'Pagamentos'});
- assert.equal(snapshot.pages.length,3);assert.match(text(snapshot),/PRODUTO 33/);assert.doesNotMatch(text(snapshot),/NÃO INCLUIR|EXCLUDED/);
- assert.equal(original.element.querySelector('.pl-pager span').textContent,before);assert.equal(select.value,row.branch);assert.equal(scroll.scrollTop,123);
+ const scroll=original.element.querySelector('.pl-table-scroll');scroll.scrollTop=123;
+ const restore=await original.preparePrint(),snapshot=api.captureFilteredReport(original.element,{title:'Pagamentos'});restore();
+ assert.equal(snapshot.pages.length,1);assert.match(text(snapshot),/PRODUTO 433/);assert.doesNotMatch(text(snapshot),/NÃO INCLUIR|EXCLUDED/);
+ assert.equal(original.element.querySelectorAll('tbody tr').length,200);assert.equal(select.value,row.branch);assert.equal(scroll.scrollTop,123);
  assert.ok(snapshot.filters.some(filter=>filter.label==='FILIAL'&&filter.value===row.branch));
  assert.ok(snapshot.filters.some(filter=>filter.value==='Desde o início'));assert.ok(snapshot.filters.some(filter=>filter.value==='Até o fim'));
 });

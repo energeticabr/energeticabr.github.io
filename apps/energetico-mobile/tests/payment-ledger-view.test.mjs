@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import { captureFilteredReport } from '../src/ui/report-print.js';
 const { createPaymentLedgerView } = await import('../src/ui/payment-ledger-view.js').catch(() => ({}));
 const row = { id: '3498', paymentDate: '2026-10-02', supplier: 'Alfa', branch: 'Xavante', product: '<img src=x onerror=alert(1)>', order: '358', disbursement: 'SIM', account: 'Caixa', description: 'Observação', unit: 11, quantity: 3, freight: 0, total: 33 };
 function setup(t, loadSnapshot = async () => ({ launches: [row] }), portrait = false) {
@@ -112,4 +113,97 @@ test('narrowing date range retries the query even after a pagination limit error
   await new Promise(r => setImmediate(r));
   assert.equal(root.querySelectorAll('tbody tr').length, 1);
   assert.equal(calls.at(-1).startDate, '2026-10-02');
+});
+
+function reachEnd(root, dom) {
+  const scroll = root.querySelector('.pl-table-scroll');
+  Object.defineProperties(scroll, {
+    clientHeight: { configurable: true, value: 300 },
+    scrollHeight: { configurable: true, value: 2000 + Math.max(0, root.querySelectorAll('tbody tr').length - 200) * 10 },
+  });
+  scroll.scrollTop = scroll.scrollHeight - scroll.clientHeight;
+  scroll.dispatchEvent(new dom.window.Event('scroll'));
+}
+
+const manyPayments = (count, supplier = 'Alfa') => Array.from({ length: count }, (_, i) => ({
+  ...row, id: String(i + 1), supplier, product: 'Serviço', order: '358', unit: 1, quantity: 1, total: 1,
+}));
+
+test('starts at 200 payments even inside one group, appends 200 at each end and stops without duplicates', async t => {
+  const { view, root, dom } = setup(t, async () => ({ launches: manyPayments(451) }));
+  await view.open();
+  assert.equal(root.querySelectorAll('tbody tr').length, 200);
+  assert.equal(root.querySelector('.pl-pager'), null);
+  const first = root.querySelector('tbody tr');
+  assert.equal(root.querySelector('[data-column=supplier]').rowSpan, 200);
+  assert.match(root.querySelector('[data-column=supplierTotal]').textContent, /451,00/);
+  reachEnd(root, dom);
+  assert.equal(root.querySelectorAll('tbody tr').length, 400);
+  assert.equal(root.querySelector('tbody tr'), first, 'append keeps the existing rows and scroll anchor');
+  assert.equal(root.querySelector('.pl-table-scroll').scrollTop, 1700);
+  assert.equal(root.querySelector('[data-column=paymentDate]').rowSpan, 400);
+  assert.equal(root.querySelector('[data-column=supplier]').rowSpan, 400);
+  reachEnd(root, dom);
+  assert.equal(root.querySelectorAll('tbody tr').length, 451);
+  reachEnd(root, dom);
+  assert.equal(new Set([...root.querySelectorAll('[data-column=id]')].map(n => n.textContent)).size, 451);
+  assert.match(root.querySelector('.pl-load-status').textContent, /451.*451/);
+});
+
+test('every reference filter resets to the first 200 matching items, not 200 before filtering', async t => {
+  const alfa = manyPayments(250), beta = manyPayments(250, 'Beta').map((item, i) => ({
+    ...item, id: String(i + 251), branch: 'Outra filial', product: 'Outro produto', order: '359', disbursement: 'NÃO',
+  }));
+  const { view, root, dom } = setup(t, async () => ({ launches: [...alfa, ...beta] }));
+  await view.open();
+  for (const [name, value] of [['supplier', 'Beta'], ['branch', 'Outra filial'], ['product', 'Outro produto'], ['order', '359'], ['disbursement', 'NÃO']]) {
+    for (const input of root.querySelectorAll('select[name]')) input.value = '';
+    reachEnd(root, dom);
+    const filter = root.querySelector(`[name=${name}]`); filter.value = value;
+    filter.dispatchEvent(new dom.window.Event('change'));
+    assert.equal(root.querySelectorAll('tbody tr').length, 200, name);
+    assert.ok([...root.querySelectorAll('[data-column=id]')].every(n => Number(n.textContent) >= 251), name);
+    assert.equal(root.querySelector('.pl-table-scroll').scrollTop, 0, name);
+    reachEnd(root, dom);
+    assert.equal(root.querySelectorAll('tbody tr').length, 250, name);
+  }
+});
+
+test('print includes all filtered payments then restores the visible 200 and scroll position', async t => {
+  const { view, root } = setup(t, async () => ({ launches: manyPayments(451) }));
+  await view.open();
+  const scroll = root.querySelector('.pl-table-scroll'); scroll.scrollTop = 120;
+  assert.equal(typeof view.preparePrint, 'function');
+  const restore = await view.preparePrint();
+  const captured = captureFilteredReport(root);
+  const table = captured.pages[0].blocks.find(block => block.type === 'table');
+  assert.equal(table.rows.length, 452);
+  assert.equal(table.rows.at(-1).cells.find(cell => cell.column === 2).runs[0].text, '1');
+  restore();
+  assert.equal(root.querySelectorAll('tbody tr').length, 200);
+  assert.equal(scroll.scrollTop, 120);
+  assert.equal(root.querySelector('[data-column=supplier]').rowSpan, 200);
+});
+
+test('loading and hidden reports cannot grow stale rows after close or invalid dates', async t => {
+  const { view, root, dom } = setup(t, async () => ({ launches: manyPayments(451) }));
+  await view.open(); view.close(); reachEnd(root, dom);
+  assert.equal(root.querySelectorAll('tbody tr').length, 0);
+  await view.open();
+  const date = root.querySelector('[data-date-display=startDate]'); date.value = '31/02/2026';
+  date.dispatchEvent(new dom.window.Event('change')); reachEnd(root, dom);
+  assert.equal(root.querySelectorAll('tbody tr').length, 0);
+});
+
+test('a stale print restoration cannot expand or move a newly filtered batch', async t => {
+  const { view, root, dom } = setup(t, async () => ({ launches: [
+    ...manyPayments(451), ...manyPayments(231, 'Beta').map((item, i) => ({ ...item, id: String(452 + i) })),
+  ] }));
+  await view.open(); reachEnd(root, dom);
+  const restore = view.preparePrint();
+  const filter = root.querySelector('[name=supplier]'); filter.value = 'Beta'; filter.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(root.querySelectorAll('tbody tr').length, 200);
+  restore();
+  assert.equal(root.querySelectorAll('tbody tr').length, 200);
+  assert.equal(root.querySelector('.pl-table-scroll').scrollTop, 0);
 });

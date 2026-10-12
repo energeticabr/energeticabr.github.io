@@ -23,6 +23,8 @@
 .pl-dialog .pl-refresh { height:44px; min-height:0; min-width:0; padding:0; background:white; color:#a20000; font:normal clamp(25px,3.5vw,45px) Arial,sans-serif; border:0; cursor:pointer; }
 .pl-refresh:disabled { opacity:.5; }
 .pl-logo { display:block; align-self:center; width:auto; height:36px; max-width:40%; object-fit:contain; flex-shrink:0; }
+.pl-ledger-logo-frame { display:grid; place-items:center; background:#e6f0ff; border:2px solid black; padding:3px; flex-shrink:0; }
+.pl-load-status { margin:0; padding:8px; text-align:center; font:600 12px/1.4 Arial,sans-serif; color:#17485b; }
 .pl-notice { flex-shrink:0; margin:0; border:1px solid #b72b2b; padding:6px; text-align:center; color:#a61d1d; font-size:12px; font-weight:700; }
 .pl-table-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
 .pl-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; background:white; color:black; font:normal clamp(6px,.94vw,11px)/1.16 Arial,sans-serif; }

@@ -1,0 +1,35 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pagamentos — rolagem contínua</title></head><body><main id="app"></main>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/ui/report-print.css';
+import {createPaymentLedgerView} from '../../src/ui/payment-ledger-view.js';
+import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
+import {decorateReportPrint,captureFilteredReport} from '../../src/ui/report-print.js';
+try {
+  const launches=Array.from({length:451},(_,i)=>({id:String(i+1),paymentDate:'2026-10-02',supplier:i<250?'Alfa':'Beta',branch:'004 - EDIFÍCIO XAVANTE',product:'SERVENTE DE PEDREIRO',order:String(350+i),disbursement:'SIM',account:'CAIXA',description:'Descrição do pagamento',unit:1,quantity:1,freight:0,total:1}));
+  let printed,finishPrint;const printDone=new Promise(resolve=>finishPrint=resolve);
+  const view=decorateReportPrint(decorateReportNavigation(createPaymentLedgerView({data:{async loadPaymentsSnapshot(){return {launches};}}}),{action:'open-payment-ledger'}),{
+    action:'open-payment-ledger',loadLogo:async()=>undefined,
+    buildPdf:async snapshot=>{printed=snapshot;return new Blob(['%PDF-test'],{type:'application/pdf'});},
+    previewMedia:async pending=>{await pending;finishPrint();},
+  });
+  await view.open();const root=view.element,scroll=root.querySelector('.pl-table-scroll'),logo=root.querySelector('img.pl-logo');await logo.decode();
+  const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  await frame();
+  const counts=[root.querySelectorAll('tbody tr').length];
+  scroll.scrollTop=70;await frame();root.querySelector('[data-action=print-report-pdf]').click();await printDone;await frame();
+  const printer={rows:printed.pages[0].blocks.find(block=>block.type==='table').rows.length,visible:root.querySelectorAll('tbody tr').length,top:scroll.scrollTop};
+  const first=root.querySelector('tbody tr');
+  for(let i=0;i<3;i++){scroll.scrollTop=scroll.scrollHeight;await frame();counts.push(root.querySelectorAll('tbody tr').length);}
+  const anchored=root.querySelector('tbody tr')===first;
+  const select=root.querySelector('[name=supplier]');select.value='Beta';select.dispatchEvent(new Event('change'));await frame();
+  const filteredInitial=root.querySelectorAll('tbody tr').length,filterScroll=scroll.scrollTop;
+  scroll.scrollTop=scroll.scrollHeight;await frame();const filteredEnd=root.querySelectorAll('tbody tr').length;
+  const beforePrint=scroll.scrollTop,restore=await view.preparePrint?.();const captured=captureFilteredReport(root);restore?.();
+  document.documentElement.dataset.layout=JSON.stringify({counts,anchored,printer,filteredInitial,filteredEnd,filterScroll,printRows:captured.pages[0].blocks.find(block=>block.type==='table').rows.length,restoredScroll:scroll.scrollTop===beforePrint,
+    ids:[...root.querySelectorAll('[data-column=id]')].map(node=>node.textContent),pager:Boolean(root.querySelector('.pl-pager')),logoBackground:getComputedStyle(logo.parentElement).backgroundColor,logoLoaded:logo.naturalWidth>0,
+    overflow:scroll.scrollWidth-scroll.clientWidth,documentOverflow:document.documentElement.scrollWidth-innerWidth,tableHeight:scroll.clientHeight});
+}catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
+</script></body></html>
