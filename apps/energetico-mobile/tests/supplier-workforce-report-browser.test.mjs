@@ -25,7 +25,7 @@ test('workforce hierarchy fits landscape phone tablet Windows and exports all co
       const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/supplier-workforce-report-browser.html`});
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
-      if(height>width){assert.equal(result.loads,0);assert.equal(result.warning,true);assert.equal(result.closeVisible,true);assert.equal(result.tables,0);assert.equal(result.busy,'true');continue;}
+      if(height>width){assert.equal(result.loads,1);assert.equal(result.warning,false);assert.equal(result.closeVisible,true);assert.ok(result.tables>0);assert.equal(result.busy,'false');continue;}
       assert.equal(result.loads,1);assert.equal(result.logoLoaded,true);assert.equal(result.documentOverflow,0);
       const safeLeft=safeAreaInsets?.left||0,safeRight=safeAreaInsets?.right||0;
       assert.ok(Math.abs(result.dialog.left-Math.max(8,safeLeft))<=1,`${width}px safe-area left edge was not applied`);

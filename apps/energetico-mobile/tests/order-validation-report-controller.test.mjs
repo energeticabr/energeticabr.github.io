@@ -342,7 +342,7 @@ test('active flow started during validation factory loading prevents the pending
   assert.equal(destroys, 1);
 });
 
-test('default validation factory waits for landscape, cancels on rotation, and removes the overlay on logout', async t => {
+test('default validation view loads in portrait, preserves rotation and cancels stale authorization on refresh', async t => {
   const dom = new JSDOM('<main id="app"><button>Relatório</button></main>');
   const previousDocument = globalThis.document;
   globalThis.document = dom.window.document;
@@ -363,25 +363,34 @@ test('default validation factory waits for landscape, cancels on rotation, and r
   });
   t.after(() => { h.controller.stop(); globalThis.document = previousDocument; dom.window.close(); });
   await h.controller.start();
-  assert.equal(await h.view.emit('open-order-validation-report'), true);
+  const opening = h.view.emit('open-order-validation-report');
+  await tick();
   const root = dom.window.document.querySelector('.ov-overlay');
   assert.ok(root);
   assert.equal(root.hidden, false);
-  assert.equal(root.querySelector('.pl-orientation').hidden, false);
-  assert.equal(loads, 0, 'portrait must not query SharePoint');
+  assert.equal(root.querySelector('.pl-orientation').hidden, true);
+  assert.equal(loads, 1, 'portrait opens one SharePoint query immediately');
   portrait = false;
   dom.window.dispatchEvent(new dom.window.Event('orientationchange'));
   await tick();
   assert.equal(loads, 1);
   portrait = true;
   dom.window.dispatchEvent(new dom.window.Event('resize'));
-  assert.equal(signals[0].aborted, true);
+  assert.equal(signals[0].aborted, false);
   portrait = false;
   dom.window.dispatchEvent(new dom.window.Event('resize'));
   await tick();
-  assert.equal(loads, 2);
+  assert.equal(loads, 1, 'rotation preserves the pending request');
+  assert.equal(signals[0].aborted, false);
+  // Native clicks are disabled while loading. Dispatch at the view boundary to
+  // exercise replacement/cancellation without changing the runtime UI policy.
+  root.querySelector('button[aria-label^="Atualizar"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  assert.equal(loads, 2, 'explicit refresh replaces the pending request');
+  assert.equal(signals[0].aborted, true);
   assert.match(root.querySelector('.pl-notice').textContent, /Nenhum pedido/);
   rejectOld(authRequired());
+  await opening;
   await tick();
   assert.equal(authorizations, 0);
   assert.match(root.querySelector('.pl-notice').textContent, /Nenhum pedido/);

@@ -13,12 +13,12 @@ function setup(t, loadSnapshot = async () => ({ launches: [row] }), portrait = f
   t.after(() => { view.destroy(); dom.window.close(); });
   return { dom, view, root: view.element, rotate(value) { orientation = value; dom.window.dispatchEvent(new dom.window.Event('resize')); } };
 }
-test('portrait opens warning without fetching, rotation loads report, outside click closes', async t => {
+test('portrait opens horizontal report immediately, rotation keeps data, outside click closes', async t => {
   let calls = 0;
   const { view, root, rotate, dom } = setup(t, async () => { calls++; return { launches: [row] }; }, true);
-  await view.open(); assert.equal(calls, 0);
-  assert.match(root.textContent, /PARA VER O RELATÓRIO FAVOR POSICIONAR O TELEFONE NA HORIZONTAL/);
-  assert.equal(root.querySelector('.pl-report').hidden, true);
+  await view.open(); assert.equal(calls,1);
+  assert.equal(root.querySelector('.pl-orientation').hidden,true);
+  assert.equal(root.querySelector('.pl-report').hidden,false);
   rotate(false); await new Promise(r => setImmediate(r));
   assert.equal(calls, 1); assert.equal(root.querySelectorAll('tbody tr').length, 1);
   root.querySelector('tbody td').click(); assert.equal(root.hidden, false);
@@ -51,12 +51,12 @@ test('close aborts loading and ignores stale response; error offers refresh with
   assert.equal(failed.root.querySelectorAll('tbody tr').length, 0);
 });
 
-test('rotation to portrait returns focus to a visible control', async t => {
+test('rotation to portrait retains the focused visible control', async t => {
   const { view, root, dom, rotate } = setup(t);
   await view.open(); root.querySelector('.sfs-search').focus();
   rotate(true);
-  assert.equal(root.querySelector('.pl-report').hidden, true);
-  assert.equal(dom.window.document.activeElement, root.querySelector('.pl-dialog'));
+  assert.equal(root.querySelector('.pl-report').hidden,false);
+  assert.equal(dom.window.document.activeElement, root.querySelector('.sfs-search'));
 });
 
 test('landscape is report-only, includes the logo and open-ended Brazilian date fields', async t => {

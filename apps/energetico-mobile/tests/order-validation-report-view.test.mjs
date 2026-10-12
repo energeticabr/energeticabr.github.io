@@ -39,7 +39,7 @@ test('fifth report shows six filtered summary cards and ID-selected full detail 
 test('report waits for landscape and restores app focus/overflow on outside click',async t=>{
   let calls=0;const {view,root,dom,rotate}=setup(t,async()=>{calls++;return {orders:[order],launches:[launch]};},true);
   const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();
-  assert.equal(calls,0);assert.equal(root.querySelector('.pl-orientation').hidden,false);
+  assert.equal(calls,1);assert.equal(root.querySelector('.pl-orientation').hidden,true);
   rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
   root.querySelector('td').click();assert.equal(root.hidden,false);
   root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);

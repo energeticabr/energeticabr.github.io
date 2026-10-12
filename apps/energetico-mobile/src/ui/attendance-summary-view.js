@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildAttendanceSummary} from '../chat/attendance-summary-model.js';
 import {formatReportDate,formatReportMoney} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -45,7 +46,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
  const content=make('div','pl-table-scroll as-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Resumo por profissão e detalhamento diário');
  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
- const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+ const landscape = bindReportLandscape(root);
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  function financial(values){
@@ -109,7 +110,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
-  if(root.hidden||portrait()||destroyed)return;
+  if(root.hidden||destroyed)return;
   pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando presenças e fornecedores do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
   try{
    const result=await data.loadSnapshot({signal:active.signal});
@@ -119,11 +120,7 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
   }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;content.replaceChildren();showNotice('Não foi possível carregar o resumo de presenças. Use Atualizar para tentar novamente.');}
   finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
- function orientationChanged(){
-  if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
-  if(vertical){pickers?.close();if(report.contains(doc.activeElement))panel.focus();controller?.abort();revision++;snapshot=null;content.replaceChildren();report.hidden=true;}
-  else if(report.hidden){report.hidden=false;void load();}
- }
+ function orientationChanged() { landscape.update(); }
  function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
  root.addEventListener('click',e=>{if(e.target===root)close();});
  root.addEventListener('keydown',e=>{
@@ -141,6 +138,6 @@ export function createAttendanceSummaryReportView({document:doc=globalThis.docum
    if(displays.has(name)){node.value=dateKey(name==='startDate'?start:end);displays.get(name).value=formatReportDate(node.value);displays.get(name).setCustomValidity('');}
    else{const value=name==='supplierStatus'?'ATIVO':'';node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));if(value)node.append(Object.assign(make('option','',value),{value}));node.value=value;}
   }
-  root.hidden=false;const vertical=portrait();warning.hidden=!vertical;report.hidden=vertical;panel.classList.toggle('pl-dialog--portrait',vertical);panel.focus();if(!vertical)await load();
- },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();}});
+  root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
+ },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

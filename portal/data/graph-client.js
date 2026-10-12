@@ -1,3 +1,5 @@
+import { notifyDataMutation } from './data-mutations.js';
+
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
 const DEFAULT_SCOPES = Object.freeze(["Sites.Read.All"]);
 
@@ -175,5 +177,19 @@ export function createGraphClient(tokenProvider, environment = {}) {
     }
   }
 
-  return Object.freeze({ request });
+  return Object.freeze({ async request(path, options = {}) {
+    const method = String(options.method || 'GET').toUpperCase();
+    let mutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+    if (new URL(graphUrl(path)).pathname.replace(/\/$/, '').endsWith('/$batch')) {
+      let body = options.body;
+      try { if (typeof body === 'string') body = JSON.parse(body); } catch { /* unknown write batch */ }
+      if (Array.isArray(body?.requests)) {
+        mutation = body.requests.some(item => !['GET', 'HEAD', 'OPTIONS'].includes(String(item?.method || 'GET').toUpperCase()));
+      }
+    }
+    if (!mutation) return request(path, options);
+    notifyDataMutation();
+    try { return await request(path, options); }
+    finally { notifyDataMutation(); }
+  } });
 }

@@ -43,8 +43,8 @@ test('stage report shows supplied six-filter order, initial statuses, logo, perc
 });
 test('portrait defers SharePoint, rotation loads, outside and Escape restore focus',async t=>{
  let calls=0;const {view,root,dom,rotate}=setup(t,async()=>{calls++;return snapshot;},true);
- const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();assert.equal(calls,0);
- assert.equal(root.querySelector('.pl-orientation').hidden,false);rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
+ const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();assert.equal(calls,1);
+ assert.equal(root.querySelector('.pl-orientation').hidden,true);rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
  root.querySelector('.sp-stage-summary').click();assert.equal(root.hidden,false);
  root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);
  await view.open();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(root.hidden,true);

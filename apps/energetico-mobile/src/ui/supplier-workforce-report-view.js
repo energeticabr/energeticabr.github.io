@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildSupplierWorkforceReport, defaultSupplierWorkforceFilters} from '../chat/supplier-workforce-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
@@ -49,7 +50,7 @@ export function createSupplierWorkforceReportView({document:doc=globalThis.docum
   report.append(filters,notice,content);panel.append(orientation,report,dismiss);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,destroyed=false,pickers=null;
   let returnFocus=null,oldOverflow='',app=null,oldInert=false;
-  const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+  const landscape = bindReportLandscape(root);
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   function clearContent(){if(content.contains(doc.activeElement))panel.focus({preventScroll:true});content.replaceChildren();}
   function showNotice(text='',alert=false){notice.textContent=text;notice.hidden=!text;notice.setAttribute('role',alert?'alert':'status');}
@@ -145,7 +146,7 @@ export function createSupplierWorkforceReportView({document:doc=globalThis.docum
     pickers=bindSearchableFilterSelects(filters,{report:true,placement:'below'});
   }
   async function load() {
-    if(root.hidden||portrait()||destroyed)return;
+    if(root.hidden||destroyed)return;
     pickers?.close();cancel();const current=revision,active=new AbortController();controller=active;
     snapshot=null;clearContent();showNotice('Carregando fornecedores e presenças do SharePoint…');setBusy(true);
     const stale=()=>active.signal.aborted||current!==revision||root.hidden||destroyed;
@@ -157,12 +158,7 @@ export function createSupplierWorkforceReportView({document:doc=globalThis.docum
     }catch{if(stale())return;snapshot=null;clearContent();showNotice('Não foi possível carregar o relatório completo. Use Atualizar para tentar novamente.',true);}
     finally{if(!stale()){controller=null;setBusy(false);}}
   }
-  function orientationChanged() {
-    if(root.hidden||destroyed)return;const vertical=portrait(),wasHidden=report.hidden;
-    orientation.hidden=!vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
-    if(vertical){pickers?.close();if(report.contains(doc.activeElement))panel.focus({preventScroll:true});cancel();report.hidden=true;setBusy(true);if(!snapshot){clearContent();showNotice();}}
-    else if(wasHidden){report.hidden=false;if(snapshot)setBusy(false);else void load();}
-  }
+  function orientationChanged() { landscape.update(); }
   function close() {
     if(root.hidden)return;cancel();pickers?.close();snapshot=null;root.hidden=true;setBusy(false);clearContent();showNotice();
     doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;
@@ -194,10 +190,10 @@ export function createSupplierWorkforceReportView({document:doc=globalThis.docum
     doc.body.style.overflow='hidden';if(app)app.inert=true;pickers?.destroy();pickers=null;
     const defaults=defaultSupplierWorkforceFilters(localDate(now()));
     for(const [name,node] of controls){const value=defaults[name]??'';if(node.tagName==='INPUT')node.setCustomValidity('');else node.replaceChildren(Object.assign(make('option','',value||'Todos'),{value}));node.value=value;}
-    root.hidden=false;const vertical=portrait();orientation.hidden=!vertical;report.hidden=vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
-    setBusy(vertical);panel.focus({preventScroll:true});content.scrollTop=0;if(!vertical)await load();
+    root.hidden=false;landscape.update();orientation.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);
+    setBusy(false);panel.focus({preventScroll:true});content.scrollTop=0;await load();
   },close,destroy(){
     if(destroyed)return;close();destroyed=true;cancel();pickers?.destroy();pickers=null;
-    doc.removeEventListener('focusin',containFocus);win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();
+    doc.removeEventListener('focusin',containFocus);win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();
   }});
 }

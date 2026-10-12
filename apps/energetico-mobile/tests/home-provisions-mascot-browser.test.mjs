@@ -83,13 +83,13 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       await evaluate(`document.querySelector('[data-action=open-payment-ledger]').click()`);
       assert.equal(await evaluate('window.reportOpened'),1);
       if(width<844){
-        assert.equal(await evaluate('window.reportLoads'),0,'vertical não consulta dados');
-        assert.equal(await evaluate(`document.querySelector('.pl-orientation').hidden`),false);
-        assert.equal(await evaluate(`document.querySelector('.pl-report').hidden`),true);
+        assert.equal(await evaluate('window.reportLoads'),1,'vertical abre o relatório imediatamente');
+        assert.equal(await evaluate(`document.querySelector('.pl-orientation').hidden`),true);
+        assert.equal(await evaluate(`document.querySelector('.pl-report').hidden`),false);
         const landscape=width===320?{width:568,height:320}:width===768?{width:1024,height:768}:{width:844,height:390};
         await send('Emulation.setDeviceMetricsOverride',{...landscape,deviceScaleFactor:1,mobile:false},sessionId);
       }
-      let loaded=false;for(let n=0;n<80&&!loaded;n++){loaded=await evaluate(`document.querySelectorAll('.pl-table tbody tr').length===10`);if(!loaded)await delay(100);}
+      let loaded=false;for(let n=0;n<80&&!loaded;n++){loaded=await evaluate(`document.querySelectorAll('.pl-table tbody tr').length===10&&document.querySelector('.pl-overlay').dataset.reportPortrait==='false'`);if(!loaded)await delay(100);}
       assert.ok(loaded,'horizontal carrega relatório real');
       assert.equal(await evaluate('window.reportLoads'),1);
       assert.equal(await evaluate(`document.querySelector('.pl-table [data-column="supplierTotal"]').textContent.includes('543,23')`),true);
@@ -266,11 +266,11 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       assert.ok(pathologyShortcut.right<=width&&pathologyShortcut.image&&Math.abs(pathologyShortcut.y+44-pathologyShortcut.previousBottom)<1&&pathologyShortcut.x>=pathologyShortcut.previousX+8,JSON.stringify(pathologyShortcut));
       await evaluate(`document.querySelector('[data-action=open-quotation-report]').click()`);
       if(width<844){
-        assert.equal(await evaluate('window.quotationLoads'),0,'portrait quotes must not fetch');
-        assert.equal(await evaluate(`document.querySelector('.qr-orientation').hidden`),false);
+        assert.equal(await evaluate('window.quotationLoads'),1,'portrait quotes load immediately');
+        assert.equal(await evaluate(`document.querySelector('.qr-orientation').hidden`),true);
         await send('Emulation.setDeviceMetricsOverride',width===320?{width:568,height:320,deviceScaleFactor:1,mobile:false}:{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
       }
-      let quotesReady=false;for(let n=0;n<80&&!quotesReady;n++){quotesReady=await evaluate(`document.querySelectorAll('.qr-budgets').length===2`);if(!quotesReady)await delay(100);}
+      let quotesReady=false;for(let n=0;n<80&&!quotesReady;n++){quotesReady=await evaluate(`document.querySelectorAll('.qr-budgets').length===2&&document.querySelector('.qr-overlay').dataset.reportPortrait==='false'`);if(!quotesReady)await delay(100);}
       assert.ok(quotesReady,'new sixth-left shortcut loads quotation report');
       const quoteFit=await evaluate(`(()=>{const p=document.querySelector('.qr-dialog'),t=document.querySelectorAll('.qr-budgets')[1],r=p.getBoundingClientRect(),last=t.querySelector('th:last-child').getBoundingClientRect(),c=document.querySelector('.qr-content');return {x:r.x,right:r.right,top:r.top,bottom:r.bottom,height:innerHeight,last:last.right,columns:t.querySelectorAll('thead th').length,groups:t.querySelectorAll('td[rowspan="2"]').length,overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(t).fontSize)};})()`);
       assert.ok(quoteFit.top===0&&quoteFit.bottom===quoteFit.height&&!quoteFit.overflow&&quoteFit.last<=quoteFit.right&&quoteFit.font>=6,JSON.stringify(quoteFit));assert.equal(quoteFit.columns,9);assert.equal(quoteFit.groups,3);
@@ -279,11 +279,11 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('[data-action=open-depreciation-report]').click()`);
       if(width<844){
-        assert.equal(await evaluate('window.depreciationLoads'),0,'portrait depreciation must not query');
-        assert.equal(await evaluate(`document.querySelector('.dr-orientation').hidden`),false);
+        assert.equal(await evaluate('window.depreciationLoads'),1,'portrait depreciation loads immediately');
+        assert.equal(await evaluate(`document.querySelector('.dr-orientation').hidden`),true);
         await send('Emulation.setDeviceMetricsOverride',width===320?{width:568,height:320,deviceScaleFactor:1,mobile:false}:{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
       }
-      let depreciationReady=false;for(let n=0;n<80&&!depreciationReady;n++){depreciationReady=await evaluate(`document.querySelectorAll('.dr-table tbody tr').length===12&&document.querySelector('.dr-brand img')?.naturalWidth>0`);if(!depreciationReady)await delay(100);}
+      let depreciationReady=false;for(let n=0;n<80&&!depreciationReady;n++){depreciationReady=await evaluate(`document.querySelectorAll('.dr-table tbody tr').length===12&&document.querySelector('.dr-brand img')?.naturalWidth>0&&document.querySelector('.dr-overlay').dataset.reportPortrait==='false'`);if(!depreciationReady)await delay(100);}
       assert.ok(depreciationReady,'seventh left mascot opens live depreciation projection');
       const depreciationFit=await evaluate(`(()=>{const p=document.querySelector('.dr-dialog'),table=p.querySelector('table'),r=p.getBoundingClientRect(),last=table.querySelector('th:last-child').getBoundingClientRect(),c=p.querySelector('.dr-content'),cards=[...p.querySelectorAll('.dr-card')];return {top:r.top,bottom:r.bottom,height:innerHeight,last:last.right,right:r.right,columns:table.querySelectorAll('thead th').length,cardTops:cards.map(n=>n.getBoundingClientRect().top),cards:cards.length,overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(table).fontSize),dateOverdue:getComputedStyle(p.querySelector('.dr-date-overdue')).color,current:getComputedStyle(p.querySelector('.dr-current')).color};})()`);
       assert.ok(depreciationFit.top===0&&depreciationFit.bottom===depreciationFit.height&&!depreciationFit.overflow&&depreciationFit.last<=depreciationFit.right&&depreciationFit.font>=6,JSON.stringify(depreciationFit));
@@ -301,11 +301,11 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('[data-action=open-document-control-report]').click()`);
       if(width<844){
-        assert.equal(await evaluate('window.documentControlLoads'),0,'portrait document control does not read SharePoint');
-        assert.equal(await evaluate(`document.querySelector('.dcr-orientation').hidden`),false);
+        assert.equal(await evaluate('window.documentControlLoads'),1,'portrait document control loads immediately');
+        assert.equal(await evaluate(`document.querySelector('.dcr-orientation').hidden`),true);
         await send('Emulation.setDeviceMetricsOverride',width===320?{width:568,height:320,deviceScaleFactor:1,mobile:false}:{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
       }
-      let documentReady=false;for(let n=0;n<80&&!documentReady;n++){documentReady=await evaluate(`document.querySelectorAll('.dcr-table tbody tr').length===12&&document.querySelector('.dcr-brand img')?.naturalWidth>0`);if(!documentReady)await delay(100);}
+      let documentReady=false;for(let n=0;n<80&&!documentReady;n++){documentReady=await evaluate(`document.querySelectorAll('.dcr-table tbody tr').length===12&&document.querySelector('.dcr-brand img')?.naturalWidth>0&&document.querySelector('.dcr-overlay').dataset.reportPortrait==='false'`);if(!documentReady)await delay(100);}
       assert.ok(documentReady,'eighth left mascot loads full document control report');
       const documentFit=await evaluate(`(()=>{const p=document.querySelector('.dcr-dialog'),table=p.querySelector('table'),r=p.getBoundingClientRect(),last=table.querySelector('th:last-child').getBoundingClientRect(),c=p.querySelector('.dcr-content'),filters=[...p.querySelectorAll('.dcr-filter,.dcr-sort')].map(n=>n.getBoundingClientRect()),cards=[...p.querySelectorAll('.dcr-card')];return {top:r.top,bottom:r.bottom,height:innerHeight,right:r.right,last:last.right,columns:table.querySelectorAll('thead th').length,filters:filters.length,aligned:filters.every(f=>Math.abs(f.top-filters[0].top)<1),cards:cards.length,cardAligned:cards.every(n=>Math.abs(n.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<1),overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(table).fontSize),id:getComputedStyle(p.querySelector('.dcr-id')).color,expired:getComputedStyle(p.querySelector('.dcr-expired')).backgroundColor};})()`);
       assert.ok(documentFit.top===0&&documentFit.bottom===documentFit.height&&!documentFit.overflow&&documentFit.last<=documentFit.right&&documentFit.aligned&&documentFit.cardAligned&&documentFit.font>=6,JSON.stringify(documentFit));assert.equal(documentFit.columns,11);assert.equal(documentFit.filters,8);assert.equal(documentFit.cards,5);assert.equal(documentFit.id,'rgb(151, 0, 0)');assert.equal(documentFit.expired,'rgb(254, 226, 226)');
@@ -320,11 +320,11 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('[data-action=open-task-association-report]').click()`);
       if(width<844){
-        assert.equal(await evaluate('window.taskAssociationLoads'),0,'portrait task report does not read SharePoint');
-        assert.equal(await evaluate(`document.querySelector('.tar-orientation').hidden`),false);
+        assert.equal(await evaluate('window.taskAssociationLoads'),1,'portrait task report loads immediately');
+        assert.equal(await evaluate(`document.querySelector('.tar-orientation').hidden`),true);
         await send('Emulation.setDeviceMetricsOverride',width===320?{width:568,height:320,deviceScaleFactor:1,mobile:false}:{width:844,height:390,deviceScaleFactor:1,mobile:false},sessionId);
       }
-      let taskReady=false;for(let n=0;n<80&&!taskReady;n++){taskReady=await evaluate(`document.querySelectorAll('.tar-table tbody tr').length===12&&document.querySelector('.tar-brand img')?.naturalWidth>0`);if(!taskReady)await delay(100);}
+      let taskReady=false;for(let n=0;n<80&&!taskReady;n++){taskReady=await evaluate(`document.querySelectorAll('.tar-table tbody tr').length===12&&document.querySelector('.tar-brand img')?.naturalWidth>0&&document.querySelector('.tar-overlay').dataset.reportPortrait==='false'`);if(!taskReady)await delay(100);}
       assert.ok(taskReady,'ninth left mascot loads grouped tasks and keeps pending statuses initially selected');
       const taskFit=await evaluate(`(()=>{const p=document.querySelector('.tar-dialog'),table=p.querySelector('table'),r=p.getBoundingClientRect(),last=table.querySelector('th:last-child').getBoundingClientRect(),c=p.querySelector('.tar-content'),filters=[...p.querySelectorAll('.tar-filter')].map(n=>n.getBoundingClientRect()),cards=[...p.querySelectorAll('.tar-card')];return {top:r.top,bottom:r.bottom,height:innerHeight,right:r.right,last:last.right,columns:table.querySelectorAll('thead th').length,filters:filters.length,aligned:filters.every(f=>Math.abs(f.top-filters[0].top)<1),cards:cards.length,cardAligned:cards.every(n=>Math.abs(n.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<1),overflow:c.scrollWidth>c.clientWidth+1,font:parseFloat(getComputedStyle(table).fontSize),emergency:getComputedStyle(p.querySelector('[data-task-id="1"]')).backgroundColor,metrics:[...p.querySelectorAll('.tar-card strong')].map(n=>n.textContent)};})()`);
       assert.ok(taskFit.top===0&&taskFit.bottom===taskFit.height&&!taskFit.overflow&&taskFit.last<=taskFit.right&&taskFit.aligned&&taskFit.cardAligned&&taskFit.font>=6,JSON.stringify(taskFit));assert.equal(taskFit.columns,5);assert.equal(taskFit.filters,7);assert.equal(taskFit.cards,3);assert.equal(taskFit.emergency,'rgb(255, 205, 210)');assert.deepEqual(taskFit.metrics,['12','1','13']);

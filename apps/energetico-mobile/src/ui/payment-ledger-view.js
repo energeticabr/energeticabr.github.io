@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import { buildPaymentLedger } from '../chat/payment-ledger-model.js';
 import { formatReportDate, formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -73,7 +74,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   let entries = [], rendered = 0, lastGroup = null, lastRow = null, currentDay = '', dayIndex = -1;
   let dateCell = null, supplierCell = null, totalCell = null, merged = new Map(), lastScrollTop = 0, printing = false;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
-  const portrait = () => win?.matchMedia ? win.matchMedia('(orientation: portrait)').matches : win?.innerHeight > win?.innerWidth;
+  const landscape = bindReportLandscape(root);
   const showNotice = text => { notice.textContent = text; notice.hidden = !text; };
   function clearRows() {
     body.replaceChildren(); rendered = 0; lastGroup = lastRow = null; currentDay = ''; dayIndex = -1;
@@ -134,7 +135,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
     pickers = bindSearchableFilterSelects(filters, {placement:'below',report:true});
   }
   async function load() {
-    if (root.hidden || portrait() || destroyed) return;
+    if (root.hidden || destroyed) return;
     pickers?.close(); controller?.abort(); const current = ++revision;
     const active = new AbortController(); controller = active; snapshot = null; empty();
     showNotice('Carregando pagamentos do SharePoint…'); report.setAttribute('aria-busy', 'true'); refresh.disabled = true;
@@ -151,12 +152,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       empty(); showNotice(`Não foi possível carregar o relatório. Use Atualizar para tentar novamente. ${String(error?.message || 'Falha na consulta.').replace(/https?:\/\/\S+/gi, 'endereço SharePoint').replace(/Bearer\s+\S+/gi, '[oculto]').slice(0, 240)}`);
     } finally { if (current === revision) { report.setAttribute('aria-busy', 'false'); refresh.disabled = false; } }
   }
-  function orientationChanged() {
-    if (root.hidden) return;
-    const vertical = portrait(); warning.hidden = !vertical; panel.classList.toggle('pl-dialog--portrait', vertical);
-    if (vertical) { pickers?.close(); if (report.contains(doc.activeElement)) panel.focus(); controller?.abort(); revision++; snapshot = null; empty(); report.hidden = true; }
-    else if (report.hidden) { report.hidden = false; void load(); }
-  }
+  function orientationChanged() { landscape.update(); }
   function close() {
     if (root.hidden) return;
     controller?.abort(); revision++; snapshot = null; pickers?.close(); empty(); root.hidden = true;
@@ -189,12 +185,12 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
     async open() {
       if (destroyed) throw new Error('O relatório foi encerrado.');
       if (!root.hidden) return;
-      returnFocus = doc.activeElement; oldOverflow = doc.body.style.overflow; app = doc.getElementById('app'); oldInert = app?.inert || false;
+      returnFocus = doc.activeElement; oldOverflow = doc.body.style.overflow; app = doc.getElementById('app'); oldInert=app?.inert||false;
       doc.body.style.overflow = 'hidden'; if (app) app.inert = true;
-      root.hidden = false;
+      root.hidden=false;landscape.update();
       for (const name of ['startDate','endDate']) { controls.get(name).value=''; dateDisplays.get(name).value=''; dateDisplays.get(name).setCustomValidity(''); }
-      const vertical = portrait(); warning.hidden = !vertical; report.hidden = vertical; panel.classList.toggle('pl-dialog--portrait', vertical); panel.focus();
-      if (!vertical) await load();
+       warning.hidden=true; report.hidden = false; panel.classList.toggle('pl-dialog--portrait', false); panel.focus();
+      await load();
     }, close,
     preparePrint() {
       const count = rendered, top = scroll.scrollTop, current = revision, printedEntries = entries;
@@ -204,6 +200,6 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
         printing = false;
       };
     },
-    destroy() { if (destroyed) return; close(); destroyed = true; pickers?.destroy(); scroll.removeEventListener('scroll', onScroll); win?.removeEventListener('resize', orientationChanged); win?.removeEventListener('orientationchange', orientationChanged); root.remove(); },
+    destroy() { if (destroyed) return; close(); destroyed = true; pickers?.destroy(); scroll.removeEventListener('scroll', onScroll); win?.removeEventListener('resize', orientationChanged); win?.removeEventListener('orientationchange', orientationChanged); landscape.destroy();root.remove(); },
   });
 }

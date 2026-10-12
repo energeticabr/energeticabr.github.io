@@ -23,7 +23,7 @@ test('contractor report fits tablet and Windows with phone scroll and complete c
       const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/contractor-control-report-browser.html`});
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
-      if(height>width){assert.equal(result.loads,0);assert.equal(result.warning,true);assert.equal(result.closeVisible,true);assert.equal(result.rows,0);continue;}
+      if(height>width){assert.equal(result.loads,1);assert.equal(result.warning,false);assert.equal(result.closeVisible,true);assert.equal(result.rows,25);continue;}
       assert.equal(result.loads,1);assert.equal(result.logoLoaded,true);assert.equal(result.documentOverflow,0);
       assert.ok(result.toolbarOverflow<=1,`${width}px toolbar overflow: ${result.toolbarOverflow}`);assert.ok(result.contentOverflow<=1,`${width}px content overflow: ${result.contentOverflow}`);
       assert.ok(result.contentHeight>80);assert.equal(result.rows,25);assert.equal(result.columns,13);assert.ok(parseFloat(result.fontSize)>=10.5);

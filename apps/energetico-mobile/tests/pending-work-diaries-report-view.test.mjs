@@ -180,24 +180,24 @@ test('close and destroy abort requests and stale results cannot overwrite a newe
 });
 
 // Break caught: portrait reads and late portrait writes violate the horizontal-only report flow.
-test('portrait waits for landscape and rotation cancels unfinished loads', async t => {
+test('portrait loads immediately and rotation retains the unfinished query', async t => {
   const requests = [];
   const {view, root, rotate} = setup(t, ({signal}) => new Promise(resolve => requests.push({signal, resolve})), true);
-  await view.open();
-  assert.equal(requests.length, 0);
-  assert.equal(root.querySelector('.pwdr-orientation').hidden, false);
+  const opening=view.open();
+  assert.equal(requests.length, 1);
+  assert.equal(root.querySelector('.pwdr-orientation').hidden, true);
   assert.throws(() => captureFilteredReport(root), /Aguarde/);
   rotate(false);
   assert.equal(requests.length, 1);
   rotate(true);
-  assert.equal(requests[0].signal.aborted, true);
+  assert.equal(requests[0].signal.aborted, false);
   requests[0].resolve(snapshot);
-  await tick();
-  assert.deepEqual(ids(root), []);
+  await opening;
+  const originalIds=ids(root);assert.ok(originalIds.length>0);
   rotate(false);
-  requests[1].resolve({rows:[row(8)], count:1});
   await tick();
-  assert.deepEqual(ids(root), ['8']);
+  assert.equal(requests.length,1);
+  assert.deepEqual(ids(root), originalIds);
 });
 
 // Break caught: clearing loaded rows on rotation would discard the PDF return state.
@@ -208,7 +208,7 @@ test('loaded landscape rows survive rotation without an unnecessary refetch', as
   const table = root.querySelector('table');
   root.querySelector('.pwdr-content').scrollTop = 123;
   rotate(true);
-  assert.equal(root.querySelector('.pwdr-report').hidden, true);
+  assert.equal(root.querySelector('.pwdr-report').hidden, false);
   rotate(false);
   await tick();
   assert.equal(reads, 1);

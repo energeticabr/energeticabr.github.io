@@ -21,8 +21,8 @@ test('pending supplier report reserves both arrow edges and captures full tables
       try {result=JSON.parse(dom.window.document.documentElement.dataset.layout);} finally {dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
       if (height>width) {
-        assert.equal(result.loads,0); assert.equal(result.warning,true); assert.equal(result.closeVisible,true);
-        assert.equal(result.busy,'true'); assert.equal(result.tables,0); continue;
+        assert.equal(result.loads,1); assert.equal(result.warning,false); assert.equal(result.closeVisible,true);
+        assert.equal(result.busy,'false'); assert.ok(result.tables>0); continue;
       }
       assert.equal(result.logoLoaded,true); assert.equal(result.arrows.length,2);
       assert.deepEqual(result.dateFilters.map(date=>[date.type,date.value,date.iso]),[

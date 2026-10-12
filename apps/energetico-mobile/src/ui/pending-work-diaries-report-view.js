@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildPendingWorkDiariesReport} from '../chat/pending-work-diaries-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 
@@ -51,7 +52,7 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
 
   let loaded = null, controller = null, revision = 0, destroyed = false;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
-  const portrait = () => win?.matchMedia ? win.matchMedia('(orientation: portrait)').matches : win?.innerHeight > win?.innerWidth;
+  const landscape = bindReportLandscape(root);
   function cancel() {
     controller?.abort();
     controller = null;
@@ -96,7 +97,7 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
     content.append(brand, table);
   }
   async function load() {
-    if (root.hidden || portrait() || destroyed) return;
+    if (root.hidden || destroyed) return;
     cancel();
     const current = revision, active = new AbortController();
     controller = active;
@@ -128,24 +129,7 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
       }
     }
   }
-  function orientationChanged() {
-    if (root.hidden || destroyed) return;
-    const vertical = portrait(), wasHidden = report.hidden;
-    warning.hidden = !vertical;
-    panel.classList.toggle('pwdr-portrait', vertical);
-    if (vertical) {
-      if (report.contains(doc.activeElement)) panel.focus({preventScroll:true});
-      cancel();
-      if (!loaded) clearContent();
-      report.hidden = true;
-      root.setAttribute('aria-busy', 'true');
-      refresh.disabled = false;
-    } else if (wasHidden) {
-      report.hidden = false;
-      if (loaded) root.setAttribute('aria-busy', 'false');
-      else void load();
-    }
-  }
+  function orientationChanged() { landscape.update(); }
   function close() {
     if (root.hidden) return;
     cancel();
@@ -185,18 +169,18 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
       returnFocus = doc.activeElement;
       oldOverflow = doc.body.style.overflow;
       app = doc.getElementById('app');
-      oldInert = app?.inert || false;
+      oldInert=app?.inert||false;
       doc.body.style.overflow = 'hidden';
       if (app) app.inert = true;
-      root.hidden = false;
-      const vertical = portrait();
-      warning.hidden = !vertical;
-      report.hidden = vertical;
-      panel.classList.toggle('pwdr-portrait', vertical);
-      root.setAttribute('aria-busy', String(vertical));
+      root.hidden=false;landscape.update();
+
+      warning.hidden=true;
+      report.hidden = false;
+      panel.classList.toggle('pwdr-portrait', false);
+      root.setAttribute('aria-busy', String(false));
       panel.focus();
       content.scrollTop = 0;
-      if (!vertical) await load();
+      await load();
     },
     close,
     destroy() {
@@ -205,7 +189,7 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
       close();
       win?.removeEventListener('resize', orientationChanged);
       win?.removeEventListener('orientationchange', orientationChanged);
-      root.remove();
+      landscape.destroy();root.remove();
     },
   });
 }

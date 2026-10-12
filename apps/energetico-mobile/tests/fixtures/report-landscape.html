@@ -1,0 +1,20 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Validação horizontal dos relatórios</title></head><body><main id="app"><button id="open">Abrir relatório</button><output id="reads">0 consultas</output></main><script type="module">
+import '../../src/ui/payment-ledger.css';
+import '../../src/ui/searchable-filter-selects.css';
+import '../../src/styles.css';
+import {createPaymentLedgerView} from '../../src/ui/payment-ledger-view.js';
+import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
+let reads=0;
+const launches=Array.from({length:440},(_,index)=>({id:String(index+1),paymentDate:'2026-10-01',supplier:'Fornecedor '+(index%3+1),branch:'004 - EDIFÍCIO XAVANTE',product:'Produto',order:String(index+1),account:'Energética - Caixa',unit:10,quantity:1,freight:0,total:10}));
+const view=decorateReportNavigation(createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){document.querySelector('#reads').textContent=++reads+' consultas';return {launches};}}}),{action:'open-payment-ledger',onNavigate:()=>false});
+document.querySelector('#open').addEventListener('click',()=>view.open());
+if(new URL(location.href).searchParams.has('safearea')) {
+ await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+ const bounds=element=>{const r=element.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};};
+ const dialog=bounds(view.element.querySelector('[role=dialog]'));
+ const controls=[...view.element.querySelectorAll('input,button')].filter(element=>!element.closest('[hidden]')&&element.getBoundingClientRect().width>1&&element.getBoundingClientRect().height>1).map(bounds);
+ view.element.querySelector('.sfs-trigger').click();
+ await new Promise(resolve=>requestAnimationFrame(resolve));
+ document.documentElement.dataset.layout=JSON.stringify({dialog,controls,popup:bounds(view.element.querySelector('.sfs-popup')),reads});
+}
+</script></body></html>

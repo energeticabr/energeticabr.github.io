@@ -38,23 +38,6 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
   catch(error){if(currentRequest(request)){populate([]);status(error?.message||'Não foi possível carregar os fornecedores. Tente atualizar.',true);}}
   finally{if(currentRequest(request))setBusy(false);}
  }
- function showReport(report){
-  clearResult();result.hidden=false;
-  result.append(make('h3','',report.supplier.name),make('p','',`Referência: ${report.month.slice(5)}/${report.month.slice(0,4)}`),make('p','rhid-monthly-total',`Total de horas apuradas: ${report.total} · ${report.recordedDays} dia(s) com batidas`));
-  if(!report.recordedDays)result.append(make('p','','Nenhuma presença RHID registrada para este fornecedor no período. Dias sem registro não significam falta.'));
-  if(report.incompleteDays)result.append(make('p','rhid-monthly-warning',`${report.incompleteDays} dia(s) com apuração incompleta. Esses dias não foram somados ao total.`));
-  result.append(make('p','rhid-monthly-legend','* Horário ajustado por administrador. “Sem registro” não significa falta.'));
-  const scroll=make('div','rhid-monthly-table-scroll');scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label','Presenças diárias do mês; deslize para ver todas as colunas');
-  const table=make('table'),caption=make('caption','','Presenças diárias — horários efetivos'),head=make('thead'),headRow=make('tr'),body=make('tbody');
-  for(const title of ['Data','Entrada 1','Saída 1','Entrada 2','Saída 2','Total','Apuração']){const cell=make('th','',title);cell.scope='col';headRow.append(cell);}head.append(headRow);
-  for(const day of report.days){
-   const row=make('tr',day.recorded&&!day.total?'rhid-monthly-row--incomplete':'');
-   const values=[`${day.date.slice(8)}/${day.date.slice(5,7)}`, ...day.slots,day.total??'—',!day.recorded?'Sem registro':!day.total?'Incompleta':day.adjusted?'Ajustado *':'RHID'];
-   for(const value of values)row.append(make('td','',value));body.append(row);
-   if(day.issues.length){const detail=make('tr','rhid-monthly-issues'),cell=make('td','',day.issues.join('; '));cell.colSpan=7;detail.append(cell);body.append(detail);}
-  }
-  table.append(caption,head,body);scroll.append(table);result.append(scroll);
- }
  async function generate(event){
   event.preventDefault();if(busy||root.hidden)return;
   const selectedIds=new Set([...supplier.selectedOptions].map(option=>option.value).filter(Boolean));
@@ -68,12 +51,9 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
    const snapshot=await data.loadMonth(selectedMonth,{signal:request.signal});if(!currentRequest(request))return;
    const reports=confirmed.map(row=>buildRhidMonthlyReport({month:selectedMonth,supplier:row,snapshot}));
    clearResult();
-   for(const report of reports){
-    const earlier=[...result.childNodes];showReport(report);result.prepend(...earlier);
-   }
    picker?.close();status(`Preparando PDF de ${reports.length} funcionário(s)…`);
    await onReport(reports.length===1?reports[0]:reports,{signal:request.signal,resolveReturnFocus:()=>!destroyed&&!root.hidden?closeButton:null});if(!currentRequest(request))return;
-   status('Relatório mensal gerado em PDF.');
+   status('');
   }catch(error){if(currentRequest(request))status(error?.message||'Não foi possível gerar o relatório mensal. Tente novamente.',true);}
   finally{if(currentRequest(request))setBusy(false);}
  }

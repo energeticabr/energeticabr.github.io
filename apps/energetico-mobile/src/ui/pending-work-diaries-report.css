@@ -14,7 +14,7 @@
   .pwdr-overlay[data-report-action] .pwdr-content { padding-inline-start:48px; }
 }
 .pwdr-brand { box-sizing:border-box; border:3px solid black; padding:8px; background:#e6f0ff; text-align:center; margin-bottom:8px; }
-.pwdr-brand img { display:block; margin:auto; width:clamp(120px,17vw,280px); max-width:100%; height:clamp(30px,4.5vw,74px); object-fit:contain; }
+.pwdr-brand img { display:block; margin:auto; width:clamp(120px,calc(17 * var(--report-vw, 1vw)),280px); max-width:100%; height:clamp(30px,calc(4.5 * var(--report-vw, 1vw)),74px); object-fit:contain; }
 .pwdr-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; font:normal 12px/1.3 Arial,sans-serif; color:black; }
 .pwdr-table th,.pwdr-table td { border:3px solid black; padding:6px 4px; text-align:center; vertical-align:middle; overflow-wrap:anywhere; font-family:Arial,sans-serif; font-size:12px; line-height:1.3; }
 .pwdr-table th { background:#e6f0ff; font-weight:700; }

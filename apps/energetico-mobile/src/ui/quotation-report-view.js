@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildQuotationOverview} from '../chat/quotation-report-model.js';
 
 const upper=value=>String(value??'').trim().toUpperCase();
@@ -15,7 +16,7 @@ export function createQuotationReportView({document:doc=globalThis.document,data
  const toolbar=make('header','qr-toolbar'),refresh=make('button','qr-refresh','⟳');refresh.type='button';refresh.setAttribute('aria-label','Atualizar cotações e orçamentos');refresh.addEventListener('click',()=>void load());toolbar.append(refresh);
  panel.append(toolbar,warning,content);root.append(panel);doc.body.append(root);
  let controller=null,revision=0,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
- const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+ const landscape = bindReportLandscape(root);
  function badge(value,quote=false){
   const key=statusKey(value);let tone='qr-neutral';
   if(quote){if(key==='ATIVA'||key==='ATIVO')tone='qr-received';}
@@ -45,16 +46,16 @@ export function createQuotationReportView({document:doc=globalThis.document,data
   if(!result.quotes.length)content.append(make('p','qr-empty','Nenhuma cotação encontrada.'));
  }
  async function load(){
-  if(root.hidden||portrait()||destroyed)return;controller?.abort();const current=++revision,active=new AbortController();controller=active;content.replaceChildren(make('p','qr-notice','Carregando cotações e orçamentos do SharePoint…'));content.setAttribute('aria-busy','true');refresh.disabled=true;
+  if(root.hidden||destroyed)return;controller?.abort();const current=++revision,active=new AbortController();controller=active;content.replaceChildren(make('p','qr-notice','Carregando cotações e orçamentos do SharePoint…'));content.setAttribute('aria-busy','true');refresh.disabled=true;
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;render(result);}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;const message=make('p','qr-notice','Não foi possível carregar as cotações e os orçamentos.');message.setAttribute('role','status');const retry=make('button','qr-retry','Tentar novamente');retry.type='button';retry.addEventListener('click',()=>void load());content.replaceChildren(message,retry);}
   finally{if(current===revision){content.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
- function orientationChanged(){if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('qr-portrait',vertical);if(vertical){if(content.contains(doc.activeElement))panel.focus();controller?.abort();revision++;content.replaceChildren();content.hidden=true;}else if(content.hidden){content.hidden=false;void load();}}
+ function orientationChanged() { landscape.update(); }
  function close(){if(root.hidden)return;controller?.abort();revision++;content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
  root.addEventListener('click',event=>{if(event.target===root)close();});root.addEventListener('keydown',event=>{
   if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')),first=nodes[0],last=nodes.at(-1);
   if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}
  });win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
- return Object.freeze({element:root,async open(){if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;root.hidden=false;const vertical=portrait();warning.hidden=!vertical;content.hidden=vertical;panel.classList.toggle('qr-portrait',vertical);panel.focus();content.scrollTop=0;if(!vertical)await load();},close,destroy(){if(destroyed)return;close();destroyed=true;win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();}});
+ return Object.freeze({element:root,async open(){if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;root.hidden=false;landscape.update();warning.hidden=true;content.hidden=false;panel.classList.toggle('qr-portrait',false);panel.focus();content.scrollTop=0;await load();},close,destroy(){if(destroyed)return;close();destroyed=true;win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

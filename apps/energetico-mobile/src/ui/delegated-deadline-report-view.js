@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {normalizeDelegatedDeadlineSnapshot, buildDelegatedDeadlineOverview} from '../chat/delegated-deadline-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -73,7 +74,7 @@ export function createDelegatedDeadlineReportView({document:doc = globalThis.doc
 
   let snapshot = null, controller = null, revision = 0, pickers = null, destroyed = false;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
-  const portrait = () => win?.matchMedia ? win.matchMedia('(orientation: portrait)').matches : win?.innerHeight > win?.innerWidth;
+  const landscape = bindReportLandscape(root);
   const today = () => provisionDateKey(now());
   const selected = () => ({
     description:description.value,
@@ -183,7 +184,7 @@ export function createDelegatedDeadlineReportView({document:doc = globalThis.doc
   }
 
   async function load() {
-    if (root.hidden || portrait() || destroyed) return;
+    if (root.hidden || destroyed) return;
     if (content.contains(doc.activeElement)) panel.focus();
     pickers?.close();
     controller?.abort();
@@ -215,26 +216,7 @@ export function createDelegatedDeadlineReportView({document:doc = globalThis.doc
     }
   }
 
-  function orientationChanged() {
-    if (root.hidden) return;
-    const vertical = portrait();
-    warning.hidden = !vertical;
-    panel.classList.toggle('tdr-portrait', vertical);
-    if (vertical) {
-      pickers?.close();
-      if (panel.contains(doc.activeElement)) panel.focus();
-      controller?.abort();
-      revision++;
-      snapshot = null;
-      content.replaceChildren();
-      report.hidden = true;
-      report.setAttribute('aria-busy', 'false');
-      refresh.disabled = false;
-    } else if (report.hidden) {
-      report.hidden = false;
-      void load();
-    }
-  }
+  function orientationChanged() { landscape.update(); }
 
   function close() {
     if (root.hidden) return;
@@ -277,19 +259,19 @@ export function createDelegatedDeadlineReportView({document:doc = globalThis.doc
       returnFocus = doc.activeElement;
       oldOverflow = doc.body.style.overflow;
       app = doc.getElementById('app');
-      oldInert = app?.inert || false;
+      oldInert=app?.inert||false;
       doc.body.style.overflow = 'hidden';
       if (app) app.inert = true;
       description.value = '';
       populate(true);
-      root.hidden = false;
-      const vertical = portrait();
-      warning.hidden = !vertical;
-      report.hidden = vertical;
-      panel.classList.toggle('tdr-portrait', vertical);
+      root.hidden=false;landscape.update();
+
+      warning.hidden=true;
+      report.hidden = false;
+      panel.classList.toggle('tdr-portrait', false);
       panel.focus();
       content.scrollTop = 0;
-      if (!vertical) await load();
+      await load();
     },
     close,
     destroy() {
@@ -299,7 +281,7 @@ export function createDelegatedDeadlineReportView({document:doc = globalThis.doc
       pickers?.destroy();
       win?.removeEventListener('resize', orientationChanged);
       win?.removeEventListener('orientationchange', orientationChanged);
-      root.remove();
+      landscape.destroy();root.remove();
     },
   });
 }

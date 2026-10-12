@@ -255,23 +255,23 @@ test('Escape aborts a pending open restores inert overflow and focus and rejects
   resolve(snapshot); await tick(); assert.equal(root.hidden,true); assert.equal(root.querySelectorAll('table').length,0);
 });
 
-test('portrait opening is lazy and rotation cancels pending requests before a fresh landscape load', async t => {
+test('portrait starts loading and rotations retain the same pending request', async t => {
   const requests=[]; const {view,root,dom} = setup(t,{loadSnapshot:options=>new Promise(resolve=>requests.push({resolve,signal:options.signal}))});
-  dom.window.matchMedia=()=>({matches:true}); await view.open(); assert.equal(requests.length,0);
-  assert.equal(root.querySelector('.pl-orientation').hidden,false);
+  dom.window.matchMedia=()=>({matches:true}); const opening=view.open(); await tick(); assert.equal(requests.length,1);
+  assert.equal(root.querySelector('.pl-orientation').hidden,true);
   assert.equal(root.querySelector('.psp-close').closest('[hidden]'),null);
   dom.window.matchMedia=()=>({matches:false}); dom.window.dispatchEvent(new dom.window.Event('resize')); await tick();
   assert.equal(requests.length,1);
-  dom.window.matchMedia=()=>({matches:true}); dom.window.dispatchEvent(new dom.window.Event('orientationchange')); assert.equal(requests[0].signal.aborted,true);
-  requests[0].resolve(snapshot); await tick(); assert.equal(root.querySelectorAll('table').length,0);
+  dom.window.matchMedia=()=>({matches:true}); dom.window.dispatchEvent(new dom.window.Event('orientationchange')); assert.equal(requests[0].signal.aborted,false);
+  requests[0].resolve(snapshot); await opening; assert.equal(root.querySelectorAll('table').length,2);
   dom.window.matchMedia=()=>({matches:false}); dom.window.dispatchEvent(new dom.window.Event('resize')); await tick();
-  requests[1].resolve(snapshot); await tick(); assert.equal(root.querySelectorAll('table').length,2);
+  assert.equal(requests.length,1); assert.equal(root.querySelectorAll('table').length,2);
 });
 
 test('loaded report retains filters and table identity across rotation and closing resets next session', async t => {
   let calls=0; const {view,root,dom} = setup(t,{loadSnapshot:async()=>{calls++;return snapshot;}}); await view.open();
   change(root,'supplier','Ana'); const table=root.querySelector('table'); const content=root.querySelector('.psp-content'); content.scrollTop=88;
-  dom.window.matchMedia=()=>({matches:true}); dom.window.dispatchEvent(new dom.window.Event('resize')); assert.throws(()=>captureFilteredReport(root));
+  dom.window.matchMedia=()=>({matches:true}); dom.window.dispatchEvent(new dom.window.Event('resize')); assert.doesNotThrow(()=>captureFilteredReport(root));
   dom.window.matchMedia=()=>({matches:false}); dom.window.dispatchEvent(new dom.window.Event('resize')); await tick();
   assert.equal(root.querySelector('table'),table); assert.equal(content.scrollTop,88); assert.equal(root.querySelector('[name=supplier]').value,'Ana'); assert.equal(calls,1);
   view.close(); await view.open(); assert.equal(root.querySelector('[name=supplier]').value,''); assert.equal(calls,2);
