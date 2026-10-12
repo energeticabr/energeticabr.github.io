@@ -151,11 +151,11 @@ for (const entry of galleryCases) {
       const mutation = deferred(); let creates = 0, saves = 0;
       const item = { id: '7', eTag: '"v3"', fields: { OBS: 'ORIGINAL', Attachments: false } };
       const data = createRegistrationGalleryData({ kind: entry.options.kind, repository: {
-        async resolveList() { return { status: 'resolved', id: 'parent-list' }; },
-        async getColumns() { return [{ name: 'OBS', text: {} }]; },
-        async getItemsPage() { return { items: [item], hasMore: false }; },
-        async getItem() { return item; },
-        async updateItem() { saves++; return mutation.promise; },
+        async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parent-list' : 'child-list' }; },
+        async getColumns(_site, list) { return [{ name: 'OBS', text: {} }, ...(list === 'child-list' ? [{ name: 'DESCRITIVOPROVISAO', text: {} }] : [])]; },
+        async getItemsPage(_site, list) { return { items: list === 'parent-list' ? [structuredClone(item)] : [], hasMore: false }; },
+        async getItem() { return structuredClone(item); },
+        async updateItem(_site, _list, _id, fields) { saves++; await mutation.promise; Object.assign(item.fields, fields); item.eTag = '"v4"'; return structuredClone(item); },
         async deleteItem() { assert.fail('the parent policy permits editing only'); },
       } });
       const ctx = setup(t, entry, { data, onCreate: () => { creates++; } });

@@ -35,8 +35,8 @@ test('all gallery shortcuts keep Tasks sizing beside Filters, collapsed and expa
           assert.ok(layout.visible && layout.ordered && layout.fits && layout.hittable && !layout.overflow, message);
           assert.ok(layout.quickSearch, message);
           assert.equal(layout.width, 46, message); assert.equal(layout.height, 46, message);
-          assert.equal(layout.color, 'rgb(33, 132, 67)', message);
-          assert.equal(layout.background, 'rgb(255, 255, 255)', message);
+          assert.equal(layout.color, result.name === 'provisionDescription' ? 'rgb(255, 255, 255)' : 'rgb(33, 132, 67)', message);
+          assert.equal(layout.background, result.name === 'provisionDescription' ? 'rgb(22, 133, 67)' : 'rgb(255, 255, 255)', message);
           assert.equal(layout.border, 'rgb(33, 132, 67)', message);
         }
         assert.equal(result.creates, 1);

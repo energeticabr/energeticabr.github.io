@@ -6,15 +6,17 @@ const { createOrdersGalleryData, createPendingProvisionAttachmentsData, OrdersGa
 
 test("grouped provisions route attachments and due-date mutations to the description parent list", async () => {
   const calls = [];
+  const parent={id:'306',eTag:'parent-etag',fields:{}};
+  const child={id:'307',eTag:'child-etag',fields:{DESCRITIVOPROVISAO:'306'}};
   const data = createPendingProvisionAttachmentsData({ sourceKind: "provision-description", repository: {
-    async resolveList(site, aliases) { calls.push(["resolve", site, aliases]); return { status: "resolved", id: "parents" }; },
-    async getItemsPage() { throw new Error("Grouped totals must come from the backend"); },
+    async resolveList(site, aliases) { calls.push(["resolve", site, aliases]); return { status: "resolved", id: aliases.includes('DESCRITIVOPROVISAO') ? "parents" : "children" }; },
+    async getItemsPage(_site,list) { assert.equal(list,'children');return {items:[structuredClone(child)],hasMore:false}; },
     async listAttachments(...args) { calls.push(["list", ...args]); return [{ name: "parent.pdf", size: 3 }]; },
     async downloadAttachment(...args) { calls.push(["download", ...args]); return new Blob(["pdf"], { type: "application/pdf" }); },
     async uploadAttachment(...args) { calls.push(["upload", ...args]); return {}; },
-    async getItem(...args) { calls.push(["item", ...args]); return { id: "306", eTag: "parent-etag", fields: {} }; },
-    async getColumns() { return [{ name: "due", displayName: "DATA PREVISTO PGTO" }]; },
-    async updateItem(...args) { calls.push(["update", ...args]); return {}; },
+    async getItem(...args) { calls.push(["item", ...args]); return structuredClone(args[1]==='parents'?parent:child); },
+    async getColumns(_site,list) { return list==='parents'?[{ name: "due", displayName: "DATA PREVISTO PGTO",dateTime:{} }]:[{name:'childDue',displayName:'DATA PREVISTO PGTO',dateTime:{}},{name:'DESCRITIVOPROVISAO',text:{}}]; },
+    async updateItem(...args) { calls.push(["update", ...args]);const target=args[1]==='parents'?parent:child;Object.assign(target.fields,args[3]);target.eTag+='new';return structuredClone(target); },
   } });
   await data.listAttachments("306");
   await data.downloadAttachment("306", "parent.pdf");
@@ -28,6 +30,7 @@ test("grouped provisions route attachments and due-date mutations to the descrip
   assert.deepEqual(Object.keys(update[4]), ["due"]);
   assert.match(update[4].due, /^2026-10-12T/);
   assert.equal(update[5].eTag, "parent-etag");
+  assert.equal(child.fields.childDue,parent.fields.due,'the popup pencil must synchronize the linked child');
   assert.equal(data.loadUpcomingPayments, undefined, "The parent provider cannot enrich from child payments");
 });
 

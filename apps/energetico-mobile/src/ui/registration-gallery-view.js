@@ -9,6 +9,7 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
+import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 
 const PAGE_SIZE = 20;
 
@@ -116,7 +117,9 @@ function knownAttachmentCount(row) {
   for (const [name, value] of Object.entries(row?.fields || {})) {
     const key = normalizedFieldName(name);
     if (["quantidadedeanexos", "attachmentcount", "attachmentscount"].includes(key)) {
-      const count = Number(valueText(value));
+      const text = valueText(value).trim();
+      if (!text) continue;
+      const count = Number(text);
       if (Number.isInteger(count) && count >= 0) return count;
     }
     if (["anexos", "attachments"].includes(key) && Array.isArray(value)) return value.length;
@@ -257,6 +260,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, button: refresh,
     onRefresh: () => load({ refresh: true }),
     isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations });
+  if (kind === 'provisionDescription') {
+    const searchWrap = el('div', 'rg-provision-search');
+    search.before(searchWrap); searchWrap.append(provisionDescriptionIcon(doc, 'search'), search);
+    const filter = createShortcut.toolbar.querySelector('.gallery-filter-button');
+    filter.replaceChildren(provisionDescriptionIcon(doc, 'filter'), el('span', '', 'Filtros'));
+    refresh.prepend(provisionDescriptionIcon(doc, 'refresh'));
+  }
   async function runMutation(operation) {
     pendingMutations++; refreshShortcut.sync();
     try { return await createShortcut.runMutation(operation); }
@@ -283,13 +293,21 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   function attachmentCountLabel(row) {
+    const current = attachmentCounts.get(String(row.id));
+    if (kind === 'provisionDescription' && current?.state === 'ready') return `${current.count} ${current.count === 1 ? "anexo" : "anexos"}`;
     const known = knownAttachmentCount(row);
     if (known != null) return `${known} ${known === 1 ? "anexo" : "anexos"}`;
     if (typeof data.listAttachments !== "function") return "Quantidade indisponível";
-    const current = attachmentCounts.get(String(row.id));
     if (current?.state === "ready") return `${current.count} ${current.count === 1 ? "anexo" : "anexos"}`;
     if (current?.state === "error") return "Quantidade indisponível";
     return "Contando anexos…";
+  }
+
+  function provisionAttachmentState(row) {
+    const known = knownAttachmentCount(row);
+    const cached = attachmentCounts.get(String(row.id));
+    const count = cached?.state === 'ready' ? cached.count : known;
+    return count == null ? 'unknown' : count > 0 ? 'present' : 'empty';
   }
 
   function requestAttachmentCounts(visibleRows) {
@@ -315,6 +333,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       attachmentCountWorkers += 1;
       void Promise.resolve().then(() => data.listAttachments(row.id, { refresh: true })).then(items => {
         if (destroyed || epoch !== attachmentCountEpoch) return;
+        if (kind === 'provisionDescription' && !Array.isArray(items)) throw new Error('Consulta de anexos incompleta.');
         attachmentCounts.set(id, { state: "ready", count: Array.isArray(items) ? items.length : 0 });
         if (!root.hidden) refreshAttachmentCount(row);
       }).catch(() => {
@@ -580,12 +599,21 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const card = el("article", model.nativeCard ? "rg-row rg-row--native" : model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
       card.dataset.registrationRow = row.id;
       if (kind === 'workDiary') card.classList.add('rg-row--work-diary');
+      if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
       if (model.showAttachments) {
         const layout = el("div", "rg-row-layout");
-        const fileRail = el(row.hasAttachments === false ? "aside" : "button", "rg-row-file");
-        if (row.hasAttachments !== false) {
+        const attachmentState = kind === 'provisionDescription' ? provisionAttachmentState(row) : null;
+        const emptyAttachments = attachmentState ? attachmentState === 'empty' : row.hasAttachments === false;
+        const fileRail = el(emptyAttachments ? "aside" : "button", "rg-row-file");
+        if (attachmentState) {
+          fileRail.dataset.attachmentState = attachmentState;
+          const symbol = el('span', 'rg-provision-file-icon');
+          symbol.append(provisionDescriptionIcon(doc, attachmentState === 'present' ? 'document' : attachmentState === 'empty' ? 'close' : 'clock'));
+          fileRail.append(symbol);
+        }
+        if (!emptyAttachments) {
           const countLabel = attachmentCountLabel(row);
           fileRail.type = "button";
           fileRail.dataset.action = "registration-attachments";
@@ -593,16 +621,19 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
           fileRail.title = "Abrir anexos";
           fileRail.disabled = attachmentLoading;
           fileRail.addEventListener("click", () => { void openAttachments(row); });
-          const icon = el("span", "rg-row-attachment", "📎");
-          icon.setAttribute("aria-hidden", "true");
-          fileRail.append(icon);
+          if (!attachmentState) {
+            const icon = el("span", "rg-row-attachment", "📎");
+            icon.setAttribute("aria-hidden", "true");
+            fileRail.append(icon);
+          }
         }
         fileRail.append(
-          el("span", "rg-row-file__label", row.hasAttachments === false ? "SEM ANEXOS" : "ANEXOS"),
+          el("span", "rg-row-file__label", emptyAttachments ? "SEM ANEXOS" : "ANEXOS"),
           el("span", "rg-row-file__count", attachmentCountLabel(row)),
         );
         const main = el("div", "rg-row-main");
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
+        else if (kind === 'provisionDescription') renderProvisionDescriptionCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (model.nativeCard) renderNativeDetails(main, row, primary);
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
@@ -648,6 +679,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
       const attachments = await data.listAttachments(row.id);
       if (destroyed || root.hidden || current !== attachmentRequest) return;
+      if (kind === 'provisionDescription') {
+        if (!Array.isArray(attachments)) throw new Error('Consulta de anexos incompleta.');
+        attachmentCounts.set(String(row.id), { state: 'ready', count: attachments.length });
+      }
       if (!attachments.length) {
         attachmentNotice = `${(model.recordArticle || "o").toUpperCase()} ${model.recordLabel || "documento"} ${row.id} não possui anexos.`;
         return;

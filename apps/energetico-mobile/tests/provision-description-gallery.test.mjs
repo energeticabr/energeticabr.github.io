@@ -98,20 +98,21 @@ function parentFixture({ tokenLabel = "Título" } = {}) {
   function assertParent(site, list) { assert.equal(site, "personal"); assert.equal(list, "parent-list-id"); }
   const data = createRegistrationGalleryData({ kind: "provisionDescription", repository: Object.freeze({
     async resolveList(site, aliases) {
-      assert.equal(site, "personal"); assert.deepEqual(aliases, ["DESCRITIVOPROVISAO"]);
-      return { status: "resolved", id: "parent-list-id" };
+      assert.equal(site, "personal");
+      return { status: "resolved", id: aliases.includes('DESCRITIVOPROVISAO') ? "parent-list-id" : "child-list-id" };
     },
-    async getColumns(site, list) { assertParent(site, list); return columns; },
+    async getColumns(site, list) { if(list==='child-list-id')return [...columns,{name:'DESCRITIVOPROVISAO',text:{}}];assertParent(site, list); return columns; },
     async getItemsPage(site, list) {
+      if(list==='child-list-id')return {items:[],hasMore:false};
       assertParent(site, list);
       return { items: [{ ...item, eTag: '"snapshot-v2"' }], hasMore: false };
     },
     async getItem(site, list, id, query) {
-      assertParent(site, list); reads.push([site, list, id, query]); return item;
+      assertParent(site, list); reads.push([site, list, id, query]); return structuredClone(item);
     },
     async updateItem(site, list, id, fields, options) {
       assertParent(site, list); writes.push([site, list, id, fields, options]);
-      return { id, eTag: '"parent-v8"', fields: { ...item.fields, ...fields } };
+      item.eTag='"parent-v8"';Object.assign(item.fields,fields);return structuredClone(item);
     },
     async deleteItem() { assert.fail("nenhuma exclusão foi autorizada"); },
     async createItem() { assert.fail("edição não cria registros nem filhos"); },
@@ -151,7 +152,8 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
   for (const [name, value] of Object.entries(draft)) form.querySelector(`[name="${name}"]`).value = value;
   form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
   await waitFor(() => fixture.writes.length === 1 && !doc.querySelector('[data-gallery-record-screen]'));
-  assert.deepEqual(fixture.reads, [["personal", "parent-list-id", "9", "$expand=fields"]]);
+  assert.ok(fixture.reads.length>=3,'baseline, conditional edit and readback are required');
+  assert.ok(fixture.reads.every(read=>JSON.stringify(read)===JSON.stringify(["personal", "parent-list-id", "9", "$expand=fields"])));
   assert.deepEqual(fixture.writes, [["personal", "parent-list-id", "9", {
     FILIAL: "FILIAL B", FORNECEDOR: "FORNECEDOR B", VALORTOTAL: "2345,67", OBS: "ALTERADO", FORMAPGTO: "PIX",
     DATAPGTOEFETUADO: "2026-10-10T04:10:00", PGTOAGENDADO: "2026-10-11T05:20:00",

@@ -4,6 +4,7 @@ import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
+import { createProvisionDescriptionEditor } from "../../../../portal/forms/provision-description-edit.js";
 
 const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado por"];
 const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado por": ["Author"], "Modificado por": ["Editor"] };
@@ -253,6 +254,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   // Lists without an extracted edit form use only the model's proven fields
   // with their real SharePoint metadata in the metadata editor.
   let editorPromise;
+  const descriptionEditor = kind === 'provisionDescription' ? createProvisionDescriptionEditor({repository,siteKey:options.siteKey||'personal',assertSession:options.assertSession}) : null;
   function metadataEditor() {
     return editorPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) => {
       const editorRepository = new Proxy(Object.create(null), {
@@ -269,7 +271,8 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
           return typeof value === "function" ? value.bind(repository) : value;
         },
       });
-      return createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,
+      return createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,assertSession:options.assertSession,
+        ...(descriptionEditor ? {persistEdit:descriptionEditor.save} : {}),
         async resolveList(signal) {
           const list = await repository.resolveList(options.siteKey || "personal", model.aliases, signal ? { signal } : {});
           if (list?.status !== "resolved" || !list.id) throw new Error(`A lista ${model.listName} não está disponível nesta conta SharePoint.`);
@@ -291,7 +294,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     } } : {}),
     ...(model.metadataEditorFields ? {
       loadEditor: async (id, options) => (await metadataEditor()).loadEditor(id, options),
-      saveEditor: async (context, fields) => (await metadataEditor()).saveEditor(context, fields),
+      saveEditor: async (context, fields, saveOptions) => (await metadataEditor()).saveEditor(context, fields, saveOptions),
       deleteItem: async (id, options) => (await metadataEditor()).deleteItem(id, options),
     } : {}),
     async loadSnapshot(loadOptions) {
