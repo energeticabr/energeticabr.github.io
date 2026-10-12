@@ -8188,96 +8188,31 @@ test("upload que devolve o menu sem marcador de reset não mantém o anexo posta
   h.controller.stop();
 });
 
-test("carrega tarefas delegadas pendentes e conclui pela galeria", async () => {
+test("inicialização e retorno ao app não consultam a galeria delegada retirada", async t => {
   const h = makeHarness();
+  t.after(() => h.controller.stop());
   const calls = [];
-  h.client.getDelegatedTasks = async () => ({
-    rows: [
-      { id: "501", task: "Enviar contrato", responsible: "Bernardo" },
-      { id: "503", task: "Conferir prazo", responsible: "Ana" },
-    ],
-  });
-  h.client.completeDelegatedTask = async id => {
-    calls.push(String(id));
-    return { delegatedTasks: { rows: [{ id: "503", task: "Conferir prazo", responsible: "Ana" }] } };
-  };
-
-  await h.controller.start();
-  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 2);
-  await h.view.emit("complete-delegated-task", { taskId: "501" });
-  assert.deepEqual(calls, ["501"]);
-  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 1);
-  h.controller.stop();
-});
-
-test("trata conclusão já gravada como sucesso quando a confirmação da VM é perdida", async () => {
-  const h = makeHarness();
-  let snapshotCalls = 0;
   h.client.getDelegatedTasks = async () => {
-    snapshotCalls += 1;
-    return {
-      rows: snapshotCalls === 1
-        ? [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }]
-        : [],
-    };
+    calls.push("retired-read");
+    return { rows: [] };
   };
-  h.client.completeDelegatedTask = async () => {
-    const error = new Error("A conexão foi interrompida antes da confirmação.");
-    error.code = "NETWORK_UNCERTAIN";
-    throw error;
-  };
-
   await h.controller.start();
-  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
-
-  assert.equal(completed, true);
-  assert.equal(snapshotCalls, 2);
-  assert.deepEqual(h.view.renders.at(-1).delegatedTasks.rows, []);
-  assert.equal(h.view.renders.at(-1).error, null);
-  h.controller.stop();
+  await h.controller.handleForeground();
+  assert.deepEqual(calls, []);
+  assert.equal(h.view.renders.at(-1).delegatedTasks, undefined);
 });
 
-test("não repete a escrita quando a confirmação chega sem a nova lista", async () => {
+test("eventos antigos da galeria delegada não concluem tarefas nem gravam uma nova ordenação", async t => {
   const h = makeHarness();
-  let snapshotCalls = 0;
-  h.client.getDelegatedTasks = async () => {
-    snapshotCalls += 1;
-    if (snapshotCalls > 1) throw new Error("A leitura da lista demorou.");
-    return { rows: [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }] };
-  };
-  h.client.completeDelegatedTask = async () => ({
-    status: "processed",
-    messages: [{ type: "text", text: "Tarefa concluída." }],
-  });
-
+  t.after(() => h.controller.stop());
+  const writes = [];
+  h.client.getDelegatedTasks = async () => ({ rows: [{ id: '501', task: 'Enviar contrato' }] });
+  h.client.completeDelegatedTask = async id => { writes.push(id); return {}; };
   await h.controller.start();
-  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
-
-  assert.equal(completed, true);
-  assert.equal(snapshotCalls, 2);
-  assert.deepEqual(h.view.renders.at(-1).delegatedTasks.rows, []);
-  assert.equal(h.view.renders.at(-1).error, null);
-  h.controller.stop();
-});
-
-test("mantém o erro quando a tarefa continua pendente após a reconciliação", async () => {
-  const h = makeHarness();
-  h.client.getDelegatedTasks = async () => ({
-    rows: [{ id: "501", task: "Enviar contrato", responsible: "Bernardo" }],
-  });
-  h.client.completeDelegatedTask = async () => {
-    const error = new Error("A VM recusou a conclusão.");
-    error.status = 400;
-    throw error;
-  };
-
-  await h.controller.start();
-  const completed = await h.view.emit("complete-delegated-task", { taskId: "501" });
-
-  assert.equal(completed, false);
-  assert.match(h.view.renders.at(-1).error, /VM recusou/);
-  assert.equal(h.view.renders.at(-1).delegatedTasks.rows.length, 1);
-  h.controller.stop();
+  await h.view.emit('complete-delegated-task', { taskId: '501' });
+  await h.view.emit('delegated-tasks-reordered', { order: ['501'] });
+  assert.deepEqual(writes, []);
+  assert.equal(h.view.renders.at(-1).delegatedTasks, undefined);
 });
 
 test("ações da prévia permitem editar assinatura ou voltar para a escolha", async () => {
@@ -9462,20 +9397,16 @@ test("falha de consulta dos diários preserva o chat e pode ser tentada ao retor
   assert.equal(h.view.renders.at(-1).pendingConstructionDiaries.rows.length, 1);
 });
 
-test("lembrete de diários ao retornar não aguarda a consulta de tarefas delegadas", async t => {
+test("lembrete de diários ao retornar funciona sem consultar a galeria delegada retirada", async t => {
   const h = pendingDiaryHarness(t);
   t.mock.timers.setTime(new Date("2026-09-30T17:00:00Z").getTime());
   await h.controller.start();
-  let resolveTasks;
-  h.client.getDelegatedTasks = () => new Promise(resolve => { resolveTasks = resolve; });
+  let retiredReads = 0;
+  h.client.getDelegatedTasks = async () => { retiredReads += 1; return { rows: [] }; };
   t.mock.timers.setTime(new Date("2026-09-30T18:00:00Z").getTime());
-  const foreground = h.controller.handleForeground();
-  t.after(() => resolveTasks?.({ rows: [] }));
-  for (let i = 0; i < 20 && !h.view.renders.at(-1).pendingConstructionDiaries; i++) await new Promise(resolve => setImmediate(resolve));
-  assert.equal(typeof resolveTasks, "function");
+  await h.controller.handleForeground();
+  assert.equal(retiredReads, 0);
   assert.equal(h.view.renders.at(-1).pendingConstructionDiaries?.rows.length, 1);
-  resolveTasks({ rows: [] });
-  await foreground;
 });
 
 test("retorno ao app remove o aviso quando os diários deixam de estar pendentes", async t => {

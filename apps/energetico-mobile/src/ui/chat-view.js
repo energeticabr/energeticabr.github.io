@@ -993,7 +993,8 @@ function menuOptionsWithoutApps(message, options) {
   const pairedMenu = pairedGalleryMenu(message);
   const filtered = options.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
-    return (!suppliesMenu || !isWorksiteVisitOption(option))
+    return !/(?:^|:)pending_delegated_tasks$/.test(replyId)
+      && (!suppliesMenu || !isWorksiteVisitOption(option))
       && (!suppliesMenu || (replyId !== "action_launch_report" && !/\bobter\s+dados\b/.test(normalizedDateText(option?.label || option?.title || "")) && replyId !== "action_quote_gallery"))
       && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId)
@@ -1315,39 +1316,6 @@ function singleLaunchConfirmationMarkup(message, activeFlow) {
   return `<dl class="chat-single-launch-confirmation" aria-label="Conferência do lançamento único">${cells.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>`;
 }
 
-function delegatedTaskRows(message, snapshot) {
-  if (snapshot && Array.isArray(snapshot.rows)) {
-    return snapshot.rows.map(row => ({
-      id: String(row.id || ""),
-      task: String(row.task || row.title || "Tarefa sem descrição"),
-      responsible: String(row.responsible || row.responsavel || ""),
-      priority: row.priority === true,
-      fatalDate: String(row.fatalDate || ""),
-      branch: String(row.branch || ""),
-      association: String(row.association || ""),
-      status: String(row.status || ""),
-    })).filter(row => row.id);
-  }
-  return (Array.isArray(message?.options) ? message.options : [])
-    .map(option => option?.task && typeof option.task === "object"
-      ? { ...option.task, id: String(option.task.id || option.value || "") }
-      : null)
-    .filter(row => row?.id);
-}
-
-function delegatedTasksMarkup(message, busy, snapshot) {
-  const rows = delegatedTaskRows(message, snapshot);
-  if (!rows.length) return `<div class="chat-delegated-tasks-empty">✅ Não há tarefas delegadas pendentes.</div>`;
-  return `<div class="chat-delegated-tasks" data-role="delegated-tasks-gallery">
-    <label class="chat-delegated-tasks__search"><span class="sr-only">Pesquisar tarefas delegadas</span><input type="search" data-role="delegated-tasks-search" placeholder="Pesquisar tarefa…" autocomplete="off"></label>
-    <div class="chat-delegated-tasks__list" role="list" aria-label="Tarefas delegadas pendentes">${rows.map(row => {
-      const details = [row.responsible && `Responsável: ${row.responsible}`, row.fatalDate && `Data fatal: ${row.fatalDate}`, row.branch, row.association].filter(Boolean).join(" · ");
-      return `<article class="chat-delegated-task" data-delegated-task-item data-task-id="${escapeHtml(row.id)}" draggable="true" role="listitem"><span class="chat-delegated-task__handle" aria-hidden="true">☷</span><div class="chat-delegated-task__body"><strong>${row.priority ? "⭐ " : ""}${escapeHtml(row.task)}</strong><small>${escapeHtml(details || "Tarefa delegada pendente")}</small></div><button class="chat-delegated-task__complete" type="button" data-action="complete-delegated-task" data-task-id="${escapeHtml(row.id)}" aria-label="Concluir tarefa ${escapeHtml(row.id)}" title="Concluir tarefa"${busy ? " disabled" : ""}>✅</button></article>`;
-    }).join("")}</div>
-    <p class="chat-delegated-tasks__hint">Arraste uma tarefa para ordenar por relevância. A ordem fica salva neste aparelho.</p>
-  </div>`;
-}
-
 function isEpiProductPoll(message, activeFlow) {
   if (String(activeFlow?.id || "").trim().toLocaleLowerCase("pt-BR") !== "document_signing") return false;
   if (String(message?.databaseFilterKey || "").trim().toLocaleLowerCase("pt-BR") === "document_signing_epi_product") return true;
@@ -1398,7 +1366,7 @@ function isAttendanceSelectionPoll(message) {
       /^pending_attendance_record:\d+$/.test(String(draftReplyId(option)))));
 }
 
-function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
+function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1528,7 +1496,6 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const isAttendanceMultiSelect = isAttendanceSelectionPoll(message);
   const isLaunchPayrollMultiSelect = message?.presentation === "launch_payroll_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
-  const isDelegatedTasks = message?.presentation === "delegated_tasks";
   const choiceListClass = choiceOptions.length === 1
     ? "chat-choice-list chat-choice-list--single"
     : "chat-choice-list";
@@ -1653,7 +1620,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ${renderAuditLogTable(auditRows, busy)}
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
-    ${isAttendanceMultiSelect ? attendanceMarkup : isLaunchPayrollMultiSelect ? launchPayrollMarkup : isEpiProductSelection ? epiMarkup : isDelegatedTasks ? delegatedTasksMarkup(message, busy, delegatedTasks) : choicesMarkup}
+    ${isAttendanceMultiSelect ? attendanceMarkup : isLaunchPayrollMultiSelect ? launchPayrollMarkup : isEpiProductSelection ? epiMarkup : choicesMarkup}
   </div>`;
 }
 
@@ -1760,8 +1727,12 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, delegatedTasks = null, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
+    // Saved conversations can still contain the retired inline gallery.
+    // Keep the history intact, but never restore its completion controls.
+    if (message.presentation === "delegated_tasks"
+        || (message.options || []).some(option => /(?:^|:)(?:delegated_task:(?:complete:)?|delegated_task_complete:)\d+$/i.test(String(draftReplyId(option) || "").trim()))) return "";
     const launchMenu = isSuppliesLaunchMenu(message);
     const pairedMenu = pairedGalleryMenu(message);
     const registrationMenu = isSuppliesRegistrationMenu(message);
@@ -1777,7 +1748,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, de
     const attendanceShortcut = cargosShortcut ? `<button class="chat-main-attendance-summary-shortcut" type="button" data-action="open-attendance-summary" aria-label="Abrir resumo de presenças e ausências" title="Resumo de presenças e ausências"${busy ? ' disabled' : ''}><img src="${ATTENDANCE_SUMMARY_MASCOT_URL}" alt="Mascote do resumo de presenças"></button><button class="chat-main-stage-progress-shortcut" type="button" data-action="open-stage-progress" aria-label="Abrir relatório de etapas e atividades" title="Etapas e atividades da obra"${busy ? ' disabled' : ''}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Mascote do relatório de etapas"></button><button class="chat-main-supplier-payroll-report-shortcut" type="button" data-action="open-supplier-payroll-report" aria-label="Abrir folhas de pagamento por fornecedor" title="Folhas de pagamento por fornecedor"${busy ? ' disabled' : ''}><img src="${SUPPLIER_PAYROLL_REPORT_MASCOT_URL}" alt="Energético com folha de pagamento"></button><button class="chat-main-supplier-workforce-shortcut" type="button" data-action="open-supplier-workforce-report" aria-label="Abrir fornecedores por filial, imóvel e profissão" title="Fornecedores por filial, imóvel e profissão"${busy ? ' disabled' : ''}><img src="${SUPPLIER_WORKFORCE_REPORT_MASCOT_URL}" alt="Energético com martelete"></button><button class="chat-main-contractor-control-shortcut" type="button" data-action="open-contractor-control-report" aria-label="Abrir controle de empreiteiros" title="Controle de empreiteiros"${busy ? ' disabled' : ''}><img src="${CONTRACTOR_CONTROL_REPORT_MASCOT_URL}" alt="Energético com carrinho de mão"></button><button class="chat-main-pending-supplier-payments-shortcut" type="button" data-action="open-pending-supplier-payments-report" aria-label="Abrir pagamentos pendentes por fornecedor" title="Pagamentos pendentes por fornecedor"${busy ? ' disabled' : ''}><img src="${PENDING_SUPPLIER_PAYMENTS_REPORT_MASCOT_URL}" alt="Energético com ferramentas e tijolos"></button><button class="chat-main-pending-work-diaries-shortcut" type="button" data-action="open-pending-work-diaries-report" aria-label="Abrir diários de obras pendentes" title="Diários de obras pendentes"${busy ? ' disabled' : ''}><img src="${PENDING_WORK_DIARIES_REPORT_MASCOT_URL}" alt="Energético com colher de pedreiro e tijolos"></button>` : '';
     const commercialShortcut = cargosShortcut ? `<nav class="chat-main-commercial-shortcuts" aria-label="Relatórios comerciais"><button class="chat-main-commercial-receipts-shortcut" type="button" data-action="open-commercial-receipts" aria-label="Abrir relatório comercial de contratos e pagamentos" title="Contratos e pagamentos"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_RECEIPTS_MASCOT_URL}" alt="Mascote do relatório comercial"></button><button class="chat-main-commercial-milestones-shortcut" type="button" data-action="open-commercial-milestones" aria-label="Abrir andamento comercial dos imóveis" title="Andamento comercial dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_MILESTONES_MASCOT_URL}" alt="Mascote do andamento comercial"></button><button class="chat-main-commercial-documents-shortcut" type="button" data-action="open-commercial-documents" aria-label="Abrir pendências documentais dos imóveis" title="Pendências documentais dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_DOCUMENTS_MASCOT_URL}" alt="Mascote das pendências documentais"></button><button class="chat-main-sac-pathologies-shortcut" type="button" data-action="open-sac-pathologies" aria-label="Abrir acompanhamento de patologias" title="Acompanhamento de patologias"${busy ? ' disabled' : ''}><img src="${SAC_PATHOLOGIES_MASCOT_URL}" alt="Mascote do acompanhamento de patologias"></button></nav>` : '';
 const provisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt="Mascote Energético"></button><button class="chat-main-payment-ledger-shortcut chat-main-provision-report-shortcut" type="button" data-action="open-provision-report" aria-label="Abrir relatório de provisões e despesas recorrentes" title="Relatório de provisões e despesas recorrentes"${busy ? " disabled" : ""}><img src="${PROVISION_REPORT_MASCOT_URL}" alt="Mascote do relatório de provisões"></button><button class="chat-main-payment-ledger-shortcut" type="button" data-action="open-payment-ledger" aria-label="Abrir relatório de pagamentos" title="Relatório de pagamentos"${busy ? " disabled" : ""}><img src="${PAYMENT_LEDGER_MASCOT_URL}" alt="Mascote do relatório de pagamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-management-shortcut" type="button" data-action="open-management-report" aria-label="Abrir resumo gerencial de gastos" title="Resumo gerencial de gastos"${busy ? " disabled" : ""}><img src="${MANAGEMENT_REPORT_MASCOT_URL}" alt="Mascote do resumo gerencial de gastos"></button><button class="chat-main-payment-ledger-shortcut chat-main-order-validation-shortcut" type="button" data-action="open-order-validation-report" aria-label="Abrir validação de notas pendentes e pedidos para baixa" title="Validação de notas pendentes e pedidos para baixa"${busy ? " disabled" : ""}><img src="${ORDER_VALIDATION_MASCOT_URL}" alt="Mascote da validação de notas"></button><button class="chat-main-payment-ledger-shortcut chat-main-quotation-shortcut" type="button" data-action="open-quotation-report" aria-label="Abrir cotações e orçamentos" title="Cotações e orçamentos"${busy ? " disabled" : ""}><img src="${QUOTATION_REPORT_MASCOT_URL}" alt="Mascote de cotações e orçamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-depreciation-shortcut" type="button" data-action="open-depreciation-report" aria-label="Abrir controle de depreciação do imobilizado" title="Controle de depreciação do imobilizado"${busy ? " disabled" : ""}><img src="${DEPRECIATION_REPORT_MASCOT_URL}" alt="Mascote do controle de depreciação"></button><button class="chat-main-payment-ledger-shortcut chat-main-document-control-shortcut" type="button" data-action="open-document-control-report" aria-label="Abrir controle de documentos" title="Controle de documentos"${busy ? " disabled" : ""}><img src="${DOCUMENT_CONTROL_REPORT_MASCOT_URL}" alt="Mascote do controle de documentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-task-association-shortcut" type="button" data-action="open-task-association-report" aria-label="Abrir atividades por associação" title="Atividades por associação"${busy ? " disabled" : ""}><img src="${TASK_ASSOCIATION_REPORT_MASCOT_URL}" alt="Mascote das atividades por associação"></button><button class="chat-main-payment-ledger-shortcut chat-main-delegated-deadline-shortcut" type="button" data-action="open-delegated-deadline-report" aria-label="Abrir tarefas delegadas por data fatal" title="Tarefas delegadas por data fatal"${busy ? ' disabled' : ''}><img src="${DELEGATED_DEADLINE_REPORT_MASCOT_URL}" alt="Mascote das tarefas delegadas por data fatal"></button>` : "";
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, delegatedTasks, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2544,7 +2515,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
-        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), delegatedTasks: state.delegatedTasks, draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
@@ -3752,7 +3723,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
-         "delegatedTasks", "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
+         "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
          "pendingProvisionReminderError", "pendingProvisionAttachmentRevision",
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",
@@ -4566,16 +4537,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
     } else if (event.target?.dataset?.role === "date-picker") {
       datePickerValue = event.target.value;
-    } else if (event.target?.dataset?.role === "delegated-tasks-search") {
-      const query = normalizedDateText(event.target.value || "");
-      root.querySelectorAll?.("[data-delegated-task-item]").forEach(item => {
-        item.hidden = query && !normalizedDateText(item.textContent || "").includes(query);
-      });
     }
   }
 
-  let draggedDelegatedTaskId = "";
-  let pointerDelegatedDrag = null;
   let immediateClickSuppression = null;
   let releaseOnlyPointer = null;
   let releaseOnlyClickSuppression = null;
@@ -4823,11 +4787,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     };
   }
 
-  function delegatedTaskAtPoint(event) {
-    const element = root.ownerDocument?.elementFromPoint?.(Number(event.clientX), Number(event.clientY));
-    return element?.closest?.("[data-delegated-task-item]") || null;
-  }
-
   function updateReleaseOnlyMovement(release, event) {
     const point = event?.touches?.[0] || event?.changedTouches?.[0] || event;
     const currentX = Number(point?.clientX);
@@ -4863,9 +4822,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     } else if (event.isPrimary !== false) {
       releaseOnlyPointer = null;
     }
-    const item = event.target?.closest?.("[data-delegated-task-item]");
-    if (!item || event.target?.closest?.("[data-action=complete-delegated-task]") || event.isPrimary === false) return;
-    pointerDelegatedDrag = { item, id: String(item.dataset.taskId || ""), startY: Number(event.clientY) || 0, active: false };
   }
 
   function pointerMove(event) {
@@ -4875,19 +4831,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       || event.pointerId == null
       || release.pointerId === event.pointerId);
     if (sameReleasePointer && !release.moved) updateReleaseOnlyMovement(release, event);
-    const drag = pointerDelegatedDrag;
-    if (!drag || !drag.id) return;
-    const distance = Math.abs((Number(event.clientY) || 0) - drag.startY);
-    if (!drag.active && distance < 6) return;
-    drag.active = true;
-    event.preventDefault?.();
-    drag.item.classList.add("is-dragging");
-    const target = delegatedTaskAtPoint(event);
-    if (!target || target === drag.item) return;
-    const list = target.parentElement;
-    if (!list) return;
-    const rect = target.getBoundingClientRect?.();
-    list.insertBefore(drag.item, rect && event.clientY > rect.top + rect.height / 2 ? target.nextSibling : target);
   }
 
   function pointerUp(event) {
@@ -4926,13 +4869,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       releaseOnlyPointer = null;
     }
-    const drag = pointerDelegatedDrag;
-    pointerDelegatedDrag = null;
-    if (!drag?.active) return;
-    drag.item.classList.remove("is-dragging");
-    const list = root.querySelector?.(".chat-delegated-tasks__list");
-    const order = [...(list?.querySelectorAll?.("[data-task-id]") || [])].map(node => node.dataset.taskId).filter(Boolean);
-    emit({ type: "delegated-tasks-reordered", order });
   }
 
   function touchStart(event) {
@@ -4959,39 +4895,6 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function touchEnd(event) {
     pointerUp(event);
-  }
-
-  function dragStart(event) {
-    const item = event.target?.closest?.("[data-delegated-task-item]");
-    if (!item || item.querySelector?.("[data-action=complete-delegated-task]") === event.target) return;
-    draggedDelegatedTaskId = String(item.dataset.taskId || "");
-    event.dataTransfer?.setData?.("text/plain", draggedDelegatedTaskId);
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-    item.classList.add("is-dragging");
-  }
-
-  function dragOver(event) {
-    if (!draggedDelegatedTaskId) return;
-    const item = event.target?.closest?.("[data-delegated-task-item]");
-    if (!item || item.dataset.taskId === draggedDelegatedTaskId) return;
-    event.preventDefault?.();
-    const list = item.parentElement;
-    const escapedId = globalThis.CSS?.escape?.(draggedDelegatedTaskId) || draggedDelegatedTaskId.replace(/[^\w-]/g, "");
-    const dragged = list?.querySelector?.(`[data-task-id="${escapedId}"]`);
-    if (!list || !dragged) return;
-    const rect = item.getBoundingClientRect?.();
-    const after = rect && event.clientY > rect.top + rect.height / 2;
-    list.insertBefore(dragged, after ? item.nextSibling : item);
-  }
-
-  function dragEnd(event) {
-    const item = event.target?.closest?.("[data-delegated-task-item]");
-    item?.classList.remove("is-dragging");
-    if (!draggedDelegatedTaskId) return;
-    const list = root.querySelector?.(".chat-delegated-tasks__list");
-    const order = [...(list?.querySelectorAll?.("[data-task-id]") || [])].map(node => node.dataset.taskId).filter(Boolean);
-    draggedDelegatedTaskId = "";
-    emit({ type: "delegated-tasks-reordered", order });
   }
 
   function observationKeyDown(event) {
@@ -5344,14 +5247,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   root.addEventListener("change", change);
   root.addEventListener("beforeinput", beforeInput);
   root.addEventListener("input", input);
-  root.addEventListener("dragstart", dragStart);
   root.addEventListener("dragenter", fileDragEnter);
-  root.addEventListener("dragover", dragOver);
   root.addEventListener("dragover", fileDragOver);
   root.addEventListener("dragleave", fileDragLeave);
   root.addEventListener("drop", fileDrop);
   root.addEventListener("paste", pastedImages);
-  root.addEventListener("dragend", dragEnd);
   root.addEventListener("pointerdown", pointerDown, { passive: false });
   root.addEventListener("pointermove", pointerMove, { passive: false });
   root.addEventListener("pointerup", pointerUp);
@@ -5398,14 +5298,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       root.removeEventListener("change", change);
       root.removeEventListener("beforeinput", beforeInput);
       root.removeEventListener("input", input);
-      root.removeEventListener("dragstart", dragStart);
       root.removeEventListener("dragenter", fileDragEnter);
-      root.removeEventListener("dragover", dragOver);
       root.removeEventListener("dragover", fileDragOver);
       root.removeEventListener("dragleave", fileDragLeave);
       root.removeEventListener("drop", fileDrop);
       root.removeEventListener("paste", pastedImages);
-      root.removeEventListener("dragend", dragEnd);
       root.removeEventListener("pointerdown", pointerDown);
       root.removeEventListener("pointermove", pointerMove);
       root.removeEventListener("pointerup", pointerUp);

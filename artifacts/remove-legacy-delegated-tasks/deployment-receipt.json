@@ -1,0 +1,28 @@
+{
+  "backup": "/var/backups/energetica-whatsapp/retired-delegated-gallery-20261012T175123852037Z",
+  "sources": [
+    {
+      "file": "workflow.py",
+      "base_sha256": "e2f9a39837f19fba31fd8f00b94e100134f2ac69f386807f0f5e150c8a7b581d",
+      "candidate_sha256": "06b4f6999a01e96dc5b53a8fb4739a72daea455b0bbc5ec4be47aafb7ada12d2",
+      "targets": [
+        "/opt/energetica-whatsapp/worker/workflow.py",
+        "/home/opc/energetica-build/worker/workflow.py"
+      ]
+    },
+    {
+      "file": "channel_bridge.py",
+      "base_sha256": "fc632e4303a0ce79a37b9cdd8811684c63f7f2dc37b1bfc65671ebf43397e804",
+      "candidate_sha256": "f9b0529ce467532a6f9857df087abb4ec8fb347915eddb983186d1042d4d39ea",
+      "targets": [
+        "/opt/energetica-whatsapp/channel_bridge.py",
+        "/home/opc/energetica-build/channel_bridge.py"
+      ]
+    }
+  ],
+  "services": [
+    "energetica-whatsapp",
+    "energetica-channel-bridge"
+  ],
+  "health": "ok"
+}
