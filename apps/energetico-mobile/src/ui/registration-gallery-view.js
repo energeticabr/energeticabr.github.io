@@ -117,7 +117,9 @@ function knownAttachmentCount(row) {
   for (const [name, value] of Object.entries(row?.fields || {})) {
     const key = normalizedFieldName(name);
     if (["quantidadedeanexos", "attachmentcount", "attachmentscount"].includes(key)) {
-      const count = Number(valueText(value));
+      const text = valueText(value).trim();
+      if (!text) continue;
+      const count = Number(text);
       if (Number.isInteger(count) && count >= 0) return count;
     }
     if (["anexos", "attachments"].includes(key) && Array.isArray(value)) return value.length;
@@ -291,10 +293,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   function attachmentCountLabel(row) {
+    const current = attachmentCounts.get(String(row.id));
+    if (kind === 'provisionDescription' && current?.state === 'ready') return `${current.count} ${current.count === 1 ? "anexo" : "anexos"}`;
     const known = knownAttachmentCount(row);
     if (known != null) return `${known} ${known === 1 ? "anexo" : "anexos"}`;
     if (typeof data.listAttachments !== "function") return "Quantidade indisponível";
-    const current = attachmentCounts.get(String(row.id));
     if (current?.state === "ready") return `${current.count} ${current.count === 1 ? "anexo" : "anexos"}`;
     if (current?.state === "error") return "Quantidade indisponível";
     return "Contando anexos…";
@@ -303,7 +306,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function provisionAttachmentState(row) {
     const known = knownAttachmentCount(row);
     const cached = attachmentCounts.get(String(row.id));
-    const count = known ?? (cached?.state === 'ready' ? cached.count : null);
+    const count = cached?.state === 'ready' ? cached.count : known;
     return count == null ? 'unknown' : count > 0 ? 'present' : 'empty';
   }
 
@@ -676,6 +679,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       }
       const attachments = await data.listAttachments(row.id);
       if (destroyed || root.hidden || current !== attachmentRequest) return;
+      if (kind === 'provisionDescription') {
+        if (!Array.isArray(attachments)) throw new Error('Consulta de anexos incompleta.');
+        attachmentCounts.set(String(row.id), { state: 'ready', count: attachments.length });
+      }
       if (!attachments.length) {
         attachmentNotice = `${(model.recordArticle || "o").toUpperCase()} ${model.recordLabel || "documento"} ${row.id} não possui anexos.`;
         return;

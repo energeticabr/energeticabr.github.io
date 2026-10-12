@@ -108,7 +108,7 @@
 @media (max-width: 350px) { .rg-document-table, .rg-document-date-grid { grid-template-columns: minmax(0, 1fr); } .rg-document-table .rg-detail--wide, .rg-document-dates, .rg-document-table .rg-detail--observation { grid-column: 1; } }
 
 /* Parent payment gallery: full-width cards and separate financial/audit clusters. */
-.rg-overlay[data-gallery-kind="provisionDescription"] { gap: 14px; background: linear-gradient(135deg, #f4fafc, #edf7fa); }
+.rg-overlay[data-gallery-kind="provisionDescription"] { gap: 14px; background-color: #f4fafc; background-image: linear-gradient(135deg, #f4fafc, #edf7fa); }
 .rg-overlay[data-gallery-kind="provisionDescription"] .rg-header { background: #f4fafc; }
 .rg-overlay[data-gallery-kind="provisionDescription"] .rg-feedback { align-self: flex-start; max-width: 100%; padding: 5px 12px; border-radius: 20px; color: #07566b; background: #dceff7; font-weight: 750; overflow-wrap: anywhere; }
 .rg-overlay[data-gallery-kind="provisionDescription"] .gallery-create-button { color: #fff; background: #168543; }
@@ -139,7 +139,7 @@
 .rg-provision-detail { display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 7px; row-gap: 2px; align-content: center; min-width: 0; padding: 6px 0; }
 .rg-provision-detail > .rg-provision-icon { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
 .rg-provision-detail dt, .rg-provision-detail dd { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
-.rg-provision-detail dt { color: #708494; font-size: .72rem; font-weight: 650; line-height: 1.3; }
+.rg-provision-detail dt { color: #4d6272; font-size: .72rem; font-weight: 650; line-height: 1.3; }
 .rg-provision-detail dd { margin: 0; color: #173a63; font-size: .86rem; font-weight: 600; line-height: 1.35; white-space: pre-wrap; }
 .rg-provision-detail--total, .rg-provision-detail--paid, .rg-provision-detail--due { padding: 8px; border: 1px solid #d4efdf; border-radius: 9px; background: #e9fbef; }
 .rg-provision-detail--total .rg-provision-icon, .rg-provision-detail--paid .rg-provision-icon { color: #138131; }
