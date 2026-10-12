@@ -69,7 +69,7 @@ test('order attachments receipt keeps each order ID, filename notes and immutabl
   assert.deepEqual(metadata.attachments, [attachment]);
 });
 
-for (const filename of ['pedido-pendente.pdf', 'pedido-incompleto.pdf', 'provisao-parcial.pdf']) {
+for (const filename of ['pedido-pendente.pdf', 'pedido-incompleto.pdf', 'provisao-parcial.pdf', 'pedido pendente de aprovação.pdf', 'comprovante parcial assinado.pdf', 'pedido não enviado.pdf']) {
   test(`a filename is an opaque attachment note, not an incomplete posting status: ${filename}`, () => {
     const card = documentFor(orderAttachments + '\n📎 Comprovante: ' + filename).querySelector('.launch-completion--order-attachments');
     assert.ok(card);
@@ -98,6 +98,11 @@ for (const [name, text] of [
   ['pending attachment with article', orderAttachments + '\n⚠️ O anexo adicional está pendente de envio.'],
   ['incomplete files with plural article', orderAttachments + '\nOs arquivos do pedido ID 406 estão incompletos.'],
   ['unconfirmed proof with indefinite article', orderAttachments + '\nUm comprovante do pedido ID 406 não confirmado.'],
+  ['partially completed attachment upload', orderAttachments + '\n⚠️ Envio dos anexos parcialmente concluído.'],
+  ['only part of the attachments added', orderAttachments + '\n⚠️ Apenas parte dos anexos foi adicionada.'],
+  ['partial upload without warning icon', orderAttachments + '\nEnvio dos anexos parcialmente concluído.'],
+  ['only part added without warning icon', orderAttachments + '\nApenas parte dos anexos foi adicionada.'],
+  ['warning without a recognized status verb', orderAttachments + '\n⚠️ Existem documentos aguardando processamento.'],
   ['incomplete attachments', orderAttachments + '\nAnexos incompletos.'],
   ['partially added files', orderAttachments + '\nArquivos parcialmente adicionados.'],
   ['negative continuation after filename', orderAttachments + '\n📎 Comprovante: recibo.pdf, não confirmado.'],

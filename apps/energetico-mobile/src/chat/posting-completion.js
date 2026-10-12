@@ -7,17 +7,22 @@ function incompletePostingNotice(line, attachmentCompletion = false) {
   for (const clause of clauses) {
     const notice = clause.replace(/^[^\p{L}\d]+/u, '')
       .replace(/^(?:AVISO|ATENCAO)\s*:\s*/i, '').replace(/^[^\p{L}\d]+/u, '');
-    if (/^(?:(?:O|OS|A|AS|UM|UMA|UNS|UMAS)\s+)?(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
-      subject = 'attachment';
-      if (!attachmentCompletion) continue;
+    if (attachmentCompletion) {
+      // A named file is metadata, not a posting status. Later clauses (after
+      // a comma, semicolon, etc.) still undergo the conservative status check.
+      if (/^(?:(?:O|OS|A|AS|UM|UMA|UNS|UMAS)\s+)?(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\s*:\s*.+\.[a-z\d]{1,10}$/i.test(notice)) continue;
+      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
+      continue;
     }
-    else if (/\b(?:PROVISAO|PROVISOES|DESCRITIVOS?(?: DE)? PROVISAO|DESCRITIVOPROVISAO|PEDIDOS?|LANCAMENTOS?|REGISTROS?|BAIXA|PAGAMENTO)\b/i.test(notice)) subject = 'record';
-    // Attachments are supplementary for financial settlements, but are the
-    // operation itself for attachment receipts. Keep subjects across clauses.
+    if (/^(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
+      subject = 'attachment';
+      continue;
+    }
+    if (/\b(?:PROVISAO|PROVISOES|DESCRITIVOS?(?: DE)? PROVISAO|DESCRITIVOPROVISAO|PEDIDOS?|LANCAMENTOS?|REGISTROS?|BAIXA|PAGAMENTO)\b/i.test(notice)) subject = 'record';
+    // A supplementary attachment clause must not exempt a later financial
+    // clause. Retain the subject for continuations such as ", não confirmado".
     if (/CONFIRMACAO (?:PARCIAL|INCOMPLETA)/i.test(notice)
-      || (subject === 'record' && /NAO (?:CONFIRMAD[OA]S?|BAIXAD[OA]S?)|\b(?:PENDENTES?|INCOMPLET[OA]S?|PARCIAL)\b/i.test(notice))
-      || (attachmentCompletion && subject === 'attachment'
-        && /(?:NAO (?:CONFIRMAD[OA]S?|ADICIONAD[OA]S?|ENVIAD[OA]S?|ANEXAD[OA]S?)|\b(?:PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?))(?=\s|$|[!?])/i.test(notice))) return true;
+      || (subject === 'record' && /NAO (?:CONFIRMAD[OA]S?|BAIXAD[OA]S?)|\b(?:PENDENTES?|INCOMPLET[OA]S?|PARCIAL)\b/i.test(notice))) return true;
   }
   return false;
 }
@@ -45,6 +50,7 @@ export function postingCompletion(message) {
     const line = plain[i];
     if ((settlement || orderAttachments) && incompletePostingNotice(line, orderAttachments)) return null;
     if (/^(?:•\s*)?(?:⚠|🚨|❗|❕|AVISO\b|ATENÇÃO\b|ATENCAO\b)/i.test(line)) {
+      if (orderAttachments) return null; // Keep uncertain attachment results in full, without a green success claim.
       notes.push(lines[i]);
       continue;
     }
