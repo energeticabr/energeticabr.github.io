@@ -1,0 +1,65 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+index 7004dbd..1f1ea74 100644
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -1135,0 +1136,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++                if state.get("stage") == "attendance_batch_action" and state.get("attendance_batch_origin") == "pending":
++                    for batch_key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids"):
++                        state.pop(batch_key, None)
++                    state["flow"] = None
++                    state["stage"] = PENDING_ATTENDANCE_RECORD_STAGE
++                    self._send_pending_attendance_records(state)
++                    etag = self._save(state, etag)
++                    return {"status": "awaiting_pending_attendance_record", "batch_id": state["batch_id"], "etag": etag}
+@@ -2991,0 +3000,3 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++        if state and state.get("stage") == "attendance_batch_action" and state.get("attendance_batch_origin") == "pending":
++            # Voltar abandona somente a seleção local, não sai de Pendências.
++            return False
+@@ -5326,0 +5338 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++        pending_origin = state.get("stage") == PENDING_ATTENDANCE_RECORD_STAGE
+@@ -5351,0 +5364,5 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++            if pending_origin:
++                return self._handle_pending_attendance_choice(
++                    {**event, "reply_id": f"pending_attendance_record:{identifiers[0]}", "text": ""},
++                    state, etag,
++                )
+@@ -5358 +5375,10 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        state["attendance_batch_origin"] = "flow"
++        state["attendance_batch_origin"] = "pending" if pending_origin else "flow"
++        if pending_origin:
++            state["flow"] = "attendance_validation"
++            state.pop("current_flow_title", None)
++            state["pending_attendance_quick"] = True
++            state["fields"] = {"DATA FILTRO PRESENÇA": state["pending_attendance_date_value"]}
++            state["display_values"] = {"DATA FILTRO PRESENÇA": self._pending_attendance_date_display(state["pending_attendance_date_value"])}
++            state["answers"] = {}
++            state["selections"] = {}
++            state["step_index"] = 1
+@@ -5380 +5406,4 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        self._send_options(state, step, state.get("options", []))
++        if state.get("stage") == PENDING_ATTENDANCE_RECORD_STAGE:
++            self._send_pending_attendance_records(state)
++        else:
++            self._send_options(state, step, state.get("options", []))
+@@ -5764,0 +5794 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++        pending_origin = state.get("attendance_batch_origin") == "pending"
+@@ -5767,0 +5798,4 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++        if pending_origin:
++            state["flow"] = None
++            result = self._pending_attendance_return_to_records(state, etag)
++            return {**result, "updated_count": count}
+@@ -5955 +5989 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-                "prompt": f"👷 PRESENÇAS PENDENTES DE {date_label}\nABRA O ID - FORNECEDOR DESEJADO, CONFIRA A TABELA E ESCOLHA PRESENTE, AUSENTE OU EDITAR.",
++                "prompt": f"👷 PRESENÇAS PENDENTES DE {date_label}\nMARQUE UMA OU MAIS PRESENÇAS E CLIQUE EM PROSSEGUIR. PARA CONFERIR OU EDITAR INDIVIDUALMENTE, ABRA O ID - FORNECEDOR COM AS CAIXAS DESMARCADAS.",
+@@ -5958 +5992 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-                "presentation": "accordion",
++                "presentation": "attendance_multi_select",
+@@ -6309,0 +6344,3 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++            if raw_text.startswith("attendance_batch:"):
++                step = self._attendance_validation_config()["steps"][1]
++                return self._start_attendance_batch(event, state, etag, step)
+@@ -6356,0 +6394 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++            state.pop("current_flow_title", None)
+@@ -27484,0 +27523,2 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++        if stage in {PENDING_ATTENDANCE_DATE_STAGE, PENDING_ATTENDANCE_RECORD_STAGE, PENDING_ATTENDANCE_ACTION_STAGE}:
++            return {"id": "attendance_validation", "title": "👷 VALIDAR PRESENÇAS APONTADAS"}

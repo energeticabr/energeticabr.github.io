@@ -1343,6 +1343,16 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
   return "<div class=\"chat-epi-product-select chat-choice-list\">" + rows + selectAll + finalize + "</div>";
 }
 
+function attendanceSelectionId(option) {
+  return String(draftReplyId(option)).match(/^(?:choice:registro_presenca_pendente:|pending_attendance_record:)?(\d+)$/)?.[1] || "";
+}
+
+function isAttendanceSelectionPoll(message) {
+  return message?.presentation === "attendance_multi_select"
+    || (message?.presentation === "accordion" && (message.options || []).some(option =>
+      /^pending_attendance_record:\d+$/.test(String(draftReplyId(option)))));
+}
+
 function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
   const filteredOptions = databaseFilteredOptions(
     message,
@@ -1470,7 +1480,7 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
   const rhidAttendanceReport = presenceTable?.kind === "rhid_attendance";
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
-  const isAttendanceMultiSelect = message?.presentation === "attendance_multi_select";
+  const isAttendanceMultiSelect = isAttendanceSelectionPoll(message);
   const isLaunchPayrollMultiSelect = message?.presentation === "launch_payroll_multi_select";
   const isEpiProductSelection = isEpiProductPoll(message, activeFlow);
   const isDelegatedTasks = message?.presentation === "delegated_tasks";
@@ -1532,12 +1542,11 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     const controls = [];
     for (const option of choiceOptions) {
       const replyId = draftReplyId(option);
-      const match = String(replyId).match(/^(?:choice:registro_presenca_pendente:)?(\d+)$/);
-      if (!match) {
+      const id = attendanceSelectionId(option);
+      if (!id) {
         controls.push(pollButton(option, busy || !currentPoll));
         continue;
       }
-      const id = match[1];
       visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       records.push(`<div class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
@@ -2559,6 +2568,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let pendingProvisionRenderDay = "";
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
+  let attendanceSelectionPollKey = "";
   const launchPayrollSelectedIds = new Set();
   let launchPayrollSelectionPollKey = "";
   let launchPayrollEligibleIds = new Set();
@@ -4004,7 +4014,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return;
     }
     if (command.type === "select-reply" && clickedAction?.closest?.(".chat-attendance-select__row") && attendanceSelectedIds.size) {
-      const warning = root.querySelector(".chat-attendance-select__warning");
+      const warning = clickedAction.closest(".chat-attendance-select")?.querySelector(".chat-attendance-select__warning");
       if (warning) warning.hidden = false;
       return;
     }
@@ -5032,7 +5042,14 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function render(state) {
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
-    if (newestPoll?.presentation !== "attendance_multi_select") attendanceSelectedIds.clear();
+    const isAttendancePoll = isAttendanceSelectionPoll(newestPoll);
+    const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";
+    if (nextAttendancePollKey !== attendanceSelectionPollKey || !isAttendancePoll) attendanceSelectedIds.clear();
+    attendanceSelectionPollKey = nextAttendancePollKey;
+    const eligibleAttendanceIds = new Set(isAttendancePoll ? (newestPoll.options || []).map(attendanceSelectionId).filter(Boolean) : []);
+    for (const id of attendanceSelectedIds) {
+      if (!eligibleAttendanceIds.has(id)) attendanceSelectedIds.delete(id);
+    }
     const isLaunchPayrollPoll = newestPoll?.presentation === "launch_payroll_multi_select";
     const nextLaunchPayrollPollKey = isLaunchPayrollPoll ? launchPayrollSelectionKey(newestPoll) : "";
     if (nextLaunchPayrollPollKey !== launchPayrollSelectionPollKey) launchPayrollSelectedIds.clear();

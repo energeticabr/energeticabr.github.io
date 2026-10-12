@@ -3159,6 +3159,80 @@ test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos
   assert.match(markup, /1985 - JOSÉ GERALDO DOS SANTOS/);
 });
 
+for (const presentation of ["accordion", "attendance_multi_select"]) {
+  test(`Pendências permite selecionar presenças e prosseguir sem selecionar o controle de datas (${presentation})`, t => {
+    const dom = new JSDOM('<main id="app"></main>');
+    const root = dom.window.document.querySelector("#app");
+    const view = createChatView(root);
+    t.after(() => { view.destroy(); dom.window.close(); });
+    const replies = [];
+    view.on("select-reply", command => replies.push(command.replyId));
+    view.render(signedInState({ messages: [{
+      id: "pending-july", role: "assistant", type: "poll", presentation,
+      question: "PRESENÇAS PENDENTES DE 31/07/2026",
+      options: [
+        { id: "pending_attendance_record:1814", reply: "pending_attendance_record:1814", label: "1814 - PRIMEIRO" },
+        { id: "pending_attendance_record:1815", reply: "pending_attendance_record:1815", label: "1815 - SEGUNDO" },
+        { id: "pending_attendance_other_date", reply: "pending_attendance_other_date", label: "📅 AVALIAR OUTRA DATA" },
+      ],
+    }] }));
+    assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]').length, 2);
+    assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').disabled, true);
+    root.querySelector('.chat-attendance-select__row button').click();
+    assert.deepEqual(replies, ["pending_attendance_record:1814"]);
+    replies.length = 0;
+    root.querySelector('[data-action="attendance-select-all"]').click();
+    assert.deepEqual([...root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked')].map(input => input.dataset.replyId), ["1814", "1815"]);
+    root.querySelector('.chat-attendance-select__row button').click();
+    assert.deepEqual(replies, [], "o botão individual não pode misturar-se com a seleção em lote");
+    root.querySelector('[data-action="attendance-select-proceed"]').click();
+    assert.deepEqual(replies, ["attendance_batch:1814,1815"]);
+    root.querySelector('[data-action="attendance-select-all"]').click();
+    assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 0);
+    assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').disabled, true);
+    root.querySelector('button[data-reply-id="pending_attendance_other_date"]').click();
+    assert.equal(replies.at(-1), "pending_attendance_other_date");
+  });
+}
+
+test("uma nova data de validação não reaproveita IDs marcados na pergunta anterior", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: "day-one", role: "assistant", type: "poll", presentation: "attendance_multi_select",
+    question: "PRESENÇAS PENDENTES DE 31/07/2026", options: [
+      { id: "pending_attendance_record:1814", label: "1814 - PRIMEIRO" },
+    ] };
+  view.render(signedInState({ messages: [poll] }));
+  const checkbox = root.querySelector('input[data-action="attendance-select-toggle"]');
+  assert.ok(checkbox);
+  checkbox.click();
+  view.render(signedInState({ messages: [poll], activeText: { id: "busy" } }));
+  assert.equal(root.querySelector('input[data-action="attendance-select-toggle"]').checked, true);
+  assert.equal(root.querySelector('input[data-action="attendance-select-toggle"]').disabled, true);
+  view.render(signedInState({ messages: [poll, { ...poll, id: "day-two", question: "PRESENÇAS PENDENTES DE 03/08/2026" }] }));
+  const checkboxes = root.querySelectorAll('input[data-action="attendance-select-toggle"]');
+  assert.equal(checkboxes[0].disabled, true, "a pergunta antiga não pode receber seleções");
+  assert.equal(checkboxes[1].checked, false);
+  assert.equal(root.querySelectorAll('[data-action="attendance-select-proceed"]')[1].disabled, true);
+});
+
+test("aviso de seleção em lote aparece no cartão atual e não no histórico", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { role: "assistant", type: "poll", presentation: "attendance_multi_select",
+    question: "PRESENÇAS PENDENTES", options: [{ id: "pending_attendance_record:1814", label: "1814 - PRIMEIRO" }] };
+  view.render(signedInState({ messages: [{ ...poll, id: "old" }, { ...poll, id: "current" }] }));
+  root.querySelectorAll('input[data-action="attendance-select-toggle"]')[1].click();
+  root.querySelectorAll('.chat-attendance-select__row button')[1].click();
+  const warnings = root.querySelectorAll('.chat-attendance-select__warning');
+  assert.equal(warnings[0].hidden, true);
+  assert.equal(warnings[1].hidden, false);
+});
+
 test("lista de presenças mostra caixas vazias à esquerda e prosseguir após os IDs", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
