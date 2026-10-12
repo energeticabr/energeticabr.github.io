@@ -2129,6 +2129,20 @@ test("exibe data e quantidade quando a data da última validação não tem pend
   assert.match(markup, /VER OUTRAS DATAS/);
 });
 
+test('lista vazia de Pendências orienta a opção de outra data sem inventar presenças', () => {
+  const markup = renderChatMarkup(signedInState({
+    messages: [{ id: 'pending-no-match', role: 'assistant', type: 'poll',
+      presentation: 'attendance_multi_select', question: 'PRESENÇAS PENDENTES DE 09/10/2026',
+      presenceDateSummary: { date: '2026-10-09', count: 0 },
+      options: [{ id: 'pending_attendance_other_date', reply: 'pending_attendance_other_date', label: '📅 AVALIAR OUTRA DATA' }],
+    }],
+  }));
+  assert.match(markup, /0 presença\(s\) pendente\(s\) para esta data\./);
+  assert.match(markup, /Use a opção de outra data para consultar outros dias\./);
+  assert.doesNotMatch(markup, /Use “VER OUTRAS DATAS”/);
+  assert.match(markup, /AVALIAR OUTRA DATA/);
+});
+
 test("menu de RH reserva a coluna direita para galerias e remove apenas o avatar lateral", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
@@ -3799,6 +3813,30 @@ test("mantém ver outras datas visível durante o filtro das presenças", () => 
 
   assert.match(markup, /📅 VER OUTRAS DATAS/);
 });
+
+for (const presentation of ["accordion", "attendance_multi_select"]) {
+  test(`busca em Pendências mantém avaliar outra data mesmo sem fornecedor correspondente (${presentation})`, t => {
+    const dom = new JSDOM('<main id="app"></main>');
+    const root = dom.window.document.querySelector('#app');
+    const view = createChatView(root);
+    t.after(() => { view.destroy(); dom.window.close(); });
+    const replies = [];
+    view.on('select-reply', command => replies.push(command.replyId));
+    view.render(signedInState({ draft: 'inexistente', messages: [{
+      id: 'pending-date-search', role: 'assistant', type: 'poll', presentation,
+      databaseFilter: true, databaseFilterKey: 'presence', question: 'PRESENÇAS PENDENTES DE 09/10/2026',
+      options: [
+        { id: 'pending_attendance_record:2229', reply: 'pending_attendance_record:2229', label: '2229 - FORNECEDOR EXEMPLO' },
+        { id: 'pending_attendance_other_date', reply: 'pending_attendance_other_date', label: '📅 AVALIAR OUTRA DATA' },
+      ],
+    }] }));
+    assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]').length, 0);
+    const otherDate = root.querySelector('button[data-reply-id="pending_attendance_other_date"]');
+    assert.ok(otherDate, 'o acesso a outra data não depende da busca por fornecedor');
+    otherDate.click();
+    assert.deepEqual(replies, ['pending_attendance_other_date']);
+  });
+}
 
 test("não mostra tabela de fornecedor vazia no menu principal", () => {
   const markup = renderChatMarkup(signedInState({

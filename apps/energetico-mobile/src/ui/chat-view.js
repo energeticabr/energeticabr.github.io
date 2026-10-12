@@ -552,7 +552,8 @@ function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);
   if (!words.length) return options;
   return options.filter(option => {
-    if (String(option?.reply || option?.id || "").trim() === PRESENCE_OTHER_DATES_REPLY_ID) return true;
+    const replyId = String(option?.reply || option?.id || "").trim();
+    if (replyId === PRESENCE_OTHER_DATES_REPLY_ID || replyId === 'pending_attendance_other_date') return true;
     if (isDatabaseRegistrationOption(option)) return true;
     const searchable = normalizedDateText([
       option?.label,
@@ -1276,7 +1277,7 @@ function presenceDateSummaryMarkup(summary) {
   const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const date = match ? `${match[3]}/${match[2]}/${match[1]}` : rawDate || "a data selecionada";
   const count = Math.max(0, Number(summary.count) || 0);
-  return `<div class="chat-presence-date-summary" role="status"><strong>📅 ${escapeHtml(date)}</strong><span>${count} presença(s) pendente(s) para esta data.</span><small>Use “VER OUTRAS DATAS” para consultar outros dias.</small></div>`;
+  return `<div class="chat-presence-date-summary" role="status"><strong>📅 ${escapeHtml(date)}</strong><span>${count} presença(s) pendente(s) para esta data.</span><small>Use a opção de outra data para consultar outros dias.</small></div>`;
 }
 
 function singleLaunchConfirmationMarkup(message, activeFlow) {
