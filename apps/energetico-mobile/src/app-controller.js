@@ -12,6 +12,7 @@ import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
   latestPresenceValidationDate,
+  presenceDateKey,
   scopePresenceResult,
 } from "./chat/presence-date-scope.js";
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
@@ -8337,6 +8338,11 @@ export function createAppController({
     const submissionText = normalizePartialDateSubmission(text, previousState.messages);
     const validatedPresenceDate = latestPresenceValidationDate(previousState.messages);
     if (validatedPresenceDate) lastPresenceValidationDate = validatedPresenceDate;
+    const pendingDateOption = /^pending_attendance_date:\d+$/.test(String(replyId || ''))
+      ? previousPoll?.options?.find(option => String(option?.reply || option?.id) === replyId)
+      : null;
+    const selectedPendingDate = presenceDateKey(pendingDateOption?.date || pendingDateOption?.label);
+    if (selectedPendingDate) lastPresenceValidationDate = selectedPendingDate;
     let operation;
     let epiAdvanceError = null;
     let paymentProvisionAutoReplyError = null;
@@ -9941,6 +9947,7 @@ export function createAppController({
         lastPresenceValidationDate = "";
         return store.replaceCurrentResponse([expandPresenceDatesMessage(pending)]);
       }
+      if (command.replyId === 'pending_attendance_other_date') lastPresenceValidationDate = '';
       const pendingDocumentDelete = String(command.replyId || "").match(/^pending_document_delete_confirmed:(\d+)$/i);
       if (pendingDocumentDelete) {
         if (flowBusy()) return false;

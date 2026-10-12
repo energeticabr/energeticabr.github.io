@@ -2615,6 +2615,73 @@ test("após validar uma presença mostra primeiro somente o mesmo dia e oferece 
   assert.equal(payloads.length, 1);
 });
 
+test("avaliar outra data em Pendências não reaplica o dia da presença anterior", async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'attendance_validation', title: 'VALIDAR PRESENÇAS APONTADAS' };
+  h.store.ingestRemoteMessages([{
+    type: 'poll', question: 'CONFIRMA A PRESENÇA?',
+    detail_table: { kind: 'presence', rows: [[{ label: 'DATA', value: '09/10/2026' }]] },
+    options: [{ id: 'present', reply: 'present', label: 'PRESENTE' }],
+  }], { activeFlow });
+  const otherDate = { id: 'pending_attendance_other_date', reply: 'pending_attendance_other_date', label: '📅 AVALIAR OUTRA DATA' };
+  const checklist = (date, options) => ({ type: 'poll', presentation: 'attendance_multi_select',
+    question: `PRESENÇAS PENDENTES DE ${date}`, options });
+  const option = (id, date) => ({ id: `pending_attendance_record:${id}`, reply: `pending_attendance_record:${id}`,
+    label: `${id} - EXEMPLO`, source_values: { Id: id, DATA: date } });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    const messages = payload.replyId === 'present'
+      ? [checklist('09/10/2026', [option('2229', '2026-10-09'), option('2219', '2026-10-08'), otherDate])]
+      : payload.replyId === 'pending_attendance_other_date'
+        ? [{ type: 'poll', question: 'QUAL DATA?', options: [{ id: 'pending_attendance_date:1', label: '08/10/2026' }] }]
+        : [checklist('08/10/2026', [option('2219', '2026-10-08'), otherDate])];
+    return { status: 'processed', activeFlow, messages };
+  };
+  await h.view.emit('select-reply', { replyId: 'present', label: 'PRESENTE' });
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(o => o.id), ['pending_attendance_record:2229', 'pending_attendance_other_date']);
+  await h.view.emit('select-reply', { replyId: 'pending_attendance_other_date', label: otherDate.label });
+  await h.view.emit('select-reply', { replyId: 'pending_attendance_date:1', label: '08/10/2026' });
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(o => o.id), ['pending_attendance_record:2219', 'pending_attendance_other_date']);
+  assert.deepEqual(payloads.map(p => p.replyId), ['present', 'pending_attendance_other_date', 'pending_attendance_date:1']);
+});
+
+test('novo dia após esgotar presenças de Pendências não herda o filtro anterior', async t => {
+  const h = makeHarness({ historyMode: 'current-step' });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'attendance_validation', title: 'VALIDAR PRESENÇAS APONTADAS' };
+  h.store.ingestRemoteMessages([{
+    type: 'poll', question: 'CONFIRMA A PRESENÇA?',
+    detail_table: { kind: 'presence', rows: [[{ label: 'DATA', value: '09/10/2026' }]] },
+    options: [{ id: 'present', reply: 'present', label: 'PRESENTE' }],
+  }], { activeFlow });
+  const dayControl = { id: 'pending_attendance_other_date', reply: 'pending_attendance_other_date', label: '📅 AVALIAR OUTRA DATA' };
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return { status: 'processed', activeFlow, messages: payload.replyId === 'present'
+      ? [{ type: 'text', text: 'NÃO HÁ OUTRAS PRESENÇAS PENDENTES NESTA DATA.' },
+        { type: 'poll', question: 'QUAL DATA DE PRESENÇA DESEJA VALIDAR?',
+          options: [{ id: 'pending_attendance_date:1', reply: 'pending_attendance_date:1', label: '08/10/2026' }] }]
+      : [{ type: 'poll', presentation: 'attendance_multi_select', question: 'PRESENÇAS PENDENTES DE 08/10/2026',
+        options: [
+          { id: 'pending_attendance_record:2219', reply: 'pending_attendance_record:2219', label: '2219 - EXEMPLO', source_values: { DATA: '2026-10-08' } },
+          { id: 'pending_attendance_record:2229', reply: 'pending_attendance_record:2229', label: '2229 - EXEMPLO', source_values: { DATA: '2026-10-09' } },
+          dayControl,
+        ] }],
+    };
+  };
+  await h.view.emit('select-reply', { replyId: 'present', label: 'PRESENTE' });
+  await h.view.emit('select-reply', { replyId: 'pending_attendance_date:1', label: '08/10/2026' });
+  const poll = h.store.getState().messages.at(-1);
+  assert.equal(poll.presenceDateKey, '2026-10-08');
+  assert.deepEqual(poll.options.map(o => o.reply), ['pending_attendance_record:2219', 'pending_attendance_other_date']);
+  assert.deepEqual(payloads.map(p => p.replyId), ['present', 'pending_attendance_date:1']);
+});
+
 test("mantém anexos transferidos visíveis nos menus até entrar no próximo fluxo", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());
@@ -2841,7 +2908,7 @@ test("quando a data validada não tem pendências mostra resumo e permite ver ou
 
   const poll = h.store.getState().messages.at(-1);
   assert.deepEqual(poll.options.map(option => option.label), ["📅 VER OUTRAS DATAS"]);
-  assert.deepEqual(poll.presenceDateSummary, { date: "2026-09-12", count: 1 });
+  assert.deepEqual(poll.presenceDateSummary, { date: "2026-09-12", count: 0 });
 });
 
 test("finalizar na seleção de produto envia FINALIZAR diretamente e limpa a retomada antiga", { concurrency: false }, async t => {

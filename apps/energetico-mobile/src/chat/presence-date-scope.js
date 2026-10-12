@@ -1,5 +1,5 @@
 const DATE_PATTERNS = [
-  /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/,
+  /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?=\b|T\d{2}:\d{2})/,
   /\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/,
 ];
 
@@ -58,6 +58,7 @@ export function latestPresenceValidationDate(messages = []) {
 function optionDateKey(option) {
   return presenceDateKey(
     option?.date || option?.data || option?.presenceDate || option?.presence_date
+      || option?.source_values?.DATA || option?.sourceValues?.DATA
       || option?.label || option?.title || option?.text || option?.id,
   );
 }
@@ -65,6 +66,8 @@ function optionDateKey(option) {
 function isPendingPresencePoll(message) {
   if (message?.type !== "poll" || !Array.isArray(message.options)) return false;
   if (message?.presentation === "accordion") return true;
+  if (message?.presentation === 'attendance_multi_select' && message.options.some(option =>
+    /^pending_attendance_record:\d+$/.test(text(option?.reply || option?.id)))) return true;
   return /pendentes?.{0,30}valida[cç][aã]o.{0,30}presen[cç]a/i.test(
     text(message.question || message.prompt),
   );
@@ -81,6 +84,7 @@ function otherDatesOption() {
 export function scopePendingPresenceMessage(message, selectedDate) {
   if (!isPendingPresencePoll(message) || !selectedDate) return message;
   const allOptions = message.options.slice();
+  const dateControl = allOptions.find(option => text(option?.reply || option?.id) === 'pending_attendance_other_date');
   const datedOptions = allOptions.map(option => ({ option, date: optionDateKey(option) }))
     .filter(item => item.date);
   if (!datedOptions.length) return message;
@@ -92,13 +96,13 @@ export function scopePendingPresenceMessage(message, selectedDate) {
     ...message,
     options: [
       ...visibleOptions,
-      ...(hasOtherDate || !visibleOptions.length ? [otherDatesOption()] : []),
+      ...(dateControl ? [dateControl] : hasOtherDate || !visibleOptions.length ? [otherDatesOption()] : []),
     ],
     presenceDateAllOptions: allOptions,
     presenceDateKey: selectedDate,
     ...(visibleOptions.length
       ? {}
-      : { presenceDateSummary: { date: selectedDate, count: datedOptions.length } }),
+      : { presenceDateSummary: { date: selectedDate, count: 0 } }),
   };
 }
 
