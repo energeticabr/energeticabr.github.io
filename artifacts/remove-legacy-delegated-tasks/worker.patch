@@ -1,0 +1,181 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+index 86dc5e5..232176f 100644
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -836,0 +837,16 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
++        # Old inline task polls may survive in a conversation or be replayed
++        # after it has moved on. Never interpret their IDs as a new form answer.
++        # The modern delegatedTasks gallery uses the separate SharePoint API.
++        retired_task_reply = str(event.get("reply_id") or event.get("text") or "").strip().lower()
++        if (state and state.get("stage") == PENDING_DELEGATED_TASKS_STAGE) or (
++            event.get("kind") == "text" and (
++                retired_task_reply == PENDING_DELEGATED_TASKS_ID
++                or retired_task_reply.startswith(("delegated_task:", "delegated_task_complete:", "choice:pending_delegated_task:"))
++            )
++        ):
++            if (state and state.get("stage") != PENDING_DELEGATED_TASKS_STAGE
++                    and event.get("message_id") in state.get("processed_message_ids", [])):
++                return {"status": "duplicate", "message_id": event.get("message_id"), "batch_id": state.get("batch_id")}
++            return self._handle_pending_delegated_tasks_choice(
++                event, state or self._new_state(event, key), etag
++            )
+@@ -5177 +5192,0 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        pending_delegated_tasks = self._pending_delegated_tasks_count()
+@@ -5193,5 +5207,0 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        options.append({
+-            **PENDING_DELEGATED_TASKS_ACTION,
+-            "title": f"📋 TAREFAS DELEGADAS PENDENTES ({pending_delegated_tasks})",
+-            "reply": PENDING_DELEGATED_TASKS_ID,
+-        })
+@@ -5222,21 +5232,2 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        """Obtém tarefas delegadas ainda não concluídas para a galeria."""
+-        getter = getattr(self.sharepoint, "get_delegated_tasks", None)
+-        if not callable(getter):
+-            return []
+-        try:
+-            rows = getter()
+-        except Exception:
+-            return []
+-        pending = []
+-        for raw in rows or []:
+-            if not isinstance(raw, dict) or raw.get("Id") in {None, ""}:
+-                continue
+-            # STATUS é a fonte principal; CONCLUÍDO mantém compatibilidade com
+-            # listas antigas que ainda não têm a coluna STATUS.
+-            status = raw.get("STATUS")
+-            if status in {None, ""}:
+-                status = raw.get("CONCLUÍDO")
+-            if status is True or normalize_text(str(status or "")) in {"concluido", "true"}:
+-                continue
+-            pending.append(copy.deepcopy(raw))
+-        return pending
++        """Compatibility snapshot for retired inline polls; no SharePoint read."""
++        return []
+@@ -5245 +5236 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        return len(self._pending_delegated_tasks())
++        return 0
+@@ -5285,28 +5275,0 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-    @staticmethod
+-    def _pending_delegated_task_option(row: dict) -> dict:
+-        item_id = str(row.get("Id") or "").strip()
+-        task = str(row.get("TAREFA") or row.get("DESCRIÇÃO") or row.get("DESCRICAO") or "Tarefa sem descrição").strip()
+-        responsible = str(row.get("RESPONSÁVEL") or row.get("RESPONSAVEL") or "").strip()
+-        priority = normalize_text(str(row.get("PRIORITÁRIA") or row.get("PRIORITARIA") or "")) in {"sim", "yes", "true", "1", "prioritaria"}
+-        details = {
+-            "id": item_id,
+-            "task": task,
+-            "responsible": responsible,
+-            "priority": priority,
+-            "fatalDate": str(row.get("DATA FATAL") or row.get("DATAFATAL") or "").strip(),
+-            "branch": str(row.get("FILIAL") or "").strip(),
+-            "association": str(row.get("ASSOCIAÇÃO") or row.get("ASSOCIACAO") or "").strip(),
+-            "status": str(row.get("CONCLUÍDO") or row.get("STATUS") or "").strip(),
+-        }
+-        prefix = "⭐ " if priority else ""
+-        title = f"{prefix}{item_id} - {task}"
+-        if responsible:
+-            title += f" · {responsible}"
+-        return {
+-            "id": f"delegated_task:{item_id}",
+-            "title": title,
+-            "reply": f"delegated_task:{item_id}",
+-            "value": item_id,
+-            "task": details,
+-        }
+-
+@@ -5316,14 +5279,5 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        rows = self._pending_delegated_tasks() if rows is None else rows
+-        options = [self._pending_delegated_task_option(row) for row in rows]
+-        state["options"] = copy.deepcopy(options)
+-        self._send_options(
+-            state,
+-            {
+-                "key": "pending_delegated_task",
+-                "prompt": "📋 TAREFAS DELEGADAS PENDENTES\nArraste para ordenar da mais relevante para a menos relevante. Toque no check para concluir uma tarefa. Use a busca para filtrar.",
+-                "button_label": "ESCOLHER TAREFA",
+-                "allow_navigation_back": True,
+-                "presentation": "delegated_tasks",
+-            },
+-            options,
+-        )
++        """Keep old callers harmless, including ones supplying cached rows."""
++        state["stage"] = "choosing_pending"
++        state["flow"] = None
++        state["options"] = []
++        self._send_pending_menu(state)
+@@ -7213 +7166,0 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        delegated_count = self._pending_delegated_tasks_count()
+@@ -7222 +7174,0 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-                delegated_count,
+@@ -7396,10 +7348 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-            self._mark_processed(state, event.get("message_id"))
+-            state["flow"] = None
+-            state["stage"] = PENDING_DELEGATED_TASKS_STAGE
+-            etag = self._save(state, etag)
+-            self._send_pending_delegated_tasks(state)
+-            return {
+-                "status": "awaiting_pending_delegated_tasks",
+-                "batch_id": state["batch_id"],
+-                "etag": etag,
+-            }
++            return self._handle_pending_delegated_tasks_choice(event, state, etag)
+@@ -7566,30 +7509 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        raw = event.get("reply_id") or event.get("text") or ""
+-        command = normalize_text(raw)
+-        if command in {NAVIGATION_BACK_ID, normalize_text(NAVIGATION_BACK_TITLE), "voltar"}:
+-            self._mark_processed(state, event.get("message_id"))
+-            state["stage"] = "choosing_pending"
+-            etag = self._save(state, etag)
+-            self._send_pending_menu(state)
+-            return {"status": "awaiting_pending", "batch_id": state["batch_id"], "etag": etag}
+-
+-        match = re.fullmatch(
+-            r"delegated_task(?:(?::|_)complete)?:([0-9]+)",
+-            str(raw or "").strip(),
+-            flags=re.I,
+-        )
+-        if not match:
+-            self._send_pending_delegated_tasks(state)
+-            return {"status": "invalid_pending_delegated_task", "batch_id": state["batch_id"], "etag": etag}
+-
+-        item_id = match.group(1)
+-        completer = getattr(self.sharepoint, "complete_delegated_task", None)
+-        if not callable(completer):
+-            self._send_text(state, "⚠️ NÃO FOI POSSÍVEL CONCLUIR A TAREFA AGORA. TENTE NOVAMENTE.")
+-            return {"status": "delegated_task_completion_unavailable", "batch_id": state["batch_id"], "etag": etag}
+-        try:
+-            completer(item_id)
+-        except Exception:
+-            self._send_text(state, "❌ NÃO FOI POSSÍVEL CONCLUIR A TAREFA. ELA PODE TER SIDO ALTERADA OU EXCLUÍDA.")
+-            self._send_pending_delegated_tasks(state)
+-            return {"status": "delegated_task_completion_failed", "batch_id": state["batch_id"], "etag": etag}
+-
++        """Retire persisted/replayed inline task selections without task writes."""
+@@ -7597,11 +7511,9 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        self._send_text(state, f"✅ TAREFA MARCADA COMO CONCLUÍDA (ID {item_id}).")
+-        rows = self._pending_delegated_tasks()
+-        if rows:
+-            self._send_pending_delegated_tasks(state, rows)
+-            status = "delegated_task_completed"
+-        else:
+-            state["stage"] = "choosing_pending"
+-            etag = self._save(state, etag)
+-            self._send_text(state, "✅ NÃO HÁ MAIS TAREFAS DELEGADAS PENDENTES.")
+-            self._send_pending_menu(state)
+-            status = "delegated_tasks_completed"
++        if state.get("stage") not in {PENDING_DELEGATED_TASKS_STAGE, "choosing_group", "choosing_pending"}:
++            # Obsolete task votes are not navigation or answers in the current
++            # form. Save only replay bookkeeping, preserving its full context.
++            etag = self.state_store.save(state["key"], state, etag)
++            self._send_text(state, "⚠️ A GALERIA ANTIGA DE TAREFAS DELEGADAS FOI DESATIVADA. SEU FORMULÁRIO ATUAL FOI PRESERVADO.")
++            return {"status": "retired_delegated_task", "batch_id": state["batch_id"], "etag": etag}
++        state["stage"] = "choosing_pending"
++        state["flow"] = None
++        state["options"] = []
+@@ -7609 +7521,2 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-        return {"status": status, "completed_id": item_id, "batch_id": state["batch_id"], "etag": etag}
++        self._send_pending_menu(state)
++        return {"status": "awaiting_pending", "batch_id": state["batch_id"], "etag": etag}
+@@ -34931 +34844 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+-            self._send_pending_delegated_tasks(state)
++            return self._handle_pending_delegated_tasks_choice({}, state, etag)

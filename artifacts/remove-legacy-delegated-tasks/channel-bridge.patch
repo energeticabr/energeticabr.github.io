@@ -1,0 +1,30 @@
+diff --git a/channel_bridge.py b/channel_bridge.py
+index 22b2999..b4deeb6 100644
+--- a/channel_bridge.py
++++ b/channel_bridge.py
+@@ -1799,4 +1799,6 @@ class ChannelBridge:
+-            getter = getattr(self.engine.sharepoint, "get_delegated_tasks", None)
+-            rows = getter() if callable(getter) else []
+-            public = self._public_delegated_tasks(rows)
+-            return {"status": "processed", "messages": [], "delegatedTasks": {"rows": public, "count": len(public)}}
++            return {
++                "status": "retired",
++                "messages": [],
++                "delegatedTasks": {"rows": [], "count": 0},
++                "notice": "A galeria antiga de tarefas delegadas foi desativada. Use a galeria atual.",
++            }
+@@ -1813,6 +1814,0 @@ class ChannelBridge:
+-            completer = getattr(self.engine.sharepoint, "complete_delegated_task", None)
+-            if not callable(completer):
+-                raise RuntimeError("A conclusão de tarefas delegadas não está disponível neste conector")
+-            completer(raw_id)
+-            getter = getattr(self.engine.sharepoint, "get_delegated_tasks", None)
+-            public = self._public_delegated_tasks(getter() if callable(getter) else [])
+@@ -1820 +1816 @@ class ChannelBridge:
+-                "status": "processed",
++                "status": "retired",
+@@ -1822,2 +1818,2 @@ class ChannelBridge:
+-                "delegatedTasks": {"rows": public, "count": len(public)},
+-                "completedTaskId": raw_id,
++                "delegatedTasks": {"rows": [], "count": 0},
++                "notice": "A conclusão pela galeria antiga foi desativada. Nenhuma tarefa foi concluída.",

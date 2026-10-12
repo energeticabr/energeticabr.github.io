@@ -4928,7 +4928,7 @@ test("digitação em pergunta estática não aciona filtro de banco", () => {
   dom.window.close();
 });
 
-test("renderiza galeria de tarefas delegadas com busca, arraste e check", () => {
+test("não reabre a galeria delegada retirada quando a conversa salva contém sua apresentação antiga", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [{
       id: "delegated-tasks",
@@ -4946,11 +4946,46 @@ test("renderiza galeria de tarefas delegadas com busca, arraste e check", () => 
     }],
   }));
 
-  assert.match(markup, /data-role="delegated-tasks-search"/);
-  assert.match(markup, /data-action="complete-delegated-task"/);
-  assert.match(markup, /data-task-id="501"/);
-  assert.match(markup, /draggable="true"/);
-  assert.match(markup, /Enviar contrato/);
+  const dom = new JSDOM(markup);
+  assert.equal(dom.window.document.querySelector('[data-role="delegated-tasks-gallery"]'), null);
+  assert.equal(dom.window.document.querySelector('[data-action="complete-delegated-task"]'), null);
+  assert.equal(dom.window.document.querySelector('[data-reply-id="delegated_task:501"]'), null);
+  assert.equal(dom.window.document.body.textContent.includes('Enviar contrato'), false);
+  dom.window.close();
+});
+
+test("menu de Pendências salvo não oferece a categoria delegada retirada e mantém as demais opções", () => {
+  for (const reply of ['pending_delegated_tasks', 'choice:pending_menu:pending_delegated_tasks']) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+      id: 'pending-menu', role: 'assistant', type: 'poll', question: '⏳ PENDÊNCIAS (42)',
+      options: [
+        { id: reply, reply, label: '📋 TAREFAS DELEGADAS PENDENTES (5)' },
+        { id: 'pending_documents', reply: 'pending_documents', label: '📄 DOCUMENTOS PENDENTES' },
+      ],
+    }] })));
+    const replies = [...dom.window.document.querySelectorAll('[data-reply-id]')].map(button => button.dataset.replyId);
+    assert.equal(replies.includes(reply), false);
+    assert.equal(replies.includes('pending_documents'), true);
+    dom.window.close();
+  }
+});
+
+test("payload legado sem presentation não restaura botões de concluir tarefa na conversa", () => {
+  for (const legacyId of [
+    "delegated_task:501", "delegated_task:complete:501", "delegated_task_complete:501",
+    "choice:pending_delegated_task:delegated_task:501",
+    "choice:pending_delegated_task:delegated_task:complete:501",
+    "choice:pending_delegated_task:delegated_task_complete:501",
+    " DELEGATED_TASK_COMPLETE:501 ",
+  ]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+      id: "old-gallery", role: "assistant", type: "poll", question: "📋 TAREFAS DELEGADAS PENDENTES",
+      options: [{ id: legacyId, reply: legacyId, label: "Enviar contrato" }],
+    }] })));
+    assert.equal(dom.window.document.querySelector(".chat-choice-button"), null, legacyId);
+    assert.equal(dom.window.document.body.textContent.includes("Enviar contrato"), false, legacyId);
+    dom.window.close();
+  }
 });
 
 test("oferece redimensionar assinatura no PDF gerado", () => {

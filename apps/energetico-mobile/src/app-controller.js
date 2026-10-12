@@ -475,7 +475,6 @@ const AUTH_SIGN_IN_TIMEOUT_MS = 120_000;
 const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const PENDING_PROVISION_AUTO_INTERVAL_MS = 30 * 60 * 1000;
 const PENDING_PROVISION_ATTACHMENT_CONCURRENCY = 4;
-const DELEGATED_TASKS_ORDER_KEY = "energetico.delegated-tasks-order";
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
 const AUTO_COMPRESSION_THRESHOLD_BYTES = 5 * 1024 * 1024;
 
@@ -828,28 +827,6 @@ function writePendingProvisionReminder(account, value) {
   }
 }
 
-function delegatedTasksStorageKey(account) {
-  const id = String(account?.homeAccountId || account?.username || "").trim();
-  return id ? `${DELEGATED_TASKS_ORDER_KEY}:${id}` : "";
-}
-
-function readDelegatedTaskOrder(account) {
-  const key = delegatedTasksStorageKey(account);
-  if (!key || !globalThis.localStorage) return [];
-  try {
-    const value = JSON.parse(globalThis.localStorage.getItem(key) || "[]");
-    return Array.isArray(value) ? value.map(item => String(item || "").trim()).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeDelegatedTaskOrder(account, order) {
-  const key = delegatedTasksStorageKey(account);
-  if (!key || !globalThis.localStorage) return;
-  try { globalThis.localStorage.setItem(key, JSON.stringify(order)); } catch { /* quota/private mode */ }
-}
-
 function documentLineSelectionStorageKey(account) {
   const id = String(account?.homeAccountId || account?.username || "").trim();
   return id ? `${DOCUMENT_LINE_SELECTION_KEY}:${id}` : "";
@@ -893,24 +870,6 @@ function writeDocumentLineSelection(account, activeFlow, productKind, finalizeOp
   } catch {
     // Persistence is best effort; the current session remains functional.
   }
-}
-
-function normalizeDelegatedTasks(snapshot, account) {
-  if (!snapshot || !Array.isArray(snapshot.rows)) return null;
-  const rows = snapshot.rows.filter(row => row && row.id != null).map(row => ({
-    ...row,
-    id: String(row.id),
-    task: String(row.task || row.title || "Tarefa sem descrição"),
-  }));
-  const known = new Map(rows.map(row => [row.id, row]));
-  const ordered = [];
-  for (const id of readDelegatedTaskOrder(account)) {
-    const row = known.get(id);
-    if (row) { ordered.push(row); known.delete(id); }
-  }
-  ordered.push(...known.values());
-  writeDelegatedTaskOrder(account, ordered.map(row => row.id));
-  return { ...snapshot, rows: ordered };
 }
 
 export function createAppController({
@@ -1358,8 +1317,6 @@ export function createAppController({
   let pendingProvisionUploadsRevision = 0;
   let currentAssistantPollSnapshot = null;
   let pendingProvisionAttachmentGeneration = 0;
-  let delegatedTasksSnapshot = null;
-  let delegatedTasksRequest = null;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
   function signaturePlacementRequest() {
@@ -1957,10 +1914,7 @@ export function createAppController({
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
-    await Promise.all([
-      refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries),
-      refreshDelegatedTasksSnapshot(),
-    ]);
+    await refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries);
     return true;
   }
 
@@ -2324,45 +2278,6 @@ export function createAppController({
     return true;
   }
 
-  async function refreshDelegatedTasksSnapshot() {
-    if (!account || stopped || typeof client.getDelegatedTasks !== "function") return false;
-    if (delegatedTasksRequest) return delegatedTasksRequest;
-    const snapshotAccount = account;
-    const snapshotRevision = sessionRevision;
-    delegatedTasksRequest = Promise.resolve().then(async () => {
-      try {
-        const snapshot = normalizeDelegatedTasks(await client.getDelegatedTasks(), snapshotAccount);
-        if (stopped || account !== snapshotAccount || sessionRevision !== snapshotRevision) return false;
-        delegatedTasksSnapshot = snapshot;
-        render();
-        return Boolean(snapshot?.rows?.length);
-      } catch {
-        return false;
-      } finally {
-        delegatedTasksRequest = null;
-      }
-    });
-    return delegatedTasksRequest;
-  }
-
-  function delegatedTaskIsPending(taskId) {
-    const id = String(taskId || "").trim();
-    return Boolean(id && delegatedTasksSnapshot?.rows?.some(row => String(row.id) === id));
-  }
-
-  async function reconcileDelegatedTaskCompletion(taskId) {
-    // A completion is a write. If the response is lost after SharePoint has
-    // accepted it, the only safe recovery is to read the pending list again
-    // and check whether the submitted item is gone. Do not retry the write.
-    if (!delegatedTaskIsPending(taskId)) return false;
-    await refreshDelegatedTasksSnapshot();
-    return Boolean(
-      delegatedTasksSnapshot
-      && Array.isArray(delegatedTasksSnapshot.rows)
-      && !delegatedTaskIsPending(taskId),
-    );
-  }
-
   async function refreshRhidAttendance() {
     if (!account || stopped || typeof client.refreshRhidAttendance !== "function"
       || typeof client.getRhidRefreshStatus !== "function") {
@@ -2694,49 +2609,6 @@ export function createAppController({
     } finally {
       rhidAttendanceShareBusy = false;
     }
-  }
-
-  async function completeDelegatedTask(taskId) {
-    if (flowBusy() || typeof client.completeDelegatedTask !== "function") return false;
-    const id = String(taskId || "").trim();
-    if (!/^\d+$/.test(id)) return false;
-    try {
-      const result = await client.completeDelegatedTask(id);
-      if (result?.delegatedTasks) delegatedTasksSnapshot = normalizeDelegatedTasks(result.delegatedTasks, account);
-      else {
-        // Keep the successful write visible even when the follow-up snapshot
-        // is unavailable. A later foreground refresh can reconcile the list.
-        if (delegatedTasksSnapshot?.rows) {
-          delegatedTasksSnapshot = {
-            ...delegatedTasksSnapshot,
-            rows: delegatedTasksSnapshot.rows.filter(row => String(row.id) !== id),
-          };
-        }
-        await refreshDelegatedTasksSnapshot();
-      }
-      sessionError = null;
-      render();
-      return true;
-    } catch (error) {
-      if (await reconcileDelegatedTaskCompletion(id)) {
-        sessionError = null;
-        render();
-        return true;
-      }
-      setSessionError(error, "Não foi possível concluir a tarefa delegada.");
-      return false;
-    }
-  }
-
-  function reorderDelegatedTasks(order) {
-    if (!account || !delegatedTasksSnapshot || !Array.isArray(order)) return false;
-    const ids = order.map(item => String(item || "").trim()).filter(Boolean);
-    const byId = new Map(delegatedTasksSnapshot.rows.map(row => [String(row.id), row]));
-    const rows = [...ids.map(id => byId.get(id)).filter(Boolean), ...delegatedTasksSnapshot.rows.filter(row => !ids.includes(String(row.id)))];
-    delegatedTasksSnapshot = { ...delegatedTasksSnapshot, rows };
-    writeDelegatedTaskOrder(account, rows.map(row => row.id));
-    render();
-    return true;
   }
 
   function closePendingProvisions() {
@@ -4096,7 +3968,6 @@ export function createAppController({
       pendingProvisionDateEditBusy,
       pendingProvisionUploads: pendingProvisionUploadsForView(),
       pendingProvisionUploadsRevision,
-      delegatedTasks: delegatedTasksSnapshot,
       signaturePlacement,
       error: sessionError || state.error,
     });
@@ -9234,7 +9105,6 @@ export function createAppController({
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
-      await refreshDelegatedTasksSnapshot();
       // A shared file may have arrived before the user authenticated. Read
       // the native inbox now that the account is known, then process it with
       // the same upload path as files selected inside the app.
@@ -9346,8 +9216,6 @@ export function createAppController({
     lastPresenceValidationDate = "";
     clearLegacyDocumentLineSelection();
     clearEpiProductSelection();
-    delegatedTasksSnapshot = null;
-    delegatedTasksRequest = null;
     attachmentTransferPending = false;
     attachmentTransferCompleted = false;
     homeAttachmentTransferPending = false;
@@ -10340,7 +10208,6 @@ export function createAppController({
     bind("pick-pending-provision-attachments", command => pickPendingProvisionAttachments(command.paymentId));
     bind("remove-pending-provision-upload", command => removePendingProvisionUpload(command.paymentId, command.uploadId));
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
-    bind("complete-delegated-task", command => completeDelegatedTask(command.taskId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value, {
       openPdf: true,
       replaceMessageId: command.messageId || "",
@@ -10361,7 +10228,6 @@ export function createAppController({
     bind("rhid-attendance-month-load", loadRhidAttendanceMonth);
     bind("rhid-attendance-adjust-save", saveRhidAttendanceAdjustment);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
-    bind("delegated-tasks-reordered", command => reorderDelegatedTasks(command.order));
     bind("sign-in", signIn);
     bind("sign-out", signOut);
     bind("retry-session", () => (account ? continueConversation() : signIn()));
@@ -10470,7 +10336,6 @@ export function createAppController({
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
-      await refreshDelegatedTasksSnapshot();
       const sharedFileIds = await sharedFileIdsPromise;
       await processFiles(sharedFileIds);
     } else {
@@ -10603,6 +10468,5 @@ export function createAppController({
     flushRecovery,
     handleBackground,
     handleForeground,
-    refreshDelegatedTasksSnapshot,
   });
 }
