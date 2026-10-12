@@ -17,6 +17,9 @@ test('other posting cards remain readable on phone, tablet and PC with every ID 
     for (const [width, height] of [[320, 740], [390, 844], [1024, 768], [1365, 900]]) {
       for (const [sample, expected] of [
         ['settlement', ['ID 308', 'ID 403', 'ID 3567']],
+        ['description-settlement', ['ID 12', 'ID 325', 'ID 406', 'ID 3570']],
+        ['description-multiple', ['ID 12', 'ID 325', 'ID 326', 'ID 327', 'ID 406', 'ID 407', 'ID 408', 'ID 3570', 'ID 3571', 'ID 9007199254740993']],
+        ['description-no-launch', ['ID 12', 'ID 325', 'ID 326']],
         ['multiple', ['IDS 3551, 3552, 3553, 3554, 3555, 3556', 'IDS 390, 391', 'ID 9007199254740993', 'R$ 1.234.567,89']],
         ['provision', ['IDS 501, 502', 'IDS 101, 102']],
         ['registration', ['ID 201']],
@@ -34,6 +37,13 @@ test('other posting cards remain readable on phone, tablet and PC with every ID 
         assert.deepEqual(layout.data.filter((_, i) => i % 2).map(field => field.text), expected);
         for (const field of layout.data) assert.ok(field.left >= 0 && field.right <= width && field.font >= 12 && !field.overflow, JSON.stringify({ width, sample, field }));
         if (sample === 'multiple') assert.equal(layout.details, '📎 Anexos enviados: 4');
+        if (sample === 'settlement' || sample.startsWith('description-')) {
+          assert.equal(layout.senderInsideCard, true);
+          assert.deepEqual(layout.sender.slice(0, 2).map(field => field.text), ['Energético', sample === 'settlement' ? '06:18' : '00:09']);
+          for (const field of layout.sender) assert.ok(field.left >= 0 && field.right <= width && field.width > 0 && field.height > 0, JSON.stringify({ width, sample, field }));
+          assert.ok(layout.sender[0].right < layout.sender[2].left, 'sender and mascot must not overlap');
+        }
+        if (sample === 'description-multiple') assert.equal(layout.details, '📎 Comprovante: recibo-ficticio.pdf');
         if (width >= 1024) assert.ok(layout.cardWidth >= width * .65, JSON.stringify(layout));
       }
     }

@@ -6,6 +6,11 @@
 .launch-completion-sender { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 3px 4px 10px; color: #6c7f89; }
 .launch-completion-sender strong { font-size: 16px; font-weight: 600; }
 .launch-completion-sender time { font-size: 13px; }
+.launch-completion > .launch-completion-sender { align-items: flex-start; margin: 0 0 18px; }
+.launch-completion-sender__identity { display: grid; gap: 4px; min-width: 0; }
+.launch-completion-sender__identity strong { color: #173b57; font-size: 20px; font-weight: 800; }
+.launch-completion-sender__identity time { font-size: 14px; font-variant-numeric: tabular-nums; }
+.launch-completion-sender img { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 10px; object-fit: contain; }
 .launch-completion { padding: clamp(12px, 2vw, 22px); border-radius: 22px; background: #fff; box-shadow: 0 3px 15px rgb(6 48 63 / 6%); color: #102f3c; }
 .launch-completion__success { display: flex; align-items: flex-start; gap: clamp(10px, 2vw, 20px); padding: clamp(14px, 2vw, 22px); background: #e4f4ee; border-radius: 16px; }
 .launch-completion__success > div { min-width: 0; }

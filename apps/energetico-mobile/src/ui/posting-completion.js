@@ -11,11 +11,12 @@ const icons = {
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const row = (label, value, name) => `<div class="launch-completion__row"><dt>${icon(name)}<span>${escapeHtml(label)}</span></dt><dd>${escapeHtml(value)}</dd></div>`;
 
-export function postingCompletionMarkup(receipt, notesMarkup = '') {
+export function postingCompletionMarkup(receipt, notesMarkup = '', sender = null) {
   const settlement = receipt.kind === 'provision-settlement';
   const taskCompletion = receipt.kind === 'task-completion';
   const completedProcess = settlement || taskCompletion;
   return `<section class="launch-completion${settlement ? ' launch-completion--provision-settlement' : ''}" aria-label="${escapeHtml(receipt.title)}">
+    ${settlement && sender ? `<div class="launch-completion-sender"><div class="launch-completion-sender__identity"><strong>${escapeHtml(sender.name)}</strong><time>${escapeHtml(receipt.time)}</time></div><img src="${escapeHtml(sender.mascotUrl)}" alt="Mascote Energético"></div>` : ''}
     <header class="launch-completion__success">
       <span class="launch-completion__check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>
       <div><h2>${settlement ? 'PAGAMENTO AGENDADO' : `${escapeHtml(receipt.title)}!`}</h2><p>${settlement ? 'Baixado na base de dados' : taskCompletion ? `Conclusão registrada na base de dados ${escapeHtml(receipt.database)}.` : `Operação concluída com sucesso na base de dados ${escapeHtml(receipt.database)} às ${escapeHtml(receipt.time)}.`}</p></div>
