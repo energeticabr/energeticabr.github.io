@@ -3159,6 +3159,77 @@ test("reduz a tipografia da lista de presenças pendentes e acomoda nomes longos
   assert.match(markup, /1985 - JOSÉ GERALDO DOS SANTOS/);
 });
 
+for (const presentation of [undefined, "attendance_supplier_sync"]) {
+  test(`replicação usa checkbox sem esconder linhas e submete somente marcados (${presentation})`, t => {
+    const dom = new JSDOM('<main id="app"></main>');
+    const root = dom.window.document.querySelector("#app");
+    const view = createChatView(root);
+    t.after(() => { view.destroy(); dom.window.close(); });
+    const replies = [];
+    view.on("select-reply", command => replies.push(command.replyId));
+    view.render(signedInState({ messages: [{
+      id: "sync-others", role: "assistant", type: "poll", presentation,
+      question: "DESEJA ALTERAR ESTES DADOS EM OUTROS FORNECEDORES COM PRESENÇA NO MESMO DIA?",
+      options: [
+        { id: "choice:sincronizar_atividade_fornecedor_presenca:supplier_sync_none", label: "🚫 NÃO ALTERAR NENHUM" },
+        { id: "choice:sincronizar_atividade_fornecedor_presenca:supplier_sync_target:2227", label: "2227 - JOSÉ" },
+        { id: "choice:sincronizar_atividade_fornecedor_presenca:supplier_sync_target:2228", label: "2228 - CLEITON" },
+        { id: "choice:sincronizar_atividade_fornecedor_presenca:finish_supplier_sync", label: "✅ SUBMETER" },
+        { id: "attendance_close_demonstrative", label: "🏁 ENCERRAR UM IDDESCRITIVOETAPA" },
+      ],
+    }] }));
+    assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]').length, 2);
+    assert.equal(root.querySelectorAll('[data-action="attendance-select-proceed"]').length, 1);
+    assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').textContent, "SUBMETER");
+    root.querySelector('[data-action="attendance-select-all"]').click();
+    root.querySelector('input[data-reply-id="2228"]').click();
+    assert.equal(root.querySelectorAll('.chat-attendance-select__row').length, 2);
+    assert.deepEqual(replies, [], "marcar/desmarcar não deve enviar ou ocultar itens");
+    root.querySelector('[data-action="attendance-select-proceed"]').click();
+    assert.deepEqual(replies, ["supplier_sync_batch:2227"]);
+    root.querySelector('[data-action="attendance-select-all"]').click();
+    root.querySelector('[data-action="attendance-select-all"]').click();
+    assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').disabled, true);
+    root.querySelector('button[data-reply-id$="supplier_sync_none"]').click();
+    assert.equal(replies.at(-1), "choice:sincronizar_atividade_fornecedor_presenca:supplier_sync_none");
+  });
+}
+
+test("replicação mantém seleção ao filtrar e bloqueia histórico, ocupação e itens indisponíveis", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector("#app");
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const replies = [];
+  view.on("select-reply", command => replies.push(command.replyId));
+  const poll = { id: "sync-current", role: "assistant", type: "poll", presentation: "attendance_supplier_sync", databaseFilter: true, databaseFilterKey: "sincronizar_atividade_fornecedor_presenca",
+    question: "DESEJA ALTERAR EM OUTROS FORNECEDORES? CASO DESEJE FILTRAR, DIGITE UM TEXTO.", options: [
+      { id: "supplier_sync_target:2227", label: "2227 - JOSÉ" },
+      { id: "supplier_sync_target:2228", label: "2228 - CLEITON" },
+      { id: "supplier_sync_target:2229", label: "2229 - INDISPONÍVEL", disabled: true },
+    ] };
+  const state = signedInState({ messages: [poll] });
+  view.render(state);
+  root.querySelector('.chat-attendance-select__label').click();
+  assert.equal(root.querySelector('input[data-reply-id="2227"]').checked, true);
+  assert.deepEqual(replies, []);
+  view.render({ ...state, draft: "CLEITON" });
+  assert.equal(root.querySelectorAll('.chat-attendance-select__row').length, 1);
+  assert.equal(root.querySelector('input[data-reply-id="2227"]'), null);
+  assert.match(root.textContent, /SUBMETER \(1\)/);
+  view.render({ ...state, draft: "", activeText: { id: "busy" } });
+  assert.equal(root.querySelector('input[data-reply-id="2227"]').checked, true);
+  assert.equal(root.querySelector('[data-action="attendance-select-proceed"]').disabled, true);
+  view.render(state);
+  root.querySelector('[data-action="attendance-select-all"]').click();
+  assert.equal(root.querySelector('input[data-reply-id="2229"]').checked, false);
+  root.querySelector('[data-action="attendance-select-proceed"]').click();
+  assert.deepEqual(replies, ["supplier_sync_batch:2227,2228"]);
+  view.render(signedInState({ messages: [poll, { ...poll, id: "sync-next" }] }));
+  assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 0);
+  assert.equal(root.querySelector('input[data-reply-id="2227"]').disabled, true);
+});
+
 for (const presentation of ["accordion", "attendance_multi_select"]) {
   test(`Pendências permite selecionar presenças e prosseguir sem selecionar o controle de datas (${presentation})`, t => {
     const dom = new JSDOM('<main id="app"></main>');

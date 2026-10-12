@@ -1382,11 +1382,18 @@ function renderEpiProductSelection(options, busy, current, selectedIds = []) {
 }
 
 function attendanceSelectionId(option) {
-  return String(draftReplyId(option)).match(/^(?:choice:registro_presenca_pendente:|pending_attendance_record:)?(\d+)$/)?.[1] || "";
+  return String(draftReplyId(option)).match(/^(?:choice:registro_presenca_pendente:|pending_attendance_record:|(?:choice:sincronizar_atividade_fornecedor_presenca:)?supplier_sync_target:)?(\d+)$/)?.[1] || "";
+}
+
+function isAttendanceSupplierSyncPoll(message) {
+  return message?.presentation === "attendance_supplier_sync"
+    || (message?.options || []).some(option =>
+      /^(?:choice:sincronizar_atividade_fornecedor_presenca:)?supplier_sync_target:\d+$/.test(String(draftReplyId(option))));
 }
 
 function isAttendanceSelectionPoll(message) {
-  return message?.presentation === "attendance_multi_select"
+  return isAttendanceSupplierSyncPoll(message)
+    || message?.presentation === "attendance_multi_select"
     || (message?.presentation === "accordion" && (message.options || []).some(option =>
       /^pending_attendance_record:\d+$/.test(String(draftReplyId(option)))));
 }
@@ -1574,25 +1581,31 @@ function renderPoll(message, busy, delegatedTasks, draft = "", databaseFilterMes
     ? renderEpiProductSelection(choiceOptions, busy, currentPoll, currentPoll ? message.epiSelectedProductIds || [] : [])
     : "";
   const attendanceMarkup = isAttendanceMultiSelect ? (() => {
-    const selected = new Set(attendanceSelectedIds.map(String));
+    const supplierSync = isAttendanceSupplierSyncPoll(message);
+    const selected = new Set((supplierSync && !currentPoll ? [] : attendanceSelectedIds).map(String));
     const records = [];
     const visibleIds = [];
     const controls = [];
     for (const option of choiceOptions) {
       const replyId = draftReplyId(option);
+      if (supplierSync && /(?:^|:)finish_supplier_sync$/.test(replyId)) continue;
       const id = attendanceSelectionId(option);
       if (!id) {
         controls.push(pollButton(option, busy || !currentPoll));
         continue;
       }
-      visibleIds.push(id);
+      if (!option.disabled) visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
-      records.push(`<div class="chat-attendance-select__row"><input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
+      const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || option.disabled ? " disabled" : ""}>`;
+      records.push(supplierSync
+        ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${formatChatText(label)}</span></label>`
+        : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
     }
     const selectAll = visibleIds.length
       ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
       : "";
-    return `<div class="chat-attendance-select">${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !currentPoll || !selected.size ? " disabled" : ""}>PROSSEGUIR${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
+    const submitLabel = supplierSync ? "SUBMETER" : "PROSSEGUIR";
+    return `<div class="chat-attendance-select"${supplierSync ? ' data-supplier-sync="true"' : ""}>${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !currentPoll || !selected.size ? " disabled" : ""}>${submitLabel}${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
     const selected = new Set(launchPayrollSelectedIds.map(String));
@@ -4024,7 +4037,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     event.preventDefault?.();
     if (command.type === "attendance-select-proceed") {
       if (!attendanceSelectedIds.size) return;
-      emit({ type: "select-reply", replyId: `attendance_batch:${[...attendanceSelectedIds].join(",")}`, label: `PROSSEGUIR (${attendanceSelectedIds.size})` });
+      const supplierSync = clickedAction?.closest?.('.chat-attendance-select')?.dataset.supplierSync === "true";
+      emit({ type: "select-reply", replyId: `${supplierSync ? "supplier_sync_batch" : "attendance_batch"}:${[...attendanceSelectedIds].join(",")}`, label: `${supplierSync ? "SUBMETER" : "PROSSEGUIR"} (${attendanceSelectedIds.size})` });
       return;
     }
     if (command.type === "launch-payroll-select-all") {
@@ -5084,7 +5098,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";
     if (nextAttendancePollKey !== attendanceSelectionPollKey || !isAttendancePoll) attendanceSelectedIds.clear();
     attendanceSelectionPollKey = nextAttendancePollKey;
-    const eligibleAttendanceIds = new Set(isAttendancePoll ? (newestPoll.options || []).map(attendanceSelectionId).filter(Boolean) : []);
+    const eligibleAttendanceIds = new Set(isAttendancePoll ? (newestPoll.options || []).filter(option => !option.disabled).map(attendanceSelectionId).filter(Boolean) : []);
     for (const id of attendanceSelectedIds) {
       if (!eligibleAttendanceIds.has(id)) attendanceSelectedIds.delete(id);
     }
