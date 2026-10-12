@@ -41,8 +41,9 @@ def package(baseline, candidate, output, mirror_hashes, archive_output=None):
             info = tarfile.TarInfo(relative)
             info.size, info.mode, info.mtime = len(data), 0o644, 0
             archive.addfile(info, io.BytesIO(data))
-    (output / 'deploy-manifest.json').write_text(json.dumps(
-        {'files': manifest, 'patch': digest(patch), 'archive': digest(archive_output.read_bytes())}, indent=2) + '\n', encoding='utf-8')
+    # Hash pins must match the LF bytes checked out by Git on every platform.
+    (output / 'deploy-manifest.json').write_bytes((json.dumps(
+        {'files': manifest, 'patch': digest(patch), 'archive': digest(archive_output.read_bytes())}, indent=2) + '\n').encode('utf-8'))
     return manifest
 
 

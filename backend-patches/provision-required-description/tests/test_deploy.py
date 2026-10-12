@@ -30,6 +30,31 @@ def load(name, path):
     return module
 
 
+def test_package_manifest_has_platform_independent_lf_bytes(tmp_path):
+    package = load('required_description_manifest_bytes', ROOT / 'package.py')
+    before, after, output = (tmp_path / name for name in ('before', 'after', 'output'))
+    mirror_hashes = {}
+    for relative in package.FILES:
+        target = after / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b'VALUE = 2\n')
+        if relative != 'worker/provision_parent_choice.py':
+            baseline = before / relative
+            baseline.parent.mkdir(parents=True, exist_ok=True)
+            baseline.write_bytes(b'VALUE = 1\n')
+            mirror_hashes[relative] = package.digest(baseline.read_bytes())
+    archive = tmp_path / 'private' / 'source-files.tar'
+    package.package(before, after, output, mirror_hashes, archive)
+    raw_manifest = (output / 'deploy-manifest.json').read_bytes()
+    assert b'\r' not in raw_manifest
+    manifest = json.loads(raw_manifest)
+    canonical = (json.dumps(manifest, indent=2) + '\n').encode('utf-8')
+    assert raw_manifest == canonical
+    assert package.digest(raw_manifest) == package.digest(canonical)
+    assert manifest['archive'] == package.digest(archive.read_bytes())
+    assert manifest['patch'] == package.digest((output / 'source.patch').read_bytes())
+
+
 def setup(tmp_path, monkeypatch):
     deploy = load('grouped_deploy_test', ROOT / 'deploy.py')
     package = load('grouped_package_test', ROOT / 'package.py')
