@@ -23,7 +23,7 @@ test('provision report fits every field and month without horizontal drag and pr
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
       if(height>width){assert.equal(result.loads,0);assert.equal(result.warning,true);assert.equal(result.rows,0);continue;}
       assert.equal(result.loads,1);assert.equal(result.logoLoaded,true);assert.equal(result.documentOverflow,0);assert.ok(result.toolbarOverflow<=1);assert.ok(result.contentOverflow<=1);assert.ok(result.contentHeight>80);
-      assert.equal(result.rows,4);assert.equal(result.pendingCount,'4 pendência(s)');assert.match(result.pendingTotal,/1\.358,48/);
+      assert.equal(result.rows,4);assert.equal(result.pendingCount,'4 pendência(s)');assert.match(result.pendingTotal,/123\.457\.161,68/);
       assert.equal(result.inactiveRows,1,`${width}px: inactive section must exercise actual records`);
       for(const wrapper of result.wrappers)assert.ok(wrapper.overflow<=1,`${width}px: ${wrapper.section} requires horizontal drag (${wrapper.overflow}px)`);
       assert.ok(parseFloat(result.fontSize)>=11);assert.ok(result.columns.every(value=>value>=100),`${width}px: cramped monthly columns ${result.columns}`);
