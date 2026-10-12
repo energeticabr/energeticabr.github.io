@@ -1,0 +1,137 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+index 27ca838..b1cf8bf 100644
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -5793,6 +5793,11 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         count = len(completed)
+         self._send_text(state, f"✅ {count} PRESENÇAS ATUALIZADAS COMO {journal['presence']}.")
+         pending_origin = state.get("attendance_batch_origin") == "pending"
++        if pending_origin:
++            state["pending_attendance_completed_ids"] = list(dict.fromkeys(
++                list(state.get("pending_attendance_completed_ids") or [])
++                + [str(item_id) for item_id in completed]
++            ))
+         state.pop("attendance_batch_commit", None)
+         for key in ("attendance_batch_records", "attendance_batch_changes", "attendance_batch_presence", "attendance_batch_origin", "attendance_batch_motivation", "attendance_batch_finalized_ids"):
+             state.pop(key, None)
+@@ -5893,6 +5898,14 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         result = []
+         for index, item in enumerate(source_options, start=1):
+             source = copy.deepcopy(item.get("source_values") or {})
++            # Keep the displayed checklist day-scoped even during a stale
++            # SharePoint response; never offer validated rows for a new batch.
++            if (
++                self._pending_attendance_date_display(source.get("DATA"))
++                != self._pending_attendance_date_display(date_value)
++                or normalize_text(str(source.get("PRESENCA") or "")) != "pendente"
++            ):
++                continue
+             item_id = source.get("Id", item.get("value", item.get("id")))
+             if item_id in {None, ""}:
+                 continue
+@@ -5962,6 +5975,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             if options is not None
+             else self._pending_attendance_record_options(state, date_value)
+         )
++        completed_ids = set(state.get("pending_attendance_completed_ids") or [])
++        options = [option for option in options if option.get("value") not in completed_ids]
+         # Depois de revisar os fornecedores de um dia, o usuário pode voltar
+         # diretamente ao seletor de datas sem precisar sair de Pendências.
+         # Mantemos a opção como terminal para que ela não seja confundida com
+@@ -6079,6 +6094,18 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         record_options = self._pending_attendance_record_options(
+             state, date_value
+         )
++        current_item_id = str(state.get("sharepoint", {}).get("item_id") or "")
++        if current_item_id and (
++            state.get("submission_operation") == "attendance_delete"
++            or normalize_text(str(state.get("fields", {}).get("PRESENCA") or ""))
++            not in {"", "pendente"}
++        ):
++            state["pending_attendance_completed_ids"] = list(dict.fromkeys(
++                list(state.get("pending_attendance_completed_ids") or []) + [current_item_id]
++            ))
++        completed_ids = set(state.get("pending_attendance_completed_ids") or [])
++        record_options = [option for option in record_options
++                          if option["value"] not in completed_ids]
+         if not record_options:
+             # Depois de apontar o último fornecedor da data, a lista daquela
+             # data deixa de ter opções. Volte ao seletor de datas para que o
+@@ -6305,6 +6332,10 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             # next response.
+             state.pop("_outbound_presence_confirmation", None)
+         state.pop("pending_attendance_edited", None)
++        state.setdefault("fields", {})["PRESENCA"] = normalized_presence
++        state["pending_attendance_completed_ids"] = list(dict.fromkeys(
++            list(state.get("pending_attendance_completed_ids") or []) + [str(item_id)]
++        ))
+         state.pop("pending_attendance_record", None)
+         state.pop("pending_attendance_record_id", None)
+         state.pop("pending_attendance_motivation", None)
+@@ -6334,6 +6365,7 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                 return {"status": "invalid_pending_attendance_date", "batch_id": state["batch_id"]}
+             self._mark_processed(state, event.get("message_id"))
+             state["pending_attendance_date_value"] = selected.get("value")
++            state.pop("pending_attendance_completed_ids", None)
+             state["stage"] = PENDING_ATTENDANCE_RECORD_STAGE
+             state["options"] = []
+             self._send_pending_attendance_records(state)
+@@ -6355,6 +6387,7 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                 state["stage"] = PENDING_ATTENDANCE_DATE_STAGE
+                 state["flow"] = None
+                 state["pending_attendance_date_value"] = None
++                state.pop("pending_attendance_completed_ids", None)
+                 state.pop("pending_attendance_open_record_id", None)
+                 state.pop("pending_attendance_record_options", None)
+                 state["options"] = []
+@@ -6385,6 +6418,17 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             if selected is None:
+                 selected = resolve_option(raw, state.get("options", []), "pending_attendance_record")
+             if not selected:
++                if not pending_action and not event.get("reply_id"):
++                    matches = filter_options(raw, self._pending_attendance_record_options(
++                        state, state.get("pending_attendance_date_value")
++                    ))
++                    completed_ids = set(state.get("pending_attendance_completed_ids") or [])
++                    matches = [option for option in matches if option["value"] not in completed_ids]
++                    if matches:
++                        self._mark_processed(state, event.get("message_id"))
++                        self._send_pending_attendance_records(state, options=matches)
++                        etag = self._save(state, etag)
++                        return {"status": "filtered_pending_attendance_records", "batch_id": state["batch_id"], "etag": etag}
+                 self._send_pending_attendance_records(state)
+                 self._save(state, etag)
+                 return {"status": "invalid_pending_attendance_record", "batch_id": state["batch_id"]}
+@@ -6394,8 +6438,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             state["flow"] = "attendance_validation"
+             state.pop("current_flow_title", None)
+             state["pending_attendance_quick"] = True
+-            state["fields"] = {}
+-            state["display_values"] = {}
++            state["fields"] = {"DATA FILTRO PRESENÇA": state["pending_attendance_date_value"]}
++            state["display_values"] = {"DATA FILTRO PRESENÇA": self._pending_attendance_date_display(state["pending_attendance_date_value"])}
+             state["answers"] = {}
+             state["selections"] = {}
+             state["step_index"] = 1
+@@ -23363,6 +23407,21 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         self, state: dict, etag: str | None
+     ) -> dict:
+         """Reconsulta pendências e mantém a validação aberta para o próximo ID."""
++        # Edits (including applying changes to other suppliers) must return
++        # to the last evaluated day's checkbox selector, not the global queue.
++        attendance_date = self._attendance_daily_report_date({
++            "fields": {"DATA": state.get("fields", {}).get("DATA")}
++        })
++        if attendance_date is not None:
++            if str(state.get("pending_attendance_date_value") or "")[:10] != attendance_date.isoformat():
++                state.pop("pending_attendance_completed_ids", None)
++            state["pending_attendance_date_value"] = attendance_date.isoformat()
++            state["pending_attendance_quick"] = True
++            state["flow"] = None
++            state.pop("current_flow_title", None)
++            state["navigation_history"] = []
++            result = self._pending_attendance_return_to_records(state, etag)
++            return {**self._completion_result(state), **result}
+         step = self._remaining_attendance_step(state)
+         options = self._selection_options(state, step)
+         current_item_id = str(
