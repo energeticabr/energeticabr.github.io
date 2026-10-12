@@ -5,6 +5,29 @@ const { createProvisionReportView } = await import('../src/ui/provision-report-v
 const row = {id:'314',recurrenceId:'7',branch:'004 - EDIFÍCIO XAVANTE',supplier:'TRANSPIO',product:'MOVIMENTAÇÃO DE TERRA',observation:'Conferir quantidade',property:'Obra',dueDate:'2026-10-09',paidDate:'',schedule:'PAGAMENTO AGENDADO',scheduledDate:'2026-10-06',executionDate:'2026-10-07',status:'PAGAMENTO PREVISTO',total:100};
 const recurrence = {id:'7',branch:row.branch,supplier:row.supplier,product:row.product,property:'Obra',status:'ATIVO',startDate:'2026-01-05',modified:'2026-10-01T12:00:00Z'};
 
+// Break: fitting 14 columns leaves tiny values with no readable local zoom
+// while the app-wide gesture guard prevents page magnification.
+test('annual table can be enlarged locally without changing data or PDF capture',async t=>{
+  const {view,root}=setup(t);await view.open();
+  const more=root.querySelector('[aria-label="Ampliar tabela anual"]');
+  const less=root.querySelector('[aria-label="Reduzir tabela anual"]');
+  const fit=root.querySelector('[aria-label="Ajustar tabela anual à tela"]');
+  assert.ok(more&&less&&fit,'annual table needs readable local magnification');
+  const annual=root.querySelector('.pr-table--annual'),wrapper=annual.closest('.pr-section-scroll');
+  const {captureFilteredReport}=await import('../src/ui/report-print.js');
+  const before=captureFilteredReport(root,{title:'Provisões'});
+  assert.equal(less.disabled,true);
+  for(let count=0;count<6;count++)more.click();
+  assert.equal(wrapper.style.getPropertyValue('--pr-annual-zoom'),'4');
+  assert.equal(root.querySelector('[aria-label="Ampliação da tabela anual"]').textContent,'400%');
+  assert.deepEqual(captureFilteredReport(root,{title:'Provisões'}),before);
+  less.click();assert.equal(wrapper.style.getPropertyValue('--pr-annual-zoom'),'3.5');
+  fit.click();assert.equal(wrapper.style.getPropertyValue('--pr-annual-zoom'),'1');
+  assert.equal(less.disabled,true);
+  for(let count=0;count<20;count++)more.click();
+  assert.equal(wrapper.style.getPropertyValue('--pr-annual-zoom'),'5');assert.equal(more.disabled,true);
+});
+
 // Break: stacked cells lose their column names or the PDF loses month headers.
 test('responsive provision cells retain every field and month label without adding duplicate PDF text',async t=>{
   const {view,root}=setup(t);await view.open();

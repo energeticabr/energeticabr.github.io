@@ -46,6 +46,23 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   }
   function table(section,title,labels,widths){
     const scroll=make('div','pr-section-scroll');scroll.dataset.section=section;scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title.replace(/^[^\p{L}]+/u,''));
+    if(section==='annual'){
+      const toolbar=make('div','pr-annual-zoom-toolbar');toolbar.dataset.reportScreenOnly='';
+      const less=button('','A−','Reduzir tabela anual'),more=button('','A+','Ampliar tabela anual');
+      const fit=button('','Ajustar à tela','Ajustar tabela anual à tela');
+      const level=make('output');level.setAttribute('aria-label','Ampliação da tabela anual');level.setAttribute('aria-live','polite');
+      const hint=make('span','pr-annual-zoom-hint','Arraste para consultar a tabela ampliada.');
+      let zoom=1;
+      const update=()=>{
+        scroll.style.setProperty('--pr-annual-zoom',String(zoom));level.textContent=`${zoom*100}%`;
+        less.disabled=zoom===1;more.disabled=zoom===5;hint.hidden=zoom===1;
+        if(zoom===1)scroll.scrollLeft=0;
+      };
+      less.addEventListener('click',()=>{zoom=Math.max(1,zoom-.5);update();});
+      more.addEventListener('click',()=>{zoom=Math.min(5,zoom+.5);update();});
+      fit.addEventListener('click',()=>{zoom=1;update();});
+      toolbar.append(make('span','','Leitura da tabela anual'),less,level,more,fit,hint);scroll.append(toolbar);update();
+    }
     const table=make('table',`pr-table pr-table--${section}`);table.dataset.section=section;
     table.setAttribute('role','table');
     const columns=make('colgroup');for(const width of widths){const col=make('col');col.style.width=`${width}%`;columns.append(col);}table.append(columns);
@@ -58,8 +75,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const tr=make('tr','pr-total'),heading=cell(tr,'label',label);heading.colSpan=colSpan;
     const total=cell(tr,'total',value);total.dataset.metric=metric;
     if(lastText!==undefined){const last=cell(tr,'count',lastText);last.dataset.metric=lastMetric;}body.append(tr);
-    // Keep one semantic table for screen readers and PDF capture. Responsive
-    // labels are CSS-generated from metadata, never duplicated report text.
+    // Keep the same semantic columns for screen readers and PDF capture.
     const labels=[...body.parentElement.tHead.rows[1].cells].map(th=>th.textContent);
     for(const row of body.rows){row.setAttribute('role','row');let column=0;
       for(const td of row.cells){td.setAttribute('role','cell');td.dataset.label=labels[column];column+=td.colSpan;}}
