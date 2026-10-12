@@ -224,13 +224,13 @@ test('close and destroy abort requests and reopening ignores late replies and re
 });
 
 // Break caught: portrait loads data or rotation discards the filtered table/scroll.
-test('portrait blocks loading and rotation cancels pending loads but retains an already loaded report',async t=>{
+test('portrait loads immediately and rotation retains the filtered table and PDF',async t=>{
   let loads=0;const {view,root,dom}=setup(t,{loadSnapshot:async()=>{loads++;return structuredClone(snapshot);}});
-  dom.window.matchMedia=()=>({matches:true});await view.open();assert.equal(loads,0);assert.equal(root.querySelector('.pl-orientation').hidden,false);
-  assert.equal(root.querySelector('.swr-close').closest('[hidden]'),null);assert.throws(()=>captureFilteredReport(root));
+  dom.window.matchMedia=()=>({matches:true});await view.open();assert.equal(loads,1);assert.equal(root.querySelector('.pl-orientation').hidden,true);
+  assert.equal(root.querySelector('.swr-close').closest('[hidden]'),null);assert.doesNotThrow(()=>captureFilteredReport(root));
   dom.window.matchMedia=()=>({matches:false});dom.window.dispatchEvent(new dom.window.Event('resize'));await tick();
   change(root,'branch','BH');const table=root.querySelector('table'),content=root.querySelector('.swr-content');content.scrollTop=66;
-  dom.window.matchMedia=()=>({matches:true});dom.window.dispatchEvent(new dom.window.Event('orientationchange'));assert.throws(()=>captureFilteredReport(root));
+  dom.window.matchMedia=()=>({matches:true});dom.window.dispatchEvent(new dom.window.Event('orientationchange'));assert.doesNotThrow(()=>captureFilteredReport(root));
   dom.window.matchMedia=()=>({matches:false});dom.window.dispatchEvent(new dom.window.Event('resize'));await tick();
   assert.equal(root.querySelector('table'),table);assert.equal(content.scrollTop,66);assert.equal(loads,1);assert.equal(root.querySelector('[name=branch]').value,'BH');
 });

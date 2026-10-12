@@ -2,11 +2,11 @@
 .spr-toolbar-logo { display:block; width:100%; max-width:190px; height:54px; object-fit:contain; }
 .spr-close { color:#a00000; background:white; border:1px solid #a00000; border-radius:5px; padding:6px; min-height:44px; font:inherit; }
 .spr-dialog .spr-filters .report-print-actions { align-self:center; }
-.spr-dialog .spr-filters .pl-filter-label { border-radius:4px 4px 0 0; font:normal clamp(9px,1.05vw,14px)/1.15 Arial,sans-serif; padding:6px 2px; }
+.spr-dialog .spr-filters .pl-filter-label { border-radius:4px 4px 0 0; font:normal clamp(9px,calc(1.05 * var(--report-vw, 1vw)),14px)/1.15 Arial,sans-serif; padding:6px 2px; }
 .spr-dialog .spr-filters .sfs-field,.spr-dialog .spr-filters .sfs-field>.sfs-trigger { height:36px; }
-.spr-dialog .spr-filters .sfs-field>.sfs-trigger { font-size:clamp(10px,1.25vw,16px); padding:4px 25px 4px 8px; border-radius:0 0 4px 4px; color:#123e63; }
+.spr-dialog .spr-filters .sfs-field>.sfs-trigger { font-size:clamp(10px,calc(1.25 * var(--report-vw, 1vw)),16px); padding:4px 25px 4px 8px; border-radius:0 0 4px 4px; color:#123e63; }
 .spr-dialog .spr-filters .sfs-arrow { width:24px; background:#123e63; color:white; border-radius:0 0 4px 0; }
-.spr-content { color:#123e63; font:clamp(10px,1.25vw,17px)/1.3 Arial,sans-serif; padding:4px 8px 12px; min-width:0; }
+.spr-content { color:#123e63; font:clamp(10px,calc(1.25 * var(--report-vw, 1vw)),17px)/1.3 Arial,sans-serif; padding:4px 8px 12px; min-width:0; }
 /* Shared navigation arrows may overlay rows; do not squeeze the report for them. */
 .spr-supplier { border:1px solid #bdd2e2; border-radius:7px; margin:5px 0; overflow:hidden; background:white; }
 .spr-supplier summary { display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.1fr) minmax(0,3.2fr); gap:10px; align-items:center; cursor:pointer; padding:8px 10px; min-height:62px; background:#fff; color:#123e63; list-style:none; }
@@ -29,7 +29,7 @@
 .spr-sheet-icon svg,.spr-metric svg { display:block; width:100%; height:34px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .spr-ids { font-weight:700; overflow-wrap:anywhere; }
 .spr-metrics { display:grid; grid-template-columns:max-content minmax(0,1fr) max-content; align-items:center; gap:10px; min-width:0; color:#b00000; }
-.spr-rubrics { display:flex; flex-direction:column; gap:3px; min-width:0; border-left:1px solid #b6cddc; padding-left:10px; font-size:clamp(8px,.85vw,12px); line-height:1.25; color:#325c7b; }
+.spr-rubrics { display:flex; flex-direction:column; gap:3px; min-width:0; border-left:1px solid #b6cddc; padding-left:10px; font-size:clamp(8px,calc(.85 * var(--report-vw, 1vw)),12px); line-height:1.25; color:#325c7b; }
 .spr-rubric-row { display:flex; justify-content:space-between; align-items:baseline; gap:4px; min-width:0; padding:4px 5px; border-radius:5px; background:var(--spr-type-bg); color:var(--spr-type-color); }
 .spr-rubric-label { min-width:0; overflow-wrap:anywhere; }
 .spr-rubric-value { flex-shrink:0; color:var(--spr-type-color,#b00000); white-space:nowrap; }
@@ -37,12 +37,12 @@
 .spr-total-paid { background:#ffe9ee; border-radius:7px; padding:8px; }
 .spr-metric svg { flex:0 0 30px; width:30px; }
 .spr-payment-count { border-left:1px solid #b6cddc; padding-left:12px; }
-.spr-metric-value { font-size:clamp(11px,1.5vw,21px); white-space:nowrap; }
-.spr-metric-label { color:#325c7b; font-size:clamp(7px,.78vw,11px); line-height:1.2; }
+.spr-metric-value { font-size:clamp(11px,calc(1.5 * var(--report-vw, 1vw)),21px); white-space:nowrap; }
+.spr-metric-label { color:#325c7b; font-size:clamp(7px,calc(.78 * var(--report-vw, 1vw)),11px); line-height:1.2; }
 .spr-detail { padding:2px 10px 8px; overflow-x:hidden; background:white; }.spr-detail[hidden] { display:none; }
 .spr-payment-toolbar { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:7px 0; }
 .spr-payment-toolbar h3 { margin:0; font-size:1em; color:#123e63; }
-.spr-payments { width:100%; table-layout:fixed; border-collapse:collapse; color:#123e63; font-size:clamp(7px,.85vw,13px); }
+.spr-payments { width:100%; table-layout:fixed; border-collapse:collapse; color:#123e63; font-size:clamp(7px,calc(.85 * var(--report-vw, 1vw)),13px); }
 .spr-payments th { background:#154d67; color:white; text-align:center; font-weight:600; }
 .spr-payments th,.spr-payments td { padding:8px 5px; border:1px solid #d8e3ec; overflow-wrap:anywhere; vertical-align:middle; }
 .spr-payments tbody tr { background:var(--spr-type-bg,#f0f6fb); }

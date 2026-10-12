@@ -17,6 +17,9 @@ import {
 import { normalizeConstructionDiaryText } from "./ui/construction-diary-text.js";
 import { provisionDateKey, provisionDayOffset } from "./chat/pending-provision-dates.js";
 import { decorateReportNavigation, getReportNeighbors } from "./ui/report-navigation.js";
+import { createReportSessionCache } from "./report-session-cache.js";
+import { observeReportMutations, observeReportMutationFactory } from "./report-mutations.js";
+import { subscribeDataMutations } from "../../../portal/data/data-mutations.js";
 import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } from "./ui/report-print.js";
 
 async function defaultSignPdfAttachment(input) {
@@ -1286,6 +1289,30 @@ export function createAppController({
   }
   let starting = false;
   let sessionRevision = 0;
+  const reportSnapshots = createReportSessionCache();
+  // Payroll details depend on the source's complete sheet/payment scans, not
+  // just the visible sheet rows. Retain that state within this auth session.
+  let supplierPayrollSessionSource = null;
+  let unsubscribeReportMutations;
+  client = observeReportMutations(client);
+  ordersGalleryDataFactory = observeReportMutationFactory(ordersGalleryDataFactory);
+  tasksGalleryDataFactory = observeReportMutationFactory(tasksGalleryDataFactory);
+  hrPayrollGalleryDataFactory = observeReportMutationFactory(hrPayrollGalleryDataFactory);
+  supplierPayrollDataFactory = observeReportMutationFactory(supplierPayrollDataFactory);
+  paymentProgrammingGalleryDataFactory = observeReportMutationFactory(paymentProgrammingGalleryDataFactory);
+  recurringExpensesGalleryDataFactory = observeReportMutationFactory(recurringExpensesGalleryDataFactory);
+  registrationGalleryDataFactory = observeReportMutationFactory(registrationGalleryDataFactory);
+  pendingProvisionAttachmentsDataFactory = observeReportMutationFactory(pendingProvisionAttachmentsDataFactory);
+  function cachedReportSource(namespace, source, assertQuery) {
+    const owner = account, revision = sessionRevision;
+    return reportSnapshots.wrap(namespace, source, () => {
+      assertQuery();
+      if (stopped || !owner || account !== owner || sessionRevision !== revision
+        || (typeof auth.getAccount === 'function' && auth.getAccount()?.homeAccountId !== owner.homeAccountId)) {
+        throw new DOMException('Consulta cancelada.', 'AbortError');
+      }
+    });
+  }
   let pendingAutomaticExit = null;
   let flowReminderTimer = null;
   let flowReminderRevision = 0;
@@ -4962,12 +4989,22 @@ export function createAppController({
   }
 
   function decorateControllerReport(panel, action) {
+    const root = panel?.element;
+    const refresh = event => {
+      const button = event.target?.closest?.('button[aria-label^="Atualizar"]');
+      if (button && root.contains(button) && !button.disabled) reportSnapshots.invalidate(action);
+    };
+    root?.addEventListener('click', refresh, true);
     const navigable = decorateReportNavigation(panel, {
       action, onNavigate: target => navigateMascotReport(action, target, decorated),
     });
-    const decorated = decorateReportPrint(navigable, {
+    const printable = decorateReportPrint(navigable, {
       action, previewMedia: native.previewMedia, closePreview: native.closePreview,
     });
+    const decorated = root ? { ...printable, destroy() {
+      root?.removeEventListener('click', refresh, true);
+      printable.destroy?.();
+    } } : printable;
     return decorated;
   }
 
@@ -5717,7 +5754,6 @@ export function createAppController({
           const data = { async [method](options = {}) {
             assertSession();
             requestSignal = options.signal; requestGeneration++;
-            if (!validation) return source[method](options);
             const signal = requestSignal, generation = requestGeneration;
             const assertQuery = () => {
               assertSession();
@@ -5725,7 +5761,9 @@ export function createAppController({
             };
             assertQuery();
             try {
-              const snapshot = await source[method](options);
+              const action = validation ? 'open-order-validation-report' : provision ? 'open-provision-report'
+                : management ? 'open-management-report' : 'open-payment-ledger';
+              const snapshot = await cachedReportSource(action, source, assertQuery)[method](options);
               assertQuery();
               return snapshot;
             } catch (error) {
@@ -5813,10 +5851,15 @@ export function createAppController({
             });
           };
           const source = await cargosDataFactory({ tokenProvider });
-          const data = { [method](options = {}) {
+          const data = { async [method](options = {}) {
             assertSession();
             requestSignal = options.signal; requestGeneration++;
-            return source[method](options);
+            const signal = requestSignal, generation = requestGeneration;
+            const assertQuery = () => {
+              assertSession();
+              if (signal?.aborted || generation !== requestGeneration) throw new DOMException('Consulta cancelada.', 'AbortError');
+            };
+            return cachedReportSource('open-cargos-table', source, assertQuery)[method](options);
           } };
           assertSession();
           const factory = cargosFactory;
@@ -5907,7 +5950,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await attendanceSummaryDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-attendance-summary', await attendanceSummaryDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6009,13 +6052,50 @@ export function createAppController({
       const assertQuery = () => { assertSession(); if (signal.aborted) throw cancelled(); };
       const request = async () => {
         assertQuery();
-        if (!session.source) {
-          const source = Promise.resolve().then(() => { assertQuery(); return supplierPayrollReportDataFactory({ tokenProvider }); });
-          session.source = source;
-          void source.catch(() => { if (session.source === source) session.source = null; });
+        if (!supplierPayrollSessionSource) {
+          const retained = { tokenProvider, source: null, snapshotLoaded: false, priming: null };
+          supplierPayrollSessionSource = retained;
+          retained.source = Promise.resolve().then(() => {
+            assertQuery();
+            return supplierPayrollReportDataFactory({ tokenProvider: (scopes, options = {}) => {
+              // Capture the current provider once. Token/consent continuations
+              // keep that request's reader/session guards across panel changes.
+              if (options.signal?.aborted || stopped || account !== reportsAccount
+                || sessionRevision !== reportsRevision) throw cancelled();
+              const provider = retained.tokenProvider;
+              return provider(scopes, options);
+            } });
+          });
+          void retained.source.catch(() => {
+            if (supplierPayrollSessionSource === retained) supplierPayrollSessionSource = null;
+          });
         }
-        const source = await session.source; assertQuery();
-        const result = await source[method](...args, { ...options, signal }); assertQuery(); return result;
+        supplierPayrollSessionSource.tokenProvider = tokenProvider;
+        const retained = supplierPayrollSessionSource;
+        session.source = retained.source;
+        const source = cachedReportSource('open-supplier-payroll-report', await session.source, assertQuery); assertQuery();
+        while (method !== 'loadSnapshot' && !retained.snapshotLoaded) {
+          // A mutation discards the source's private sheet/payment links too.
+          // Coalesce initialization for concurrently expanded groups.
+          if (!retained.priming) {
+            const priming = source.loadSnapshot({ ...options, signal }).then(() => {
+              if (supplierPayrollSessionSource !== retained) throw cancelled();
+              retained.snapshotLoaded = true;
+            }).finally(() => { if (retained.priming === priming) retained.priming = null; });
+            retained.priming = priming;
+          }
+          try { await retained.priming; }
+          catch (error) {
+            assertQuery();
+            if (supplierPayrollSessionSource !== retained || error?.name !== 'AbortError') throw error;
+            // Another group's cancellation must not cancel this live reader.
+            // Re-enter the shared prime instead of racing independent retries.
+          }
+          assertQuery();
+        }
+        const result = await source[method](...args, { ...options, signal }); assertQuery();
+        if (method === 'loadSnapshot') retained.snapshotLoaded = true;
+        return result;
       };
       try { return await Promise.race([request(), cancellation]); }
       finally {
@@ -6160,7 +6240,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await stageProgressDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-stage-progress', await stageProgressDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6288,7 +6368,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await commercialReceiptsDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-commercial-receipts', await commercialReceiptsDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6416,7 +6496,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await commercialMilestonesDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-commercial-milestones', await commercialMilestonesDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6544,7 +6624,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await commercialDocumentsDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-commercial-documents', await commercialDocumentsDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6681,7 +6761,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await sacPathologiesDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-sac-pathologies', await sacPathologiesDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6823,7 +6903,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await quotationReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-quotation-report', await quotationReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -6960,7 +7040,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await depreciationReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-depreciation-report', await depreciationReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -7097,7 +7177,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await documentControlReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-document-control-report', await documentControlReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -7238,7 +7318,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await taskAssociationReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-task-association-report', await taskAssociationReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -7380,7 +7460,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await delegatedDeadlineReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-delegated-deadline-report', await delegatedDeadlineReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -7525,7 +7605,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await supplierWorkforceReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-supplier-workforce-report', await supplierWorkforceReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -7650,7 +7730,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await contractorControlReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-contractor-control-report', await contractorControlReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const result = method === 'loadDetails'
             ? await source.loadDetails(id, { ...options, signal })
@@ -7783,7 +7863,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await generalSummaryReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-general-summary-report', await generalSummaryReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const result = await source.loadReport({ ...options, signal });
           assertQuery(); return result;
@@ -7931,7 +8011,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await pendingSupplierPaymentsReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-pending-supplier-payments-report', await pendingSupplierPaymentsReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -8077,7 +8157,7 @@ export function createAppController({
       const load = async () => {
         try {
           assertQuery();
-          const source = await pendingWorkDiariesReportDataFactory({ tokenProvider });
+          const source = cachedReportSource('open-pending-work-diaries-report', await pendingWorkDiariesReportDataFactory({ tokenProvider }), assertQuery);
           assertQuery();
           const snapshot = await source.loadSnapshot({ ...options, signal });
           assertQuery();
@@ -9092,6 +9172,8 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    reportSnapshots.reset();
+    supplierPayrollSessionSource = null;
     disposeRhidMonthlyReport();
     disposeAttendanceSummaryReport();
     disposeStageProgressReport();
@@ -9222,6 +9304,8 @@ export function createAppController({
     disposeHrPayrollGallery();
     disposeSupplierPayroll();
     sessionRevision += 1;
+    reportSnapshots.reset();
+    supplierPayrollSessionSource = null;
     sharedResumeRequested = false;
     cancelFlowReminder();
     cancelAttachmentReminder();
@@ -10311,6 +10395,11 @@ export function createAppController({
 
   async function start() {
     if (started) return;
+    reportSnapshots.reset();
+    unsubscribeReportMutations = subscribeDataMutations(() => {
+      reportSnapshots.invalidate();
+      supplierPayrollSessionSource = null;
+    });
     started = true;
     stopped = false;
     starting = true;
@@ -10428,6 +10517,10 @@ export function createAppController({
   }
 
   function stop() {
+    reportSnapshots.reset();
+    unsubscribeReportMutations?.();
+    supplierPayrollSessionSource = null;
+    unsubscribeReportMutations = null;
     pendingLiveSignatureCapture = null;
     disposeRhidMonthlyReport();
     pendingAutomaticExit = null;

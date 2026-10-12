@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildPendingSupplierPaymentsReport} from '../chat/pending-supplier-payments-report-model.js';
 import {formatReportDate} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -82,7 +83,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
   report.append(filters,notice,content); panel.append(warning,report,dismiss); root.append(panel); doc.body.append(root);
   let snapshot=null, controller=null, revision=0, destroyed=false, pickers=null;
   let returnFocus=null, oldOverflow='', app=null, oldInert=false;
-  const portrait=()=>win?.matchMedia ? win.matchMedia('(orientation: portrait)').matches : win?.innerHeight>win?.innerWidth;
+  const landscape = bindReportLandscape(root);
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   function clearContent() {
     if (content.contains(doc.activeElement)) panel.focus({preventScroll:true});
@@ -91,7 +92,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
   function showNotice(text='', alert=false) {
     notice.textContent=text; notice.hidden=!text; notice.setAttribute('role',alert?'alert':'status');
   }
-  function setBusy(busy) {root.setAttribute('aria-busy',String(busy)); refresh.disabled=busy && !portrait();}
+  function setBusy(busy) {root.setAttribute('aria-busy',String(busy)); refresh.disabled=busy ;}
   function cancel() {controller?.abort(); controller=null; revision++;}
   function financialBadges(parent, row, pending=false) {
     const badges=make('div','psp-badges');
@@ -212,7 +213,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
     pickers=bindSearchableFilterSelects(filters,{report:true,placement:'below'});
   }
   async function load() {
-    if (root.hidden || portrait() || destroyed) return;
+    if (root.hidden || destroyed) return;
     pickers?.close(); cancel(); const current=revision, active=new AbortController(); controller=active;
     snapshot=null; clearContent(); showNotice('Carregando pagamentos do SharePoint…'); setBusy(true);
     const stale=()=>active.signal.aborted || current!==revision || root.hidden || destroyed;
@@ -230,16 +231,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
       snapshot=null; clearContent(); showNotice('Não foi possível carregar os pagamentos completos. Use Atualizar para tentar novamente.',true);
     } finally {if (!stale()) {controller=null; setBusy(false);}}
   }
-  function orientationChanged() {
-    if (root.hidden || destroyed) return;
-    const vertical=portrait(), wasHidden=report.hidden;
-    warning.hidden=!vertical; panel.classList.toggle('pl-dialog--portrait',vertical);
-    if (vertical) {
-      pickers?.close(); if (report.contains(doc.activeElement)) panel.focus({preventScroll:true});
-      cancel(); report.hidden=true; setBusy(true);
-      if (!snapshot) {clearContent(); showNotice();}
-    } else if (wasHidden) {report.hidden=false; if (snapshot) setBusy(false); else void load();}
-  }
+  function orientationChanged() { landscape.update(); }
   function close() {
     if (root.hidden) return;
     cancel(); pickers?.close(); snapshot=null; root.hidden=true; setBusy(false); clearContent(); showNotice();
@@ -271,7 +263,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
   return Object.freeze({element:root, async open() {
     if (destroyed) throw new Error('O relatório foi encerrado.');
     if (!root.hidden) return;
-    returnFocus=doc.activeElement; oldOverflow=doc.body.style.overflow; app=doc.getElementById('app'); oldInert=app?.inert || false;
+    returnFocus=doc.activeElement; oldOverflow=doc.body.style.overflow; app=doc.getElementById('app'); oldInert=app?.inert||false;
     doc.body.style.overflow='hidden'; if(app) app.inert=true;
     pickers?.destroy(); pickers=null; const today=localDate(now());
     for (const [name,node] of controls) {
@@ -282,12 +274,12 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
       const display=dateDisplays.get(name);
       if (display) {display.value=value?formatReportDate(value):''; display.setCustomValidity('');}
     }
-    root.hidden=false; const vertical=portrait(); warning.hidden=!vertical; report.hidden=vertical;
-    panel.classList.toggle('pl-dialog--portrait',vertical); setBusy(vertical); panel.focus(); content.scrollTop=0;
-    if (!vertical) await load();
+    root.hidden=false;landscape.update();  warning.hidden=true; report.hidden=false;
+    panel.classList.toggle('pl-dialog--portrait',false); setBusy(false); panel.focus(); content.scrollTop=0;
+    await load();
   }, close, destroy() {
     if (destroyed) return;
     close(); destroyed=true; pickers?.destroy(); pickers=null;
-    win?.removeEventListener('resize',orientationChanged); win?.removeEventListener('orientationchange',orientationChanged); root.remove();
+    win?.removeEventListener('resize',orientationChanged); win?.removeEventListener('orientationchange',orientationChanged); landscape.destroy();root.remove();
   }});
 }

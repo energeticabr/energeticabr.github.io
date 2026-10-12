@@ -9,23 +9,23 @@
 .ccr-dialog.pl-dialog--portrait { padding-top:38px; }
 .ccr-filters { grid-template-columns:84px minmax(0,.9fr) minmax(0,.7fr) minmax(0,1.4fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,.9fr); align-items:end; }
 .ccr-filters .ccr-filter-label { background:#a20000; color:white; white-space:normal; min-height:2.3em; display:grid; align-items:center; }
-.ccr-filter-input { width:100%; min-width:0; box-sizing:border-box; height:27px; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; font:normal clamp(9px,1.2vw,14px) Arial,sans-serif; }
+.ccr-filter-input { width:100%; min-width:0; box-sizing:border-box; height:27px; color:#000; background:white; border:1px solid #1c3c7b; border-radius:0; font:normal clamp(9px,calc(1.2 * var(--report-vw, 1vw)),14px) Arial,sans-serif; }
 .ccr-filters .sfs .sfs-field > .sfs-trigger { color:#000; font-weight:400; }
 /* Shared report pickers own their modal typography and keyboard behavior. */
 .ccr-notice p { margin:2px 0; }
 /* The overlay already applies safe-area insets; reserve only the navigation gutter here. */
-.ccr-content { box-sizing:border-box; margin-inline:56px; overflow-y:auto; overflow-x:hidden; color:#243447; font:normal clamp(10.5px,1.1vw,14px)/1.35 Arial,sans-serif; }
+.ccr-content { box-sizing:border-box; margin-inline:56px; overflow-y:auto; overflow-x:hidden; color:#243447; font:normal clamp(10.5px,calc(1.1 * var(--report-vw, 1vw)),14px)/1.35 Arial,sans-serif; }
 .ccr-brand { border:2px solid #000; background:#ddebf7; padding:8px; text-align:center; }
-.ccr-brand img { display:block; height:clamp(38px,5vw,70px); max-width:65%; width:auto; object-fit:contain; margin:auto; }
-.ccr-title { font-size:clamp(16px,1.8vw,22px); font-weight:700; color:#831843; border-bottom:3px solid #831843; margin:10px 0; padding-bottom:6px; }
+.ccr-brand img { display:block; height:clamp(38px,calc(5 * var(--report-vw, 1vw)),70px); max-width:65%; width:auto; object-fit:contain; margin:auto; }
+.ccr-title { font-size:clamp(16px,calc(1.8 * var(--report-vw, 1vw)),22px); font-weight:700; color:#831843; border-bottom:3px solid #831843; margin:10px 0; padding-bottom:6px; }
 .ccr-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0; }
 .ccr-metric { border:2px solid #70ad47; background:#e2f0d9; color:#375623; padding:10px 5px; text-align:center; min-width:0; overflow-wrap:anywhere; }
-.ccr-metric dt { font-size:clamp(9px,1vw,12px); font-weight:700; }
-.ccr-metric dd { margin:4px 0 0; font-size:clamp(17px,2vw,25px); line-height:1.15; font-weight:800; }
+.ccr-metric dt { font-size:clamp(9px,calc(1 * var(--report-vw, 1vw)),12px); font-weight:700; }
+.ccr-metric dd { margin:4px 0 0; font-size:clamp(17px,calc(2 * var(--report-vw, 1vw)),25px); line-height:1.15; font-weight:800; }
 .ccr-metric--inactive { background:#fce4d6; color:#9c0006; border-color:#c00000; }
 .ccr-metric--contracts { background:#ddebf7; color:#1f4e78; border-color:#5b9bd5; }
 .ccr-metric--activeGlobalValue { border-color:#548235; }
-.ccr-metric--activeGlobalValue dd { font-size:clamp(14px,1.8vw,22px); }
+.ccr-metric--activeGlobalValue dd { font-size:clamp(14px,calc(1.8 * var(--report-vw, 1vw)),22px); }
 .ccr-note { box-sizing:border-box; width:100%; margin:10px 0; padding:8px; background:#fdf2f8; color:#831843; border:1px solid #f9a8d4; border-left:4px solid #be185d; text-align:center; font-weight:600; overflow-wrap:anywhere; }
 .ccr-warnings { margin:8px 0; padding:5px 8px; color:#9c0006; background:#fff2cc; border:1px solid #d6b656; overflow-wrap:anywhere; }
 .ccr-warnings p { margin:3px 0; }
@@ -48,7 +48,7 @@
 .ccr-pager button,.ccr-retry,.ccr-detail-retry { min-height:32px; padding:5px 8px; border:1px solid #be185d; border-radius:4px; background:white; color:#831843; font:inherit; cursor:pointer; }
 .ccr-pager button:disabled { opacity:.4; cursor:default; }
 .ccr-detail { margin:18px 0; }
-.ccr-selected-title,.ccr-detail-title { padding:9px; margin:12px 0 8px; background:#831843; color:white; font-size:clamp(12px,1.4vw,17px); text-align:center; overflow-wrap:anywhere; }
+.ccr-selected-title,.ccr-detail-title { padding:9px; margin:12px 0 8px; background:#831843; color:white; font-size:clamp(12px,calc(1.4 * var(--report-vw, 1vw)),17px); text-align:center; overflow-wrap:anywhere; }
 .ccr-detail-section:has(.ccr-launches) .ccr-detail-title { background:#163a5f; }
 .ccr-launches thead th { background:#4472c4; }
 .ccr-detail-section:has(.ccr-measurements) .ccr-detail-title { background:#548235; }

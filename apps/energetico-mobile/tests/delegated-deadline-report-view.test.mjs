@@ -225,9 +225,9 @@ test('portrait avoids data reads and rotation, Escape and backdrop restore app s
   dom.window.document.body.style.overflow = 'auto';
   original.focus();
   await view.open();
-  assert.equal(reads, 0);
+  assert.equal(reads,1);
   assert.equal(app.inert, true);
-  assert.equal(root.querySelector('.tdr-orientation').hidden, false);
+  assert.equal(root.querySelector('.tdr-orientation').hidden,true);
   rotate(false);
   await tick();
   assert.equal(reads, 1);
@@ -315,19 +315,19 @@ test('closed and superseded reads are aborted and cannot overwrite a newer openi
   await assert.rejects(view.open(), /encerrado/);
 });
 
-test('rotation during loading aborts the read and returning to landscape starts a fresh snapshot', async t => {
+test('rotation during loading retains the original query and snapshot', async t => {
   const requests = [];
   const {view, root, rotate} = setup(t, ({signal}) => new Promise(resolve => requests.push({signal, resolve})));
   const opening = view.open();
   rotate(true);
-  assert.equal(requests[0].signal.aborted, true);
+  assert.equal(requests[0].signal.aborted, false);
   requests[0].resolve(snapshot);
   await opening;
-  assert.deepEqual(ids(root), []);
+  const originalIds=ids(root);assert.ok(originalIds.length>0);
   rotate(false);
-  requests[1].resolve({tasks:[row(8)]});
   await tick();
-  assert.deepEqual(ids(root), [8]);
+  assert.equal(requests.length,1);
+  assert.deepEqual(ids(root), originalIds);
 });
 
 test('rebuilt selectors keep focus and Tab stays inside the report', async t => {

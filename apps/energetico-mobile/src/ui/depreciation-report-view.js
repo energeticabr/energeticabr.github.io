@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildDepreciationOverview} from '../chat/depreciation-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 
@@ -22,7 +23,7 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
  const content=make('div','dr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e depreciação por filial');
  panel.append(warning,toolbar,content);root.append(panel);doc.body.append(root);
  let controller=null,revision=0,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
- const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+ const landscape = bindReportLandscape(root);
 
  function render(snapshot){
   const result=buildDepreciationOverview(snapshot,provisionDateKey(now()));content.replaceChildren();
@@ -61,7 +62,7 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
  }
 
  async function load(){
-  if(root.hidden||portrait()||destroyed)return;
+  if(root.hidden||destroyed)return;
   if(content.contains(doc.activeElement))panel.focus();
   controller?.abort();const current=++revision,active=new AbortController();controller=active;refresh.disabled=true;
   content.replaceChildren(make('p','dr-notice','Carregando depreciação do SharePoint…'));content.setAttribute('aria-busy','true');
@@ -78,12 +79,7 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
   }
  }
  refresh.addEventListener('click',()=>void load());
- function orientationChanged(){
-  if(root.hidden)return;
-  const vertical=portrait();warning.hidden=!vertical;toolbar.hidden=vertical;panel.classList.toggle('dr-portrait',vertical);
-  if(vertical){if(panel.contains(doc.activeElement))panel.focus();controller?.abort();revision++;content.replaceChildren();content.hidden=true;content.setAttribute('aria-busy','false');refresh.disabled=false;}
-  else if(content.hidden){content.hidden=false;void load();}
- }
+ function orientationChanged() { landscape.update(); }
  function close(){
   if(root.hidden)return;controller?.abort();revision++;content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;
  }
@@ -101,9 +97,9 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
   async open(){
    if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;
    returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;
-   root.hidden=false;const vertical=portrait();warning.hidden=!vertical;content.hidden=toolbar.hidden=vertical;panel.classList.toggle('dr-portrait',vertical);panel.focus();content.scrollTop=0;if(!vertical)await load();
+   root.hidden=false;landscape.update();warning.hidden=true;content.hidden=toolbar.hidden=false;panel.classList.toggle('dr-portrait',false);panel.focus();content.scrollTop=0;await load();
   },
   close,
-  destroy(){if(destroyed)return;close();destroyed=true;win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();},
+  destroy(){if(destroyed)return;close();destroyed=true;win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();},
  });
 }

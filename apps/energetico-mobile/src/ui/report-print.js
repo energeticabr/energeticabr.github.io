@@ -1,3 +1,4 @@
+import { reportLayoutRect } from './report-landscape.js';
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 export const REPORT_PDF_TITLES = Object.freeze({
  'open-general-summary-report':'Resumo geral',
@@ -65,7 +66,7 @@ function tableBlock(table,root){
  }
  const colWidths=[...table.querySelectorAll(':scope > colgroup > col')].map(col=>parseFloat(col.style.width));
  const widths=colWidths.length===columns&&colWidths.every(n=>n>0)?colWidths:Array.from({length:columns},(_,index)=>{
-  const header=rows.find(row=>row.header)?.cells.find(cell=>cell.column===index),rect=header?table.rows[0]?.cells[index]?.getBoundingClientRect():null;
+  const header=rows.find(row=>row.header)?.cells.find(cell=>cell.column===index),cell=header?table.rows[0]?.cells[index]:null,rect=cell?reportLayoutRect(cell):null;
   return rect?.width||Math.max(6,Math.min(35,...rows.map(row=>row.cells.find(cell=>cell.column===index)?.runs.map(run=>run.text).join('').length||6)));
  });
  return {type:'table',widths,rows};

@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {contractorReport, documentCell, formatReportDate, formatReportMoney} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
@@ -68,7 +69,7 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   let snapshot=null,page=1,pickers=null,destroyed=false,overviewController=null,detailController=null,reloadPositions=null;
   let overviewRevision=0,detailRevision=0,stateRevision=0,detailState='idle',detailId='',detailSnapshot=null,detailPromise=null,printRestore=null;
   let returnFocus=null,oldOverflow='',app=null,oldInert=false;
-  const portrait=()=>win?.matchMedia ? win.matchMedia('(orientation: portrait)').matches : win?.innerHeight>win?.innerWidth;
+  const landscape = bindReportLandscape(root);
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   const result=()=>contractorReport(snapshot?.rows || [],selected());
   const eligibleId=()=>{const id=controls.get('id').value;return snapshot && id && result().rows.some(row=>String(row.id)===id) ? id : '';};
@@ -85,7 +86,7 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   }
   function focusBeforeClear(node) {if (node.contains(doc.activeElement)) panel.focus({preventScroll:true});}
   function replaceBody(body) {focusBeforeClear(body);body.replaceChildren();}
-  function updateBusy() {root.setAttribute('aria-busy',String(!root.hidden && (portrait() || Boolean(overviewController) || detailState==='loading')));detail.setAttribute('aria-busy',String(detailState==='loading'));}
+  function updateBusy() {root.setAttribute('aria-busy',String(!root.hidden && (Boolean(overviewController) || detailState==='loading')));detail.setAttribute('aria-busy',String(detailState==='loading'));}
   function showNotice(message='',retry=false) {
     notice.replaceChildren();notice.hidden=!message;notice.setAttribute('role',retry?'alert':'status');
     if (!message) return;
@@ -166,9 +167,9 @@ export function createContractorControlReportView({document:doc=globalThis.docum
       linked(detailSnapshot.measurements),row=>[[row.id],[row.supplier],[row.contract],[row.status,row.statusTone??statusTone(row.status)]],'Nenhuma medição vinculada ao contrato.'));
   }
   function loadDetails(id) {
-    clearDetails();if (!id || root.hidden || portrait() || destroyed || id!==eligibleId()) return Promise.resolve();
+    clearDetails();if (!id || root.hidden || destroyed || id!==eligibleId()) return Promise.resolve();
     const active=new AbortController(),current=detailRevision;detailController=active;detailId=id;detailState='loading';renderDetails();updateBusy();
-    const stale=()=>active.signal.aborted||current!==detailRevision||root.hidden||portrait()||destroyed||id!==eligibleId();
+    const stale=()=>active.signal.aborted||current!==detailRevision||root.hidden||destroyed||id!==eligibleId();
     const pending=(async()=>{
       try {
         const loaded=await abortable(Promise.resolve().then(()=>{if (active.signal.aborted) throw cancelled();return data.loadDetails(id,{signal:active.signal});}),active.signal);
@@ -180,11 +181,11 @@ export function createContractorControlReportView({document:doc=globalThis.docum
     })();detailPromise=pending;return pending;
   }
   async function loadOverview() {
-    if (root.hidden || portrait() || destroyed) return;
+    if (root.hidden || destroyed) return;
     invalidatePrint();pickers?.close();const positions=reloadPositions??scrollPositions(),savedPage=page;reloadPositions=positions;
     cancelOverview();clearDetails();const active=new AbortController(),current=overviewRevision;overviewController=active;
     snapshot=null;warnings.replaceChildren();warnings.hidden=true;renderMain();showNotice('Carregando controle de empreiteiros…');updateBusy();
-    const stale=()=>active.signal.aborted||current!==overviewRevision||root.hidden||portrait()||destroyed;
+    const stale=()=>active.signal.aborted||current!==overviewRevision||root.hidden||destroyed;
     try {
       const loaded=await abortable(Promise.resolve().then(()=>{if (active.signal.aborted) throw cancelled();return data.loadOverview({signal:active.signal});}),active.signal);
       if (stale()) return;
@@ -198,19 +199,10 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   function filtersChanged() {
     if (root.hidden || destroyed) return;
     invalidatePrint();page=1;reloadPositions=null;clearDetails();content.scrollTop=0;
-    if (overviewController) {cancelOverview();if (!portrait()) void loadOverview();}
+    if (overviewController) {cancelOverview();void loadOverview();}
     else if (snapshot) {renderMain();void loadDetails(eligibleId());}
   }
-  function orientationChanged() {
-    if (root.hidden || destroyed) return;
-    const vertical=portrait(),wasHidden=report.hidden;orientation.hidden=!vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
-    if (vertical) {
-      invalidatePrint();pickers?.close();if (report.contains(doc.activeElement)) panel.focus({preventScroll:true});
-      cancelOverview();if (detailState==='loading') clearDetails();report.hidden=true;updateBusy();
-    } else if (wasHidden) {
-      report.hidden=false;if (!snapshot) void loadOverview();else {if (eligibleId() && detailState==='idle') void loadDetails(eligibleId());updateBusy();}
-    }
-  }
+  function orientationChanged() { landscape.update(); }
   function close() {
     if (root.hidden) return;
     invalidatePrint();cancelOverview();clearDetails();pickers?.close();root.hidden=true;snapshot=null;page=1;reloadPositions=null;
@@ -227,7 +219,7 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   async function preparePrint() {
     printRestore?.();
     const current=stateRevision,id=eligibleId();
-    const ready=()=>!root.hidden&&!portrait()&&!destroyed&&snapshot&&!overviewController&&current===stateRevision;
+    const ready=()=>!root.hidden&&!destroyed&&snapshot&&!overviewController&&current===stateRevision;
     if (!ready()) throw new Error('O relatório ainda não está pronto para impressão.');
     if (id && detailState==='loading') await detailPromise;
     if (!ready() || (id && (id!==eligibleId() || detailId!==id || detailState!=='ready'))) throw new Error('O detalhamento ainda não está pronto para impressão.');
@@ -263,10 +255,10 @@ export function createContractorControlReportView({document:doc=globalThis.docum
     for (const [name,node] of controls) {
       const value=name==='status'?'ATIVO':'';node.replaceChildren(Object.assign(make('option','',value||'Todos'),{value}));node.value=value;
     }
-    root.hidden=false;const vertical=portrait();orientation.hidden=!vertical;report.hidden=vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
-    updateBusy();panel.focus({preventScroll:true});content.scrollTop=0;content.scrollLeft=0;mainScroll.scrollLeft=0;if (!vertical) await loadOverview();
+    root.hidden=false;landscape.update();orientation.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);
+    updateBusy();panel.focus({preventScroll:true});content.scrollTop=0;content.scrollLeft=0;mainScroll.scrollLeft=0;await loadOverview();
   },close,preparePrint,destroy() {
     if (destroyed) return;close();destroyed=true;cancelOverview();clearDetails();pickers?.destroy();pickers=null;
-    doc.removeEventListener('focusin',containFocus);win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();
+    doc.removeEventListener('focusin',containFocus);win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();
   }});
 }

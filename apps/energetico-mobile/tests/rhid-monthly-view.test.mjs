@@ -81,12 +81,14 @@ test('monthly panel suspension releases the app for its existing signature pad w
  assert.equal(doc.querySelector('#app').inert,true);assert.equal(view.element.inert,false);
  assert.equal(view.element.hidden,false);
 });
-test('monthly form requires supplier, month and year and shows that supplier daily totals',async t=>{
- const requests=[];const {doc}=await setup(t,{loadMonth:async month=>{requests.push(month);return snapshot;}});
+test('monthly form requires supplier, month and year and sends daily totals only to the PDF',async t=>{
+ const requests=[],reports=[];const {doc}=await setup(t,{loadMonth:async month=>{requests.push(month);return snapshot;}},{onReport:async report=>reports.push(report)});
  const supplier=doc.querySelector('select[name="supplier"]');assert.equal(supplier.value,'');assert.deepEqual([...supplier.options].map(o=>o.textContent),['Selecione o fornecedor',...suppliers.map(s=>s.name)]);
  assert.equal(doc.querySelector('[name="month"]').value,'09');assert.equal(doc.querySelector('[name="year"]').value,'2026');
  supplier.value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();
- assert.deepEqual(requests,['2026-09']);assert.match(doc.querySelector('[data-monthly-result]').textContent,/HELISON ROSA LUIS/);assert.match(doc.querySelector('[data-monthly-result]').textContent,/09:00/);assert.equal(doc.querySelectorAll('tbody tr').length,30);
+ assert.deepEqual(requests,['2026-09']);assert.equal(reports[0].supplier.name,'HELISON ROSA LUIS');assert.equal(reports[0].total,'09:00');assert.equal(reports[0].days.length,30);
+ assert.equal(doc.querySelector('[data-monthly-result]').hidden,true);assert.equal(doc.querySelector('[data-monthly-result]').childNodes.length,0);assert.equal(doc.querySelectorAll('tbody tr').length,0);
+ assert.equal(doc.querySelector('.rhid-monthly-notice').hidden,true,'only the PDF is the successful result');
 });
 test('supplier options keep multiple choices when searching again without opening a keyboard',async t=>{
  const {doc,dom}=await setup(t,{loadSuppliers:async()=>Array.from({length:12},(_,i)=>({id:String(i+1),name:`FORNECEDOR ${i+1}`}))});
@@ -113,7 +115,8 @@ test('monthly selection generates all selected employees from one monthly snapsh
  doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
  assert.equal(reads,1);assert.equal(reports.length,1);
  assert.deepEqual(reports[0].map(r=>[r.supplier.id,r.total]),[['4','00:00'],['7','09:00']]);
- assert.equal(doc.querySelectorAll('[data-monthly-result] table').length,2);
+ assert.equal(doc.querySelectorAll('[data-monthly-result] table').length,0);
+ assert.equal(doc.querySelector('[data-monthly-result]').hidden,true);
 });
 
 test('RHID confirms the marked suppliers without generating a PDF and restores period entry',async t=>{
@@ -215,7 +218,7 @@ test('PDF opening failures leave the report available with a visible retry error
  const {doc}=await setup(t,{}, {onReport:async()=>{throw new Error('Não foi possível abrir o PDF.');}});
  doc.querySelector('[name="supplier"]').value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
  assert.match(doc.querySelector('[role="alert"]').textContent,/PDF/);assert.equal(doc.querySelector('.rhid-monthly-generate').disabled,false);
- assert.equal(doc.querySelector('[data-monthly-result]').hidden,false);
+ assert.equal(doc.querySelector('[data-monthly-result]').hidden,true);
 });
 
 test('closing monthly PDF restores focus inside the still-open report instead of inert app',async t=>{

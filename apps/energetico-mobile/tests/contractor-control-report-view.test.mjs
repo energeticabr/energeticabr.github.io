@@ -201,15 +201,15 @@ test('external text is literal in overview details options and warnings',async t
 });
 
 // Break: portrait starts queries or rotation leaves a cancelled detail permanently loading.
-test('portrait shows landscape notice with no query and rotation resumes current filters safely',async t=>{
+test('portrait loads the overview and rotation retains current details safely',async t=>{
   let loads=0;const requests=[];const {view,root,dom}=setup(t,{loadOverview:async()=>{loads++;return snapshot();},loadDetails:(id,{signal})=>{const value=deferred();requests.push({...value,id,signal});return value.promise;}});
-  dom.window.matchMedia=()=>({matches:true});await view.open();assert.equal(loads,0);assert.equal(root.querySelector('.pl-orientation').hidden,false);
-  assert.equal(root.querySelector('.ccr-close').closest('[hidden]'),null);await assert.rejects(view.preparePrint());
+  dom.window.matchMedia=()=>({matches:true});await view.open();assert.equal(loads,1);assert.equal(root.querySelector('.pl-orientation').hidden,true);
+  assert.equal(root.querySelector('.ccr-close').closest('[hidden]'),null);const restore=await view.preparePrint();restore?.();
   dom.window.matchMedia=()=>({matches:false});dom.window.dispatchEvent(new dom.window.Event('resize'));await tick();assert.equal(loads,1);
   change(root,'id','1');await tick();dom.window.matchMedia=()=>({matches:true});dom.window.dispatchEvent(new dom.window.Event('orientationchange'));
-  assert.equal(requests[0].signal.aborted,true);requests[0].resolve(details('1'));await tick();
-  dom.window.matchMedia=()=>({matches:false});dom.window.dispatchEvent(new dom.window.Event('resize'));await tick();assert.equal(requests.length,2);
-  requests[1].resolve(details('1'));await tick();assert.equal(root.querySelector('[name=id]').value,'1');assert.equal(root.querySelectorAll('table').length,3);assert.equal(loads,1);
+  assert.equal(requests[0].signal.aborted,false);requests[0].resolve(details('1'));await tick();
+  dom.window.matchMedia=()=>({matches:false});dom.window.dispatchEvent(new dom.window.Event('resize'));await tick();assert.equal(requests.length,1);
+  assert.equal(root.querySelector('[name=id]').value,'1');assert.equal(root.querySelectorAll('table').length,3);assert.equal(loads,1);
 });
 
 // Break: modal lets focus escape, traps a PDF dialog, or leaves HOME inert after any dismissal path.

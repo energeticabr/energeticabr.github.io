@@ -136,17 +136,18 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
     }));
     const nameHeight = Math.max(...signatures.map(signature => signature.nameLines.length)) * 13;
     const labelHeight = (Math.max(...signatures.map(signature => signature.labelLines.length)) - 1) * 12;
-    const groupHeight = 16 + nameHeight + labelHeight + 8 + 64;
+    const groupHeight = 16 + 64 + 13 + nameHeight + labelHeight + 8;
     // Reserve both signatures at once; a continuation has report context only.
     if (y - groupHeight < BOTTOM) addPage(false);
-    const nameTop = y - 16;
+    const signatureBottom = y - 16 - 64;
+    const nameTop = signatureBottom - 13;
     const labelTop = nameTop - nameHeight;
-    const bottom = labelTop - labelHeight - 8 - 64;
+    const bottom = labelTop - labelHeight - 8;
     signatures.forEach(({ name, fieldName, nameLines, labelLines }, index) => {
       const x = MARGIN + index * (width + gap);
       nameLines.forEach((line, lineIndex) => text(line, x, nameTop - lineIndex * 13, bold, 10));
       labelLines.forEach((line, lineIndex) => text(line, x, labelTop - lineIndex * 12, regular, 9));
-      page.drawLine({ start: { x, y: bottom }, end: { x: x + width, y: bottom }, thickness: 0.7, color: rule });
+      page.drawLine({ start: { x, y: signatureBottom }, end: { x: x + width, y: signatureBottom }, thickness: 0.7, color: navy });
       // A merged /Sig field + /Widget is registered in both canonical trees.
       // No /V is set: this is an empty signature field, not a signed document.
       const appearance = pdf.context.register(pdf.context.flateStream("", {
@@ -154,7 +155,7 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
       }));
       const field = pdf.context.register(pdf.context.obj({
         Type: "Annot", Subtype: "Widget", FT: "Sig", T: PDFHexString.fromText(fieldName),
-        TU: PDFHexString.fromText(name), Rect: [x, bottom, x + width, bottom + 64],
+        TU: PDFHexString.fromText(name), Rect: [x, signatureBottom, x + width, signatureBottom + 64],
         P: page.ref, F: 4, AP: { N: appearance },
       }));
       pdf.getForm().acroForm.addField(field);

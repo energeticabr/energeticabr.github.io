@@ -135,7 +135,7 @@ test("monthly PDF embeds supplied official raster offline at left on every emplo
       assert.equal(widget.P().toString(), output.pdf.getPage(index).ref.toString());
       assert.ok(output.pdf.getPage(index).node.Annots().asArray().some(ref => ref.toString() === field.ref.toString()), "assinatura registrada na página e no AcroForm");
       assert.ok(widget.dict.has(PDFName.of("AP")));
-      if (index === 0) assert.deepEqual(widget.getRectangle(), { x: kind === "employee" ? 32 : 309.5, y: 93, width: 253.5, height: 64 });
+      if (index === 0) assert.deepEqual(widget.getRectangle(), { x: kind === "employee" ? 32 : 309.5, y: 127, width: 253.5, height: 64 });
     }
   }
   const positions = output.pages[0].items;
@@ -214,9 +214,9 @@ test("monthly PDF ties two blank true signature widgets to full employee and rep
     const index = pdf.getPages().findIndex(page => page.ref.toString() === widget.P().toString());
     assert.ok(index >= 0);
     assert.ok(box.x >= 32 && box.x + box.width <= 563 && box.y >= 32);
-    const above = pages[index].items.filter(item => item.transform[4] >= box.x && item.transform[4] + item.width <= box.x + box.width + 0.5
-      && item.transform[5] > box.y + box.height && item.transform[5] < box.y + box.height + 110).map(item => item.str).join(" ");
-    assert.match(above, field.getName().includes("employee") ? /ALEXANDRA MARIA APARECIDA/ : /Representante da Energética/);
+    const below = pages[index].items.filter(item => item.transform[4] >= box.x && item.transform[4] + item.width <= box.x + box.width + 0.5
+      && item.transform[5] < box.y && item.transform[5] > box.y - 160).map(item => item.str).join(" ");
+    assert.match(below, field.getName().includes("employee") ? /ALEXANDRA MARIA APARECIDA/ : /Representante da Energética/);
   }
   const employee = fields.find(field => field.getName().includes("employee"));
   assert.equal(employee.acroField.dict.lookup(PDFName.of("TU")).decodeText(), name.trim());
@@ -256,10 +256,17 @@ test("monthly PDF fits 31 recorded days, total and ample signatures on exactly o
   assert.ok(box.width >= 200 && box.height >= 64);
   const index = pdf.getPages().findIndex(page => page.ref.toString() === employeeWidget.P().toString());
   const nameItems = pages[index].items.filter(item => item.transform[4] >= box.x && item.transform[4] + item.width <= box.x + box.width + 0.5
-    && item.transform[5] > box.y + box.height && item.transform[5] < box.y + box.height + 70
+    && item.transform[5] < box.y && item.transform[5] > box.y - 70
     && item.height >= 10 && !item.str.includes("Assinatura"));
   assert.equal(nameItems.map(item => item.str).join(" "), input.supplier.name, "nome completo deve quebrar na própria coluna");
   assert.ok(nameItems.length > 1 && nameItems.every(item => item.height >= 10), "sem reduzir a fonte do nome");
+  assert.ok(nameItems.every(item=>item.transform[5]+item.height<=box.y),'names must not overlap the digital signature area');
+  const streams=pdf.getPage(index).node.Contents().asArray().map(ref=>decodePDFRawStream(pdf.context.lookup(ref)).decode());
+  const content=streams.map(bytes=>new TextDecoder().decode(bytes)).join('\n');
+  for(const field of [employee,representative]) {
+    const rect=field.acroField.getWidgets()[0].getRectangle();
+    assert.match(content,new RegExp(`${rect.x} ${rect.y} m\\s+${rect.x+rect.width} ${rect.y} l`),'a physical signature line sits above the names and at the base of each digital field');
+  }
   assertInside(pages);
 });
 

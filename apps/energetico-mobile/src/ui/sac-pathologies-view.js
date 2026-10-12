@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildSacPathologies} from '../chat/sac-pathologies-model.js';
 import {formatOperationsDate} from '../chat/operations-reports-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -22,7 +23,7 @@ export function createSacPathologiesReportView({document:doc=globalThis.document
  const content=make('div','pl-table-scroll sap-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e registros de patologias');
  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
- const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+ const landscape = bindReportLandscape(root);
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  function render(){
@@ -58,12 +59,12 @@ export function createSacPathologiesReportView({document:doc=globalThis.document
   pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
  }
  async function load(){
-  if(root.hidden||portrait()||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando patologias do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
+  if(root.hidden||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando patologias do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;buildSacPathologies(result,{},day(now()));snapshot=result;populate();render();}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;content.replaceChildren();showNotice('Não foi possível carregar as patologias. Use Atualizar para tentar novamente.');}
   finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
- function orientationChanged(){if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('pl-dialog--portrait',vertical);if(vertical){pickers?.close();if(report.contains(doc.activeElement))panel.focus();controller?.abort();revision++;snapshot=null;content.replaceChildren();report.hidden=true;}else if(report.hidden){report.hidden=false;void load();}}
+ function orientationChanged() { landscape.update(); }
  function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{
@@ -75,6 +76,6 @@ export function createSacPathologiesReportView({document:doc=globalThis.document
  return Object.freeze({element:root,async open(){
   if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;pickers?.destroy();pickers=null;
   for(const [name,node] of controls){node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));if(name==='status')node.append(Object.assign(make('option','','ATIVO'),{value:'ATIVO'}));node.value=name==='status'?'ATIVO':'';}
-  root.hidden=false;const vertical=portrait();warning.hidden=!vertical;report.hidden=vertical;panel.classList.toggle('pl-dialog--portrait',vertical);panel.focus();if(!vertical)await load();
- },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();}});
+  root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
+ },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

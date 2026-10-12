@@ -34,12 +34,12 @@ function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],r
 test('provision report waits for landscape, restores focus outside, and reloads after rotation',async t=>{
   let calls=0;const {view,root,dom,rotate}=setup(t,async()=>{calls++;return {provisions:[row],recurrences:[recurrence]};},true);
   const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();
-  assert.equal(calls,0);assert.equal(root.querySelector('.pl-orientation').hidden,false);
+  assert.equal(calls,1);assert.equal(root.querySelector('.pl-orientation').hidden,true);
   rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
   assert.equal(root.querySelectorAll('.pr-table').length,3);
   root.querySelector('td').click();assert.equal(root.hidden,false);
-  rotate(true);assert.equal(root.querySelector('.pl-report').hidden,true);
-  rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,2);
+  rotate(true);assert.equal(root.querySelector('.pl-report').hidden,false);
+  rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
   root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);
   assert.equal(dom.window.document.body.style.overflow,'');
 });

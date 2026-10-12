@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildDocumentControlOverview} from '../chat/document-control-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -25,7 +26,7 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
  const content=make('div','dcr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e documentos');
  report.append(toolbar,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
- const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+ const landscape = bindReportLandscape(root);
  const selected=()=>{const order=ORDERS.find(entry=>entry[0]===sort.value)||ORDERS[0];return {...Object.fromEntries([...controls].map(([name,node])=>[name,node.value])),order:order[2],direction:order[3]};};
  function render(){
   if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;
@@ -52,12 +53,12 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
   pickers=bindSearchableFilterSelects(toolbar,{placement:'below',report:true});
  }
  async function load(){
-  if(root.hidden||portrait()||destroyed)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;content.replaceChildren(make('p','dcr-notice','Carregando documentos do SharePoint…'));report.setAttribute('aria-busy','true');
+  if(root.hidden||destroyed)return;if(content.contains(doc.activeElement))panel.focus();pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;refresh.disabled=true;content.replaceChildren(make('p','dcr-notice','Carregando documentos do SharePoint…'));report.setAttribute('aria-busy','true');
   try{const result=await data.loadSnapshot({signal:active.signal});if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;buildDocumentControlOverview(result,{},provisionDateKey(now()));snapshot=result;populate();render();}
   catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;snapshot=null;const message=make('p','dcr-notice','Não foi possível carregar o controle de documentos.');message.setAttribute('role','status');const retry=make('button','dcr-retry','Tentar novamente');retry.type='button';retry.addEventListener('click',()=>void load());content.replaceChildren(message,retry);}
   finally{if(current===revision){refresh.disabled=false;report.setAttribute('aria-busy','false');}}
  }
- function orientationChanged(){if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('dcr-portrait',vertical);if(vertical){pickers?.close();if(panel.contains(doc.activeElement))panel.focus();controller?.abort();revision++;snapshot=null;content.replaceChildren();report.hidden=true;report.setAttribute('aria-busy','false');refresh.disabled=false;}else if(report.hidden){report.hidden=false;void load();}}
+ function orientationChanged() { landscape.update(); }
  function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-document-control-report"]:not(:disabled)')||app;target?.focus?.();returnFocus=null;}
  root.addEventListener('click',event=>{if(event.target===root)close();});root.addEventListener('keydown',event=>{
   if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
@@ -67,6 +68,6 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
  for(const node of controls.values())node.addEventListener('change',()=>{render();content.scrollTop=0;});sort.addEventListener('change',()=>{render();content.scrollTop=0;});refresh.addEventListener('click',()=>void load());win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
  return Object.freeze({element:root,async open(){
   if(destroyed)throw new Error('O relatório foi encerrado.');if(!root.hidden)return;returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;pickers?.destroy();pickers=null;
-  for(const node of controls.values())node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));sort.value='id-desc';root.hidden=false;const vertical=portrait();warning.hidden=!vertical;report.hidden=vertical;panel.classList.toggle('dcr-portrait',vertical);panel.focus();content.scrollTop=0;if(!vertical)await load();
- },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();}});
+  for(const node of controls.values())node.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));sort.value='id-desc';root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('dcr-portrait',false);panel.focus();content.scrollTop=0;await load();
+ },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

@@ -1,3 +1,4 @@
+import { reportLayoutViewport, reportLayoutRect } from './report-landscape.js';
 const enhanced = new WeakMap();
 let nextId = 0;
 
@@ -104,11 +105,11 @@ function createPicker(select, closeOthers, options = {}) {
   }
   function positionPopup() {
     if (popup.hidden || destroyed) return;
-    const viewport = view.visualViewport;
-    let top = viewport?.offsetTop || 0;
-    let bottom = top + (viewport?.height || view.innerHeight || doc.documentElement.clientHeight);
-    let left = viewport?.offsetLeft || 0;
-    let right = left + (viewport?.width || view.innerWidth || doc.documentElement.clientWidth);
+    const viewport = reportLayoutViewport(select);
+    let top = viewport.top;
+    let bottom = top + viewport.height;
+    let left = viewport.left;
+    let right = left + viewport.width;
     if (reportPicker) {
       // Retain the unobstructed height while searching: mobile keyboards shrink
       // both visualViewport and (on Android) the layout viewport. Like PowerApps,
@@ -126,10 +127,10 @@ function createPicker(select, closeOthers, options = {}) {
       // Fixed panels do not inherit the app header's safe-area spacing. Read
       // resolved env() insets from the backdrop, including after rotation.
       const safeArea = view.getComputedStyle(backdrop);
-      const safeTop = parseFloat(safeArea.paddingTop) || 0;
-      const safeBottom = parseFloat(safeArea.paddingBottom) || 0;
-      const safeLeft = parseFloat(safeArea.paddingLeft) || 0;
-      const safeRight = parseFloat(safeArea.paddingRight) || 0;
+      const safeTop = viewport.rotated ? 0 : parseFloat(safeArea.paddingTop) || 0;
+      const safeBottom = viewport.rotated ? 0 : parseFloat(safeArea.paddingBottom) || 0;
+      const safeLeft = viewport.rotated ? 0 : parseFloat(safeArea.paddingLeft) || 0;
+      const safeRight = viewport.rotated ? 0 : parseFloat(safeArea.paddingRight) || 0;
       const usableWidth = right - left - safeLeft - safeRight;
       const width = Math.max(0, Math.min(480, usableWidth - 24));
       const height = Math.max(0, Math.min(640, (selectionActions ? viewportHeight : reportViewport.height) - safeTop - safeBottom - 24));
@@ -140,7 +141,7 @@ function createPicker(select, closeOthers, options = {}) {
       popup.style.top = `${top + safeTop + 12}px`;
       popup.style.right = 'auto'; popup.style.bottom = 'auto';
       popup.style.height = `${height}px`; popup.style.maxHeight = `${height}px`;
-      const footerHeight = actionFooter ? actionFooter.getBoundingClientRect().height || 64 : 0;
+      const footerHeight = actionFooter ? reportLayoutRect(actionFooter).height || 64 : 0;
       list.style.maxHeight = `${Math.max(0, height - 54 - footerHeight)}px`;
       return;
     }

@@ -1,3 +1,4 @@
+import { bindReportLandscape } from './report-landscape.js';
 import {buildSupplierPayrollOverview,currentPayrollMonth,summarizePayrollPayments,summarizePayrollPaymentsByType,payrollReferencePeriod,payrollTypeAppearance,buildPayrollReportCsv} from '../chat/supplier-payroll-report-model.js';
 import {formatOperationsDate} from '../chat/operations-reports-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -37,7 +38,7 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  const launchActions=createGalleryRecordActions({document:doc,host:root,loadEditor:loadLaunchEditor,saveEditor:saveLaunchEditor,onChanged:changed,actions:['edit']});
  const rowCache=new Map();
  function icon(name){const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),path=doc.createElementNS('http://www.w3.org/2000/svg','path');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');path.setAttribute('d',ICONS[name]);svg.append(path);return svg;}
- const portrait=()=>win?.matchMedia?win.matchMedia('(orientation: portrait)').matches:win?.innerHeight>win?.innerWidth;
+ const landscape = bindReportLandscape(root);
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  const invalidateDetails=()=>{for(const entry of entries)entry.controller?.abort();entries=[];};
@@ -148,7 +149,6 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  async function load({preserve=false}={}){
   if(root.hidden||destroyed)return;
   const state=pendingReload||{openKeys:preserve?new Set(entries.filter(e=>e.card.open).map(e=>e.group.key)):new Set(),scroll:preserve?content.scrollTop:0};
-  if(portrait()) {pendingReload=state;controller?.abort();invalidateDetails();rowCache.clear();snapshot=null;content.replaceChildren();revision++;return;}
   pendingReload=null;const {openKeys,scroll}=state;
   pickers?.close();controller?.abort();invalidateDetails();rowCache.clear();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();showNotice('Carregando folhas de pagamento do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
   try{const result=await abortable(Promise.resolve().then(()=>data.loadSnapshot({signal:active.signal})),active.signal);if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;buildSupplierPayrollOverview(result);snapshot=result;populate();render();for(const entry of entries){if(openKeys.has(entry.group.key)){entry.card.open=true;entry.open=true;entry.detail.hidden=false;void loadGroup(entry).catch(()=>{});}}content.scrollTop=scroll;}
@@ -156,17 +156,7 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
   finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
  }
  function close(){if(root.hidden)return;paymentActions.close();launchActions.close();controller?.abort();revision++;invalidateDetails();rowCache.clear();snapshot=null;pendingReload=null;printing=false;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;onClose();}
- function orientationChanged(){
-  if(root.hidden)return;const vertical=portrait();warning.hidden=!vertical;panel.classList.toggle('pl-dialog--portrait',vertical);
-  if(vertical){
-   pickers?.close();report.hidden=true;
-   // A PDF preview can rotate the device. Keep the loaded reference, supplier
-   // disclosures and their tables; hiding the report is not a new data session.
-   if(!snapshot){controller?.abort();revision++;report.setAttribute('aria-busy','false');refresh.disabled=false;}
-   if(printing){revision++;for(const entry of entries)entry.controller?.abort();}
-   if(root.contains(doc.activeElement))panel.focus();
-  }else if(report.hidden){report.hidden=false;if(!snapshot)void load();}
- }
+ function orientationChanged() { landscape.update(); }
  closeButton.addEventListener('click',close);refresh.addEventListener('click',()=>void load());root.addEventListener('click',e=>{if(e.target===root)close();});
  search.addEventListener('input',()=>{if(!printing){render();content.scrollTop=0;}});exportAll.addEventListener('click',()=>void exportGroups([...entries]));
  root.addEventListener('keydown',e=>{if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,summary,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){e.preventDefault();first?.focus();}});
@@ -175,12 +165,12 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
   if(destroyed)throw new Error('O relatório de folhas foi encerrado.');if(!root.hidden)return;
   returnFocus=doc.activeElement;oldOverflow=doc.body.style.overflow;app=doc.getElementById('app');oldInert=app?.inert||false;doc.body.style.overflow='hidden';if(app)app.inert=true;
   search.value='';pickers?.destroy();pickers=null;for(const [name,node] of controls){const value=name==='month'?currentPayrollMonth(now()):'';node.replaceChildren(Object.assign(make('option','',name==='month'?monthLabel(value):'Todos'),{value}));node.value=value;node.disabled=false;}
-  root.hidden=false;const vertical=portrait();warning.hidden=!vertical;report.hidden=vertical;panel.classList.toggle('pl-dialog--portrait',vertical);panel.focus();if(!vertical)await load();
+  root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
  },async preparePrint(){
   if(!snapshot||root.hidden||destroyed||exporting||paymentActions.isEditing()||launchActions.isEditing())throw cancelled();pickers?.close();printing=true;refresh.disabled=true;search.disabled=true;for(const node of controls.values())node.disabled=true;
   const states=entries.map(entry=>({entry,open:entry.card.open,inert:entry.card.inert})),current=revision;
   for(const {entry} of states)entry.card.inert=true;
-  const restore=()=>{for(const {entry,open,inert} of states){entry.card.open=open;entry.card.inert=inert||false;entry.detail.hidden=!open;}printing=false;refresh.disabled=false;search.disabled=false;for(const node of controls.values())node.disabled=false;};
+  const restore=()=>{for(const {entry,open,inert} of states){entry.card.open=open;entry.card.inert=inert;entry.detail.hidden=!open;}printing=false;refresh.disabled=false;search.disabled=false;for(const node of controls.values())node.disabled=false;};
   try{for(const {entry} of states){entry.card.open=true;entry.detail.hidden=false;await loadGroup(entry);}if(root.hidden||destroyed||current!==revision)throw cancelled();for(const {entry} of states){entry.card.open=true;entry.detail.hidden=false;}return restore;}catch(error){restore();throw error;}
- },close,destroy(){if(destroyed)return;close();destroyed=true;paymentActions.destroy();launchActions.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);root.remove();}});
+ },close,destroy(){if(destroyed)return;close();destroyed=true;paymentActions.destroy();launchActions.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

@@ -14,7 +14,7 @@ function setup(t,loadSnapshot=async()=>({launches:[row],productTypes:[{product:'
 test('management shortcut popup guards portrait, rotates, closes outside and restores focus',async t=>{
   let calls=0;const {view,root,dom,rotate}=setup(t,async options=>{calls++;assert.equal(options.reportNumber,9);return {launches:[row],productTypes:[]};},true);
   const trigger=dom.window.document.querySelector('#app button');trigger.focus();
-  await view.open();assert.equal(calls,0);assert.match(root.textContent,/POSICIONAR O TELEFONE NA HORIZONTAL/);
+  await view.open();assert.equal(calls,1);assert.match(root.textContent,/POSICIONAR O TELEFONE NA HORIZONTAL/);
   rotate(false);await new Promise(r=>setImmediate(r));assert.equal(calls,1);
   assert.equal(root.querySelectorAll('.gm-table').length,7);
   root.querySelector('td').click();assert.equal(root.hidden,false);

@@ -43,7 +43,7 @@ test('report renders logo, seven indicators, eleven columns, branch totals and d
 
 test('portrait avoids reads and rotation loads; inside stays open, outside and Escape restore focus',async t=>{
  let reads=0;const {view,root,dom,rotate}=setup(t,async()=>{reads++;return snapshot;},true);
- const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();assert.equal(reads,0);assert.equal(root.querySelector('.dr-orientation').hidden,false);
+ const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();assert.equal(reads,1);assert.equal(root.querySelector('.dr-orientation').hidden,true);
  rotate(false);await tick();assert.equal(reads,1);root.querySelector('table').click();assert.equal(root.hidden,false);root.click();assert.equal(root.hidden,true);assert.equal(dom.window.document.activeElement,trigger);assert.equal(dom.window.document.getElementById('app').inert,false);
  await view.open();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(root.hidden,true);
 });
@@ -57,10 +57,10 @@ test('refresh clears stale totals, reloads real data and recomputes São Paulo c
  assert.equal(root.querySelectorAll('.dr-date-overdue').length,2);
 });
 
-test('closing and rotating abort late reads without showing stale financial data',async t=>{
+test('rotation retains pending read but closing aborts and discards late data',async t=>{
  let finish,signal;const {view,root,rotate}=setup(t,options=>{signal=options.signal;return new Promise(resolve=>finish=resolve);});
- const opening=view.open();rotate(true);assert.equal(signal.aborted,true);finish(snapshot);await opening;assert.equal(root.querySelectorAll('table').length,0);
- rotate(false);await tick();view.close();assert.equal(signal.aborted,true);finish(snapshot);await tick();assert.equal(root.querySelectorAll('.dr-card').length,0);assert.equal(root.hidden,true);
+ const opening=view.open();rotate(true);assert.equal(signal.aborted,false);finish(snapshot);await opening;assert.ok(root.querySelectorAll('table').length>0);
+ rotate(false);await tick();view.close();const second=view.open();view.close();assert.equal(signal.aborted,true);finish(snapshot);await second;assert.equal(root.querySelectorAll('.dr-card').length,0);assert.equal(root.hidden,true);
 });
 
 test('failed and incomplete loads display retry instead of zero totals; reopening obtains a fresh snapshot',async t=>{
