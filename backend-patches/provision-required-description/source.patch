@@ -9,11 +9,11 @@
  try:
      from .logic import resolve_option
      from .payment_provision_group import provision_parent_fields, provision_preview
-+    from .provision_parent_choice import append_options, parent_id, validate_parent, linked_total, same_total
++    from .provision_parent_choice import append_options, parent_id, read_parent, validate_parent, linked_total, same_total
  except ImportError:
      from logic import resolve_option
      from payment_provision_group import provision_parent_fields, provision_preview
-+    from provision_parent_choice import append_options, parent_id, validate_parent, linked_total, same_total
++    from provision_parent_choice import append_options, parent_id, read_parent, validate_parent, linked_total, same_total
  
  
  PROVISION_STAGES = {
@@ -90,7 +90,7 @@
          elif stage == "asking_provision_more":
              if value == "SIM":
                  for key,values in state["provision_lines"][-1].items():
-@@ -230,7 +268,45 @@
+@@ -230,7 +268,89 @@
          if state.get("provision_reference_supplier"):
              rows.append({"label":"FORNECEDOR REFERÊNCIA","value":state["provision_reference_supplier"]})
          rows.append({"label":"TOTAL DA PROVISÃO","value":preview["totalDisplay"]})
@@ -100,17 +100,61 @@
 +                     else "NOVO DESCRITIVO"})
          return rows
 +
-+    def _provision_update_existing_total(self, state, etag):
++    def _provision_ensure_once(self, state, etag, checkpoint, token, fields, target, idempotency_field):
++        """Fence creation across response loss and eventually consistent token reads.
++
++        ensure_item itself recovers once but may return an empty token read.
++        Re-entering it after an ambiguous POST would create a duplicate. An old
++        unresolved journal without a fence is also recovery-only: its earlier
++        POST outcome cannot be established from an empty read.
++        """
++        finder = getattr(self.sharepoint, "_find_item", None)
++        if not callable(finder):
++            raise RuntimeError("A recuperação por token da provisão é obrigatória")
++        existing = finder(token, target, idempotency_field)
++        if existing:
++            return int(parent_id(existing["Id"])), etag
++        if checkpoint.get("create_attempted", True):
++            raise RuntimeError("A criação da provisão está aguardando confirmação por token; tente novamente sem repostar")
++        checkpoint["create_attempted"] = True
++        etag = self._save(state, etag)  # Must be durable BEFORE ensure_item can POST.
++        try:
++            item_id = self.sharepoint.ensure_item(token, fields, target_list=target,
++                idempotency_field=idempotency_field, merge_existing=False)
++        except HTTPError as exc:
++            response = exc.response
++            request = exc.request if exc.request is not None else getattr(response, "request", None)
++            # ensure_item may replace a lost POST exception with a recovery GET
++            # exception. Only a definite POST rejection can release this fence.
++            if (response is not None and response.status_code in {400, 401, 403}
++                    and getattr(request, "method", None) == "POST"):
++                checkpoint["create_attempted"] = False
++                self._save(state, etag)
++            raise
++        return int(parent_id(item_id)), etag
++
++    def _provision_update_total(self, state, etag):
 +        progress = state["provision_commit"]
-+        checkpoint = progress.setdefault("total_update", {"verified": False})
++        # Previous NEW journals saved None here. Persist the migration before
++        # the paginated read so an unavailable page still leaves a checkpoint.
++        if not isinstance(progress.get("total_update"), dict):
++            progress["total_update"] = {"verified": False}
++            etag = self._save(state, etag)
++        checkpoint = progress["total_update"]
 +        if checkpoint["verified"]:
 +            return etag
-+        selection = progress["parent_selection"]
++        def current_parent():
++            if progress.get("parent_mode", "NEW") == "EXISTING":
++                return validate_parent(self.sharepoint, progress["parent_selection"],
++                                       check_etag=False, allow_total_change=True)
++            # A newly-created group's later payment/gallery edits are not our
++            # fields to reset. Read its version and update only VALORTOTAL.
++            return read_parent(self.sharepoint, progress["parent_id"], require_pending=False)
 +        for attempt in range(3):
-+            before = validate_parent(self.sharepoint, selection, check_etag=False, allow_total_change=True)
++            before = current_parent()
 +            group = self.sharepoint.get_provision_description(progress["parent_id"])
 +            total = linked_total(group, progress["parent_id"], [c["item_id"] for c in progress["children"]])
-+            current = validate_parent(self.sharepoint, selection, check_etag=False, allow_total_change=True)
++            current = current_parent()
 +            if before["etag"] != current["etag"]:
 +                if attempt == 2:
 +                    raise RuntimeError("O descritivo mudou durante a consulta do total")
@@ -125,7 +169,7 @@
 +                    if exc.response is not None and exc.response.status_code == 412 and attempt < 2:
 +                        continue
 +                    raise
-+            confirmed = validate_parent(self.sharepoint, selection, check_etag=False, allow_total_change=True)
++            confirmed = current_parent()
 +            if not same_total(confirmed["fields"]["VALORTOTAL"], total):
 +                if attempt == 2:
 +                    raise RuntimeError("O total do descritivo não foi confirmado")
@@ -136,7 +180,7 @@
  
      @staticmethod
      def _provision_verified(result):
-@@ -251,36 +327,64 @@
+@@ -251,36 +371,65 @@
          progress = state.get("provision_commit")
          token = state.get("idempotency_token") or f"WA-payment-{state['batch_id']}"
          if not progress:
@@ -158,7 +202,7 @@
 +                "parent_fields":parent_fields, "parent_id":int(selection["parent_id"]) if selection else None,
 +                "parent_verified":bool(selection), "parent_mode":mode, "parent_selection":selection,
 +                "parent_token":token+"-parent",
-+                "total_update":{"verified":False} if selection else None,
++                "create_attempted":False, "total_update":{"verified":False},
 +                "fixed_fields":copy.deepcopy(flow.get("fixed_fields", [])),
                  "attachments":copy.deepcopy(state.get("attachments",[])),
                  "attachment_digests":[hashlib.sha256(self.media_repository.read(a)).hexdigest()
@@ -166,6 +210,7 @@
 -                "children":[{"fields":copy.deepcopy(line["fields"]), "item_id":None, "verified":False}
 -                            for line in lines],
 +                "children":[{"fields":copy.deepcopy(line["fields"]), "item_id":None, "verified":False,
++                             "create_attempted":False,
 +                             "token":token if len(lines) == 1 else token+f"-line-{index+1}"}
 +                            for index,line in enumerate(lines)],
              }
@@ -192,10 +237,12 @@
              state["provision_commit"] = progress
              etag = self._save(state, etag)
          if progress["parent_id"] is None:
-             progress["parent_id"] = self.sharepoint.ensure_item(
+-            progress["parent_id"] = self.sharepoint.ensure_item(
 -                token+"-parent", progress["parent_fields"],
+-                target_list="DESCRITIVOPROVISAO", idempotency_field="Title", merge_existing=False)
++            progress["parent_id"], etag = self._provision_ensure_once(state, etag, progress,
 +                progress.get("parent_token", token+"-parent"), progress["parent_fields"],
-                 target_list="DESCRITIVOPROVISAO", idempotency_field="Title", merge_existing=False)
++                "DESCRITIVOPROVISAO", "Title")
              self._remember_submission_item(state, progress["parent_id"], "DESCRITIVOPROVISAO")
 +            etag = self._save(state, etag)
 +        parent_id(progress["parent_id"])
@@ -209,7 +256,7 @@
              etag = self._save(state, etag)
          if not progress["parent_verified"]:
              verification = self.sharepoint.verify_item(
-@@ -297,6 +401,9 @@
+@@ -297,6 +446,9 @@
          # pending groups created by the previous version also copy their
          # frozen files. ensure_attachment safely resumes partial uploads.
          if not progress.get("parent_attachments_verified"):
@@ -219,7 +266,7 @@
              for attachment in frozen_attachments:
                  self.sharepoint.ensure_attachment(progress["parent_id"], attachment["sharepoint_name"],
                      self.media_repository.read(attachment), attachment.get("mime_type"),
-@@ -310,16 +417,22 @@
+@@ -310,19 +462,24 @@
                  if not self._provision_verified(verification):
                      raise RuntimeError("Os anexos do pai da provisão não foram confirmados no SharePoint")
              progress["parent_attachments_verified"] = True
@@ -238,13 +285,18 @@
              if child["item_id"] is None:
                  # Single-mode tokens retain compatibility with existing drafts.
 -                child_token = token if len(progress["children"]) == 1 else token+f"-line-{index+1}"
+-                child["item_id"] = self.sharepoint.ensure_item(
+-                    child_token, child["fields"], target_list=target,
+-                    idempotency_field=flow.get("idempotency_field","Title"), merge_existing=False)
 +                child_token = child.get("token") or (token if len(progress["children"]) == 1 else token+f"-line-{index+1}")
 +                if existing_mode:
 +                    validate_parent(self.sharepoint, progress["parent_selection"])
-                 child["item_id"] = self.sharepoint.ensure_item(
-                     child_token, child["fields"], target_list=target,
-                     idempotency_field=flow.get("idempotency_field","Title"), merge_existing=False)
-@@ -335,6 +448,8 @@
++                child["item_id"], etag = self._provision_ensure_once(state, etag, child,
++                    child_token, child["fields"], target, flow.get("idempotency_field","Title"))
+                 self._remember_submission_item(state, child["item_id"], target)
+                 etag = self._save(state, etag)
+             names = attachment_names if index == 0 else []
+@@ -335,6 +492,8 @@
                  if link and link != expected_fields["DESCRITIVOPROVISAO"]:
                      raise RuntimeError("A provisão antiga já está vinculada a outro pai")
                  if not link:
@@ -253,12 +305,11 @@
                      self.sharepoint.update_item_with_etag(child["item_id"],expected_fields,
                          version,target_list=target)
              if index == 0:
-@@ -346,6 +461,8 @@
+@@ -346,6 +505,7 @@
                  raise RuntimeError(f"A linha {index+1} da provisão não foi confirmada no SharePoint")
              child["verified"] = True
              etag = self._save(state, etag)
-+        if existing_mode:
-+            etag = self._provision_update_existing_total(state, etag)
++        etag = self._provision_update_total(state, etag)
          items = [{"line":index+1,"item_id":child["item_id"],"fields":copy.deepcopy(child["fields"]),
                    "verified":child["verified"]} for index,child in enumerate(progress["children"])]
          state["sharepoint"] = {
@@ -296,15 +347,15 @@
 +    return text
 +
 +
-+def read_parent(client, item_id):
++def read_parent(client, item_id, *, require_pending=True):
 +    item_id = parent_id(item_id)
 +    fields, etag = client.get_item_fields_with_etag(int(item_id), PARENT_FIELDS, target_list=PARENT_LIST)
 +    if not isinstance(fields, dict) or any(key not in fields for key in PARENT_FIELDS):
 +        raise ValueError("Leitura incompleta do descritivo")
 +    if not isinstance(etag, str) or not etag.strip() or etag.strip() == "*":
 +        raise ValueError("ETag específico do descritivo é obrigatório")
-+    if any(value is not None and (not isinstance(value, str) or value.strip())
-+           for value in (fields[key] for key in PAYMENT_MARKERS)):
++    if require_pending and any(value is not None and (not isinstance(value, str) or value.strip())
++                               for value in (fields[key] for key in PAYMENT_MARKERS)):
 +        raise ParentUnavailable("O descritivo já está pago, agendado ou em execução")
 +    return {"parent_id": item_id, "fields": copy.deepcopy(fields), "etag": etag.strip()}
 +
