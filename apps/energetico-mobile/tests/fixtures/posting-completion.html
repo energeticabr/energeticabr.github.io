@@ -13,6 +13,13 @@ window.addEventListener('error', event => {
 import { createChatView } from '../../src/ui/chat-view.js';
 const view = createChatView(document.querySelector('#app'));
 const samples = {
+  'order-attachments': `✅ 🟢 ANEXOS DO PEDIDO ADICIONADOS NA BASE DE DADOS NOTASPENDENTES ÀS 00:13. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• PEDIDO: ID 406`,
+  'order-attachments-multiple': `✅ 🟢 ANEXOS DO PEDIDO ADICIONADOS NA BASE DE DADOS NOTASPENDENTES ÀS 00:13. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• PEDIDOS: IDS 406, 9007199254740993
+📎 Comprovante: comprovante-pendente.pdf`,
   settlement: `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE DADOS PROVISÃO PGTOS ÀS 06:18.* 🕒
 🆔 *REGISTROS CONFIRMADOS:*
 • PROVISÃO DE PAGAMENTO: ID 308
@@ -55,7 +62,7 @@ const samples = {
 };
 const sample = new URLSearchParams(location.search).get('sample') || 'multiple';
 view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
-  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : 'POSTAGEM CONCLUÍDA' },
+  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('order-attachments') ? '📎 ADICIONAR UM ANEXO A UM PEDIDO' : sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : 'POSTAGEM CONCLUÍDA' },
   messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text: samples[sample] }],
 });
 await document.fonts.ready;

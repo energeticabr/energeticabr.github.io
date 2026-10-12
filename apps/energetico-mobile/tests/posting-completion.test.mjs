@@ -29,6 +29,79 @@ const descriptionSettlement = `✅ *🟢 PAGAMENTO AGENDADO BAIXADO NA BASE DE D
 • PEDIDO: ID 406
 • LANÇAMENTO: ID 3570`;
 
+const orderAttachments = `✅ 🟢 ANEXOS DO PEDIDO ADICIONADOS NA BASE DE DADOS NOTASPENDENTES ÀS 00:13. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• PEDIDO: ID 406`;
+
+test('order attachments confirmation uses the branded success card with the actual order and source time', () => {
+  const doc = documentFor(orderAttachments);
+  const card = doc.querySelector('.launch-completion--order-attachments');
+  assert.ok(card, 'the attachment notice must use the shared receipt, not a plain paragraph');
+  assert.equal(card.querySelector('h2').textContent, 'ANEXOS DO PEDIDO');
+  assert.equal(card.querySelector('.launch-completion__success p').textContent, 'Adicionados na base de dados');
+  assert.match(card.querySelector('.launch-completion__operation').textContent, /NOTASPENDENTES\s+ÀS 00:13/);
+  assert.equal(card.querySelector('.launch-completion-sender strong').textContent, 'Energético');
+  assert.equal(card.querySelector('.launch-completion-sender time').textContent, '00:13');
+  assert.equal(card.querySelector('.launch-completion-sender img').getAttribute('alt'), 'Mascote Energético');
+  assert.equal(doc.querySelector('.chat-message--launch-completion > .chat-avatar'), null);
+  assert.equal(doc.querySelectorAll('.launch-completion-sender').length, 1);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['PEDIDO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 406']);
+  assert.equal(card.querySelector('footer').textContent.trim(), 'Processo concluído com sucesso!');
+  assert.doesNotMatch(card.textContent, /R\$|\d{2}\/\d{2}\/\d{4}|\d+ anexos/i);
+  assert.equal(card.querySelectorAll('button, input, [data-action]').length, 0);
+});
+
+test('order attachments receipt keeps each order ID, filename notes and immutable metadata without losing precision', () => {
+  const text = orderAttachments.replace('• PEDIDO: ID 406', '• PEDIDOS: IDS 406, 9007199254740993')
+    + '\n📎 Comprovante: comprovante-pendente.pdf\n📎 Anexos enviados: 2\nArquivo: A & B <img src=x onerror=alert(1)>';
+  const attachment = Object.freeze({ id: 'receipt', name: 'comprovante-pendente.pdf' });
+  const metadata = Object.freeze({ attachments: Object.freeze([attachment]) });
+  const card = documentFor(text, metadata).querySelector('.launch-completion--order-attachments');
+  assert.ok(card);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['PEDIDO', 'PEDIDO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 406', 'ID 9007199254740993']);
+  assert.match(card.querySelector('.launch-completion__details').textContent, /comprovante-pendente\.pdf/);
+  assert.match(card.querySelector('.launch-completion__details').textContent, /Anexos enviados: 2/);
+  assert.ok(card.textContent.includes('Arquivo: A & B <img src=x onerror=alert(1)>'));
+  assert.equal(card.querySelector('img[src="x"]'), null);
+  assert.equal(documentFor(text, metadata).querySelector('.launch-completion').outerHTML, card.outerHTML);
+  assert.deepEqual(metadata.attachments, [attachment]);
+});
+
+for (const [name, text] of [
+  ['missing order', orderAttachments.split('\n').slice(0, 2).join('\n')],
+  ['unrelated confirmed document', orderAttachments.replace('• PEDIDO: ID 406', '• DOCUMENTO: ID 406')],
+  ['invalid order ID', orderAttachments.replace('ID 406', 'ID 0')],
+  ['invalid hour', orderAttachments.replace('00:13', '24:13')],
+  ['unrelated database', orderAttachments.replace('NOTASPENDENTES', 'DOCUMENTOS')],
+  ['unrelated added subject', orderAttachments.replace('ANEXOS DO PEDIDO', 'DOCUMENTOS')],
+  ['empty additional order', orderAttachments + '\n• PEDIDO:'],
+  ['failed attachment', orderAttachments + '\n❌ Falha ao enviar um anexo.'],
+  ['partial confirmation', orderAttachments + '\n⚠️ CONFIRMAÇÃO PARCIAL: um anexo permanece pendente.'],
+  ['unconfirmed attachment', orderAttachments + '\n⚠️ Anexo do pedido ID 406 não confirmado.'],
+  ['pending attachment', orderAttachments + '\nAnexo adicional pendente de envio.'],
+  ['attachment not added', orderAttachments + '\nArquivo não adicionado.'],
+  ['attachment not sent', orderAttachments + '\nComprovante não enviado.'],
+  ['attachment not linked', orderAttachments + '\nDocumento não anexado.'],
+  ['incomplete attachments', orderAttachments + '\nAnexos incompletos.'],
+  ['partially added files', orderAttachments + '\nArquivos parcialmente adicionados.'],
+  ['negative continuation after filename', orderAttachments + '\n📎 Comprovante: recibo.pdf, não confirmado.'],
+  ['pending order after received attachment', orderAttachments + '\n⚠️ Anexo recebido; pedido ID 407 pendente de confirmação.'],
+]) {
+  test(`incomplete order attachments confirmation stays plain and visible: ${name}`, () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.ok(doc.querySelector('.chat-bubble').textContent.includes(text.replaceAll('*', '').split('\n')[0]));
+  });
+}
+
+test('order attachment wording in a user message or structured response is not a write receipt', () => {
+  for (const metadata of [{ role: 'user' }, { presence_confirmation: { rows: [] } }]) {
+    assert.equal(documentFor(orderAttachments, metadata).querySelector('.launch-completion'), null);
+  }
+});
+
 test('description settlement renders the shared green receipt with its parent and every confirmed child', () => {
   const card = documentFor(descriptionSettlement).querySelector('.launch-completion--provision-settlement');
   assert.ok(card, 'the parent-model notice must use the same receipt as provision settlements');
