@@ -4,6 +4,25 @@ import { JSDOM } from 'jsdom';
 const { createProvisionReportView } = await import('../src/ui/provision-report-view.js').catch(() => ({}));
 const row = {id:'314',recurrenceId:'7',branch:'004 - EDIFÍCIO XAVANTE',supplier:'TRANSPIO',product:'MOVIMENTAÇÃO DE TERRA',observation:'Conferir quantidade',property:'Obra',dueDate:'2026-10-09',paidDate:'',schedule:'PAGAMENTO AGENDADO',scheduledDate:'2026-10-06',executionDate:'2026-10-07',status:'PAGAMENTO PREVISTO',total:100};
 const recurrence = {id:'7',branch:row.branch,supplier:row.supplier,product:row.product,property:'Obra',status:'ATIVO',startDate:'2026-01-05',modified:'2026-10-01T12:00:00Z'};
+
+// Break: stacked cells lose their column names or the PDF loses month headers.
+test('responsive provision cells retain every field and month label without adding duplicate PDF text',async t=>{
+  const {view,root}=setup(t);await view.open();
+  const main=root.querySelector('table[data-section=provisions]');
+  assert.deepEqual([...main.querySelectorAll('tbody tr[data-id] td')].map(cell=>cell.dataset.label),
+    ['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS']);
+  const annual=root.querySelector('table[data-section=annual]');
+  const labels=[...annual.querySelector('tbody tr[data-recurrence-id]').cells].map(cell=>cell.dataset.label);
+  assert.deepEqual(labels,['FORNECEDOR','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ','TOTAL']);
+  assert.equal(root.querySelector('.pr-scroll-hint'),null);
+  assert.equal(main.getAttribute('role'),'table');
+  assert.equal(main.querySelector('tbody tr[data-id]').getAttribute('role'),'row');
+  assert.equal(main.querySelector('tbody tr[data-id] td').getAttribute('role'),'cell');
+  const {captureFilteredReport}=await import('../src/ui/report-print.js');
+  const capture=captureFilteredReport(root,{title:'Provisões'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
+  assert.deepEqual(tables.map(table=>table.rows.filter(row=>row.header).at(-1).cells.length),[7,14,8]);
+  assert.equal(tables[0].rows[2].cells[0].runs.map(run=>run.text).join('').trim(),row.branch);
+});
 function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],recurrences:[recurrence]}), portrait=false) {
   assert.equal(typeof createProvisionReportView, 'function');
   const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let vertical=portrait;

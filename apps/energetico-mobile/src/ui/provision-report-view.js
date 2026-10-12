@@ -46,15 +46,22 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   function table(section,title,labels,widths){
     const scroll=make('div','pr-section-scroll');scroll.dataset.section=section;scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title.replace(/^[^\p{L}]+/u,''));
     const table=make('table',`pr-table pr-table--${section}`);table.dataset.section=section;
+    table.setAttribute('role','table');
     const columns=make('colgroup');for(const width of widths){const col=make('col');col.style.width=`${width}%`;columns.append(col);}table.append(columns);
     const head=make('thead'),titleRow=make('tr'),heading=make('th','pr-section-title',title);heading.colSpan=labels.length;titleRow.append(heading);head.append(titleRow);
     const headings=make('tr');for(const label of labels){const th=make('th','',label);th.scope='col';headings.append(th);}head.append(headings);
+    for(const row of head.rows){row.setAttribute('role','row');for(const th of row.cells)th.setAttribute('role','columnheader');}
     const body=make('tbody');table.append(head,body);scroll.append(table);content.append(scroll);return body;
   }
   function footer(body,label,colSpan,value,metric,lastText,lastMetric){
     const tr=make('tr','pr-total'),heading=cell(tr,'label',label);heading.colSpan=colSpan;
     const total=cell(tr,'total',value);total.dataset.metric=metric;
     if(lastText!==undefined){const last=cell(tr,'count',lastText);last.dataset.metric=lastMetric;}body.append(tr);
+    // Keep one semantic table for screen readers and PDF capture. Responsive
+    // labels are CSS-generated from metadata, never duplicated report text.
+    const labels=[...body.parentElement.tHead.rows[1].cells].map(th=>th.textContent);
+    for(const row of body.rows){row.setAttribute('role','row');let column=0;
+      for(const td of row.cells){td.setAttribute('role','cell');td.dataset.label=labels[column];column+=td.colSpan;}}
   }
   function scheduling(td,row,today){
     td.replaceChildren();const schedule=upper(row.schedule);
@@ -71,7 +78,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     content.replaceChildren();showNotice('');if(!snapshot)return;
     const today=provisionDateKey(now()),result=buildProvisionReport(snapshot,selected(),today);
     const logoFrame=make('div','pr-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
-    const body=table('provisions','⚠ DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS',['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS'],[10,15,28,11,15,10,11]);
+    const body=table('provisions','⚠ DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS',['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS'],[10,16,23,10,14,14,13]);
     for(const row of result.rows){const tr=make('tr');tr.dataset.id=row.id;
       cell(tr,'branch',row.branch,'pr-bold');cell(tr,'supplier',row.supplier,'pr-bold');cell(tr,'product',`${row.product}${row.observation?` (${row.observation})`:''}`,'pr-bold');
       const dueCell=cell(tr,'dueDate','','pr-red pr-bold');dueCell.replaceChildren();textLine(dueCell,formatReportDate(row.dueDate),'pr-date pr-nowrap');
@@ -81,7 +88,6 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       const due=provisionDueState(row.dueDate,today),dueTone=due.kind==='unknown'?'muted':row.dueDate<today?'red':row.dueDate===today?'yellow':'green';
       statusLine(status,due.label,dueTone,`pr-${dueTone}`);body.append(tr);}
     footer(body,'TOTAL DE PROVISÕES COM PAGAMENTO PENDENTE',5,money(result.pendingTotal),'pendingTotal',`${result.pendingCount} pendência(s)`,'pendingCount');
-    const hint=make('p','pr-scroll-hint','Deslize para os lados para ver os meses e o total.');hint.dataset.reportScreenOnly='';content.append(hint);
     const annual=table('annual','📊 RELATÓRIO ANUAL – PROVISÃO DE PAGAMENTOS',['FORNECEDOR',...MONTHS,'TOTAL'],[16,...MONTHS.map(()=>6.25),9]);
     for(const group of result.annual){const tr=make('tr');tr.dataset.recurrenceId=group.recurrenceId;
       const supplier=cell(tr,'supplier',`${group.supplier} - ${group.property||'-'} ( ID: ${group.recurrenceId})`,'pr-bold');
