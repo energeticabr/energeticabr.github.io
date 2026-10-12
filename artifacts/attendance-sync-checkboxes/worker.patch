@@ -1,0 +1,574 @@
+warning: in the working copy of 'C:/Users/Bernardonotini/Documents/Codex/2026-09-17/abr/artifacts/attendance-return-date-checklist-20261012/worker/workflow.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'C:/Users/Bernardonotini/Documents/Codex/2026-09-17/abr/artifacts/attendance-sync-checkboxes-20261012/worker/workflow.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/worker/workflow.py b/worker/workflow.py
+index b1cf8bf..86dc5e5 100644
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -2946,6 +2946,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         result: dict | None,
+         etag: str | None,
+     ) -> None:
++        if (result or {}).get("status") == "attendance_supplier_sync_superseded":
++            return
+         if not state.get("flow") or self._draft_input_ignored_stage(before_stage):
+             return
+         if not self._draft_input_snapshot_changed(before_snapshot, state):
+@@ -5742,11 +5744,12 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         completed = []
+         try:
+             for entry in journal["entries"]:
++                updates = entry.get("updates", journal["updates"])
+                 item_id = entry["item_id"]
+                 try:
+                     current, item_etag = self.sharepoint.get_item_fields_with_etag(
+                         item_id,
+-                        list(dict.fromkeys(["PRESENCA", "DATA", *updates, *ATTENDANCE_CONSISTENCY_FIELDS])),
++                        list(dict.fromkeys(["PRESENCA", "DATA", *updates, *entry["original"], *ATTENDANCE_CONSISTENCY_FIELDS])),
+                         target_list="DESCRITIVOPRESENCA",
+                     )
+                 except Exception as exc:
+@@ -5755,14 +5758,18 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                     ) == 404:
+                         raise AttendanceBatchConflict(f"ID {item_id} NÃO EXISTE MAIS") from exc
+                     raise
++                if self._selection_date_key(current.get("DATA")) != entry["expected_day"]:
++                    raise AttendanceBatchConflict(f"A DATA DO ID {item_id} FOI ALTERADA")
+                 if all(self._same_attendance_value(current.get(field), value)
+                        for field, value in updates.items()):
++                    if journal.get("origin") == "supplier_sync":
++                        for field, value in entry["original"].items():
++                            if field not in updates and not self._same_attendance_value(current.get(field), value):
++                                raise AttendanceBatchConflict(f"O CAMPO {field} DO ID {item_id} FOI ALTERADO")
+                     completed.append(item_id)
+                     continue
+                 if normalize_text(str(current.get("PRESENCA") or "")) != "pendente":
+                     raise AttendanceBatchConflict(f"ID {item_id} FOI ALTERADO DURANTE O LOTE")
+-                if str(current.get("DATA") or "")[:10] != entry["expected_day"]:
+-                    raise AttendanceBatchConflict(f"A DATA DO ID {item_id} FOI ALTERADA")
+                 for field in entry["original"]:
+                     if field in {"DATA", "PRESENCA"}:
+                         continue
+@@ -5774,6 +5781,11 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                     item_id, updates, item_etag, target_list="DESCRITIVOPRESENCA"
+                 )
+                 completed.append(item_id)
++            if journal.get("origin") == "supplier_sync":
++                for entry in journal["entries"]:
++                    entry["verified"] = self.sharepoint.verify_item(
++                        entry["item_id"], entry["updates"], [], target_list="DESCRITIVOPRESENCA"
++                    )
+         except AttendanceBatchConflict as exc:
+             journal["last_error"] = str(exc)
+             journal["blocked"] = True
+@@ -5792,6 +5804,26 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             return {"status": "attendance_batch_recovery_pending", "batch_id": state["batch_id"], "etag": etag}
+         count = len(completed)
+         self._send_text(state, f"✅ {count} PRESENÇAS ATUALIZADAS COMO {journal['presence']}.")
++        if journal.get("origin") == "supplier_sync":
++            day = self._selection_date_key(state["fields"].get("DATA"))
++            if self._selection_date_key(state.get("pending_attendance_date_value")) != day:
++                state["pending_attendance_completed_ids"] = []
++            state["pending_attendance_date_value"] = day
++            state["pending_attendance_completed_ids"] = list(dict.fromkeys(
++                list(state.get("pending_attendance_completed_ids") or []) + [str(item_id) for item_id in completed]
++            ))
++            original_id = int(str(state.get("sharepoint", {}).get("item_id") or state["fields"].get("ID PRESENÇA")))
++            original = next(entry for entry in journal["entries"] if entry["item_id"] == original_id)
++            state["sharepoint"] = {
++                "item_id": original_id, "attachment_names": [], "verified": original["verified"],
++                "supplier_field_sync": None,
++                "recorded_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
++            }
++            state.pop("attendance_batch_commit", None)
++            state["stage"] = "notifying"
++            etag = self._save(state, etag)
++            result = self._notify_completed(state, etag)
++            return {**result, "updated_count": count}
+         pending_origin = state.get("attendance_batch_origin") == "pending"
+         if pending_origin:
+             state["pending_attendance_completed_ids"] = list(dict.fromkeys(
+@@ -21243,6 +21275,15 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+     def _handle_selection_reply(self, event, state, etag, step) -> dict:
+         raw_reply = event.get("reply_id") or event.get("text") or ""
+         control = normalize_text(str(raw_reply))
++        if (state.get("flow") == "attendance_validation"
++                and step.get("key") == "sincronizar_atividade_fornecedor_presenca"):
++            plan = state.get("attendance_supplier_sync_plan")
++            if plan and plan.get("identity") != self._attendance_supplier_sync_operation_identity(state):
++                return {"status": "attendance_supplier_sync_superseded", "batch_id": state["batch_id"], "etag": etag}
++            if (raw_reply == "finish_supplier_sync" and not plan
++                    and not state.get("multi_selections", {}).get(step["key"])
++                    and not state.get("selections", {}).get(step["key"])):
++                return {"status": "invalid_supplier_sync_batch", "batch_id": state["batch_id"], "etag": etag}
+         # Recarrega opções de formulários que já estavam abertos quando uma
+         # etapa deixou de ser texto livre e passou a ser uma seleção.
+         if not state.get("options"):
+@@ -21253,6 +21294,17 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             and str(raw_reply).startswith("attendance_batch:")
+         ):
+             return self._start_attendance_batch(event, state, etag, step)
++        if (
++            state.get("flow") == "attendance_validation"
++            and step.get("key") == "sincronizar_atividade_fornecedor_presenca"
++        ):
++            if str(raw_reply).startswith("supplier_sync_batch:"):
++                return self._submit_attendance_supplier_sync_batch(event, state, etag, step)
++            plan = state.get("attendance_supplier_sync_plan")
++            if plan and not plan.get("complete") and raw_reply != "finish_supplier_sync":
++                self._send_text(state, "⚠️ RETOME O MESMO LOTE; HÁ ALTERAÇÕES JÁ APLICADAS.")
++                etag = self._save(state, etag)
++                return {"status": "invalid_supplier_sync_batch", "batch_id": state["batch_id"], "etag": etag}
+         if (
+             state.get("flow") == "pending_document_attachment"
+             and step.get("key") == "documento_pendente"
+@@ -21634,8 +21686,67 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                             state,
+                             self._flow_config(state),
+                             supplier_fields,
++                            etag,
+                         )
++                        etag = applied.get("etag", etag)
+                     except Exception as exc:
++                        # A replicação salva cada checkpoint antes de continuar.
++                        latest, etag = self.state_store.load(state["key"])
++                        local_plan = state.get("attendance_supplier_sync_plan")
++                        saved_plan = (latest or {}).get("attendance_supplier_sync_plan")
++                        same_operation = latest and (
++                            self._attendance_supplier_sync_operation_identity(latest)
++                            == self._attendance_supplier_sync_operation_identity(state)
++                        )
++                        same_journal = not local_plan or (saved_plan and all(
++                            saved_plan.get(name) == local_plan.get(name)
++                            for name in ("identity", "entries", "requested_ids", "presence_fields", "supplier_fields")
++                        ))
++                        if not same_operation or not same_journal:
++                            state.clear()
++                            state.update(copy.deepcopy(latest or {}))
++                            return {"status": "attendance_supplier_sync_superseded", "batch_id": state.get("batch_id"), "etag": etag}
++                        if latest:
++                            # Parta do estado completo mais recente, preservando
++                            # metadata/alertas concorrentes e somente mesclando
++                            # o progresso que pertence a esta sincronização.
++                            merged = copy.deepcopy(latest)
++                            for progress_key in (
++                                "attendance_supplier_sync_applied_target_ids",
++                                "attendance_supplier_sync_applied_supplier_ids",
++                            ):
++                                merged[progress_key] = list(dict.fromkeys(
++                                    list(latest.get(progress_key) or []) + list(state.get(progress_key) or [])
++                                ))
++                            if state.get("attendance_supplier_sync_plan"):
++                                local_plan = copy.deepcopy(state["attendance_supplier_sync_plan"])
++                                saved_plan = latest.get("attendance_supplier_sync_plan") or {}
++                                if (saved_plan.get("entries") == local_plan["entries"]
++                                        and saved_plan.get("presence_fields") == local_plan["presence_fields"]
++                                        and saved_plan.get("supplier_fields") == local_plan["supplier_fields"]):
++                                    for progress_key in ("presence_ids", "supplier_ids"):
++                                        local_plan[progress_key] = list(dict.fromkeys(
++                                            list(saved_plan.get(progress_key) or []) + list(local_plan.get(progress_key) or [])
++                                        ))
++                                    local_plan["complete"] = bool(saved_plan.get("complete") or local_plan.get("complete"))
++                                merged["attendance_supplier_sync_plan"] = local_plan
++                            records = {record["item_id"]: record for record in latest.get("attendance_supplier_sync_records", [])}
++                            records.update({record["item_id"]: record for record in state.get("attendance_supplier_sync_records", [])})
++                            if records:
++                                merged["attendance_supplier_sync_records"] = list(records.values())
++                            for section in ("answers", "selections", "multi_selections"):
++                                if step["key"] in state.get(section, {}):
++                                    merged.setdefault(section, {})[step["key"]] = copy.deepcopy(state[section][step["key"]])
++                            target = step.get("target_field")
++                            for section in ("fields", "display_values"):
++                                if target in state.get(section, {}):
++                                    merged.setdefault(section, {})[target] = copy.deepcopy(state[section][target])
++                            maximum = int(self.config.get("limits", {}).get("max_processed_message_ids", 200))
++                            merged["processed_message_ids"] = list(dict.fromkeys(
++                                list(latest.get("processed_message_ids") or []) + list(state.get("processed_message_ids") or [])
++                            ))[-maximum:]
++                            state.clear()
++                            state.update(merged)
+                         self._send_text(
+                             state,
+                             "❌ NÃO FOI POSSÍVEL APLICAR AS ALTERAÇÕES NOS "
+@@ -21643,11 +21754,12 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                         )
+                         state["options"] = self._selection_options(state, step)
+                         self._send_options(state, step, state["options"])
+-                        self._save(state, etag)
++                        etag = self._save(state, etag)
+                         return {
+                             "status": "attendance_supplier_sync_failed",
+                             "field": step["key"],
+                             "batch_id": state["batch_id"],
++                            "etag": etag,
+                         }
+                     if applied["presence_ids"] or applied["supplier_ids"]:
+                         state["attendance_supplier_sync_applied_target_ids"] = (
+@@ -22666,6 +22778,13 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+ 
+     def _prepare_attendance_selected_record(self, state: dict) -> None:
+         """Remove o texto legado e registra a base original da edição."""
++        for key in (
++            "attendance_supplier_sync_plan", "attendance_supplier_sync_records",
++            "attendance_supplier_sync_applied_target_ids", "attendance_supplier_sync_applied_supplier_ids",
++            "attendance_supplier_sync_target_ids",
++        ):
++            state.pop(key, None)
++        state.get("multi_selections", {}).pop("sincronizar_atividade_fornecedor_presenca", None)
+         state.pop("attendance_supplier_sync_changes", None)
+         state.pop("attendance_supplier_sync_display_changes", None)
+         state.pop("attendance_supplier_sync_forced_fields", None)
+@@ -23248,6 +23367,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                 continue
+             if normalize_text(str(values.get("PRESENCA") or "")) != "pendente":
+                 continue
++            if self._selection_date_key(values.get("DATA")) != self._selection_date_key(fields.get("DATA")):
++                continue
+             supplier = str(values.get("FORNECEDOR") or "FORNECEDOR NÃO INFORMADO").strip()
+             options.append({
+                 "id": f"supplier_sync_target:{raw_id}",
+@@ -23257,6 +23378,66 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             })
+         return options
+ 
++    def _attendance_supplier_sync_operation_identity(self, state: dict) -> dict:
++        fields = state.get("fields") or {}
++        return {
++            "key": state.get("key"), "batch_id": state.get("batch_id"), "flow": state.get("flow"),
++            "item_id": str((state.get("sharepoint") or {}).get("item_id") or ""),
++            "selected_id": str(fields.get("ID PRESENÇA") or ""),
++            "day": self._selection_date_key(fields.get("DATA")),
++            "stage": state.get("stage"), "step_index": state.get("step_index"),
++        }
++
++    def _submit_attendance_supplier_sync_batch(self, event, state, etag, step) -> dict:
++        """Substitui a seleção local somente depois de validar o CSV inteiro."""
++        raw = str(event.get("reply_id") or event.get("text") or "")
++        try:
++            if not re.fullmatch(r"supplier_sync_batch:[1-9][0-9]*(?:,[1-9][0-9]*)*", raw):
++                raise ValueError("SELEÇÃO INVÁLIDA")
++            requested = raw.split(":", 1)[1].split(",")
++            if len(set(requested)) != len(requested):
++                raise ValueError("IDs REPETIDOS")
++            plan = state.get("attendance_supplier_sync_plan")
++            if plan and not plan.get("complete"):
++                if set(requested) != set(plan["requested_ids"]):
++                    raise ValueError("RETOME EXATAMENTE OS IDs DO LOTE EM ANDAMENTO")
++                requested = list(plan["requested_ids"])
++            options = self._attendance_supplier_sync_options(state)
++            allowed = {str(option["value"]).split(":", 1)[1]: option for option in options
++                       if str(option.get("id", "")).startswith("supplier_sync_target:")}
++            if any(item_id not in allowed for item_id in requested):
++                raise ValueError("UMA PRESENÇA NÃO ESTÁ MAIS DISPONÍVEL NESTA DATA")
++            original_id = str(state.get("sharepoint", {}).get("item_id") or state["fields"].get("ID PRESENÇA") or "")
++            day = self._selection_date_key(state["fields"].get("DATA"))
++            if not day or not original_id.isdigit() or int(original_id) <= 0:
++                raise ValueError("A PRESENÇA ORIGINAL NÃO ESTÁ DISPONÍVEL")
++            fields = self._flow_config(state)["writable_fields"]
++            selected = []
++            for item_id in [original_id, *requested]:
++                current, _ = self.sharepoint.get_item_fields_with_etag(
++                    int(item_id), fields, target_list="DESCRITIVOPRESENCA"
++                )
++                if (normalize_text(str(current.get("PRESENCA") or "")) != "pendente"
++                        or self._selection_date_key(current.get("DATA")) != day):
++                    raise ValueError(f"ID {item_id} NÃO ESTÁ PENDENTE NESTA DATA")
++                selected.append({
++                    "id": f"supplier_sync_target:{item_id}", "value": f"ID:{item_id}",
++                    "title": f"{item_id} - {current.get('FORNECEDOR') or 'NÃO INFORMADO'}",
++                    "source_values": {**current, "Id": item_id},
++                })
++        except Exception as exc:
++            self._mark_processed(state, event.get("message_id"))
++            self._send_text(state, f"⚠️ NENHUMA NOVA ALTERAÇÃO APLICADA: {exc}.")
++            state["options"] = self._selection_options(state, step)
++            self._send_options(state, step, state["options"])
++            etag = self._save(state, etag)
++            return {"status": "invalid_supplier_sync_batch", "batch_id": state["batch_id"], "etag": etag}
++        state.setdefault("multi_selections", {})[step["key"]] = selected
++        state["options"] = self._selection_options(state, step)
++        return self._handle_selection_reply(
++            {**event, "reply_id": "finish_supplier_sync", "text": ""}, state, etag, step
++        )
++
+     @staticmethod
+     def _attendance_supplier_change_table(changes: list[dict]) -> dict:
+         """Monta a representação estruturada da tabela Antes/Depois."""
+@@ -27818,6 +27999,13 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         return {"status": "flow_summary", "batch_id": state["batch_id"]}
+ 
+     def _summary_rows(self, state: dict) -> list[dict]:
++        if self._attendance_supplier_confirmation_records(state):
++            return [
++                {"label": f"PRESENÇA {index}", "value": "\n".join(
++                    f"{cell['label']}: {cell['value']}" for cell in row
++                )}
++                for index, row in enumerate(self._attendance_confirmation_detail_table(state)["rows"], start=1)
++            ]
+         if state.get("flow") == "payment_settlement" and state.get("provision_description"):
+             return self._description_summary_rows(state)
+         if state.get("flow") == "payment" and state.get("provision_lines"):
+@@ -27922,9 +28110,64 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         activity = str((descriptor or {}).get("ATIVIDADEEXECUTADA") or "").strip()
+         return f"{identifier} - {activity}" if activity else identifier
+ 
++    def _attendance_supplier_confirmation_records(self, state: dict) -> list[dict]:
++        """Mantém o conjunto explícito de IDs, inclusive em sessões já abertas."""
++        if state.get("flow") != "attendance_validation":
++            return []
++        records = state.get("attendance_supplier_sync_records")
++        if records:
++            return records
++        applied_ids = state.get("attendance_supplier_sync_applied_target_ids") or []
++        if not applied_ids:
++            return []
++        original_id = str(state.get("sharepoint", {}).get("item_id") or state["fields"].get("ID PRESENÇA"))
++        records = []
++        for raw_id in dict.fromkeys([original_id, *map(str, applied_ids)]):
++            item_id = int(raw_id)
++            source = self.sharepoint.get_item_fields(
++                item_id, self._flow_config(state)["writable_fields"], target_list="DESCRITIVOPRESENCA"
++            )
++            records.append({"item_id": item_id, "source_values": {**source, "Id": item_id}})
++        state["attendance_supplier_sync_records"] = records
++        return records
++
++    def _attendance_supplier_confirmation_updates(self, state: dict, record: dict) -> dict:
++        presence = str(state.get("fields", {}).get("PRESENCA") or "").upper()
++        if presence not in {"PRESENTE", "AUSENTE"}:
++            raise RuntimeError("ESCOLHA PRESENTE OU AUSENTE ANTES DE CONFIRMAR")
++        original_id = str(state.get("sharepoint", {}).get("item_id") or state["fields"].get("ID PRESENÇA"))
++        updates = {"PRESENCA": presence}
++        if str(record["item_id"]) == original_id:
++            updates = {field: copy.deepcopy(state.get("fields", {}).get(field))
++                       for field in self._flow_config(state)["writable_fields"]}
++        if presence == "AUSENTE":
++            updates.update(MOTIVACAO=state["fields"].get("MOTIVACAO") or "NÃO APONTADO", VLORDIARIO="0", IDPGTO="AUSENTE")
++        return updates
++
+     def _attendance_confirmation_detail_table(self, state: dict) -> dict:
+         """Monta os dois dados essenciais antes da confirmação da presença."""
+ 
++        records = self._attendance_supplier_confirmation_records(state)
++        if records:
++            fields = list(dict.fromkeys([
++                "DATA", "FORNECEDOR", "IDDESCRITIVOETAPA", "ATIVIDADEEXECUTADA", "PRESENCA",
++                *self._flow_config(state)["writable_fields"],
++            ]))
++            rows = []
++            for record in records:
++                values = {**record["source_values"], **self._attendance_supplier_confirmation_updates(state, record)}
++                row = [{"label": "ID", "value": str(record["item_id"])}]
++                for field in fields:
++                    value = values.get(field)
++                    cell = {"label": field, "value": str(value) if value not in {None, ""} else "-"}
++                    if field == "DATA":
++                        cell["value"] = self._pending_attendance_date_display(str(value or "").strip() or "-")
++                    if field == "PRESENCA":
++                        cell["tone"] = "absent" if value == "AUSENTE" else "present"
++                    row.append(cell)
++                rows.append(row)
++            return {"title": "📋 RESUMO DAS PRESENÇAS SELECIONADAS", "kind": "presence", "rows": rows}
++
+         display = state.get("display_values", {})
+         fields = state.get("fields", {})
+         activity = display.get("ATIVIDADEEXECUTADA", fields.get("ATIVIDADEEXECUTADA"))
+@@ -28831,6 +29074,11 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             state["_outbound_detail_table"] = self._attendance_confirmation_detail_table(
+                 state
+             )
++            if self._attendance_supplier_confirmation_records(state):
++                prompt = "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\n" + "\n".join(
++                    " | ".join(f"{cell['label']}: {cell['value']}" for cell in row)
++                    for row in state["_outbound_detail_table"]["rows"]
++                )
+         actions = [
+             {"id": "confirm_yes", "title": "SIM"},
+             {"id": "confirm_edit", "title": "EDITAR"},
+@@ -31098,6 +31346,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                     state, etag, flow
+                 )
+             if flow.get("mode") == "update_selected_item":
++                if self._attendance_supplier_confirmation_records(state):
++                    return self._commit_attendance_supplier_confirmation(state, etag, flow)
+                 return self._commit_selected_item_update(state, etag, flow)
+             if flow.get("mode") == "attach_existing_item":
+                 return self._commit_existing_item_attachments(state, etag, flow)
+@@ -31640,9 +31890,10 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             )
+         )
+         sync_step_key = "sincronizar_atividade_fornecedor_presenca"
++        selection = state.get("selections", {}).get(sync_step_key, [])
+         selected_targets = [
+-            item for item in state.get("selections", {}).get(sync_step_key, [])
+-            if str(item.get("value", "")).startswith("ID:")
++            item for item in (selection if isinstance(selection, list) else [])
++            if isinstance(item, dict) and str(item.get("value", "")).startswith("ID:")
+         ]
+         state["attendance_supplier_sync_target_ids"] = [
+             str(item.get("value", "")).split(":", 1)[1]
+@@ -31763,7 +32014,8 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         state: dict,
+         flow: dict,
+         supplier_fields: dict,
+-    ) -> dict[str, list[str]]:
++        etag: str | None = None,
++    ) -> dict:
+         """Aplica imediatamente a seleção feita em SUBMETER.
+ 
+         A seleção de fornecedores é uma ação própria do usuário. Ela não deve
+@@ -31786,6 +32038,15 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+         changed_presence_fields = self._attendance_supplier_presence_changed_fields(
+             state
+         )
++        plan = state.get("attendance_supplier_sync_plan")
++        target_ids = [str(item["value"]).split(":", 1)[1] for item in selected_targets]
++        if plan and not plan.get("complete"):
++            if (set(target_ids) != {str(entry["item_id"]) for entry in plan["entries"]}
++                    or changed_presence_fields != plan["presence_fields"]
++                    or supplier_fields != plan["supplier_fields"]):
++                raise RuntimeError("RETOME O MESMO LOTE E OS MESMOS CAMPOS JÁ CONFIRMADOS")
++            by_id = {str(item["value"]).split(":", 1)[1]: item for item in selected_targets}
++            selected_targets = [by_id[str(entry["item_id"])] for entry in plan["entries"]]
+         lookup_step = flow.get("supplier_activity_sync_lookup_step")
+         branch = state.get("fields", {}).get("FILIAL")
+         resolved = []
+@@ -31859,24 +32120,68 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                     )
+             resolved.append((target_id, supplier_id))
+ 
+-        presence_ids = []
+-        supplier_ids = []
+-        for target_id, supplier_id in resolved:
+-            if changed_presence_fields:
+-                self.sharepoint.update_item(
+-                    target_id,
+-                    changed_presence_fields,
+-                    target_list="DESCRITIVOPRESENCA",
++        if plan and not plan.get("complete"):
++            if resolved != [(entry["item_id"], entry["supplier_id"]) for entry in plan["entries"]]:
++                raise RuntimeError("O CADASTRO DE UM FORNECEDOR DO LOTE FOI ALTERADO")
++        else:
++            entries = []
++            for target, (target_id, supplier_id) in zip(selected_targets, resolved):
++                current = self.sharepoint.get_item_fields(
++                    target_id, flow["writable_fields"], target_list="DESCRITIVOPRESENCA"
+                 )
+-            if supplier_id is not None and supplier_fields:
+-                self.sharepoint.update_item(
+-                    supplier_id,
+-                    supplier_fields,
+-                    target_list="FORNECEDORES",
++                entries.append({
++                    "item_id": target_id, "supplier_id": supplier_id,
++                    "source_values": {**(target.get("source_values") or {}), **current, "Id": target_id},
++                })
++            original_id = str(state.get("sharepoint", {}).get("item_id") or state["fields"].get("ID PRESENÇA"))
++            plan = {
++                "identity": self._attendance_supplier_sync_operation_identity(state),
++                "entries": entries, "requested_ids": [item_id for item_id in target_ids if item_id != original_id],
++                "presence_fields": copy.deepcopy(changed_presence_fields),
++                "supplier_fields": copy.deepcopy(supplier_fields),
++                "presence_ids": [], "supplier_ids": [],
++            }
++            state["attendance_supplier_sync_plan"] = plan
++            etag = self._save(state, etag)
++        presence_ids = plan.setdefault("presence_ids", [])
++        supplier_ids = plan.setdefault("supplier_ids", [])
++        applied_presence_ids = state.setdefault("attendance_supplier_sync_applied_target_ids", [])
++        applied_supplier_ids = state.setdefault("attendance_supplier_sync_applied_supplier_ids", [])
++        for entry in plan["entries"]:
++            target_id, supplier_id = entry["item_id"], entry["supplier_id"]
++            if str(target_id) not in presence_ids:
++                current = self.sharepoint.get_item_fields(
++                    target_id, list(changed_presence_fields), target_list="DESCRITIVOPRESENCA"
++                )
++                if changed_presence_fields and not all(
++                    self._same_attendance_value(current.get(field), value)
++                    for field, value in changed_presence_fields.items()
++                ):
++                    self.sharepoint.update_item(target_id, changed_presence_fields, target_list="DESCRITIVOPRESENCA")
++                presence_ids.append(str(target_id))
++                if str(target_id) not in applied_presence_ids:
++                    applied_presence_ids.append(str(target_id))
++                etag = self._save(state, etag)
++            if supplier_id is not None and supplier_fields and str(supplier_id) not in supplier_ids:
++                current = self.sharepoint.get_item_fields(
++                    supplier_id, list(supplier_fields), target_list="FORNECEDORES"
+                 )
++                if not all(self._same_attendance_value(current.get(field), value)
++                           for field, value in supplier_fields.items()):
++                    self.sharepoint.update_item(supplier_id, supplier_fields, target_list="FORNECEDORES")
+                 supplier_ids.append(str(supplier_id))
+-            presence_ids.append(str(target_id))
+-        return {"presence_ids": presence_ids, "supplier_ids": supplier_ids}
++                if str(supplier_id) not in applied_supplier_ids:
++                    applied_supplier_ids.append(str(supplier_id))
++                etag = self._save(state, etag)
++        records = {record["item_id"]: record for record in state.get("attendance_supplier_sync_records", [])}
++        for entry in plan["entries"]:
++            records[entry["item_id"]] = {
++                "item_id": entry["item_id"], "source_values": {**entry["source_values"], **changed_presence_fields}
++            }
++        state["attendance_supplier_sync_records"] = list(records.values())
++        plan["complete"] = True
++        etag = self._save(state, etag)
++        return {"presence_ids": applied_presence_ids, "supplier_ids": applied_supplier_ids, "etag": etag}
+ 
+     @staticmethod
+     def _is_missing_sharepoint_item_error(exc: Exception) -> bool:
+@@ -31976,6 +32281,47 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+             )
+         return replacement_id
+ 
++    def _commit_attendance_supplier_confirmation(self, state, etag, flow) -> dict:
++        """Pré-valida todos os participantes e reutiliza o journal de presenças."""
++        entries = []
++        presence = state["fields"].get("PRESENCA")
++        try:
++            for record in self._attendance_supplier_confirmation_records(state):
++                item_id = record["item_id"]
++                source = record["source_values"]
++                updates = self._attendance_supplier_confirmation_updates(state, record)
++                fields = list(dict.fromkeys([*flow["writable_fields"], *ATTENDANCE_CONSISTENCY_FIELDS]))
++                current, item_etag = self.sharepoint.get_item_fields_with_etag(
++                    item_id, fields, target_list="DESCRITIVOPRESENCA"
++                )
++                day = self._selection_date_key(source.get("DATA"))
++                if not day or self._selection_date_key(current.get("DATA")) != day:
++                    raise RuntimeError(f"A DATA DO ID {item_id} FOI ALTERADA")
++                if normalize_text(str(current.get("PRESENCA") or "")) != "pendente":
++                    raise RuntimeError(f"ID {item_id} NÃO ESTÁ MAIS PENDENTE")
++                for field in fields:
++                    if field == "DATA":
++                        continue
++                    if not self._same_attendance_value(current.get(field), source.get(field)):
++                        raise RuntimeError(f"O CAMPO {field} DO ID {item_id} FOI ALTERADO")
++                review = self._attendance_consistency_record({**current, **updates}, item_id=item_id)
++                if review:
++                    raise RuntimeError(f"ID {item_id}: " + "; ".join(review["issues"]))
++                entries.append({"item_id": item_id, "expected_day": day, "original": current,
++                                "updates": updates, "etag": item_etag})
++        except Exception as exc:
++            self._send_text(state, f"⚠️ LOTE NÃO SUBMETIDO: {exc}. NENHUMA PRESENÇA VALIDADA.")
++            state["stage"] = "awaiting_confirmation"
++            self._send_confirmation_actions(state)
++            etag = self._save(state, etag)
++            return {"status": "awaiting_confirmation", "batch_id": state["batch_id"], "etag": etag}
++        state["attendance_batch_commit"] = {
++            "entries": entries, "updates": {"PRESENCA": presence}, "presence": presence, "origin": "supplier_sync",
++        }
++        state["stage"] = "attendance_batch_committing"
++        etag = self._save(state, etag)
++        return self._resume_attendance_batch_commit(state, etag)
++
+     def _commit_selected_item_update(
+         self, state: dict, etag: str | None, flow: dict
+     ) -> dict:
+@@ -35187,6 +35533,7 @@ class WorkflowEngine(ProvisionDescriptionSettlement, PaymentProvisionFlow):
+                 state.pop("_outbound_change_table", None)
+             change_lines = self._attendance_supplier_change_table_text(changes)
+             displayed = dict(step)
++            displayed["presentation"] = "attendance_supplier_sync"
+             displayed["prompt"] = str(step.get("prompt", "")).format(
+                 supplier=supplier or "EM BRANCO",
+                 changes=change_lines or "• NENHUMA ALTERAÇÃO IDENTIFICADA",

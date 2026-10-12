@@ -44,11 +44,11 @@ class AttendanceReturnTests(unittest.TestCase):
         self.sharepoint.options_by_key["presenca_pendente_continuacao"] = copy.deepcopy(rows)
         return rows
 
-    def assert_scoped_checklist(self):
+    def assert_scoped_checklist(self, expected_ids=None):
         poll = self.messenger.sent[-1]
         self.assertEqual(poll.get("presentation"), "attendance_multi_select")
         self.assertIn("31/07/2026", poll["prompt"])
-        self.assertEqual([row["value"] for row in self.current()["options"] if not row.get("terminal_option")], ["1816", "1817"])
+        self.assertEqual([row["value"] for row in self.current()["options"] if not row.get("terminal_option")], ["1816", "1817"] if expected_ids is None else expected_ids)
         self.assertEqual(self.current()["stage"], "choosing_pending_attendance_record")
         self.assertEqual(self.current()["pending_attendance_date_value"][:10], "2026-07-31")
 
@@ -80,13 +80,16 @@ class AttendanceReturnTests(unittest.TestCase):
         self.assertTrue(any(call["item_id"] == 1816 for call in self.sharepoint.update_calls), repr((self.sharepoint.update_calls, self.messenger.sent[-1])))
         self.reply("2")
         self.reply("SIM")
-        self.assert_scoped_checklist()
+        self.assertEqual(self.sharepoint.items[1816]["fields"]["PRESENCA"], "PRESENTE")
+        self.assert_scoped_checklist(["1817"])
         writes = len(self.sharepoint.update_calls)
-        result = self.reply(reply_id="attendance_batch:1816,1817")
-        self.assertEqual(result["status"], "awaiting_attendance_batch_action")
+        result = self.reply(reply_id="attendance_batch:1817")
+        self.assertEqual(result["status"], "awaiting_pending_attendance_action")
         self.assertEqual(len(self.sharepoint.update_calls), writes)
-        self.assertEqual(self.reply(reply_id="navigation_back")["status"], "awaiting_pending_attendance_record")
-        self.assert_scoped_checklist()
+        # Um único ID restante usa a revisão individual existente, sem
+        # reapresentar a presença 1816 que acabou de ser validada pelo SIM.
+        self.assertEqual(self.current()["pending_attendance_record_id"], "1817")
+        self.assertEqual(self.current()["pending_attendance_date_value"][:10], "2026-07-31")
 
     def test_pending_individual_selection_retains_day_filter_for_edits(self):
         self.open_pending()

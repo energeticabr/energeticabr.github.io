@@ -3230,6 +3230,34 @@ test("replicação mantém seleção ao filtrar e bloqueia histórico, ocupaçã
   assert.equal(root.querySelector('input[data-reply-id="2227"]').disabled, true);
 });
 
+test("confirmação de fornecedores mostra todas as linhas com dados e presença, sem truncar o lote", () => {
+  const rows = Array.from({ length: 25 }, (_, index) => [
+    { label: "ID PRESENÇA", value: String(3000 + index) },
+    { label: "DATA", value: "12/10/2026" },
+    { label: "FORNECEDOR", value: `FORNECEDOR ${index + 1}` },
+    { label: "IDDESCRITIVOETAPA", value: "127" },
+    { label: "ATIVIDADE EXECUTADA", value: "FUNDAÇÃO EM TUBULÃO" },
+    { label: "PRESENÇA", value: "PRESENTE", tone: "present" },
+  ]);
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "confirm-all", role: "assistant", type: "poll", question: "CONFIRMA A POSTAGEM DE TODAS ESTAS PRESENÇAS?",
+    detail_table: { kind: "presence", title: "DADOS DAS PRESENÇAS", rows },
+    options: [{ id: "confirm_yes", label: "SIM" }, { id: "confirm_edit", label: "EDITAR" }, { id: "confirm_cancel", label: "CANCELAR" }],
+  }] })));
+  try {
+    const rendered = dom.window.document.querySelectorAll('.chat-presence-table-row');
+    assert.equal(rendered.length, 25);
+    for (let index = 0; index < rendered.length; index += 1) {
+      assert.ok(rendered[index].textContent.includes(`FORNECEDOR ${index + 1}`));
+      assert.ok(rendered[index].textContent.includes(String(3000 + index)));
+      assert.ok(rendered[index].textContent.includes("12/10/2026"));
+      assert.ok(rendered[index].textContent.includes("FUNDAÇÃO EM TUBULÃO"));
+      assert.equal(rendered[index].querySelector('.chat-presence-table-cell--present b').textContent, "PRESENTE");
+    }
+    assert.equal(dom.window.document.querySelectorAll('button[data-reply-id="confirm_yes"]').length, 1);
+  } finally { dom.window.close(); }
+});
+
 for (const presentation of ["accordion", "attendance_multi_select"]) {
   test(`Pendências permite selecionar presenças e prosseguir sem selecionar o controle de datas (${presentation})`, t => {
     const dom = new JSDOM('<main id="app"></main>');

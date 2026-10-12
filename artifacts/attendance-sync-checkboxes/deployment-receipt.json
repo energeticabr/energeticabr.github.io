@@ -1,0 +1,14 @@
+{
+  "backup": "/var/backups/energetica-whatsapp/attendance-supplier-checkbox-20261012T155654966944Z",
+  "base_sha256": "3140439d59903753febc9435e6d6c5f370cffdc92717fdf64cbcac54e5805e04",
+  "installed_sha256": "e2f9a39837f19fba31fd8f00b94e100134f2ac69f386807f0f5e150c8a7b581d",
+  "targets": [
+    "/opt/energetica-whatsapp/worker/workflow.py",
+    "/home/opc/energetica-build/worker/workflow.py"
+  ],
+  "services": [
+    "energetica-whatsapp",
+    "energetica-channel-bridge"
+  ],
+  "health": "ok"
+}
