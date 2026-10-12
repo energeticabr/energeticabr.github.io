@@ -18,6 +18,7 @@ test('payments scroll in batches of 200, reset after filtering, keep PDF complet
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,result.error);
       assert.deepEqual(result.counts,[200,400,451,451]);assert.equal(result.anchored,true);
+      assert.deepEqual(result.printer,{rows:452,visible:200,top:70});
       assert.equal(result.filteredInitial,200);assert.equal(result.filteredEnd,201);assert.equal(result.filterScroll,0);
       assert.equal(new Set(result.ids).size,201);assert.ok(result.ids.every(id=>Number(id)>=251));
       assert.equal(result.printRows,202);assert.equal(result.restoredScroll,true);assert.equal(result.pager,false);

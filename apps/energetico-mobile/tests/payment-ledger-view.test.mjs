@@ -194,3 +194,16 @@ test('loading and hidden reports cannot grow stale rows after close or invalid d
   date.dispatchEvent(new dom.window.Event('change')); reachEnd(root, dom);
   assert.equal(root.querySelectorAll('tbody tr').length, 0);
 });
+
+test('a stale print restoration cannot expand or move a newly filtered batch', async t => {
+  const { view, root, dom } = setup(t, async () => ({ launches: [
+    ...manyPayments(451), ...manyPayments(231, 'Beta').map((item, i) => ({ ...item, id: String(452 + i) })),
+  ] }));
+  await view.open(); reachEnd(root, dom);
+  const restore = view.preparePrint();
+  const filter = root.querySelector('[name=supplier]'); filter.value = 'Beta'; filter.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(root.querySelectorAll('tbody tr').length, 200);
+  restore();
+  assert.equal(root.querySelectorAll('tbody tr').length, 200);
+  assert.equal(root.querySelector('.pl-table-scroll').scrollTop, 0);
+});

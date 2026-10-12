@@ -197,10 +197,10 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       if (!vertical) await load();
     }, close,
     preparePrint() {
-      const count = rendered, top = scroll.scrollTop, current = revision;
+      const count = rendered, top = scroll.scrollTop, current = revision, printedEntries = entries;
       printing = true; appendRows(entries.length);
       return () => {
-        if (current === revision && !root.hidden && !destroyed) { clearRows(); appendRows(count); scroll.scrollTop = top; lastScrollTop = scroll.scrollTop; }
+        if (current === revision && entries === printedEntries && !root.hidden && !destroyed) { clearRows(); appendRows(count); scroll.scrollTop = top; lastScrollTop = scroll.scrollTop; }
         printing = false;
       };
     },
