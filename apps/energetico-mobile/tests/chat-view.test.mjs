@@ -3582,6 +3582,96 @@ test("resumo em lote mostra somente a pergunta antes da tabela", () => {
   dom.window.close();
 });
 
+function attendanceSummaryDocument(rows, kind = "presence") {
+  return new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "attendance-group-fills", role: "assistant", type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?",
+    detail_table: { kind, title: "RESUMO DAS PRESENÇAS SELECIONADAS", rows },
+    options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "SUBMETER TODOS" }],
+  }] })), { url: "http://localhost/" });
+}
+
+function attendanceSummaryRow(supplier, descriptor, activity, overrides = {}) {
+  return [
+    { label: "DATA", value: overrides.date || "12/10/2026" },
+    { label: "FORNECEDOR", value: supplier },
+    { label: overrides.descriptorLabel || "IDDESCRITIVO", value: descriptor },
+    { label: "ATIVIDADEEXECUTADA", value: activity },
+    { label: "PRESENÇA", value: overrides.presence || "PRESENTE", tone: overrides.presence === "AUSENTE" ? "absent" : "present" },
+  ];
+}
+
+test("resumo agrupa o fundo pelo ID de etapa e atividade juntos mesmo com fornecedores intercalados", t => {
+  const dom = attendanceSummaryDocument([
+    attendanceSummaryRow("LUIZ", "126 - ALVENARIA", "ALVENARIA"),
+    attendanceSummaryRow("ANA", "127 - PINTURA", "PINTURA"),
+    attendanceSummaryRow("CLEITON", "126 - ALVENARIA", "ALVENARIA", { date: "11/10/2026", presence: "AUSENTE" }),
+    attendanceSummaryRow("JOSÉ", "126 - ALVENARIA", "REBOCO"),
+    attendanceSummaryRow("EDGAR", "128 - ALVENARIA", "ALVENARIA"),
+    attendanceSummaryRow("MAURO", "126 - DESCRIÇÃO\nRENOMEADA", "ALVENARIA", { descriptorLabel: "IDDESCRITIVOETAPA" }),
+  ]);
+  t.after(() => dom.window.close());
+  const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
+  const fills = rows.map(row => dom.window.getComputedStyle(row).backgroundColor);
+  assert.ok(dom.window.document.querySelector(".chat-presence-table--batch"), "data adicional mantém os campos empilhados");
+  assert.notEqual(fills[0], "rgba(0, 0, 0, 0)", "cada grupo tem fundo visível");
+  assert.equal(fills[0], fills[2], "presença, fornecedor e data não mudam a dupla etapa/atividade");
+  assert.equal(fills[0], fills[5], "o ID, não o texto renomeado da etapa, identifica o grupo");
+  assert.equal(new Set([fills[0], fills[1], fills[3], fills[4]]).size, 4, "alterar só um dos campos já muda o fundo");
+  assert.deepEqual(rows.map(row => row.querySelectorAll(".chat-presence-table-cell b")[1].textContent), ["LUIZ", "ANA", "CLEITON", "JOSÉ", "EDGAR", "MAURO"]);
+  assert.match(rows[2].querySelector(".chat-presence-table-cell--absent").textContent, /AUSENTE/);
+  assert.equal(rows[0].getAttribute("aria-label"), rows[2].getAttribute("aria-label"), "leitores de tela identificam o mesmo grupo");
+});
+
+test("resumo não reutiliza fundos de grupos diferentes quando há mais tipos de atividade", t => {
+  const dom = attendanceSummaryDocument(Array.from({ length: 200 }, (_, index) => attendanceSummaryRow(`PESSOA ${index}`, `${100 + index} - ETAPA`, `ATIVIDADE ${index}`)));
+  t.after(() => dom.window.close());
+  const fills = [...dom.window.document.querySelectorAll(".chat-presence-table-row")].map(row => dom.window.getComputedStyle(row).backgroundColor);
+  assert.equal(new Set(fills).size, 200);
+  assert.ok(fills.every(fill => fill !== "rgba(0, 0, 0, 0)"));
+});
+
+test("resumo não reúne etapas ou atividades ausentes como se fossem um trabalho confirmado", t => {
+  const dom = attendanceSummaryDocument([
+    attendanceSummaryRow("LUIZ", "-", "ALVENARIA"),
+    attendanceSummaryRow("ANA", "-", "ALVENARIA"),
+    attendanceSummaryRow("CLEITON", "126 - ALVENARIA", "EM BRANCO"),
+    attendanceSummaryRow("JOSÉ", "126 - ALVENARIA", "EM BRANCO"),
+    attendanceSummaryRow("EDGAR", "126 - ALVENARIA", { id: 1 }),
+    attendanceSummaryRow("MAURO", "126 - ALVENARIA", { id: 2 }),
+  ]);
+  t.after(() => dom.window.close());
+  const fills = [...dom.window.document.querySelectorAll(".chat-presence-table-row")].map(row => dom.window.getComputedStyle(row).backgroundColor);
+  assert.equal(new Set(fills).size, 6);
+});
+
+test("rótulos continuam legíveis sobre os fundos dos grupos", t => {
+  const dom = attendanceSummaryDocument(Array.from({ length: 20 }, (_, index) => attendanceSummaryRow(`PESSOA ${index}`, `${100 + index} - ETAPA`, `ATIVIDADE ${index}`)));
+  t.after(() => dom.window.close());
+  const style = dom.window.document.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  dom.window.document.head.append(style);
+  const luminance = color => {
+    const channels = color.match(/\d+/g).slice(0, 3).map(value => {
+      const component = Number(value) / 255;
+      return component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  for (const row of dom.window.document.querySelectorAll(".chat-presence-table-row")) {
+    const background = dom.window.getComputedStyle(row).backgroundColor;
+    const labelColor = dom.window.getComputedStyle(row.querySelector("span")).color;
+    assert.ok((luminance(background) + 0.05) / (luminance(labelColor) + 0.05) >= 4.5, `${labelColor} sobre ${background}`);
+  }
+});
+
+test("agrupamento de fundos não altera tabelas de outros fluxos", t => {
+  const dom = attendanceSummaryDocument([attendanceSummaryRow("LUIZ", "126 - ALVENARIA", "ALVENARIA")], "payment_audit");
+  t.after(() => dom.window.close());
+  assert.equal(dom.window.document.querySelector(".chat-presence-table--batch"), null);
+  assert.equal(dom.window.document.querySelector(".chat-presence-table-row")?.style.backgroundColor || "", "");
+});
+
 test("resumo de presenças múltiplas empilha campos sem comprimir textos no celular", () => {
   const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(css, /\.chat-presence-table--batch \.chat-presence-table-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);

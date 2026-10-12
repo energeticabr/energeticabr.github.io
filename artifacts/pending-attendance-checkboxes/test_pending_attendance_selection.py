@@ -107,7 +107,7 @@ class PendingAttendanceSelectionTests(unittest.TestCase):
         self.assertEqual(self.reply(reply_id="attendance_batch_absent")["status"], "awaiting_attendance_batch_motivation")
         self.assertEqual(self.reply("FALTA SEM JUSTIFICATIVA")["status"], "awaiting_attendance_batch_confirmation")
         self.assertEqual(self.sharepoint.update_calls, [])
-        self.assertTrue(all(row[3]["value"] == "AUSENTE" for row in self.messenger.sent[-1]["detail_table"]["rows"]))
+        self.assertTrue(all(next(cell["value"] for cell in row if cell["label"] == "PRESENÇA") == "AUSENTE" for row in self.messenger.sent[-1]["detail_table"]["rows"]))
 
     def test_other_date_after_back_does_not_keep_batch_selection(self):
         self.open_pending()

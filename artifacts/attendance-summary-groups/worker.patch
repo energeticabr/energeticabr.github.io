@@ -1,0 +1,5 @@
+diff --git a/worker/workflow.py b/worker/workflow.py
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -5452,0 +5453 @@
++                {"label": "DATA", "value": self._pending_attendance_date_display(str(source.get("DATA") or "").strip() or "-")},

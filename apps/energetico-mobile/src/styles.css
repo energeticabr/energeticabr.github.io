@@ -630,10 +630,9 @@ button { touch-action: manipulation; }
 .chat-presence-table-cell--present b { color: #166534; background: #dcfce7; border-radius: 6px; padding: 2px 5px; }
 .chat-presence-table-cell--absent b { color: #991b1b; background: #fee2e2; border-radius: 6px; padding: 2px 5px; }
 .chat-presence-table--batch .chat-presence-table-row { grid-template-columns: minmax(0, 1fr); padding: 5px 0; }
-.chat-presence-table--batch .chat-presence-table-row:nth-of-type(even) { background: #f7fbfa; }
 .chat-presence-table--batch .chat-presence-table-cell { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 5px 11px; }
 .chat-presence-table--batch .chat-presence-table-cell + .chat-presence-table-cell { border-left: 0; }
-.chat-presence-table--batch .chat-presence-table-cell span { font-size: 10px; }
+.chat-presence-table--batch .chat-presence-table-cell span { color: #43535c; font-size: 10px; }
 .chat-presence-table--batch .chat-presence-table-cell b { font-size: 12px; line-height: 1.35; overflow-wrap: break-word; word-break: normal; }
 .chat-presence-table--batch .chat-presence-table-cell--present b,
 .chat-presence-table--batch .chat-presence-table-cell--absent b { width: fit-content; }
