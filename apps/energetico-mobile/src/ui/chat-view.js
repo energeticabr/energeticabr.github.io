@@ -787,11 +787,20 @@ function changeTableQuestion(message, table) {
 }
 
 function presenceSummaryQuestion(question, table) {
-  const rows = Array.isArray(table?.rows) ? table.rows : [];
-  if (table?.kind !== "presence" || !rows.some(row => Array.isArray(row) && row.length === 4)) return question;
-  const heading = String(question).split(/\r?\n/, 1)[0].trim();
+  if (!isPresenceSummaryTable(table)) return question;
+  const lines = String(question).split(/\r?\n/);
+  const heading = lines[0].trim();
   if (!/CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS\?/i.test(heading)) return question;
-  return /^✅/.test(heading) ? heading : `✅ ${heading}`;
+  const rows = Array.isArray(table) ? table : table.rows;
+  const normalizeValue = value => String(value ?? "-").replace(/\s+/g, " ").trim();
+  const representedRows = new Set(rows
+    .filter(row => Array.isArray(row) && row.length >= 4 && row.every(cell =>
+      cell && typeof cell === "object"
+      && (cell.value == null || ["string", "number"].includes(typeof cell.value))))
+    .map(row => JSON.stringify(row.map(cell => normalizeValue(cell.value)))));
+  const extraLines = lines.slice(1).filter(line =>
+    !representedRows.has(JSON.stringify(line.split("|").map(normalizeValue))));
+  return [ /^✅/.test(heading) ? heading : `✅ ${heading}`, ...extraLines ].join("\n").trim();
 }
 
 function isSignedDocumentMessage(message) {
@@ -1022,6 +1031,19 @@ function presenceSummaryField(row, labels) {
   return typeof cell?.value === "string" || typeof cell?.value === "number" ? String(cell.value).trim() : "";
 }
 
+function isPresenceSummaryTable(table) {
+  if (table?.kind && table.kind !== "presence") return false;
+  const rows = Array.isArray(table) ? table : table?.rows;
+  if (!Array.isArray(rows)) return false;
+  return rows.some(row => Array.isArray(row)
+    && presenceSummaryField(row, ["fornecedor"])
+    && row.some(cell => ["iddescritivo", "iddescritivoetapa", "atividadeexecutada"]
+      .includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, "")))
+    // Older confirmations omit kind; recognize their attendance fields instead.
+    && (table?.kind === "presence" || row.some(cell =>
+      normalizedDateText(cell?.label).replace(/[^a-z]/g, "") === "presenca")));
+}
+
 function presenceSummaryGroupKey(row, rowIndex) {
   const descriptor = presenceSummaryField(row, ["iddescritivo", "iddescritivoetapa"]);
   const descriptorId = descriptor.match(/^(0*[1-9]\d*)(?:\s*[-–—][\s\S]*)?$/)?.[1];
@@ -1052,9 +1074,7 @@ function presenceDetailTableMarkup(table) {
   if (!cells.length) return "";
   const title = Array.isArray(table) ? "📋 DADOS DA PRESENÇA" : (table.title || "📋 DADOS DA PRESENÇA");
   const validRows = rows.filter(row => Array.isArray(row) && row.length);
-  const batch = table?.kind === "presence" && validRows.some(row =>
-    presenceSummaryField(row, ["fornecedor"]) && row.some(cell =>
-      ["iddescritivo", "iddescritivoetapa", "atividadeexecutada"].includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, ""))));
+  const batch = isPresenceSummaryTable(table);
   const groups = new Map();
   return `<div class="chat-presence-table${batch ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${validRows.map((row, rowIndex) => {
     let groupAttributes = "";
