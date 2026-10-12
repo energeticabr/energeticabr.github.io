@@ -69,6 +69,14 @@ test('order attachments receipt keeps each order ID, filename notes and immutabl
   assert.deepEqual(metadata.attachments, [attachment]);
 });
 
+for (const filename of ['pedido-pendente.pdf', 'pedido-incompleto.pdf', 'provisao-parcial.pdf']) {
+  test(`a filename is an opaque attachment note, not an incomplete posting status: ${filename}`, () => {
+    const card = documentFor(orderAttachments + '\n📎 Comprovante: ' + filename).querySelector('.launch-completion--order-attachments');
+    assert.ok(card);
+    assert.equal(card.querySelector('.launch-completion__details').textContent, '📎 Comprovante: ' + filename);
+  });
+}
+
 for (const [name, text] of [
   ['missing order', orderAttachments.split('\n').slice(0, 2).join('\n')],
   ['unrelated confirmed document', orderAttachments.replace('• PEDIDO: ID 406', '• DOCUMENTO: ID 406')],
@@ -84,6 +92,12 @@ for (const [name, text] of [
   ['attachment not added', orderAttachments + '\nArquivo não adicionado.'],
   ['attachment not sent', orderAttachments + '\nComprovante não enviado.'],
   ['attachment not linked', orderAttachments + '\nDocumento não anexado.'],
+  ['qualified attachment not added', orderAttachments + '\n⚠️ Anexo do pedido ID 406 não adicionado.'],
+  ['qualified attachment not sent', orderAttachments + '\n⚠️ Anexo do pedido ID 406 não enviado.'],
+  ['qualified attachment not linked', orderAttachments + '\n⚠️ Anexo do pedido ID 406 não anexado.'],
+  ['pending attachment with article', orderAttachments + '\n⚠️ O anexo adicional está pendente de envio.'],
+  ['incomplete files with plural article', orderAttachments + '\nOs arquivos do pedido ID 406 estão incompletos.'],
+  ['unconfirmed proof with indefinite article', orderAttachments + '\nUm comprovante do pedido ID 406 não confirmado.'],
   ['incomplete attachments', orderAttachments + '\nAnexos incompletos.'],
   ['partially added files', orderAttachments + '\nArquivos parcialmente adicionados.'],
   ['negative continuation after filename', orderAttachments + '\n📎 Comprovante: recibo.pdf, não confirmado.'],
@@ -92,7 +106,7 @@ for (const [name, text] of [
   test(`incomplete order attachments confirmation stays plain and visible: ${name}`, () => {
     const doc = documentFor(text);
     assert.equal(doc.querySelector('.launch-completion'), null);
-    assert.ok(doc.querySelector('.chat-bubble').textContent.includes(text.replaceAll('*', '').split('\n')[0]));
+    for (const line of text.replaceAll('*', '').split('\n')) assert.ok(doc.querySelector('.chat-bubble').textContent.includes(line), line);
   });
 }
 

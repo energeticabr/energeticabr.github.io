@@ -7,11 +7,11 @@ function incompletePostingNotice(line, attachmentCompletion = false) {
   for (const clause of clauses) {
     const notice = clause.replace(/^[^\p{L}\d]+/u, '')
       .replace(/^(?:AVISO|ATENCAO)\s*:\s*/i, '').replace(/^[^\p{L}\d]+/u, '');
-    if (/^(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
+    if (/^(?:(?:O|OS|A|AS|UM|UMA|UNS|UMAS)\s+)?(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
       subject = 'attachment';
       if (!attachmentCompletion) continue;
     }
-    if (/\b(?:PROVISAO|PROVISOES|DESCRITIVOS?(?: DE)? PROVISAO|DESCRITIVOPROVISAO|PEDIDOS?|LANCAMENTOS?|REGISTROS?|BAIXA|PAGAMENTO)\b/i.test(notice)) subject = 'record';
+    else if (/\b(?:PROVISAO|PROVISOES|DESCRITIVOS?(?: DE)? PROVISAO|DESCRITIVOPROVISAO|PEDIDOS?|LANCAMENTOS?|REGISTROS?|BAIXA|PAGAMENTO)\b/i.test(notice)) subject = 'record';
     // Attachments are supplementary for financial settlements, but are the
     // operation itself for attachment receipts. Keep subjects across clauses.
     if (/CONFIRMACAO (?:PARCIAL|INCOMPLETA)/i.test(notice)
