@@ -1,0 +1,26 @@
+{
+  "files": {
+    "worker/payment_provision_flow.py": {
+      "before": "94d4e6f7a2fe4810fe37d652428759a75e2eca2780b8a7adcd4fa7719d2ee413",
+      "mirrorBefore": "94d4e6f7a2fe4810fe37d652428759a75e2eca2780b8a7adcd4fa7719d2ee413",
+      "after": "7c4b4984fef7479b2d2c74fa1e4cb751d86f47cf783137495e4ee7cc4c0cd3ff"
+    },
+    "worker/provision_parent_choice.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "29dc5d329c864eff367cfc0a429122d22a58a64f268e877950431f88e5907412"
+    },
+    "worker/workflow.py": {
+      "before": "a14f57dd52196b0552a181c159ab5ab678bbc143732386bbe3fc79d0d515c377",
+      "mirrorBefore": "a14f57dd52196b0552a181c159ab5ab678bbc143732386bbe3fc79d0d515c377",
+      "after": "d5238945da0525622761dda0917d6a7da5f1b4cf78e002597d3b2881fdd4738a"
+    },
+    "channel_bridge.py": {
+      "before": "c7ec64d90f05e86d4be5ea41f51a7a017e58af77214fadc49d2f4c64bff48b49",
+      "mirrorBefore": "c7ec64d90f05e86d4be5ea41f51a7a017e58af77214fadc49d2f4c64bff48b49",
+      "after": "fc632e4303a0ce79a37b9cdd8811684c63f7f2dc37b1bfc65671ebf43397e804"
+    }
+  },
+  "patch": "60a1482367bf39d2971cfa32bdfb9215c8f2654eac4201f382b06ee7123b14fd",
+  "archive": "f7b68bdd104c023a6b1419881bc7da41023cc750f6621114981e968c6d36838e"
+}

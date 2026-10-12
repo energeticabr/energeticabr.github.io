@@ -1,6 +1,7 @@
 import { persistLancamentoRecord } from "./lancamentos-workflow.js";
 import { normalizeF21RecurringExpenseRules } from "./despesas-recorrentes-powerapps-rules.js";
 import { buildF20SecondaryCadastroProdutoPayload, getF18NextMonthDepreciationDate } from "./imobilizados-powerapps-rules.js";
+import { persistProvisionParentWorkflow } from "./provision-parent-workflow.js";
 
 function canonicalField(value) {
   return String(value || "")
@@ -81,6 +82,9 @@ export async function persistEntityRecord(repository, entity, list, options = {}
     return repository.updateItem(entity.siteKey, list.id, item.id, fields, { eTag });
   }
   if (typeof repository.createItem !== "function") throw new TypeError("O repositório não oferece criação de registros.");
+  if (entity?.id === "provisoes-de-pagamento") {
+    return persistProvisionParentWorkflow(repository, entity, list, { ...options, fields });
+  }
   await createMissingF20Product(repository, entity, fields);
   return repository.createItem(entity.siteKey, list.id, fields);
 }
@@ -108,7 +112,7 @@ function frozenCopy(values = []) {
 function normalizedRetryItem(value) {
   if (!value) return null;
   const retryItem = value.retryItem || value;
-  if (!retryItem.savedItem || !String(retryItem.itemId || "").trim()) {
+  if (!retryItem.provisionRetryState && (!retryItem.savedItem || !String(retryItem.itemId || "").trim())) {
     throw new TypeError("A retentativa requer o retryItem retornado pela falha anterior.");
   }
   return retryItem;
@@ -121,7 +125,7 @@ function attachmentFailureMessage(stage, name, itemId) {
   return `Os novos anexos do registro ${itemId} foram enviados, mas não foi possível excluir o anexo ${name}. A retentativa continuará do ponto da falha.`;
 }
 
-function retrySnapshot({ mode, savedItem, itemId, completedUploads, completedDeletions, pendingUploads, pendingDeletions }) {
+function retrySnapshot({ mode, savedItem, itemId, completedUploads, completedDeletions, pendingUploads, pendingDeletions, provisionRetryState }) {
   return Object.freeze({
     mode,
     savedItem,
@@ -130,6 +134,7 @@ function retrySnapshot({ mode, savedItem, itemId, completedUploads, completedDel
     completedDeletions: frozenCopy(completedDeletions),
     pendingUploads: frozenCopy(pendingUploads),
     pendingDeletions: frozenCopy(pendingDeletions),
+    ...(provisionRetryState ? { provisionRetryState } : {}),
   });
 }
 
@@ -173,7 +178,9 @@ export function mergeFailedFormRetryState(uiRetryState, error, previousRetryStat
     ?? attachmentChanges?.deletions
     ?? previousChanges.deletions;
   return Object.freeze({
+    ...(previousRetryState || {}),
     ...(uiRetryState || {}),
+    ...(persistenceRetryItem?.provisionRetryState ? { provisionParentChoice: persistenceRetryItem.provisionRetryState.choice } : {}),
     ...(persistenceRetryItem ? { persistenceRetryItem } : {}),
     attachmentChanges: Object.freeze({ uploads: frozenCopy(uploads), deletions: frozenCopy(deletions) }),
   });
@@ -181,13 +188,13 @@ export function mergeFailedFormRetryState(uiRetryState, error, previousRetryStat
 
 export async function persistEntityRecordWithAttachments(repository, entity, list, options = {}) {
   const mode = options.mode === "edit" ? "edit" : "create";
-  const retryItem = normalizedRetryItem(options.retryItem);
+  const retryItem = normalizedRetryItem(options.retryItem || formPersistenceRetryItem(options.retryState));
   if (retryItem?.mode && retryItem.mode !== mode) throw new Error("A retentativa deve usar o mesmo modo da gravação original.");
   if (retryItem && mode === "edit" && options.item?.id && String(options.item.id) !== String(retryItem.itemId)) {
     throw new Error("A retentativa de edição não corresponde ao item original.");
   }
 
-  const suppliedAttachments = options.attachments;
+  const suppliedAttachments = retryItem?.provisionRetryState ? null : options.attachments;
   const uploads = [...(suppliedAttachments?.uploads ?? retryItem?.pendingUploads ?? [])];
   const deletions = [...(suppliedAttachments?.deletions ?? retryItem?.pendingDeletions ?? [])];
   if (mode !== "edit" && deletions.length) throw new Error("Uma criação não pode excluir anexos existentes.");
@@ -199,11 +206,21 @@ export async function persistEntityRecordWithAttachments(repository, entity, lis
   const pendingUploads = uploads.filter(file => !uploadedKeys.has(attachmentKey(attachmentName(file))));
   const pendingDeletions = deletions.filter(name => !deletedKeys.has(attachmentKey(name)));
 
-  const savedItem = retryItem?.savedItem || await persistEntityRecord(repository, entity, list, {
-    ...options,
-    mode,
-    fields: recordFields(options.fields),
-  });
+  let savedItem;
+  try {
+    savedItem = retryItem?.savedItem || await persistEntityRecord(repository, entity, list, {
+      ...options,
+      retryItem,
+      mode,
+      fields: recordFields(options.fields),
+    });
+  } catch (error) {
+    if (error.provisionRetryState) {
+      error.retryItem = retrySnapshot({ mode, savedItem: null, itemId: error.provisionRetryState.childId, completedUploads, completedDeletions, pendingUploads, pendingDeletions, provisionRetryState: error.provisionRetryState });
+    }
+    throw error;
+  }
+  const provisionRetryState = savedItem?.provisionRetryState || retryItem?.provisionRetryState;
   const itemId = String(retryItem?.itemId || savedItem?.id || savedItem?.item?.id || (mode === "edit" ? options.item?.id : "") || "").trim();
   if ((uploads.length || deletions.length) && !itemId) throw new Error("O SharePoint não retornou o ID necessário para gravar os anexos.");
 
@@ -227,6 +244,7 @@ export async function persistEntityRecordWithAttachments(repository, entity, lis
           completedDeletions,
           pendingUploads: pendingUploads.slice(index),
           pendingDeletions,
+          provisionRetryState,
         }),
       });
     }
@@ -251,6 +269,7 @@ export async function persistEntityRecordWithAttachments(repository, entity, lis
           completedDeletions,
           pendingUploads: [],
           pendingDeletions: pendingDeletions.slice(index),
+          provisionRetryState,
         }),
       });
     }

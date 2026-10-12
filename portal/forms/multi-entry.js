@@ -15,6 +15,7 @@ function immutableRow(row) {
     message: row.message,
     result: row.result,
     retryItem: row.retryItem,
+    retryState: row.retryState,
   });
 }
 
@@ -93,7 +94,7 @@ export function createMultiEntryQueue(options = {}) {
   const notify = () => options.onChange?.(snapshot());
   const snapshot = () => Object.freeze(rows.map(immutableRow));
 
-  function add(fields, rawValues = {}, relationshipLabels = {}, attachments = {}) {
+  function add(fields, rawValues = {}, relationshipLabels = {}, attachments = {}, retryState = null) {
     if (!fields || typeof fields !== "object" || Array.isArray(fields) || !Object.keys(fields).length) {
       throw new TypeError("O lançamento múltiplo requer ao menos um campo validado.");
     }
@@ -107,6 +108,10 @@ export function createMultiEntryQueue(options = {}) {
       message: "Aguardando envio.",
       result: undefined,
       retryItem: undefined,
+      retryState: retryState ? Object.freeze({
+        ...retryState,
+        ...(retryState.provisionParentChoice ? { provisionParentChoice: Object.freeze({ ...retryState.provisionParentChoice }) } : {}),
+      }) : null,
     };
     rows = [...rows, row];
     notify();
@@ -157,15 +162,36 @@ export function createMultiEntryQueue(options = {}) {
     notify();
   }
 
-  return Object.freeze({ add, remove, submitAll, snapshot, clearSuccessful });
+  function reselectProvisionParent(id, selected) {
+    const row = rows.find(candidate => candidate.id === id);
+    if (activeSubmission || !canReselectQueuedProvisionParent(row)) throw new Error("A escolha só pode mudar em uma linha rejeitada antes de iniciar a gravação; uma retentativa parcial mantém seu descritivo.");
+    const parentId = String(selected?.id || "");
+    const eTag = String(selected?.eTag || "").trim();
+    if (selected?.mode !== "existing" || !/^[1-9]\d*$/.test(parentId) || !eTag || eTag === "*") throw new Error("Selecione um descritivo pendente com ID e ETag autoritativos.");
+    row.retryState = Object.freeze({ ...row.retryState, provisionParentChoice: Object.freeze({ mode: "existing", id: parentId, eTag }) });
+    row.status = "pending";
+    row.message = "Descritivo selecionado novamente. Aguardando envio.";
+    notify();
+    return immutableRow(row);
+  }
+
+  return Object.freeze({ add, remove, submitAll, snapshot, clearSuccessful, reselectProvisionParent });
+}
+
+export function canReselectQueuedProvisionParent(row) {
+  return row?.status === "error" && Boolean(row.retryState?.provisionParentChoice)
+    && !row.retryItem && !row.retryState?.persistenceRetryItem && !row.retryState?.provisionRetryState;
 }
 
 export function multiEntryQueueMarkup(rows = [], columns = [], options = {}) {
   const statusLabel = Object.freeze({ pending: "Pendente", submitting: "Enviando", success: "Enviado", error: "Falhou" });
   const gallery = row => rowGalleryFields(row, columns, options.mode);
+  const reselect = row => options.allowProvisionReselection && canReselectQueuedProvisionParent(row)
+    ? `<button type="button" class="button-secondary" data-multi-entry-reselect="${escapeHtml(row.id)}">Selecionar descritivo novamente</button><div data-multi-entry-parent-options="${escapeHtml(row.id)}" hidden><label>Descritivo pendente<select data-multi-entry-parent-id="${escapeHtml(row.id)}"></select></label><button type="button" class="button-secondary" data-multi-entry-parent-apply="${escapeHtml(row.id)}">Confirmar descritivo</button><p role="status" data-multi-entry-parent-status="${escapeHtml(row.id)}"></p></div>`
+    : "";
   return `<section class="multi-entry-queue" data-multi-entry-queue aria-labelledby="multiEntryTitle">
     <div class="dynamic-form-heading"><div><p class="page-eyebrow">Lançamento múltiplo</p><h3 id="multiEntryTitle">Itens preparados</h3></div><strong>${rows.length}</strong></div>
-    <div data-multi-entry-rows>${rows.map((row, index) => `<article class="multi-entry-row is-${escapeHtml(row.status)}" data-multi-entry-row="${escapeHtml(row.id)}"><header><strong>Item ${index + 1}</strong><span>${escapeHtml(statusLabel[row.status] || row.status)}</span></header><dl class="multi-entry-fields">${gallery(row).map(field => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(field.value)}</dd></div>`).join("") || `<div><dt>Registro</dt><dd>${escapeHtml(row.id)}</dd></div>`}</dl><footer><p>${escapeHtml(row.message || statusLabel[row.status] || "Pendente")}</p>${row.status === "submitting" ? "" : `<button type="button" class="button-secondary" data-multi-entry-remove="${escapeHtml(row.id)}">Remover</button>`}</footer></article>`).join("") || '<p class="entity-empty">Adicione ao menos um item antes de submeter.</p>'}</div>
+    <div data-multi-entry-rows>${rows.map((row, index) => `<article class="multi-entry-row is-${escapeHtml(row.status)}" data-multi-entry-row="${escapeHtml(row.id)}"><header><strong>Item ${index + 1}</strong><span>${escapeHtml(statusLabel[row.status] || row.status)}</span></header><dl class="multi-entry-fields">${gallery(row).map(field => `<div><dt>${escapeHtml(field.label)}</dt><dd>${escapeHtml(field.value)}</dd></div>`).join("") || `<div><dt>Registro</dt><dd>${escapeHtml(row.id)}</dd></div>`}</dl><footer><p>${escapeHtml(row.message || statusLabel[row.status] || "Pendente")}</p>${reselect(row)}${row.status === "submitting" ? "" : `<button type="button" class="button-secondary" data-multi-entry-remove="${escapeHtml(row.id)}">Remover</button>`}</footer></article>`).join("") || '<p class="entity-empty">Adicione ao menos um item antes de submeter.</p>'}</div>
     <button type="button" class="button-primary" data-multi-entry-submit${rows.some(row => row.status === "pending" || row.status === "error") ? "" : " disabled"}>Submeter tudo</button>
   </section>`;
 }
