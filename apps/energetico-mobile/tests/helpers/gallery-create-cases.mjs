@@ -6,7 +6,7 @@ import { createPaymentProgrammingGallery } from '../../src/ui/payment-programmin
 import { createRecurringExpensesGallery } from '../../src/ui/recurring-expenses-gallery-view.js';
 import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
 
-export const registrationKinds = ['investment', 'institution', 'investment_type', 'profitability', 'taxation', 'group', 'family', 'subfamily', 'product', 'documents', 'asset',
+export const registrationKinds = ['financial_movement', 'investment', 'institution', 'investment_type', 'profitability', 'taxation', 'group', 'family', 'subfamily', 'product', 'documents', 'asset',
   'assetFunction', 'assetProduct', 'assetGroup', 'workDiary', 'quotes', 'contracts', 'contractLines',
   'measurements', 'measurementLines', 'stageDemonstratives', 'constructionStages', 'recurringTasks', 'delegatedTasks', 'provisionDescription'];
 export const galleryCases = [
