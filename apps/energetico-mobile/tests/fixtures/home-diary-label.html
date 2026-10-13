@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],messages:[{
+  id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options:[
+    {id:'group_pending',reply:'group_pending',label:'⏳ PENDÊNCIAS (48)'},
+    {id:'group_supplies',reply:'group_supplies',label:'📦 SUPRIMENTOS'},
+    {id:'start_pending_construction_diary',reply:'start_pending_construction_diary',label:'📔 COMEÇAR DIÁRIO DE OBRAS (13/10/2026)'},
+  ],
+}]});
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+const button = document.querySelector('[data-reply-id="start_pending_construction_diary"]');
+const range = document.createRange();
+range.selectNodeContents(button);
+const bounds = button.getBoundingClientRect();
+document.documentElement.dataset.layout = JSON.stringify({
+  text:button.textContent,
+  height:bounds.height,
+  button:{left:bounds.left,right:bounds.right},
+  textRects:[...range.getClientRects()].map(rect=>({top:rect.top,left:rect.left,right:rect.right})),
+});
+document.documentElement.dataset.ready = 'true';
+</script></body></html>

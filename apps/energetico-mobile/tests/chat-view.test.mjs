@@ -4198,6 +4198,7 @@ test("menu inicial põe COMEÇAR DIÁRIO DE OBRAS por último e em vermelho", ()
   ]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
   assert.equal(buttons.at(-1).dataset.label, "📔 COMEÇAR DIÁRIO DE OBRAS (24/09/2026)");
+  assert.equal(buttons.at(-1).textContent, "📔 DIÁRIO (24/09/2026)");
   dom.window.close();
 });
 
@@ -4244,6 +4245,8 @@ test("menu com anexos põe COMEÇAR DIÁRIO latente depois de fotos e em vermelh
     "group_supplies", "group_demands", "append_today_construction_diary_photos", "resume_latent_construction_diary",
   ]);
   assert.equal(buttons.at(-1).classList.contains("chat-choice-button--danger"), true);
+  assert.equal(buttons.at(-1).dataset.label, "▶️ COMEÇAR DIÁRIO DE OBRAS (24/09/2026)");
+  assert.equal(buttons.at(-1).textContent, "▶️ DIÁRIO (24/09/2026)");
   dom.window.close();
 });
 
