@@ -972,6 +972,7 @@ export function createAppController({
   let homeAttachmentTransferPending = false;
   let pendingHomeExit = null;
   let homeAttachmentSelection = [];
+  let unavailableAttachmentRecovery = null;
   let finishingFlow = false;
   // Render an actionable login immediately. Session restoration is silent and
   // must never leave the first screen disabled while a native bridge responds.
@@ -2419,6 +2420,7 @@ export function createAppController({
           });
         }
         if (replaceMessageId) view.closeRhidAttendanceReport?.();
+        if (rhidAttendanceReportNavigationRevision !== navigationRevision) return false;
         if (openPdf) {
           const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
           const pdf = await buildRhidAttendancePdf(table, { dateLabel: reportDate, updateLabel });
@@ -3853,6 +3855,84 @@ export function createAppController({
     return target ? store.removeAttachment(target.id) : false;
   }
 
+  function rememberUnavailableAttachmentSelection(error, selectedIds, previousState) {
+    if (!Array.isArray(selectedIds) || !selectedIds.length) return;
+    const unavailable = error?.code === "ATTACHMENT_UNAVAILABLE"
+      || (error?.status === 422
+        && /^Um anexo selecionado não está mais disponível(?: ou já foi submetido)?\.$/u.test(String(error?.message || "")));
+    if (!unavailable) return;
+    const selected = previousState.attachments.filter(item => selectedIds.includes(item.id));
+    if (!selected.length) return;
+    unavailableAttachmentRecovery = {
+      account, sessionRevision, flowId: String(previousState.activeFlow?.id || ""),
+      contextId: String(previousState.activeFlow?.contextId || ""), selected,
+      rejectedIds: (error.unavailableAttachmentIds || []).filter(id => selected.some(item => item.id === id)),
+    };
+  }
+
+  async function dismissUnavailableAttachmentSelection() {
+    const recovery = unavailableAttachmentRecovery;
+    if (!recovery) return;
+    const current = () => !stopped && recovery.account === account && recovery.sessionRevision === sessionRevision
+      && recovery.flowId === String(store.getState().activeFlow?.id || "")
+      && recovery.contextId === String(store.getState().activeFlow?.contextId || "");
+    if (!current()) { unavailableAttachmentRecovery = null; return; }
+    // Cancel the rejected navigation even if legacy reconciliation fails.
+    // A fresh snapshot may prove which references to detach, never whether
+    // the user authorized replaying a stale transfer or discarding a draft.
+    pendingHomeExit = null;
+    pendingAutomaticExit = null;
+    attachmentTransferPending = false;
+    attachmentTransferCompleted = false;
+    homeAttachmentTransferPending = false;
+    homeAttachmentSelection = [];
+    let rejectedIds = recovery.rejectedIds;
+    const renewals = new Map();
+    if (!rejectedIds.length) {
+      // Older VMs report only a generic error. Never infer a missing file
+      // from that text or its filename; reconcile an authenticated snapshot.
+      if (typeof client.getAttachments !== "function") return;
+      let snapshot;
+      try {
+        snapshot = await withTimeout(client.getAttachments(), 15_000, "A consulta de anexos demorou demais.");
+      } catch { return; }
+      if (!current() || !Array.isArray(snapshot)) return;
+      const retainedIds = new Set(recovery.selected
+        .filter(selected => snapshot.some(item => item?.id === selected.id && item?.mediaUrl))
+        .map(item => item.id));
+      const unmatched = recovery.selected.filter(selected => !retainedIds.has(selected.id));
+      const sameFile = (left, right) => Boolean(left?.fileName)
+        && left.fileName === right.fileName && left.mimeType === right.mimeType
+        && Number(left.size) === Number(right.size);
+      rejectedIds = recovery.selected.filter(selected => {
+        const exact = snapshot.find(item => item?.id === selected.id && item?.mediaUrl);
+        if (exact) return exact.existing === true || exact.readOnly === true || exact.origin === "existing";
+        // A VM may renew an ID while keeping the file. Retain it if the
+        // fresh snapshot confirms a unique, transferable replacement.
+        const matches = snapshot.filter(item => item?.id && item?.mediaUrl
+          && !retainedIds.has(item.id) && sameFile(item, selected));
+        if (matches.length === 1 && unsubmittedUserAttachments(matches).length === 1
+          && unmatched.filter(item => sameFile(item, selected)).length === 1) {
+          renewals.set(selected.id, matches[0]);
+          return true;
+        }
+        // An ambiguous replacement is not proof that a file disappeared.
+        // Keep it for the authoritative resume snapshot rather than guessing.
+        return !matches.length || unsubmittedUserAttachments(matches).length === 0;
+      }).map(item => item.id);
+    }
+    if (!current()) return;
+    attachmentRevision += 1;
+    const reconciled = store.getState().attachments
+      .map(item => renewals.get(item.id) || item)
+      .filter(item => !rejectedIds.includes(item.id));
+    for (const id of rejectedIds) store.removeAttachment(id, { dismissFromSnapshots: true });
+    if (renewals.size) store.syncAttachments([...new Map(reconciled.map(item => [item.id, item])).values()]);
+    // The rejected transfer never started. Resume this flow without replaying
+    // stale Home selection or abandoning the draft on the user's behalf.
+    unavailableAttachmentRecovery = null;
+  }
+
   function pendingAttachmentGuard() {
     const pending = store.getState().pendingFiles;
     if (!pending.length) return null;
@@ -4329,22 +4409,31 @@ export function createAppController({
     }
   }
 
-  async function continueConversation() {
+  async function continueConversation({ dismissUnavailableAttachments = false } = {}) {
     if (!account || stopped || flowBusy({ allowUncertainRecovery: true })) return false;
     disposeGeneralSummaryReport();
     cancelResponseTransition();
     currentAssistantPollSnapshot = null;
     cancelCompletionMenu();
     const conversationAccount = account;
+    const conversationRevision = sessionRevision;
+    const currentConversation = () => account === conversationAccount && sessionRevision === conversationRevision && !stopped;
     const previousFlow = store.getState().activeFlow;
     const resumeDraftRevision = draftEditRevision;
     sessionError = null;
     resuming = true;
     render();
     try {
+      if (dismissUnavailableAttachments) await dismissUnavailableAttachmentSelection();
+      if (!currentConversation()) return false;
       attachmentRevision += 1;
       let paymentProvisionAutoReplyError = null;
-      let result = preparePresenceResult(await client.sendText({ text: "", replyId: "input_continue" }));
+      const resumeRequest = client.sendText({ text: "", replyId: "input_continue" });
+      const resumed = await (dismissUnavailableAttachments
+        ? withTimeout(resumeRequest, 30_000, "A retomada demorou demais. Seu rascunho foi preservado; tente novamente.")
+        : resumeRequest);
+      if (!currentConversation()) return false;
+      let result = preparePresenceResult(resumed);
       const blankPaymentFormOption = paymentProvisionBlankFormOption(
         result,
         result.activeFlow || store.getState().activeFlow,
@@ -4360,7 +4449,7 @@ export function createAppController({
           result = paymentProvisionSyncNotice(result);
         }
       }
-      if (account !== conversationAccount || stopped) return false;
+      if (!currentConversation()) return false;
       const hadPendingAutomaticExit = Boolean(pendingAutomaticExit);
       const preserveHomeAttachments = pendingAutomaticExit?.preserveHomeAttachments === true || Boolean(pendingHomeExit);
       reconcilePendingAutomaticExit(result);
@@ -4372,7 +4461,7 @@ export function createAppController({
           replyId: pendingAutomaticExit.replyId,
           ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
         }));
-        if (account !== conversationAccount || stopped) return false;
+        if (!currentConversation()) return false;
         if (!isMenuResult(result)) throw new Error("A VM não confirmou o retorno ao menu principal. Tente novamente.");
         pendingAutomaticExit = null;
         automaticExitCompleted = true;
@@ -4449,8 +4538,10 @@ export function createAppController({
       // resposta do usuário.
       if (!menuResult && typeof client.getAttachments === "function") {
         try {
-          const attachments = await client.getAttachments();
-          if (account === conversationAccount && !stopped) {
+          const snapshotRequest = client.getAttachments();
+          const attachments = await (dismissUnavailableAttachments
+            ? withTimeout(snapshotRequest, 15_000, "A consulta de anexos demorou demais.") : snapshotRequest);
+          if (currentConversation()) {
             attachmentRevision += 1;
             store.syncAttachments(attachments);
             hydrateMediaPreviews();
@@ -4460,6 +4551,7 @@ export function createAppController({
           // novamente sem bloquear a conversa.
         }
       }
+      if (!currentConversation()) return false;
       reconcileRecovery(resumeDraftRevision, ingestedResult);
       persistRecovery();
       if (attachmentReminderDetails()) scheduleAttachmentReminder();
@@ -4467,7 +4559,7 @@ export function createAppController({
       scheduleCompletionMenu(result);
       return !paymentProvisionAutoReplyError;
     } catch (error) {
-      if (!stopped && account === conversationAccount) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
+      if (currentConversation()) setSessionError(error, "Não foi possível retomar a conversa com a VM.");
       return false;
     } finally {
       resuming = false;
@@ -8761,6 +8853,9 @@ export function createAppController({
       }
       if (operation && store.getState().activeText?.id === operation.id
         && (error?.code === "NETWORK_UNCERTAIN" || automaticExitDiscarded || retryingAutomaticExit)) recoveryUncertain = true;
+      if (!stopped && account === sendingAccount && sessionRevision === sendingRevision) {
+        rememberUnavailableAttachmentSelection(error, behavior.homeAttachmentIds, previousState);
+      }
       if (operation) store.failText(operation, error);
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
@@ -9338,6 +9433,7 @@ export function createAppController({
     homeAttachmentTransferPending = false;
     pendingHomeExit = null;
     homeAttachmentSelection = [];
+    unavailableAttachmentRecovery = null;
     signaturePlacementEditPending = false;
     invalidateSignaturePlacement({ clearOverride: true });
     account = null;
@@ -10327,11 +10423,10 @@ export function createAppController({
     bind("remove-pending-provision-upload", command => removePendingProvisionUpload(command.paymentId, command.uploadId));
     bind("send-pending-provision-attachments", command => sendPendingProvisionAttachments(command.paymentId));
     bind("rhid-attendance-report-generate", command => generateRhidAttendanceReport(command.value, {
-      openPdf: true,
       replaceMessageId: command.messageId || "",
     }));
     bind("open-rhid-monthly-report", openRhidMonthlyReport);
-    bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value, { openPdf: true }));
+    bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value));
     bind("open-rhid-attendance-today", () => {
       if (!account || stopped || flowBusy()) return false;
       const pending = rhidAttendanceReportRequests.get("new-report");
@@ -10348,7 +10443,7 @@ export function createAppController({
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("sign-in", signIn);
     bind("sign-out", signOut);
-    bind("retry-session", () => (account ? continueConversation() : signIn()));
+    bind("retry-session", () => (account ? continueConversation({ dismissUnavailableAttachments: true }) : signIn()));
   }
 
   function registerResumeListener(startRevision) {

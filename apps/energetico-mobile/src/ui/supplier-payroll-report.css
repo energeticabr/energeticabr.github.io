@@ -1,4 +1,4 @@
-.spr-filters { grid-template-columns:minmax(80px,.85fr) auto repeat(3,minmax(0,1.3fr)) auto; align-items:center; gap:10px; padding:6px 8px; }
+.spr-filters { grid-template-columns:minmax(80px,.85fr) auto repeat(3,minmax(0,1.3fr)); align-items:center; gap:10px; padding:6px 8px; }
 .spr-toolbar-logo { display:block; width:100%; max-width:190px; height:54px; object-fit:contain; }
 .spr-close { color:#a00000; background:white; border:1px solid #a00000; border-radius:5px; padding:6px; min-height:44px; font:inherit; }
 .spr-dialog .spr-filters .report-print-actions { align-self:center; }
@@ -73,7 +73,7 @@
 }
 @media(min-width:650px) { .spr-rubrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-content:center; }.spr-rubric-row { flex-direction:column; gap:2px; } }
 @media(max-width:650px) {
- .spr-filters { grid-template-columns:64px auto repeat(3,minmax(0,1fr)) auto; gap:3px; }
+ .spr-filters { grid-template-columns:64px auto repeat(3,minmax(0,1fr)); gap:3px; }
  .spr-close { font-size:10px; padding:3px; }
  .spr-dialog .spr-filters .pl-filter-label { padding:4px 1px; font-size:8px; }
  .spr-dialog .spr-filters .sfs-field,.spr-dialog .spr-filters .sfs-field>.sfs-trigger { height:30px; }

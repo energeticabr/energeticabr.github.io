@@ -2157,7 +2157,7 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
   const changingExistingReport = Boolean(messageId);
   return `<section class="chat-confirmation chat-date-picker chat-rhid-report-page" data-rhid-attendance-report-dialog role="dialog" aria-modal="false" aria-labelledby="rhid-attendance-report-title" tabindex="-1">
       <div class="chat-date-picker__header">
-        <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar">×</button>
+        <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar relatório RHID">❌</button>
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
       ${directToday ? `<p>Presenças de hoje: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong></p>` : `<button class="chat-confirmation__confirm chat-rhid-monthly-entry" type="button" data-action="open-rhid-monthly-report" data-value="${escapeHtml(month || date.slice(0, 7))}">GERAR RELATÓRIO MENSAL</button>`}
@@ -2165,7 +2165,6 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
       ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
-        <button class="chat-confirmation__cancel" type="button" data-action="cancel-rhid-attendance-report"${busy ? " disabled" : ""}>Cancelar</button>
         <button class="chat-confirmation__confirm" type="button" data-action="${directToday ? "open-rhid-attendance-today" : "generate-rhid-attendance-report"}"${directToday ? "" : ` data-value="${escapeHtml(date)}"`}${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : directToday ? "Tentar novamente" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
       </div>
   </section>`;

@@ -18,7 +18,7 @@ test('all sixteen custom mascot reports generate real PDFs and preserve phone fi
    const dom=new JSDOM(stdout);try{
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);assert.equal(result.error,undefined,result.error);assert.equal(result.results.length,16);
     for(const report of result.results){assert.ok(report.printer,report.action);assert.ok(report.bytes>1000&&report.pages>0&&report.text.length>50,JSON.stringify(report));assert.ok(report.fits,report.action);if(report.filterWidth)assert.ok(report.filterWidth<=report.filterClient+1,'filters overflow '+JSON.stringify(report));if(report.action==='open-payment-ledger')assert.ok(report.filterHeight<=50,'printer must keep the compact single filter row '+report.filterHeight);}
-    assert.deepEqual(result.viewer,{open:true,canvas:true,forward:true,back:'Voltar ao relatório',automaticShare:false,returned:true});
+    assert.deepEqual(result.viewer,{open:true,canvas:true,forward:true,back:null,close:'❌',automaticShare:false,returned:true});
     assert.match(result.results.find(report=>report.action==='open-payment-ledger').text,/SERVENTE DE PEDREIRO/);
     assert.match(result.results.find(report=>report.action==='open-depreciation-report').text,/VIBRADOR DE CONCRETO/);
     if(process.env.REPORT_PDF_QA_DIR){mkdirSync(process.env.REPORT_PDF_QA_DIR,{recursive:true});for(const sample of dom.window.document.querySelectorAll('[data-pdf-sample]'))writeFileSync(resolve(process.env.REPORT_PDF_QA_DIR,`${sample.dataset.pdfSample}-${width}.pdf`),Buffer.from(sample.textContent,'base64'));}

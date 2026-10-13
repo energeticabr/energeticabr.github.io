@@ -64,8 +64,14 @@ export function normalizeProvisionReportRow(item, columns = []) {
   const quantity = scalar(rawQuantity) === "" ? 0 : amount(rawQuantity);
   const freight = scalar(rawFreight) === "" ? 0 : amount(rawFreight);
   const rawSchedule = read("PGTOAGENDADO", "PGTO AGENDADO");
+  // The child's DESCRITIVOPROVISAO is text containing a real parent item ID,
+  // not a supplier label or SharePoint lookup display value.
+  const rawDescriptionId = read("DESCRITIVOPROVISAO");
+  const descriptionId = typeof rawDescriptionId === "string" || typeof rawDescriptionId === "number"
+    ? String(rawDescriptionId).trim() : "";
   return Object.freeze({
     id: scalar(item?.id ?? read("ID")), recurrenceId: get("IDRECORRENCIA", "ID RECORRENCIA"),
+    ...(/^[1-9]\d*$/.test(descriptionId) ? { descriptionId } : {}),
     branch: get("FILIAL", "Title"), supplier: get("FORNECEDOR"), product: get("PRODUTO", "DESCRICAOPGTO"),
     observation: get("OBS", "OBSERVAÇÃO", "OBSERVACAO"), property: get("IMOVEL", "IMÓVEL"),
     dueDate: provisionDateKey(get("DATA PREVISTO PGTO", "DATAPGTOPREVISTO")),
@@ -76,6 +82,14 @@ export function normalizeProvisionReportRow(item, columns = []) {
     status: get("STATUS"),
     total: price == null || quantity == null || freight == null ? null
       : finiteTotal(new Decimal(price).times(quantity).plus(freight)),
+  });
+}
+
+export function normalizeProvisionReportDescription(item, columns = []) {
+  const get = (...aliases) => scalar(valueFor(item, columns, aliases));
+  return Object.freeze({
+    id: scalar(item?.id ?? get("ID")), branch: get("FILIAL"), supplier: get("FORNECEDOR"),
+    dueDate: provisionDateKey(get("DATAPREVISTOPGTO", "DATA PREVISTO PGTO")),
   });
 }
 
@@ -102,6 +116,39 @@ function matches(row, filters) {
 function completeSum(rows) {
   return rows.every(row => Number.isFinite(row.total))
     ? finiteTotal(rows.reduce((sum, row) => sum.plus(row.total), new Decimal(0))) : null;
+}
+
+/** Group only the already-filtered detail rows. Recurrence calculations and
+ * footer metrics continue to consume the original report rows, never summaries. */
+export function groupProvisionReportRows(rows, descriptions = []) {
+  const parents = new Map(descriptions.filter(row => /^[1-9]\d*$/.test(scalar(row.id)))
+    .map(row => [scalar(row.id), row]));
+  const seen = new Set(), unique = rows.filter(row => {
+    const id = scalar(row.id);
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id); return true;
+  });
+  const linked = new Map();
+  for (const row of unique) {
+    const id = scalar(row.descriptionId);
+    if (!parents.has(id)) continue;
+    if (!linked.has(id)) linked.set(id, []);
+    linked.get(id).push(row);
+  }
+  const displayed = new Set(), result = [];
+  for (const row of unique) {
+    const id = scalar(row.descriptionId), children = linked.get(id);
+    if (!children || children.length < 2) { result.push(row); continue; }
+    if (displayed.has(id)) continue;
+    displayed.add(id);
+    const parent = parents.get(id);
+    const common = field => children.every(child => child[field] === row[field]) ? row[field] : "";
+    result.push(Object.freeze({ ...row, id, branch: parent.branch, supplier: parent.supplier, dueDate: parent.dueDate,
+      total: completeSum(children), schedule: common("schedule"), scheduledDate: common("scheduledDate"),
+      executionDate: common("executionDate"), status: common("status"), children: Object.freeze([...children]) }));
+  }
+  return Object.freeze(result);
 }
 
 function nextDate(maxDueDate) {

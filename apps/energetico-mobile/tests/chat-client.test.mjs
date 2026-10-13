@@ -416,6 +416,27 @@ test("casinha envia contrato seletivo no mesmo endpoint autenticado", async () =
   });
 });
 
+test('erro de anexo indisponível preserva somente IDs de arquivo válidos enviados pela VM', async () => {
+  const id = 'a'.repeat(64);
+  const client = clientWith(async () => jsonResponse({ error: 'Um anexo selecionado não está mais disponível.',
+    code: 'ATTACHMENT_UNAVAILABLE', unavailableAttachmentIds: [id, id, '../outro.pdf', null] }, 422));
+  await assert.rejects(client.sendText({ replyId: 'portal_transfer_attachments', homeAttachmentIds: [id] }), error => {
+    assert.equal(error.code, 'ATTACHMENT_UNAVAILABLE');
+    assert.deepEqual(error.unavailableAttachmentIds, [id]);
+    assert.equal(error.status, 422);
+    return true;
+  });
+});
+
+test('falha de rede não recebe metadados de limpeza de anexos', async () => {
+  const client = clientWith(async () => jsonResponse({ error: 'Serviço indisponível', code: 'ATTACHMENT_UNAVAILABLE',
+    unavailableAttachmentIds: ['a'.repeat(64)] }, 503));
+  await assert.rejects(client.sendText(), error => {
+    assert.equal(error.unavailableAttachmentIds, undefined);
+    return true;
+  });
+});
+
 test("confirmação da casinha envia a identidade do recibo sem usar transferência legada", async () => {
   let body;
   const client = clientWith(async (_url, options) => {

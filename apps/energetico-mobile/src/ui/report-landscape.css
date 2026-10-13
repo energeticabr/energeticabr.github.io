@@ -1,0 +1,18 @@
+/* The rotated canvas uses logical landscape edges. Keep a tappable backdrop
+   on every physical edge, including phones with asymmetric safe areas. */
+.report-landscape-viewport[data-report-portrait="true"] {
+ position:fixed!important; inset:auto!important; top:0!important;
+ left:var(--report-physical-width)!important;
+ width:var(--report-width)!important; height:var(--report-height)!important;
+ max-width:none!important; max-height:none!important;
+ transform:rotate(90deg); transform-origin:0 0;
+ box-sizing:border-box;
+ padding:max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-top))!important;
+}
+.report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
+ width:100%!important; height:100%!important; max-height:100%!important;
+ padding:3px!important; border-radius:0!important;
+}
+.report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--previous { left:max(16px,env(safe-area-inset-top)); }
+.report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--next { right:max(16px,env(safe-area-inset-bottom)); }
+.report-landscape-viewport[data-report-portrait="true"][data-report-compact-height="true"] .pr-content { padding-inline:48px; }

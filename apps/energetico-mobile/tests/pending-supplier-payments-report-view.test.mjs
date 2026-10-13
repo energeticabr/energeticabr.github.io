@@ -282,7 +282,10 @@ test('dialog traps keyboard focus and destroy releases owned UI and cannot reope
   const panel=root.querySelector('[role=dialog]'); panel.focus(); root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
   assert.equal(doc.activeElement,root.querySelector('.pl-refresh'));
   panel.focus(); root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
-  assert.equal(doc.activeElement,root.querySelector('.psp-close'));
+  assert.equal(doc.activeElement,root.querySelector('.psp-content'));
+  root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+  assert.equal(doc.activeElement,root.querySelector('.pl-refresh'));
+  root.querySelector('.psp-close').focus();assert.equal(doc.activeElement,root.querySelector('.psp-close'));
   view.destroy(); assert.equal(root.isConnected,false); assert.equal(doc.querySelector('#app').inert,false); await assert.rejects(view.open(),/encerrado/);
 });
 

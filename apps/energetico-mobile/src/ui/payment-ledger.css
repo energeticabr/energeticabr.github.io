@@ -4,7 +4,7 @@
 .pl-dialog--portrait { width:min(460px,100%); height:auto; border-radius:16px; padding:20px; }
 .pl-orientation { font-size:1rem; font-weight:750; line-height:1.6; padding:16px 4px; }
 .pl-report { min-height:0; height:100%; display:flex; flex-direction:column; gap:4px; overflow:hidden; }
-.pl-filters { display:grid; grid-template-columns:4.5fr 23fr 12fr 14fr 14fr 17fr 10fr; gap:4px; align-items:end; flex-shrink:0; }
+.pl-filters { display:grid; grid-template-columns:4.5fr 25fr 12fr 14fr 14fr 17fr 10fr; gap:4px; align-items:end; flex-shrink:0; }
 .pl-filter,.pl-dates { min-width:0; display:flex; flex-direction:column; }
 .pl-filter-label { background:#a20000; color:white; font-size:clamp(8px,calc(1.1 * var(--report-vw, 1vw)),14px); line-height:1.15; text-align:center; padding:3px 1px; white-space:nowrap; }
 .pl-date-fields { display:flex; min-width:0; }

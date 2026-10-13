@@ -1,0 +1,12 @@
+.report-close-bar { display:grid; grid-template-columns:minmax(0,1fr) 44px; align-items:start; gap:4px; min-width:0; flex-shrink:0; }
+.report-close-bar > .report-close-tools { grid-column:1; grid-row:1; min-width:0; }
+.report-close-bar > .report-pdf-status { grid-column:1 / -1; }
+button.report-close-control.report-close-control {
+ position:static; inset:auto; display:grid; place-items:center; box-sizing:border-box;
+ grid-column:2; grid-row:1; flex:0 0 44px; width:44px; height:44px; min-width:44px; min-height:44px;
+ align-self:flex-start; margin:0 0 0 auto; padding:0; border:1px solid #a20000;
+ border-radius:6px; background:#fff; color:#a20000; font:24px/1 Arial,sans-serif;
+ cursor:pointer; touch-action:manipulation;
+}
+button.report-close-control:focus-visible { outline:3px solid #1476c8; outline-offset:-3px; }
+@media print { .report-close-bar, .report-close-control { display:none!important; } }

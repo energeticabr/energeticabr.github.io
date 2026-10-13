@@ -7,6 +7,51 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
+test('rotated phone reports keep a tappable backdrop and the same two navigation controls as landscape',{timeout:90000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+ if(!browser)return t.skip('Chrome unavailable');
+ const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+ try {
+  await server.listen();
+  for(const [width,height] of [[390,844],[844,390]]) {
+   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?controls`});
+   const dom=new JSDOM(stdout);
+   try {
+    const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
+    assert.equal(result.arrows.length,2);
+    assert.ok(result.arrows.every(arrow=>arrow.visible&&arrow.hit&&arrow.width>=44&&arrow.height>=44),JSON.stringify(result));
+    assert.deepEqual(result.navigated,['open-provision-report','open-management-report']);
+    assert.equal(result.closedByX,true);
+    if(result.portrait) {
+     assert.ok(Object.values(result.gaps).every(gap=>gap>=16),JSON.stringify(result));
+     assert.equal(result.outsideIsBackdrop,true);
+     assert.equal(result.closedOutside,true);
+    }
+   }finally{dom.window.close();}
+  }
+ }finally{await server.close();}
+});
+
+test('contractor filters use the same single landscape row on a portrait phone',{timeout:90000},async t=>{
+ const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+ if(!browser)return t.skip('Chrome unavailable');
+ const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+ try {
+  await server.listen();
+  for(const [width,height]of [[390,844],[844,390]]) {
+   const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?contractor`});
+   const dom=new JSDOM(stdout);
+   try {
+    const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
+    assert.equal(layout.columns,7,JSON.stringify(layout));
+    assert.equal(layout.sameRow,true,JSON.stringify(layout));
+    assert.equal(layout.reads,1);
+    assert.equal(layout.closeCount,1);
+   }finally{dom.window.close();}
+  }
+ }finally{await server.close();}
+});
+
 test('portrait rotation maps asymmetric physical safe areas to the report and expanded picker',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');

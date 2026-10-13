@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildQuotationOverview} from '../chat/quotation-report-model.js';
 
 const upper=value=>String(value??'').trim().toUpperCase();
@@ -17,6 +18,7 @@ export function createQuotationReportView({document:doc=globalThis.document,data
  panel.append(toolbar,warning,content);root.append(panel);doc.body.append(root);
  let controller=null,revision=0,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:toolbar, onClose:close});
  function badge(value,quote=false){
   const key=statusKey(value);let tone='qr-neutral';
   if(quote){if(key==='ATIVA'||key==='ATIVO')tone='qr-received';}

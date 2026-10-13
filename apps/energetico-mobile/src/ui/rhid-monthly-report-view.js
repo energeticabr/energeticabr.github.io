@@ -1,5 +1,6 @@
 import {buildRhidMonthlyReport,isRhidReportMonth} from '../chat/rhid-monthly-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
+import {addReportCloseControl} from './report-close-control.js';
 
 const MONTHS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 export function createRhidMonthlyReportView({document:doc=globalThis.document,data,now=()=>new Date(),onClose=()=>{},onReport=async()=>{}}={}){
@@ -15,10 +16,11 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  const period=make('div','rhid-monthly-period'),monthLabel=make('label'),month=make('select');month.name='month';month.required=true;month.setAttribute('aria-label','Mês de referência');
  MONTHS.forEach((name,index)=>month.append(Object.assign(make('option','',name),{value:String(index+1).padStart(2,'0')})));monthLabel.append(make('span','','Mês de referência'),month);
  const yearLabel=make('label'),year=make('input');year.type='number';year.name='year';year.min='1000';year.max='9999';year.step='1';year.required=true;year.inputMode='numeric';year.setAttribute('aria-label','Ano de referência');yearLabel.append(make('span','','Ano'),year);period.append(monthLabel,yearLabel);
- const actions=make('div','rhid-monthly-actions'),cancel=button('rhid-monthly-cancel','Cancelar'),submit=button('rhid-monthly-generate','Gerar relatório');submit.type='submit';actions.append(cancel,submit);
+ const actions=make('div','rhid-monthly-actions'),submit=button('rhid-monthly-generate','Gerar relatório');submit.type='submit';actions.append(submit);
  const retry=button('rhid-monthly-refresh','Atualizar fornecedores'),notice=make('p','rhid-monthly-notice');notice.setAttribute('role','status');notice.hidden=true;
  const result=make('div','rhid-monthly-result');result.dataset.monthlyResult='true';result.hidden=true;
  form.append(supplierLabel,period,retry,actions);panel.append(header,form,notice,result);root.append(panel);doc.body.append(root);
+ addReportCloseControl({root, toolbar:header, onClose:close, button:closeButton, inline:true});
  let destroyed=false,revision=0,controller=null,picker=null,options=[],busy=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
  function suspend(){if(destroyed||root.hidden)return;picker?.close();root.style.visibility='hidden';root.inert=true;if(app)app.inert=oldInert;}
  function resume(){if(destroyed||root.hidden)return;root.style.visibility='';root.inert=false;if(app)app.inert=true;}
@@ -61,7 +63,7 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
   if(root.hidden)return;controller?.abort();revision++;picker?.close();clearResult();status('');root.hidden=true;root.style.visibility='';root.inert=false;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;onClose();
   const target=returnFocus?.isConnected?returnFocus:app?.querySelector('[data-action="open-rhid-monthly-report"]');target?.focus?.({preventScroll:true});returnFocus=null;
  }
- closeButton.addEventListener('click',close);cancel.addEventListener('click',close);retry.addEventListener('click',()=>void loadSuppliers());form.addEventListener('submit',generate);
+ retry.addEventListener('click',()=>void loadSuppliers());form.addEventListener('submit',generate);
  form.addEventListener('change',()=>{if(!busy){clearResult();status('');}});
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{

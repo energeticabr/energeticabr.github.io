@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {contractorReport, documentCell, formatReportDate, formatReportMoney} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 
@@ -42,7 +43,7 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   const panel=make('section','pl-dialog ccr-dialog');panel.tabIndex=-1;
   panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Controle de empreiteiros');
   const orientation=make('p','pl-orientation ccr-orientation','PARA VER O RELATÓRIO FAVOR POSICIONAR O TELEFONE NA HORIZONTAL.');orientation.setAttribute('role','status');
-  const back=button('ccr-back','Voltar ao menu inicial','←'),dismiss=button('ccr-close','Fechar relatório','×');
+  const dismiss=button('ccr-close','Fechar relatório','❌');
   const report=make('div','pl-report ccr-report'),filters=make('div','pl-filters ccr-filters'),controls=new Map();
   const refresh=button('pl-refresh ccr-refresh','Atualizar controle de empreiteiros','⟳');filters.append(refresh);
   for (const [name,label] of FILTERS) {
@@ -65,11 +66,12 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   const pager=make('nav','ccr-pager');pager.setAttribute('aria-label','Páginas do relatório');
   const previous=button('ccr-previous','Página anterior','Anterior'),next=button('ccr-next','Próxima página','Próxima'),pageLabel=make('span','ccr-page-label');pager.append(previous,pageLabel,next);
   const detail=make('section','ccr-detail');detail.hidden=true;detail.setAttribute('aria-label','Detalhamento do contrato selecionado');
-  content.append(brand,title,metrics,note,warnings,mainScroll,pager,detail);report.append(filters,notice,content);panel.append(orientation,report,back,dismiss);root.append(panel);doc.body.append(root);
+  content.append(brand,title,metrics,note,warnings,mainScroll,pager,detail);report.append(filters,notice,content);panel.append(orientation,report,dismiss);root.append(panel);doc.body.append(root);
   let snapshot=null,page=1,pickers=null,destroyed=false,overviewController=null,detailController=null,reloadPositions=null;
   let overviewRevision=0,detailRevision=0,stateRevision=0,detailState='idle',detailId='',detailSnapshot=null,detailPromise=null,printRestore=null;
   let returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close, button:dismiss});
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   const result=()=>contractorReport(snapshot?.rows || [],selected());
   const eligibleId=()=>{const id=controls.get('id').value;return snapshot && id && result().rows.some(row=>String(row.id)===id) ? id : '';};
@@ -236,7 +238,7 @@ export function createContractorControlReportView({document:doc=globalThis.docum
   for (const control of controls.values()) control.addEventListener('change',filtersChanged);
   previous.addEventListener('click',()=>{if (snapshot && page>1) {invalidatePrint();page--;renderMain();content.scrollTop=0;}});
   next.addEventListener('click',()=>{if (snapshot && page<Math.ceil(result().rows.length/PAGE_SIZE)) {invalidatePrint();page++;renderMain();content.scrollTop=0;}});
-  refresh.addEventListener('click',()=>void loadOverview());dismiss.addEventListener('click',close);back.addEventListener('click',()=>{close();onHome();});
+  refresh.addEventListener('click',()=>void loadOverview());
   root.addEventListener('click',event=>{if (event.target===root) close();});
   root.addEventListener('keydown',event=>{
     if (root.hidden || event.defaultPrevented) return;

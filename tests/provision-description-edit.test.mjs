@@ -33,3 +33,43 @@ test('newly linked child is exposed as pending and resumed on explicit retry',as
 test('metadata labels cannot make the idempotency Title token editable',async()=>{const f=fixture();f.columns.parents.push({name:'Title',displayName:'OBS',text:{}});await assert.rejects(f.save({Title:'changed'}),/editável|identidade/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});
 test('metadata labels cannot redirect shared child edits into protected line or identity columns',async()=>{for(const name of ['VALORTOTAL','VALORUNITARIO','QTD','FRETE','PRODUTO','IDPEDIDO','Title','DESCRITIVOPROVISAO','FORNECEDOR']){const f=fixture();f.columns.children=f.columns.children.filter(c=>!['OBS',name].includes(c.name));f.columns.children.push({name,displayName:'OBS',text:{}});await assert.rejects(f.save({OBS:'999'}),/metadados|protegido|incompat/i,name);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0,name);assert.equal(f.records.children.get('2').fields.VALORTOTAL,'50');}});
 test('an empty delta cannot implicitly resume an incomplete operation without matching requested values',async()=>{const f=fixture();let failed=false;f.setBeforePatch((list,id)=>{if(list==='children'&&id==='3'&&!failed){failed=true;throw new Error('offline');}});await assert.rejects(f.save({OBS:'new'}));const count=f.calls.filter(c=>c[0]==='patch').length;await assert.rejects(f.save({}),/retentativa|dados|intenção/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,count);assert.equal(f.records.children.get('3').fields.OBS,'child old');});
+
+function statusFixture() {
+ const f=fixture();
+ for(const list of ['parents','children'])f.columns[list].push({name:'STATUS',text:{}});
+ f.records.parents.get('42').fields.STATUS='PAGAMENTO PREVISTO';
+ f.baseline.fields.STATUS='PAGAMENTO PREVISTO';
+ f.records.children.get('2').fields.STATUS='PAGAMENTO PREVISTO';
+ f.records.children.get('3').fields.STATUS='PAGAMENTO EFETUADO';
+ const getPage=f.repo.getItemsPage;
+ f.repo.getItemsPage=async(site,list,query,options)=>list==='parents'?{items:[structuredClone(f.records.parents.get('42'))],hasMore:false}:getPage(site,list,query,options);
+ return f;
+}
+test('confirmed text STATUS is saved with pinned versions and cascaded through the existing parent-first operation',async()=>{
+ const f=statusFixture();
+ await f.save({STATUS:'PAGAMENTO EFETUADO',OBS:'new'});
+ assert.deepEqual(f.calls.filter(call=>call[0]==='patch').map(call=>call.slice(1,3)),[['parents','42'],['children','2'],['children','3']]);
+ assert.equal(f.records.parents.get('42').fields.STATUS,'PAGAMENTO EFETUADO');
+ assert.equal(f.records.children.get('2').fields.STATUS,'PAGAMENTO EFETUADO');
+ assert.equal(f.records.children.get('3').fields.OBS,'new');
+ assert.equal(f.records.children.get('2').fields.VALORTOTAL,'50');
+ assert.equal(f.records.children.get('9').fields.STATUS,undefined);
+});
+test('invented text STATUS is rejected before any parent or child write',async()=>{
+ const f=statusFixture();
+ await assert.rejects(f.save({STATUS:'STATUS INVENTADO'}),/opç|comprov|cadastrad/i);
+ assert.equal(f.calls.filter(call=>call[0]==='patch').length,0);
+});
+test('STATUS revalidates current source values before saving a formerly available selection',async()=>{
+ const f=statusFixture();
+ f.records.children.get('3').fields.STATUS='PAGAMENTO PREVISTO';
+ await assert.rejects(f.save({STATUS:'PAGAMENTO EFETUADO'}),/opç|comprov|cadastrad/i);
+ assert.equal(f.calls.filter(call=>call[0]==='patch').length,0);
+});
+test('child STATUS choice incompatibility prevents the parent write',async()=>{
+ const f=statusFixture();
+ f.columns.parents.find(column=>column.name==='STATUS').choice={choices:['PAGAMENTO PREVISTO','PAGAMENTO EFETUADO']};
+ const child=f.columns.children.find(column=>column.name==='STATUS');delete child.text;child.choice={choices:['PAGAMENTO PREVISTO']};
+ await assert.rejects(f.save({STATUS:'PAGAMENTO EFETUADO'}),/opç/i);
+ assert.equal(f.calls.filter(call=>call[0]==='patch').length,0);
+});

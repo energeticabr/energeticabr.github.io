@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildDocumentControlOverview} from '../chat/document-control-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -27,6 +28,7 @@ export function createDocumentControlReportView({document:doc=globalThis.documen
  report.append(toolbar,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:toolbar, onClose:close});
  const selected=()=>{const order=ORDERS.find(entry=>entry[0]===sort.value)||ORDERS[0];return {...Object.fromEntries([...controls].map(([name,node])=>[name,node.value])),order:order[2],direction:order[3]};};
  function render(){
   if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;

@@ -240,7 +240,9 @@ test('keyboard trap outside focus escape and backdrop close restore the original
   let closes=0;const {view,root,doc,dom}=setup(t,{onClose:()=>closes++});doc.body.style.overflow='auto';doc.getElementById('trigger').focus();await view.open();
   assert.equal(doc.getElementById('app').inert,true);const panel=root.querySelector('[role=dialog]');panel.focus();
   root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));assert.equal(doc.activeElement,root.querySelector('.pl-refresh'));
-  panel.focus();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));assert.equal(doc.activeElement,root.querySelector('.swr-close'));
+  panel.focus();root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));assert.equal(doc.activeElement,root.querySelector('.swr-content'));
+  root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));assert.equal(doc.activeElement,root.querySelector('.pl-refresh'));
+  root.querySelector('.swr-close').focus();assert.equal(doc.activeElement,root.querySelector('.swr-close'));
   doc.getElementById('outside').focus();assert.ok(root.contains(doc.activeElement));
   root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
   assert.equal(root.hidden,true);assert.equal(closes,1);assert.equal(doc.getElementById('app').inert,false);assert.equal(doc.body.style.overflow,'auto');assert.equal(doc.activeElement.id,'trigger');

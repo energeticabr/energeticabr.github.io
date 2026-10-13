@@ -1,3 +1,5 @@
+import {addReportCloseControl} from './report-close-control.js';
+
 const LOGO = new URL('../../../../assets/logo-energetica-oficial.png', import.meta.url).href;
 const GROUPS = [
   ['finance', 'FINANCEIRO / COMPRAS', [['dueToday', 'VENCIMENTOS HOJE'], ['overdue', 'PGTOS VENCIDOS'],
@@ -59,9 +61,8 @@ export function createGeneralSummaryReportView({document:doc = globalThis.docume
   const panel = make('section', 'pl-dialog gsr-dialog'); panel.tabIndex = -1;
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', 'Resumo geral');
   const report = make('div', 'pl-report gsr-report'), toolbar = make('div', 'gsr-toolbar');
-  const home = button('gsr-home', 'Voltar ao menu inicial', 'Início');
   const refresh = button('pl-refresh gsr-refresh', 'Atualizar resumo geral', 'Atualizar');
-  const dismiss = button('gsr-close', 'Fechar relatório', 'Fechar'); toolbar.append(home, refresh, dismiss);
+  const dismiss = button('gsr-close', 'Fechar relatório', '❌'); toolbar.append(refresh, dismiss);
   const notice = make('div', 'gsr-notice'); notice.hidden = true;
   const content = make('div', 'gsr-content'); content.tabIndex = 0;
   content.setAttribute('role', 'region'); content.setAttribute('aria-label', 'Indicadores do resumo geral');
@@ -86,6 +87,7 @@ export function createGeneralSummaryReportView({document:doc = globalThis.docume
   }
   dashboard.append(secondRow, thirdRow); content.append(brand, title, meta, warnings, dashboard);
   report.append(toolbar, notice, content); panel.append(report); root.append(panel); doc.body.append(root);
+  addReportCloseControl({root, toolbar, onClose:close, button:dismiss, inline:true});
 
   let snapshot = null, controller = null, loadPromise = null, revision = 0, destroyed = false, printRestore = null;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
@@ -172,8 +174,7 @@ export function createGeneralSummaryReportView({document:doc = globalThis.docume
     };
     printRestore = restore; return restore;
   }
-  refresh.addEventListener('click', () => void load()); dismiss.addEventListener('click', close);
-  home.addEventListener('click', () => {if (!root.hidden) {close(); onHome();}});
+  refresh.addEventListener('click', () => void load());
   root.addEventListener('click', event => {if (event.target === root) close();});
   root.addEventListener('keydown', event => {
     if (root.hidden || event.defaultPrevented) return;

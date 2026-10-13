@@ -16,7 +16,7 @@
 .rhid-monthly-supplier .sfs-list[aria-multiselectable="true"] .sfs-option[aria-selected="true"]::before { content: '✓'; display: grid; place-items: center; background: #07586b; border-color: #07586b; color: #fff; font-size: 14px; }
 .rhid-monthly-supplier .sfs-option[aria-selected="true"] { background: #e1edf5; }
 .rhid-monthly-refresh { justify-self: start; background: #e7f2f9; color: #135577; }
-.rhid-monthly-actions { display: flex; justify-content: space-between; gap: 16px; }
+.rhid-monthly-actions { display: flex; justify-content: flex-end; gap: 16px; }
 .rhid-monthly-cancel { background: #fff; color: #a01d28; }
 .rhid-monthly-generate { background: #07586b; color: #fff; font-weight: 700 !important; }
 .rhid-monthly-dialog button:disabled { opacity: .5; cursor: default; }

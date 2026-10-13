@@ -80,6 +80,9 @@ export function createConversationStore({
     typeof randomUUID === "function" ? String(randomUUID()) : `local-${++sequence}`
   );
   const listeners = new Set();
+  // Rejected references are dismissed locally, never deleted from the VM.
+  // Stable IDs are scoped to the authenticated session and reset on sign-out.
+  const dismissedAttachmentIds = new Set();
   let draftVersion = 0;
   let state = freezeState({
     draft: "",
@@ -155,7 +158,8 @@ export function createConversationStore({
   }
 
   function visibleAttachments(items, activeFlow, uploadedItem) {
-    return items.filter(item => !isSignatureAttachment(item, activeFlow)
+    return items.filter(item => !dismissedAttachmentIds.has(String(item?.id))
+      && !isSignatureAttachment(item, activeFlow)
       && !isHiddenUploadedAttachment(item, uploadedItem));
   }
 
@@ -365,9 +369,10 @@ export function createConversationStore({
     return true;
   }
 
-  function removeAttachment(attachmentId) {
+  function removeAttachment(attachmentId, { dismissFromSnapshots = false } = {}) {
     const id = String(attachmentId || "").trim();
     if (!id) return false;
+    if (dismissFromSnapshots) dismissedAttachmentIds.add(id);
     const attachments = state.attachments.filter(item => item.id !== id);
     if (attachments.length === state.attachments.length) return false;
     publish({ ...state, attachments });
@@ -375,6 +380,7 @@ export function createConversationStore({
   }
 
   function clearSession() {
+    dismissedAttachmentIds.clear();
     draftVersion += 1;
     publish({ draft: "", messages: [], attachments: [], pendingFiles: [], activeText: null, activeFlow: null, completionNavigation: null, error: null });
   }
@@ -636,7 +642,8 @@ export function createConversationStore({
       messages: snapshot.messages,
       activeFlow: snapshot.activeFlow ?? null,
       completionNavigation: snapshot.completionNavigation ?? null,
-      attachments: Array.isArray(snapshot.attachments) ? snapshot.attachments : [],
+      attachments: Array.isArray(snapshot.attachments)
+        ? snapshot.attachments.filter(item => !dismissedAttachmentIds.has(String(item?.id))) : [],
       error: null,
     });
     return true;

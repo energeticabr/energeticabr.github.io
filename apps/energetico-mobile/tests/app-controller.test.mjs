@@ -973,7 +973,7 @@ test("falha ao consultar outro dia aparece no cartão sem perder os dados anteri
   assert.equal(current.detail_table.rows.length, 1);
 });
 
-test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças acessível", async t => {
+test("atalho RHID consulta hoje e abre apenas a tela de presenças, sem PDF automático", async t => {
   const h = makeHarness();
   const requested = [];
   const previews = [];
@@ -993,18 +993,17 @@ test("atalho RHID consulta hoje, abre PDF interno e deixa a tela de presenças a
   assert.deepEqual(requested, ["2026-09-27"]);
   assert.equal(h.store.getState().messages.at(-1).detail_table.kind, "rhid_attendance");
   assert.equal(h.store.getState().messages.at(-1).detail_table.updateLabel, "ÚLTIMA COLETA DO RHID ÀS 17:11");
-  assert.equal(previews.length, 1);
-  assert.equal(previews[0].blob.type, "application/pdf");
-  assert.match(previews[0].fileName, /2026-09-27.*\.pdf$/);
+  assert.equal(previews.length, 0);
 });
-test('Gerar relatório RHID de uma data selecionada abre PDF com página inteira',async t=>{
+test('Gerar relatório abaixo do calendário RHID abre o dia selecionado sem gerar PDF',async t=>{
  const h=makeHarness(),previews=[];
  h.client.getRhidAttendanceReport=async date=>({date,rows:[{ID_PESSOA_RHID:'1',NOME_COLABORADOR:'ANA',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}]});
  h.native.previewMedia=async(source,name,options)=>previews.push({blob:await source,name,options});
  t.after(()=>h.controller.stop());await h.controller.start();
- await h.view.emit('rhid-attendance-report-generate',{value:'2026-10-08'});
- assert.equal(previews.length,1);assert.equal(previews[0].blob.type,'application/pdf');assert.equal(previews[0].options.layout,'report-pdf');
- assert.match(previews[0].name,/2026-10-08\.pdf$/);
+ assert.equal(await h.view.emit('rhid-attendance-report-generate',{value:'2026-10-08'}),true);
+ assert.equal(previews.length,0);
+ assert.equal(h.store.getState().messages.at(-1).detail_table.reportDate,'2026-10-08');
+ assert.equal(h.store.getState().messages.at(-1).detail_table.rows[0][0],'ANA');
 });
 
 for(const replaceExisting of [false,true])test(`navegação iniciada após consultar RHID descarta o PDF diário antes de abrir (relatório ${replaceExisting?'existente':'novo'})`,async t=>{
@@ -1038,7 +1037,7 @@ test("ícone de atualização aguarda a sincronização RHID/SharePoint e inform
   assert.equal(statuses.at(-1).busy, false);
 });
 
-test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => {
+test("atalho RHID abre a tela mesmo sem presenças no dia, sem PDF automático", async t => {
   const h = makeHarness();
   const previews = [];
   h.client.getRhidAttendanceReport = async date => ({ date, rows: [] });
@@ -1050,8 +1049,7 @@ test("atalho RHID abre PDF informativo mesmo sem presenças no dia", async t => 
 
   assert.equal(h.store.getState().messages.at(-1).detail_table.kind, "rhid_attendance");
   assert.deepEqual(h.store.getState().messages.at(-1).detail_table.rows, []);
-  assert.equal(previews.length, 1);
-  assert.equal(previews[0].blob.type, "application/pdf");
+  assert.equal(previews.length, 0);
 });
 
 test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem refazer a consulta", async t => {
@@ -1080,8 +1078,7 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
   await h.controller.start();
 
   await h.view.emit("rhid-attendance-report-generate", { value: "2026-09-25" });
-  assert.equal(previews.length, 1, "gerar abre uma prévia sem compartilhar o documento");
-  assert.equal(previews[0].options.layout, "report-pdf");
+  assert.equal(previews.length, 0, "abrir a tela diária não gera nem abre o PDF");
   assert.equal(exported.length, 0);
   const report = h.store.getState().messages.at(-1);
   assert.equal(report.detail_table.rows.length, 9, "a tela e o PDF devem partir das mesmas nove pessoas");

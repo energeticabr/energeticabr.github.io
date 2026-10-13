@@ -1,4 +1,4 @@
-import { applyScreenNavigation } from "./screen-navigation.js";
+import { addReportCloseControl } from "./report-close-control.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 function element(documentRef, tag, className, text) {
   const node = documentRef.createElement(tag);
@@ -89,6 +89,8 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
   }
 
   const doc = documentRef;
+  const backdrop = element(doc, "div", "hr-payroll-report-backdrop");
+  backdrop.hidden = true;
   const overlay = element(doc, "section", "hr-gallery-overlay hr-payroll-report-overlay");
   overlay.hidden = true;
   overlay.tabIndex = -1;
@@ -97,11 +99,12 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
   overlay.setAttribute("aria-label", "Relatório da folha");
   const header = element(doc, "header", "hr-gallery-header");
   const title = element(doc, "h1", "hr-gallery-title", "Relatório da folha");
-  const close = element(doc, "button", "hr-gallery-button hr-payroll-report-close", "Voltar");
+  const close = element(doc, "button", "hr-gallery-button hr-payroll-report-close", "❌");
   close.type = "button";
   close.dataset.action = "close-hr-payroll-report";
-  const home = onHome ? element(doc, "button", "hr-gallery-button", "Início") : null;
-  applyScreenNavigation({ header, back: close, home, title });
+  header.append(title);
+  backdrop.append(overlay);
+  addReportCloseControl({root:backdrop, toolbar:header, onClose:closeReport, button:close, inline:true});
 
   const content = element(doc, "div", "hr-gallery-content");
   const body = element(doc, "div", "hr-payroll-report-body");
@@ -281,14 +284,15 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     controller?.abort();
     controller = null;
     overlay.hidden = true;
+    backdrop.hidden = true;
     overlay.setAttribute("aria-busy", "false");
     onClose?.();
   }
 
-  close.addEventListener("click", closeReport);
-  home?.addEventListener("click", () => { closeReport(); onHome(); });
+  backdrop.addEventListener("click", event => { if (event.target === backdrop) closeReport(); });
 
   return Object.freeze({
+    element: backdrop,
     async open(payroll) {
       if (destroyed) return false;
       const id = String(payroll?.id ?? "").trim();
@@ -302,8 +306,9 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
       supplier.textContent = currentPayroll.supplier;
       month.textContent = `Mês de referência · ${currentPayroll.month}`;
       opened = true;
-      if (!overlay.isConnected) mountRoot.append(overlay);
+      if (!backdrop.isConnected) mountRoot.append(backdrop);
       overlay.hidden = false;
+      backdrop.hidden = false;
       overlay.focus();
       await loadPayments();
       return true;
@@ -315,7 +320,7 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
       epoch += 1;
       controller?.abort();
       controller = null;
-      overlay.remove();
+      backdrop.remove();
     },
   });
 }

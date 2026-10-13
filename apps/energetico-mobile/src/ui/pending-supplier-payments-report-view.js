@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildPendingSupplierPaymentsReport} from '../chat/pending-supplier-payments-report-model.js';
 import {formatReportDate} from '../chat/contractor-report-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -84,6 +85,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
   let snapshot=null, controller=null, revision=0, destroyed=false, pickers=null;
   let returnFocus=null, oldOverflow='', app=null, oldInert=false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close, button:dismiss});
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   function clearContent() {
     if (content.contains(doc.activeElement)) panel.focus({preventScroll:true});
@@ -239,7 +241,7 @@ export function createPendingSupplierPaymentsReportView({document:doc=globalThis
     const target=returnFocus?.isConnected?returnFocus:doc.querySelector('[data-action="open-pending-supplier-payments-report"]:not(:disabled)') || app;
     returnFocus=null; target?.focus?.({preventScroll:true}); onClose();
   }
-  refresh.addEventListener('click',()=>void load()); dismiss.addEventListener('click',close);
+  refresh.addEventListener('click',()=>void load());
   root.addEventListener('click',event=>{if(event.target===root) close();});
   root.addEventListener('keydown',event=>{
     if (root.hidden || event.defaultPrevented) return;

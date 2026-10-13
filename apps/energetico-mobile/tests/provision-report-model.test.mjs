@@ -225,3 +225,54 @@ test("report handles empty snapshots without mutating frozen input or truncating
   assert.equal(many.pendingTotal, 2001);
   assert.equal(many.annual[0].months[9].pending.length, 2001);
 });
+
+// Break: a label/lookup value becomes the parent identity, or the child's due
+// date is substituted for DATAPREVISTOPGTO on the actual description record.
+test("description grouping reads the textual parent ID and the parent's own payment date", () => {
+  const columns = [{ name: "parent_ref", displayName: "DESCRITIVOPROVISAO", text: {} }];
+  assert.equal(model.normalizeProvisionReportRow({ id: "41", fields: { parent_ref: " 42 " } }, columns).descriptionId, "42");
+  for (const value of ["Fornecedor 42", "", "0", { LookupValue: "42", LookupId: "99" }]) {
+    assert.ok(!model.normalizeProvisionReportRow({ fields: { DESCRITIVOPROVISAO: value } }).descriptionId);
+  }
+  assert.equal(typeof model.normalizeProvisionReportDescription, "function");
+  const parent = model.normalizeProvisionReportDescription({ id: "42", fields: {
+    parentBranch: "Filial do pai", FORNECEDOR: "Fornecedor de referência", DATAPREVISTOPGTO: "2026-10-20T03:00:00Z",
+    DATAPGTOPREVISTO: "2026-11-01", VALORTOTAL: "999999,99",
+  } }, [{ name: "parentBranch", displayName: "FILIAL" }]);
+  assert.deepEqual(parent, { id: "42", branch: "Filial do pai", supplier: "Fornecedor de referência", dueDate: "2026-10-20" });
+  assert.equal(Object.isFrozen(parent), true);
+});
+
+// Break: grouping by names combines different parents, or adding the parent
+// amount / repeated child ID inflates the exact sum of linked item totals.
+test("description groups use real parent IDs, unique children and exact totals without changing report sections", () => {
+  assert.equal(typeof model.groupProvisionReportRows, "function");
+  const first = Object.freeze(provision(1, { descriptionId: "42", total: 0.1, product: "Internet" }));
+  const second = Object.freeze(provision(2, { descriptionId: "42", total: 0.2, product: "Água", supplier: "Outro fornecedor" }));
+  const third = Object.freeze(provision(3, { descriptionId: "43", total: 7 }));
+  const orphan = Object.freeze(provision(4, { descriptionId: "404", total: 9 }));
+  const unlinked = Object.freeze(provision(5, { total: 11 }));
+  const parents = Object.freeze([
+    Object.freeze({ id: "42", branch: "Filial do pai", supplier: "Referência", dueDate: "2026-10-20", total: 999 }),
+    Object.freeze({ id: "43", branch: "Filial do pai", supplier: "Referência", dueDate: "2026-10-20" }),
+  ]);
+  const rows = Object.freeze([first, second, first, third, orphan, unlinked]);
+  const grouped = model.groupProvisionReportRows(rows, parents);
+  assert.equal(grouped.length, 4);
+  assert.equal(grouped[0].id, "42");
+  assert.equal(grouped[0].branch, "Filial do pai");
+  assert.equal(grouped[0].supplier, "Referência");
+  assert.equal(grouped[0].dueDate, "2026-10-20");
+  assert.equal(grouped[0].total, 0.3);
+  assert.deepEqual(grouped[0].children, [first, second]);
+  assert.equal(grouped[1], third, "a single linked item keeps its original data");
+  assert.equal(grouped[2], orphan);
+  assert.equal(grouped[3], unlinked);
+  assert.equal(Object.isFrozen(grouped[0]), true);
+  assert.deepEqual(rows, [first, second, first, third, orphan, unlinked]);
+  const source = { provisions: [first, second, third, orphan, unlinked], recurrences: [recurrence(7)] };
+  assert.deepEqual(model.buildProvisionReport({ ...source, descriptions: parents }), model.buildProvisionReport(source));
+  const filtered = model.buildProvisionReport(source, { product: "Internet" });
+  assert.deepEqual(model.groupProvisionReportRows(filtered.rows, parents), [first, third, orphan, unlinked]);
+  assert.equal(model.groupProvisionReportRows([first, { ...second, total: null }], parents)[0].total, null);
+});

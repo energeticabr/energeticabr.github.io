@@ -38,7 +38,7 @@ test('report renders logo, seven indicators, eleven columns, branch totals and d
  assert.match(root.querySelector('.dr-table tfoot').textContent,/400,00.*220,00.*180,00.*5,40/);
  assert.equal(root.querySelectorAll('.dr-date-overdue,.dr-date-today,.dr-date-future').length,3);
  assert.equal(dom.window.getComputedStyle(root.querySelector('.dr-depreciated')).color,'rgb(156, 0, 0)');assert.equal(dom.window.getComputedStyle(root.querySelector('.dr-current')).color,'rgb(39, 78, 19)');
- assert.equal(root.querySelectorAll('select,input,[aria-label*="Fechar"]').length,0);
+ assert.equal(root.querySelectorAll('select,input').length,0);assert.equal(root.querySelector('[aria-label*="Fechar"]').textContent,'❌');
 });
 
 test('portrait avoids reads and rotation loads; inside stays open, outside and Escape restore focus',async t=>{

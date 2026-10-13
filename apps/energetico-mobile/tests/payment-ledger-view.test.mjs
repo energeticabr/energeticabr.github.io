@@ -64,7 +64,7 @@ test('landscape is report-only, includes the logo and open-ended Brazilian date 
   const { view, root, dom } = setup(t, async options => { calls.push(options.filters); return { launches: [row, {...row, id:'3500',paymentDate:'2027-01-10'}] }; });
   await view.open();
   assert.equal(root.querySelector('.pl-heading'), null);
-  assert.equal(root.querySelector('.pl-close'), null);
+  assert.equal(root.querySelector('.report-close-control').textContent, '❌');
   assert.equal(root.querySelector('.pl-summary'), null);
   assert.equal(root.querySelector('.pl-scroll-hint'), null);
   assert.ok(root.querySelector('img[alt="Logo Energética"]').src.includes('logo-energetica-oficial'));

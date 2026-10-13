@@ -76,6 +76,12 @@ async function parsePortalResponse(response, failurePrefix, options = {}) {
     const message = result?.error || `${failurePrefix} respondeu com erro ${response.status}.`;
     const error = new Error(message);
     error.status = response.status;
+    if (response.status === 422 && result?.code === "ATTACHMENT_UNAVAILABLE"
+      && Array.isArray(result.unavailableAttachmentIds)) {
+      error.code = "ATTACHMENT_UNAVAILABLE";
+      error.unavailableAttachmentIds = [...new Set(result.unavailableAttachmentIds
+        .filter(id => typeof id === "string" && /^[a-f0-9]{64}$/.test(id)).slice(0, 1000))];
+    }
     // A body that was interrupted while it was being streamed is safe to
     // resend. The server keys uploads by X-Portal-Message-Id, so the retry
     // cannot create a second attachment when the first request reached it.

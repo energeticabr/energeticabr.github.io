@@ -2,7 +2,7 @@ import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { normalizeSpendingLaunch, normalizeSpendingProduct, normalizeSpendingProvision, normalizeSpendingRecurrence } from "./spending-reports-model.js";
-import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence } from './provision-report-model.js';
+import { normalizeProvisionReportRow, normalizeProvisionReportRecurrence, normalizeProvisionReportDescription } from './provision-report-model.js';
 import { normalizeOrderValidationOrder, normalizeOrderValidationLaunch, assertOrderValidationSource } from './order-validation-report-model.js';
 
 const SITE = "personal";
@@ -113,19 +113,28 @@ export function createSpendingReportsData({
   }
 
   async function loadProvisionReportSnapshot({ signal } = {}) {
-    const [recurrenceList, provisionList] = await Promise.all([
+    const [recurrenceList, provisionList, descriptionList] = await Promise.all([
       resolve(['DESPESASRECORRENTES', 'DESPESAS RECORRENTES'], signal),
       resolve(['PROVISÃO PGTOS', 'PROVISAO PGTOS', 'PROVISAO PAGAMENTOS'], signal),
+      resolve('DESCRITIVOPROVISAO', signal),
     ]);
-    const [recurrenceColumns, recurrenceItems, provisionColumns, provisionItems] = await Promise.all([
+    const [recurrenceColumns, recurrenceItems, provisionColumns, provisionItems, descriptionColumns, descriptionItems] = await Promise.all([
       repository.getColumns(SITE, recurrenceList, signal ? { signal } : {}), allItems(recurrenceList, signal),
       repository.getColumns(SITE, provisionList, signal ? { signal } : {}), allItems(provisionList, signal),
+      repository.getColumns(SITE, descriptionList, signal ? { signal } : {}), allItems(descriptionList, signal),
     ]);
     abortIfNeeded(signal);
-    if (!Array.isArray(recurrenceColumns) || !Array.isArray(provisionColumns)) throw new Error('O SharePoint retornou colunas inválidas.');
+    if (![recurrenceColumns, provisionColumns, descriptionColumns].every(Array.isArray)) throw new Error('O SharePoint retornou colunas inválidas.');
+    const seen = new Set(), uniqueProvisions = provisionItems.filter(item => {
+      const id = String(item.id ?? '').trim();
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id); return true;
+    });
     return Object.freeze({
       recurrences: Object.freeze(recurrenceItems.map(item => normalizeProvisionReportRecurrence(item, recurrenceColumns))),
-      provisions: Object.freeze(provisionItems.map(item => normalizeProvisionReportRow(item, provisionColumns))),
+      provisions: Object.freeze(uniqueProvisions.map(item => normalizeProvisionReportRow(item, provisionColumns))),
+      descriptions: Object.freeze(descriptionItems.map(item => normalizeProvisionReportDescription(item, descriptionColumns))),
     });
   }
 

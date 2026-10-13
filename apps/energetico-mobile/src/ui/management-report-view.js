@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import { buildSpendingReport9 } from '../chat/spending-reports-model.js';
 import { formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -35,6 +36,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
   const selected=()=>Object.fromEntries([...controls].map(([name,n])=>[name,n.value]));
   function cell(tr,column,value,span=1,className='') {

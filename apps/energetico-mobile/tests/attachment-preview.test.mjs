@@ -25,6 +25,34 @@ function setup(t, options = {}) {
   t.after(() => { preview.destroy(); stopPageZoom(); dom.window.close(); });
   return { preview, documentRef, dom, revoked };
 }
+for (const layout of ['report-pdf', 'flow-summary']) test(`${layout} has one emoji close and no duplicate return button, including loading and errors`, async t => {
+  const { preview, documentRef, dom } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: Promise.resolve(), destroy() {} }) }) });
+  let resolve, closed = 0;
+  const loading = preview.open(new Promise(done => { resolve = done; }), 'relatorio.pdf', { layout, returnLabel: 'Voltar ao relatório', onClose: () => closed++ });
+  const dialog = documentRef.querySelector('dialog');
+  const close = documentRef.querySelector('.attachment-preview-close');
+  assert.equal(close.textContent, '❌');
+  assert.equal(close.getAttribute('aria-label'), 'Fechar relatório');
+  assert.equal(documentRef.querySelector('.attachment-preview-back').hidden, true);
+  assert.equal([...dialog.querySelectorAll('button')].filter(button => !button.hidden && /Fechar|Voltar ao/.test(button.textContent)).length, 0);
+  close.click();
+  resolve(new Blob(['pdf'], { type: 'application/pdf' }));
+  await loading;
+  assert.equal(dialog.open, false);
+  assert.equal(closed, 1);
+  await preview.open(Promise.reject(new Error('Falha de consulta')), 'relatorio.pdf', { layout, onClose: () => closed++ });
+  assert.equal(close.textContent, '❌');
+  dialog.querySelector('.attachment-preview-content').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(dialog.open, true, 'um clique dentro mantém o relatório aberto');
+  dialog.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(dialog.open, false);
+  assert.equal(closed, 2);
+  assert.equal(documentRef.querySelector('textarea').value, 'rascunho preservado');
+  await preview.open(new Blob(['pdf'], { type: 'application/pdf' }), 'anexo.pdf');
+  assert.equal(close.textContent, 'Fechar', 'o visualizador de anexos comum não muda');
+  assert.equal(documentRef.querySelector('.attachment-preview-back').hidden, false);
+});
+
 test('report PDF requests whole-page fit without changing ordinary attachments',async t=>{
  const fits=[];const {preview}=setup(t,{loadPdfPreview:async()=>({createPdfPreview:options=>{fits.push(options.fit);return {ready:Promise.resolve(),destroy(){}};}})});
  const blob=new Blob(['pdf'],{type:'application/pdf'});

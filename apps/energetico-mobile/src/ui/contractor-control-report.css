@@ -2,7 +2,7 @@
 .ccr-overlay[hidden],.ccr-overlay [hidden] { display:none !important; }
 .ccr-dialog { position:relative; width:100%; background:#fff; color:#243447; }
 .ccr-dialog:not(.pl-dialog--portrait) { height:100dvh; max-height:100dvh; }
-.ccr-report { padding-top:34px; box-sizing:border-box; }
+.ccr-report { box-sizing:border-box; }
 .ccr-back,.ccr-close { position:absolute; top:2px; z-index:2; display:grid; place-items:center; width:40px; height:30px; min-height:0; min-width:0; padding:0; border:1px solid #a20000; border-radius:4px; color:#a20000; background:white; font:24px/1 Arial,sans-serif; cursor:pointer; }
 .ccr-back { left:4px; }
 .ccr-close { right:4px; }
@@ -55,21 +55,16 @@
 .ccr-measurements thead th { background:#70ad47; }
 .ccr-detail-error,.ccr-detail-notice { padding:8px; border:1px solid #d6b656; background:#fff2cc; color:#7f6000; }
 .ccr-overlay :focus-visible { outline:2px solid #2188c1; outline-offset:2px; }
-@media(max-width:900px) {
-  .ccr-brand { padding:5px; }
-  .ccr-title { margin:6px 0; }
-  .ccr-metrics { gap:4px; margin:6px 0; }
-  .ccr-metric { padding:6px 3px; }
-  .ccr-note { margin:6px 0; padding:5px; }
-  .ccr-table th,.ccr-table td { padding:5px 3px; }
-}
-@media(max-width:600px) {
-  .ccr-filters { grid-template-columns:84px repeat(3,minmax(0,1fr)); }
-  .ccr-filters .pl-refresh,.ccr-filters .report-print-actions { grid-row:span 2; }
-}
-@media(max-height:500px) {
-  .ccr-content { margin-inline:48px; }
-}
+/* Breakpoints refer to the report canvas, not the physical phone orientation. */
+.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-brand { padding:5px; }
+.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-title { margin:6px 0; }
+.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-metrics { gap:4px; margin:6px 0; }
+.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-metric { padding:6px 3px; }
+.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-note { margin:6px 0; padding:5px; }
+.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-table th,.ccr-overlay:not([data-report-width-mode="wide"]) .ccr-table td { padding:5px 3px; }
+.ccr-overlay[data-report-width-mode="narrow"] .ccr-filters { grid-template-columns:84px repeat(3,minmax(0,1fr)); }
+.ccr-overlay[data-report-width-mode="narrow"] .ccr-filters .pl-refresh,.ccr-overlay[data-report-width-mode="narrow"] .ccr-filters .report-print-actions { grid-row:span 2; }
+.ccr-overlay[data-report-compact-height="true"] .ccr-content { margin-inline:48px; }
 @media print {
   .ccr-overlay,.ccr-dialog,.ccr-report { position:static; height:auto; max-height:none; overflow:visible; padding:0; }
   .ccr-content { margin-inline:0; overflow:visible; }

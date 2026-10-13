@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildCommercialMilestones} from '../chat/commercial-milestones-model.js';
 import {formatOperationsDate} from '../chat/operations-reports-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -26,6 +27,7 @@ export function createCommercialMilestonesReportView({document:doc=globalThis.do
  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close});
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  function spanLength(rows,index,fields){const current=rows[index];let count=1;for(let i=index+1;i<rows.length&&fields.every(field=>rows[i][field]===current[field]);i++)count++;return count;}

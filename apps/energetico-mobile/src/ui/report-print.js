@@ -124,7 +124,7 @@ export function openFilteredReportPdf(root,{action,previewMedia,buildPdf=default
  const title=REPORT_PDF_TITLES[action]||'Relatório Energético',snapshot=captured||captureFilteredReport(root,{title});
  const name=title.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w -]/g,'').replace(/\s+/g,'-')+'.pdf';
  const pending=Promise.resolve().then(loadLogo).then(logoBytes=>buildPdf(snapshot,{logoBytes}));
- return previewMedia(pending,name,{returnLabel:'Voltar ao relatório',onClose,resolveReturnFocus});
+ return previewMedia(pending,name,{layout:'report-pdf',returnLabel:'Voltar ao relatório',onClose,resolveReturnFocus});
 }
 export function decorateReportPrint(panel,{action,previewMedia,closePreview,buildPdf,loadLogo}={}){
  const root=panel?.element;if(!root?.ownerDocument||!REPORT_PDF_TITLES[action])return panel;
@@ -145,7 +145,12 @@ export function decorateReportPrint(panel,{action,previewMedia,closePreview,buil
   event.preventDefault();event.stopPropagation();if(destroyed||busy||root.hidden||!root.isConnected)return;
   let snapshot,restore;
   busy=true;update();status.hidden=true;
-  try{restore=await panel.preparePrint?.();if(destroyed||root.hidden)return;snapshot=captureFilteredReport(root,{title:REPORT_PDF_TITLES[action]});}
+  try{
+   const options={title:REPORT_PDF_TITLES[action]};
+   if(typeof panel.capturePrint==='function')snapshot=await panel.capturePrint(options);
+   else{restore=await panel.preparePrint?.();if(destroyed||root.hidden)return;snapshot=captureFilteredReport(root,options);}
+   if(destroyed||root.hidden)return;
+  }
   catch(error){if(!destroyed&&!root.hidden){status.textContent='Não foi possível gerar o PDF. Tente novamente.';status.hidden=false;}return;}
   finally{restore?.();busy=false;update();}
   button.focus({preventScroll:true});

@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildStageProgress} from '../chat/stage-progress-model.js';
 import {calendarDays,formatOperationsDate} from '../chat/operations-reports-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -26,6 +27,7 @@ export function createStageProgressReportView({document:doc=globalThis.document,
  report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close});
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  function duration(days,state){const badge=make('span',`sp-duration sp-duration--${state}`,days===null?'—':`${days} dias`);return badge;}
