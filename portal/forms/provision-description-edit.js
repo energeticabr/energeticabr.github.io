@@ -63,12 +63,13 @@ export async function loadProvisionDescriptionStatusOptions({repository,siteKey=
  if(child.choices)return Object.freeze([...new Set(child.choices)]);
  const values=new Set();
  for(const source of [parent,child]){
-  const query=`$select=id&$expand=fields($select=${source.descriptor.name})&$top=200`;
+  // Match the repository's Graph/REST safety limits rather than bypassing them.
+  const query=`$select=id&$expand=fields($select=${source.descriptor.name})&$top=100`;
   let cursor='';const seen=new Set();let complete=false;
-  for(let pageNumber=1;pageNumber<=400;pageNumber++){
+  for(let pageNumber=1;pageNumber<=100;pageNumber++){
    active();
    const page=typeof repository.getItemsPage==='function'
-    ?await repository.getItemsPage(siteKey,source.list.id,query,{pageNumber,maxPages:400,...(cursor?{cursor}:{}),...options})
+    ?await repository.getItemsPage(siteKey,source.list.id,query,{pageNumber,maxPages:100,...(cursor?{cursor}:{}),...options})
     :{items:await repository.getItems(siteKey,source.list.id,query,options),hasMore:false};
    active();
    if(!Array.isArray(page?.items)||typeof page.hasMore!=='boolean'||page.complete===false||page.partial||page.truncated||page.items.complete===false||page.items.partial||page.items.truncated)throw new Error('A consulta de opções de STATUS está incompleta.');
