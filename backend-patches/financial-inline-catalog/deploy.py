@@ -87,6 +87,10 @@ def deploy(check=False):
             saved[target] = backup / (str(index) + '-' + target.name)
             shutil.copy2(target, saved[target])
             assert digest(saved[target]) == FILES[relative], 'Backup mismatch'
+        else:
+            # New helpers must inherit the readable worker file's group,
+            # not the root-owned directory's group.
+            attributes[target] = target.with_name('workflow.py').stat()
     changed = []
     try:
         for target, relative in targets:
