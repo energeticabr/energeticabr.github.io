@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { buildAttendanceRhidBadge } from '/src/chat/attendance-rhid-badges.js';
+import { attendanceBadgePoll, attendanceBadgeState } from '../helpers/attendance-rhid-badge-fixture.mjs';
+const poll = attendanceBadgePoll(new URLSearchParams(location.search).get('presentation') || 'attendance_multi_select');
+for (const [index, raw] of [[0, '06:45;12:00;13:00;16:30'], [2, '07:00;12:00;13:00;16:29']]) {
+  const name = poll.options[index].label.split(' - ')[1];
+  poll.options[index].rhidBadge = buildAttendanceRhidBadge({ name, date: '2026-10-13' }, {
+    date: '2026-10-13', rows: [{ Id: String(index), NOME_COLABORADOR: name, DATA_REFERENCIA: '2026-10-13', BATIDAS_RHID: raw }],
+  });
+}
+poll.question = '👉 👷 QUAL PRESENÇA DESEJA VALIDAR?\nCASO DESEJE FILTRAR, DIGITE UM TEXTO.';
+const view = createChatView(document.querySelector('#app'));
+view.render(attendanceBadgeState(poll));
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+const rect = node => {
+  const r = node.getBoundingClientRect();
+  return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, height: r.height };
+};
+document.documentElement.dataset.layout = JSON.stringify([...document.querySelectorAll('.chat-attendance-select__content')].map(content => {
+  const badge = content.querySelector('.chat-attendance-rhid-badge');
+  const badgeRange = document.createRange();
+  badgeRange.selectNodeContents(badge);
+  return {
+  bounds: rect(content), badge: rect(badge),
+  badgeTextRects: [...badgeRange.getClientRects()].map(r => ({ left: r.left, right: r.right })),
+  cells: [...content.querySelectorAll('.chat-attendance-rhid-punch')].map(cell => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    return { ...rect(cell), text: cell.textContent, color: getComputedStyle(cell).color,
+      textRects: [...range.getClientRects()].map(r => ({ top: r.top, left: r.left, right: r.right })) };
+  }),
+}; }));
+document.documentElement.dataset.ready = 'true';
+</script></body></html>

@@ -151,6 +151,11 @@ function personBadge(person, date) {
   }))).people[0];
   if (!tablePerson) return badge("unavailable", date);
 
+  // Use the report's effective slots (including approved adjustments), never
+  // assign an afternoon-only punch to E1 just because it is first in the array.
+  const punches = Object.fromEntries(SLOTS.map(slot => [slot, tablePerson.slots[slot].effective]));
+  const dailyBadge = (status, minutes) => ({ ...badge(status, date, minutes), punches });
+
   let times = tablePerson.rawPunches;
   const adjustments = Object.fromEntries(SLOTS.filter(slot => tablePerson.slots[slot].adjustment)
     .map(slot => [slot, tablePerson.slots[slot].adjustment]));
@@ -160,20 +165,20 @@ function personBadge(person, date) {
     const adjusted = buildRhidAttendanceTable([{ Id: "badge", NOME_COLABORADOR: tablePerson.name,
       BATIDAS_RHID: times.slice(0, 4), ADMIN_AJUSTES: adjustments }]).people[0];
     if (!adjusted || SLOTS.some(slot => adjusted.slots[slot].rhidCandidates.length > 1)
-      || SLOTS.flatMap(slot => adjusted.slots[slot].rhidCandidates).length !== Math.min(times.length, 4)) return badge("inconsistent", date);
+      || SLOTS.flatMap(slot => adjusted.slots[slot].rhidCandidates).length !== Math.min(times.length, 4)) return dailyBadge("inconsistent");
     const effectiveSlots = SLOTS.map(slot => adjusted.slots[slot].effective);
-    if ([0, 2].some(index => Boolean(effectiveSlots[index]) !== Boolean(effectiveSlots[index + 1]))) return badge("inconsistent", date);
+    if ([0, 2].some(index => Boolean(effectiveSlots[index]) !== Boolean(effectiveSlots[index + 1]))) return dailyBadge("inconsistent");
     times = [...effectiveSlots.filter(Boolean), ...times.slice(4)];
   }
-  if (!times.length) return badge("absent", date);
-  if (times.length % 2 || times.some((time, index) => index > 0 && time <= times[index - 1])) return badge("inconsistent", date);
+  if (!times.length) return dailyBadge("absent");
+  if (times.length % 2 || times.some((time, index) => index > 0 && time <= times[index - 1])) return dailyBadge("inconsistent");
   let minutes = 0;
   for (let index = 0; index < times.length; index += 2) {
     const asMinutes = time => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
     minutes += asMinutes(times[index + 1]) - asMinutes(times[index]);
   }
   const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-  return badge(weekday >= 1 && weekday <= 4 && minutes < 510 ? "inconsistent" : "present", date, minutes);
+  return dailyBadge(weekday >= 1 && weekday <= 4 && minutes < 510 ? "inconsistent" : "present", minutes);
 }
 
 export function buildAttendanceRhidBadge(context, report) {
