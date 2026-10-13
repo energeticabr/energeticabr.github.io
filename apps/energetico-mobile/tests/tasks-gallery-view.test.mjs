@@ -124,7 +124,8 @@ test('submeter conclusão confirma ID e data no novo layout por 2 segundos e ret
   t.mock.timers.tick(1); await settle(); await settle();
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
   assert.equal(ctx.root().hidden, false);
-  assert.equal(ctx.root().querySelectorAll('.tg-card').length, 0);
+  assert.deepEqual([...ctx.root().querySelectorAll('.tg-card')].map(card => card.dataset.itemId), ['175'],
+    'a tarefa não iniciada continua visível após concluir a outra');
   assert.equal(ctx.document.activeElement, ctx.root(), 'foco permanece na galeria após recriar cartões');
 });
 
@@ -577,25 +578,36 @@ test("pesquisa e filtros da G7 refinam a lista localmente sem novas escritas", a
   assert.equal([...ctx.root().querySelectorAll("button")].some(node => node.textContent.trim() === "Aplicar filtros"), false);
 });
 
-test("G7 filtra por padrão atividades criadas ou em atendimento e mantém o status individual", async t => {
+test("G7 exibe todos os status não concluídos por padrão e ao limpar os filtros", async t => {
   const rows = [
     { id: "101", fields: { "ID 2": "101", TAREFA: "Atividade criada", STATUS: "ATIVIDADE CRIADA" } },
     { id: "102", fields: { "ID 2": "102", TAREFA: "Em atendimento", STATUS: "EM ATENDIMENTO" } },
     { id: "103", fields: { "ID 2": "103", TAREFA: "Não iniciada", STATUS: "NÃO INICIADA" } },
-    { id: "104", fields: { "ID 2": "104", TAREFA: "Concluída", STATUS: "CONCLUÍDA" } },
+    { id: "104", fields: { "ID 2": "104", TAREFA: "Concluída", STATUS: "CONCLUÍDA", field_8: "2026-10-01" } },
+    { id: "105", fields: { TAREFA: "Atrasada", STATUS: "ATRASADA", field_7: "2026-09-01" } },
+    { id: "106", fields: { TAREFA: "Outro status pendente", STATUS: "AGUARDANDO TERCEIROS" } },
+    { id: "107", fields: { TAREFA: "Sem status", STATUS: "" } },
+    { id: "108", fields: { TAREFA: "Finalizada com status antigo", STATUS: "EM ATENDIMENTO", "DATA CONCLUSÃO": "2026-10-01" } },
   ];
-  const ctx = await setup(t, { rows });
+  const ctx = await setup(t, { rows, now: () => new Date("2026-10-13T12:00:00Z") });
   await ctx.gallery.open();
 
   const status = ctx.root().querySelector('[name="status"]');
-  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
-  assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId).sort(), ["101", "102"]);
+  const ids = () => [...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId).sort();
+  assert.deepEqual(ids(), ["101", "102", "103", "105", "106", "107"]);
+  assert.equal(status.selectedOptions[0].textContent, "TODAS, EXCETO CONCLUÍDA");
 
   setFilter(ctx, "status", "EM ATENDIMENTO");
   assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId), ["102"]);
+  setFilter(ctx, "status", "NÃO INICIADA");
+  assert.deepEqual(ids(), ["103", "107"]);
+  setFilter(ctx, "status", "CONCLUÍDA");
+  assert.deepEqual(ids(), ["104", "108"]);
+  setFilter(ctx, "status", "");
+  assert.deepEqual(ids(), ["101", "102", "103", "104", "105", "106", "107", "108"]);
   button(ctx.root(), "Limpar filtros").click();
-  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
-  assert.deepEqual([...ctx.root().querySelectorAll(".tg-card")].map(card => card.dataset.itemId).sort(), ["101", "102"]);
+  assert.equal(status.selectedOptions[0].textContent, "TODAS, EXCETO CONCLUÍDA");
+  assert.deepEqual(ids(), ["101", "102", "103", "105", "106", "107"]);
 });
 
 test("G7 oferece EM ATENDIMENTO mesmo quando nenhum registro tem esse status", async t => {
@@ -606,7 +618,7 @@ test("G7 oferece EM ATENDIMENTO mesmo quando nenhum registro tem esse status", a
 
   const status = ctx.root().querySelector('[name="status"]');
   assert.ok([...status.options].some(option => option.value === "EM ATENDIMENTO"));
-  assert.equal(status.selectedOptions[0].textContent, "ATIVIDADE CRIADA OU EM ATENDIMENTO");
+  assert.equal(status.selectedOptions[0].textContent, "TODAS, EXCETO CONCLUÍDA");
 });
 
 test("toques em opções de ordenação e status aplicam os filtros da galeria", async t => {
