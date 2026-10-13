@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from uuid import uuid4
 
 SOURCE = Path(__file__).resolve().parents[1] / 'rhid_badge_source.py'
 spec = importlib.util.spec_from_file_location('rhid_badge_source', SOURCE) if SOURCE.exists() else None
@@ -10,6 +11,7 @@ if spec:
     spec.loader.exec_module(module)
 
 DAY = '2026-10-05'
+DUMMY_PASSWORD = uuid4().hex
 def punch(pis, time='07:00', day=DAY, nsr=1):
     return f'{nsr:09d}3{day}T{time}:00-0300{pis:012d}0000'
 HEADER = ('0000000001' + ' ' * 196 + DAY + DAY).ljust(302)
@@ -33,7 +35,7 @@ class Transport:
     def __init__(self, pages=None, afd=None):
         self.calls = []
         self.pages = pages or [Response({'totalRecords': 1, 'records': [
-            {'id': 1, 'name': 'ANA', 'pis': 123, 'cpf': 'private', 'password': 'private', 'templates': ['private']},
+            {'id': 1, 'name': 'ANA', 'pis': 123, 'cpf': 'private', 'password': DUMMY_PASSWORD, 'templates': ['private']},
         ]})]
         self.afd = afd or Response(HEADER + '\n' + FOOTER)
     def post(self, url, **kwargs):
@@ -48,7 +50,7 @@ class RhidSourceTests(unittest.TestCase):
         self.assertIsNotNone(module, 'the read-only RHID badge source is missing')
         self.assertTrue(hasattr(module, 'RhidBadgeSource'), 'RHID source API is missing')
         self.transport = transport or Transport()
-        return module.RhidBadgeSource({'email': 'test@example.com', 'password': 'test-secret', 'system': 'rhid'},
+        return module.RhidBadgeSource({'email': 'test@example.com', 'password': DUMMY_PASSWORD, 'system': 'rhid'},
                                       transport=self.transport, clock=now or (lambda: 1000.0))
 
     def test_complete_registration_exposes_only_id_and_name(self):
@@ -57,7 +59,7 @@ class RhidSourceTests(unittest.TestCase):
         self.assertEqual(report['registration']['people'], [{'id': '1', 'name': 'ANA'}])
         self.assertTrue(report['registration']['complete'])
         self.assertNotIn('private', json.dumps(report))
-        self.assertNotIn('test-secret', json.dumps(report))
+        self.assertNotIn(DUMMY_PASSWORD, json.dumps(report))
         self.assertNotIn('test-token', json.dumps(report))
         self.assertEqual(report['rows'][0]['BATIDAS_RHID'], [])
         self.assertEqual(report['rows'][0]['STATUS_RHID'], 'SEM BATIDAS')
