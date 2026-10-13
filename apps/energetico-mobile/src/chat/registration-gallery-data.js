@@ -4,6 +4,7 @@ import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
+import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 
 const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado por"];
@@ -11,6 +12,7 @@ const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado p
 
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
+  ...FINANCIAL_GALLERY_MODELS,
   provisionDescription: Object.freeze({
     title: "GALERIA DESCRITIVO PROVISÃO",
     listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],
@@ -266,6 +268,18 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
             const allowed = (Array.isArray(columns) ? columns : []).filter(column => model.metadataEditorFields.some(field =>
               (kind === "provisionDescription" ? [column.name] : [column.name, column.displayName])
                 .some(name => registrationFieldKey(name) === registrationFieldKey(field))));
+            if (kind === 'investment' && allowed.some(column => registrationFieldKey(column.name) === 'instituicao')) {
+              const institutions = await filters.loadFilterOptions('INSTITUICAO', { refresh: true, signal: args[2]?.signal });
+              const choices = institutions.map(option => option.value);
+              return allowed.map(column => registrationFieldKey(column.name) === 'instituicao'
+                ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column);
+            }
+            if (['institution', 'investment_type', 'profitability'].includes(kind)) return allowed.map(column => {
+              const field = registrationFieldKey(column.name);
+              const choices = field === 'status' ? ['ATIVO', 'INATIVO']
+                : kind === 'investment_type' && field === 'tipo' ? ['RENDA FIXA', 'RENDA VARIÁVEL'] : null;
+              return choices ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column;
+            });
             if (kind !== "provisionDescription" || !allowed.some(column => registrationFieldKey(column.name) === "status" && !column.readOnly && !column.hidden)) return allowed;
             const choices = await loadProvisionDescriptionStatusOptions({ repository, siteKey: options.siteKey || "personal", signal: args[2]?.signal });
             return allowed.map(column => registrationFieldKey(column.name) === "status"
@@ -276,6 +290,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
         },
       });
       return createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,assertSession:options.assertSession,
+        ...(model.metadataEditorEntity ? { entity: model.metadataEditorEntity } : {}),
         ...(descriptionEditor ? {persistEdit:descriptionEditor.save} : {}),
         async resolveList(signal) {
           const list = await repository.resolveList(options.siteKey || "personal", model.aliases, signal ? { signal } : {});

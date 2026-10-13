@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
+import { galleryCases } from './helpers/gallery-create-cases.mjs';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -24,7 +25,7 @@ test('all gallery loaders are centered below navigation without leaking content 
       const dom = new JSDOM(stdout), results = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
       assert.ok(Array.isArray(results), JSON.stringify(results));
-      assert.equal(results.length, 27);
+      assert.equal(results.length, galleryCases.length);
       for (const result of results) {
         for (const state of ['initial', 'refreshing']) {
           const layout = result[state], message = `${width}x${height} ${result.name} ${state}: ${JSON.stringify(layout)}`;

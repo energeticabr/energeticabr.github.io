@@ -34,6 +34,7 @@ const activeContracts = source('EMPREITEIRO', 'ID', {
   labelFields: ['FORNECEDOR'], conditions: [{ sourceField: 'STATUS', value: 'ATIVO' }],
 });
 export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
+  investment: { INSTITUICAO: source('INSTITUICAOEMISSORA', 'INSTITUICAOEMISSORA') },
   provisionDescription: { STATUS: source('DESCRITIVOPROVISAO', 'STATUS', { provisionDescriptionStatus: true }) },
   asset: { FILIAL: branch, IMOBILIZADO: source('CADASTROIMOBILIZADO', 'IMOBILIZADO', { listAliases: ['CADASTROIMOBILIZADO', 'CADASTRO IMOBILIZADO'] }) },
   assetFunction: {},
