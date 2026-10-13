@@ -11,9 +11,9 @@ import { normalizeGalleryItem } from '../chat/orders-gallery-data.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
-const DEFAULT_STATUS_FILTER = "__ATIVIDADE_CRIADA_OU_EM_ATENDIMENTO__";
-const DEFAULT_STATUS_LABEL = "ATIVIDADE CRIADA OU EM ATENDIMENTO";
-const DEFAULT_TASK_STATUSES = ["ATIVIDADE CRIADA", "EM ATENDIMENTO"];
+const DEFAULT_STATUS_FILTER = "__TODAS_EXCETO_CONCLUIDA__";
+const DEFAULT_STATUS_LABEL = "TODAS, EXCETO CONCLUÍDA";
+const BASE_TASK_STATUSES = ["ATIVIDADE CRIADA", "EM ATENDIMENTO"];
 const DATE_FIELD = /(data|date|criad|created|modific|modified|conclus|fatal|identifica|in[ií]cio)/i;
 
 function key(value) {
@@ -351,7 +351,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       const control = controls.get(name); const current = control.value;
       const rowValues = name === "supplier" ? supplierOptions.map(option => option.value)
         : rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean);
-      const values = [...new Set(name === "status" ? [...DEFAULT_TASK_STATUSES, ...rowValues] : rowValues)]
+      const values = [...new Set(name === "status" ? [...BASE_TASK_STATUSES, ...rowValues] : rowValues)]
         .sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
       if (current && current !== DEFAULT_STATUS_FILTER && !values.includes(current)) values.push(current);
       const options = [Object.assign(el("option", "", "Todos"), { value: "" })];
@@ -396,7 +396,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       ])) return false;
       const taskStatus = status(fields, today);
       if (filterValues.status === DEFAULT_STATUS_FILTER) {
-        if (!DEFAULT_TASK_STATUSES.some(value => normalized(value) === normalized(taskStatus))) return false;
+        if (completion(fields)) return false;
       } else if (filterValues.status && normalized(taskStatus) !== normalized(filterValues.status)) return false;
       if (filterValues.supplier && normalized(field(fields, ["REFERENTE"])) !== normalized(filterValues.supplier)) return false;
       if (filterValues.priority && String(priority(fields)) !== String(filterValues.priority === "SIM")) return false;

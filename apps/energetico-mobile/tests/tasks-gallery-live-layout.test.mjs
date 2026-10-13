@@ -53,6 +53,12 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tasks-gallery-responsive.html?w=${width}` }, sessionId);
       await waitFor(`location.search === '?w=${width}' && document.documentElement?.dataset.ready === 'true'`);
+      const defaults = await evaluate(`({
+        label: document.querySelector('[name="status"]').selectedOptions[0].textContent,
+        ids: [...document.querySelectorAll('.tg-card')].map(card => card.dataset.itemId).sort()
+      })`);
+      assert.equal(defaults.label, 'TODAS, EXCETO CONCLUÍDA');
+      assert.deepEqual(defaults.ids, ['175', '176'], 'inclui não iniciada e exclui concluída em todas as telas');
       const toolbar = await evaluate(`(() => {
         const search = document.querySelector('[data-gallery-quick-search]'), filter = document.querySelector('.tg-filter-toggle'), add = document.querySelector('[data-action="create-task"]');
         const a = search.getBoundingClientRect(), b = filter.getBoundingClientRect(), c = add.getBoundingClientRect(), style = getComputedStyle(add);
