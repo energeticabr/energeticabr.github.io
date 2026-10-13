@@ -5,6 +5,7 @@ import { createSharePointRepository } from "../../../../portal/data/sharepoint-r
 import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
 import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
+import { createFinancialMovementEditor } from './financial-movement-editor.js';
 import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 
 const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado por"];
@@ -289,7 +290,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
           return typeof value === "function" ? value.bind(repository) : value;
         },
       });
-      return createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,assertSession:options.assertSession,
+      const editor = createGalleryRecordData({ repository: editorRepository, siteKey: options.siteKey || "personal", listName: model.listName, listAliases: model.aliases, metadataOnly: true,assertSession:options.assertSession,
         ...(model.metadataEditorEntity ? { entity: model.metadataEditorEntity } : {}),
         ...(descriptionEditor ? {persistEdit:descriptionEditor.save} : {}),
         async resolveList(signal) {
@@ -298,6 +299,8 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
           return list;
         },
       });
+      return kind === 'financial_movement' ? createFinancialMovementEditor(editor, { repository,
+        siteKey: options.siteKey || 'personal', assertSession: options.assertSession }) : editor;
     });
   }
   return Object.freeze({ ...data,

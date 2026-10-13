@@ -34,6 +34,11 @@ const activeContracts = source('EMPREITEIRO', 'ID', {
   labelFields: ['FORNECEDOR'], conditions: [{ sourceField: 'STATUS', value: 'ATIVO' }],
 });
 export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
+  financial_movement: {
+    INSTITUICAO: source('INSTITUICAOEMISSORA', 'INSTITUICAOEMISSORA'),
+    DESCRICAO: source('CADASTRO INVESTIMENTO', 'DESCRICAO', { dependsOn: ['INSTITUICAO'],
+      conditions: [{ sourceField: 'INSTITUICAO', filterField: 'INSTITUICAO', optional: true }] }),
+  },
   investment: { INSTITUICAO: source('INSTITUICAOEMISSORA', 'INSTITUICAOEMISSORA') },
   provisionDescription: { STATUS: source('DESCRITIVOPROVISAO', 'STATUS', { provisionDescriptionStatus: true }) },
   asset: { FILIAL: branch, IMOBILIZADO: source('CADASTROIMOBILIZADO', 'IMOBILIZADO', { listAliases: ['CADASTROIMOBILIZADO', 'CADASTRO IMOBILIZADO'] }) },

@@ -408,6 +408,7 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_financial_movement_gallery: 'financial_movement',
   action_investment_gallery: 'investment',
   action_institution_gallery: 'institution',
   action_investment_type_gallery: 'investment_type',
@@ -436,6 +437,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const GALLERY_CREATION_ACTIONS = Object.freeze({
+  action_financial_movement_gallery: ['action_financial_movement', 'APONTAR MOVIMENTAÇÃO'],
   action_investment_gallery: ['action_register_investment', 'CADASTRO INVESTIMENTO'],
   action_institution_gallery: ['action_register_institution', 'CADASTRO INSTITUIÇÃO'],
   action_investment_type_gallery: ['action_register_investment_type', 'CADASTRO TIPO INVESTIMENTO'],
