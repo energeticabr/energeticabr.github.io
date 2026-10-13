@@ -2616,6 +2616,31 @@ test("após validar uma presença mostra primeiro somente o mesmo dia e oferece 
   assert.equal(payloads.length, 1);
 });
 
+test('atalho de presenças de hoje encaminha uma navegação e mantém os nomes de hoje após data histórica', async t => {
+  const h=makeHarness({historyMode:'current-step'});
+  t.after(()=>h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{type:'poll',question:'CONFIRMA A PRESENÇA?',
+    detail_table:{kind:'presence',rows:[[{label:'DATA',value:'12/10/2026'}]]},options:[{id:'present',label:'PRESENTE'}]}],
+    {activeFlow:{id:'attendance_validation'}});
+  h.client.sendText=async()=>({status:'processed',messages:[]});
+  await h.view.emit('select-reply',{replyId:'present',label:'PRESENTE'});
+  h.store.ingestRemoteMessages([{type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',
+    options:[{id:'start_today_pending_attendance',reply:'start_today_pending_attendance',label:'👷 PRESENÇAS (1)',tone:'danger'}]}],
+    {activeFlow:null,resetConversation:true});
+  const payloads=[];
+  h.client.sendText=async payload=>{
+    payloads.push(payload);
+    return {status:'awaiting_input',activeFlow:{id:'attendance_validation'},messages:[{
+      type:'poll',presentation:'attendance_multi_select',question:'QUAL PRESENÇA DESEJA VALIDAR?',
+      options:[{id:'choice:registro_presenca_pendente:2249',reply:'choice:registro_presenca_pendente:2249',label:'2249 - TESTE',date:'2026-10-13',name:'TESTE'}],
+    }]};
+  };
+  await h.view.emit('select-reply',{replyId:'start_today_pending_attendance',label:'👷 PRESENÇAS (1)'});
+  assert.deepEqual(payloads.map(p=>p.replyId),['start_today_pending_attendance']);
+  assert.deepEqual(h.store.getState().messages.at(-1).options.map(o=>o.reply),['choice:registro_presenca_pendente:2249']);
+});
+
 test("avaliar outra data em Pendências não reaplica o dia da presença anterior", async t => {
   const h = makeHarness({ historyMode: 'current-step' });
   t.after(() => h.controller.stop());

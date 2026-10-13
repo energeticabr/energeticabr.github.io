@@ -346,6 +346,7 @@ function mainMenuDiaryRank(option) {
   const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
   if (replyId === "start_pending_construction_diary" || replyId === "resume_latent_construction_diary") return 2;
   if (replyId === "append_today_construction_diary_photos") return 1;
+  if (replyId === "start_today_pending_attendance") return 1.5;
   return 0;
 }
 
@@ -712,7 +713,8 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const galleryClass = galleryButton ? " chat-choice-button--gallery" : "";
   const launchMenuClass = launchMenuButton ? " chat-choice-button--launch-menu-primary" : "";
   const suppliesClass = suppliesButton ? " chat-choice-button--supplies" : "";
-  const diaryClass = option.menuDisplayLabel ? " chat-choice-button--diary" : "";
+  const diaryClass = option.menuDisplayLabel ? " chat-choice-button--diary"
+    : draftReplyId(option) === "start_today_pending_attendance" ? " chat-choice-button--today-attendance" : "";
   const galleryAttribute = galleryButton ? " data-gallery-button" : "";
   const content = displayIcon
     ? `<span class="chat-supplies-button-icon" aria-hidden="true">${escapeHtml(displayIcon)}</span><span class="chat-supplies-button-text">${escapeHtml(displayLabel || label)}</span>`
