@@ -1387,6 +1387,20 @@ function isAttendanceSelectionPoll(message) {
       /^pending_attendance_record:\d+$/.test(String(draftReplyId(option)))));
 }
 
+function attendanceRhidBadgeMarkup(badge) {
+  const tones = {
+    present: "present",
+    absent: "absent",
+    inconsistent: "inconsistent",
+    unregistered: "unregistered",
+    loading: "neutral",
+    unavailable: "neutral",
+  };
+  if (!badge || !Object.hasOwn(tones, badge.status) || !badge.label) return "";
+  const description = escapeHtml(badge.description || badge.label);
+  return `<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span>`;
+}
+
 function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {
   const filteredOptions = databaseFilteredOptions(
     message,
@@ -1584,10 +1598,15 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       }
       if (!option.disabled) visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
+      const nameMarkup = formatChatText(label);
+      const rhidBadge = attendanceRhidBadgeMarkup(option.rhidBadge);
+      const recordMarkup = rhidBadge
+        ? `<span class="chat-attendance-select__content"><span class="chat-attendance-select__name">${nameMarkup}</span>${rhidBadge}</span>`
+        : nameMarkup;
       const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || option.disabled ? " disabled" : ""}>`;
       records.push(supplierSync
-        ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${formatChatText(label)}</span></label>`
-        : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${formatChatText(label)}</button></div>`);
+        ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${recordMarkup}</span></label>`
+        : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${recordMarkup}</button></div>`);
     }
     const selectAll = visibleIds.length
       ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`

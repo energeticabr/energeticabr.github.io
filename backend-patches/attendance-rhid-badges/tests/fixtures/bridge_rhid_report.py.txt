@@ -1,0 +1,86 @@
+from rhid_attendance_adjustments import SharePointRhidAttendanceAdjustmentStore, validate_adjustment_against_rhid
+
+class Bridge:
+    def portal_rhid_attendance_report(
+        self, identity: dict, selected_date, *, allowed_emails: set[str],
+    ) -> dict:
+        """Consulta RHID e acrescenta os ajustes manuais sem alterar a origem."""
+        raw_date = str(selected_date or "").strip()
+        try:
+            on_date = date.fromisoformat(raw_date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Data inválida para o relatório RHID.") from exc
+        if on_date.isoformat() != raw_date:
+            raise ValueError("Data inválida para o relatório RHID.")
+
+        with self.lock:
+            key, state = self._portal_state(identity)
+            self.portal_owners.authorize(
+                key, identity, state_exists=bool(state), bind=bool(state),
+                allowed_emails=allowed_emails,
+            )
+
+        source_rows = self.engine.sharepoint.get_rhid_attendance_report(on_date)
+        pending_rows = self.engine.sharepoint.get_pending_attendance(on_date)
+        person_keys_by_name = {}
+        for row in source_rows:
+            if isinstance(row, dict):
+                name = normalize_text(str(row.get("NOME_COLABORADOR") or ""))
+                person_key = str(row.get("ID_PESSOA_RHID") or row.get("Id") or "").strip()
+                if name and person_key:
+                    person_keys_by_name.setdefault(name, set()).add(person_key)
+        pending_by_name = {}
+        for row in pending_rows:
+            if not isinstance(row, dict):
+                continue
+            name = normalize_text(str(row.get("FORNECEDOR") or ""))
+            identifier = str(row.get("Id") or "").strip()
+            if (name and re.fullmatch(r"[1-9][0-9]*", identifier)
+                and str(row.get("DATA") or "")[:10] == on_date.isoformat()
+                and normalize_text(str(row.get("PRESENCA") or "")) == "pendente"):
+                pending_by_name.setdefault(name, []).append(identifier)
+        fields = (
+            "ID_PESSOA_RHID",
+            "DATA_REFERENCIA",
+            "NOME_COLABORADOR",
+            "BATIDAS_RHID",
+            "MINUTOS_TRABALHADOS",
+            "STATUS_RHID",
+            "COLETADO_EM",
+            "ORIGEM_ULTIMA_ALTERACAO",
+        )
+        adjustment_store = getattr(self, "rhid_attendance_adjustments", None)
+        adjustments = adjustment_store.latest_for_day(on_date) if adjustment_store is not None else {}
+        rows = []
+        for row in source_rows:
+            if not isinstance(row, dict):
+                continue
+            item_id = row.get("Id", row.get("ID"))
+            rhid_id = str(row.get("ID_PESSOA_RHID") or "").strip()
+            person_key = f"rhid:{rhid_id}" if rhid_id else f"id:{item_id}"
+            item = {"Id": item_id, **{field: row.get(field) for field in fields}}
+            name = normalize_text(str(row.get("NOME_COLABORADOR") or ""))
+            item["pendingPresenceIds"] = pending_by_name.get(name, []) if len(person_keys_by_name.get(name, ())) == 1 else []
+            if person_key in adjustments:
+                item["ADMIN_AJUSTES"] = adjustments[person_key]
+            rows.append(item)
+        return {
+            "status": "processed",
+            "messages": [],
+            "attendanceReport": {"date": on_date.isoformat(), "rows": rows},
+        }
+
+class Handler:
+    def handle(self, action, body, identity):
+        if True:
+            if action == "other":
+                pass
+            else:
+                if action == "other2":
+                    pass
+                elif action == "rhid_attendance_report":
+                    result = self.bridge.portal_rhid_attendance_report(
+                        identity,
+                        body.get("date"),
+                        allowed_emails=self.portal_authenticator.allowed_emails,
+                    )
