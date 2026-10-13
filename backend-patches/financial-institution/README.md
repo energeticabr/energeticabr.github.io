@@ -7,3 +7,5 @@ A instalação confere o hash de origem, valida a configuração e comprova que 
 deploy.sh roda os cinco testes do Form54 e os cinco testes anteriores do investimento, com motor real e adaptadores externos isolados. Depois cria backup protegido, publica a configuração e verifica a saúde, com rollback em caso de falha. Não grava registros fictícios no SharePoint.
 
 Menus e perguntas vêm da VM e atendem os clientes Android, iOS e Windows já instalados, sem mudança do código cliente.
+
+Para implantação a partir do checkout completo, a suíte anterior é localizada em ../financial-investment/test_investment.py. Ao copiar apenas esta pasta para uma área temporária do servidor, copie também esse test_investment.py para a mesma área antes de executar sudo bash deploy.sh. A ausência da suíte interrompe a execução antes de qualquer alteração na configuração.
