@@ -35,7 +35,7 @@ class ChoiceContextTests(unittest.TestCase):
     def test_rh_choice_preserves_its_real_day_and_supplier_without_exposing_the_source_row(self):
         original = {'id': '2239', 'title': '2239 - ANA', 'source_values': {'Id': 2239,
             'FORNECEDOR': 'ANA', 'DATA': '2026-10-13T12:00:00Z', 'ID_PESSOA_RHID': 7,
-            'CPF': 'not-public', 'PIS': 'not-public', 'SENHA': 'not-public'}}
+            'CPF': 'not-public', 'PIS': 'not-public', 'OBSERVACAO_INTERNA': 'not-public'}}
         before = deepcopy(original)
         actual = self.serialize('registro_presenca_pendente', [original])[0]
         self.assertEqual(actual.get('date'), '2026-10-13')
@@ -43,7 +43,7 @@ class ChoiceContextTests(unittest.TestCase):
         self.assertEqual(actual.get('rhidId'), '7')
         self.assertEqual(actual['reply'], 'choice:registro_presenca_pendente:2239')
         self.assertEqual(actual['label'], '2239 - ANA')
-        self.assertFalse({'source_values', 'CPF', 'PIS', 'SENHA'} & actual.keys())
+        self.assertFalse({'source_values', 'CPF', 'PIS', 'OBSERVACAO_INTERNA'} & actual.keys())
         self.assertEqual(original, before)
 
     def test_pending_presence_uses_its_own_day_not_the_current_day(self):
