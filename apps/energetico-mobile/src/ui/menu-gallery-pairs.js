@@ -27,6 +27,13 @@ const TASK_PAIRS = Object.freeze([
   { primary: "action_delegated_task", primaryLabel: "criar uma tarefa delegada", primaryLabels: ["criar tarefa delegada"], id: "action_delegated_tasks_gallery", label: "GALERIA DE TAREFAS DELEGADAS" },
   { primary: "action_recurring_task_registration", primaryLabel: "cadastrar tarefa recorrente", primaryLabels: ["tarefas recorrentes", "cadastro de tarefas recorrentes"], id: "action_recurring_tasks_gallery", label: "GALERIA DE TAREFAS RECORRENTES" },
 ]);
+const FINANCIAL_PAIRS = Object.freeze([
+  { primary: 'action_register_investment', primaryLabel: 'cadastro investimento', id: 'action_investment_gallery', label: 'GALERIA INVESTIMENTOS' },
+  { primary: 'action_register_institution', primaryLabel: 'cadastro instituicao', id: 'action_institution_gallery', label: 'GALERIA INSTITUIÇÕES' },
+  { primary: 'action_register_investment_type', primaryLabel: 'cadastro tipo investimento', id: 'action_investment_type_gallery', label: 'GALERIA TIPOS DE INVESTIMENTO' },
+  { primary: 'action_register_profitability', primaryLabel: 'cadastro de rentabilidade', id: 'action_profitability_gallery', label: 'GALERIA RENTABILIDADE' },
+  { primary: 'action_register_taxation', primaryLabel: 'cadastro tributacao', id: 'action_taxation_gallery', label: 'GALERIA TRIBUTAÇÃO' },
+]);
 
 export function galleryPairForOption(option, pairs) {
   const id = String(option?.reply || option?.id || "").trim().toLowerCase();
@@ -38,6 +45,10 @@ export function pairedGalleryMenu(message) {
   if (message?.type !== "poll") return null;
   const headings = String(message.question || message.prompt || message.text || "").split(/\r?\n/).map(normalized);
   const options = Array.isArray(message.options) ? message.options : [];
+  if (headings.some(heading => ['cadastros', 'efetuar cadastros', 'cadastros financeiros'].includes(heading))
+    && options.some(option => galleryPairForOption(option, FINANCIAL_PAIRS))) {
+    return { kind: 'financial', pairs: FINANCIAL_PAIRS };
+  }
   if (headings.includes("demandas") && options.some(option => galleryPairForOption(option, TASK_PAIRS))) {
     return { kind: "demand", pairs: TASK_PAIRS };
   }

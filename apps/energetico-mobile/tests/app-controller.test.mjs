@@ -1943,6 +1943,10 @@ test('mais da galeria envia action_task e exibe o fluxo real de criação de tar
 });
 
 const galleryCreationCases = [
+  ...['investment', 'institution', 'investment_type', 'profitability', 'taxation'].map((kind, index) => [
+    `action_${kind}_gallery`, 'registrationGalleryFactory', 'registrationGalleryDataFactory', `action_register_${kind}`,
+    ['CADASTRO INVESTIMENTO', 'CADASTRO INSTITUIÇÃO', 'CADASTRO TIPO INVESTIMENTO', 'CADASTRO DE RENTABILIDADE', 'CADASTRO TRIBUTAÇÃO'][index], `${kind}_registration`,
+  ]),
   ['action_provision_description_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_payment', 'CRIAR UMA PROVISÃO DE PAGAMENTO', 'payment'],
   ['action_launch_gallery', 'launchGalleryFactory', null, 'action_launch', 'EFETUAR LANÇAMENTO', 'launch'],
   ['action_orders_gallery', 'ordersGalleryFactory', 'ordersGalleryDataFactory', 'action_pending_order_registration', 'EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)', 'pending_order_registration'],

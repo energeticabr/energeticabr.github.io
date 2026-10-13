@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
+import { galleryCases } from './helpers/gallery-create-cases.mjs';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -27,7 +28,7 @@ test('all gallery shortcuts keep Tasks sizing beside Filters, collapsed and expa
       const results = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
       assert.ok(Array.isArray(results), JSON.stringify(results));
-      assert.equal(results.length, 27);
+      assert.equal(results.length, galleryCases.length);
       for (const result of results) {
         assert.equal(result.missing, undefined, `${width}px ${result.name}: shortcut missing`);
         for (const state of ['collapsed', 'expanded']) {

@@ -408,6 +408,11 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_investment_gallery: 'investment',
+  action_institution_gallery: 'institution',
+  action_investment_type_gallery: 'investment_type',
+  action_profitability_gallery: 'profitability',
+  action_taxation_gallery: 'taxation',
   action_provision_description_gallery: "provisionDescription",
   action_group_gallery: "group",
   action_family_gallery: "family",
@@ -431,6 +436,11 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const GALLERY_CREATION_ACTIONS = Object.freeze({
+  action_investment_gallery: ['action_register_investment', 'CADASTRO INVESTIMENTO'],
+  action_institution_gallery: ['action_register_institution', 'CADASTRO INSTITUIÇÃO'],
+  action_investment_type_gallery: ['action_register_investment_type', 'CADASTRO TIPO INVESTIMENTO'],
+  action_profitability_gallery: ['action_register_profitability', 'CADASTRO DE RENTABILIDADE'],
+  action_taxation_gallery: ['action_register_taxation', 'CADASTRO TRIBUTAÇÃO'],
   action_provision_description_gallery: ["action_payment", "CRIAR UMA PROVISÃO DE PAGAMENTO"],
   action_launch_gallery: ["action_launch", "EFETUAR LANÇAMENTO"],
   action_orders_gallery: ["action_pending_order_registration", "EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)"],
