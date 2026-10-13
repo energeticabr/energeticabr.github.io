@@ -32,7 +32,7 @@ REPLACEMENTS = (
      '                        allowed_emails=self.portal_authenticator.allowed_emails,\n'
      '                        include_registration=body.get("includeRegistration") is True,\n'),
     ('                    # Mantém metadados de apresentação para o portal sem\n',
-     '                    **attendance_rhid_option_context(step, item),\n'
+     '                    **attendance_rhid_option_context(step, item, state.get("options")),\n'
      '                    # Mantém metadados de apresentação para o portal sem\n'),
 )
 
