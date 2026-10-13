@@ -27,6 +27,35 @@ def _identifier(value):
     raw = str(value or '').strip()
     return str(int(raw)) if re.fullmatch(r'[0-9]+', raw) and int(raw) > 0 else ''
 
+def attendance_rhid_option_context(step, item):
+    """Send only a presence choice's day/name/clock ID, never its private row."""
+    if step.get('key') not in {'registro_presenca_pendente', 'pending_attendance_record',
+                               'sincronizar_atividade_fornecedor_presenca'}:
+        return {}
+    if item.get('terminal_option') or not re.fullmatch(
+        r'(?:pending_attendance_record:|supplier_sync_target:)?[1-9][0-9]*', str(item.get('id') or '')):
+        return {}
+    values = item.get('source_values', item.get('sourceValues'))
+    if not isinstance(values, dict): return {'date': 'INVALID'}
+    result = {'date': 'INVALID'}
+    raw = values.get('DATA')
+    if isinstance(raw, str) and raw.strip():
+        raw = raw.strip()
+        iso = re.fullmatch(r'(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}.*)?', raw)
+        br = re.fullmatch(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', raw)
+        candidate = iso.group(1) if iso else (f'{br[3]}-{int(br[2]):02d}-{int(br[1]):02d}' if br else '')
+        try:
+            result['date'] = date.fromisoformat(candidate).isoformat()
+        except ValueError:
+            # A nonempty invalid date stops older clients falling back to a
+            # previous day. Do not expose unvalidated database text.
+            result['date'] = 'INVALID'
+    name = values.get('FORNECEDOR')
+    if isinstance(name, str) and name.strip(): result['name'] = name.strip()
+    rhid_id = _identifier(values.get('ID_PESSOA_RHID'))
+    if rhid_id: result['rhidId'] = rhid_id
+    return result
+
 def _complete_afd_records(raw, day):
     """Require the AFD671 header/range and trailer counts, not just HTTP 200."""
     lines = raw.lstrip('\ufeff').splitlines()

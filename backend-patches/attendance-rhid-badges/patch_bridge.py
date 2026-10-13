@@ -5,7 +5,7 @@ import sys
 REPLACEMENTS = (
     ('from rhid_attendance_adjustments import SharePointRhidAttendanceAdjustmentStore, validate_adjustment_against_rhid\n',
      'from rhid_attendance_adjustments import SharePointRhidAttendanceAdjustmentStore, validate_adjustment_against_rhid\n'
-     'from rhid_badge_source import get_rhid_badge_report\n'),
+     'from rhid_badge_source import get_rhid_badge_report, attendance_rhid_option_context\n'),
     ('    def portal_rhid_attendance_report(\n'
      '        self, identity: dict, selected_date, *, allowed_emails: set[str],\n',
      '    def portal_rhid_attendance_report(\n'
@@ -31,6 +31,9 @@ REPLACEMENTS = (
      '                        body.get("date"),\n'
      '                        allowed_emails=self.portal_authenticator.allowed_emails,\n'
      '                        include_registration=body.get("includeRegistration") is True,\n'),
+    ('                    # Mantém metadados de apresentação para o portal sem\n',
+     '                    **attendance_rhid_option_context(step, item),\n'
+     '                    # Mantém metadados de apresentação para o portal sem\n'),
 )
 
 def patch_bridge(source):

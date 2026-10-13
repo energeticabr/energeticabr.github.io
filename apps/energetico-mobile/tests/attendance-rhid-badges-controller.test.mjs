@@ -72,6 +72,62 @@ test('daily RHID badges distinguish regular hours, no punches, short day and con
   assert.equal(h.writes.length, 0, 'badges only read RHID and never submit attendance');
 });
 
+test('real portal choices with only allowlisted date/name metadata query the correct day and show all four states', async t => {
+  const date = '2026-10-05';
+  const rows = [person('1', 'REGULAR', '07:00;12:00;13:00;16:30'), person('2', 'SEM BATIDA'), person('3', 'CURTO', '07:00')];
+  const registration = { complete: true, people: rows.map(row => ({ id: row.ID_PESSOA_RHID, name: row.NOME_COLABORADOR })) };
+  const h = harness(t, async day => report(day, rows, registration));
+  const options = ['REGULAR', 'SEM BATIDA', 'CURTO', 'SEM RELÓGIO'].map((name, index) => ({
+    id: `choice:registro_presenca_pendente:${101 + index}`, reply: `choice:registro_presenca_pendente:${101 + index}`,
+    label: `${101 + index} - ${name}`, date, name,
+  }));
+  await open(h, poll('actual-transport', options));
+  assert.deepEqual(h.reads, ['2026-10-05']);
+  assert.deepEqual(currentOptions(h).map(item => [item.rhidBadge?.status, item.rhidBadge?.label]), [
+    ['present', '08h30'], ['absent', 'AUSENTE'], ['inconsistent', 'INCONSISTENTE'], ['unregistered', 'S/ CADASTRO'],
+  ]);
+  assert.equal(h.writes.length, 0);
+});
+
+test('restored pending choice reads its own detail-table date without a prior date selection', async t => {
+  const h = harness(t, async day => report(day, [person('1', 'ANA', '07:00;12:00;13:00;16:30', day)]));
+  await open(h, poll('legacy-wire', [{ reply: 'pending_attendance_record:101', id: 'choice:pending_attendance_record:pending_attendance_record:101',
+    label: '101 - ANA', detail_table: [[{ label: 'DATA', value: '05/10/2026' }, { label: 'FILIAL', value: '004' }]] }]));
+  assert.deepEqual(h.reads, ['2026-10-05']);
+  assert.equal(currentOptions(h)[0].rhidBadge?.label, '08h30');
+  assert.equal(h.writes.length, 0);
+});
+
+test('restored undated and empty-date choices never reuse a historical presence confirmation', async t => {
+  const h = harness(t, async day => report(day, [person('1', 'ANA', '07:00;12:00;13:00;16:30', day)]));
+  await h.controller.start();
+  h.writes.length = 0;
+  h.store.ingestRemoteMessages([
+    { id: 'old-confirmation', type: 'text', text: 'Presença confirmada', presence_confirmation: { date: '2026-10-05' } },
+    poll('restored-on-13-oct', [
+      { id: 'pending_attendance_record:101', label: '101 - ANA', detail_table: [[{ label: 'DATA', value: '' }]] },
+      { id: 'pending_attendance_record:102', label: '102 - ANA' },
+    ]),
+  ], { activeFlow: flow, resetConversation: true });
+  await tick(); await tick();
+  assert.deepEqual(h.reads, [], 'missing current-record dates cannot authorize a read of 05/10');
+  assert.deepEqual(currentOptions(h).map(item => item.rhidBadge?.status), ['unavailable', 'unavailable']);
+  assert.equal(h.writes.length, 0);
+});
+
+test('expanded multi-day choices never assign the formerly filtered poll day to an undated option', async t => {
+  const h = harness(t, async day => report(day, [person('1', 'ANA', '07:00;12:00;13:00;16:30', day)]));
+  await open(h, poll('expanded-dates', [
+    option('101', 'ANA', '2026-10-05'), option('102', 'ANA', '2026-10-13'),
+    { id: 'pending_attendance_record:103', label: '103 - ANA' },
+  ], { presenceDateKey: '2026-10-05' }));
+  assert.deepEqual(currentOptions(h).map(item => [item.rhidBadge?.date, item.rhidBadge?.status]), [
+    ['2026-10-05', 'present'], ['2026-10-13', 'present'], ['', 'unavailable'],
+  ]);
+  assert.deepEqual(h.reads.sort(), ['2026-10-05', '2026-10-13']);
+  assert.equal(h.writes.length, 0);
+});
+
 for (const [date, punches, expectedStatus, expectedLabel] of [
   ['2026-10-05', '07:00;12:00;13:00;16:29', 'inconsistent', 'INCONSISTENTE'],
   ['2026-10-06', '07:00;12:00;13:00;16:30', 'present', '08h30'],

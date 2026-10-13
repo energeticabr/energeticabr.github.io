@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação RHID — teste de transporte</title><link rel="stylesheet" href="../../src/styles.css"></head>
+<body><div id="app"></div><script type="module">
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createAppController } from '../../src/app-controller.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+
+const date = '2026-10-13';
+const people = [
+  { id: '1', name: 'FUNCIONÁRIO REGULAR', punches: ['07:00', '12:00', '13:00', '16:45'] },
+  { id: '2', name: 'FUNCIONÁRIO SEM BATIDA', punches: [] },
+  { id: '3', name: 'FUNCIONÁRIO COM BATIDA INCOMPLETA', punches: ['07:00'] },
+];
+const names = [...people.map(person => person.name), 'FORNECEDOR SEM CADASTRO'];
+// The real portal now sends this allowlisted shape, not source_values.
+const wireOptions = names.map((name, index) => ({
+  id: `choice:registro_presenca_pendente:${2239 - index}`,
+  reply: `choice:registro_presenca_pendente:${2239 - index}`,
+  label: `${2239 - index} - ${name}`, name, date,
+}));
+const choices = { id: 'actual-wire-presence', type: 'poll', presentation: 'attendance_multi_select',
+  databaseFilter: true, databaseFilterKey: 'registro_presenca_pendente',
+  question: '👉 👷 QUAL PRESENÇA DESEJA VALIDAR?\nCASO DESEJE FILTRAR, DIGITE UM TEXTO.', options: wireOptions };
+const account = { homeAccountId: 'isolated-rhid-test', name: 'Teste isolado' };
+const store = createConversationStore();
+const controller = createAppController({ store, view: createChatView(document.querySelector('#app')),
+  auth: { initialize: async () => account, getToken: async () => 'test-token', signOut: async () => {} },
+  native: { importSharedItems: async () => [] },
+  client: {
+    sendText: async payload => {
+      if (payload.replyId && payload.replyId !== 'input_continue') throw new Error('Submissão bloqueada neste teste');
+      return { status: 'processed', messages: [] };
+    },
+    getRhidAttendanceReport: async day => {
+      if (day !== date) throw new Error('A consulta perdeu a data de cada presença');
+      return { date: day, registration: { complete: true, people: people.map(({id, name}) => ({ id, name })) },
+        rows: people.map(person => ({ Id: `rhid:${person.id}`, ID_PESSOA_RHID: person.id,
+          NOME_COLABORADOR: person.name, DATA_REFERENCIA: day, BATIDAS_RHID: person.punches })) };
+    },
+  },
+  pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
+});
+await controller.start();
+store.ingestRemoteMessages([choices], { resetConversation: true, activeFlow: { id: 'attendance_validation', title: 'VALIDAR PRESENÇAS APONTADAS' } });
+addEventListener('pagehide', () => controller.stop(), { once: true });
+</script></body></html>

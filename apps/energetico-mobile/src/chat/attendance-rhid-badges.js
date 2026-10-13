@@ -24,7 +24,7 @@ export function attendanceRhidPollEligible(poll) {
     && poll.options.some(option => /^pending_attendance_record:\d+$/.test(replyId(option)));
 }
 
-export function attendanceRhidOptionContext(option, poll, fallbackDate = "") {
+export function attendanceRhidOptionContext(option, poll) {
   if (!option || typeof option !== "object") return null;
   const id = replyId(option);
   const label = text(option.label || option.title || option.text);
@@ -34,11 +34,20 @@ export function attendanceRhidOptionContext(option, poll, fallbackDate = "") {
   if (!presenceId) return null;
 
   const source = { ...option.sourceValues, ...option.source_values };
-  const explicitDate = [option.date, option.data, option.presenceDate, option.presence_date,
-    source.DATA, source.date, source.data, source.presenceDate, source.presence_date].find(value => text(value));
+  const dates = [option.date, option.data, option.presenceDate, option.presence_date,
+    source.DATA, source.date, source.data, source.presenceDate, source.presence_date];
+  const explicitDateIndex = dates.findIndex(value => value !== undefined);
+  // The legacy portal keeps per-record DATA in the existing detail table but
+  // deliberately strips source_values. Never use another record's/day's table.
+  const detail = option.detail_table || option.detailTable;
+  const detailRows = Array.isArray(detail) ? detail : detail?.rows;
+  const detailDateCell = (Array.isArray(detailRows) ? detailRows : []).flatMap(row => Array.isArray(row) ? row : [row])
+    .find(cell => normalizedName(cell?.label || cell?.name) === "DATA");
   const dateInLabel = label.match(DATE_IN_LABEL)?.[0];
-  // An explicit but impossible date must not be replaced by another day.
-  const date = calendarDate(explicitDate ?? dateInLabel ?? (text(poll?.presenceDateKey) || fallbackDate));
+  // Empty/invalid per-record dates are authoritative. Unrelated historical
+  // confirmations cannot prove which day a restored choice belongs to.
+  const date = calendarDate(explicitDateIndex >= 0 ? dates[explicitDateIndex]
+    : detailDateCell ? detailDateCell.value : dateInLabel);
   const withoutDates = label.replace(DATE_IN_LABEL, "");
   const afterId = new RegExp(`(?:^|\\D)${presenceId}\\s*[-–—:]\\s*(.*)$`, "u").exec(withoutDates)?.[1];
   const name = text(source.FORNECEDOR || option.FORNECEDOR || option.name

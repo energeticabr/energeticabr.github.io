@@ -84,3 +84,47 @@ class Handler:
                         body.get("date"),
                         allowed_emails=self.portal_authenticator.allowed_emails,
                     )
+
+class ChannelMessenger:
+    def _send_option_poll(self, state, step, visible):
+        def reply_id(item):
+            option_id = str(item["id"])
+            if option_id.isdecimal():
+                return f"choice:{step['key']}:{option_id}"
+            return option_id
+
+        self._send_poll(
+            state,
+            step["prompt"],
+            [
+                {
+                    "label": visual_option_title(item),
+                    "reply": reply_id(item),
+                    "id": f"choice:{step['key']}:{item['id']}",
+                    # Mantém metadados de apresentação para o portal sem
+                    # alterar o formato aceito pelo poll do WhatsApp.
+                    **{
+                        key: item[key]
+                        for key in (
+                            "detail_table",
+                            "actions",
+                            "expanded",
+                            "disabled",
+                            "tone",
+                        )
+                        if key in item
+                    },
+                }
+                for item in visible
+            ],
+        )
+        source = step.get("source") or {}
+        if (
+            source.get("type") == "sharepoint_list"
+            and not step.get("accepts_direct_text")
+            and self.messages
+        ):
+            self.messages[-1]["databaseFilter"] = True
+            self.messages[-1]["databaseFilterKey"] = str(step["key"])
+        if step.get("presentation") and self.messages:
+            self.messages[-1]["presentation"] = str(step["presentation"])
