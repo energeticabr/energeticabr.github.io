@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const view=createChatView(document.querySelector('#app'));
+const options=[
+  ['group_pending','⏳ PENDÊNCIAS (48)'],['group_supplies','📦 SUPRIMENTOS'],
+  ['group_financial','💵 FINANCEIRO'],['group_demands','📋 DEMANDAS'],
+  ['group_human_resources','👥 RECURSOS HUMANOS'],['group_construction_stage','🏗️ ETAPA OBRA'],
+  ['group_commercial','📈 COMERCIAL'],['group_audit','🔎 AUDITORIA E DOCUMENTOS'],
+  ['group_nb','🏢 NB PARTICIPAÇÕES'],['group_personal_expenses','💰 GASTOS PESSOAIS'],
+  ['start_pending_construction_diary','📔 COMEÇAR DIÁRIO DE OBRAS (13/10/2026)'],
+  ['start_today_pending_attendance','👷 PRESENÇAS (10)'],
+].map(([id,label])=>({id,reply:id,label,...(id==='start_today_pending_attendance'?{tone:'danger'}:{})}));
+view.render({sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],messages:[
+  {id:'home',role:'assistant',type:'poll',question:'QUAL ÁREA VOCÊ DESEJA ACESSAR?',options}
+]});
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+const button=document.querySelector('[data-reply-id="start_today_pending_attendance"]');
+const diary=document.querySelector('[data-reply-id="start_pending_construction_diary"]');
+const box=button.getBoundingClientRect(), range=document.createRange();
+range.selectNodeContents(button);
+document.documentElement.dataset.layout=JSON.stringify({
+  text:button.textContent,height:box.height,background:getComputedStyle(button).backgroundColor,
+  left:box.left,right:box.right,bottom:box.bottom,diaryTop:diary.getBoundingClientRect().top,
+  lines:[...range.getClientRects()].map(r=>({top:r.top,left:r.left,right:r.right})),
+});
+document.documentElement.dataset.ready='true';
+</script></body></html>

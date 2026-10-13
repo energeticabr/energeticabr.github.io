@@ -976,7 +976,8 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
   justify-content: center;
 }
 .chat-choice-list button.chat-choice-button--danger { border: 2px solid #8f1d1d; color: #fff; background: var(--danger); }
-.chat-choice-list button.chat-choice-button--diary { padding-inline: 4px; white-space: nowrap; font-size: min(var(--control-font-size), 3.5vw); }
+.chat-choice-list button.chat-choice-button--diary,
+.chat-choice-list button.chat-choice-button--today-attendance { padding-inline: 4px; white-space: nowrap; font-size: min(var(--control-font-size), 3.5vw); }
 .chat-choice-list button.chat-choice-button--danger:hover,
 .chat-choice-list button.chat-choice-button--danger:focus-visible { border-color: #741515; background: #8f1d1d; }
 .chat-choice-list button.chat-choice-button--finish { border: 2px solid #16765f; color: #12634f; background: #e7f5f0; }
