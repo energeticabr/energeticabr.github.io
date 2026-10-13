@@ -8,7 +8,7 @@ import {createContractorControlReportView} from '../../src/ui/contractor-control
 import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
 let reads=0;
 const navigated=[];
-const launches=Array.from({length:440},(_,index)=>({id:String(index+1),paymentDate:'2026-10-01',supplier:'Fornecedor '+(index%3+1),branch:'004 - EDIFÍCIO XAVANTE',product:'Produto',order:String(index+1),account:'Energética - Caixa',unit:10,quantity:1,freight:0,total:10}));
+const launches=Array.from({length:new URL(location.href).searchParams.has('visual')?12:440},(_,index)=>({id:String(index+1),paymentDate:'2026-10-01',supplier:'Fornecedor '+(index%3+1),branch:'004 - EDIFÍCIO XAVANTE',product:'Produto',order:String(index+1),account:'Energética - Caixa',unit:10,quantity:1,freight:0,total:10}));
 const contractorMode=new URL(location.href).searchParams.has('contractor');
 const view=decorateReportNavigation(contractorMode?createContractorControlReportView({document,data:{async loadOverview(){reads++;return {rows:[],documentStatuses:{}};},async loadDetails(){return {};}}}):createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){document.querySelector('#reads').textContent=++reads+' consultas';return {launches};}}}),{action:contractorMode?'open-contractor-control-report':'open-payment-ledger',onNavigate:target=>{navigated.push(target);return false;}});
 document.querySelector('#open').addEventListener('click',()=>view.open());

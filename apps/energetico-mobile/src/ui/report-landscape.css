@@ -1,5 +1,5 @@
-/* The rotated canvas uses logical landscape edges. Keep a tappable backdrop
-   on every physical edge, including phones with asymmetric safe areas. */
+/* Fill the physical height. Only physical left/right expose the backdrop;
+   notch/home-indicator safe areas stay inside the opaque rotated dialog. */
 .report-landscape-viewport[data-report-portrait="true"] {
  position:fixed!important; inset:auto!important; top:0!important;
  left:var(--report-physical-width)!important;
@@ -7,11 +7,11 @@
  max-width:none!important; max-height:none!important;
  transform:rotate(90deg); transform-origin:0 0;
  box-sizing:border-box;
- padding:max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-top))!important;
+ padding:max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))!important;
 }
 .report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
  width:100%!important; height:100%!important; max-height:100%!important;
- padding:3px!important; border-radius:0!important;
+ padding:3px max(3px,env(safe-area-inset-bottom)) 3px max(3px,env(safe-area-inset-top))!important; border-radius:0!important;
 }
 .report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--previous { left:max(16px,env(safe-area-inset-top)); }
 .report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--next { right:max(16px,env(safe-area-inset-bottom)); }

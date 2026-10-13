@@ -7,7 +7,7 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-test('rotated phone reports keep a tappable backdrop and the same two navigation controls as landscape',{timeout:90000},async t=>{
+test('rotated phone reports fill physical height, retain lateral dismissal and both navigation arrows',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
@@ -23,7 +23,8 @@ test('rotated phone reports keep a tappable backdrop and the same two navigation
     assert.deepEqual(result.navigated,['open-provision-report','open-management-report']);
     assert.equal(result.closedByX,true);
     if(result.portrait) {
-     assert.ok(Object.values(result.gaps).every(gap=>gap>=16),JSON.stringify(result));
+     assert.ok(result.gaps.left>=16&&result.gaps.right>=16,JSON.stringify(result));
+     assert.ok(Math.abs(result.gaps.top)<1&&Math.abs(result.gaps.bottom)<1,'only the physical sides may expose the backdrop: '+JSON.stringify(result));
      assert.equal(result.outsideIsBackdrop,true);
      assert.equal(result.closedOutside,true);
     }
@@ -64,7 +65,9 @@ test('portrait rotation maps asymmetric physical safe areas to the report and ex
   try {
    const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
    assert.ok(layout.controls.length>=10,'measure the actual visible report controls');
-   for(const bounds of [layout.dialog,layout.popup,...layout.controls]) {
+   assert.ok(Math.abs(layout.dialog.top)<1&&Math.abs(layout.dialog.bottom-844)<1,'opaque report fills height even with safe areas');
+   assert.ok(layout.dialog.left>=insets.left-1&&layout.dialog.right<=390-insets.right+1);
+   for(const bounds of [layout.popup,...layout.controls]) {
     assert.ok(bounds.left>=insets.left-1&&bounds.right<=390-insets.right+1,JSON.stringify({bounds,layout}));
     assert.ok(bounds.top>=insets.top-1&&bounds.bottom<=844-insets.bottom+1,JSON.stringify({bounds,layout}));
    }
