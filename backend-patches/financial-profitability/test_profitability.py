@@ -31,7 +31,7 @@ class ProfitabilityTests(unittest.TestCase):
     def open(self):
         self.send('group_financial')
         self.send('action_financial_registrations')
-        self.assertEqual([a['id'] for a in self.engine.last_menu], [
+        self.assertEqual([a['id'] for a in self.engine.last_menu[:4]], [
             'action_register_investment', 'action_register_institution',
             'action_register_investment_type', 'action_register_profitability'])
         self.send('action_register_profitability')
@@ -81,8 +81,12 @@ class ProfitabilityTests(unittest.TestCase):
         with open(original_path, encoding='utf-8') as stream:
             original = json.load(stream)
         recovered = copy.deepcopy(self.config)
-        recovered['whatsapp']['submenus']['financial_registrations']['actions'].pop()
-        recovered['sharepoint'].pop('profitability_registration_flow')
+        # New registrations may append entries; all original settings must remain exact.
+        actions = recovered['whatsapp']['submenus']['financial_registrations']['actions']
+        actions[:] = actions[:len(original['whatsapp']['submenus']['financial_registrations']['actions'])]
+        for key in set(recovered['sharepoint']) - set(original['sharepoint']):
+            self.assertTrue(key.endswith('_registration_flow'))
+            recovered['sharepoint'].pop(key)
         self.assertEqual(recovered, original)
 
 
