@@ -11,7 +11,9 @@ e o demonstrativo continua na pergunta de observações.
 
 Campos, respostas, anexos, token do pai e eventual retorno externo para
 validação de presença são preservados. Cancelar o filho retorna ao seletor
-original. Voltar na primeira pergunta, antes de informar a atividade, também
+original, inclusive ao digitar CANCELAR no nome/edição ou usar o botão
+Cancelar de um resumo anterior depois de voltar. Voltar na primeira
+pergunta, antes de informar a atividade, também
 retorna ao pai. Duplicatas, repetição da confirmação e falha de gravação não
 criam um demonstrativo nem confirmam uma presença.
 
@@ -20,6 +22,9 @@ criam um demonstrativo nem confirmam uma presença.
 Os testes usam o WorkflowEngine real e o harness existente
 `tests/test_workflow.py`; SharePoint, mídia, canal e estado são apenas
 adaptações em memória. Executar num sandbox com `worker/` e `tests/`:
+
+São 15 testes funcionais e 8 de segurança do deployer. A suíte legada é
+comparada com o baseline, sem aceitar novos casos de falha/erro.
 
 ```sh
 PYTHONPATH=tests python -B -m unittest test_demonstrative_new_activity -v

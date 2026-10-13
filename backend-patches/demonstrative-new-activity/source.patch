@@ -1,6 +1,34 @@
 --- a/worker/workflow.py
 +++ b/worker/workflow.py
-@@ -2744,7 +2744,13 @@
+@@ -999,6 +999,27 @@
+ 
+         if (
+             state
++            and state.get("flow") == "hr_activity_registration"
++            and (state.get("embedded_return") or {}).get("type")
++            == "demonstrative_activity_registration"
++            and state.get("stage") in CANCELLABLE_STAGES
++            and state.get("stage") not in DRAFT_BUSY_STAGES
++            and event.get("kind") == "text"
++            and command in {"cancelar", "confirm_cancel", "cancel_failed_submission"}
++        ):
++            # Cancellation is a control even while entering/editing the child
++            # activity, including a Cancel button from an earlier summary.
++            if event.get("message_id") in state.get("processed_message_ids", []):
++                return {
++                    "status": "duplicate",
++                    "message_id": event.get("message_id"),
++                    "batch_id": state.get("batch_id"),
++                }
++            self._mark_processed(state, event.get("message_id"))
++            return self._restore_embedded_supply_ancestor(state, etag, 1)
++
++        if (
++            state
+             and state.get("stage") in CANCELLABLE_STAGES
+             and event.get("kind") == "text"
+             and command == "fim"
+@@ -2744,7 +2765,13 @@
          if state.get("flow") == "supplier_attendance_creation":
              return self.config["sharepoint"]["supplier_attendance_creation_flow"]
          if state.get("flow") == "hr_activity_registration":
@@ -15,7 +43,7 @@
          if state.get("flow") == "hr_profession_registration":
              return self.config["sharepoint"]["hr_profession_registration_flow"]
          if state.get("flow") == "inconsistency_type_registration":
-@@ -3015,6 +3021,15 @@
+@@ -3015,6 +3042,15 @@
          return state.get("stage") not in DRAFT_BUSY_STAGES
  
      def _back_would_leave_flow(self, state: dict | None) -> bool:
@@ -31,7 +59,7 @@
          if state and state.get("stage") == "attendance_batch_action" and state.get("attendance_batch_origin") == "pending":
              # Voltar abandona somente a seleção local, não sai de Pendências.
              return False
-@@ -4020,6 +4035,8 @@
+@@ -4020,6 +4056,8 @@
          history = state.get("navigation_history", [])
          if not history:
              embedded = state.get("embedded_return") or {}
@@ -40,7 +68,7 @@
              parent_state = embedded.get("state")
              if isinstance(parent_state, dict):
                  draft = None
-@@ -19110,6 +19127,19 @@
+@@ -19110,6 +19148,19 @@
          return unique
  
      def _selection_options(self, state: dict, step: dict) -> list[dict]:
@@ -60,7 +88,7 @@
          step = self._construction_diary_stage_terminal_state(state, step)
          step = self._multi_selection_terminal_state(state, step)
          if (state.get("flow") == "payment_settlement" and step.get("key") == "provisao_para_baixa"
-@@ -21500,6 +21530,8 @@
+@@ -21500,6 +21551,8 @@
              return self._start_embedded_attendance_stage_registration(state, etag)
          if selected.get("action") == "start_embedded_attendance_activity_registration":
              return self._start_embedded_attendance_activity_registration(state, etag)
@@ -69,7 +97,7 @@
          if selected.get("action") == "edit_launch_supplier_default_branch":
              return self._start_launch_supplier_default_branch_edit(
                  state, etag, step
-@@ -24386,6 +24418,30 @@
+@@ -24386,6 +24439,30 @@
              "etag": etag,
          }
  
@@ -100,7 +128,7 @@
      def _start_embedded_launch_registration(
          self,
          state: dict,
-@@ -24409,6 +24465,7 @@
+@@ -24409,6 +24486,7 @@
              "supply_subfamily_registration",
              "supply_family_registration",
              "attendance_validation",
@@ -108,7 +136,7 @@
          }:
              raise RuntimeError(
                  "O cadastro incorporado não está disponível para este fluxo"
-@@ -24453,6 +24510,8 @@
+@@ -24453,6 +24531,8 @@
              "navigation_history",
          )
          parent_keys = (*parent_keys, *PROVISION_STATE_KEYS)
@@ -117,7 +145,7 @@
          parent_state = {
              key: copy.deepcopy(state[key]) for key in parent_keys if key in state
          }
-@@ -25269,6 +25328,52 @@
+@@ -25269,6 +25349,52 @@
              **result,
              "embedded_attendance_stage_registered": True,
              "registered_stage_item_id": item_id,
@@ -170,7 +198,7 @@
          }
  
      def _resume_attendance_with_registered_activity(
-@@ -29082,6 +29187,8 @@
+@@ -29082,6 +29208,8 @@
      def _prompt_cancelled_confirmation(
          self, state: dict, etag: str | None
      ) -> dict:
@@ -179,7 +207,7 @@
          # Ainda não existe registro no SharePoint nesta etapa. Os dados ficam
          # temporariamente preservados apenas para possibilitar o desfazer.
          state["stage"] = "cancelled_confirmation"
-@@ -33508,6 +33615,10 @@
+@@ -33508,6 +33636,10 @@
              return self._resume_attendance_with_registered_activity(
                  state, etag, item_id
              )

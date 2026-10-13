@@ -167,6 +167,35 @@ class DemonstrativeActivityTests(unittest.TestCase):
         self.assertEqual(state["embedded_return"], parent["embedded_return"])
         self.assertEqual(self.sharepoint.items, {})
 
+    def test_cancel_at_child_text_input_does_not_become_an_activity(self):
+        parent = self.start_selector()
+        self.start_child()
+        returned = self.reply("CANCELAR")
+        self.assertEqual(returned.get("field"), "atividade_demonstrativo_etapa")
+        self.assertEqual(self.current()["fields"], parent["fields"])
+        self.assertEqual(self.sharepoint.items, {})
+
+    def test_old_summary_cancel_button_after_back_preserves_nested_parent(self):
+        parent = self.start_selector(nested=True)
+        self.start_child()
+        self.reply(ACTIVITY)
+        self.reply(reply_id="navigation_back")
+        returned = self.reply(reply_id="confirm_cancel")
+        self.assertEqual(returned.get("field"), "atividade_demonstrativo_etapa")
+        self.assertEqual(self.current()["fields"], parent["fields"])
+        self.assertEqual(self.current()["embedded_return"], parent["embedded_return"])
+        self.assertEqual(self.sharepoint.items, {})
+
+    def test_cancel_at_child_edit_menu_returns_to_parent_without_writes(self):
+        parent = self.start_selector()
+        self.start_child()
+        self.reply(ACTIVITY)
+        self.reply("EDITAR")
+        returned = self.reply("CANCELAR")
+        self.assertEqual(returned.get("field"), "atividade_demonstrativo_etapa")
+        self.assertEqual(self.current()["fields"], parent["fields"])
+        self.assertEqual(self.sharepoint.items, {})
+
     def test_duplicate_child_activity_does_not_advance_parent(self):
         parent = self.start_selector()
         self.start_child()
