@@ -20,6 +20,8 @@ ATTENDANCE_HOLIDAY_SOURCE=/home/opc/attendance-holiday-20261013/candidate /opt/e
 
 `test_deploy.py` reaproveita os testes de drift, manifesto, candidato, modo check, backup e recuperação do deployer compartilhado, com arquivos temporários locais e sem reiniciar serviços reais.
 
+Verificação de 13/10/2026 (UTC): 12 testes específicos e 8 testes de publicação passaram. A suíte legada completa executou 570 testes em cada versão; baseline e candidato final têm as mesmas 146 falhas, 29 erros e 1 skip, com lista de falhas/erros idêntica. Essas falhas preexistentes não foram corrigidas nem ocultadas nesta alteração. O patch de fixture altera só quatro expectativas de menu/transporte. Revisão independente aprovou a correção do transporte Meta.
+
 ## Publicação
 
 Somente `worker/workflow.py` é instalado em `/opt/energetica-whatsapp` e `/home/opc/energetica-build`. O manifesto fixa os hashes antes/depois. O wrapper exige também o hash do deployer compartilhado, que faz CAS, trava, backup, instalação atômica, reinício e health check com rollback em caso de erro.

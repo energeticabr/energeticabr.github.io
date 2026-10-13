@@ -1,21 +1,40 @@
 --- a/tests/test_workflow.py
 +++ b/tests/test_workflow.py
-@@ -15505,7 +15505,7 @@
+@@ -15505,8 +15505,8 @@
              ["✏️ SIM, EDITAR", "🟢 PRESENTE"],
          )
          self.assertEqual(
-@@ -17474 +17474 @@
--        self.assertIn("DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS", self.messenger.sent[-1]["body"])
-+        self.assertIn("DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS", self.messenger.sent[-1]["prompt"])
-@@ -17520 +17520 @@
--        self.assertIn("DESEJA EDITAR", self.messenger.sent[-1]["body"])
-+        self.assertIn("DESEJA EDITAR", self.messenger.sent[-1]["prompt"])
-@@ -17562 +17562 @@
--        self.assertIn("FINALIZADO", self.messenger.sent[-1]["body"])
-+        self.assertIn("FINALIZADO", self.messenger.sent[-1]["prompt"])
 -            self.messenger.sent[-1]["options"][3]["title"],
 -            "🗑️ SOLICITAR EXCLUSÃO",
 +            [option["title"] for option in self.messenger.sent[-1]["options"][2:5]],
 +            ["🔴 AUSENTE", "🗓️ FERIADO", "🗑️ SOLICITAR EXCLUSÃO"],
          )
          self.assertEqual(
+             self.messenger.sent[-1]["options"][2]["title"], "🔴 AUSENTE"
+@@ -17471,7 +17471,7 @@
+         action = self.reply(reply_id="attendance_batch:1814,1815")
+         self.assertEqual(action["status"], "awaiting_attendance_batch_action")
+         self.assertEqual(self.sharepoint.update_calls, [])
+-        self.assertIn("DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS", self.messenger.sent[-1]["body"])
++        self.assertIn("DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS", self.messenger.sent[-1]["prompt"])
+ 
+         summary = self.reply(reply_id="attendance_batch_present")
+         self.assertEqual(summary["status"], "awaiting_attendance_batch_confirmation")
+@@ -17517,7 +17517,7 @@
+         self.engine._resend_current_prompt(state, etag)
+ 
+         self.assertGreater(len(self.messenger.sent), sent_before)
+-        self.assertIn("DESEJA EDITAR", self.messenger.sent[-1]["body"])
++        self.assertIn("DESEJA EDITAR", self.messenger.sent[-1]["prompt"])
+ 
+     def test_attendance_batch_rejects_incompatible_branch_before_any_write(self):
+         second = copy.deepcopy(self.sharepoint.options_by_key["registro_presenca_pendente"][0])
+@@ -17559,7 +17559,7 @@
+ 
+         self.reply(reply_id="attendance_batch:1814,1815")
+ 
+-        self.assertIn("FINALIZADO", self.messenger.sent[-1]["body"])
++        self.assertIn("FINALIZADO", self.messenger.sent[-1]["prompt"])
+ 
+     def test_attendance_batch_summary_survives_demonstrative_lookup_failure(self):
+         second = copy.deepcopy(self.sharepoint.options_by_key["registro_presenca_pendente"][0])

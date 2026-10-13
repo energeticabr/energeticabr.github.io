@@ -28,5 +28,15 @@ if __name__ == "__main__":
     parser.add_argument("--before", type=Path, required=True)
     parser.add_argument("--after", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--fixture-before", type=Path)
+    parser.add_argument("--fixture-after", type=Path)
     args = parser.parse_args()
+    if bool(args.fixture_before) != bool(args.fixture_after):
+        parser.error("Supply both fixture paths")
     print(json.dumps(package(args.before, args.after, args.output)))
+    if args.fixture_before:
+        patch = "".join(difflib.unified_diff(
+            args.fixture_before.read_text(encoding="utf-8").splitlines(True),
+            args.fixture_after.read_text(encoding="utf-8").splitlines(True),
+            fromfile="a/tests/test_workflow.py", tofile="b/tests/test_workflow.py"))
+        (args.output / "fixture-menu.patch").write_bytes(patch.encode("utf-8"))
