@@ -17,6 +17,7 @@ import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-op
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
+import { attendanceRhidOptionContext } from "../chat/attendance-rhid-badges.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -1394,6 +1395,17 @@ function isAttendanceSelectionPoll(message) {
       /^pending_attendance_record:\d+$/.test(String(draftReplyId(option)))));
 }
 
+function attendanceDayQuestionMarkup(message) {
+  if (!isAttendanceSelectionPoll(message) || isAttendanceSupplierSyncPoll(message)) return null;
+  const records = (message.options || []).map(option => attendanceRhidOptionContext(option, message)).filter(Boolean);
+  const dates = new Set(records.map(record => record.date));
+  // Derive the heading from this poll's records, not the clock or an older message.
+  const date = records.length ? (dates.size === 1 ? [...dates][0] : "") : message.presenceDateKey;
+  if (!isValidRhidReportDate(date)) return "QUAL PRESENÇA DESEJA VALIDAR?";
+  const weekday = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"][new Date(`${date}T00:00:00Z`).getUTCDay()];
+  return `QUAL PRESENÇA DESEJA VALIDAR DO DIA <strong class="chat-question-field">${date.split("-").reverse().join("/")}</strong> (${weekday})?`;
+}
+
 function attendanceRhidBadgeMarkup(badge) {
   const tones = {
     present: "present",
@@ -1664,7 +1676,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     return `<div class="chat-launch-payroll-select">${selectAll}${records.join("")}${unavailableWarning}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button></div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
-    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu ? "" : `<p>${formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu ? "" : `<p>${attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
     ${presenceDetailTableMarkup(presenceTable)}
