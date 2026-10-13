@@ -1403,7 +1403,15 @@ function attendanceRhidBadgeMarkup(badge) {
   };
   if (!badge || !Object.hasOwn(tones, badge.status) || !badge.label) return "";
   const description = escapeHtml(badge.description || badge.label);
-  return `<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span>`;
+  const punches = [
+    ["entry1", "E1", "Entrada 1", "entry"], ["exit1", "S1", "Saída 1", "exit"],
+    ["entry2", "E2", "Entrada 2", "entry"], ["exit2", "S2", "Saída 2", "exit"],
+  ].map(([slot, short, label, tone]) => {
+    const raw = badge.punches?.[slot];
+    const time = typeof raw === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(raw) ? raw : "";
+    return `<span class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone}" data-rhid-slot="${slot}" aria-label="${label}: ${time || "sem batida"}">${short}- ${time || "—"}</span>`;
+  }).join("");
+  return `<span class="chat-attendance-rhid-summary">${punches}<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span></span>`;
 }
 
 function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false) {

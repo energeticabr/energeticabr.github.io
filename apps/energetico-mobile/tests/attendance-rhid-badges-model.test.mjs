@@ -14,6 +14,50 @@ const context = (extra = {}) => ({ presenceId: "101", name: "ANA", date: day, ..
 const row = (extra = {}) => ({ Id: "sharepoint-10", ID_PESSOA_RHID: "10", NOME_COLABORADOR: "ANA", DATA_REFERENCIA: day, BATIDAS_RHID: regular, ...extra });
 const report = (rows = [row()], extra = {}) => ({ date: day, rows, ...extra });
 
+test("badge exposes the same four effective punch slots as the daily report", () => {
+  const actual = badgeFor(context(), report());
+  assert.deepEqual(actual.punches, { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: "16:30" });
+  assert.equal(actual.label, "08h30");
+});
+
+test("incomplete and afternoon-only punches keep their slots without invented entries or exits", () => {
+  for (const [raw, expected] of [
+    ["06:45", { entry1: "06:45", exit1: null, entry2: null, exit2: null }],
+    ["13:00;16:30", { entry1: null, exit1: null, entry2: "13:00", exit2: "16:30" }],
+    ["07:00;12:00;13:00", { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: null }],
+    ["", { entry1: null, exit1: null, entry2: null, exit2: null }],
+  ]) {
+    assert.deepEqual(badgeFor(context(), report([row({ BATIDAS_RHID: raw })])).punches, expected);
+  }
+});
+
+test("punch display includes approved corrections even when a period remains incomplete", () => {
+  const actual = badgeFor(context(), report([row({ BATIDAS_RHID: "07:00", ADMIN_AJUSTES: { entry1: { time: "06:50" } } })]));
+  assert.equal(actual.status, "inconsistent");
+  assert.deepEqual(actual.punches, { entry1: "06:50", exit1: null, entry2: null, exit2: null });
+});
+
+test("duplicated valid punches still display known times and approved corrections with an inconsistency warning", () => {
+  const actual = badgeFor(context(), report([row({
+    BATIDAS_RHID: "07:00;07:00;12:00;13:00",
+    ADMIN_AJUSTES: { exit2: { time: "16:30" } },
+  })]));
+  assert.equal(actual.status, "inconsistent");
+  assert.equal(actual.minutes, undefined);
+  assert.deepEqual(actual.punches, { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: "16:30" });
+});
+
+test("unavailable or ambiguous identity never exposes another person's punch times", () => {
+  for (const actual of [
+    badgeFor(context({ date: "2026-10-06" }), report()),
+    badgeFor(context({ name: "BIA" }), report()),
+    badgeFor(context(), report([row(), row({ ID_PESSOA_RHID: "20", Id: "20" })])),
+  ]) {
+    assert.equal(actual.status, "unavailable");
+    assert.equal(actual.punches, undefined);
+  }
+});
+
 for (const presentation of ["attendance_multi_select", "attendance_supplier_sync"]) {
   test(`eligibility accepts ${presentation}`, () => assert.equal(eligible(poll([], { presentation })), true));
 }

@@ -28,6 +28,29 @@ function rowFor(root, id) {
 }
 
 for (const presentation of presentations) {
+  test(`punch pairs show known times and dashes without altering record actions (${presentation})`, t => {
+    const poll = attendanceBadgePoll(presentation);
+    poll.options[0].rhidBadge.punches = { entry1: "06:45", exit1: "12:00", entry2: "13:00", exit2: null };
+    const doc = rendered(t, poll);
+    const row = rowFor(doc, "2101");
+    assert.deepEqual([...row.querySelectorAll(".chat-attendance-rhid-punch")].map(cell => cell.textContent),
+      ["E1- 06:45", "S1- 12:00", "E2- 13:00", "S2- —"]);
+    assert.equal(row.querySelector('[data-rhid-slot="entry1"]').getAttribute("aria-label"), "Entrada 1: 06:45");
+    assert.equal(row.querySelector('[data-rhid-slot="exit2"]').getAttribute("aria-label"), "Saída 2: sem batida");
+    assert.deepEqual([...rowFor(doc, "2102").querySelectorAll(".chat-attendance-rhid-punch")].map(cell => cell.textContent),
+      ["E1- —", "S1- —", "E2- —", "S2- —"]);
+    assert.equal(row.querySelectorAll("button").length, presentation === "attendance_supplier_sync" ? 0 : 1);
+  });
+
+  test(`punch cells reject invalid values instead of rendering injected markup (${presentation})`, t => {
+    const poll = attendanceBadgePoll(presentation);
+    poll.options[0].rhidBadge.punches = { entry1: '<img src=x onerror="alert(1)">', exit1: "25:00", entry2: "13:00", exit2: "16:30" };
+    const row = rowFor(rendered(t, poll), "2101");
+    assert.equal(row.querySelector("img, [onerror]"), null);
+    assert.deepEqual([...row.querySelectorAll(".chat-attendance-rhid-punch")].map(cell => cell.textContent),
+      ["E1- —", "S1- —", "E2- 13:00", "S2- 16:30"]);
+  });
+
   test(`RHID badges follow supplier names with four distinct textual states (${presentation})`, t => {
     const poll = attendanceBadgePoll(presentation);
     const before = structuredClone(poll);
@@ -47,7 +70,7 @@ for (const presentation of presentations) {
       assert.equal(badge.dataset.rhidDate, "2026-10-13");
       const nameNode = row.querySelector(".chat-attendance-select__name");
       assert.equal(nameNode.textContent, name);
-      assert.equal(nameNode.nextElementSibling, badge, "badge must follow the complete supplier name");
+      assert.equal(nameNode.nextElementSibling, badge.parentElement, "punches and badge must follow the complete supplier name");
       assert.ok(badge.closest(presentation === "attendance_supplier_sync" ? "label" : "button"));
       assert.equal(row.querySelector("input").getAttribute("aria-label"), `Selecionar ${name}`);
       if (presentation !== "attendance_supplier_sync") {
