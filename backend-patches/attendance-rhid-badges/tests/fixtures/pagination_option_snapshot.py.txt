@@ -1,0 +1,15 @@
+# Exact live WorkflowEngine method observed on 2026-10-13. It deliberately
+# omits private source rows; the portal must recover context by the same ID.
+@staticmethod
+def _pagination_option_snapshot(options: list[dict]) -> list[dict]:
+    """Guarda somente os dados visuais necessários às páginas seguintes."""
+    return [
+        copy.deepcopy(
+            {
+                key: value
+                for key, value in item.items()
+                if key != "source_values"
+            }
+        )
+        for item in options
+    ]
