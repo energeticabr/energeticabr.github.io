@@ -7,6 +7,7 @@ import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { createTaskCompletionDialog } from './task-completion-dialog.js';
+import { normalizeGalleryItem } from '../chat/orders-gallery-data.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -227,8 +228,17 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     },
     today: () => dateKey(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(now())),
     onBlocked: blocked => { header.inert = content.inert = detail.inert = blocked; },
-    onChanged: async () => {
-      if (!await loadSnapshot()) throw new Error('Tente atualizar a lista novamente.');
+    onChanged: saved => {
+      if (!opened || destroyed) return;
+      const updated = normalizeGalleryItem(saved);
+      if (!updated) throw new Error('A tarefa salva não pôde ser identificada.');
+      const scrollTop = content.scrollTop, scrollLeft = content.scrollLeft, rootTop = root.scrollTop;
+      rows = rows.map(row => String(row.id) === updated.id
+        ? { ...row, ...updated, hasAttachments: updated.hasAttachments ?? row.hasAttachments,
+          fields: { ...row.fields, ...updated.fields } } : row);
+      filterOptions(); updateMetrics();
+      applyLocalFilters({ preserveCards: true, changedId: String(saved.id) });
+      content.scrollTop = scrollTop; content.scrollLeft = scrollLeft; root.scrollTop = rootTop;
     },
   });
 
@@ -368,11 +378,11 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     notice.textContent = message; notice.hidden = !message; notice.setAttribute("role", error ? "alert" : "status"); notice.classList.toggle("og-error", error);
   }
 
-  function applyLocalFilters() {
+  function applyLocalFilters({ preserveCards = false, changedId } = {}) {
     filterValues = Object.fromEntries([...controls].map(([name, control]) => [name, control.value.trim()]));
     sortValue = filterValues.sort || "fatal-asc";
     pageSize = PAGE_SIZES.includes(Number(filterValues.pageSize)) ? Number(filterValues.pageSize) : 10;
-    page = 1;
+    if (!preserveCards) page = 1;
     const query = normalized(filterValues.search); const today = dateKey(now());
     filteredRows = sortRows(rows.filter(row => {
       const fields = row.fields || {};
@@ -396,7 +406,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       if (filterValues.identificationDate && dateKey(field(fields, ["DATA IDENTIFICAÇÃO", "DATA IDENTIFICACAO"])) !== filterValues.identificationDate) return false;
       return true;
     }));
-    renderList();
+    renderList({ preserveCards, changedId });
   }
 
   function renderCard(row, index) {
@@ -471,10 +481,23 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     return card;
   }
 
-  function renderList() {
+  function renderList({ preserveCards = false, changedId } = {}) {
     const pageCount = Math.ceil(filteredRows.length / pageSize); page = Math.min(page, Math.max(1, pageCount));
     const start = (page - 1) * pageSize; const visible = filteredRows.slice(start, start + pageSize);
-    cards.replaceChildren(...visible.map((row, index) => renderCard(row, index)));
+    if (preserveCards) {
+      // Keep neighboring cards (including expanded descriptions) mounted after a quick completion.
+      const existing = new Map([...cards.children].map(card => [card.dataset.itemId, card]));
+      const retained = new Set(visible.map(row => String(row.id)));
+      for (const card of [...cards.children]) if (!retained.has(card.dataset.itemId)) card.remove();
+      visible.forEach((row, index) => {
+        const id = String(row.id), old = existing.get(id);
+        const card = id !== changedId && old ? old : renderCard(row, index);
+        if (old && old !== card) old.replaceWith(card);
+        card.classList.toggle('tg-card--blue', index % 2 === 1);
+        card.classList.toggle('tg-card--light', index % 2 === 0);
+        if (cards.children[index] !== card) cards.insertBefore(card, cards.children[index] || null);
+      });
+    } else cards.replaceChildren(...visible.map((row, index) => renderCard(row, index)));
     for (const row of visible) if (attachmentCounts.hasError(row)) updateAttachmentCount(row);
     void attachmentCounts.request(visible);
     listStatus.textContent = filteredRows.length ? `${filteredRows.length} tarefa(s)` : "Nenhuma tarefa encontrada para estes filtros.";

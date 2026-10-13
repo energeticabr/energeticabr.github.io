@@ -122,6 +122,36 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       await evaluate(`const add = document.querySelector('[data-action="create-task"]'); add.click(); add.click();`);
       assert.equal(await evaluate('window.createdTasks'), 1);
       assert.equal(await evaluate('document.querySelector(".tg-overlay").hidden'), true);
+      await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tasks-gallery-responsive.html?preserve=${width}` }, sessionId);
+      await waitFor(`location.search === '?preserve=${width}' && document.documentElement?.dataset.ready === 'true'`);
+      await evaluate(`(() => {
+        [...document.querySelectorAll('.og-pagination button')].find(button => button.textContent === 'Próxima página').click();
+        const sibling = document.querySelector('[data-item-id="189"]');
+        sibling.querySelector('[data-action="expand"]').click(); window.keptCard = sibling;
+        document.querySelector('[data-item-id="188"]').scrollIntoView({ block: 'center' });
+        window.scrollBefore = document.querySelector('.og-content').scrollTop;
+        window.loadingWasShown = false;
+        const screen = document.querySelector('.gallery-loading-screen');
+        new MutationObserver(records => { if (records.some((record, index) =>
+          record.attributeName === 'hidden' && (index + 1 < records.length ? records[index + 1].oldValue === null : !screen.hidden))) window.loadingWasShown = true; })
+          .observe(screen, { attributes: true, attributeOldValue: true });
+        document.querySelector('[data-item-id="188"] [data-action="complete"]').click();
+      })()`);
+      await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);
+      await evaluate(`document.querySelector('[data-task-completion-submit]').click()`);
+      await waitFor(`Boolean(document.querySelector('[data-task-completion-success]'))`);
+      await waitFor(`!document.querySelector('.tg-completion-dialog')`);
+      const preserved = await evaluate(`({ page: document.querySelector('.og-page-label').textContent,
+        before: window.scrollBefore, after: document.querySelector('.og-content').scrollTop,
+        snapshots: window.snapshots, loadingWasShown: window.loadingWasShown,
+        sameCard: window.keptCard === document.querySelector('[data-item-id="189"]'),
+        expanded: window.keptCard.querySelector('[data-action="expand"]').getAttribute('aria-expanded'),
+        remaining: document.querySelector('.og-list-status').textContent })`);
+      assert.equal(preserved.page, 'Página 2 de 3');
+      assert.ok(preserved.before > 0 && Math.abs(preserved.before - preserved.after) < 2, JSON.stringify(preserved));
+      assert.equal(preserved.snapshots, 1); assert.equal(preserved.loadingWasShown, false);
+      assert.equal(preserved.sameCard, true); assert.equal(preserved.expanded, 'true');
+      assert.equal(preserved.remaining, '24 tarefa(s)');
     }
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);

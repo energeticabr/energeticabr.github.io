@@ -12,19 +12,24 @@
 <body>
   <script type="module">
     import { createTasksGallery } from '../../src/ui/tasks-gallery-view.js';
-    const rows = [{ id: '176', hasAttachments: true, fields: {
+    const rows = new URLSearchParams(location.search).has('preserve')
+      ? Array.from({ length: 25 }, (_, index) => ({ id: String(200 - index), hasAttachments: false,
+        fields: { TAREFA: `Tarefa de teste ${200 - index}. ` + 'Conferir documentos e contratos da obra. '.repeat(20), STATUS: 'EM ATENDIMENTO' } }))
+      : [{ id: '176', hasAttachments: true, fields: {
       TAREFA: 'Conferir documentos e contratos da obra. '.repeat(12), STATUS: 'EM ATENDIMENTO',
       field_7: '2026-10-05', Criado: '2026-10-03T10:00:00Z', field_10: 'OBRA',
     } }, { id: '175', hasAttachments: false, fields: { TAREFA: 'Tarefa curta', STATUS: 'EM ATENDIMENTO' } }];
     window.writes = [];
     window.createdTasks = 0;
+    window.snapshots = 0;
     const gallery = createTasksGallery({ document, onCreate: () => { window.createdTasks++; }, now: () => new Date('2026-10-04T01:30:00Z'), data: {
-      async loadSnapshot() { return { rows }; },
+      async loadSnapshot() { window.snapshots++; return { rows }; },
       async listAttachments(id) { return id === '176' ? [{ fileName: 'tarefa.pdf' }] : []; },
       async loadEditor(id) { return { entity: { id: 'lancamentos-de-tarefas' }, item: { id, fields: {} },
         columns: [{ name: 'field_8', label: 'DATA CONCLUSÃO', control: 'date', editable: true },
           { name: 'field_12', label: 'CONCLUÍDO', control: 'text', editable: true }], contract: { hasForm: true } }; },
-      async saveEditor(context, fields) { window.writes.push({ id: context.item.id, fields }); rows.splice(rows.findIndex(row => row.id === context.item.id), 1); },
+      async saveEditor(context, fields) { window.writes.push({ id: context.item.id, fields });
+        const row = rows.find(row => row.id === context.item.id); row.fields = { ...row.fields, ...fields }; return row; },
     } });
     await gallery.open(); document.documentElement.dataset.ready = 'true';
   </script>
