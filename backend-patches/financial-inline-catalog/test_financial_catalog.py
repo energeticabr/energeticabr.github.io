@@ -113,6 +113,19 @@ class FinancialCatalogTests(unittest.TestCase):
         self.assertEqual(self.state['flow'], 'investment_registration')
         self.assertEqual(self.engine._current_step(self.state)['key'], KEY)
 
+    def test_public_back_control_returns_to_parent_without_exit_discard_prompt(self):
+        self.create()
+        self.engine.state_store.load.return_value = (self.state, 'isolated-etag')
+        self.assertFalse(self.engine._back_would_leave_flow(self.state))
+        event = {**self.event, 'message_id': 'child-navigation-back',
+                 'reply_id': 'navigation_back', 'text': 'navigation_back'}
+        result = self.engine.handle(event)
+        self.assertEqual(self.state['flow'], 'investment_registration')
+        self.assertEqual(self.engine._current_step(self.state)['key'], KEY)
+        self.assertNotEqual(result['status'], 'awaiting_portal_draft_exit')
+        self.assertIn(CREATE_ID, [o['id'] for o in self.state['options']])
+        self.sp.ensure_item.assert_not_called()
+
     def test_existing_option_still_advances_and_arbitrary_text_is_not_an_answer(self):
         self.open()
         self.send('BANCO QUE NÃO EXISTE')
