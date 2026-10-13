@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+stage="$(cd -- "$(dirname -- "$0")" && pwd)"
+app=/opt/energetica-whatsapp
+target="$app/worker/workflow_config.json"
+original=8ba5c2679be440604e81e1560e58a28f22a1a10c8478164780a80ed57a36f0fc
+test "$(sha256sum "$target" | cut -d' ' -f1)" = "$original"
+"$app/.venv/bin/python" "$stage/install.py" "$target" "$stage/candidate.json"
+env PYTHONDONTWRITEBYTECODE=1 INVESTMENT_CONFIG="$stage/candidate.json" "$app/.venv/bin/python" "$stage/test_investment.py"
+test "$(sha256sum "$target" | cut -d' ' -f1)" = "$original"
+backup="$app/.deploy-backups/financial-investment-$(date -u +%Y%m%dT%H%M%SZ)"
+install -d -m 700 "$backup"
+cp -p "$target" "$backup/workflow_config.json"
+rollback() {
+  cp -p "$backup/workflow_config.json" "$target"
+  systemctl restart energetica-channel-bridge.service
+  echo 'Rollback aplicado; dados preservados.' >&2
+}
+trap rollback ERR
+install -o root -g energetica-whatsapp -m 640 "$stage/candidate.json" "$target"
+systemctl restart energetica-channel-bridge.service
+for attempt in {1..15}; do
+  if curl -fsS --max-time 3 http://127.0.0.1:8765/health > "$stage/health.json" 2>/dev/null; then break; fi
+  sleep 1
+done
+curl -fsS --max-time 3 http://127.0.0.1:8765/health
+systemctl is-active energetica-channel-bridge.service
+trap - ERR
+sha256sum "$target"
+echo "Publicado; backup $backup"
