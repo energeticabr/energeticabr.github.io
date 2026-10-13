@@ -30,6 +30,16 @@ replace_once('        provision_lock = self._handle_frozen_provision(event,state
         provision_lock = self._handle_frozen_provision(event,state,etag)''')
 replace_once('            step = steps[state["step_index"]]',
              '            step = financial_catalog.step_with_create(self, state, steps[state["step_index"]])')
+replace_once('''    def _back_would_leave_flow(self, state: dict | None) -> bool:
+        if (''',
+             '''    def _back_would_leave_flow(self, state: dict | None) -> bool:
+        if (state and (state.get("embedded_return") or {}).get("type") == financial_catalog.RETURN_TYPE
+                and state.get("stage") == "selecting_fields" and not state.get("navigation_history")
+                and not state.get("fields") and not state.get("answers")):
+            # Back from an untouched child restores its parent, so the portal
+            # must not classify it as abandoning the entire financial draft.
+            return False
+        if (''')
 replace_once('        if selected.get("action") == "start_embedded_product_registration":',
              '        if selected.get("action") == financial_catalog.CREATE_ACTION:\n'
              '            return financial_catalog.start(self, state, etag)\n'
@@ -68,8 +78,8 @@ replace_once('''    def _cancel(self, state: dict, etag: str | None, event: dict
             return financial_catalog.cancel(self, state, etag)
         if cash_checkpoint_pending(state):''')
 candidate.parent.mkdir(parents=True, exist_ok=True)
-candidate.write_text(code, encoding='utf-8', newline='\n')
+candidate.write_bytes(code.encode('utf-8'))
 patch = ''.join(difflib.unified_diff(original.splitlines(keepends=True), code.splitlines(keepends=True),
                                   fromfile='a/worker/workflow.py', tofile='b/worker/workflow.py'))
-Path(__file__).with_name('workflow.patch').write_text(patch, encoding='utf-8', newline='\n')
+Path(__file__).with_name('workflow.patch').write_bytes(patch.encode('utf-8'))
 print(hashlib.sha256(candidate.read_bytes()).hexdigest())

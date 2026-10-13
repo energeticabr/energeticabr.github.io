@@ -23,7 +23,20 @@
          provision_lock = self._handle_frozen_provision(event,state,etag)
          if provision_lock is not None:
              return provision_lock
-@@ -18767,7 +18776,7 @@
+@@ -3042,6 +3051,12 @@
+         return state.get("stage") not in DRAFT_BUSY_STAGES
+ 
+     def _back_would_leave_flow(self, state: dict | None) -> bool:
++        if (state and (state.get("embedded_return") or {}).get("type") == financial_catalog.RETURN_TYPE
++                and state.get("stage") == "selecting_fields" and not state.get("navigation_history")
++                and not state.get("fields") and not state.get("answers")):
++            # Back from an untouched child restores its parent, so the portal
++            # must not classify it as abandoning the entire financial draft.
++            return False
+         if (
+             state
+             and (state.get("embedded_return") or {}).get("type") == "demonstrative_activity_registration"
+@@ -18767,7 +18782,7 @@
                      state.pop("edit_step_indices", None)
                      return None
                  state["step_index"] = remaining[0]
@@ -32,7 +45,7 @@
              if self._provision_multiple(state) and step.get("key") == "produto_pagamento":
                  step = {**step,"allow_blank":False}
              if step.get("edit_only") and edit_step_indices is None:
-@@ -21346,6 +21355,8 @@
+@@ -21346,6 +21361,8 @@
                  }
                  return self._delete_pending_document(state, etag)
          if control in {"filter_clear", "limpar filtro", "refresh_options"}:
@@ -41,7 +54,7 @@
              self._send_options(state, step, state["options"])
              self._save(state, etag)
              return {
-@@ -21519,6 +21530,8 @@
+@@ -21519,6 +21536,8 @@
          ):
              return self._start_pending_document_signature(state, etag, selected)
  
@@ -50,7 +63,7 @@
          if selected.get("action") == "start_embedded_product_registration":
              return self._start_embedded_product_registration(state, etag)
          if selected.get("action") == "start_embedded_supply_subfamily_registration":
-@@ -24487,7 +24500,7 @@
+@@ -24487,7 +24506,7 @@
              "supply_family_registration",
              "attendance_validation",
              "construction_stage_demonstrative_create",
@@ -59,7 +72,7 @@
              raise RuntimeError(
                  "O cadastro incorporado não está disponível para este fluxo"
              )
-@@ -24531,7 +24544,7 @@
+@@ -24531,7 +24550,7 @@
              "navigation_history",
          )
          parent_keys = (*parent_keys, *PROVISION_STATE_KEYS)
@@ -68,7 +81,7 @@
              parent_keys = (*parent_keys, "idempotency_token")
          parent_state = {
              key: copy.deepcopy(state[key]) for key in parent_keys if key in state
-@@ -33562,6 +33575,8 @@
+@@ -33562,6 +33581,8 @@
              # próximo menu/fluxo deve começar com a bandeja vazia; rascunhos
              # continuam protegidos por _delete_staged_attachments.
              self._clear_submitted_diary_attachments(state)
@@ -77,7 +90,7 @@
          if embedded_type == "launch_product_registration":
              return self._resume_launch_with_registered_product(
                  state, etag, item_id
-@@ -34402,6 +34417,8 @@
+@@ -34402,6 +34423,8 @@
          }
  
      def _cancel(self, state: dict, etag: str | None, event: dict) -> dict:
