@@ -383,7 +383,11 @@ function draftMenuOptions(message) {
         const replyId = String(option?.reply || option?.id || "").trim().toLowerCase();
         if (replyId === "append_today_construction_diary_photos") return { ...option, tone: undefined };
         if (mainMenuDiaryRank(option) && /comecar\s+diario\s+de\s+obras/.test(normalizedDateText(option.label || option.title))) {
-          return { ...option, tone: "danger" };
+          return {
+            ...option,
+            tone: "danger",
+            menuDisplayLabel: String(option.label || option.title).replace(/come[çc]ar\s+di[áa]rio\s+de\s+obras/i, "DIÁRIO"),
+          };
         }
         if (replyId === "resume_latent_construction_diary") return { ...option, tone: undefined };
         return option;
@@ -708,6 +712,7 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const galleryClass = galleryButton ? " chat-choice-button--gallery" : "";
   const launchMenuClass = launchMenuButton ? " chat-choice-button--launch-menu-primary" : "";
   const suppliesClass = suppliesButton ? " chat-choice-button--supplies" : "";
+  const diaryClass = option.menuDisplayLabel ? " chat-choice-button--diary" : "";
   const galleryAttribute = galleryButton ? " data-gallery-button" : "";
   const content = displayIcon
     ? `<span class="chat-supplies-button-icon" aria-hidden="true">${escapeHtml(displayIcon)}</span><span class="chat-supplies-button-text">${escapeHtml(displayLabel || label)}</span>`
@@ -718,7 +723,7 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
     return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
-  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}${suppliesClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${content}</button>`;
+  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}${suppliesClass}${diaryClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${content}</button>`;
 }
 
 function compressionPreviewData(message) {
@@ -1513,7 +1518,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
       displayLabel: option?.recommendedDate === true
         ? `⭐ ${String(option.label || option.title || option.id || "")}`
-        : null,
+        : option.menuDisplayLabel || null,
     })];
   }).join("");
   const rawChangeTable = message.change_table || message.changeTable;
