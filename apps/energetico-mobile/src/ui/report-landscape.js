@@ -35,11 +35,14 @@ export function reportLayoutViewport(element) {
   const root = element.closest('.report-landscape-viewport'), win = element.ownerDocument.defaultView;
   if (root?.dataset.reportPortrait === 'true') {
     // Fixed descendant pickers share this transformed containing block. Its
-    // safe padding is already mapped to logical edges; do not use the physical
-    // viewport's env() insets a second time when positioning their controls.
+    // lateral backdrop padding and the dialog's internal notch/home-indicator
+    // padding are mapped to logical edges. Keep expanded pickers in that area.
     const style=win.getComputedStyle(root);
+    const panel=element.closest('[role="dialog"]')||root.querySelector('[role="dialog"]');
+    const panelStyle=panel&&panel!==root?win.getComputedStyle(panel):null;
     const top=parseFloat(style.paddingTop)||0,bottom=parseFloat(style.paddingBottom)||0;
-    const left=parseFloat(style.paddingLeft)||0,right=parseFloat(style.paddingRight)||0;
+    const left=(parseFloat(style.paddingLeft)||0)+(parseFloat(panelStyle?.paddingLeft)||0);
+    const right=(parseFloat(style.paddingRight)||0)+(parseFloat(panelStyle?.paddingRight)||0);
     return {rotated:true,top,left,
       width:Math.max(0,parseFloat(root.style.getPropertyValue('--report-width'))-left-right),
       height:Math.max(0,parseFloat(root.style.getPropertyValue('--report-height'))-top-bottom)};

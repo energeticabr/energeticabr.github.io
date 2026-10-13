@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createPaymentLedgerView } from '../src/ui/payment-ledger-view.js';
 import { captureFilteredReport } from '../src/ui/report-print.js';
+import { reportLayoutViewport } from '../src/ui/report-landscape.js';
 
 const row = {id:'1',paymentDate:'2026-10-01',supplier:'Fornecedor',branch:'Filial',product:'Produto',order:'1',account:'Caixa',unit:10,quantity:1,freight:0,total:10};
 function setup(t, load) {
@@ -52,6 +53,14 @@ test('expanded filters use the logical landscape bounds rather than physical por
   assert.equal(popup.style.height,'366px');
   assert.equal(popup.style.left,'182px');
   assert.equal(popup.style.top,'12px');
+});
+
+test('a full-height rotated report keeps top and bottom safe areas inside its opaque dialog for pickers',async t=>{
+  const {view,root}=setup(t,async()=>({launches:[row]}));await view.open();
+  root.style.padding='23px 0px 16px';
+  root.querySelector('[role=dialog]').style.padding='3px 34px 3px 59px';
+  const viewport=reportLayoutViewport(root.querySelector('.sfs-trigger'));
+  assert.deepEqual(viewport,{rotated:true,top:23,left:59,width:751,height:351});
 });
 test('PDF measures unrotated column widths, preserving report proportions',async t=>{
   const {view,root}=setup(t,async()=>({launches:[row]}));await view.open();
