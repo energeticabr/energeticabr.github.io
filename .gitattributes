@@ -3,3 +3,4 @@ backend-patches/provision-required-description/tests/* text eol=lf
 backend-patches/provision-required-description/source.patch whitespace=-blank-at-eol
 backend-patches/financial-inline-catalog/* text eol=lf
 backend-patches/financial-inline-catalog/workflow.patch whitespace=-blank-at-eol
+backend-patches/financial-movements/* text eol=lf
