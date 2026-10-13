@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { JSDOM } from 'jsdom';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
+import { galleryCases } from './helpers/gallery-create-cases.mjs';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -25,7 +26,7 @@ test('refresh toolbar stays visible with 44px targets and first-row search/filte
         url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/gallery-refresh-responsive.html` });
       const dom = new JSDOM(stdout), results = JSON.parse(dom.window.document.documentElement.dataset.layout);
       dom.window.close();
-      assert.ok(Array.isArray(results), JSON.stringify(results)); assert.equal(results.length, 26);
+      assert.ok(Array.isArray(results), JSON.stringify(results)); assert.equal(results.length, galleryCases.filter(entry => entry.name !== 'launch').length);
       for (const result of results) {
         assert.equal(result.missing, undefined, `${width}px ${result.name}: refresh missing`);
         for (const state of ['collapsed', 'expanded']) {
