@@ -1,0 +1,143 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -5375,14 +5375,20 @@
+             + ". CASO NECESSÁRIO, EDITE ANTES DE SUBMETER.\n"
+             if finalized else ""
+         )
+-        self._send_actions(
+-            state,
+-            f"{warning}🔎 DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS?\n{count} PRESENÇAS SELECIONADAS.",
+-            [
++        state["options"] = [
+                 {"id": "attendance_batch_edit", "title": "✏️ SIM, EDITAR"},
+                 {"id": "attendance_batch_present", "title": "🟢 PRESENTE"},
+                 {"id": "attendance_batch_absent", "title": "🔴 AUSENTE"},
+-            ],
++                {"id": "attendance_batch_holiday", "title": "🗓️ FERIADO"},
++        ]
++        self._send_options(
++            state,
++            {
++                "key": "attendance_batch_action",
++                "prompt": f"{warning}🔎 DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS?\n{count} PRESENÇAS SELECIONADAS.",
++                "button_label": "ESCOLHER PRESENÇA",
++            },
++            state["options"],
+         )
+         etag = self._save(state, etag)
+         return {"status": "awaiting_attendance_batch_action", "batch_id": state["batch_id"], "etag": etag}
+@@ -5412,6 +5418,8 @@
+                 {"label": "ATIVIDADEEXECUTADA", "value": str(changes.get("ATIVIDADEEXECUTADA", source.get("ATIVIDADEEXECUTADA")) or "EM BRANCO")},
+                 {"label": "PRESENÇA", "value": presence, "tone": "absent" if presence == "AUSENTE" else "present"},
+             ])
++            if presence == "AUSENTE" and state.get("attendance_batch_motivation"):
++                rows[-1].append({"label": "MOTIVAÇÃO", "value": state["attendance_batch_motivation"]})
+         return rows
+ 
+     def _prompt_attendance_batch_confirmation(self, state: dict, etag: str | None) -> dict:
+@@ -5440,9 +5448,17 @@
+ 
+     def _handle_attendance_batch_action(self, event: dict, state: dict, etag: str | None) -> dict:
+         command = str(event.get("reply_id") or event.get("text") or "").strip()
++        selected = resolve_option(command, state.get("options", []), state["stage"])
++        if selected:
++            command = str(selected["id"])
+         self._mark_processed(state, event.get("message_id"))
+         if command == "attendance_batch_present":
+             state["attendance_batch_presence"] = "PRESENTE"
++            state.pop("attendance_batch_motivation", None)
++            return self._prompt_attendance_batch_confirmation(state, etag)
++        if command == "attendance_batch_holiday":
++            state["attendance_batch_presence"] = "AUSENTE"
++            state["attendance_batch_motivation"] = "FERIADO"
+             return self._prompt_attendance_batch_confirmation(state, etag)
+         if command == "attendance_batch_absent":
+             state["attendance_batch_presence"] = "AUSENTE"
+@@ -5490,14 +5506,20 @@
+ 
+     def _prompt_attendance_batch_presence(self, state: dict, etag: str | None) -> dict:
+         state["stage"] = "attendance_batch_presence"
+-        self._send_actions(
+-            state,
+-            "QUAL PRESENÇA DESEJA APLICAR A TODOS OS IDs SELECIONADOS?",
+-            [
++        state["options"] = [
+                 {"id": "attendance_batch_present", "title": "🟢 PRESENTE"},
+                 {"id": "attendance_batch_absent", "title": "🔴 AUSENTE"},
++                {"id": "attendance_batch_holiday", "title": "🗓️ FERIADO"},
+                 {"id": "attendance_batch_edit", "title": "✏️ VOLTAR À EDIÇÃO"},
+-            ],
++        ]
++        self._send_options(
++            state,
++            {
++                "key": "attendance_batch_presence",
++                "prompt": "QUAL PRESENÇA DESEJA APLICAR A TODOS OS IDs SELECIONADOS?",
++                "button_label": "ESCOLHER PRESENÇA",
++            },
++            state["options"],
+         )
+         etag = self._save(state, etag)
+         return {"status": "awaiting_attendance_batch_presence", "batch_id": state["batch_id"], "etag": etag}
+@@ -19102,6 +19124,20 @@
+             options = copy.deepcopy(state["diary_start_options"])
+         elif (
+             state.get("flow") == "attendance_validation"
++            and step.get("key") == "revisar_dados_presenca"
++        ):
++            # Keep stored menus and root-specific configuration unchanged.
++            step = copy.deepcopy(step)
++            choices = step["source"]["options"]
++            if not any(normalize_text(str(option.get("value"))) == "feriado" for option in choices):
++                absent_index = next(index for index, option in enumerate(choices)
++                                    if normalize_text(str(option.get("value"))) == "ausente")
++                choices.insert(absent_index + 1, {"id": 4, "title": "🗓️ FERIADO", "value": "FERIADO"})
++                for index, option in enumerate(choices, start=1):
++                    option["id"] = index
++            options = self.sharepoint.get_options(step, self._context(state))
++        elif (
++            state.get("flow") == "attendance_validation"
+             and step.get("key") == "sincronizar_atividade_fornecedor_presenca"
+         ):
+             options = self._attendance_supplier_sync_options(state)
+@@ -21794,7 +21830,7 @@
+                     return self._prompt_edit_field(state, etag)
+                 if review_choice == "excluir":
+                     return self._prompt_attendance_deletion_confirmation(state, etag)
+-                if review_choice in {"presente", "ausente"}:
++                if review_choice in {"presente", "ausente", "feriado"}:
+                     # A revisão já exibe o resumo completo.  A escolha de
+                     # presença/ausência deve aplicar o status imediatamente,
+                     # sem repetir a pergunta de status que antes vinha após
+@@ -22656,7 +22692,7 @@
+     def _apply_attendance_review_presence_choice(
+         self, state: dict, choice: str, etag: str | None
+     ) -> dict:
+-        """Aplica PRESENTE/AUSENTE escolhidos diretamente na revisão.
++        """Aplica PRESENTE/AUSENTE/FERIADO escolhidos diretamente na revisão.
+ 
+         A tela de revisão é o último quadro antes da confirmação para a
+         maioria dos usuários.  PRESENTE segue direto ao resumo final; para
+@@ -22670,7 +22706,7 @@
+         status_option = next(
+             option
+             for option in status_step.get("source", {}).get("options", [])
+-            if normalize_text(str(option.get("value", ""))) == choice
++            if normalize_text(str(option.get("value", ""))) == ("ausente" if choice == "feriado" else choice)
+         )
+         self._apply_selected_option(state, status_step, status_option)
+         self._apply_attendance_presence_effects(state, status_option)
+@@ -22679,7 +22715,12 @@
+         state["stage"] = "selecting_fields"
+ 
+         steps = self._flow_config(state).get("steps", [])
+-        if choice == "presente":
++        if choice == "feriado":
++            motivation_step = next(step for step in steps
++                                   if step.get("key") == "motivacao_ausencia_presenca")
++            self._apply_selected_option(state, motivation_step, {"id": "holiday", "title": "FERIADO", "value": "FERIADO"})
++            state["step_index"] = len(steps)
++        elif choice == "presente":
+             state["step_index"] = len(steps)
+         else:
+             state["step_index"] = next(
