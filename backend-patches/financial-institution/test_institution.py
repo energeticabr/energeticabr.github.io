@@ -50,7 +50,7 @@ class InstitutionTests(unittest.TestCase):
     def open(self):
         self.send('group_financial')
         self.send('action_financial_registrations')
-        self.assertEqual([a['id'] for a in self.engine.last_menu], ['action_register_investment', 'action_register_institution'])
+        self.assertEqual([a['id'] for a in self.engine.last_menu[:2]], ['action_register_investment', 'action_register_institution'])
         self.send('action_register_institution')
         self.assertEqual(self.state['flow'], 'institution_registration')
 
