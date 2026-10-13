@@ -3714,6 +3714,112 @@ function attendanceSummaryRow(supplier, descriptor, activity, overrides = {}) {
   ];
 }
 
+test("resumo sem kind mantém valores longos abaixo dos rótulos, sem colunas comprimidas", t => {
+  const message = {
+    id: "legacy-summary", role: "assistant", type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?",
+    detail_table: { title: "RESUMO DAS PRESENÇAS SELECIONADAS", rows: [
+      attendanceSummaryRow("FORNECEDOR DE TESTE ALFA", "127 - EXECUÇÃO FUNDAÇÃO EM TUBULÃO", "EXECUÇÃO FUNDAÇÃO EM TUBULÃO"),
+      attendanceSummaryRow("FORNECEDOR DE TESTE BETA", "127 - EXECUÇÃO FUNDAÇÃO EM TUBULÃO", "EXECUÇÃO FUNDAÇÃO EM TUBULÃO"),
+      attendanceSummaryRow("FORNECEDOR DE TESTE GAMA", "128 - ALVENARIA", "ALVENARIA"),
+    ] },
+    options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "SIM" }],
+  };
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [message] })), { url: "http://localhost/" });
+  t.after(() => dom.window.close());
+  const style = dom.window.document.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  dom.window.document.head.append(style);
+  const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
+  const activity = rows[0].querySelectorAll(".chat-presence-table-cell")[3];
+  assert.equal(dom.window.getComputedStyle(rows[0]).gridTemplateColumns, "minmax(0, 1fr)", "cada pessoa usa toda a largura");
+  assert.equal(dom.window.getComputedStyle(activity).gridTemplateColumns, "minmax(0, 1fr)", "rótulo não disputa largura com o valor");
+  assert.equal(activity.querySelector("b").textContent, "EXECUÇÃO FUNDAÇÃO EM TUBULÃO");
+  assert.equal(rows[0].querySelector("span").textContent, "DATA");
+  assert.equal(rows[0].style.backgroundColor, rows[1].style.backgroundColor);
+  assert.notEqual(rows[0].style.backgroundColor, rows[2].style.backgroundColor);
+});
+
+test("resumo datado apresenta todos os fornecedores uma vez, também no payload legado", t => {
+  for (const kind of ["presence", undefined]) {
+    const rows = [
+      attendanceSummaryRow("FORNECEDOR DE TESTE ALFA", "127 - FUNDAÇÃO", "FUNDAÇÃO"),
+      attendanceSummaryRow("FORNECEDOR DE TESTE BETA", "127 - FUNDAÇÃO", "FUNDAÇÃO"),
+    ];
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+      id: "dated-summary", role: "assistant", type: "poll",
+      question: "✅ CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\n12/10/2026 | FORNECEDOR DE TESTE ALFA | 127 - FUNDAÇÃO | FUNDAÇÃO | PRESENTE\n12/10/2026 | FORNECEDOR DE TESTE BETA | 127 - FUNDAÇÃO | FUNDAÇÃO | PRESENTE",
+      detail_table: { ...(kind ? { kind } : {}), title: "RESUMO DAS PRESENÇAS SELECIONADAS", rows },
+      options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "SIM" }],
+    }] })));
+    t.after(() => dom.window.close());
+    assert.equal(dom.window.document.querySelector(".chat-choice-card > p").textContent.trim(), "✅ CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?");
+    assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-row").length, 2);
+    for (const name of ["FORNECEDOR DE TESTE ALFA", "FORNECEDOR DE TESTE BETA"]) {
+      assert.equal(dom.window.document.body.textContent.split(name).length - 1, 1);
+    }
+  }
+});
+
+test("deduplicação do resumo preserva instruções e fornecedores ausentes da tabela", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "summary-extra-information", role: "assistant", type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\n12/10/2026 | ALFA | 127 - FUNDAÇÃO | FUNDAÇÃO | PRESENTE\n12/10/2026 | BETA | 128 - ALVENARIA | ALVENARIA | AUSENTE\nConfira também os registros sem horário antes de confirmar.",
+    detail_table: { kind: "presence", rows: [
+      attendanceSummaryRow("ALFA", "127 - FUNDAÇÃO", "FUNDAÇÃO"),
+    ] },
+    options: [],
+  }] })));
+  t.after(() => dom.window.close());
+  const question = dom.window.document.querySelector(".chat-choice-card > p").textContent;
+  assert.doesNotMatch(question, /ALFA/);
+  assert.match(question, /12\/10\/2026 \| BETA \| 128 - ALVENARIA \| ALVENARIA \| AUSENTE/);
+  assert.match(question, /Confira também os registros sem horário antes de confirmar/);
+});
+
+test("resumo parcial legado não oculta atividade que só existe no texto da pergunta", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "summary-partial-information", role: "assistant", type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\n12/10/2026 | ALFA | 127 - FUNDAÇÃO | EXECUÇÃO FUNDAÇÃO EM TUBULÃO | PRESENTE",
+    detail_table: { rows: [[
+      { label: "DATA", value: "12/10/2026" },
+      { label: "FORNECEDOR", value: "ALFA" },
+      { label: "IDDESCRITIVO", value: "127 - FUNDAÇÃO" },
+      { label: "PRESENÇA", value: "PRESENTE", tone: "present" },
+    ]] },
+    options: [],
+  }] })));
+  t.after(() => dom.window.close());
+  assert.match(dom.window.document.querySelector(".chat-choice-card > p").textContent, /EXECUÇÃO FUNDAÇÃO EM TUBULÃO/);
+});
+
+test("tabela legada em array também empilha os campos da confirmação", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "array-summary", role: "assistant", type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?",
+    detailTable: [attendanceSummaryRow("FORNECEDOR DE TESTE", "127 - FUNDAÇÃO", "FUNDAÇÃO")],
+    options: [{ id: "attendance_batch_confirm", reply: "attendance_batch_confirm", label: "SIM" }],
+  }] })));
+  t.after(() => dom.window.close());
+  assert.ok(dom.window.document.querySelector(".chat-presence-table--batch"));
+  assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-cell").length, 5);
+});
+
+test("campos genéricos sem situação da presença não são tratados como confirmação legada", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "generic-details", role: "assistant", type: "poll",
+    question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\nInformação adicional que precisa continuar visível.",
+    detail_table: { title: "Dados do fornecedor", rows: [[
+      { label: "FORNECEDOR", value: "FORNECEDOR DE TESTE" },
+      { label: "ATIVIDADEEXECUTADA", value: "FUNDAÇÃO" },
+    ]] },
+    options: [],
+  }] })));
+  t.after(() => dom.window.close());
+  assert.equal(dom.window.document.querySelector(".chat-presence-table--batch"), null);
+  assert.match(dom.window.document.querySelector(".chat-choice-card > p").textContent, /Informação adicional/);
+});
+
 test("resumo agrupa o fundo pelo ID de etapa e atividade juntos mesmo com fornecedores intercalados", t => {
   const dom = attendanceSummaryDocument([
     attendanceSummaryRow("LUIZ", "126 - ALVENARIA", "ALVENARIA"),
