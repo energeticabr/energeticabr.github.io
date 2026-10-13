@@ -144,6 +144,7 @@ export function createBrowserAuth({ client, config, storage }) {
 const PENDING_ACTION_KEY = "energetico:msal-pending-action:v1";
 const RESUMABLE_ACTIONS = new Set([
   'action_investment_gallery',
+  'action_financial_movement_gallery',
   'action_institution_gallery',
   'action_investment_type_gallery',
   'action_profitability_gallery',

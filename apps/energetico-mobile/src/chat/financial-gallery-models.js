@@ -13,6 +13,13 @@ function model(title, listName, fields, fieldLabels, dateFields = []) {
 }
 
 export const FINANCIAL_GALLERY_MODELS = Object.freeze({
+  financial_movement: Object.freeze({ ...model('DE MOVIMENTAÇÃO', 'MOVIMENTACOESFINANCEIRAS',
+    ['INSTITUICAO', 'DESCRICAO', 'OPERACAO', 'VALOR'],
+    { INSTITUICAO: 'Instituição', DESCRICAO: 'Descrição', OPERACAO: 'Operação', VALOR: 'Valor' }),
+    recordLabel: 'movimentação', recordArticle: 'a', searchPlaceholder: 'Pesquisar instituição, descrição ou operação',
+    fieldTypes: { VALOR: 'currency', Criado: 'date', Modificado: 'date' },
+    metadataEditorEntity: { id: 'financial-movement', title: 'Movimentação financeira', siteKey: 'personal', immutableFields: [], messageFields: [] },
+  }),
   investment: model('INVESTIMENTOS', 'CADASTRO INVESTIMENTO',
     ['INSTITUICAO', 'DESCRICAO', 'TIPO', 'INVESTIMENTO', 'TRIBUTAÇÃO', 'RENTABILIDADE', 'LIQUIDEZ', 'RISCO', 'PRAZO'],
     { INSTITUICAO: 'Instituição', DESCRICAO: 'Descrição' }, ['PRAZO']),

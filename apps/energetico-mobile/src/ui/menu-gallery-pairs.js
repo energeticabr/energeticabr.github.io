@@ -34,6 +34,9 @@ const FINANCIAL_PAIRS = Object.freeze([
   { primary: 'action_register_profitability', primaryLabel: 'cadastro de rentabilidade', id: 'action_profitability_gallery', label: 'GALERIA RENTABILIDADE' },
   { primary: 'action_register_taxation', primaryLabel: 'cadastro tributacao', id: 'action_taxation_gallery', label: 'GALERIA TRIBUTAÇÃO' },
 ]);
+const MOVEMENT_PAIRS = Object.freeze([
+  { primary: 'action_financial_movement', primaryLabel: 'apontar movimentacao', id: 'action_financial_movement_gallery', label: 'GALERIA DE MOVIMENTAÇÃO' },
+]);
 
 export function galleryPairForOption(option, pairs) {
   const id = String(option?.reply || option?.id || "").trim().toLowerCase();
@@ -45,6 +48,9 @@ export function pairedGalleryMenu(message) {
   if (message?.type !== "poll") return null;
   const headings = String(message.question || message.prompt || message.text || "").split(/\r?\n/).map(normalized);
   const options = Array.isArray(message.options) ? message.options : [];
+  if (headings.includes('financeiro') && options.some(option => galleryPairForOption(option, MOVEMENT_PAIRS))) {
+    return { kind: 'financial-movement', pairs: MOVEMENT_PAIRS };
+  }
   if (headings.some(heading => ['cadastros', 'efetuar cadastros', 'cadastros financeiros'].includes(heading))
     && options.some(option => galleryPairForOption(option, FINANCIAL_PAIRS))) {
     return { kind: 'financial', pairs: FINANCIAL_PAIRS };

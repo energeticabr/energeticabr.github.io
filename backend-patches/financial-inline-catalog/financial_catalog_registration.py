@@ -2,6 +2,7 @@
 import copy
 
 FINANCIAL_FLOWS = frozenset({
+    'financial_movement',
     'investment_registration', 'institution_registration', 'investment_type_registration',
     'profitability_registration', 'taxation_registration',
 })
@@ -72,6 +73,15 @@ def complete(engine, state, etag, item_id):
     info = catalog(engine, state, step)
     if info is None:
         raise RuntimeError('A pergunta de origem não corresponde ao catálogo cadastrado')
+    # The child investment may belong to another institution. It must never
+    # populate a parent's filtered description with a mismatched registration.
+    context = engine._context(state)
+    for condition in step.get('source', {}).get('filters', []):
+        expected = context.get(condition['value_from']) if 'value_from' in condition else condition.get('equals')
+        if child_fields.get(condition['field']) != expected:
+            engine._send_text(state, 'O CADASTRO FOI GRAVADO. SELECIONE UMA DESCRIÇÃO VINCULADA À INSTITUIÇÃO DESTA MOVIMENTAÇÃO.')
+            state['options'] = []
+            return engine._prompt_next_or_summary(state, etag)
     label = child_fields.get(info['label_field'])
     value = item_id if info['value_field'] in {'Id', 'ID'} else child_fields.get(info['value_field'])
     if str(label or '').strip() and value not in (None, ''):
