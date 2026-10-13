@@ -31,6 +31,13 @@ preservam a política existente de saída de rascunho. Retornar ao menu recalcul
 - Baseline SHA-256: `70558a64d50da382e28825486716f952c7c0c2f7725596c4e9552bd3d6dda135`.
 - Candidato SHA-256: `910a6d02e87c35c83af13914fc43e34e014caa24ad5c3fffe455547b42c55c85`.
 
+Implantado em 13/10/2026 às 20:51 UTC: ambos os destinos com esse hash,
+saúde HTTP `status=ok`. A consulta real bloqueando escritas remotas confirmou
+`PRESENÇAS (10)` para 13/10/2026. Configuração carregada do mesmo arquivo do
+serviço (`/etc/energetica-whatsapp.env`); nenhum segredo é exibido.
+Suíte completa local do aplicativo: 5.922 aprovados, zero falhas/ignorados;
+testes adicionados posteriormente de controller e navegador aprovados à parte.
+
 ### Casos preexistentes não aprovados
 
 - `test_workflow.WorkflowTests.test_abandoning_resumed_construction_diary_removes_main_menu_option`

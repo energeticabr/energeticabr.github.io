@@ -7,7 +7,7 @@ from unittest.mock import patch
 ROOT = Path('/opt/energetica-whatsapp')
 sys.path[:0] = [str(ROOT), str(ROOT / 'worker')]
 from local_app import load_env, build_engine
-load_env(ROOT / '.env.local')
+load_env(Path('/etc/energetica-whatsapp.env'))
 import requests
 original = requests.sessions.Session.request
 
