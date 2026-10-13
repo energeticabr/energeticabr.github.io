@@ -40,6 +40,8 @@ class InvestmentTests(unittest.TestCase):
     def setUp(self):
         self.config = load_workflow_config(os.getenv('INVESTMENT_CONFIG', '/opt/energetica-whatsapp/worker/workflow_config.json'))
         self.sharepoint = MagicMock()
+        for method in ('ensure_item', 'create_item', 'update_item', 'delete_item'):
+            getattr(self.sharepoint, method).side_effect = AssertionError('Unexpected write before confirmation')
         self.sharepoint.get_options.return_value = [{'id': 1, 'title': 'INSTITUIÇÃO DE TESTE', 'value': 'INSTITUIÇÃO DE TESTE'}]
         self.engine = IsolatedEngine(self.config, MagicMock(), MagicMock(), MagicMock(), self.sharepoint)
         self.event = {'conversation_id': 'synthetic-test', 'sender': 'test-only', 'message_id': 'test-0', 'kind': 'text', 'text': ''}
@@ -64,6 +66,7 @@ class InvestmentTests(unittest.TestCase):
         self.assertEqual(self.engine._flow_config(self.state)['target_list'], 'CADASTRO INVESTIMENTO')
         self.assertEqual(self.engine._current_step(self.state)['target_field'], 'INSTITUICAO')
         self.sharepoint.create_item.assert_not_called()
+        self.sharepoint.ensure_item.assert_not_called()
 
     def test_form45_controls_order_and_optional_fields(self):
         self.state['flow'] = 'investment_registration'
@@ -79,6 +82,7 @@ class InvestmentTests(unittest.TestCase):
         self.assertNotIn('INSTITUICAO', self.state['fields'])
         self.assertNotEqual(result['status'], 'completed')
         self.sharepoint.create_item.assert_not_called()
+        self.sharepoint.ensure_item.assert_not_called()
 
     def test_all_answers_reach_review_without_writing(self):
         self.open()
@@ -91,6 +95,7 @@ class InvestmentTests(unittest.TestCase):
         self.assertEqual(self.state['fields']['INVESTIMENTO'], 'CDB')
         self.assertEqual(len(self.engine.summary_rows), 9)
         self.sharepoint.create_item.assert_not_called()
+        self.sharepoint.ensure_item.assert_not_called()
 
     def test_back_from_cadastros_returns_to_financial_menu(self):
         self.send('group_financial')
