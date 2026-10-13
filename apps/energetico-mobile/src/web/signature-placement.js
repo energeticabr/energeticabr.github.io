@@ -828,11 +828,11 @@ export function createSignaturePlacement({
     const timestamp = signatureDateLabel(signedAt, {timeZone:'America/Sao_Paulo'}).replace(', ', ' às ');
     if (signatureDocumentLayout === "payment" || signatureDocumentLayout === "epi") {
       caption.append(element(documentRef, "span", "signature-placement-marker__name", name));
-      if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
+      if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA: ${timestamp}`));
     } else {
       const nameLine = element(documentRef, "span", "signature-placement-marker__name", name);
       caption.append(nameLine);
-      if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA/HORA: ${timestamp}`));
+      if (timestamp) caption.append(element(documentRef, "span", "signature-placement-marker__date", `DATA: ${timestamp}`));
     }
     marker.append(caption);
     const integrityId = String(signatureBlob?.signatureEvidence?.id || "");

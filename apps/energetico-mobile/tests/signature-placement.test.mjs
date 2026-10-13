@@ -84,7 +84,8 @@ test("exibe o retângulo com nome e data abaixo da assinatura", async t => {
   const caption = container.querySelector(".signature-placement-marker__caption");
   assert.ok(caption);
   assert.match(caption.textContent, /FORNECEDOR A/);
-  assert.match(caption.textContent, /DATA\/HORA/);
+  assert.match(caption.textContent, /DATA: 13\/09\/2026 às 18:45/);
+  assert.doesNotMatch(caption.textContent, /DATA\/HORA/);
   assert.doesNotMatch(caption.textContent, /ASSINADO DIGITALMENTE POR/);
 });
 
@@ -108,7 +109,7 @@ test('prévia apresenta ícones e selo ao lado dos dados reais sem mudar o ponto
   await viewer.ready;
   const marker = container.querySelector('.signature-placement-marker');
   const caption = marker.querySelector('.signature-placement-marker__caption');
-  assert.match(caption.textContent.replace(/\s+/g,' '), /DATA\/HORA: 11\/10\/2026 às 01:01/);
+  assert.match(caption.textContent.replace(/\s+/g,' '), /DATA: 11\/10\/2026 às 01:01/);
   assert.equal(caption.querySelectorAll('svg[data-signature-icon]').length, 4);
   assert.match(caption.querySelector('.signature-card-seal').textContent, /Documento assinado eletronicamente/);
   assert.match(caption.querySelector('.signature-placement-marker__integrity').textContent.replace(/\s+/g,' '), /^REGISTRO: 0123456789abcdef$/);
@@ -128,7 +129,7 @@ test("comprovante de pagamento usa bloco de assinatura com linha interna", async
   assert.equal(marker.querySelector(".signature-placement-marker__label"), null);
   assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 2);
   assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /COPIADORA ALTERNATIVA/);
-  assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /DATA\/HORA/);
+  assert.equal(marker.querySelector(".signature-placement-marker__date")?.textContent, "DATA: 20/09/2026 às 12:17");
 });
 
 test("comprovante EPI usa cartão de assinatura com nome e data separados", async t => {
@@ -143,7 +144,7 @@ test("comprovante EPI usa cartão de assinatura com nome e data separados", asyn
   assert.equal(marker.querySelector(".signature-placement-marker__label"), null);
   assert.equal(marker.querySelectorAll(".signature-placement-marker__caption span").length, 2);
   assert.match(marker.querySelector(".signature-placement-marker__name")?.textContent || "", /RAFAEL GONTIJO/);
-  assert.match(marker.querySelector(".signature-placement-marker__date")?.textContent || "", /^DATA\/HORA:/);
+  assert.equal(marker.querySelector(".signature-placement-marker__date")?.textContent, "DATA: 20/09/2026 às 12:40");
 });
 
 test("mantém o cartão EPI inteiro na página e emite o mesmo centro que será gravado", async t => {

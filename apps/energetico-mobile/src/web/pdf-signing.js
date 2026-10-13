@@ -274,7 +274,7 @@ export async function signPdfAttachment({
   if (hasIntegrity) {
     await drawSignatureRecordCard(pdf, page, signature, {left, bottom, width:markerWidth, height:markerHeight,
       captionRatio:markerGeometry.captionRatio, signerName:printableText(signerName) || 'USUÁRIO',
-      timestamp:`DATA/HORA: ${epiDateLabel(signedAt)}`, recordLines, verification, opaqueInk:cardCaption});
+      timestamp:`DATA: ${epiDateLabel(signedAt)}`, recordLines, verification, opaqueInk:cardCaption});
     const existingKeywords = pdf.getKeywords();
     pdf.setKeywords([...(existingKeywords ? [existingKeywords] : []), `Energetico assinatura registro ${integrityId}`]);
   } else {
@@ -350,7 +350,7 @@ export async function signPdfAttachment({
       color: captionColor,
     });
     const timestamp = fitText(
-      `DATA/HORA: ${paymentCaption ? dateLabel(signedAt).replace(", ", " ") : epiDateLabel(signedAt)}`,
+      `DATA: ${paymentCaption ? dateLabel(signedAt).replace(", ", " ") : epiDateLabel(signedAt)}`,
       font,
       fontSize,
       textWidth,
@@ -391,7 +391,7 @@ export async function signPdfAttachment({
       font,
       color: captionColor,
     });
-    const timestamp = fitText(`DATA/HORA: ${dateLabel(signedAt)}`, font, fontSize, textWidth);
+    const timestamp = fitText(`DATA: ${dateLabel(signedAt)}`, font, fontSize, textWidth);
     page.drawText(timestamp, {
       x: left + inset,
       y: bottom + 2,
