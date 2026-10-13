@@ -1,5 +1,6 @@
 """Exercise the actual portal serializer, not just fabricated app options."""
 import ast
+import copy
 from copy import deepcopy
 import importlib.util
 from pathlib import Path
@@ -14,11 +15,16 @@ def load(name):
     return module
 patch = load('patch_bridge')
 badge_source = load('rhid_badge_source')
+context_patch = load('patch_presence_context')
 BASELINE = ROOT / 'tests/fixtures/bridge_rhid_report.py.txt'
 
 class ChoiceContextTests(unittest.TestCase):
-    def serialize(self, key, choices):
+    def serialize(self, key, choices, state=None, upgrade=False):
         source = patch.patch_bridge(BASELINE.read_text(encoding='utf-8'))
+        if upgrade:
+            source = source.replace('attendance_rhid_option_context(step, item, state.get("options"))',
+                                    'attendance_rhid_option_context(step, item)')
+            source = context_patch.patch_bridge(source)
         parsed = ast.parse(source)
         method = next(node for node in ast.walk(parsed) if isinstance(node, ast.FunctionDef) and node.name == '_send_option_poll')
         namespace = {'visual_option_title': lambda item: item.get('title', '')}
@@ -29,8 +35,62 @@ class ChoiceContextTests(unittest.TestCase):
         def send(state, question, options):
             messages.append({'question': question, 'options': options})
         messenger = SimpleNamespace(_send_poll=send, messages=messages)
-        namespace['_send_option_poll'](messenger, {}, {'key': key, 'prompt': 'Qual presença?', 'presentation': 'attendance_multi_select'}, choices)
+        namespace['_send_option_poll'](messenger, state or {}, {'key': key, 'prompt': 'Qual presença?', 'presentation': 'attendance_multi_select'}, choices)
         return messages[-1]['options']
+
+    def paginate(self, choices):
+        filename = ROOT / 'tests/fixtures/pagination_option_snapshot.py.txt'
+        namespace = {'copy': copy}
+        exec(compile(filename.read_text(encoding='utf-8'), str(filename), 'exec'), namespace)
+        return namespace['_pagination_option_snapshot'].__func__(choices)
+
+    def test_real_pagination_recovers_context_from_the_exact_original_record(self):
+        choices = [{'id': 2249, 'title': '2249 - ANA', 'value': '2249',
+            'source_values': {'Id': 2249, 'DATA': '2026-10-13T00:00:00Z', 'FORNECEDOR': 'ANA',
+                              'CPF': 'private', 'PIS': 'private'}},
+            {'id': 2248, 'title': '2248 - BIA', 'value': '2248',
+            'source_values': {'Id': 2248, 'DATA': '2026-10-12T00:00:00Z', 'FORNECEDOR': 'BIA'}}]
+        before = deepcopy(choices)
+        visible = self.paginate(choices)
+        self.assertTrue(all('source_values' not in item for item in visible))
+        actual = self.serialize('registro_presenca_pendente', visible, {'options': choices})
+        self.assertEqual([(item.get('date'), item.get('name')) for item in actual],
+                         [('2026-10-13', 'ANA'), ('2026-10-12', 'BIA')])
+        self.assertTrue(all(not {'source_values', 'CPF', 'PIS'} & item.keys() for item in actual))
+        self.assertEqual(choices, before)
+
+    def test_filtered_and_later_pages_never_join_by_position(self):
+        choices = [{'id': 'supplier_sync_target:21', 'title': '21 - ANA',
+                    'source_values': {'DATA': '2026-10-12', 'FORNECEDOR': 'ANA', 'ID_PESSOA_RHID': 7}},
+                   {'id': 'supplier_sync_target:22', 'title': '22 - BIA',
+                    'source_values': {'DATA': '2026-10-13', 'FORNECEDOR': 'BIA', 'ID_PESSOA_RHID': 8}}]
+        actual = self.serialize('sincronizar_atividade_fornecedor_presenca',
+                                self.paginate(choices)[1:], {'options': choices})[0]
+        self.assertEqual((actual.get('date'), actual.get('name'), actual.get('rhidId')),
+                         ('2026-10-13', 'BIA', '8'))
+
+    def test_upgrading_the_deployed_bridge_keeps_paginated_metadata(self):
+        choices = [{'id': '2249', 'title': '2249 - ANA',
+                    'source_values': {'DATA': '2026-10-13', 'FORNECEDOR': 'ANA'}}]
+        actual = self.serialize('registro_presenca_pendente', self.paginate(choices),
+                                {'options': choices}, upgrade=True)[0]
+        self.assertEqual((actual.get('date'), actual.get('name')), ('2026-10-13', 'ANA'))
+
+    def test_no_exact_or_unique_original_record_fails_closed(self):
+        original = {'id': 'pending_attendance_record:21', 'title': '21 - ANA',
+                    'source_values': {'DATA': '2026-10-13', 'FORNECEDOR': 'ANA'}}
+        visible = {'id': 'pending_attendance_record:22', 'title': '22 - BIA'}
+        for options in [[original], [original, deepcopy(original)], None, 'bad', {}]:
+            item = original if isinstance(options, list) and len(options) == 2 else visible
+            actual = self.serialize('pending_attendance_record', self.paginate([item]), {'options': options})[0]
+            self.assertEqual(actual.get('date'), 'INVALID')
+
+    def test_explicit_invalid_source_is_not_replaced_by_a_different_day(self):
+        original = {'id': '21', 'title': '21 - ANA', 'source_values': {'DATA': '2026-10-13'}}
+        for values in [None, {}, {'DATA': ''}, {'DATA': '2026-02-30'}]:
+            visible = {**original, 'source_values': values}
+            actual = self.serialize('registro_presenca_pendente', [visible], {'options': [original]})[0]
+            self.assertEqual(actual.get('date'), 'INVALID')
 
     def test_rh_choice_preserves_its_real_day_and_supplier_without_exposing_the_source_row(self):
         original = {'id': '2239', 'title': '2239 - ANA', 'source_values': {'Id': 2239,

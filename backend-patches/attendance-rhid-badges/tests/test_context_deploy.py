@@ -29,7 +29,7 @@ class ContextDeployTests(unittest.TestCase):
         source = patch_bridge.patch_bridge((ROOT / 'tests/fixtures/bridge_rhid_report.py.txt').read_text())
         # The existing deployed bridge lacks only the optional choice context.
         source = source.replace('get_rhid_badge_report, attendance_rhid_option_context', 'get_rhid_badge_report')
-        source = source.replace('                    **attendance_rhid_option_context(step, item),\n', '')
+        source = source.replace('                    **attendance_rhid_option_context(step, item, state.get("options")),\n', '')
         self.original = source.encode()
         self.original_module = b'original = True\n'
         self.new_module = b'updated = True\n'

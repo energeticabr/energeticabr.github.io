@@ -63,6 +63,20 @@ consulta, ajustes, vínculo pendente e autorização são preservados.
 
 ## Correção do contexto enviado ao app (13/10/2026)
 
+### Paginação real de presenças
+
+A paginação de `WorkflowEngine` remove `source_values` antes do adaptador de
+canal. O serializer agora recupera o contexto do registro original em
+`state.options`, exigindo uma correspondência única pelo ID exato. Não utiliza
+posição, nome do fornecedor, dia selecionado ou dia atual como alternativa.
+Fonte explícita inválida continua inválida; controles e outros fluxos não
+recebem metadados RHID. Apenas data, nome e ID RHID são enviados ao cliente.
+
+`test_choice_context.py` executa o snapshot real da paginação antes do produtor,
+incluindo filtro/página seguinte, datas históricas e IDs ausentes/ambíguos.
+`deploy_context.py` também permite atualizar a ponte que já recebeu a primeira
+correção de contexto, mantendo os mesmos hashes, locks, backups e rollback.
+
 O produtor real `ChannelMessenger._send_option_poll` removia `source_values`
 sem transmitir a data individual. Isso deixava todos os indicadores neutros,
 mesmo com a conexão RHID e o AFD funcionando. As opções das três etapas de

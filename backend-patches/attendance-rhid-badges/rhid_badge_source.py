@@ -27,7 +27,7 @@ def _identifier(value):
     raw = str(value or '').strip()
     return str(int(raw)) if re.fullmatch(r'[0-9]+', raw) and int(raw) > 0 else ''
 
-def attendance_rhid_option_context(step, item):
+def attendance_rhid_option_context(step, item, source_options=None):
     """Send only a presence choice's day/name/clock ID, never its private row."""
     if step.get('key') not in {'registro_presenca_pendente', 'pending_attendance_record',
                                'sincronizar_atividade_fornecedor_presenca'}:
@@ -36,6 +36,15 @@ def attendance_rhid_option_context(step, item):
         r'(?:pending_attendance_record:|supplier_sync_target:)?[1-9][0-9]*', str(item.get('id') or '')):
         return {}
     values = item.get('source_values', item.get('sourceValues'))
+    if 'source_values' not in item and 'sourceValues' not in item and isinstance(source_options, list):
+        # Workflow pagination deliberately strips private source rows. Recover
+        # only this same record from the full server-side options, never by
+        # position, supplier name, selected day, or the current day.
+        matches = [original for original in source_options if isinstance(original, dict)
+                   and not original.get('terminal_option')
+                   and str(original.get('id')) == str(item.get('id'))]
+        if len(matches) == 1:
+            values = matches[0].get('source_values', matches[0].get('sourceValues'))
     if not isinstance(values, dict): return {'date': 'INVALID'}
     result = {'date': 'INVALID'}
     raw = values.get('DATA')
