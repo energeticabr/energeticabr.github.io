@@ -3,6 +3,33 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
+import { createSharePointRepository } from '../../../portal/data/sharepoint-repository.js';
+
+test('STATUS discovery respects real Graph page limits and includes choices on later pages', async t => {
+  const graph = { async request(path, options = {}) {
+    assert.equal(options.method || 'GET', 'GET', 'status discovery never writes business data');
+    if (path.includes('/columns')) return { value: [{ name: 'STATUS', text: {} }] };
+    if (path.includes('/items')) {
+      if (path.includes('/items/9')) return item(9, { STATUS: null });
+      if (path.includes('$select=STATUS')) assert.equal(new URLSearchParams(path.split('?')[1]).get('$top'), '100');
+      if (path.includes('parents')) return { value: [item(9, { STATUS: null })] };
+      if (path.includes('$skiptoken=next')) return { value: [item(2, { STATUS: paid })] };
+      return { value: [item(1, { STATUS: predicted })], '@odata.nextLink':
+        'https://graph.microsoft.com/v1.0/sites/site/lists/children/items?$select=id&$expand=fields($select=STATUS)&$top=100&$skiptoken=next' };
+    }
+    if (/\/lists(?:\?|$)/.test(path)) return { value: [{ id: 'parents', displayName: 'DESCRITIVOPROVISAO', list: { template: 'genericList' } }, { id: 'children', displayName: 'PROVISÃO PGTOS', list: { template: 'genericList' } }] };
+    return { id: 'site' };
+  } };
+  const repository = createSharePointRepository(graph, { personal: { host: 'example.sharepoint.com', path: '/sites/example', readTransport: 'graph' } });
+  const f = { data: createRegistrationGalleryData({ kind: 'provisionDescription', repository }) };
+  assert.deepEqual((await f.data.loadFilterOptions('STATUS')).map(option => option.value).sort(), [paid, predicted]);
+  const v = await view(t, f), status = v.root.querySelector('[data-filter-field="STATUS"]');
+  assert.equal(status.disabled, false, v.root.querySelector('.rg-feedback').textContent);
+  assert.equal(status.value, predicted);
+  assert.deepEqual([...status.options].map(option => option.value).sort(), ['', paid, predicted]);
+  const context = await f.data.loadEditor('9');
+  assert.deepEqual([...context.columns.find(column => column.name === 'STATUS').choices].sort(), [paid, predicted]);
+});
 
 const predicted = 'PAGAMENTO PREVISTO', paid = 'PAGAMENTO EFETUADO';
 const item = (id, fields) => ({ id: String(id), eTag: `"v${id}"`, hasAttachments: false, fields });
