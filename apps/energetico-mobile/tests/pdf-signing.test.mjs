@@ -76,7 +76,7 @@ test("identificação do ponto mantém letras legíveis no tamanho padrão de 50
   });
   const signed = await PDFDocument.load(await result.arrayBuffer());
   const content = pageContent(signed);
-  for (const label of ["CLEITON CESAR NONATO", "DATA/HORA: 03/10/2026 às 23:58",
+  for (const label of ["CLEITON CESAR NONATO", "DATA: 03/10/2026 às 23:58",
     "REGISTRO: 0123456789abcdef", "fedcba9876543210"]) {
     assert.ok(boldTextPlacement(content, label).size >= 8, `${label} precisa ser legível`);
   }
@@ -108,6 +108,26 @@ function metadataTextPlacements(content) {
   }));
 }
 
+test('comprovante auditado usa DATA e mantém data e hora completas em uma linha', async () => {
+  const source = await PDFDocument.create(); source.addPage([595, 842]);
+  const id = '0123456789abcdef0123456789abcdef';
+  const result = await signPdfAttachment({
+    documentBlob: new Blob([await source.save()]), documentFileName: 'comprovante-pagamento.pdf',
+    signatureBlob: new Blob([PNG_1X1]), point: {page: 1, x: .7, y: .3, scale: .5},
+    signerName: 'SIMETRAL', signedAt: '2026-10-12T15:33:00Z', integrityId: id,
+    verificationUrl: `https://example.com/assinaturas/${id}/${'a'.repeat(64)}`,
+  });
+  const pdf = await PDFDocument.load(await result.arrayBuffer());
+  const metadata = metadataTextPlacements(pageContent(pdf));
+  const date = metadata.filter(row => /DATA:|12\/10\/2026|12:33/.test(row.text));
+  assert.deepEqual(date.map(row => row.text), ['DATA: 12/10/2026 às 12:33']);
+  assert.doesNotMatch(metadata.map(row => row.text).join(' '), /DATA\/HORA/);
+  const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const seal = pdf.context.lookup(pdf.getPage(0).node.Annots().get(0)).lookup(PDFName.of('Rect')).asArray().map(n => n.asNumber());
+  assert.ok(date[0].x + font.widthOfTextAtSize(date[0].text, date[0].size) < seal[0], 'data não invade o selo de verificação');
+  assert.match(pdf.getKeywords(), new RegExp(id), 'registro completo continua no PDF');
+});
+
 for (const documentFileName of ['PONTO-RHID.pdf','comprovante-pagamento.pdf','comprovante-entrega-epi.pdf']) {
   test(`metadados longos em ${documentFileName} quebram linha com margem antes do selo`, async () => {
     const source=await PDFDocument.create(); source.addPage([595,842]);
@@ -122,11 +142,12 @@ for (const documentFileName of ['PONTO-RHID.pdf','comprovante-pagamento.pdf','co
     const seal=pdf.context.lookup(pdf.getPage(0).node.Annots().get(0)).lookup(PDFName.of('Rect')).asArray().map(n=>n.asNumber());
     for (const row of rows) assert.ok(row.x+font.widthOfTextAtSize(row.text,row.size)<=seal[0]-row.size*.75,
       `texto precisa de margem própria antes do selo: ${row.text}`);
-    const nameRows=rows.filter(row=>!row.text.includes('DATA/HORA')&&!row.text.includes('REGISTRO')&&!/[\d:]/.test(row.text));
+    const nameRows=rows.filter(row=>!row.text.includes('DATA:')&&!row.text.includes('REGISTRO')&&!/[\d:]/.test(row.text));
     assert.ok(nameRows.length>=2,'nome longo deve quebrar linha, não ser espremido em uma linha');
     assert.equal(nameRows.map(row=>row.text).join(' '),'JANAINA APARECIDA DA SILVA GONCALVES');
     const allText=rows.map(row=>row.text).join(' ');
-    assert.match(allText,/DATA\/HORA: 11\/10\/2026 às 11:10/);
+    assert.match(allText,/DATA: 11\/10\/2026 às 11:10/);
+    assert.doesNotMatch(allText,/DATA\/HORA/);
     assert.match(allText,/REGISTRO: f820ab3ae320e746/);
     assert.match(pdf.getKeywords(),new RegExp(id));
     for(let i=1;i<rows.length;i++) assert.ok(rows[i-1].y-rows[i].y>=Math.min(rows[i-1].size,rows[i].size), 'linhas não se sobrepõem');
@@ -157,10 +178,10 @@ for (const documentFileName of ['PONTO-RHID.pdf', 'comprovante-pagamento.pdf', '
     const metadata=metadataTextPlacements(content);
     const nameRows=metadata.filter(row=>!/[\d:]/.test(row.text));
     assert.equal(nameRows.map(row=>row.text).join(' '),'JANAINA APARECIDA DA SILVA GONÇALVES');
-    assert.match(metadata.map(row=>row.text).join(' '),/DATA\/HORA: 11\/10\/2026 às 01:01/);
+    assert.match(metadata.map(row=>row.text).join(' '),/DATA: 11\/10\/2026 às 01:01/);
     assert.match(metadata.map(row=>row.text).join(' '),/REGISTRO: 0123456789abcdef/);
     const name = nameRows.at(-1);
-    const date = metadata.find(row=>row.text.startsWith('DATA/HORA'));
+    const date = metadata.find(row=>row.text.startsWith('DATA:'));
     const record = metadata.find(row=>row.text.startsWith('REGISTRO'));
     assert.ok(name.y > date.y && date.y > record.y);
     assert.equal(name.x, date.x, 'informações alinhadas à esquerda');
@@ -314,7 +335,7 @@ test("comprovante EPI usa cartão centralizado com assinatura, nome e data", asy
   const content = pageContent(signed);
   const labelHex = Buffer.from("ASSINADO DIGITALMENTE POR:", "latin1").toString("hex").toUpperCase();
   const signerHex = Buffer.from("RAFAEL GONTIJO", "latin1").toString("hex").toUpperCase();
-  const dateHex = Buffer.from("DATA/HORA: 20/09/2026 às 00:32", "latin1").toString("hex").toUpperCase();
+  const dateHex = Buffer.from("DATA: 20/09/2026 às 00:32", "latin1").toString("hex").toUpperCase();
 
   assert.doesNotMatch(content, new RegExp(`<${labelHex}> Tj`));
   assert.match(content, new RegExp(`<${signerHex}> Tj`));
@@ -404,7 +425,7 @@ test("PDF final emoldura a assinatura de Bernardo e identifica nome, função e 
   const date = boldTextPlacement(content, "DATA: 24/09/2026 às 13:16");
   assert.equal(signer.size, bernardo.size);
   assert.ok(date.y > 230, "A data de Bernardo deve ficar afastada da borda inferior do cartão");
-  const signerDate = boldTextPlacement(content, "DATA/HORA: 24/09/2026 às 13:16");
+  const signerDate = boldTextPlacement(content, "DATA: 24/09/2026 às 13:16", 1);
   assert.ok(signerDate.y > 227.4, "A data do usuário também deve ter margem inferior");
   assert.ok((content.match(/0 0 m\n0 [\d.]+ l\n[\d.]+ [\d.]+ l\n[\d.]+ 0 l\nh\nS/g) || []).length >= 2);
   assert.ok((content.match(/0\.08 0\.18 0\.34 RG/g) || []).length >= 2);
