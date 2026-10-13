@@ -116,6 +116,8 @@ function normalizedFields(item) {
   return fields;
 }
 
+export { normalizeItem as normalizeGalleryItem };
+
 function normalizeItem(item) {
   const fields = normalizedFields(item);
   const id = String(fieldValue(fields, ["ID"]) ?? item?.id ?? "").trim();

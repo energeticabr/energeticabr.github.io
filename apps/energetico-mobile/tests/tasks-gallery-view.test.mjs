@@ -97,7 +97,7 @@ test('submeter conclusão confirma ID e data no novo layout por 2 segundos e ret
   const writes = [], saving = deferred();
   const ctx = await setup(t, { now: () => new Date('2026-10-03T12:00:00Z'), data: {
     loadEditor: async id => completionContext(id),
-    saveEditor: async (context, fields) => { writes.push([context.item.id, fields]); await saving.promise; ctx.data.loadSnapshot = async () => ({ rows: [] }); },
+    saveEditor: async (context, fields) => { writes.push([context.item.id, fields]); await saving.promise; return { ...context.item, fields: { ...context.item.fields, ...fields } }; },
   } });
   await ctx.gallery.open();
   const dialog = await openCompletion(ctx);
@@ -193,6 +193,40 @@ test('serviço real reconcilia escrita confirmada cuja leitura posterior falhou 
   assert.equal(ctx.root().querySelectorAll('.tg-card').length, 0);
 });
 
+test('conclusão normaliza responsável e data retornados pelo serviço real sem recarregar', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { createTasksGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  let item = { id: '176', eTag: '"v1"', lastModifiedBy: { user: { displayName: 'Editor Antigo' } },
+    lastModifiedDateTime: '2026-10-02T12:00:00Z', fields: { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição original', STATUS: 'EM ATENDIMENTO' } };
+  const data = createTasksGalleryData({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'tasks' }; },
+    async getItemsPage() { return { items: [item], hasMore: false }; },
+    async getItem() { return item; },
+    async getColumns() { return [
+      { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
+      { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
+      { name: 'field_11', displayName: 'TAREFA', text: {} },
+    ]; },
+    async updateItem(_site, _list, _id, fields) {
+      item = { ...item, eTag: '"v2"', fields: { ...item.fields, ...fields },
+        lastModifiedBy: { user: { displayName: 'Editor Novo' } }, lastModifiedDateTime: '2026-10-03T15:00:00Z' };
+      return item;
+    },
+  } });
+  const ctx = await setup(t, { data }); await ctx.gallery.open();
+  const root = ctx.root(), status = root.querySelector('[name="status"]'); status.value = '';
+  status.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  t.mock.timers.tick(2000); await settle();
+  assert.match(root.querySelector('.tg-modified').textContent, /03\/10\/2026, 12:00/);
+  const search = root.querySelector('[name="search"]');
+  search.value = 'Editor Antigo'; search.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  assert.equal(root.querySelectorAll('.tg-card').length, 0);
+  search.value = 'Editor Novo'; search.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  assert.equal(root.querySelectorAll('.tg-card').length, 1);
+});
+
 test('data vazia impede gravação; falha no save mantém valores para tentar novamente', async t => {
   let writes = 0;
   const ctx = await setup(t, { data: {
@@ -214,7 +248,7 @@ test('data vazia impede gravação; falha no save mantém valores para tentar no
   assert.equal(dialog.querySelector('[data-task-completion-submit]').disabled, false);
 });
 
-test('conclusão salva com falha de refresh repete só a consulta, não a gravação', async t => {
+test('conclusão confirmada não depende de recarregar a galeria para mostrar sucesso', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let writes = 0, failRefresh = false;
   const ctx = await setup(t, { data: {
@@ -226,14 +260,83 @@ test('conclusão salva com falha de refresh repete só a consulta, não a grava�
   const dialog = await openCompletion(ctx);
   dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
   assert.equal(writes, 1);
-  assert.match(dialog.querySelector('[role="alert"]').textContent, /salva.*atualizar/i);
-  assert.equal(dialog.querySelector('.launch-completion'), null);
-  failRefresh = false;
-  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
-  assert.equal(writes, 1);
   assert.ok(dialog.querySelector('.launch-completion'));
+  assert.equal(ctx.root().querySelector('[data-item-id="176"]'), null, 'a tarefa sai do filtro de pendentes sem consultar a lista');
   t.mock.timers.tick(2000); await settle();
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+});
+
+test('concluir na segunda página preserva filtros, rolagem e os outros cartões sem carregar a galeria', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = Array.from({ length: 25 }, (_, i) => ({ id: String(200 - i), hasAttachments: false,
+    fields: { TAREFA: `Obra tarefa ${200 - i}`, STATUS: 'EM ATENDIMENTO', FILIAL: 'OBRA' } }));
+  const saving = deferred();
+  const ctx = await setup(t, { rows, data: {
+    loadEditor: async id => completionContext(id),
+    saveEditor: async (context, fields) => { await saving.promise; return { id: context.item.id, fields }; },
+  } });
+  await ctx.gallery.open();
+  const root = ctx.root(), content = root.querySelector('.og-content');
+  const branch = root.querySelector('[name="branch"]'); branch.value = 'OBRA';
+  branch.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  button(root, 'Próxima página').click();
+  const untouched = root.querySelector('[data-item-id="189"]');
+  content.scrollTop = 730; root.scrollTop = 32;
+  root.querySelector('[data-item-id="188"] [data-action="complete"]').click(); await settle();
+  const dialog = root.querySelector('.tg-completion-dialog');
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle();
+  assert.equal(root.querySelector('[data-item-id="189"]'), untouched, 'não limpa a galeria enquanto grava');
+  assert.equal(root.getAttribute('aria-busy'), 'false');
+  saving.resolve(); await settle(); await settle();
+  assert.ok(dialog.querySelector('.launch-completion'));
+  assert.equal(ctx.calls.filter(([kind]) => kind === 'snapshot').length, 1, 'sem recarga de lista na conclusão');
+  assert.equal(root.querySelector('.og-page-label').textContent, 'Página 2 de 3');
+  assert.equal(branch.value, 'OBRA');
+  assert.equal(root.querySelector('[data-item-id="189"]'), untouched, 'mantém o DOM dos outros cartões');
+  assert.equal(root.querySelector('[data-item-id="188"]'), null);
+  assert.equal(root.querySelector('.og-list-status').textContent, '24 tarefa(s)');
+  assert.equal(root.querySelector('.tg-metric--done dd').textContent, '1');
+  t.mock.timers.tick(2000); await settle();
+  assert.equal(content.scrollTop, 730); assert.equal(root.scrollTop, 32);
+  assert.equal(root.querySelector('.tg-completion-dialog'), null);
+});
+
+test('conclusão com status Todos atualiza cartão e mantém a última página existente', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = Array.from({ length: 11 }, (_, i) => ({ id: String(186 - i), hasAttachments: false,
+    fields: { TAREFA: `Tarefa ${186 - i}`, STATUS: 'EM ATENDIMENTO' } }));
+  const ctx = await setup(t, { rows, data: {
+    loadEditor: async id => completionContext(id),
+    saveEditor: async (context, fields) => ({ id: context.item.id, fields }),
+  } });
+  await ctx.gallery.open();
+  const root = ctx.root(), status = root.querySelector('[name="status"]'); status.value = '';
+  status.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  button(root, 'Próxima página').click();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(root.querySelector('.og-page-label').textContent, 'Página 2 de 2');
+  assert.equal(root.querySelector('[data-item-id="176"] .tg-status').textContent, 'CONCLUÍDA');
+  assert.equal(root.querySelector('.og-list-status').textContent, '11 tarefa(s)');
+  t.mock.timers.tick(2000); await settle();
+});
+
+test('concluir o único cartão da última página recua apenas uma página sem recarregar', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rows = Array.from({ length: 21 }, (_, i) => ({ id: String(196 - i), hasAttachments: false,
+    fields: { TAREFA: `Tarefa ${196 - i}`, STATUS: 'EM ATENDIMENTO' } }));
+  const ctx = await setup(t, { rows, data: {
+    loadEditor: async id => completionContext(id), saveEditor: async (context, fields) => ({ id: context.item.id, fields }),
+  } });
+  await ctx.gallery.open();
+  button(ctx.root(), 'Próxima página').click(); button(ctx.root(), 'Próxima página').click();
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('[data-task-completion-submit]').click(); await settle(); await settle();
+  assert.equal(ctx.root().querySelector('.og-page-label').textContent, 'Página 2 de 2');
+  assert.equal(ctx.root().querySelectorAll('.tg-card').length, 10);
+  assert.equal(ctx.root().querySelector('[data-item-id="176"]'), null);
+  assert.equal(ctx.calls.filter(([kind]) => kind === 'snapshot').length, 1);
+  t.mock.timers.tick(2000); await settle();
 });
 
 test('fechar popup durante leitura ignora resposta tardia e campos não comprovados bloqueiam save', async t => {
