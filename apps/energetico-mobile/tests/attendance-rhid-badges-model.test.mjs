@@ -37,6 +37,16 @@ test("punch display includes approved corrections even when a period remains inc
   assert.deepEqual(actual.punches, { entry1: "06:50", exit1: null, entry2: null, exit2: null });
 });
 
+test("duplicated valid punches still display known times and approved corrections with an inconsistency warning", () => {
+  const actual = badgeFor(context(), report([row({
+    BATIDAS_RHID: "07:00;07:00;12:00;13:00",
+    ADMIN_AJUSTES: { exit2: { time: "16:30" } },
+  })]));
+  assert.equal(actual.status, "inconsistent");
+  assert.equal(actual.minutes, undefined);
+  assert.deepEqual(actual.punches, { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: "16:30" });
+});
+
 test("unavailable or ambiguous identity never exposes another person's punch times", () => {
   for (const actual of [
     badgeFor(context({ date: "2026-10-06" }), report()),

@@ -145,16 +145,18 @@ function personBadge(person, date) {
   if (rows.some(row => calendarDate(row.DATA_REFERENCIA ?? row.date) !== date)) return badge("unavailable", date);
   const parsed = rows.map(row => inspectPunches(row.BATIDAS_RHID));
   const rawTimes = parsed.flatMap(part => part.times);
-  if (parsed.some(part => part.invalid) || new Set(rawTimes).size !== rawTimes.length) return badge("inconsistent", date);
+  if (parsed.some(part => part.invalid)) return badge("inconsistent", date);
+  const duplicatePunches = new Set(rawTimes).size !== rawTimes.length;
   const tablePerson = buildRhidAttendanceTable(rows.map((row, index) => ({
     ...row, BATIDAS_RHID: parsed[index].times, STATUS_RHID: "",
   }))).people[0];
-  if (!tablePerson) return badge("unavailable", date);
+  if (!tablePerson) return badge(duplicatePunches ? "inconsistent" : "unavailable", date);
 
   // Use the report's effective slots (including approved adjustments), never
   // assign an afternoon-only punch to E1 just because it is first in the array.
   const punches = Object.fromEntries(SLOTS.map(slot => [slot, tablePerson.slots[slot].effective]));
   const dailyBadge = (status, minutes) => ({ ...badge(status, date, minutes), punches });
+  if (duplicatePunches) return dailyBadge("inconsistent");
 
   let times = tablePerson.rawPunches;
   const adjustments = Object.fromEntries(SLOTS.filter(slot => tablePerson.slots[slot].adjustment)
