@@ -46,7 +46,7 @@ As credenciais já utilizadas pelo coletor ficam fora do Git, em
 `root:energetica-whatsapp`. Não incluir valores, arquivos privados ou tokens em
 commits, logs ou exemplos.
 
-`patch_bridge.py` aplica cinco substituições exatas ao backend atual e recusa
+`patch_bridge.py` aplica seis substituições exatas ao backend original e recusa
 deriva/patch ambíguo. Instalar o módulo e a alteração pequena de
 `channel_bridge.py` no serviço e no espelho de build, com cópia recuperável e
 conferência de hashes antes de reiniciar. Nenhum `workflow_config.json` é
@@ -60,3 +60,38 @@ python -m unittest discover -s backend-patches/attendance-rhid-badges/tests -v
 
 O teste de ponte usa uma fixture pequena do método original e verifica que
 consulta, ajustes, vínculo pendente e autorização são preservados.
+
+## Correção do contexto enviado ao app (13/10/2026)
+
+O produtor real `ChannelMessenger._send_option_poll` removia `source_values`
+sem transmitir a data individual. Isso deixava todos os indicadores neutros,
+mesmo com a conexão RHID e o AFD funcionando. As opções das três etapas de
+presença agora recebem somente `date`, `name` e, quando conhecido, `rhidId`.
+Nenhum CPF, PIS, credencial ou registro completo sai para o aplicativo.
+Controles terminais e outras etapas não recebem esses metadados. Uma data
+inválida, vazia ou ausente usa o marcador `INVALID`, para que um cliente antigo
+não reutilize a data anterior. Não há fallback para "hoje" nem para uma
+confirmação histórica que não pertença comprovadamente à enquete atual.
+
+O cliente também lê a célula `DATA` do `detail_table` daquela própria opção,
+permitindo consultar corretamente listas de Pendências já restauradas.
+
+Para uma ponte que já possui a consulta RHID, use `deploy_context.py` (dry-run
+por padrão). Forneça os SHA-256 atuais de `channel_bridge.py` e
+`rhid_badge_source.py`, além de um estágio externo às duas raízes. A opção
+`--apply` instala somente esses dois arquivos em produção e no espelho,
+preservando donos/modos, cópias recuperáveis, configurações e credenciais.
+O CLI mantém os dois locks compartilhados já utilizados pelos demais deploys
+(`/tmp/energetica-whatsapp-deploy.lock` e `/home/opc/.energetica-deploy.lock`).
+O instalador recusa deriva, verifica o HTTP 200 após reiniciar e reverte em
+caso de falha. Cada arquivo deslocado fica numa pasta única
+`.rhid-context-recovery-*`; a publicação usa hardlink create-only, nunca um
+`replace` que possa apagar um arquivo criado no intervalo por outro escritor.
+Os bytes deslocados são verificados depois de capturados e preservados em
+conflitos, inclusive durante a reversão. Os locks serializam escritores
+cooperativos; a recuperação preserva arquivos de escritores externos.
+
+Os testes `test_choice_context.py` executam o produtor real de opções e
+`test_context_deploy.py` cobre hashes, locks, concorrência real, backup, saúde
+e reversão. Os testes do app
+verificam a consulta pela data transmitida e os quatro indicadores originais.

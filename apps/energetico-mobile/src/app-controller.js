@@ -4047,9 +4047,8 @@ export function createAppController({
     }
     let nextRefresh = Infinity;
     let changed = false;
-    const fallbackDate = latestPresenceValidationDate(state.messages) || lastPresenceValidationDate;
     const options = activePoll.options.map(option => {
-      const context = attendanceRhidOptionContext(option, activePoll, fallbackDate);
+      const context = attendanceRhidOptionContext(option, activePoll);
       if (!context) return option;
       changed = true;
       let rhidBadge;

@@ -56,15 +56,46 @@ test("camel-case sourceValues and label dates/names provide real context", () =>
 for (const key of ["date", "data", "presenceDate", "presence_date"]) {
   test(`context reads ${key} without inventing today`, () => assert.equal(contextFor(option({ [key]: "2026-10-06T00:00:00-03:00" }), poll()).date, "2026-10-06"));
 }
-test("date fallback is used only when explicit date information is absent", () => {
+test("only the individual option may supply its date, never a stale expanded-poll day or history", () => {
   const undated = { id: "pending_attendance_record:101", label: "101 - ANA" };
   assert.equal(contextFor(undated, poll()).date, "");
-  assert.equal(contextFor(undated, poll([], { presenceDateKey: day })).date, day);
-  assert.equal(contextFor(undated, poll(), "05/10/2026").date, day);
+  assert.equal(contextFor(undated, poll([], { presenceDateKey: day })).date, "");
+  assert.equal(contextFor(undated, poll(), "05/10/2026").date, "");
   assert.equal(contextFor(undated, poll(), "today").date, "");
   assert.equal(contextFor(option({ date: "2026-02-30" }), poll([], { presenceDateKey: day }), day).date, "");
   assert.equal(contextFor(option({ source_values: { DATA: "30/02/2026", FORNECEDOR: "ANA" } }), poll(), day).date, "");
   assert.equal(contextFor({ ...undated, label: "101 - ANA - 31/04/2026" }, poll(), day).date, "");
+});
+
+for (const extra of [{ date: "" }, { date: null }, { source_values: { DATA: "" } },
+  { detail_table: [[{ label: "DATA", value: "" }]] }, { detailTable: { rows: [[{ label: "DATA", value: null }]] } }]) {
+  test(`explicitly empty per-record date blocks fallback ${JSON.stringify(extra)}`, () => {
+    const actual = { id: "pending_attendance_record:101", label: "101 - ANA", ...extra };
+    assert.equal(contextFor(actual, poll([], { presenceDateKey: day }), day).date, "");
+    assert.equal(badgeFor(contextFor(actual, poll(), day), report()).status, "unavailable");
+  });
+}
+
+test("legacy pending portal options obtain the day from their actual detail cells", () => {
+  const actual = { id: "choice:pending_attendance_record:pending_attendance_record:101", reply: "pending_attendance_record:101", label: "101 - ANA",
+    detail_table: [[{ label: "DATA", value: "05/10/2026" }, { label: "FILIAL", value: "004" }], [{ label: "ATIVIDADE", value: "EXECUÇÃO FUNDAÇÃO" }]] };
+  const extracted = contextFor(actual, poll());
+  assert.deepEqual(extracted, { presenceId: "101", name: "ANA", date: day });
+  assert.equal(badgeFor(extracted, report()).label, "08h30");
+});
+
+test("each restored detail table chooses its own day instead of the previously selected day", () => {
+  const actual = { id: "pending_attendance_record:101", label: "101 - ANA",
+    detailTable: { rows: [[{ label: "DATA", value: "2026-10-06T12:00:00Z" }]] } };
+  assert.equal(contextFor(actual, poll([], { presenceDateKey: day }), day).date, "2026-10-06");
+});
+
+test("invalid dates in a legacy detail table do not fall through to another days punches", () => {
+  const actual = { id: "pending_attendance_record:101", label: "101 - ANA",
+    detail_table: [[{ label: "DATA", value: "30/02/2026" }]] };
+  assert.equal(contextFor(actual, poll([], { presenceDateKey: day }), day).date, "");
+  const explicit = { ...actual, date: "2026-10-06" };
+  assert.equal(contextFor(explicit, poll(), day).date, "2026-10-06");
 });
 
 for (const [date, punches, status, label, minutes] of [
