@@ -43,5 +43,5 @@
 - [x] Step 2: Run unittest test_demonstrative_new_activity -v against baseline on the VM sandbox. Expected: behavior failures because the new terminal action does not exist.
 - [x] Step 3: Add the dynamic terminal action and scoped child start/restore handlers; use confirmed child item ID and description in atividade_demonstrativo_etapa.
 - [x] Step 4: Run focused tests against candidate. Expected: all pass; compare full legacy suite against identical baseline and ensure no new failures/errors.
-- [ ] Step 5: Review, package hash-pinned source, check backup/rollback deployer, publish both server roots and re-run installed-source tests.
+- [x] Step 5: Review, package hash-pinned source, check backup/rollback deployer, publish both server roots and re-run installed-source tests.
 - [ ] Step 6: Commit, create PR, merge and verify publication at the merged revision; preserve unrelated files and the user's signing draft.
