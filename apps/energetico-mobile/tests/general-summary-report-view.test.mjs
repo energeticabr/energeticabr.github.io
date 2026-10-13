@@ -259,9 +259,9 @@ test('modal owns focus and Tab while allowing both shared and native PDF dialogs
   }
 });
 
-// Break: HOME fails to notify its parent, dismissals call HOME, or repeated close corrupts inert/scroll state.
-test('home close Escape and backdrop restore prior app state and call the correct callbacks once', async t => {
-  for (const dismissal of ['home', 'close', 'escape', 'outside']) {
+// Break: dismissals navigate HOME or repeated close corrupts inert/scroll state.
+test('close Escape and backdrop restore prior app state and call only close once', async t => {
+  for (const dismissal of ['close', 'escape', 'outside']) {
     let closes = 0, homes = 0; const {view, root, doc, dom} = setup(t, {onClose:() => closes++, onHome:() => homes++});
     const trigger = doc.getElementById('trigger'); trigger.focus(); doc.body.style.overflow = 'auto';
     doc.getElementById('app').inert = dismissal === 'outside'; await view.open();
@@ -271,7 +271,7 @@ test('home close Escape and backdrop restore prior app state and call the correc
     view.close();
     assert.equal(root.hidden, true); assert.equal(doc.activeElement, trigger);
     assert.equal(doc.body.style.overflow, 'auto'); assert.equal(doc.getElementById('app').inert, dismissal === 'outside');
-    assert.equal(closes, 1); assert.equal(homes, dismissal === 'home' ? 1 : 0);
+    assert.equal(closes, 1); assert.equal(homes, 0); assert.equal(root.querySelector('.gsr-home'), null);
   }
 });
 

@@ -1,7 +1,9 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import { buildPaymentLedger } from '../chat/payment-ledger-model.js';
 import { formatReportDate, formatReportMoney } from '../chat/contractor-report-model.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { captureFilteredReport, REPORT_PDF_TITLES } from './report-print.js';
 
 const COLUMNS = ['DATA PGTO', 'PEDIDO', 'ID', 'FORNECEDOR', 'FILIAL', 'CONTA', 'PRODUTO', 'VU', 'QTD', 'FRETE', 'TOTAL', 'TOTAL FORN. DIA'];
 const FILTERS = [['branch', 'FILIAL'], ['order', 'ID PEDIDO'], ['product', 'PRODUTO'], ['supplier', 'FORNECEDOR'], ['disbursement', 'DESEMBOLSO']];
@@ -75,6 +77,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   let dateCell = null, supplierCell = null, totalCell = null, merged = new Map(), lastScrollTop = 0, printing = false;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice = text => { notice.textContent = text; notice.hidden = !text; };
   function clearRows() {
     body.replaceChildren(); rendered = 0; lastGroup = lastRow = null; currentDay = ''; dayIndex = -1;
@@ -84,28 +87,34 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   function cell(tr, column, value, span = 1) {
     const td = make('td', '', String(value ?? '').trim() || '—'); td.dataset.column = column; td.rowSpan = span; tr.append(td); return td;
   }
+  function displayValues(group, row) {
+    return { paymentDate: formatReportDate(group.date), order: row.order, id: row.id, supplier: group.supplier,
+      branch: row.branch, account: row.account, product: row.product || '—', unit: money(row.unit),
+      quantity: quantity(row.quantity), freight: money(row.freight), total: money(row.total), supplierTotal: money(group.total) };
+  }
   function appendRows(limit = BATCH_SIZE) {
     const end = Math.min(entries.length, rendered + limit), fragment = doc.createDocumentFragment();
     for (; rendered < end; rendered++) {
       const { group, row } = entries[rendered], sameGroup = group === lastGroup;
+      const values = displayValues(group, row);
       const firstDay = group.date !== currentDay;
       if (firstDay) { currentDay = group.date; dayIndex++; }
       const tr = make('tr', dayIndex % 2 === 0 ? 'pl-day-blue' : '');
-      if (firstDay) dateCell = cell(tr, 'paymentDate', formatReportDate(group.date));
+      if (firstDay) dateCell = cell(tr, 'paymentDate', values.paymentDate);
       else dateCell.rowSpan++;
       function mergedCell(column, keys) {
         if (sameGroup && keys.every(key => lastRow[key] === row[key])) merged.get(column).rowSpan++;
-        else merged.set(column, cell(tr, column, row[column]));
+        else merged.set(column, cell(tr, column, values[column]));
       }
-      mergedCell('order', ['branch', 'account', 'order']); cell(tr, 'id', row.id);
-      if (!sameGroup) supplierCell = cell(tr, 'supplier', group.supplier); else supplierCell.rowSpan++;
+      mergedCell('order', ['branch', 'account', 'order']); cell(tr, 'id', values.id);
+      if (!sameGroup) supplierCell = cell(tr, 'supplier', values.supplier); else supplierCell.rowSpan++;
       mergedCell('branch', ['branch']); mergedCell('account', ['branch', 'account']);
-      const product = cell(tr, 'product', ''); product.replaceChildren(make('strong', '', row.product || '—'));
+      const product = cell(tr, 'product', ''); product.replaceChildren(make('strong', '', values.product));
       if (row.description) product.append(doc.createTextNode(` (${row.description})`));
-      cell(tr, 'unit', money(row.unit)); cell(tr, 'quantity', quantity(row.quantity));
-      cell(tr, 'freight', money(row.freight)); cell(tr, 'total', money(row.total));
+      cell(tr, 'unit', values.unit); cell(tr, 'quantity', values.quantity);
+      cell(tr, 'freight', values.freight); cell(tr, 'total', values.total);
       // The full filtered supplier/day total comes from the complete snapshot, never the visible batch.
-      if (!sameGroup) totalCell = cell(tr, 'supplierTotal', money(group.total)); else totalCell.rowSpan++;
+      if (!sameGroup) totalCell = cell(tr, 'supplierTotal', values.supplierTotal); else totalCell.rowSpan++;
       fragment.append(tr); lastGroup = group; lastRow = row;
     }
     body.append(fragment);
@@ -181,6 +190,44 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
   }
   scroll.addEventListener('scroll', onScroll, { passive: true });
   win?.addEventListener('resize', orientationChanged); win?.addEventListener('orientationchange', orientationChanged);
+  /** Synchronous {title, filters, pages:[{blocks}]} capture for the PDF decorator.
+   * Call panel.capturePrint({title}) before its preparePrint/DOM fallback; no
+   * restore callback is needed. Validation and metadata use the visible batch,
+   * while every already-filtered entry becomes a plain 12-column snapshot row.
+   * This never fetches, changes scroll/focus, or constructs more ledger DOM. */
+  function capturePrint({ title = REPORT_PDF_TITLES['open-payment-ledger'] } = {}) {
+    const captured = captureFilteredReport(root, { title });
+    if (entries.length <= rendered) return captured;
+    const block = captured.pages[0].blocks.find(entry => entry.type === 'table');
+    const columns = [...body.rows[0].cells].map(td => td.dataset.column), templates = block.rows[1].cells;
+    const productStyle = win.getComputedStyle(body.rows[0].querySelector('[data-column=product]'));
+    const descriptionBold = Number(productStyle.fontWeight) >= 600 || productStyle.fontWeight === 'bold';
+    const normalized = value => String(value ?? '').replace(/\s+/g, ' ');
+    let day = '', dayNumber = -1;
+    const rows = [block.rows[0]];
+    for (const { group, row } of entries) {
+      if (day !== group.date) { day = group.date; dayNumber++; }
+      const values = displayValues(group, row);
+      const cells = templates.map((template, index) => {
+        const column = columns[index], style = template.runs[0];
+        // The first data day is blue; the alternating plain days share the
+        // table/header's white background, both read from the current CSS.
+        const background = dayNumber % 2 ? block.rows[0].cells[index].background : template.background;
+        let runs;
+        if (column === 'product') {
+          runs = [];
+          const product = normalized(values.product), description = row.description ? normalized(` (${row.description})`) : '';
+          if (product.trim()) runs.push({ ...style, text: `${product} `, bold: true });
+          if (description.trim()) runs.push({ ...style, text: description, bold: descriptionBold });
+          if (runs.length) { runs[0].text = runs[0].text.trimStart(); runs.at(-1).text = runs.at(-1).text.trimEnd(); }
+        } else runs = [{ ...style, text: normalized(values[column]).trim() || '—' }];
+        return { ...template, runs, background };
+      });
+      rows.push({ header: false, cells });
+    }
+    block.rows = rows;
+    return captured;
+  }
   return Object.freeze({ element: root,
     async open() {
       if (destroyed) throw new Error('O relatório foi encerrado.');
@@ -191,7 +238,7 @@ export function createPaymentLedgerView({ document: doc = globalThis.document, d
       for (const name of ['startDate','endDate']) { controls.get(name).value=''; dateDisplays.get(name).value=''; dateDisplays.get(name).setCustomValidity(''); }
        warning.hidden=true; report.hidden = false; panel.classList.toggle('pl-dialog--portrait', false); panel.focus();
       await load();
-    }, close,
+    }, close, capturePrint,
     preparePrint() {
       const count = rendered, top = scroll.scrollTop, current = revision, printedEntries = entries;
       printing = true; appendRows(entries.length);

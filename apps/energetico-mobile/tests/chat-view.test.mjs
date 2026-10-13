@@ -1118,6 +1118,10 @@ test("tela do calendário RHID cancela sem enviar e gera com a data escolhida", 
 
   root.querySelector('[data-action="open-rhid-attendance-report"]').click();
   assert.equal(root.querySelector('.chat-confirmation-backdrop'), null, "o calendário RHID usa a própria tela, sem camada escura");
+  const reportDialog = root.querySelector('[data-rhid-attendance-report-dialog]');
+  assert.equal(reportDialog.querySelectorAll('[data-action="cancel-rhid-attendance-report"]').length, 1, "o calendário possui uma única ação de fechar");
+  assert.equal(reportDialog.querySelector('[data-action="cancel-rhid-attendance-report"]').textContent, '❌');
+  assert.ok(reportDialog.querySelector('[data-action="open-rhid-monthly-report"]'), "a geração mensal continua separada do relatório diário");
   assert.equal(root.querySelector('.chat-transcript .chat-choice-button'), null, "o menu fica oculto enquanto o calendário RHID está aberto");
   assert.equal(root.querySelector('[data-rhid-attendance-report-dialog] input[type="date"]'), null, "o calendário RHID não deve abrir seletor nativo");
   assert.ok(root.querySelector('[data-role="rhid-calendar-day"][aria-pressed="true"]'), "a data de hoje deve vir selecionada");

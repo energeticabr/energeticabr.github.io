@@ -74,6 +74,7 @@ async function waitFor(predicate) {
 function parentFixture({ tokenLabel = "Título" } = {}) {
   const columns = [
     { name: "FILIAL", text: {} }, { name: "FORNECEDOR", text: {} },
+    { name: "STATUS", text: {} },
     { name: "VALORTOTAL", text: {} }, { name: "DATAPGTOEFETUADO", dateTime: {} },
     { name: "OBS", text: {} }, { name: "FORMAPGTO", text: {} },
     { name: "PGTOAGENDADO", dateTime: {} }, { name: "DATAPGTOAGENDADO", dateTime: {} },
@@ -87,6 +88,7 @@ function parentFixture({ tokenLabel = "Título" } = {}) {
   ];
   const item = { id: "9", eTag: '"parent-v7"', fields: {
     FILIAL: "FILIAL A", FORNECEDOR: "FORNECEDOR A", VALORTOTAL: "1234,56", OBS: "ORIGINAL",
+    STATUS: "PAGAMENTO EFETUADO",
     FORMAPGTO: "CAIXA", DATAPGTOEFETUADO: "2026-10-08T03:00:00Z",
     PGTOAGENDADO: "2026-10-08T03:00:00Z", DATAPGTOAGENDADO: "2026-10-08T03:00:00Z",
     DATAEXECUCAOAGENDAMENTO: "2026-10-08T03:00:00Z", DATAPREVISTOPGTO: "2026-10-09T03:00:00Z",
@@ -103,7 +105,10 @@ function parentFixture({ tokenLabel = "Título" } = {}) {
     },
     async getColumns(site, list) { if(list==='child-list-id')return [...columns,{name:'DESCRITIVOPROVISAO',text:{}}];assertParent(site, list); return columns; },
     async getItemsPage(site, list) {
-      if(list==='child-list-id')return {items:[],hasMore:false};
+      if(list==='child-list-id')return {items:[
+        {id:'101',fields:{STATUS:'PAGAMENTO PREVISTO'}},
+        {id:'102',fields:{STATUS:'PAGAMENTO EFETUADO'}},
+      ],hasMore:false};
       assertParent(site, list);
       return { items: [{ ...item, eTag: '"snapshot-v2"' }], hasMore: false };
     },
@@ -126,6 +131,10 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
   const gallery = createRegistrationGallery({ document: doc, kind: "provisionDescription", data: fixture.data });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
+  assert.equal(doc.querySelector('[data-registration-row="9"]'), null, 'o pai pago fica fora da abertura padrão');
+  const statusFilter = doc.querySelector('[data-filter-field="STATUS"]');
+  statusFilter.value = '';
+  statusFilter.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   const pencil = doc.querySelector('[data-registration-row="9"] [data-gallery-action="edit"]');
   assert.ok(pencil, "o item pai precisa oferecer o lápis");
   assert.equal(pencil.getAttribute("aria-label"), "Editar item de ID 9");
@@ -134,9 +143,14 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
   await waitFor(() => doc.querySelector('[data-dynamic-form]'));
   const form = doc.querySelector('[data-dynamic-form]');
   assert.deepEqual([...form.querySelectorAll('[name]')].map(control => control.name).sort(), [
-    "FILIAL", "FORNECEDOR", "VALORTOTAL", "DATAPGTOEFETUADO", "OBS", "FORMAPGTO",
+    "FILIAL", "FORNECEDOR", "STATUS", "VALORTOTAL", "DATAPGTOEFETUADO", "OBS", "FORMAPGTO",
     "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", "DATAPREVISTOPGTO",
   ].sort());
+  const status = form.querySelector('[name="STATUS"]');
+  assert.equal(status.tagName, 'SELECT');
+  assert.equal(status.multiple, false);
+  assert.equal(status.value, 'PAGAMENTO EFETUADO');
+  assert.deepEqual([...status.options].map(option => option.value).filter(Boolean).sort(), ['PAGAMENTO EFETUADO', 'PAGAMENTO PREVISTO']);
   assert.equal(form.querySelector('[name="VALORTOTAL"]').type, "text");
   assert.equal(form.querySelector('[name="VALORTOTAL"]').value, "1234,56");
   assert.equal(form.querySelector('[name="PGTOAGENDADO"]').type, "datetime-local");

@@ -21,7 +21,6 @@ const cases = [
   ...['group', 'family', 'subfamily', 'product', 'documents'].map(kind =>
     [kind, opts => createRegistrationGallery({ ...opts, kind, data })]),
   ...['IDFOLHA', 'FOLHAPGTO'].map(gallery => [gallery, opts => createHrPayrollGallery({ ...opts, gallery, request: async () => ({ rows: [] }) })]),
-  ['relatório da folha', opts => createHrPayrollReport({ ...opts, request: async () => [] }), { id: '1' }],
   ['efetuar folha', opts => createSupplierPayrollView({ ...opts, documentRef: opts.document, data: {} })],
 ];
 
@@ -46,7 +45,7 @@ for (const [name, create, input] of cases) {
   });
 }
 
-test('casinha do relatório IDFOLHA fecha relatório e galeria mesmo quando onClose destrói a página', async t => {
+test('❌ do relatório IDFOLHA fecha somente o relatório e cancela a consulta sem sair da galeria', async t => {
   const dom = new JSDOM('<main></main>');
   let homes = 0, closes = 0;
   let resolveReport, reportSignal;
@@ -64,11 +63,17 @@ test('casinha do relatório IDFOLHA fecha relatório e galeria mesmo quando onCl
   await view.open();
   dom.window.document.querySelector('[data-action="open-payroll-report"]').click();
   await new Promise(resolve => setImmediate(resolve));
-  dom.window.document.querySelector('.hr-payroll-report-overlay .screen-navigation').lastElementChild.click();
-  assert.equal(homes, 1);
-  assert.equal(closes, 1);
+  const report = dom.window.document.querySelector('.hr-payroll-report-overlay');
+  assert.equal(report.querySelector('.screen-navigation'), null);
+  const exits = [...report.querySelectorAll('.report-close-control')];
+  assert.equal(exits.length, 1);
+  assert.equal(exits[0].textContent, '❌');
+  exits[0].click();
+  assert.equal(homes, 0);
+  assert.equal(closes, 0);
   assert.equal(reportSignal.aborted, true);
   resolveReport([]);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(dom.window.document.querySelector('.hr-gallery-overlay'), null);
+  assert.equal(report.hidden, true);
+  assert.equal(dom.window.document.querySelector('.hr-gallery-overlay:not(.hr-payroll-report-overlay)').hidden, false);
 });

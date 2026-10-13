@@ -280,7 +280,26 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function rowFieldValue(row, field) {
     if (field === "ID") return String(row.id || "");
     if (model.nativeCard && ["Criado por", "Modificado por"].includes(field)) return documentAuthorValue(row, field);
+    if (kind === 'provisionDescription' && field === 'STATUS') {
+      const status = fieldValue(row.fields, field, model);
+      // Legacy parents have an empty textual STATUS; execution dates provide
+      // their display/filter value only, without adding it to a saved draft.
+      return status.trim() ? status : provisionExecuted(row) ? 'PAGAMENTO EFETUADO' : 'PAGAMENTO PREVISTO';
+    }
     return fieldValue(row.fields, field, model);
+  }
+
+  function provisionExecuted(row) {
+    return ['DATAPGTOEFETUADO', 'DATAEXECUCAOAGENDAMENTO'].some(field => valueText(registrationRawField(row.fields, field, model)).trim());
+  }
+
+  function retainProvisionStatusFilter(field, control, value) {
+    if (kind !== 'provisionDescription' || field !== 'STATUS' || !value || [...control.options].some(option => option.value === value)) return;
+    // Retain the requested default/current filter when its source no longer
+    // offers it. This disabled entry is not an editable SharePoint choice.
+    const retained = option(`${value} (sem opção cadastrada)`, value);
+    retained.disabled = true;
+    control.prepend(retained);
   }
 
   function documentAuthorValue(row, field) {
@@ -470,13 +489,16 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const selectedLabel = control.selectedOptions[0]?.textContent || selectedValue;
     const policy = data.getFilterPolicy?.(field);
     const fixedValue = policy?.disabled === true ? policy.defaultValue || "" : "";
+    const desiredValue = fixedValue || (!hasLoaded ? policy?.defaultValue || model.defaultFilters?.[field] || selectedValue : selectedValue);
     filterErrors.delete(field);
     if (source.disabledUntil?.some(parent => !filters[parent])) {
       control.replaceChildren(option("Selecione o filtro anterior", ""));
       control.disabled = true;
       return;
     }
-    control.replaceChildren(option("Carregando…", fixedValue));
+    // Closing while the request is pending must not turn the selected STATUS
+    // into Todos when the same gallery reopens and rejects the old response.
+    control.replaceChildren(option("Carregando…", kind === 'provisionDescription' && field === 'STATUS' ? desiredValue : fixedValue));
     control.disabled = true;
     try {
       if (typeof data.loadFilterOptions !== "function") throw new Error("Fonte de filtro indisponível.");
@@ -485,13 +507,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (!Array.isArray(options)) throw new Error("Opções do filtro indisponíveis.");
       control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
       if (fixedValue && !options.some(item => String(item.value) === fixedValue)) control.append(option(fixedValue, fixedValue));
-      const desiredValue = fixedValue || (!hasLoaded ? policy?.defaultValue || selectedValue : selectedValue);
+      retainProvisionStatusFilter(field, control, desiredValue);
       if (refresh && desiredValue && ![...control.options].some(item => item.value === desiredValue)) control.append(option(selectedLabel || desiredValue, desiredValue));
       control.value = fixedValue || ([...control.options].some(item => item.value === desiredValue) ? desiredValue : "");
       control.disabled = policy?.disabled === true;
     } catch {
       if (destroyed || root.hidden || !root.isConnected || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
-      control.replaceChildren(option("Indisponível", fixedValue));
+      control.replaceChildren(option("Indisponível", kind === 'provisionDescription' && field === 'STATUS' ? desiredValue : fixedValue));
       if (refresh && selectedValue && selectedValue !== fixedValue) {
         control.append(option(selectedLabel, selectedValue));
         control.value = selectedValue;
@@ -514,12 +536,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         ? Number(right) - Number(left)
         : left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true }));
       control.replaceChildren(option("Todos", ""), ...values.map(value => option(value, value)));
+      if (!hasLoaded) retainProvisionStatusFilter(field, control, model.defaultFilters?.[field]);
       if (control.multiple) {
         const selected = !hasLoaded ? model.defaultFilters?.[field] || [] : selectedValue;
         for (const option of control.options) option.selected = selected.includes(option.value);
         continue;
       }
-      control.value = !hasLoaded && values.includes(model.defaultFilters?.[field]) ? model.defaultFilters[field]
+      control.value = !hasLoaded && [...control.options].some(option => option.value === model.defaultFilters?.[field]) ? model.defaultFilters[field]
         : values.includes(selectedValue) ? selectedValue : "";
     }
     await populateCatalogFilters([...filterSources.keys()], { refresh });
@@ -557,6 +580,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   function filteredRows() {
     const query = search.value.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const filtered = rows.filter(row => {
+      if (kind === 'provisionDescription' && filterControls.get('STATUS').value === model.defaultFilters.STATUS && provisionExecuted(row)) return false;
       for (const [field, control] of filterControls) {
         if (control.multiple) {
           const selected = [...control.selectedOptions].map(option => option.value).filter(Boolean);

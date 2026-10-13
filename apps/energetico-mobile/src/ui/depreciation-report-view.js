@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildDepreciationOverview} from '../chat/depreciation-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 
@@ -24,6 +25,7 @@ export function createDepreciationReportView({document:doc=globalThis.document,d
  panel.append(warning,toolbar,content);root.append(panel);doc.body.append(root);
  let controller=null,revision=0,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:toolbar, onClose:close});
 
  function render(snapshot){
   const result=buildDepreciationOverview(snapshot,provisionDateKey(now()));content.replaceChildren();

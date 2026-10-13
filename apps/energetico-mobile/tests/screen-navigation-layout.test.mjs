@@ -56,6 +56,15 @@ test('navigation pairs stay left and payroll footer spans both sides at mobile a
           if(!ready) await delay(100);
         }
         assert.ok(ready, screen+' did not open at '+width);
+        if(screen==='hrreport') {
+          const report=await evaluate(`(()=>{const root=document.querySelector('.hr-payroll-report-overlay'),header=root.querySelector('.hr-gallery-header'),title=header.querySelector('h1'),exits=[...header.querySelectorAll('.report-close-control')];const box=n=>{const r=n.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width,height:r.height};};return {navigation:root.querySelector('.screen-navigation')!==null,title:box(title),exits:exits.map(node=>({text:node.textContent,...box(node)})),overflow:root.scrollWidth>root.clientWidth+1};})()`);
+          assert.equal(report.navigation,false,'relatórios não têm retorno/início duplicados');
+          assert.equal(report.exits.length,1);
+          assert.equal(report.exits[0].text,'❌');
+          assert.ok(report.exits[0].width>=44&&report.exits[0].height>=44&&report.exits[0].right<=width+1&&!report.overflow,JSON.stringify(report));
+          assert.ok(report.title.right<=report.exits[0].left,JSON.stringify(report));
+          continue;
+        }
         const layout=await evaluate(`(() => {
           const nav=document.querySelector('.screen-navigation'),header=nav.parentElement,title=nav.nextElementSibling;
           const box=n=>{const r=n.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};

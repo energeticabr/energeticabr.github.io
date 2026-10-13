@@ -286,6 +286,10 @@ export function createAttachmentPreview({
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
     dialog.dataset.layout = ['flow-summary', 'report-pdf'].includes(layout) ? layout : "media";
+    const reportLayout = dialog.dataset.layout !== "media";
+    closeButton.textContent = reportLayout ? "❌" : "Fechar";
+    closeButton.setAttribute("aria-label", reportLayout ? "Fechar relatório" : "Fechar");
+    backButton.hidden = reportLayout;
     const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp };
     active = session;
     title.textContent = session.fileName;

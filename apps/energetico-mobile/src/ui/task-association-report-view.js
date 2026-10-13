@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildTaskAssociationOverview} from '../chat/task-association-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -28,6 +29,7 @@ export function createTaskAssociationReportView({document:doc=globalThis.documen
  const content=make('div','tar-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Indicadores e atividades por associação');report.append(toolbar,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
  let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:toolbar, onClose:close});
  const selected=()=>({...Object.fromEntries([...controls].filter(([name])=>name!=='status').map(([name,node])=>[name,node.value])),description:description.value,dueDate:native.value,statuses:[...controls.get('status').selectedOptions].map(option=>option.value).filter(Boolean)});
  function render(){
   if(content.contains(doc.activeElement))panel.focus();content.replaceChildren();if(!snapshot)return;

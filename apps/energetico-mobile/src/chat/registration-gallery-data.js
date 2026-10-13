@@ -4,7 +4,7 @@ import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
 import { createSharePointAttachmentTransport } from "../../../../portal/data/attachments.js";
 import { createRegistrationGalleryFilterData } from "./registration-gallery-filter-data.js";
-import { createProvisionDescriptionEditor } from "../../../../portal/forms/provision-description-edit.js";
+import { createProvisionDescriptionEditor, loadProvisionDescriptionStatusOptions } from "../../../../portal/forms/provision-description-edit.js";
 
 const AUDIT_FIELDS = ["ID", "Criado por", "Criado", "Modificado", "Modificado por"];
 const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado por": ["Author"], "Modificado por": ["Editor"] };
@@ -15,10 +15,10 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
     title: "GALERIA DESCRITIVO PROVISÃO",
     listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],
     nativeCard: true, showAttachments: true, recordLabel: "descritivo de provisão", recordActions: ["edit"],
-    metadataEditorFields: ["FILIAL", "FORNECEDOR", "VALORTOTAL", "DATAPGTOEFETUADO", "OBS", "FORMAPGTO", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", "DATAPREVISTOPGTO"],
+    metadataEditorFields: ["FILIAL", "FORNECEDOR", "STATUS", "VALORTOTAL", "DATAPGTOEFETUADO", "OBS", "FORMAPGTO", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", "DATAPREVISTOPGTO"],
     searchPlaceholder: "Pesquisar fornecedor, observação ou ID",
-    fields: ["FORNECEDOR", "FILIAL", "VALORTOTAL", "DATA PREVISTO PGTO", "DATAPGTOEFETUADO", "FORMAPGTO", "OBS", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", ...AUDIT_FIELDS],
-    filterFields: ["ID", "FILIAL", "FORNECEDOR", "FORMAPGTO"],
+    fields: ["FORNECEDOR", "FILIAL", "STATUS", "VALORTOTAL", "DATA PREVISTO PGTO", "DATAPGTOEFETUADO", "FORMAPGTO", "OBS", "PGTOAGENDADO", "DATAPGTOAGENDADO", "DATAEXECUCAOAGENDAMENTO", ...AUDIT_FIELDS],
+    filterFields: ["ID", "FILIAL", "FORNECEDOR", "FORMAPGTO", "STATUS"], defaultFilters: { STATUS: "PAGAMENTO PREVISTO" },
     fieldAliases: { ...AUDIT_ALIASES, "DATA PREVISTO PGTO": ["DATAPREVISTOPGTO"] },
     fieldLabels: { VALORTOTAL: "Valor total", "DATA PREVISTO PGTO": "Data previsto pgto", DATAPGTOEFETUADO: "Data pgto efetuado", FORMAPGTO: "Forma de pagamento", OBS: "Observação", PGTOAGENDADO: "Pgto agendado", DATAPGTOAGENDADO: "Data pgto agendado", DATAEXECUCAOAGENDAMENTO: "Data execução agendamento" },
     fieldTypes: { VALORTOTAL: "currency", "DATA PREVISTO PGTO": "date", DATAPGTOEFETUADO: "date", PGTOAGENDADO: "date", DATAPGTOAGENDADO: "date", DATAEXECUCAOAGENDAMENTO: "date" },
@@ -263,9 +263,13 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
             const columns = await repository.getColumns(...args);
             // The provision parent's Title is an idempotency token; display
             // labels must not grant fields outside its proven internal names.
-            return (Array.isArray(columns) ? columns : []).filter(column => model.metadataEditorFields.some(field =>
+            const allowed = (Array.isArray(columns) ? columns : []).filter(column => model.metadataEditorFields.some(field =>
               (kind === "provisionDescription" ? [column.name] : [column.name, column.displayName])
                 .some(name => registrationFieldKey(name) === registrationFieldKey(field))));
+            if (kind !== "provisionDescription" || !allowed.some(column => registrationFieldKey(column.name) === "status" && !column.readOnly && !column.hidden)) return allowed;
+            const choices = await loadProvisionDescriptionStatusOptions({ repository, siteKey: options.siteKey || "personal", signal: args[2]?.signal });
+            return allowed.map(column => registrationFieldKey(column.name) === "status"
+              ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column);
           };
           const value = repository[property];
           return typeof value === "function" ? value.bind(repository) : value;

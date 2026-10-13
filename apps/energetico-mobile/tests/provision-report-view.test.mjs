@@ -166,3 +166,50 @@ test('provision report PDF keeps large annual totals on one line and omits scree
   assert.ok(items.some(item=>item.str==='R$ 1.234.567,89'),'annual total must fit on one PDF line');
   assert.doesNotMatch(items.map(item=>item.str).join(' '),/Deslize para os lados/);
 });
+
+// Break: the summary renders child metadata, loses a product, changes the
+// annual section, or expansion adds summary amounts to the pending footer.
+test('multi-item description starts collapsed and expands original linked rows without counting the summary',async t=>{
+  const first={...row,id:'301',descriptionId:'42',total:0.1,product:'Água',observation:'<b>Original</b>'};
+  const second={...row,id:'302',descriptionId:'42',total:0.2,branch:'Filial diferente',supplier:'Outro fornecedor',product:'Internet',observation:'',dueDate:'2026-10-12'};
+  const single={...row,id:'303',descriptionId:'43',total:7};
+  const descriptions=[{id:'42',branch:'Filial do pai',supplier:'Referência',dueDate:'2026-10-20'},
+    {id:'43',branch:'Filial do pai',supplier:'Referência',dueDate:'2026-10-20'}];
+  const {view,root,dom}=setup(t,async()=>({provisions:[first,second,single],recurrences:[recurrence],descriptions}));await view.open();
+  const main=root.querySelector('.pr-table--provisions'),annual=root.querySelector('.pr-table--annual');
+  const annualBefore=annual.outerHTML;
+  const group=main.querySelector('tr[data-description-id="42"]'),toggle=group?.querySelector('button');
+  assert.ok(toggle,'multi-item parent needs an accessible expand/collapse button');
+  assert.equal(toggle.type,'button');assert.equal(toggle.getAttribute('aria-expanded'),'false');
+  assert.match(toggle.getAttribute('aria-label'),/Expandir.*42/);
+  assert.match(toggle.textContent,/↓/);
+  assert.equal(group.querySelector('[data-column=branch]').textContent.replace('↓','').trim(),'Filial do pai');
+  assert.equal(group.querySelector('[data-column=supplier]').textContent,'Referência');
+  assert.equal(group.querySelector('[data-column=dueDate]').textContent,'20/10/2026');
+  assert.equal(group.querySelector('[data-column=total]').textContent.replace(/\s/g,''),'R$0,30');
+  assert.deepEqual([...group.querySelector('[data-column=product]').children].map(node=>node.textContent),['Água (<b>Original</b>)','Internet']);
+  assert.equal(group.querySelector('b'),null);
+  assert.equal(main.querySelectorAll('tr[data-id]:not([hidden])').length,1);assert.equal(main.querySelector('tr[data-id="303"] button'),null);
+  const controlled=toggle.getAttribute('aria-controls').split(' ').map(id=>dom.window.document.getElementById(id));
+  assert.ok(controlled.every(Boolean),'aria-controls must reference existing rows even when collapsed');
+  assert.deepEqual(controlled.map(node=>node.dataset.id),['301','302']);assert.ok(controlled.every(node=>node.hidden));
+  const before=root.querySelector('[data-metric=pendingTotal]').textContent;
+  toggle.focus();toggle.click();
+  assert.equal(toggle.getAttribute('aria-expanded'),'true');assert.match(toggle.getAttribute('aria-label'),/Recolher.*42/);
+  assert.equal(main.querySelectorAll('tr[data-id]:not([hidden])').length,3);assert.ok(controlled.every(node=>!node.hidden));
+  assert.equal(dom.window.document.activeElement,toggle);
+  const child=main.querySelector('tr[data-id="302"]');
+  assert.equal(child.querySelector('[data-column=branch]').textContent,'Filial diferente');
+  assert.equal(child.querySelector('[data-column=supplier]').textContent,'Outro fornecedor');
+  assert.equal(child.querySelector('[data-column=dueDate]').textContent,'12/10/2026');
+  assert.equal(child.querySelector('[data-column=total]').textContent.replace(/\s/g,''),'R$0,20');
+  assert.equal(child.querySelector('[data-column=product]').dataset.label,'PRODUTO');
+  assert.equal(root.querySelector('[data-metric=pendingTotal]').textContent,before);
+  assert.equal(root.querySelector('[data-metric=pendingCount]').textContent,'3 pendência(s)');
+  assert.equal(annual.outerHTML,annualBefore);
+  toggle.click();assert.equal(toggle.getAttribute('aria-expanded'),'false');assert.equal(main.querySelectorAll('tr[data-id]:not([hidden])').length,1);
+  toggle.click();const product=root.querySelector('[name=product]');product.value='Água';product.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(root.querySelector('.pr-table--provisions button'),null);
+  assert.deepEqual([...root.querySelectorAll('.pr-table--provisions tr[data-id]')].map(node=>node.dataset.id),['301']);
+  assert.equal(root.querySelector('[data-metric=pendingTotal]').textContent.replace(/\s/g,''),'R$0,10');
+});

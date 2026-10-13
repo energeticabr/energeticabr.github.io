@@ -6,6 +6,8 @@ import '../../src/ui/searchable-filter-selects.css';
 import {createRegistrationGallery} from '../../src/ui/registration-gallery-view.js';
 const rows=[{id:'17',hasAttachments:false,fields:{FORNECEDOR:'COPASA',FILIAL:'004 - EDIFÍCIO XAVANTE',DATAPREVISTOPGTO:'2026-11-05',Created:'2026-10-08',Modified:'2026-10-08'}},{id:'16',attachmentCount:2,createdBy:{user:{displayName:'BERNARDO NOTINI MOREIRA BAHIA'}},lastModifiedBy:{user:{displayName:'USUÁRIO COM NOME LONGO PARA TESTAR A QUEBRA DE LINHA'}},fields:{FORNECEDOR:'PETRANET E SERVIÇOS DE TELECOMUNICAÇÕES',FILIAL:'004 - EDIFÍCIO XAVANTE',VALORTOTAL:'99999999,80',DATAPREVISTOPGTO:'2026-11-05',DATAPGTOEFETUADO:'2026-10-08',Created:'2026-10-08',Modified:'2026-10-08',FORMAPGTO:'ENERGÉTICA SICOOB',OBS:'Pagamento de serviços recorrentes com observação extensa e informações preservadas.'}}];
 await createRegistrationGallery({document,kind:'provisionDescription',onHome(){},onCreate(){},data:{async loadSnapshot(){return{rows};}}}).open();
+// Include the paid fixture through the same manual filter used by the user.
+const status=document.querySelector('[data-filter-field="STATUS"]');status.value='';status.dispatchEvent(new Event('change',{bubbles:true}));
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const cards=[...document.querySelectorAll('[data-registration-row]')],r=n=>n.getBoundingClientRect();
 const first=cards[0];

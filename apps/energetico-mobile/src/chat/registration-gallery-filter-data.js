@@ -1,3 +1,5 @@
+import { loadProvisionDescriptionStatusOptions } from '../../../../portal/forms/provision-description-edit.js';
+
 // Catalog filter Items are taken from G22/G14/G13/G39/G19_2 and
 // G31/G48/G6/G49/G23/G25/G7 in the extracted Power Apps source. Internal aliases
 // below are proven by References/DataSources.json; live metadata must still
@@ -32,6 +34,7 @@ const activeContracts = source('EMPREITEIRO', 'ID', {
   labelFields: ['FORNECEDOR'], conditions: [{ sourceField: 'STATUS', value: 'ATIVO' }],
 });
 export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
+  provisionDescription: { STATUS: source('DESCRITIVOPROVISAO', 'STATUS', { provisionDescriptionStatus: true }) },
   asset: { FILIAL: branch, IMOBILIZADO: source('CADASTROIMOBILIZADO', 'IMOBILIZADO', { listAliases: ['CADASTROIMOBILIZADO', 'CADASTRO IMOBILIZADO'] }) },
   assetFunction: {},
   assetProduct: { FUNCAO: source('FUNCAOIMOBILIZADO', 'FUNCAO', { listAliases: ['FUNCAOIMOBILIZADO', 'FUNÇÃO IMOBILIZADO'] }) },
@@ -158,6 +161,11 @@ export function createRegistrationGalleryFilterData({ repository, siteKey = 'per
     const cacheKey = JSON.stringify([fieldKey, selected]);
     if (refresh) cache.delete(cacheKey);
     else if (cache.has(cacheKey)) return cache.get(cacheKey);
+    if (descriptor.provisionDescriptionStatus) {
+      const values = await read(() => loadProvisionDescriptionStatusOptions({ repository, siteKey, signal }), signal);
+      const options = Object.freeze(values.map(value => Object.freeze({ value, label: value })));
+      active(); cache.set(cacheKey, options); return options;
+    }
     const list = await resolveCatalog(descriptor, signal); active();
     const columns = await read(() => repository.getColumns(siteKey, list.id, signal ? { signal } : {}), signal); active();
     if (!Array.isArray(columns)) throw new Error('Os metadados do catálogo retornaram um resultado inválido.');

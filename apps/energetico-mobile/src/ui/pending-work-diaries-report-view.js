@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildPendingWorkDiariesReport} from '../chat/pending-work-diaries-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 
@@ -53,6 +54,7 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
   let loaded = null, controller = null, revision = 0, destroyed = false;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:toolbar, onClose:close, button:dismiss});
   function cancel() {
     controller?.abort();
     controller = null;
@@ -157,7 +159,6 @@ export function createPendingWorkDiariesReportView({document:doc = globalThis.do
     else if (!event.shiftKey && (doc.activeElement === last || doc.activeElement === panel)) {event.preventDefault(); first?.focus();}
   });
   refresh.addEventListener('click', () => void load());
-  dismiss.addEventListener('click', close);
   win?.addEventListener('resize', orientationChanged);
   win?.addEventListener('orientationchange', orientationChanged);
 

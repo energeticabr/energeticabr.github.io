@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {normalizeDelegatedDeadlineSnapshot, buildDelegatedDeadlineOverview} from '../chat/delegated-deadline-report-model.js';
 import {provisionDateKey} from '../chat/pending-provision-dates.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -75,6 +76,7 @@ export function createDelegatedDeadlineReportView({document:doc = globalThis.doc
   let snapshot = null, controller = null, revision = 0, pickers = null, destroyed = false;
   let returnFocus = null, oldOverflow = '', app = null, oldInert = false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:toolbar, onClose:close});
   const today = () => provisionDateKey(now());
   const selected = () => ({
     description:description.value,

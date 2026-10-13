@@ -213,8 +213,8 @@ test('portrait loads the overview and rotation retains current details safely',a
 });
 
 // Break: modal lets focus escape, traps a PDF dialog, or leaves HOME inert after any dismissal path.
-test('modal contains focus allows PDF dialogs and Escape outside back restore HOME focus and inert state',async t=>{
-  for(const dismissal of ['escape','outside','back','close']) {
+test('modal contains focus allows PDF dialogs and Escape outside close restore HOME focus and inert state',async t=>{
+  for(const dismissal of ['escape','outside','close']) {
     let closes=0,homes=0;const {view,root,doc,dom}=setup(t,{onClose:()=>closes++,onHome:()=>homes++});const trigger=doc.getElementById('trigger');trigger.focus();doc.body.style.overflow='auto';
     await view.open();assert.equal(doc.getElementById('app').inert,true);assert.equal(doc.body.style.overflow,'hidden');
     doc.getElementById('outside').focus();assert.equal(doc.activeElement,root.querySelector('[role=dialog]'));
@@ -225,7 +225,7 @@ test('modal contains focus allows PDF dialogs and Escape outside back restore HO
     if(dismissal==='escape')root.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
     else if(dismissal==='outside')root.click();else root.querySelector(`.ccr-${dismissal}`).click();
     assert.equal(root.hidden,true);assert.equal(doc.activeElement,trigger);assert.equal(doc.getElementById('app').inert,false);assert.equal(doc.body.style.overflow,'auto');
-    assert.equal(closes,1);assert.equal(homes,dismissal==='back'?1:0);
+    assert.equal(closes,1);assert.equal(homes,0);assert.equal(root.querySelector('.ccr-back'),null);
   }
 });
 

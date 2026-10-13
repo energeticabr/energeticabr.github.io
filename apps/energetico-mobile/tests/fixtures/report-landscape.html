@@ -1,12 +1,16 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Validação horizontal dos relatórios</title></head><body><main id="app"><button id="open">Abrir relatório</button><output id="reads">0 consultas</output></main><script type="module">
 import '../../src/ui/payment-ledger.css';
+import '../../src/ui/contractor-control-report.css';
 import '../../src/ui/searchable-filter-selects.css';
 import '../../src/styles.css';
 import {createPaymentLedgerView} from '../../src/ui/payment-ledger-view.js';
+import {createContractorControlReportView} from '../../src/ui/contractor-control-report-view.js';
 import {decorateReportNavigation} from '../../src/ui/report-navigation.js';
 let reads=0;
+const navigated=[];
 const launches=Array.from({length:440},(_,index)=>({id:String(index+1),paymentDate:'2026-10-01',supplier:'Fornecedor '+(index%3+1),branch:'004 - EDIFÍCIO XAVANTE',product:'Produto',order:String(index+1),account:'Energética - Caixa',unit:10,quantity:1,freight:0,total:10}));
-const view=decorateReportNavigation(createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){document.querySelector('#reads').textContent=++reads+' consultas';return {launches};}}}),{action:'open-payment-ledger',onNavigate:()=>false});
+const contractorMode=new URL(location.href).searchParams.has('contractor');
+const view=decorateReportNavigation(contractorMode?createContractorControlReportView({document,data:{async loadOverview(){reads++;return {rows:[],documentStatuses:{}};},async loadDetails(){return {};}}}):createPaymentLedgerView({document,data:{async loadPaymentsSnapshot(){document.querySelector('#reads').textContent=++reads+' consultas';return {launches};}}}),{action:contractorMode?'open-contractor-control-report':'open-payment-ledger',onNavigate:target=>{navigated.push(target);return false;}});
 document.querySelector('#open').addEventListener('click',()=>view.open());
 if(new URL(location.href).searchParams.has('safearea')) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -16,5 +20,20 @@ if(new URL(location.href).searchParams.has('safearea')) {
  view.element.querySelector('.sfs-trigger').click();
  await new Promise(resolve=>requestAnimationFrame(resolve));
  document.documentElement.dataset.layout=JSON.stringify({dialog,controls,popup:bounds(view.element.querySelector('.sfs-popup')),reads});
+}
+if(new URL(location.href).searchParams.has('controls')) {
+ await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+ const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect();
+ const arrows=[...root.querySelectorAll('.report-navigation-arrow')].map(button=>{const r=button.getBoundingClientRect();return {direction:button.dataset.direction,width:r.width,height:r.height,visible:getComputedStyle(button.closest('nav')).display!=='none',hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===button};});
+ for(const button of root.querySelectorAll('.report-navigation-arrow')){button.click();await new Promise(resolve=>requestAnimationFrame(resolve));}
+ const close=root.querySelector('.report-close-control');close.click();const closedByX=root.hidden;
+ await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+ const outside=document.elementFromPoint(root.dataset.reportPortrait==='true'?8:1,innerHeight/2),outsideIsBackdrop=outside===root;outside.click();
+ document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',gaps:{left:rect.left,right:innerWidth-rect.right,top:rect.top,bottom:innerHeight-rect.bottom},arrows,navigated,closedByX,closedOutside:root.hidden,outsideIsBackdrop});
+}
+if(contractorMode) {
+ await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+ const root=view.element,filters=root.querySelector('.ccr-filters'),rects=[...filters.querySelectorAll('.ccr-filter')].map(element=>element.getBoundingClientRect()),portrait=root.dataset.reportPortrait==='true';
+ document.documentElement.dataset.layout=JSON.stringify({portrait,columns:getComputedStyle(filters).gridTemplateColumns.split(' ').length,sameRow:rects.every(rect=>rect.width>1&&rect.height>1&&Math.abs((portrait?rect.left:rect.bottom)-(portrait?rects[0].left:rects[0].bottom))<1),reads,closeCount:root.querySelectorAll('.report-close-control').length});
 }
 </script></body></html>

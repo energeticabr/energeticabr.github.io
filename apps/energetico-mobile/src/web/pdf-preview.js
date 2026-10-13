@@ -5,6 +5,7 @@ import { createPinchZoom } from "./pinch-zoom.js";
 const MAX_CANVAS_PIXELS = 2_000_000;
 const MAX_CANVAS_SIDE = 4096;
 const MAX_PDF_BYTES = 60_000_000;
+const WINDOWED_PAGE_THRESHOLD = 12;
 
 function formatBytes(bytes) {
   const size = Math.max(0, Number(bytes) || 0);
@@ -90,11 +91,25 @@ export function createPdfPreview({
   let renderGeneration = 0;
   let busy = true;
   let renderedCanvases = [];
+  let windowed = false, slotsReady = false, pageSlots = [], pendingPageIndex = null, windowTask = null;
+  const failedPageNumbers = new Set();
   const windowRef = documentRef.defaultView;
   let resizeObserver = null;
   let fittedSize = '';
   let reportedPage = null;
   const viewportSize = () => `${viewport.clientWidth}:${viewport.clientHeight}`;
+
+  function visiblePageIndex() {
+    const bounds = viewport.getBoundingClientRect();
+    const bottom = bounds.bottom ?? bounds.top + viewport.clientHeight;
+    let mostVisible = 0, index = pageIndex;
+    for (const node of surface.children) {
+      const pageBounds = node.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(bottom, pageBounds.bottom) - Math.max(bounds.top, pageBounds.top));
+      if (visible > mostVisible) { mostVisible = visible; index = pageNumbers.indexOf(Number(node.dataset.pageNumber)); }
+    }
+    return index;
+  }
 
   function getCurrentPage() {
     if (destroyed || busy) return null;
@@ -102,17 +117,7 @@ export function createPdfPreview({
     // the last stable employee and disable signing until its page is restored.
     if (fit === 'page' && viewportSize() !== fittedSize) return null;
     if (continuous) {
-      const bounds = viewport.getBoundingClientRect();
-      const bottom = bounds.bottom ?? bounds.top + viewport.clientHeight;
-      let mostVisible = 0;
-      for (const node of surface.children) {
-        const pageBounds = node.getBoundingClientRect();
-        const visible = Math.max(0, Math.min(bottom, pageBounds.bottom) - Math.max(bounds.top, pageBounds.top));
-        if (visible > mostVisible) {
-          mostVisible = visible;
-          pageIndex = pageNumbers.indexOf(Number(node.dataset.pageNumber));
-        }
-      }
+      pageIndex = visiblePageIndex();
     }
     const number = pageNumbers[pageIndex] || 1;
     return !destroyed && !busy && renderedCanvases.some(canvas => Number(canvas.parentElement?.dataset.pageNumber) === number) ? number : null;
@@ -120,6 +125,12 @@ export function createPdfPreview({
 
   function showCurrentPage() {
     if (destroyed) return;
+    if (windowed && slotsReady && viewportSize() === fittedSize) {
+      if (continuous) pageIndex = visiblePageIndex();
+      if (windowIndices(pageIndex).some(index => !pageSlots[index].node.querySelector('canvas') && !failedPageNumbers.has(pageSlots[index].number))) {
+        void queuePageWindow().catch(error => { if (!destroyed) onError(error); });
+      }
+    }
     if (!continuous) {
       pageNavigation.hidden = pageNumbers.length <= 1;
       previousPageButton.disabled = pageIndex <= 0;
@@ -140,6 +151,12 @@ export function createPdfPreview({
   function applyZoom(value, { previousZoom = 1, midpoint, ratio = 1 } = {}) {
     const bounded = Math.min(4, Math.max(1, Number(value) || 1));
     const viewportWidth = Math.max(1, viewport.clientWidth || container.clientWidth || 360);
+    if (windowed) {
+      for (const slot of pageSlots) {
+        slot.node.style.height = `${Math.round(slot.height * bounded)}px`;
+        slot.node.style.width = bounded > 1 ? `${Math.max(viewportWidth, slot.width * bounded)}px` : '';
+      }
+    }
     const canvases = [...surface.querySelectorAll(".attachment-preview-pdf-canvas")];
     let surfaceWidth = viewportWidth;
     for (const canvas of canvases) {
@@ -168,12 +185,15 @@ export function createPdfPreview({
   const pinchZoom = createPinchZoom({ element: viewport, documentRef, onZoom: applyZoom });
 
   function clearRenderedPages() {
-    for (const canvas of renderedCanvases) canvas.width = canvas.height = 0;
+    // Include a canvas whose render promise is still pending, not just the
+    // completed pages. A quick close/reopen must not double graphics memory.
+    for (const canvas of surface.querySelectorAll('canvas')) canvas.width = canvas.height = 0;
     renderedCanvases = [];
     surface.replaceChildren();
+    slotsReady = false; pageSlots = []; pendingPageIndex = null;
   }
 
-  async function renderPage(page, number, generation) {
+  async function renderPage(page, number, generation, existingWrapper) {
     const natural = page.getViewport({ scale: 1 });
     if (!(natural.width > 0 && natural.height > 0 && Number.isFinite(natural.width + natural.height))) {
       throw new Error("Dimensões de página inválidas.");
@@ -192,7 +212,7 @@ export function createPdfPreview({
       Math.sqrt(MAX_CANVAS_PIXELS / (displayed.width * displayed.height)),
     );
     const scaled = page.getViewport({ scale: displayScale * outputRatio });
-    const wrapper = element("div", "attachment-preview-pdf-page");
+    const wrapper = existingWrapper || element("div", "attachment-preview-pdf-page");
     wrapper.dataset.pageNumber = String(number);
     if (!continuous) wrapper.hidden = number !== pageNumbers[pageIndex];
     const canvas = element("canvas", "attachment-preview-pdf-canvas");
@@ -203,23 +223,23 @@ export function createPdfPreview({
     canvas.style.width = `${Math.floor(displayed.width)}px`;
     canvas.style.height = `${Math.floor(displayed.height)}px`;
     wrapper.append(canvas);
-    surface.append(wrapper);
+    if (!existingWrapper) surface.append(wrapper);
     canvas.dataset.baseWidth = String(Math.floor(displayed.width));
     canvas.dataset.baseHeight = String(Math.floor(displayed.height));
     if (destroyed || generation !== renderGeneration) {
       canvas.width = canvas.height = 0;
-      wrapper.remove();
+      if (existingWrapper) canvas.remove(); else wrapper.remove();
       page.cleanup();
       return false;
     }
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("O navegador não oferece canvas para este PDF.");
-    renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
     try {
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("O navegador não oferece canvas para este PDF.");
+      renderTask = page.render({ canvasContext: context, viewport: scaled, annotationMode: 0 });
       await renderTask.promise;
     } catch (error) {
       canvas.width = canvas.height = 0;
-      wrapper.remove();
+      if (existingWrapper) canvas.remove(); else wrapper.remove();
       throw error;
     } finally {
       renderTask = null;
@@ -227,10 +247,112 @@ export function createPdfPreview({
     }
     if (destroyed || generation !== renderGeneration) {
       canvas.width = canvas.height = 0;
-      wrapper.remove();
+      if (existingWrapper) canvas.remove(); else wrapper.remove();
       return false;
     }
     renderedCanvases.push(canvas);
+    return true;
+  }
+
+  function windowIndices(index) {
+    if (!continuous) return index >= 0 && index < pageSlots.length ? [index] : [];
+    const bounds = viewport.getBoundingClientRect(), bottom = bounds.bottom ?? bounds.top + viewport.clientHeight;
+    const visible = pageSlots.map((slot, i) => ({ i, rect: slot.node.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.bottom > bounds.top && rect.top < bottom)
+      .map(({ i }) => i).sort((a, b) => Math.abs(a - index) - Math.abs(b - index));
+    const candidates = [...new Set([index, ...visible, index - 1, index + 1])], indices = [];
+    let pixels = 0;
+    for (const candidate of candidates) {
+      const slot = pageSlots[candidate]; if (!slot) continue;
+      const cost = Math.min(MAX_CANVAS_PIXELS, (slot.width + 1) * (slot.height + 1) * Math.min(2, Math.max(1, Number(pixelRatio) || 1)) ** 2);
+      if (pixels + cost > MAX_CANVAS_PIXELS * 3) continue;
+      indices.push(candidate); pixels += cost;
+    }
+    return indices;
+  }
+
+  function queuePageWindow() {
+    pendingPageIndex = pageIndex;
+    if (windowTask) return windowTask;
+    const generation = renderGeneration;
+    windowTask = renderPageWindow(generation).finally(() => {
+      windowTask = null;
+      if (!destroyed && generation === renderGeneration) {
+        if (pendingPageIndex !== null) void queuePageWindow().catch(error => { if (!destroyed) onError(error); });
+        else refitPage();
+      }
+    });
+    return windowTask;
+  }
+
+  async function renderPageWindow(generation) {
+    busy = true; reportedPage = null; onPageChange(null); root.setAttribute('aria-busy', 'true');
+    while (!destroyed && generation === renderGeneration && pendingPageIndex !== null) {
+      const target = pendingPageIndex; pendingPageIndex = null;
+      const indices = windowIndices(target), wanted = new Set(indices.map(index => pageSlots[index].number));
+      // Release backing stores BEFORE allocating another window. Removing a
+      // canvas alone does not promptly free Safari's graphics memory.
+      renderedCanvases = renderedCanvases.filter(canvas => {
+        if (wanted.has(Number(canvas.parentElement?.dataset.pageNumber))) return true;
+        canvas.width = canvas.height = 0; canvas.remove(); return false;
+      });
+      for (const index of indices) {
+        if (destroyed || generation !== renderGeneration) return;
+        if (pendingPageIndex !== null && pendingPageIndex !== target) break;
+        const slot = pageSlots[index];
+        if (slot.node.querySelector('canvas') || failedPageNumbers.has(slot.number)) continue;
+        try {
+          const page = await pdf.getPage(slot.number);
+          if (destroyed || generation !== renderGeneration) { page.cleanup(); return; }
+          if (!(await renderPage(page, slot.number, generation, slot.node))) return;
+        } catch (error) {
+          if (destroyed || generation !== renderGeneration || error?.name === 'RenderingCancelledException') return;
+          const lastBounds = pageSlots.at(-1)?.node.getBoundingClientRect(), viewportBounds = viewport.getBoundingClientRect();
+          const atEnd = continuous && lastBounds?.bottom <= viewportBounds.bottom + 1;
+          const oldHeight = parseFloat(slot.node.style.height) || slot.height;
+          failedPageNumbers.add(slot.number); slot.node.classList.add('attachment-preview-pdf-page--error');
+          slot.node.replaceChildren(element('p', 'attachment-preview-pdf-page-error', `Não foi possível mostrar a página ${slot.number}.`));
+          // A failed employee needs a full-height reachable slot, including
+          // on tall phones where several landscape pages fit on screen.
+          slot.height = Math.max(slot.height, 120, viewport.clientHeight - 8);
+          slot.node.style.height = `${Math.round(slot.height * pinchZoom.getZoom())}px`;
+          if (atEnd) viewport.scrollTop += parseFloat(slot.node.style.height) - oldHeight;
+        }
+      }
+    }
+    if (destroyed || generation !== renderGeneration) return;
+    root.dataset.failedPages = String(failedPageNumbers.size);
+    if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
+    busy = false; root.setAttribute('aria-busy', 'false'); showCurrentPage();
+  }
+
+  async function preparePageSlots(generation) {
+    for (const number of pageNumbers) {
+      let page, natural, failed = false;
+      try {
+        page = await pdf.getPage(number);
+        if (destroyed || generation !== renderGeneration) return false;
+        natural = page.getViewport({ scale: 1 });
+        if (!(natural.width > 0 && natural.height > 0 && Number.isFinite(natural.width + natural.height))) throw new Error('Dimensões de página inválidas.');
+      } catch (error) {
+        if (destroyed || generation !== renderGeneration || error?.name === 'RenderingCancelledException') return false;
+        failed = true; failedPageNumbers.add(number);
+      } finally { page?.cleanup(); }
+      const availableWidth = Math.max(1, viewport.clientWidth - 8), availableHeight = Math.max(120, viewport.clientHeight - 8);
+      const scale = failed ? 1 : Math.min(availableWidth / natural.width, availableHeight / natural.height);
+      const node = element('div', 'attachment-preview-pdf-page'); node.dataset.pageNumber = String(number);
+      const width = failed ? availableWidth : Math.floor(natural.width * scale), height = failed ? availableHeight : Math.floor(natural.height * scale);
+      node.style.height = `${height}px`;
+      if (failed) { node.classList.add('attachment-preview-pdf-page--error'); node.append(element('p', 'attachment-preview-pdf-page-error', `Não foi possível mostrar a página ${number}.`)); }
+      if (!continuous) node.hidden = number !== pageNumbers[pageIndex];
+      surface.append(node); pageSlots.push({ node, number, width, height });
+    }
+    slotsReady = true;
+    if (pinchZoom.getZoom() > 1) applyZoom(pinchZoom.getZoom());
+    if (continuous) {
+      const target = pageSlots[pageIndex]?.node;
+      if (target) viewport.scrollTop = Math.max(0, target.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop);
+    }
     return true;
   }
 
@@ -242,6 +364,12 @@ export function createPdfPreview({
     root.setAttribute("aria-busy", "true");
     renderTask?.cancel();
     clearRenderedPages();
+    if (windowed) {
+      failedPageNumbers.clear();
+      if (!(await preparePageSlots(generation))) return;
+      await queuePageWindow();
+      return;
+    }
     let failedPages = 0;
     for (let number = 1; number <= pdf.numPages; number += 1) {
       if (!pageFilter(number, pdf.numPages)) continue;
@@ -331,6 +459,7 @@ export function createPdfPreview({
     if (destroyed) { pdf = null; return; }
     pageNumbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1).filter(n => pageFilter(n, pdf.numPages));
     pageIndex = Math.max(0, pageNumbers.indexOf(initialPage));
+    windowed = fit === 'page' && pageNumbers.length > WINDOWED_PAGE_THRESHOLD;
     renderGeneration += 1;
     try {
       await renderAll(renderGeneration);

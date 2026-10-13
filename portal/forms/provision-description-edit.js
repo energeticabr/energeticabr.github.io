@@ -1,4 +1,4 @@
-const COMMON = new Set(['FILIAL','FORNECEDOR','DATAPREVISTOPGTO','DATAPGTOEFETUADO','FORMAPGTO','OBS','PGTOAGENDADO','DATAPGTOAGENDADO','DATAEXECUCAOAGENDAMENTO']);
+const COMMON = new Set(['FILIAL','FORNECEDOR','DATAPREVISTOPGTO','DATAPGTOEFETUADO','FORMAPGTO','OBS','PGTOAGENDADO','DATAPGTOAGENDADO','DATAEXECUCAOAGENDAMENTO','STATUS']);
 const DATES = new Set(['DATAPREVISTOPGTO','DATAPGTOEFETUADO','PGTOAGENDADO','DATAPGTOAGENDADO','DATAEXECUCAOAGENDAMENTO']);
 const CHILD_LISTS = ['PROVISÃO PGTOS','PROVISAO PGTOS','PROVISAO PAGAMENTOS'];
 const key = value => String(value || '').replace(/_x([0-9a-f]{4})_/gi,(_,hex)=>String.fromCodePoint(parseInt(hex,16))).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toUpperCase();
@@ -38,6 +38,56 @@ function equal(actual,expected,descriptor){
 function matches(item,patch,columns){return Object.entries(patch).every(([name,value])=>equal(item.fields?.[name],value,columns.find(c=>c.name===name)||{}));}
 const intent = patch => JSON.stringify(Object.keys(patch).sort().map(name=>[name,patch[name]]));
 
+/** STATUS is currently Text on both lists. Discover values without changing its schema. */
+export async function loadProvisionDescriptionStatusOptions({repository,siteKey='personal',signal}={}){
+ const active=()=>{if(signal?.aborted)throw signal.reason||new DOMException('Consulta de STATUS cancelada.','AbortError');};
+ const options=signal?{signal}:{};
+ async function statusSource(aliases){
+  active();const list=await repository.resolveList(siteKey,aliases,options);active();
+  if(list?.status!=='resolved'||!list.id)throw new Error('A lista de opções de STATUS não foi comprovada.');
+  const columns=await repository.getColumns(siteKey,list.id,options);active();
+  if(!Array.isArray(columns))throw new Error('Metadados de STATUS indisponíveis.');
+  const descriptor=column(columns,'STATUS');
+  if(descriptor.choice){
+   const choices=descriptor.choice.choices;
+   if(descriptor.choice.allowMultipleValues||!Array.isArray(choices)||choices.some(value=>typeof value!=='string'||!value.trim()))throw new Error('As opções de STATUS não foram comprovadas nos metadados.');
+   return {list,descriptor,choices};
+  }
+  if(!descriptor.text||descriptor.text.allowMultipleLines)throw new Error('STATUS requer metadados textuais ou de escolha simples.');
+  return {list,descriptor};
+ }
+ const parent=await statusSource(['DESCRITIVOPROVISAO']);
+ if(parent.choices)return Object.freeze([...new Set(parent.choices)]);
+ const child=await statusSource(CHILD_LISTS);
+ if(child.list.id===parent.list.id)throw new Error('A fonte de STATUS das provisões não corresponde à lista filha.');
+ if(child.choices)return Object.freeze([...new Set(child.choices)]);
+ const values=new Set();
+ for(const source of [parent,child]){
+  const query=`$select=id&$expand=fields($select=${source.descriptor.name})&$top=200`;
+  let cursor='';const seen=new Set();let complete=false;
+  for(let pageNumber=1;pageNumber<=400;pageNumber++){
+   active();
+   const page=typeof repository.getItemsPage==='function'
+    ?await repository.getItemsPage(siteKey,source.list.id,query,{pageNumber,maxPages:400,...(cursor?{cursor}:{}),...options})
+    :{items:await repository.getItems(siteKey,source.list.id,query,options),hasMore:false};
+   active();
+   if(!Array.isArray(page?.items)||typeof page.hasMore!=='boolean'||page.complete===false||page.partial||page.truncated||page.items.complete===false||page.items.partial||page.items.truncated)throw new Error('A consulta de opções de STATUS está incompleta.');
+   for(const row of page.items){
+    if(!row?.fields||typeof row.fields!=='object'||Array.isArray(row.fields))throw new Error('O registro de opções de STATUS é inválido.');
+    const value=row.fields[source.descriptor.name];
+    if(value==null||value==='')continue;
+    if(typeof value!=='string')throw new Error('A fonte retornou uma opção de STATUS inválida.');
+    if(value.trim())values.add(value);
+   }
+   if(!page.hasMore){if(page.nextLink)throw new Error('Cursor de opções de STATUS inconsistente.');complete=true;break;}
+   if(typeof page.nextLink!=='string'||!page.nextLink.trim()||seen.has(page.nextLink))throw new Error('A paginação das opções de STATUS não retornou cursor único.');
+   cursor=page.nextLink;seen.add(cursor);
+  }
+  if(!complete)throw new Error('A paginação das opções de STATUS excedeu o limite seguro.');
+ }
+ return Object.freeze([...values]);
+}
+
 /** One service retains incomplete operations for explicit retry, never rebasing stale edits. */
 export function createProvisionDescriptionEditor({repository,siteKey='personal',assertSession=()=>{}}={}){
  const operations=new Map(),busy=new Set();
@@ -74,6 +124,10 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
    const resolvedLogical=COMMON.has(logical)||logical==='VALORTOTAL'?logical:descriptor&&key(descriptor.displayName);
    if(!descriptor||['TITLE','ID','CREATED','MODIFIED','AUTHOR','EDITOR'].includes(key(name))||(!COMMON.has(resolvedLogical)&&resolvedLogical!=='VALORTOTAL'))throw new Error(`O campo ${name} não é editável no descritivo.`);
    if(DATES.has(resolvedLogical)&&!descriptor.dateTime)throw new Error(`O campo ${name} requer metadados de data do descritivo.`);
+   if(resolvedLogical==='STATUS'){
+    const choices=await loadProvisionDescriptionStatusOptions({repository,siteKey,signal});active(signal);
+    if(!blank(value)&&!choices.includes(value)||blank(value)&&descriptor.required)throw new Error('Selecione uma opção de STATUS comprovada no SharePoint.');
+   }
    patch[name]=valueFor(value,descriptor,descriptor);
    if(COMMON.has(resolvedLogical))shared.push({logical:resolvedLogical,descriptor,value:patch[name]});
   }

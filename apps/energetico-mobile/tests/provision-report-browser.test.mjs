@@ -41,6 +41,10 @@ test('provision report keeps the original compact tables in landscape and portra
       assert.ok(result.columns.every(value=>value>20),`${width}px: monthly columns missing ${result.columns}`);
       assert.equal(result.zoomProbe.tableDisplay,'table');assert.equal(result.zoomProbe.fontReadable,true);
       assert.equal(result.zoomProbe.viewportGuard,true);assert.equal(result.zoomProbe.resetOverflow,0);
+      assert.ok(parseFloat(result.fontSize)>=7,`${width}px: annual text must be larger at its fitted scale`);
+      assert.ok(result.annualTypography.dates.every(date=>date.weight==='600'&&date.size>=4.5),`${width}px: annual dates need semibold, whole readable tokens`);
+      assert.ok(result.annualTypography.totals.every(total=>total.align==='center'&&total.weight==='600'),`${width}px: annual totals need centered semibold text`);
+      assert.ok(result.annualTypography.ordinaryAmounts.every(size=>size>=5),`${width}px: ordinary annual values must be larger`);
       assert.ok(result.atomic.length>=30,`${width}px: whole date/amount tokens missing`);
       for(const token of result.atomic){
         assert.ok(token.lines<=1,`${width}px: ${token.text} broke into ${token.lines} lines`);assert.equal(token.whiteSpace,'nowrap');
@@ -60,6 +64,31 @@ test('provision report keeps the original compact tables in landscape and portra
       assert.equal(result.filters.length,5);assert.deepEqual(result.capturedTables.map(table=>table.columns),[7,14,8]);
       assert.match(result.annualText,/1\.234\.567,89/);assert.match(result.annualText,/02\/01\/2026/);assert.match(result.annualText,/02\/12\/2026/);
       t.diagnostic(`${width}x${height}: compact table rows, visible column headers, no horizontal overflow, whole dates/amounts and six status colors`);
+    }
+  }finally{
+    await server?.close();if(dirname(resolve(cacheRoot))!==temporaryRoot||!basename(cacheRoot).startsWith('provision-report-vite-'))throw new Error('Cache fora do diretório temporário autorizado.');
+    await rm(cacheRoot,{recursive:true,force:true,maxRetries:5,retryDelay:250});
+  }
+});
+
+test('grouped provision rows fit phone and PC canvases when expanded without changing totals',{timeout:90000},async t=>{
+  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const temporaryRoot=resolve(tmpdir()),cacheRoot=await mkdtemp(join(temporaryRoot,'provision-report-vite-'));let server;
+  try{
+    server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cacheRoot,'cache'),optimizeDeps:{noDiscovery:true,include:['decimal.js']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});await server.listen();
+    for(const [width,height,safeAreaInsets] of [[568,320],[844,390,{left:47,right:47,bottom:21}],[1920,1080],[390,844]]){
+      const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-report-browser.html?grouped=1`});
+      const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
+      assert.equal(result.error,undefined);const probe=result.groupProbe;
+      assert.ok(probe.collapsedHidden);assert.equal(probe.expanded,'true');assert.ok(probe.focusKept);
+      assert.deepEqual(probe.originalIds,['301','302']);assert.deepEqual(probe.originalDates,['09/10/2026','11/10/2026']);
+      assert.equal(probe.branch,'FILIAL DO PAI');assert.equal(probe.supplier,'FORNECEDOR DE REFERÊNCIA');assert.equal(probe.date,'25/10/2026');
+      assert.equal(probe.total.replace(/\s/g,''),'R$123.456.911,68');assert.equal(probe.products.length,2);
+      assert.equal(probe.singleHasToggle,false);assert.equal(probe.expandedRows,5);
+      assert.ok(probe.expandedOverflow<=1,`${width}px: expanded items overflow the report`);assert.deepEqual(probe.cellOverflows,[]);
+      assert.ok(probe.totalsUnchanged);assert.ok(probe.annualUnchanged);assert.equal(probe.collapsed,'false');assert.ok(probe.hiddenAgain);
+      t.diagnostic(`${width}x${height}: collapsed parent, original item rows, stable totals and focus, no horizontal overflow`);
     }
   }finally{
     await server?.close();if(dirname(resolve(cacheRoot))!==temporaryRoot||!basename(cacheRoot).startsWith('provision-report-vite-'))throw new Error('Cache fora do diretório temporário autorizado.');

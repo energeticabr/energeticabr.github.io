@@ -23,6 +23,23 @@ function fixture(t,rows=[row]){
 }
 function text(snapshot){return snapshot.pages.flatMap(page=>page.blocks).flatMap(block=>block.type==='table'?block.rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))):block.runs.map(run=>run.text)).join(' ');}
 
+test('ledger printer uses complete model capture without expanding live rows and preserves the filtered report',async t=>{
+ const rows=Array.from({length:1201},(_,index)=>({...row,id:String(index+1),product:`Produto ${index+1}`}));
+ const {dom,original}=fixture(t,rows);await original.open();
+ const body=original.element.querySelector('tbody'),before=[...body.rows];
+ let captured,prepares=0,reads=0,closes=0;
+ const panel={...original,capturePrint(options){reads++;return original.capturePrint(options);},preparePrint(){prepares++;return original.preparePrint();}};
+ const view=api.decorateReportPrint(panel,{action:'open-payment-ledger',loadLogo:async()=>undefined,
+  buildPdf:async snapshot=>{captured=snapshot;return new Blob(['%PDF-test'],{type:'application/pdf'});},
+  previewMedia:async promise=>{await promise;closes++;}});
+ t.after(()=>view.destroy());
+ const print=view.element.querySelector('[data-action=print-report-pdf]');print.click();await tick();await tick();
+ assert.equal(reads,1);assert.equal(prepares,0,'PDF generation must not create thousands of live DOM rows');
+ assert.equal(captured.pages[0].blocks.find(block=>block.type==='table').rows.length,1202);
+ assert.deepEqual([...body.rows],before,'the same visible rows, not a rebuilt copy, remain in the report');
+ assert.equal(closes,1);assert.equal(dom.window.document.activeElement,print);
+});
+
 test('refresh uses a font-independent icon without replacing the working refresh button',async t=>{
  const {original}=fixture(t);await original.open();
  const refresh=original.element.querySelector('[aria-label^="Atualizar"]'),label=refresh.getAttribute('aria-label');
@@ -88,7 +105,8 @@ test('print opens the existing PDF viewer, shares only on click, and close retur
  view.element.querySelector('[data-action=print-report-pdf]').click();await tick();await tick();
  assert.equal(dom.window.document.querySelector('.attachment-preview-dialog').open,true);assert.equal(shared,0);assert.match(text(captured),/Alfa/);assert.doesNotMatch(text(captured),/Beta/);
  dom.window.document.querySelector('.attachment-preview-export').click();await tick();assert.equal(shared,1);
- assert.equal(dom.window.document.querySelector('.attachment-preview-back').textContent,'Voltar ao relatório');
+ assert.equal(dom.window.document.querySelector('.attachment-preview-back').hidden,true);
+ assert.equal(dom.window.document.querySelector('.attachment-preview-close').textContent,'❌');
  dom.window.document.querySelector('.attachment-preview-close').click();assert.equal(view.element.hidden,false);assert.equal(filter.value,'Alfa');assert.equal(view.element.querySelectorAll('tbody tr').length,1);
  assert.equal(dom.window.document.activeElement,view.element.querySelector('[data-action=print-report-pdf]'));
 });

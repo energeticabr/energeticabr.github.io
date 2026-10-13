@@ -343,11 +343,11 @@ assert.deepEqual(shortcuts.map(s=>s.action),['open-pending-provisions','open-pro
       await send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:false},sessionId);
       await evaluate(`document.querySelector('.chat-main-cargos-shortcut').click()`);
       const cargosFit=await evaluate(`(()=>{const r=document.querySelector('.cargos-screen').getBoundingClientRect(),s=document.querySelector('.cargos-scroll'),t=document.querySelector('.cargos-table');return {top:r.top,bottom:r.bottom,rows:t.querySelectorAll('[data-cargo]').length,groups:t.querySelectorAll('.cargos-group').length,pan:s.scrollWidth>s.clientWidth,font:parseFloat(getComputedStyle(t).fontSize),overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
-      assert.ok(cargosFit.top===0&&cargosFit.bottom===844&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);
+      assert.ok(cargosFit.top>=8&&cargosFit.bottom<=836&&!cargosFit.overflow&&cargosFit.font>=14,JSON.stringify(cargosFit));assert.equal(cargosFit.rows,7);assert.equal(cargosFit.groups,2);
       if(width<870)assert.ok(cargosFit.pan);
       await evaluate(`document.querySelector('.cargos-scroll').scrollLeft=600`);
       assert.ok(await evaluate(`(()=>{const th=document.querySelector('.cargos-table tbody tr[data-cargo] th').getBoundingClientRect(),s=document.querySelector('.cargos-scroll').getBoundingClientRect();return Math.abs(th.left-s.left)<=2;})()`),'cargo permanece fixo durante a rolagem');
-      await evaluate(`document.querySelector('[aria-label="Voltar ao menu inicial"]').click()`);
+      await evaluate(`document.querySelector('.cargos-backdrop .report-close-control').click()`);
       if(width===390&&!pwa&&process.env.HOME_MASCOT_SCREENSHOT){const shot=await send('Page.captureScreenshot',{format:'png'},sessionId);writeFileSync(process.env.HOME_MASCOT_SCREENSHOT,Buffer.from(shot.data,'base64'));}
       // Earlier report checks scroll the longer mascot rail. Use the current hit target, not initial coordinates.
       const provisionsHit=await evaluate(`(()=>{const b=document.querySelector('.chat-main-provisions-shortcut');b.scrollIntoView({block:'center'});const r=b.getBoundingClientRect();return {action:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-action]')?.dataset.action||'',x:r.x+r.width/2,y:r.y+r.height/2};})()`);

@@ -53,8 +53,10 @@ test('payroll mascot fits below delete and collapsed reports work on phone and d
       assert.ok(reportReady);
       const closed=await evaluate(`[...document.querySelectorAll('.hr-payroll-report-overlay details')].every(d=>!d.open)`);
       assert.ok(closed, 'detalhes iniciam recolhidos');
+      const exits=await evaluate(`(()=>{const root=document.querySelector('.hr-payroll-report-overlay');return {close:[...root.querySelectorAll('.report-close-control')].map(button=>button.textContent),navigation:root.querySelector('.screen-navigation')!==null};})()`);
+      assert.deepEqual(exits,{close:['❌'],navigation:false},'relatório mantém apenas um controle de fechar');
       await evaluate(`document.querySelector('.hr-payroll-report-overlay').focus()`);
-      for(let n=0;n<3;n++) await press('Tab','Tab',9);
+      for(let n=0;n<2;n++) await press('Tab','Tab',9);
       assert.ok(await evaluate(`document.activeElement===document.querySelector('[data-report-total-type="SALARIO"]').closest('summary') && getComputedStyle(document.activeElement).outlineStyle==='solid'`), 'subtotal alcançável por Tab com foco visível');
       await press('Enter','Enter',13);
       assert.ok(await evaluate(`document.querySelector('[data-report-total-type="SALARIO"]').closest('details').open`));

@@ -10,6 +10,7 @@ const ICONS=Object.freeze({
  clock:['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z','M12 6v6l4 2'],
  search:['M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z','m16 16 6 6'],
  filter:['M2 3h20l-8 9v8l-4 2V12L2 3Z'],
+ status:['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z','m7 12 3 3 7-7'],
  refresh:['M20 9a8 8 0 0 0-14-4L3 8','M3 3v5h5','M4 15a8 8 0 0 0 14 4l3-3','M21 21v-5h-5'],
 });
 
@@ -28,6 +29,7 @@ export function renderProvisionDescriptionCard({document:doc,container,rowId,tit
  heading.append(el('strong','rg-row-title',title),el('span','rg-document-id',`ID ${rowId}`));container.append(heading);
  const pair=(parent,field,label,icon,tone='',fallback='—')=>{const row=el('div',`rg-provision-detail${tone?` rg-provision-detail--${tone}`:''}`);row.dataset.field=field;row.append(provisionDescriptionIcon(doc,icon),el('dt','',label),el('dd','',String(value(field)||fallback)));parent.append(row);};
  const core=el('dl','rg-provision-core');
+ pair(core,'STATUS','Status','status','status');
  pair(core,'FILIAL','Filial','branch');pair(core,'VALORTOTAL','Valor total','money','total');
  pair(core,'DATAPGTOEFETUADO','Data pgto efetuado','calendar','paid');pair(core,'DATA PREVISTO PGTO','Data previsto pgto','calendar','due');container.append(core);
  const extra=el('dl','rg-provision-extra');

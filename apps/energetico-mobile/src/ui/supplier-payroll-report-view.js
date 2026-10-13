@@ -1,4 +1,5 @@
 import { bindReportLandscape } from './report-landscape.js';
+import { addReportCloseControl } from './report-close-control.js';
 import {buildSupplierPayrollOverview,currentPayrollMonth,summarizePayrollPayments,summarizePayrollPaymentsByType,payrollReferencePeriod,payrollTypeAppearance,buildPayrollReportCsv} from '../chat/supplier-payroll-report-model.js';
 import {formatOperationsDate} from '../chat/operations-reports-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
@@ -39,6 +40,7 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  const rowCache=new Map();
  function icon(name){const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),path=doc.createElementNS('http://www.w3.org/2000/svg','path');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');path.setAttribute('d',ICONS[name]);svg.append(path);return svg;}
  const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close, button:closeButton});
  const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
  const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
  const invalidateDetails=()=>{for(const entry of entries)entry.controller?.abort();entries=[];};
@@ -157,7 +159,7 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  }
  function close(){if(root.hidden)return;paymentActions.close();launchActions.close();controller?.abort();revision++;invalidateDetails();rowCache.clear();snapshot=null;pendingReload=null;printing=false;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;onClose();}
  function orientationChanged() { landscape.update(); }
- closeButton.addEventListener('click',close);refresh.addEventListener('click',()=>void load());root.addEventListener('click',e=>{if(e.target===root)close();});
+ refresh.addEventListener('click',()=>void load());root.addEventListener('click',e=>{if(e.target===root)close();});
  search.addEventListener('input',()=>{if(!printing){render();content.scrollTop=0;}});exportAll.addEventListener('click',()=>void exportGroups([...entries]));
  root.addEventListener('keydown',e=>{if(root.hidden)return;if(e.key==='Escape'){e.preventDefault();close();return;}if(e.key!=='Tab')return;const nodes=[...panel.querySelectorAll('button,input,select,summary,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){e.preventDefault();first?.focus();}});
  for(const node of controls.values())node.addEventListener('change',()=>{if(printing)return;render();content.scrollTop=0;});win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);

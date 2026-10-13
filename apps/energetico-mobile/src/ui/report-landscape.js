@@ -1,27 +1,7 @@
 // Screen orientation is presentation only. No data, request or authentication
 // state belongs here; turning the device must retain the live report DOM.
-const STYLE_ID = 'report-landscape-style';
-const CSS = `
-.report-landscape-viewport[data-report-portrait="true"] {
- position:fixed!important; inset:auto!important; top:0!important;
- left:var(--report-physical-width)!important;
- width:var(--report-width)!important; height:var(--report-height)!important;
- max-width:none!important; max-height:none!important;
- transform:rotate(90deg); transform-origin:0 0;
- box-sizing:border-box;
- padding:max(3px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(3px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-top))!important;
-}
-.report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
- width:100%!important; height:100%!important; max-height:100%!important;
- padding:3px!important; border-radius:0!important;
-}
-`;
-
 export function bindReportLandscape(root) {
   const doc = root.ownerDocument, win = doc.defaultView;
-  if (!doc.getElementById(STYLE_ID)) {
-    const style = doc.createElement('style'); style.id = STYLE_ID; style.textContent = CSS; doc.head.append(style);
-  }
   root.classList.add('report-landscape-viewport');
   let destroyed = false, previous = null;
   function update() {
@@ -36,11 +16,15 @@ export function bindReportLandscape(root) {
     const portrait = keyboardResize ? previous.portrait
       : win.matchMedia ? win.matchMedia('(orientation: portrait)').matches : height > width;
     previous = {width,height,portrait};
+    const logicalWidth=portrait?height:width,logicalHeight=portrait?width:height;
     root.dataset.reportPortrait = String(portrait);
+    root.dataset.reportWidthMode = logicalWidth<=600?'narrow':logicalWidth<=900?'compact':'wide';
+    root.dataset.reportCompactHeight = String(logicalHeight<=500);
     root.style.setProperty('--report-physical-width',`${width}px`);
-    root.style.setProperty('--report-width',`${portrait ? height : width}px`);
-    root.style.setProperty('--report-height',`${portrait ? width : height}px`);
-    root.style.setProperty('--report-vw',`${(portrait ? height : width)/100}px`);
+    root.style.setProperty('--report-width',`${logicalWidth}px`);
+    root.style.setProperty('--report-height',`${logicalHeight}px`);
+    root.style.setProperty('--report-vw',`${logicalWidth/100}px`);
+    root.style.setProperty('--report-navigation-size',logicalHeight<=500?'46px':'56px');
   }
   win.addEventListener('resize',update); win.addEventListener('orientationchange',update);
   update();

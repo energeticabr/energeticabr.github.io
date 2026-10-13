@@ -23,10 +23,15 @@ test('portrait immediately opens the real report on a logical landscape surface'
   assert.equal(root.dataset.reportPortrait,'true');
   assert.equal(root.style.getPropertyValue('--report-width'),'844px');
   assert.equal(root.style.getPropertyValue('--report-height'),'390px');
+  assert.equal(root.dataset.reportWidthMode,'compact');
+  assert.equal(root.dataset.reportCompactHeight,'true');
+  assert.equal(root.style.getPropertyValue('--report-navigation-size'),'46px');
   const cell=root.querySelector('tbody td');
   rotate();rotate();
   assert.equal(reads,1);
   assert.equal(root.querySelector('tbody td'),cell,'rotation must retain the exact DOM/data');
+  assert.equal(root.dataset.reportWidthMode,'compact');
+  assert.equal(root.style.getPropertyValue('--report-navigation-size'),'46px');
   assert.equal(root.querySelector('.pl-orientation')?.hidden??true,true);
 });
 test('rotating during the first query does not abort or start another query',async t=>{

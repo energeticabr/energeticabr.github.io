@@ -66,6 +66,9 @@
 .report-mascot-button:hover { background: #dceef4; }
 .report-mascot-button:focus-visible { outline: 3px solid #e6a929; outline-offset: 2px; }
 .hr-payroll-report-overlay { z-index: 14; }
+.hr-payroll-report-backdrop { position:fixed; inset:0; z-index:14; display:grid; place-items:center; box-sizing:border-box; padding:8px; background:rgb(5 32 46 / 58%); }
+.hr-payroll-report-backdrop[hidden] { display:none; }
+.hr-payroll-report-backdrop > .hr-payroll-report-overlay { position:relative; width:100%; height:100%; }
 .hr-payroll-report-body { display: grid; gap: 14px; }
 .hr-payroll-report-identity { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 3px 10px; padding: 16px; border: 1px solid #c5d6df; border-radius: 15px; background: #fff; box-shadow: 0 3px 12px #163c4a10; }
 .hr-payroll-report-id { grid-row: span 2; align-self: start; padding: 7px 10px; border-radius: 9px; color: #fff; background: #07566b; font-size: 1rem; }

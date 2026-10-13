@@ -1,5 +1,6 @@
 import { bindReportLandscape } from './report-landscape.js';
-import { buildProvisionReport } from '../chat/provision-report-model.js';
+import { addReportCloseControl } from './report-close-control.js';
+import { buildProvisionReport, groupProvisionReportRows } from '../chat/provision-report-model.js';
 import { formatReportDate, formatReportMoney } from '../chat/contractor-report-model.js';
 import { provisionDateKey, provisionDueState } from '../chat/pending-provision-dates.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
@@ -10,10 +11,12 @@ const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV
 const money = value => Number.isFinite(value) ? formatReportMoney(value) : 'INCOMPLETO';
 const daysBetween = (start,end) => Math.round((Date.parse(`${end}T00:00:00Z`)-Date.parse(`${start}T00:00:00Z`))/86400000);
 const upper = value => String(value || '').trim().toLocaleUpperCase('pt-BR');
+let instanceSequence=0;
 
 export function createProvisionReportView({document:doc=globalThis.document,data,now=()=>new Date()}={}) {
   if (!doc?.body || typeof data?.loadProvisionReportSnapshot !== 'function') throw new TypeError('O relatório de provisões requer documento e sessão SharePoint.');
   const win=doc.defaultView;
+  const instance=++instanceSequence;
   const make=(tag,className='',text)=>{const node=doc.createElement(tag);node.className=className;if(text!==undefined)node.textContent=text;return node;};
   const button=(className,text,label)=>{const node=make('button',className,text);node.type='button';node.setAttribute('aria-label',label);return node;};
   const root=make('div','pl-overlay pr-overlay');root.hidden=true;
@@ -32,6 +35,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
   const landscape = bindReportLandscape(root);
+  addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   function cell(tr,column,text,className=''){const td=make('td',className,String(text??'').trim()||'—');td.dataset.column=column;tr.append(td);return td;}
@@ -43,6 +47,20 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   }
   function datedLine(parent,label,date,className=''){
     const line=make('div',className);line.append(doc.createTextNode(`${label} `),make('span','pr-date pr-nowrap',`(${formatReportDate(date)})`));parent.append(line);
+  }
+  function fitAnnualTokens(){
+    const annual=content.querySelector('.pr-table--annual');
+    // clientWidth is the logical, unrotated cell width on the phone canvas.
+    if(!annual?.clientWidth)return;
+    const context=doc.createElement('canvas').getContext('2d');if(!context)return;
+    for(const node of annual.querySelectorAll('.pr-nowrap,.pr-money')){
+      node.style.removeProperty('font-size');
+      const td=node.closest('td'),style=win.getComputedStyle(node),cellStyle=win.getComputedStyle(td);
+      const available=td.clientWidth-parseFloat(cellStyle.paddingLeft)-parseFloat(cellStyle.paddingRight)-1;
+      context.font=`${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const width=context.measureText(node.textContent).width;
+      if(width>available&&available>0)node.style.fontSize=`${parseFloat(style.fontSize)*available/width}px`;
+    }
   }
   function table(section,title,labels,widths){
     const scroll=make('div','pr-section-scroll');scroll.dataset.section=section;scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title.replace(/^[^\p{L}]+/u,''));
@@ -57,6 +75,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
         scroll.style.setProperty('--pr-annual-zoom',String(zoom));level.textContent=`${zoom*100}%`;
         less.disabled=zoom===1;more.disabled=zoom===5;hint.hidden=zoom===1;
         if(zoom===1)scroll.scrollLeft=0;
+        fitAnnualTokens();
       };
       less.addEventListener('click',()=>{zoom=Math.max(1,zoom-.5);update();});
       more.addEventListener('click',()=>{zoom=Math.min(5,zoom+.5);update();});
@@ -76,8 +95,11 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const total=cell(tr,'total',value);total.dataset.metric=metric;
     if(lastText!==undefined){const last=cell(tr,'count',lastText);last.dataset.metric=lastMetric;}body.append(tr);
     // Keep the same semantic columns for screen readers and PDF capture.
+    labelRows(body,body.rows);
+  }
+  function labelRows(body,rows){
     const labels=[...body.parentElement.tHead.rows[1].cells].map(th=>th.textContent);
-    for(const row of body.rows){row.setAttribute('role','row');let column=0;
+    for(const row of rows){row.setAttribute('role','row');let column=0;
       for(const td of row.cells){td.setAttribute('role','cell');td.dataset.label=labels[column];column+=td.colSpan;}}
   }
   function scheduling(td,row,today){
@@ -91,19 +113,39 @@ export function createProvisionReportView({document:doc=globalThis.document,data
         const tone=days<2?'red':days<5?'orange':'green';statusLine(td,`- EM ${days} ${days===1?'DIA':'DIAS'}`,tone,`pr-badge pr-badge--${tone}`);}
     } else textLine(td,row.schedule||'-','pr-muted');
   }
+  function provisionRow(row,today){
+    const tr=make('tr');if(row.children)tr.dataset.descriptionId=row.id;else tr.dataset.id=row.id;
+    cell(tr,'branch',row.branch,'pr-bold');cell(tr,'supplier',row.supplier,'pr-bold');
+    const productText=item=>`${item.product}${item.observation?` (${item.observation})`:''}`;
+    const product=cell(tr,'product',productText(row),'pr-bold');
+    if(row.children){product.replaceChildren();for(const item of row.children)textLine(product,productText(item));}
+    const dueCell=cell(tr,'dueDate','','pr-red pr-bold');dueCell.replaceChildren();textLine(dueCell,formatReportDate(row.dueDate),'pr-date pr-nowrap');
+    scheduling(cell(tr,'schedule',''),row,today);cell(tr,'total',money(row.total),'pr-bold pr-money');
+    const status=cell(tr,'status','');status.replaceChildren();const paid=upper(row.status)==='PAGAMENTO EFETUADO',statusTone=paid?'green':upper(row.status)==='PENDENTE'?'orange':'red';
+    if(paid)statusLine(status,row.status,'green','pr-green');else textLine(status,row.status||'—',`pr-${statusTone}`);
+    const due=provisionDueState(row.dueDate,today),dueTone=due.kind==='unknown'?'muted':row.dueDate<today?'red':row.dueDate===today?'yellow':'green';
+    statusLine(status,due.label,dueTone,`pr-${dueTone}`);return tr;
+  }
   function render(){
     content.replaceChildren();showNotice('');if(!snapshot)return;
     const today=provisionDateKey(now()),result=buildProvisionReport(snapshot,selected(),today);
     const logoFrame=make('div','pr-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
     const body=table('provisions','⚠ DESPESAS RECORRENTES – PROVISÃO DE PAGAMENTOS',['FILIAL','FORNECEDOR','PRODUTO','DATA VENCIMENTO','AGENDAMENTO','VALOR','STATUS'],[10,16,23,10,14,14,13]);
-    for(const row of result.rows){const tr=make('tr');tr.dataset.id=row.id;
-      cell(tr,'branch',row.branch,'pr-bold');cell(tr,'supplier',row.supplier,'pr-bold');cell(tr,'product',`${row.product}${row.observation?` (${row.observation})`:''}`,'pr-bold');
-      const dueCell=cell(tr,'dueDate','','pr-red pr-bold');dueCell.replaceChildren();textLine(dueCell,formatReportDate(row.dueDate),'pr-date pr-nowrap');
-      scheduling(cell(tr,'schedule',''),row,today);cell(tr,'total',money(row.total),'pr-bold pr-money');
-      const status=cell(tr,'status','');status.replaceChildren();const paid=upper(row.status)==='PAGAMENTO EFETUADO',statusTone=paid?'green':upper(row.status)==='PENDENTE'?'orange':'red';
-      if(paid)statusLine(status,row.status,'green','pr-green');else textLine(status,row.status||'—',`pr-${statusTone}`);
-      const due=provisionDueState(row.dueDate,today),dueTone=due.kind==='unknown'?'muted':row.dueDate<today?'red':row.dueDate===today?'yellow':'green';
-      statusLine(status,due.label,dueTone,`pr-${dueTone}`);body.append(tr);}
+    for(const row of groupProvisionReportRows(result.rows,snapshot.descriptions)){
+      const tr=provisionRow(row,today);body.append(tr);if(!row.children)continue;
+      tr.classList.add('pr-description-group');
+      const branch=tr.querySelector('[data-column=branch]'),toggle=button('pr-group-toggle','↓',`Expandir itens do descritivo ${row.id}`);
+      branch.classList.add('pr-group-branch');branch.replaceChildren(toggle,make('span','',row.branch||'—'));
+      const children=row.children.map((item,index)=>{const child=provisionRow(item,today);child.classList.add('pr-description-child');child.id=`pr-description-${instance}-${revision}-${row.id}-${index}`;return child;});
+      for(const child of children){child.hidden=true;body.append(child);}
+      labelRows(body,children);toggle.setAttribute('aria-controls',children.map(child=>child.id).join(' '));toggle.setAttribute('aria-expanded','false');
+      toggle.dataset.reportScreenOnly='';
+      toggle.addEventListener('click',()=>{
+        const expanded=toggle.getAttribute('aria-expanded')!=='true';
+        toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-label',`${expanded?'Recolher':'Expandir'} itens do descritivo ${row.id}`);toggle.textContent=expanded?'↑':'↓';
+        for(const child of children)child.hidden=!expanded;
+      });
+    }
     footer(body,'TOTAL DE PROVISÕES COM PAGAMENTO PENDENTE',5,money(result.pendingTotal),'pendingTotal',`${result.pendingCount} pendência(s)`,'pendingCount');
     const annual=table('annual','📊 RELATÓRIO ANUAL – PROVISÃO DE PAGAMENTOS',['FORNECEDOR',...MONTHS,'TOTAL'],[16,...MONTHS.map(()=>6.25),9]);
     for(const group of result.annual){const tr=make('tr');tr.dataset.recurrenceId=group.recurrenceId;
@@ -122,6 +164,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       cell(tr,'modified',formatted,'pr-red pr-bold');const days=daysBetween(provisionDateKey(row.modified),today);cell(tr,'days',`${days} dia(s)`,days<=7?'pr-red pr-bold':'pr-orange pr-bold');inactive.append(tr);}
     if(!result.inactiveRecent.length){const tr=make('tr'),td=cell(tr,'empty','✅ Nenhuma despesa recorrente com status INATIVO foi modificada nos últimos 30 dias.','pr-green pr-empty');td.colSpan=8;inactive.append(tr);}
     footer(inactive,'TOTAL DE DESPESAS RECORRENTES COM STATUS INATIVO',7,result.inactiveCount,'inactiveCount');
+    fitAnnualTokens();
     if(result.incompleteCount)showNotice(`${result.incompleteCount} provisão(ões) com valores incompletos. Totais afetados aparecem como INCOMPLETO.`);
     else if(!result.rows.length&&!result.annual.length)showNotice('Nenhuma provisão corresponde aos filtros.');
   }
@@ -144,7 +187,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;content.replaceChildren();showNotice(`Não foi possível carregar o relatório. Use Atualizar para tentar novamente. ${String(error?.message||'Falha na consulta.').replace(/https?:\/\/\S+/gi,'endereço SharePoint').replace(/Bearer\s+\S+/gi,'[oculto]').slice(0,240)}`);
     }finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }
-  function orientationChanged() { landscape.update(); }
+  function orientationChanged() { landscape.update();if(win?.requestAnimationFrame)win.requestAnimationFrame(fitAnnualTokens);else fitAnnualTokens(); }
   function close(){if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;}
   root.addEventListener('click',event=>{if(event.target===root)close();});
   root.addEventListener('keydown',event=>{
