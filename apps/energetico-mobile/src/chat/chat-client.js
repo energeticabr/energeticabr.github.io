@@ -382,14 +382,15 @@ export function createChatClient({
     return snapshot;
   }
 
-  async function getRhidAttendanceReport(selectedDate) {
+  async function getRhidAttendanceReport(selectedDate, { includeRegistration = false } = {}) {
     const date = String(selectedDate || "").trim();
     if (!validIsoDate(date)) throw new Error("Selecione uma data válida para o relatório RHID.");
     const token = await acquireToken(tokenProvider);
     const result = await request(chatUrl.href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "rhid_attendance_report", date }),
+      body: JSON.stringify({ action: "rhid_attendance_report", date,
+        ...(includeRegistration === true ? { includeRegistration: true } : {}) }),
       cache: "no-store",
       credentials: "omit",
     }, response => parsePortalResponse(response, "O relatório de presenças RHID", { allowRecovery: true }), true);

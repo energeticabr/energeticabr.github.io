@@ -8,6 +8,7 @@ import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-option
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
+import { attendanceRhidOptionContext, attendanceRhidPollEligible, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -1081,6 +1082,13 @@ export function createAppController({
   let attachmentRevision = 0;
   let snapshotPending = null;
   const rhidAttendanceReportRequests = new Map();
+  // These read-only indicators belong to the authenticated view, never to a
+  // recovered conversation or to the presence values submitted to SharePoint.
+  const attendanceRhidBadgeReports = new Map();
+  let attendanceRhidBadgeOwner = null;
+  let attendanceRhidBadgeRevision = -1;
+  let attendanceRhidBadgeTimer = null;
+  let attendanceRhidBadgeNextRefresh = 0;
   const rhidPendingValidationRequests = new Set();
   let rhidAttendanceReportPreviousSnapshot = null;
   let rhidAttendanceReportNavigationRevision = 0;
@@ -2305,6 +2313,8 @@ export function createAppController({
             : "A atualização ainda não foi confirmada. Tente consultar novamente em alguns minutos.");
         }
         if (stopped || account !== refreshAccount || sessionRevision !== refreshRevision) return false;
+        clearAttendanceRhidBadges();
+        render();
         view.setRhidRefreshStatus?.({ busy: false, message: "SharePoint atualizado com os dados disponíveis no RHID." });
         return true;
       } catch (error) {
@@ -2548,6 +2558,7 @@ export function createAppController({
     try {
       await client.saveRhidAttendanceAdjustment({ date: day, personKey, slot, time, reason: String(reason).trim() });
       if (stopped || account !== currentAccount || sessionRevision !== currentRevision) return false;
+      clearAttendanceRhidBadges(day);
       view.closeRhidAttendanceAdjustment?.();
       try {
         const report = await client.getRhidAttendanceReport(day);
@@ -3896,6 +3907,103 @@ export function createAppController({
     });
   }
 
+  function clearAttendanceRhidBadges(day = "") {
+    if (attendanceRhidBadgeTimer !== null) clearTimeout(attendanceRhidBadgeTimer);
+    attendanceRhidBadgeTimer = null;
+    attendanceRhidBadgeNextRefresh = 0;
+    if (day) attendanceRhidBadgeReports.delete(day);
+    else {
+      attendanceRhidBadgeReports.clear();
+      attendanceRhidBadgeOwner = null;
+      attendanceRhidBadgeRevision = -1;
+    }
+  }
+
+  function attendanceRhidBadgeReport(day) {
+    let entry = attendanceRhidBadgeReports.get(day);
+    if (entry && (entry.status === "loading" || entry.expiresAt > Date.now())) return entry;
+    const owner = account, revision = sessionRevision;
+    entry = { status: "loading", report: null, expiresAt: Infinity };
+    attendanceRhidBadgeReports.set(day, entry);
+    const current = () => !stopped && sessionStatus === "authenticated" && account === owner && sessionRevision === revision
+      && attendanceRhidBadgeReports.get(day) === entry;
+    // Start outside render. One request per day serves every visible supplier;
+    // checkbox/filter changes can never create parallel requests for that day.
+    Promise.resolve().then(() => {
+      if (!current()) return null;
+      return withTimeout(client.getRhidAttendanceReport(day, { includeRegistration: true }), rhidReportTimeoutMs,
+        "Não foi possível consultar o RHID nesta data.");
+    }).then(report => {
+      if (!current()) return;
+      entry.report = report;
+      entry.status = "ready";
+      entry.expiresAt = Date.now() + 60_000;
+      render();
+    }).catch(() => {
+      if (!current()) return;
+      entry.status = "unavailable";
+      entry.expiresAt = Date.now() + 30_000;
+      render();
+    });
+    return entry;
+  }
+
+  function decorateAttendanceRhidBadges(state, messages) {
+    if (!account || stopped || sessionStatus !== "authenticated") {
+      clearAttendanceRhidBadges();
+      return messages;
+    }
+    if (attendanceRhidBadgeOwner !== account || attendanceRhidBadgeRevision !== sessionRevision) {
+      clearAttendanceRhidBadges();
+      attendanceRhidBadgeOwner = account;
+      attendanceRhidBadgeRevision = sessionRevision;
+    }
+    const activePoll = latestAssistantPoll(messages);
+    if (!attendanceRhidPollEligible(activePoll)) {
+      if (attendanceRhidBadgeTimer !== null) clearTimeout(attendanceRhidBadgeTimer);
+      attendanceRhidBadgeTimer = null;
+      attendanceRhidBadgeNextRefresh = 0;
+      return messages;
+    }
+    let nextRefresh = Infinity;
+    let changed = false;
+    const fallbackDate = latestPresenceValidationDate(state.messages) || lastPresenceValidationDate;
+    const options = activePoll.options.map(option => {
+      const context = attendanceRhidOptionContext(option, activePoll, fallbackDate);
+      if (!context) return option;
+      changed = true;
+      let rhidBadge;
+      if (!context.date || typeof client.getRhidAttendanceReport !== "function") {
+        rhidBadge = buildAttendanceRhidBadge(context, null);
+      } else {
+        const entry = attendanceRhidBadgeReport(context.date);
+        nextRefresh = Math.min(nextRefresh, entry.expiresAt);
+        rhidBadge = entry.status === "loading"
+          ? { status: "loading", label: "CONSULTANDO RHID", date: context.date,
+            description: "Consultando o ponto deste fornecedor na data da presença." }
+          : buildAttendanceRhidBadge(context, entry.status === "ready" ? entry.report : null);
+      }
+      return { ...option, rhidBadge };
+    });
+    if (attendanceRhidBadgeNextRefresh !== nextRefresh) {
+      if (attendanceRhidBadgeTimer !== null) clearTimeout(attendanceRhidBadgeTimer);
+      attendanceRhidBadgeTimer = null;
+      attendanceRhidBadgeNextRefresh = nextRefresh;
+      if (Number.isFinite(nextRefresh)) {
+        attendanceRhidBadgeTimer = setTimeout(() => {
+          attendanceRhidBadgeTimer = null;
+          attendanceRhidBadgeNextRefresh = 0;
+          if (!stopped && account) render();
+        }, Math.max(1, nextRefresh - Date.now()));
+        attendanceRhidBadgeTimer?.unref?.();
+      }
+    }
+    if (!changed) return messages;
+    const decorated = messages.slice();
+    decorated[decorated.lastIndexOf(activePoll)] = { ...activePoll, options };
+    return decorated;
+  }
+
   function render() {
     if (!flowBusy() || stopped || !account) {
       const waiters = [...idleWaiters];
@@ -3933,6 +4041,7 @@ export function createAppController({
         }
       }
     }
+    renderMessages = decorateAttendanceRhidBadges(state, renderMessages);
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
@@ -9050,6 +9159,7 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    clearAttendanceRhidBadges();
     reportSnapshots.reset();
     supplierPayrollSessionSource = null;
     disposeRhidMonthlyReport();
@@ -9149,6 +9259,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    clearAttendanceRhidBadges();
     disposeRhidMonthlyReport();
     pendingAutomaticExit = null;
     rhidAttendanceReportPreviousSnapshot = null;
@@ -10390,6 +10501,7 @@ export function createAppController({
   }
 
   function stop() {
+    clearAttendanceRhidBadges();
     reportSnapshots.reset();
     unsubscribeReportMutations?.();
     supplierPayrollSessionSource = null;

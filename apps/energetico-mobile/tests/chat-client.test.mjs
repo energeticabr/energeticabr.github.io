@@ -207,6 +207,27 @@ test("consulta o relatório RHID do dia selecionado com a sessão Microsoft", as
   assert.deepEqual(JSON.parse(request.body), { action: "rhid_attendance_report", date: "2026-09-25" });
 });
 
+test("consulta RHID com cadastro completo apenas para os indicadores de presenças", async () => {
+  const requests = [];
+  const registration = { complete: true, people: [{ id: "9", name: "Pessoa A" }] };
+  const client = clientWith(async (url, options) => {
+    requests.push({ url, ...options });
+    return jsonResponse({ status: "processed", messages: [], attendanceReport: {
+      date: "2026-10-05", rows: [], registration,
+    } });
+  });
+  const report = await client.getRhidAttendanceReport("2026-10-05", { includeRegistration: true });
+  assert.deepEqual(JSON.parse(requests[0].body), {
+    action: "rhid_attendance_report", date: "2026-10-05", includeRegistration: true,
+  });
+  assert.deepEqual(report.registration, registration);
+  assert.equal(requests[0].cache, "no-store");
+  assert.equal(requests[0].headers.Authorization, "Bearer graph-token");
+  await client.getRhidAttendanceReport("2026-10-05");
+  assert.deepEqual(JSON.parse(requests[1].body), { action: "rhid_attendance_report", date: "2026-10-05" },
+    "existing daily/monthly reports keep their original source and request");
+});
+
 test("abre validação RHID vinculada ao ID pendente usando sessão autenticada", async () => {
   let request;
   const client = clientWith(async (url, options) => {
