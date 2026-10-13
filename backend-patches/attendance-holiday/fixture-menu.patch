@@ -4,6 +4,15 @@
              ["✏️ SIM, EDITAR", "🟢 PRESENTE"],
          )
          self.assertEqual(
+@@ -17474 +17474 @@
+-        self.assertIn("DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS", self.messenger.sent[-1]["body"])
++        self.assertIn("DESEJA EDITAR ALGUM DOS DADOS EXIBIDOS", self.messenger.sent[-1]["prompt"])
+@@ -17520 +17520 @@
+-        self.assertIn("DESEJA EDITAR", self.messenger.sent[-1]["body"])
++        self.assertIn("DESEJA EDITAR", self.messenger.sent[-1]["prompt"])
+@@ -17562 +17562 @@
+-        self.assertIn("FINALIZADO", self.messenger.sent[-1]["body"])
++        self.assertIn("FINALIZADO", self.messenger.sent[-1]["prompt"])
 -            self.messenger.sent[-1]["options"][3]["title"],
 -            "🗑️ SOLICITAR EXCLUSÃO",
 +            [option["title"] for option in self.messenger.sent[-1]["options"][2:5]],

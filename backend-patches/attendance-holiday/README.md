@@ -12,7 +12,7 @@ Os dois menus de presença em lote usam o transporte de lista, sem o limite de t
 
 O script `test_holiday.py` requer `ATTENDANCE_HOLIDAY_SOURCE` apontando para um sandbox com o `worker` vigente e `tests/test_workflow.py` (fixtures em memória). Executar usando o ambiente Python já provisionado do servidor, não as conexões SharePoint reais.
 
-`fixture-menu.patch` atualiza somente a expectativa do menu no teste legado: FERIADO passa a ocupar a opção 4 e exclusão a opção 5. Aplicar no sandbox candidato, nunca no baseline.
+`fixture-menu.patch` atualiza somente a expectativa do menu no teste legado (FERIADO como 4 e exclusão como 5) e três leituras do prompt dos menus em lote, agora enviados como lista em vez de botões. Não remove nem ignora testes. Aplicar no sandbox candidato, nunca no baseline.
 
 ```sh
 ATTENDANCE_HOLIDAY_SOURCE=/home/opc/attendance-holiday-20261013/candidate /opt/energetica-whatsapp/.venv/bin/python -B test_holiday.py -v
