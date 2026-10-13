@@ -1,0 +1,88 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -22,6 +22,10 @@
+     from launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from document_item_lock import document_item_lock
+     from provision_description_settlement import ProvisionDescriptionSettlement, group_options
++try:
++    from . import financial_catalog_registration as financial_catalog
++except ImportError:
++    import financial_catalog_registration as financial_catalog
+ from calendar import monthrange
+ from pathlib import Path
+ from datetime import date, datetime, timedelta, timezone
+@@ -827,6 +831,11 @@
+             if event.get("kind") == "text" and command == "retry_after_error":
+                 return self._retry_after_error(state, etag)
+             return self._cash_checkpoint_blocked(state, etag)
++        if (((state or {}).get("embedded_return") or {}).get("type") == financial_catalog.RETURN_TYPE
++                and event.get("kind") == "text" and event.get("reply_id")
++                and self._is_option_next(event["reply_id"]) and not state.get("option_pagination")):
++            self._mark_processed(state, event.get("message_id"))
++            return self._resend_current_prompt(state, etag)
+         provision_lock = self._handle_frozen_provision(event,state,etag)
+         if provision_lock is not None:
+             return provision_lock
+@@ -18767,7 +18776,7 @@
+                     state.pop("edit_step_indices", None)
+                     return None
+                 state["step_index"] = remaining[0]
+-            step = steps[state["step_index"]]
++            step = financial_catalog.step_with_create(self, state, steps[state["step_index"]])
+             if self._provision_multiple(state) and step.get("key") == "produto_pagamento":
+                 step = {**step,"allow_blank":False}
+             if step.get("edit_only") and edit_step_indices is None:
+@@ -21346,6 +21355,8 @@
+                 }
+                 return self._delete_pending_document(state, etag)
+         if control in {"filter_clear", "limpar filtro", "refresh_options"}:
++            if control == "refresh_options" and financial_catalog.catalog(self, state, step):
++                state["options"] = self._selection_options(state, step)
+             self._send_options(state, step, state["options"])
+             self._save(state, etag)
+             return {
+@@ -21519,6 +21530,8 @@
+         ):
+             return self._start_pending_document_signature(state, etag, selected)
+ 
++        if selected.get("action") == financial_catalog.CREATE_ACTION:
++            return financial_catalog.start(self, state, etag)
+         if selected.get("action") == "start_embedded_product_registration":
+             return self._start_embedded_product_registration(state, etag)
+         if selected.get("action") == "start_embedded_supply_subfamily_registration":
+@@ -24487,7 +24500,7 @@
+             "supply_family_registration",
+             "attendance_validation",
+             "construction_stage_demonstrative_create",
+-        }:
++        } | financial_catalog.FINANCIAL_FLOWS:
+             raise RuntimeError(
+                 "O cadastro incorporado não está disponível para este fluxo"
+             )
+@@ -24531,7 +24544,7 @@
+             "navigation_history",
+         )
+         parent_keys = (*parent_keys, *PROVISION_STATE_KEYS)
+-        if return_type == "demonstrative_activity_registration":
++        if return_type in {"demonstrative_activity_registration", financial_catalog.RETURN_TYPE}:
+             parent_keys = (*parent_keys, "idempotency_token")
+         parent_state = {
+             key: copy.deepcopy(state[key]) for key in parent_keys if key in state
+@@ -33562,6 +33575,8 @@
+             # próximo menu/fluxo deve começar com a bandeja vazia; rascunhos
+             # continuam protegidos por _delete_staged_attachments.
+             self._clear_submitted_diary_attachments(state)
++        if embedded_type == financial_catalog.RETURN_TYPE:
++            return financial_catalog.complete(self, state, etag, item_id)
+         if embedded_type == "launch_product_registration":
+             return self._resume_launch_with_registered_product(
+                 state, etag, item_id
+@@ -34402,6 +34417,8 @@
+         }
+ 
+     def _cancel(self, state: dict, etag: str | None, event: dict) -> dict:
++        if (state.get("embedded_return") or {}).get("type") == financial_catalog.RETURN_TYPE:
++            return financial_catalog.cancel(self, state, etag)
+         if cash_checkpoint_pending(state):
+             return self._cash_checkpoint_blocked(state, etag)
+         draft = None
