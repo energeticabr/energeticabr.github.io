@@ -33,6 +33,41 @@ const orderAttachments = `✅ 🟢 ANEXOS DO PEDIDO ADICIONADOS NA BASE DE DADOS
 🆔 REGISTROS CONFIRMADOS:
 • PEDIDO: ID 406`;
 
+const diaryCompletion = `✅ 🟢 DIÁRIO DE OBRA PREENCHIDO NA BASE DE DADOS DIÁRIO DE OBRAS ÀS 23:29. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• DIÁRIO DE OBRAS: ID 214`;
+
+test('diary completion uses the branded success receipt with the confirmed ID and source time', () => {
+  const doc = documentFor(diaryCompletion);
+  const card = doc.querySelector('.launch-completion--diary');
+  assert.ok(card, 'the diary notice must use the shared branded receipt');
+  assert.equal(card.querySelector('.launch-completion-sender strong').textContent, 'Energético');
+  assert.equal(card.querySelector('.launch-completion-sender time').textContent, '23:29');
+  assert.equal(card.querySelector('.launch-completion-sender img').getAttribute('alt'), 'Mascote Energético');
+  assert.equal(doc.querySelector('.chat-message--launch-completion > .chat-avatar'), null);
+  assert.equal(card.querySelector('h2').textContent, 'DIÁRIO DE OBRA PREENCHIDO');
+  assert.equal(card.querySelector('.launch-completion__success p').textContent, 'Registrado na base de dados');
+  assert.match(card.querySelector('.launch-completion__operation').textContent, /DIÁRIO DE OBRAS\s+ÀS 23:29/);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['DIÁRIO DE OBRAS']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 214']);
+  assert.equal(card.querySelector('footer').textContent.trim(), 'Processo concluído com sucesso!');
+  assert.equal(card.querySelectorAll('button, input, [data-action]').length, 0);
+});
+
+for (const text of [
+  diaryCompletion.replace('ID 214', 'ID 0'),
+  diaryCompletion.replace('23:29', '25:29'),
+  diaryCompletion.replace('NA BASE DE DADOS DIÁRIO DE OBRAS', 'NA BASE DE DADOS OUTRA BASE'),
+  diaryCompletion.replace('DIÁRIO DE OBRAS: ID 214', 'DOCUMENTO: ID 214'),
+  diaryCompletion + '\n❌ Falha ao gravar outro diário.',
+]) {
+  test(`unconfirmed diary completion remains plain text: ${text.split('\n').at(-1)}`, () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.match(doc.querySelector('.chat-bubble').textContent, /DIÁRIO DE OBRA PREENCHIDO/);
+  });
+}
+
 test('order attachments confirmation uses the branded success card with the actual order and source time', () => {
   const doc = documentFor(orderAttachments);
   const card = doc.querySelector('.launch-completion--order-attachments');
