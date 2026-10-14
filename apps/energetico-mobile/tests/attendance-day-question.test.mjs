@@ -53,6 +53,53 @@ test('empty scoped day keeps its explicit date without inventing attendance reco
   assert.equal(dom.window.document.querySelector('.chat-attendance-select__row'),null);
 });
 
+test('HORÁRIO sits beside Energético and emits the current dated poll identity', t => {
+  const {view,dom}=render(t,[row(1,'2026-10-12')]);
+  const button=dom.window.document.querySelector('[data-action="attendance-validation-hours"]');
+  assert.ok(button);
+  assert.equal(button.textContent,'HORÁRIO');
+  assert.equal(button.parentElement.querySelector('strong')?.textContent,'Energético');
+  assert.equal(button.parentElement.nextElementSibling.classList.contains('chat-choice-card'),true);
+  const commands=[];
+  view.on('attendance-validation-hours',command=>commands.push(command));
+  button.click();
+  assert.deepEqual(commands,[{type:'attendance-validation-hours',messageId:'day'}]);
+});
+
+test('HORÁRIO is unavailable for ambiguous days and unrelated polls', t => {
+  for (const [options,extra] of [
+    [[row(1,'2026-10-12'),row(2,'2026-10-13')],{}],
+    [[row(1,'2026-02-30')],{}],
+    [[row(1,undefined)],{}],
+    [[row(1,'2026-10-12')],{presentation:'attendance_supplier_sync'}],
+    [[row(1,'2026-10-12')],{presentation:'list'}],
+  ]) {
+    const {dom}=render(t,options,extra);
+    assert.equal(dom.window.document.querySelector('[data-action="attendance-validation-hours"]'),null);
+  }
+});
+
+test('HORÁRIO is hidden when a later assistant text supersedes the poll', t => {
+  const {view,dom}=render(t,[row(1,'2026-10-12')]);
+  view.render({sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],messages:[
+    {id:'day',role:'assistant',type:'poll',presentation:'attendance_multi_select',question,options:[row(1,'2026-10-12')]},
+    {id:'later',role:'assistant',type:'text',text:'Etapa encerrada'},
+  ]});
+  assert.equal(dom.window.document.querySelector('[data-action="attendance-validation-hours"]'),null);
+});
+
+test('RHID retry after HORÁRIO retains the historical date and does not claim today', t => {
+  const {view,dom}=render(t,[row(1,'2026-09-25')]);
+  view.openRhidAttendanceToday({date:'2026-09-25'});
+  view.setRhidAttendanceReportStatus({busy:false,error:'Falha temporária'});
+  const dialog=dom.window.document.querySelector('[data-rhid-attendance-report-dialog]');
+  assert.doesNotMatch(dialog.textContent,/Presenças de hoje/);
+  const commands=[];
+  view.on('rhid-attendance-report-generate',command=>commands.push(command));
+  [...dialog.querySelectorAll('button')].find(button=>button.textContent==='Tentar novamente').click();
+  assert.deepEqual(commands,[{type:'rhid-attendance-report-generate',value:'2026-09-25'}]);
+});
+
 test('supplier synchronization and date selection keep their own questions', t => {
   for (const presentation of ['attendance_supplier_sync','list']) {
     const {heading}=render(t,[row(1,'2026-10-12')],{presentation,question:'ESCOLHA UMA OPÇÃO'});

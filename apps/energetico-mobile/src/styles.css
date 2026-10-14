@@ -586,6 +586,8 @@ button { touch-action: manipulation; }
 }
 .chat-message--user .chat-bubble { color: white; background: var(--brand); border-radius: 18px 18px 5px 18px; }
 .chat-bubble > strong { display: block; margin-bottom: 4px; font-size: .78rem; }
+.chat-attendance-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.chat-attendance-heading > strong { font-size:.78rem; }
 .chat-bubble p { margin: 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-message--assistant .chat-bubble p { font-weight: 600; }
 .chat-message--hr-gallery-menu { align-items: stretch; }

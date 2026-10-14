@@ -8,7 +8,7 @@ import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-option
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
-import { attendanceRhidOptionContext, attendanceRhidPollEligible, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
+import { attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -10024,7 +10024,7 @@ export function createAppController({
         "open-media", "open-file", "open-pending-provisions", "open-pending-provision-attachment",
         "resize-signature", "signature-placement-edit", "pick-files", "pick-pending-provision-attachments",
         "capture-photo", "pick-photos", "pick-document-files",
-        "open-rhid-attendance-today", "rhid-attendance-report-today", "rhid-presence-validate-open",
+        "open-rhid-attendance-today", "rhid-attendance-report-today", "rhid-presence-validate-open", "attendance-validation-hours",
       ].includes(type)) {
         disposeDepreciationReport();
         disposeDocumentControlReport();
@@ -10438,6 +10438,16 @@ export function createAppController({
     }));
     bind("open-rhid-monthly-report", openRhidMonthlyReport);
     bind("rhid-attendance-report-today", command => generateRhidAttendanceReport(command.value));
+    bind("attendance-validation-hours", command => {
+      if (!account || stopped || flowBusy()) return false;
+      const poll = latestAssistantPoll(store.getState().messages);
+      const date = attendanceValidationDate(poll);
+      if (!date || !command.messageId || String(poll.id) !== String(command.messageId)) return false;
+      const pending = rhidAttendanceReportRequests.get("new-report");
+      if (pending) return pending;
+      if (view.openRhidAttendanceToday?.({ date }) === false) return false;
+      return generateRhidAttendanceReport(date);
+    });
     bind("open-rhid-attendance-today", () => {
       if (!account || stopped || flowBusy()) return false;
       const pending = rhidAttendanceReportRequests.get("new-report");

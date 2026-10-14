@@ -17,7 +17,7 @@ import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-op
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
-import { attendanceRhidOptionContext } from "../chat/attendance-rhid-badges.js";
+import { attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -1397,10 +1397,8 @@ function isAttendanceSelectionPoll(message) {
 
 function attendanceDayQuestionMarkup(message) {
   if (!isAttendanceSelectionPoll(message) || isAttendanceSupplierSyncPoll(message)) return null;
-  const records = (message.options || []).map(option => attendanceRhidOptionContext(option, message)).filter(Boolean);
-  const dates = new Set(records.map(record => record.date));
   // Derive the heading from this poll's records, not the clock or an older message.
-  const date = records.length ? (dates.size === 1 ? [...dates][0] : "") : message.presenceDateKey;
+  const date = attendanceValidationDate(message);
   if (!isValidRhidReportDate(date)) return "QUAL PRESENÇA DESEJA VALIDAR?";
   const weekday = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"][new Date(`${date}T00:00:00Z`).getUTCDay()];
   return `QUAL PRESENÇA DESEJA VALIDAR DO DIA <strong class="chat-question-field">${date.split("-").reverse().join("/")}</strong> (${weekday})?`;
@@ -1794,7 +1792,7 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, attendanceHoursCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
     // Saved conversations can still contain the retired inline gallery.
     // Keep the history intact, but never restore its completion controls.
@@ -1807,6 +1805,9 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, dr
     const taskMenu = isDemandsTaskMenu(message);
     const hrGalleryMenu = isHrPayrollGalleryMenu(message);
     const rhidReport = (message.detail_table || message.detailTable)?.kind === "rhid_attendance";
+    const attendanceHeader = currentPoll && attendanceHoursCurrent && attendanceValidationDate(message)
+      ? `<div class="chat-attendance-heading"><strong>Energético</strong><button class="chat-flow-summary" type="button" data-action="attendance-validation-hours" data-message-id="${escapeHtml(message.id)}"${busy ? " disabled" : ""}>HORÁRIO</button></div>`
+      : "<strong>Energético</strong>";
     const initialAreaMenu = isInitialAreaSelectionMenu(message);
     const launchPayment = Boolean(launchPresencePaymentSummary(message, activeFlow));
     const provisionOption = initialAreaMenu && currentPoll && !activeFlow
@@ -1815,7 +1816,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, dr
     const attendanceShortcut = cargosShortcut ? `<button class="chat-main-attendance-summary-shortcut" type="button" data-action="open-attendance-summary" aria-label="Abrir resumo de presenças e ausências" title="Resumo de presenças e ausências"${busy ? ' disabled' : ''}><img src="${ATTENDANCE_SUMMARY_MASCOT_URL}" alt="Mascote do resumo de presenças"></button><button class="chat-main-stage-progress-shortcut" type="button" data-action="open-stage-progress" aria-label="Abrir relatório de etapas e atividades" title="Etapas e atividades da obra"${busy ? ' disabled' : ''}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Mascote do relatório de etapas"></button><button class="chat-main-supplier-payroll-report-shortcut" type="button" data-action="open-supplier-payroll-report" aria-label="Abrir folhas de pagamento por fornecedor" title="Folhas de pagamento por fornecedor"${busy ? ' disabled' : ''}><img src="${SUPPLIER_PAYROLL_REPORT_MASCOT_URL}" alt="Energético com folha de pagamento"></button><button class="chat-main-supplier-workforce-shortcut" type="button" data-action="open-supplier-workforce-report" aria-label="Abrir fornecedores por filial, imóvel e profissão" title="Fornecedores por filial, imóvel e profissão"${busy ? ' disabled' : ''}><img src="${SUPPLIER_WORKFORCE_REPORT_MASCOT_URL}" alt="Energético com martelete"></button><button class="chat-main-contractor-control-shortcut" type="button" data-action="open-contractor-control-report" aria-label="Abrir controle de empreiteiros" title="Controle de empreiteiros"${busy ? ' disabled' : ''}><img src="${CONTRACTOR_CONTROL_REPORT_MASCOT_URL}" alt="Energético com carrinho de mão"></button><button class="chat-main-pending-supplier-payments-shortcut" type="button" data-action="open-pending-supplier-payments-report" aria-label="Abrir pagamentos pendentes por fornecedor" title="Pagamentos pendentes por fornecedor"${busy ? ' disabled' : ''}><img src="${PENDING_SUPPLIER_PAYMENTS_REPORT_MASCOT_URL}" alt="Energético com ferramentas e tijolos"></button><button class="chat-main-pending-work-diaries-shortcut" type="button" data-action="open-pending-work-diaries-report" aria-label="Abrir diários de obras pendentes" title="Diários de obras pendentes"${busy ? ' disabled' : ''}><img src="${PENDING_WORK_DIARIES_REPORT_MASCOT_URL}" alt="Energético com colher de pedreiro e tijolos"></button>` : '';
     const commercialShortcut = cargosShortcut ? `<nav class="chat-main-commercial-shortcuts" aria-label="Relatórios comerciais"><button class="chat-main-commercial-receipts-shortcut" type="button" data-action="open-commercial-receipts" aria-label="Abrir relatório comercial de contratos e pagamentos" title="Contratos e pagamentos"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_RECEIPTS_MASCOT_URL}" alt="Mascote do relatório comercial"></button><button class="chat-main-commercial-milestones-shortcut" type="button" data-action="open-commercial-milestones" aria-label="Abrir andamento comercial dos imóveis" title="Andamento comercial dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_MILESTONES_MASCOT_URL}" alt="Mascote do andamento comercial"></button><button class="chat-main-commercial-documents-shortcut" type="button" data-action="open-commercial-documents" aria-label="Abrir pendências documentais dos imóveis" title="Pendências documentais dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_DOCUMENTS_MASCOT_URL}" alt="Mascote das pendências documentais"></button><button class="chat-main-sac-pathologies-shortcut" type="button" data-action="open-sac-pathologies" aria-label="Abrir acompanhamento de patologias" title="Acompanhamento de patologias"${busy ? ' disabled' : ''}><img src="${SAC_PATHOLOGIES_MASCOT_URL}" alt="Mascote do acompanhamento de patologias"></button></nav>` : '';
 const provisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt="Mascote Energético"></button><button class="chat-main-payment-ledger-shortcut chat-main-provision-report-shortcut" type="button" data-action="open-provision-report" aria-label="Abrir relatório de provisões e despesas recorrentes" title="Relatório de provisões e despesas recorrentes"${busy ? " disabled" : ""}><img src="${PROVISION_REPORT_MASCOT_URL}" alt="Mascote do relatório de provisões"></button><button class="chat-main-payment-ledger-shortcut" type="button" data-action="open-payment-ledger" aria-label="Abrir relatório de pagamentos" title="Relatório de pagamentos"${busy ? " disabled" : ""}><img src="${PAYMENT_LEDGER_MASCOT_URL}" alt="Mascote do relatório de pagamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-management-shortcut" type="button" data-action="open-management-report" aria-label="Abrir resumo gerencial de gastos" title="Resumo gerencial de gastos"${busy ? " disabled" : ""}><img src="${MANAGEMENT_REPORT_MASCOT_URL}" alt="Mascote do resumo gerencial de gastos"></button><button class="chat-main-payment-ledger-shortcut chat-main-order-validation-shortcut" type="button" data-action="open-order-validation-report" aria-label="Abrir validação de notas pendentes e pedidos para baixa" title="Validação de notas pendentes e pedidos para baixa"${busy ? " disabled" : ""}><img src="${ORDER_VALIDATION_MASCOT_URL}" alt="Mascote da validação de notas"></button><button class="chat-main-payment-ledger-shortcut chat-main-quotation-shortcut" type="button" data-action="open-quotation-report" aria-label="Abrir cotações e orçamentos" title="Cotações e orçamentos"${busy ? " disabled" : ""}><img src="${QUOTATION_REPORT_MASCOT_URL}" alt="Mascote de cotações e orçamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-depreciation-shortcut" type="button" data-action="open-depreciation-report" aria-label="Abrir controle de depreciação do imobilizado" title="Controle de depreciação do imobilizado"${busy ? " disabled" : ""}><img src="${DEPRECIATION_REPORT_MASCOT_URL}" alt="Mascote do controle de depreciação"></button><button class="chat-main-payment-ledger-shortcut chat-main-document-control-shortcut" type="button" data-action="open-document-control-report" aria-label="Abrir controle de documentos" title="Controle de documentos"${busy ? " disabled" : ""}><img src="${DOCUMENT_CONTROL_REPORT_MASCOT_URL}" alt="Mascote do controle de documentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-task-association-shortcut" type="button" data-action="open-task-association-report" aria-label="Abrir atividades por associação" title="Atividades por associação"${busy ? " disabled" : ""}><img src="${TASK_ASSOCIATION_REPORT_MASCOT_URL}" alt="Mascote das atividades por associação"></button><button class="chat-main-payment-ledger-shortcut chat-main-delegated-deadline-shortcut" type="button" data-action="open-delegated-deadline-report" aria-label="Abrir tarefas delegadas por data fatal" title="Tarefas delegadas por data fatal"${busy ? ' disabled' : ''}><img src="${DELEGATED_DEADLINE_REPORT_MASCOT_URL}" alt="Mascote das tarefas delegadas por data fatal"></button>` : "";
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : "<strong>Energético</strong>"}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2187,12 +2188,12 @@ function rhidAttendanceReportMarkup({ open = false, date = "", messageId = "", b
         <button class="chat-date-picker__close" type="button" data-action="cancel-rhid-attendance-report" aria-label="Fechar relatório RHID" title="Fechar relatório RHID">❌</button>
         <h2 id="rhid-attendance-report-title">${changingExistingReport ? "📅 Alterar data do relatório RHID" : "📊 Relatório de presenças RHID"}</h2>
       </div>
-      ${directToday ? `<p>Presenças de hoje: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong></p>` : `<button class="chat-confirmation__confirm chat-rhid-monthly-entry" type="button" data-action="open-rhid-monthly-report" data-value="${escapeHtml(month || date.slice(0, 7))}">GERAR RELATÓRIO MENSAL</button>`}
+      ${directToday ? `<p>Presenças de: <strong>${escapeHtml(`${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`)}</strong></p>` : `<button class="chat-confirmation__confirm chat-rhid-monthly-entry" type="button" data-action="open-rhid-monthly-report" data-value="${escapeHtml(month || date.slice(0, 7))}">GERAR RELATÓRIO MENSAL</button>`}
       ${directToday ? "" : rhidCalendarMarkup(month || (date || saoPauloDateIso()).slice(0, 7), date || saoPauloDateIso(), monthPresentDates, monthKnown, monthIrregularCounts)}
       ${monthLoading ? loadingIndicatorMarkup("Consultando presenças deste mês…", { compact: true }) : ""}
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
       <div class="chat-confirmation__actions">
-        <button class="chat-confirmation__confirm" type="button" data-action="${directToday ? "open-rhid-attendance-today" : "generate-rhid-attendance-report"}"${directToday ? "" : ` data-value="${escapeHtml(date)}"`}${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : directToday ? "Tentar novamente" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
+        <button class="chat-confirmation__confirm" type="button" data-action="generate-rhid-attendance-report" data-value="${escapeHtml(date)}"${busy ? " disabled" : ""}>${busy ? "⏳ Atualizando…" : directToday ? "Tentar novamente" : changingExistingReport ? "Atualizar relatório" : "Gerar relatório"}</button>
       </div>
   </section>`;
 }
@@ -2527,6 +2528,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const latestPoll = [...visibleMessages]
     .reverse()
     .find(message => message?.role !== "user" && message?.type === "poll");
+  const latestAttendanceMessage = [...visibleMessages].reverse().find(message => message?.role !== "user");
   const databaseFilter = databaseFilterForView(visibleMessages);
   const dateInput = !databaseFilter
     && !state.activeText
@@ -2583,7 +2585,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
-        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
@@ -2659,6 +2661,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let powerBiDashboard = null;
   const attendanceSelectedIds = new Set();
   let attendanceSelectionPollKey = "";
+  let attendanceReportSelection = null;
   const launchPayrollSelectedIds = new Set();
   let launchPayrollSelectionPollKey = "";
   let launchPayrollEligibleIds = new Set();
@@ -4278,6 +4281,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
     }
+    if (command.type === "attendance-validation-hours") {
+      attendanceReportSelection = { key: attendanceSelectionPollKey, ids: [...attendanceSelectedIds] };
+      emit(command);
+      return;
+    }
     if (command.type === "rhid-attendance-report-today") {
       emit({ type: "rhid-attendance-report-today", value: saoPauloDateIso() });
       return;
@@ -5067,7 +5075,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
     const isAttendancePoll = isAttendanceSelectionPoll(newestPoll);
     const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";
-    if (nextAttendancePollKey !== attendanceSelectionPollKey || !isAttendancePoll) attendanceSelectedIds.clear();
+    if (nextAttendancePollKey !== attendanceSelectionPollKey || !isAttendancePoll) {
+      attendanceSelectedIds.clear();
+      if (attendanceReportSelection?.key === nextAttendancePollKey) {
+        for (const id of attendanceReportSelection.ids) attendanceSelectedIds.add(id);
+        attendanceReportSelection = null;
+      }
+    }
+    const viewingRhid = (newestPoll?.detail_table || newestPoll?.detailTable)?.kind === "rhid_attendance";
+    if (state.sessionStatus !== "authenticated" || (!viewingRhid && nextAttendancePollKey !== attendanceReportSelection?.key)) attendanceReportSelection = null;
     attendanceSelectionPollKey = nextAttendancePollKey;
     const eligibleAttendanceIds = new Set(isAttendancePoll ? (newestPoll.options || []).filter(option => !option.disabled).map(attendanceSelectionId).filter(Boolean) : []);
     for (const id of attendanceSelectedIds) {

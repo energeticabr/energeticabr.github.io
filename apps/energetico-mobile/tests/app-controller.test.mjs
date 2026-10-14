@@ -536,6 +536,64 @@ test("calendário RHID atual gera e abre o relatório da data tocada, sem voltar
   assert.doesNotMatch(root.querySelector('.chat-transcript')?.textContent || "", /QUAL FLUXO VOCÊ DESEJA INICIAR/i);
 });
 
+test("HORÁRIO abre RHID do dia em validação sem PDF e permite voltar à lista", async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  const h = makeHarness({ view });
+  const requested = [], previews = [];
+  h.client.getRhidAttendanceReport = async date => {
+    requested.push(date);
+    return { date, rows: [{ ID_PESSOA_RHID: '9', NOME_COLABORADOR: 'ANA', BATIDAS_RHID: '07:00; 12:00; 13:00; 17:00' }] };
+  };
+  h.native.previewMedia = async () => previews.push(true);
+  t.after(() => { h.controller.stop(); view.destroy(); dom.window.close(); });
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ id: 'validation-day', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'QUAL PRESENÇA DESEJA VALIDAR?', options: [
+      { id: 'choice:registro_presenca_pendente:21', label: '21 - ANA', date: '2026-09-25' },
+    ] }], { activeFlow: { id: 'attendance_validation', title: 'VALIDAR PRESENÇAS' }, resetConversation: true });
+  // Badge enrichment may also read RHID; only count reads made by this shortcut.
+  await new Promise(resolve => setImmediate(resolve));
+  requested.length = 0;
+  root.querySelector('[data-action="attendance-select-toggle"]').click();
+  const button = root.querySelector('[data-action="attendance-validation-hours"]');
+  assert.ok(button, 'atalho no cabeçalho da pergunta');
+  button.click();
+  for (let attempt = 0; attempt < 30 && !root.querySelector('.chat-rhid-attendance-report'); attempt++)
+    await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(requested, ['2026-09-25']);
+  assert.equal(h.store.getState().messages.at(-1).detail_table.reportDate, '2026-09-25');
+  assert.ok(root.querySelector('.chat-rhid-attendance-report'));
+  assert.deepEqual(previews, []);
+  root.querySelector('[data-reply-id="navigation_back"]').click();
+  assert.ok(root.querySelector('[data-action="attendance-validation-hours"]'));
+  assert.equal(root.querySelector('[data-action="attendance-select-toggle"]').checked, true);
+  assert.match(root.querySelector('.chat-choice-card > p').textContent, /25\/09\/2026/);
+});
+
+test("HORÁRIO rejeita mensagem antiga, dia ambíguo e comandos com data adulterada", async t => {
+  const h = makeHarness();
+  const requested = [];
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ id: 'current', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'QUAL PRESENÇA?', options: [{ id: 'pending_attendance_record:1', date: '2026-09-25' }] }],
+    { activeFlow: { id: 'attendance_validation' }, resetConversation: true });
+  h.client.getRhidAttendanceReport = async date => { requested.push(date); return { date, rows: [] }; };
+  assert.equal(await h.view.emit('attendance-validation-hours', { messageId: 'old', value: '2026-10-13' }), false);
+  assert.deepEqual(requested, []);
+  await h.view.emit('attendance-validation-hours', { messageId: 'current', value: '2026-10-13' });
+  assert.deepEqual(requested, ['2026-09-25'], 'date comes from current records, never command or clock');
+  h.store.ingestRemoteMessages([{ id: 'mixed', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'QUAL PRESENÇA?', options: [{ id: 'pending_attendance_record:1', date: '2026-09-25' },
+      { id: 'pending_attendance_record:2', date: '2026-09-26' }] }], { resetConversation: true });
+  await new Promise(resolve => setImmediate(resolve));
+  requested.length = 0;
+  assert.equal(await h.view.emit('attendance-validation-hours', { messageId: 'mixed' }), false);
+  assert.deepEqual(requested, [], 'rejected shortcut adds no request beyond badge enrichment');
+});
+
 test("consulta RHID sem resposta termina a espera e informa o erro", async t => {
   const h = makeHarness({ rhidReportTimeoutMs: 15 });
   const statuses = [];
