@@ -1323,6 +1323,7 @@ export function createAppController({
   let pendingConstructionDiaryRequest = null;
   let pendingConstructionDiaryData = null;
   let recentDiaryPoll = null;
+  let recentDiaryAccount = null;
   let recentDiaryActivities = [];
   let recentDiaryActivitiesLoading = false;
   let recentDiaryActivitiesError = false;
@@ -4178,11 +4179,12 @@ export function createAppController({
     const diaryActivityPrompt = /^construction_diary_(?:create|fill)$/.test(String(state.activeFlow?.id || ""))
       && /atividades\s+executadas/i.test(String(currentDiaryPoll?.question || currentDiaryPoll?.prompt || ""));
     const activeDiaryPoll = diaryActivityPrompt && account && !stopped ? currentDiaryPoll : null;
-    if (activeDiaryPoll !== recentDiaryPoll) {
+    if (activeDiaryPoll !== recentDiaryPoll || (activeDiaryPoll && account !== recentDiaryAccount)) {
       recentDiaryActivitiesAbort?.abort();
       recentDiaryActivitiesAbort = null;
       recentDiaryActivitiesRequest = null;
       recentDiaryPoll = activeDiaryPoll;
+      recentDiaryAccount = activeDiaryPoll ? account : null;
       recentDiaryActivities = [];
       recentDiaryActivitiesLoading = Boolean(activeDiaryPoll);
       recentDiaryActivitiesError = false;
