@@ -31,8 +31,7 @@
 .pr-table--annual td[data-column=month] { text-align:left; }
 .pr-table--annual .pr-money { font-size:inherit; }
 .pr-table.pr-table--annual .pr-badge { font-size:inherit; padding:2px 1px; }
-.pr-table--annual .pr-status-line { flex-wrap:wrap; gap:2px; }
-.pr-table--annual .pr-status-dot { flex-basis:calc(clamp(3px,.65cqw,8px) * var(--pr-annual-zoom,1)); width:calc(clamp(3px,.65cqw,8px) * var(--pr-annual-zoom,1)); height:calc(clamp(3px,.65cqw,8px) * var(--pr-annual-zoom,1)); }
+.pr-table--annual .pr-status-line { gap:0; }
 .pr-table--inactive td[data-column=id],.pr-table--inactive td[data-column=days],.pr-table--inactive td[data-column=modified] { text-align:center; }
 .pr-table .pr-bold { font-weight:700; }
 .pr-table .pr-money { text-align:right; white-space:nowrap; overflow-wrap:normal; }

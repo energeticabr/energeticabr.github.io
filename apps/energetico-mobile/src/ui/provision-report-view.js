@@ -40,10 +40,10 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   const selected=()=>Object.fromEntries([...controls].map(([name,node])=>[name,node.value]));
   function cell(tr,column,text,className=''){const td=make('td',className,String(text??'').trim()||'—');td.dataset.column=column;tr.append(td);return td;}
   function textLine(parent,text,className=''){const line=make('div',className,text);parent.append(line);return line;}
-  function statusLine(parent,text,tone,className='',textClass=''){
+  function statusLine(parent,text,tone,className='',textClass='',showDot=true){
     const line=make('div',`pr-status-line ${className}`);line.dataset.statusTone=tone;
-    const dot=make('span',`pr-status-dot pr-status-dot--${tone}`);dot.setAttribute('aria-hidden','true');
-    line.append(dot,make('span',textClass,text));parent.append(line);return line;
+    if(showDot){const dot=make('span',`pr-status-dot pr-status-dot--${tone}`);dot.setAttribute('aria-hidden','true');line.append(dot);}
+    line.append(make('span',textClass,text));parent.append(line);return line;
   }
   function datedLine(parent,label,date,className=''){
     const line=make('div',className);line.append(doc.createTextNode(`${label} `),make('span','pr-date pr-nowrap',`(${formatReportDate(date)})`));parent.append(line);
@@ -163,12 +163,12 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     const annual=table('annual','📊 RELATÓRIO ANUAL – PROVISÃO DE PAGAMENTOS',['FORNECEDOR',...MONTHS,'TOTAL'],[16,...MONTHS.map(()=>6.25),9]);
     for(const group of result.annual){const tr=make('tr');tr.dataset.recurrenceId=group.recurrenceId;
       const supplier=cell(tr,'supplier',`${group.supplier} - ${group.property||'-'} ( ID: ${group.recurrenceId})`,'pr-bold');
-      if(group.inactivePending)statusLine(supplier,'INATIVO COM PROVISÃO PENDENTE','orange','pr-badge pr-badge--orange');
+      if(group.inactivePending)statusLine(supplier,'INATIVO COM PROVISÃO PENDENTE','orange','pr-badge pr-badge--orange','',false);
       for(const month of group.months){const td=cell(tr,'month','');td.dataset.month=month.month;td.replaceChildren();
-        if(group.startDate&&Number(group.startDate.slice(5,7))===month.month){const started=make('div','pr-event pr-badge pr-badge--purple');statusLine(started,'INICIADO:','purple');textLine(started,formatReportDate(group.startDate),'pr-date pr-nowrap');td.append(started);}
-        for(const row of month.paid){const event=make('div','pr-event');textLine(event,money(row.total),'pr-money pr-nowrap pr-green pr-bold');statusLine(event,formatReportDate(row.paidDate),'green','','pr-date pr-nowrap');td.append(event);}
-        for(const row of month.pending){const event=make('div','pr-event');textLine(event,formatReportDate(row.dueDate),'pr-date pr-nowrap pr-orange pr-bold');const days=daysBetween(today,row.dueDate),tone=days<0?'red':'orange';statusLine(event,days<0?`ATR. ${-days}d`:`EM ${days}d`,tone,`pr-${tone} pr-bold`,'pr-nowrap');td.append(event);}
-        if(month.nextDate){const next=make('div','pr-event pr-badge pr-badge--blue');statusLine(next,'PRÓX','blue');textLine(next,formatReportDate(month.nextDate).slice(0,5),'pr-date pr-nowrap');td.append(next);}}
+        if(group.startDate&&Number(group.startDate.slice(5,7))===month.month){const started=make('div','pr-event pr-badge pr-badge--purple');statusLine(started,'INICIADO:','purple','','pr-nowrap',false);textLine(started,formatReportDate(group.startDate),'pr-date pr-nowrap');td.append(started);}
+        for(const row of month.paid){const event=make('div','pr-event');textLine(event,money(row.total),'pr-money pr-nowrap pr-green pr-bold');statusLine(event,formatReportDate(row.paidDate),'green','','pr-date pr-nowrap',false);td.append(event);}
+        for(const row of month.pending){const event=make('div','pr-event');textLine(event,formatReportDate(row.dueDate),'pr-date pr-nowrap pr-orange pr-bold');const days=daysBetween(today,row.dueDate),tone=days<0?'red':'orange';statusLine(event,days<0?`ATR. ${-days}d`:`EM ${days}d`,tone,`pr-${tone} pr-bold`,'pr-nowrap',false);td.append(event);}
+        if(month.nextDate){const next=make('div','pr-event pr-badge pr-badge--blue');statusLine(next,'PRÓX','blue','','pr-nowrap',false);textLine(next,formatReportDate(month.nextDate).slice(0,5),'pr-date pr-nowrap');td.append(next);}}
       cell(tr,'total',money(group.paidTotal),'pr-red pr-bold pr-money');annual.append(tr);}
     footer(annual,'TOTAL DE DESPESAS RECORRENTES EXIBIDAS NO RELATÓRIO ANUAL',13,result.annualCount,'annualCount');
     const inactive=table('inactive','🛑 DESPESAS RECORRENTES COM STATUS INATIVO MODIFICADAS NOS ÚLTIMOS 30 DIAS',['ID','FILIAL','FORNECEDOR','PRODUTO','IMÓVEL','STATUS','DATA MODIFICAÇÃO','DIAS MODIFICADO'],[5,13,18,24,13,9,11,7]);
