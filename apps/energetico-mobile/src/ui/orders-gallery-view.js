@@ -85,6 +85,7 @@ function safeFailure(error, fallback) {
 export function createOrdersGallery({
   document: documentRef = globalThis.document,
   data,
+  invalidateRelatedReports,
   openMediaCollection,
   onClose,
   onHome,
@@ -160,6 +161,7 @@ export function createOrdersGallery({
     onRefresh: async () => {
       // Reports query rows on opening; invalidate their source contracts for every order.
       data.invalidateRelatedReports?.();
+      invalidateRelatedReports?.();
       await loadSnapshot({ refresh: true });
     },
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });

@@ -1276,6 +1276,12 @@ export function createAppController({
   // Payroll details depend on the source's complete sheet/payment scans, not
   // just the visible sheet rows. Retain that state within this auth session.
   let supplierPayrollSessionSource = null;
+  function invalidateGalleryReportSources() {
+    // Several reports share gallery-backed lists; clear all session snapshots so
+    // their next opening reads the current source instead of a prior capture.
+    reportSnapshots.invalidate();
+    supplierPayrollSessionSource = null;
+  }
   let unsubscribeReportMutations;
   client = observeReportMutations(client);
   ordersGalleryDataFactory = observeReportMutationFactory(ordersGalleryDataFactory);
@@ -5600,8 +5606,7 @@ export function createAppController({
             invalidateRelatedReports: () => {
               assertSession();
               data.invalidateRelatedReports?.();
-              reportSnapshots.invalidate('open-supplier-payroll-report');
-              supplierPayrollSessionSource = null;
+              invalidateGalleryReportSources();
             },
             onHome: () => {
               assertSession();
@@ -5660,6 +5665,7 @@ export function createAppController({
               assertSession();
               const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
               data.invalidateRelatedReports?.();
+              invalidateGalleryReportSources();
               assertSession();
             },
             loadOrderSnapshot: async ({ id, signal } = {}) => {
@@ -5777,6 +5783,7 @@ export function createAppController({
           assertSession();
           const panel = await ordersGalleryFactory({
             data,
+            invalidateRelatedReports: () => { assertSession(); invalidateGalleryReportSources(); },
             openMediaCollection: items => openGalleryMedia(items, assertSession),
             onCreate: galleryCreationHandler(ORDERS_GALLERY_ID, assertSession),
             onHome: () => { assertSession(); return returnToMainMenu(); },

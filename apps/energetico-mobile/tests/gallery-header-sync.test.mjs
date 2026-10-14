@@ -32,12 +32,13 @@ test('orders sync invalidates every linked report even with an empty gallery', a
         invalidateRelatedReports: () => calls.push(['invalidate-linked']),
         loadLinkedReport: async id => { calls.push(['linked', id]); return {}; },
       },
+      invalidateRelatedReports: () => calls.push(['invalidate-session-reports']),
     }));
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
   dom.window.document.querySelector('[data-gallery-refresh]').click();
   await new Promise(resolve => setTimeout(resolve, 20));
-  assert.deepEqual(calls, [['orders', false], ['invalidate-linked'], ['orders', true]]);
+  assert.deepEqual(calls, [['orders', false], ['invalidate-linked'], ['invalidate-session-reports'], ['orders', true]]);
 });
 
 test('IDFOLHA sync invalidates the FOLHAPGTO report source regardless of rows', async t => {
