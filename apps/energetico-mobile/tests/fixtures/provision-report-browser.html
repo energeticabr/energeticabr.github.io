@@ -48,6 +48,8 @@ try {
       return {text:node.textContent,lines:range.getClientRects().length,rect:rect(node),cell:cell?rect(cell):null,whiteSpace:getComputedStyle(node).whiteSpace};
     });
     const dots=[...root.querySelectorAll('.pr-status-dot')].filter(visible).map(node=>({tone:node.parentElement.dataset.statusTone,color:getComputedStyle(node).backgroundColor,...rect(node)}));
+    const annualDotCount=annual.querySelectorAll('.pr-status-dot').length;
+    const annualStatuses=[...annual.querySelectorAll('.pr-status-line')].map(node=>({tone:node.dataset.statusTone,text:node.textContent,color:getComputedStyle(node).color}));
     const wrappers=[...root.querySelectorAll('.pr-section-scroll')].map(node=>({...rect(node),overflow:node.scrollWidth-node.clientWidth,section:node.dataset.section,keyboard:node.tabIndex}));
     const annualScroll=annual.closest('.pr-section-scroll');if(annualScroll){annualScroll.scrollLeft=annualScroll.scrollWidth;await new Promise(requestAnimationFrame);}
     const reachTotal=annualScroll?{scroll:annualScroll.scrollLeft,total:rect(annual.querySelector('tbody tr [data-column=total]')),wrapper:rect(annualScroll)}:null;
@@ -74,7 +76,7 @@ try {
       },
       rows:main.querySelectorAll('tbody tr[data-id]:not([hidden])').length,pendingTotal:root.querySelector('[data-metric=pendingTotal]').textContent,pendingCount:root.querySelector('[data-metric=pendingCount]').textContent,
       inactiveRows:root.querySelectorAll('.pr-table--inactive tbody tr:not(.pr-total):not(:has([data-column=empty]))').length,
-      atomic,dots,wrappers,reachTotal,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),filters:capture.filters,
+      atomic,dots,annualDotCount,annualStatuses,wrappers,reachTotal,arrows:[...root.querySelectorAll('.report-navigation-arrow')].map(rect),filters:capture.filters,
       capturedTables:tables.map(table=>({columns:table.widths.length,rows:table.rows.length})),annualText:tables[1].rows.flatMap(row=>row.cells.flatMap(cell=>cell.runs.map(run=>run.text))).join(' ')};
     for(let count=0;count<6;count++)root.querySelector('[aria-label="Ampliar tabela anual"]').click();
     await new Promise(requestAnimationFrame);

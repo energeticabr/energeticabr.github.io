@@ -50,8 +50,15 @@ test('provision report keeps the original compact tables in landscape and portra
         assert.ok(token.lines<=1,`${width}px: ${token.text} broke into ${token.lines} lines`);assert.equal(token.whiteSpace,'nowrap');
         if(token.cell){assert.ok(token.rect.left>=token.cell.left-1);assert.ok(token.rect.right<=token.cell.right+1,`${width}px: ${token.text} spills past its cell`);}
       }
-      const colors={green:'rgb(46, 125, 50)',yellow:'rgb(183, 128, 0)',red:'rgb(176, 0, 32)',orange:'rgb(245, 124, 0)',purple:'rgb(106, 27, 154)',blue:'rgb(21, 101, 192)'};
-      for(const [tone,color] of Object.entries(colors)){const dots=result.dots.filter(dot=>dot.tone===tone);assert.ok(dots.length,`${width}px: ${tone} indicator missing`);for(const dot of dots){assert.equal(dot.color,color);assert.ok(dot.width>=3&&dot.height>=3);}}
+      const colors={green:'rgb(46, 125, 50)',yellow:'rgb(183, 128, 0)',red:'rgb(176, 0, 32)',orange:'rgb(245, 124, 0)'};
+      for(const [tone,color] of Object.entries(colors)){const dots=result.dots.filter(dot=>dot.tone===tone);assert.ok(dots.length,`${width}px: ${tone} provision indicator missing`);for(const dot of dots){assert.equal(dot.color,color);assert.ok(dot.width>=3&&dot.height>=3);}}
+      assert.equal(result.annualDotCount,0,`${width}px: annual recurrence cells still have colored dots`);
+      for(const [tone,color] of Object.entries({...colors,green:'rgb(0, 0, 0)',purple:'rgb(106, 27, 154)',blue:'rgb(21, 101, 192)'})){
+        const statuses=result.annualStatuses.filter(status=>status.tone===tone);
+        if(tone==='yellow')continue;
+        assert.ok(statuses.length,`${width}px: ${tone} annual status text missing`);
+        assert.ok(statuses.every(status=>status.color===color),`${width}px: ${tone} annual text lost its color`);
+      }
       assert.equal(result.wrappers.length,3);assert.ok(result.wrappers.every(wrapper=>wrapper.keyboard===0));assert.ok(result.reachTotal);
       assert.equal(result.reachTotal.scroll,0,`${width}px: annual report must fit before scrolling`);
       assert.ok(result.reachTotal.total.right<=result.reachTotal.wrapper.right+1,`${width}px: total column cannot be reached`);
@@ -63,7 +70,7 @@ test('provision report keeps the original compact tables in landscape and portra
       if(!result.portrait)for(const wrapper of result.wrappers){assert.ok(wrapper.left>=result.arrows[0].right+2);assert.ok(wrapper.right<=result.arrows[1].left-2);}
       assert.equal(result.filters.length,5);assert.deepEqual(result.capturedTables.map(table=>table.columns),[7,14,8]);
       assert.match(result.annualText,/1\.234\.567,89/);assert.match(result.annualText,/02\/01\/2026/);assert.match(result.annualText,/02\/12\/2026/);
-      t.diagnostic(`${width}x${height}: compact table rows, visible column headers, no horizontal overflow, whole dates/amounts and six status colors`);
+      t.diagnostic(`${width}x${height}: compact table rows, no annual status dots, whole dates/amounts and colored text`);
     }
   }finally{
     await server?.close();if(dirname(resolve(cacheRoot))!==temporaryRoot||!basename(cacheRoot).startsWith('provision-report-vite-'))throw new Error('Cache fora do diretório temporário autorizado.');

@@ -107,9 +107,9 @@ test('provision report aborts closed requests and never renders partial or stale
   const invalid=setup(t,async()=>({provisions:[row]}));await invalid.view.open();assert.equal(invalid.root.querySelectorAll('.pr-table').length,0);
 });
 
-// Break: a status is rendered as plain text (or an OS-dependent emoji) without
-// its colored indicator; dates and monetary amounts have no atomic display.
-test('provision report restores colored status markers and keeps calendar values atomic',async t=>{
+// Break: dots inside narrow recurring-expense month cells force status text
+// onto extra lines, while provision statuses still need their own markers.
+test('provision statuses keep markers and annual recurrence statuses use colored text without dots',async t=>{
   const provisions=[
     {...row,id:'1',schedule:'PENDENTE',dueDate:'2026-10-04'},
     {...row,id:'2',schedule:'',dueDate:'2026-10-05'},
@@ -129,10 +129,12 @@ test('provision report restores colored status markers and keeps calendar values
   assert.equal(root.querySelector('[data-id="1"] [data-column=dueDate] .pr-nowrap')?.textContent,'04/10/2026');
   assert.match(root.querySelector('[data-id="4"] [data-column=total]').textContent,/1\.234\.567,89/);
   const month=root.querySelector('[data-section=annual] [data-month="10"]');
-  assert.ok(month.querySelector('[data-status-tone=purple] .pr-status-dot'));
-  assert.ok(month.querySelector('[data-status-tone=green] .pr-status-dot'));
-  assert.ok(month.querySelector('[data-status-tone=red] .pr-status-dot'));
-  assert.ok(month.querySelector('[data-status-tone=orange] .pr-status-dot'));
+  assert.equal(root.querySelectorAll('.pr-table--annual .pr-status-dot').length,0);
+  assert.equal(month.querySelector('[data-status-tone=purple]')?.textContent,'INICIADO:');
+  assert.equal(month.querySelector('[data-status-tone=green]')?.textContent,'02/10/2026');
+  assert.equal(month.querySelector('[data-status-tone=red]')?.textContent,'ATR. 1d');
+  assert.equal(month.querySelector('[data-status-tone=orange]')?.textContent,'EM 0d');
+  assert.equal(month.querySelector('[data-status-tone=green]')?.classList.contains('pr-green'),false,'paid dates keep their original black text');
   assert.deepEqual([...month.querySelectorAll('.pr-date')].map(node=>node.textContent),['01/10/2026','02/10/2026','04/10/2026','05/10/2026','09/10/2026']);
   assert.equal(month.querySelector('.pr-money')?.textContent.replace(/\s/g,''),'R$1.234.567,89');
 });
@@ -141,9 +143,10 @@ test('provision report keeps blue next-payment and orange inactive indicators wi
   const {view,root}=setup(t,async()=>({provisions:[{...row,paidDate:'2026-10-02',status:'PAGAMENTO EFETUADO'},{...row,id:'316',recurrenceId:'8'}],
     recurrences:[recurrence,{...recurrence,id:'8',status:'INATIVO'}]}));await view.open();
   const next=root.querySelector('[data-section=annual] tr[data-recurrence-id="7"] [data-month="11"]');
-  assert.ok(next.querySelector('[data-status-tone=blue] .pr-status-dot'));
+  assert.equal(next.querySelector('[data-status-tone=blue]')?.textContent,'PRÓX');
   assert.equal(next.querySelector('.pr-date')?.textContent,'09/10');
-  assert.ok(root.querySelector('[data-recurrence-id="8"] [data-column=supplier] [data-status-tone=orange] .pr-status-dot'));
+  assert.equal(root.querySelector('[data-recurrence-id="8"] [data-column=supplier] [data-status-tone=orange]')?.textContent,'INATIVO COM PROVISÃO PENDENTE');
+  assert.equal(root.querySelectorAll('.pr-table--annual .pr-status-dot').length,0);
 });
 
 // Break: screen column proportions also squeeze a large total in the exported
