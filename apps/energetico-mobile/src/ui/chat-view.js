@@ -627,6 +627,15 @@ function orderProvisionPaymentMethodOptions(message, options, activeFlow) {
   return rows.map(row => row.id === null ? row.option : ordered[next++].option);
 }
 
+function paymentProvisionProductOptions(message, options, activeFlow, currentPoll) {
+  if (!currentPoll || activeFlow?.id !== "payment_provision") return options;
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/\bqual\s+(?:e\s+)?(?:o\s+)?produto\b/u.test(question)) return options;
+  return options.filter(option => numericChoiceId(option) !== 0 || normalizedDateText(
+    option?.label || option?.title || option?.text,
+  ).replace(/^[^a-z]+/u, "").trim() !== "em branco");
+}
+
 function formatDateDraft(value, deleting = false) {
   const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
   if (digits.length < 2) return digits;
@@ -1460,7 +1469,8 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   // choices for their current question.
   const options = orderEffectivePaymentDateOptions(
     message,
-    allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option)),
+    paymentProvisionProductOptions(message,
+      allOptions.filter(option => !auditLogRow(option) && !navigationOptionKind(option)), activeFlow, currentPoll),
   );
   const isHrGalleryMenu = isHrPayrollGalleryMenu(message);
   const galleryOptions = isHrGalleryMenu ? hrPayrollGalleryOptions(options) : [];
