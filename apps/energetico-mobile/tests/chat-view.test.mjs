@@ -7246,6 +7246,43 @@ test("mostra finalizar anexos somente quando a VM pede o comando", () => {
   assert.doesNotMatch(regularMarkup, /data-action="finish-flow"/);
 });
 
+test("provisão de pagamento não oferece produto em branco e preserva as demais escolhas vazias", () => {
+  const blank = { id: "product_blank", reply: "product_blank", label: "0 - ⬜ EM BRANCO" };
+  const product = { id: "657", reply: "657", label: "657 - VERGALHÃO 20MM RETO BARRA" };
+  const blankLabelProduct = { id: "658", reply: "658", label: "658 - ETIQUETA EM BRANCO" };
+  const productQuestion = {
+    role: "assistant", type: "poll", question: "📦 QUAL É O PRODUTO? CASO DESEJE FILTRAR, DIGITE UM TEXTO.",
+    options: [blank, product, blankLabelProduct],
+  };
+  const choices = (activeFlow, message) => {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ activeFlow, messages: [message] })));
+    const replyIds = [...dom.window.document.querySelectorAll('.chat-choice-list [data-reply-id]')]
+      .map(button => button.dataset.replyId);
+    dom.window.close();
+    return replyIds;
+  };
+
+  assert.deepEqual(choices({ id: "payment_provision" }, productQuestion), ["657", "658"]);
+  assert.deepEqual(choices({ id: "launch" }, productQuestion), ["product_blank", "657", "658"]);
+  assert.deepEqual(choices({ id: "payment_provision" }, {
+    ...productQuestion, question: "QUAL É A FORMA DE PAGAMENTO?",
+  }), ["product_blank", "657", "658"]);
+});
+
+test("enquete histórica de produto não perde opção por causa do fluxo atual de provisão", () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({
+    activeFlow: { id: "payment_provision" },
+    messages: [
+      { id: "historical", role: "assistant", type: "poll", question: "QUAL É O PRODUTO?",
+        options: [{ id: "old_blank", label: "0 - EM BRANCO" }] },
+      { id: "current", role: "assistant", type: "poll", question: "QUAL É A FILIAL?",
+        options: [{ id: "branch_004", label: "004 - EDIFÍCIO XAVANTE" }] },
+    ],
+  })));
+  assert.ok(dom.window.document.querySelector('[data-reply-id="old_blank"]'));
+  dom.window.close();
+});
+
 test("permite finalizar quando já há anexo e a VM oferece adicionar mais ou finalizar", () => {
   const markup = renderChatMarkup(signedInState({
     activeFlow: { id: "document", title: "ADICIONAR UM NOVO DOCUMENTO" },
