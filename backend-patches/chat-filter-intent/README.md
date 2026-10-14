@@ -8,7 +8,8 @@ botões continuam a enviar o `reply_id` real e a selecionar normalmente.
 
 O patch lê o `workflow.py` vigente e grava um candidato separado, sem alterar
 o original. Antes da instalação, executar `py_compile` e
-`test_filter_intent.py CANDIDATE`. Fazer backup do arquivo vigente, verificar
-seu hash novamente e instalar o candidato preservando dono/grupo/permissões.
-Reiniciar os serviços do fluxo e conferir saúde e hash instalado. Para voltar,
-restaurar somente o backup desta implantação e reiniciar os mesmos serviços.
+`test_filter_intent.py CANDIDATE`. `deploy.py` verifica os hashes, salva as
+cópias do aplicativo e da árvore de build, instala o candidato preservando
+dono/grupo/permissões, reinicia os dois serviços e confere os endpoints de
+saúde. Em caso de falha, restaura ambas as cópias e verifica o retorno dos
+serviços. O backup é mantido para eventual recuperação posterior.
