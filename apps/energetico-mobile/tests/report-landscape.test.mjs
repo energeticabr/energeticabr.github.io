@@ -27,7 +27,7 @@ test('portrait immediately opens the real report on a logical landscape surface'
   assert.equal(root.dataset.reportWidthMode,'compact');
   assert.equal(root.dataset.reportCompactHeight,'true');
   assert.equal(root.style.getPropertyValue('--report-navigation-size'),'46px');
-  assert.ok(Math.abs(Number(root.style.getPropertyValue('--report-scale')) - 339.3/844) < .001);
+  assert.equal(root.style.getPropertyValue('--report-scale'),'');
   const cell=root.querySelector('tbody td');
   rotate();rotate();
   assert.equal(reads,1);
@@ -56,12 +56,12 @@ test('expanded filters use the logical landscape bounds rather than physical por
   assert.equal(popup.style.top,'12px');
 });
 
-test('a width-fitted portrait report uses its own landscape panel bounds for pickers',async t=>{
+test('a sideways portrait report keeps safe areas within landscape bounds for pickers',async t=>{
   const {view,root}=setup(t,async()=>({launches:[row]}));await view.open();
-  root.style.padding='23px 11px 16px';
-  root.querySelector('[role=dialog]').style.padding='3px';
+  root.style.padding='23px 0px 16px';
+  root.querySelector('[role=dialog]').style.padding='3px 34px 3px 59px';
   const viewport=reportLayoutViewport(root.querySelector('.sfs-trigger'));
-  assert.deepEqual(viewport,{rotated:true,top:3,left:3,width:838,height:384});
+  assert.deepEqual(viewport,{rotated:true,top:23,left:59,width:751,height:351});
 });
 test('PDF measures unrotated column widths, preserving report proportions',async t=>{
   const {view,root}=setup(t,async()=>({launches:[row]}));await view.open();

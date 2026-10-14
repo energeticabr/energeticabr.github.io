@@ -35,12 +35,11 @@ try {
   const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
   const portrait=root.dataset.reportPortrait==='true';
-  const scale=portrait?Number(root.style.getPropertyValue('--report-scale'))||1:1;
   const panelBounds=root.querySelector('[role="dialog"]').getBoundingClientRect();
   const rect=node=>{
     const {left,right,top,bottom,width,height}=node.getBoundingClientRect();
     // Compare the actual columns in the shared landscape coordinate system.
-    return portrait?{left:(left-panelBounds.left)/scale,right:(right-panelBounds.left)/scale,top:(top-panelBounds.top)/scale,bottom:(bottom-panelBounds.top)/scale,width:width/scale,height:height/scale}:{left,right,top,bottom,width,height};
+    return portrait?{left:top-panelBounds.top,right:bottom-panelBounds.top,top:panelBounds.right-right,bottom:panelBounds.right-left,width:height,height:width}:{left,right,top,bottom,width,height};
   };
     const logo=root.querySelector('.pr-logo img');await logo.decode();await new Promise(requestAnimationFrame);
     const content=root.querySelector('.pr-content'),toolbar=root.querySelector('.pr-filters'),annual=root.querySelector('.pr-table--annual'),main=root.querySelector('.pr-table--provisions');

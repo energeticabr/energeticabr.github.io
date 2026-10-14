@@ -27,11 +27,6 @@ export function bindReportLandscape(root) {
     root.style.setProperty('--report-height',`${logicalHeight}px`);
     root.style.setProperty('--report-vw',`${logicalWidth/100}px`);
     root.style.setProperty('--report-navigation-size',logicalHeight<=500?'46px':'56px');
-    const padding=win.getComputedStyle(root);
-    const sideInset=Math.max(24,width*.065);
-    const left=Math.max(sideInset,parseFloat(padding.paddingLeft)||0);
-    const right=Math.max(sideInset,parseFloat(padding.paddingRight)||0);
-    root.style.setProperty('--report-scale',String(portrait?Math.min(1,Math.max(0,(width-left-right)/logicalWidth)):1));
   }
   win.addEventListener('resize',update); win.addEventListener('orientationchange',update);
   update();
@@ -41,12 +36,14 @@ export function bindReportLandscape(root) {
 export function reportLayoutViewport(element) {
   const root = element.closest('.report-landscape-viewport'), win = element.ownerDocument.defaultView;
   if (root?.dataset.reportPortrait === 'true') {
-    // Fixed descendant pickers use the scaled dialog's logical landscape
-    // coordinates. The backdrop padding is physical and must not be subtracted.
+    // Pickers share this rotated containing block. Include backdrop and panel
+    // safe-area padding so expanded menus remain inside the opaque report.
+    const style=win.getComputedStyle(root);
     const panel=element.closest('[role="dialog"]')||root.querySelector('[role="dialog"]');
     const panelStyle=panel&&panel!==root?win.getComputedStyle(panel):null;
-    const top=parseFloat(panelStyle?.paddingTop)||0,bottom=parseFloat(panelStyle?.paddingBottom)||0;
-    const left=parseFloat(panelStyle?.paddingLeft)||0,right=parseFloat(panelStyle?.paddingRight)||0;
+    const top=parseFloat(style.paddingTop)||0,bottom=parseFloat(style.paddingBottom)||0;
+    const left=(parseFloat(style.paddingLeft)||0)+(parseFloat(panelStyle?.paddingLeft)||0);
+    const right=(parseFloat(style.paddingRight)||0)+(parseFloat(panelStyle?.paddingRight)||0);
     return {rotated:true,top,left,
       width:Math.max(0,parseFloat(root.style.getPropertyValue('--report-width'))-left-right),
       height:Math.max(0,parseFloat(root.style.getPropertyValue('--report-height'))-top-bottom)};
