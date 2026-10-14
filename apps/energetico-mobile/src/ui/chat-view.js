@@ -1070,7 +1070,7 @@ function isPresenceSummaryTable(table) {
 }
 
 function presenceSummaryGroupKey(row, rowIndex) {
-  const descriptor = presenceSummaryField(row, ["iddescritivo", "iddescritivoetapa"]);
+  const descriptor = presenceSummaryField(row, ["iddescritivo", "iddescritivoetapa", "iddescritivoatividadeexecutada", "iddescritivoetapaatividadeexecutada"]);
   const descriptorId = descriptor.match(/^(0*[1-9]\d*)(?:\s*[-–—][\s\S]*)?$/)?.[1];
   const activity = presenceSummaryField(row, ["atividadeexecutada"]);
   if (!descriptorId || !activity || ["-", "em branco", "nao informado"].includes(normalizedDateText(activity))) {
@@ -1101,14 +1101,18 @@ function presenceDetailTableMarkup(table) {
   const validRows = rows.filter(row => Array.isArray(row) && row.length);
   const batch = isPresenceSummaryTable(table);
   const groups = new Map();
-  return `<div class="chat-presence-table${batch ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${validRows.map((row, rowIndex) => {
-    let groupAttributes = "";
-    if (batch) {
-      const key = presenceSummaryGroupKey(row, rowIndex);
-      if (!groups.has(key)) groups.set(key, groups.size);
-      const groupIndex = groups.get(key);
-      groupAttributes = ` style="background-color: ${presenceSummaryGroupFill(groupIndex)}" aria-label="Grupo de atividade ${groupIndex + 1}"`;
-    }
+  if (batch) validRows.forEach((row, rowIndex) => {
+    const key = presenceSummaryGroupKey(row, rowIndex);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  const displayRows = batch
+    ? [...groups.values()].flatMap((groupRows, groupIndex) => groupRows.map((row, index) => ({ row, groupIndex, groupStart: groupIndex > 0 && index === 0 })))
+    : validRows.map(row => ({ row }));
+  return `<div class="chat-presence-table${batch ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${displayRows.map(({ row, groupIndex, groupStart }) => {
+    const groupAttributes = batch
+      ? ` style="background-color: ${presenceSummaryGroupFill(groupIndex)}" aria-label="Grupo de atividade ${groupIndex + 1}"`
+      : "";
     const visibleCells = batch ? [
       ["DATA", ["data"]],
       ["FORNECEDOR", ["fornecedor"]],
@@ -1119,7 +1123,13 @@ function presenceDetailTableMarkup(table) {
       ...row.find(cell => aliases.includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, ""))),
       label,
     })) : row;
-    return `<div class="chat-presence-table-row" role="row"${groupAttributes}>${visibleCells.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`;
+    if (batch) {
+      const motivation = row.find(cell => ["motivacao", "motivo"].includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, "")));
+      if (normalizedDateText(motivation?.value).trim() === "feriado") {
+        visibleCells.push({ ...motivation, label: "MOTIVAÇÃO", holiday: true });
+      }
+    }
+    return `<div class="chat-presence-table-row${groupStart ? " chat-presence-table-row--group-start" : ""}" role="row"${groupAttributes}>${visibleCells.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}${cell.holiday ? " chat-presence-table-cell--holiday" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`;
   }).join("")}</div>`;
 }
 
