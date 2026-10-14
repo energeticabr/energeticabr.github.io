@@ -62,6 +62,16 @@ test('refresh puts a newly created highest payment ID first without keeping the 
   assert.equal(f.reads.length, 4);
 });
 
+test('IDFOLHA sync invalidates the linked FOLHAPGTO snapshot for every report', async () => {
+  const f = fixture();
+  await f.data.loadFilteredPage('FOLHAPGTO');
+  f.addNewest();
+  f.data.invalidateRelatedReports();
+  const result = await f.data.loadFilteredPage('FOLHAPGTO');
+  assert.equal(result.rows[0].id, '101');
+  assert.equal(f.reads.length, 4, 'next linked read cannot reuse a stale filtered snapshot');
+});
+
 test('payment default ordering does not change the IDFOLHA gallery', async () => {
   const { data } = fixture();
   const result = await data.loadFilteredPage('IDFOLHA');

@@ -37,10 +37,11 @@ async function setup(t, entry, overrides = {}) {
   return { dom, document, gallery, state, root: document.querySelector(entry.root) };
 }
 function refresh(ctx) {
-  const buttons = [...ctx.root.querySelectorAll('button')].filter(button => /Atualizar/.test(button.textContent));
+  const buttons = [...ctx.root.querySelectorAll('[data-gallery-refresh]')];
   assert.equal(buttons.length, 1, 'one refresh control, reusing existing buttons');
   const button = buttons[0];
-  assert.equal(button.textContent, 'Atualizar base de dados');
+  assert.match(button.getAttribute('aria-label'), /sincronizar/i);
+  assert.equal(button.parentElement, ctx.root.querySelector('header'));
   assert.equal(button.closest('details'), null, 'refresh stays outside collapsed filters');
   assert.equal(button.closest('[hidden]'), null);
   return button;
@@ -66,7 +67,7 @@ for (const entry of refreshCases) {
     ctx.state.rows = [refreshRow(entry, '902', 'SINTETICO NOVO')];
     assert.equal(button.disabled, false, 'read-only action does not depend on create callback');
     button.click(); await settle(); await settle();
-    assert.equal(ctx.state.calls.length, calls + 1, 'only current gallery reads once');
+    assert.equal(ctx.state.calls.length, calls + 1, 'current gallery reads once; linked report cache is invalidated');
     assert.equal(ctx.state.calls.at(-1).refresh, true, 'loader must bypass its cache');
     assert.match(ctx.root.textContent, /SINTETICO NOVO/);
     assert.doesNotMatch(ctx.root.textContent, /SINTETICO ANTERIOR/);

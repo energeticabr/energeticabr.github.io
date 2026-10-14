@@ -196,7 +196,7 @@ function personDisplayName(value) {
  * Nothing here owns the chat, the viewer, or the signature canvas.
  */
 export function createLaunchGallery({ document: documentRef = globalThis.document,
-  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot, loadLaunchGroup,
+  request, upload, openMedia, openMediaCollection, loadMediaPreview, loadOrderSnapshot, loadLaunchGroup, invalidateRelatedReports,
   captureSignature, onClose, onHome, onCreate, clusterTimeoutMs = 30_000 } = {}) {
   if (!documentRef?.body || typeof request !== 'function') throw new TypeError('Documento e request são obrigatórios.');
   const doc = documentRef;
@@ -322,10 +322,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     label: 'Adicionar um novo lançamento', action: 'create-launch',
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading && !editor && !review });
   let pendingMutations = 0;
-  const refreshControl = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar,
-    onRefresh: () => {
+  const refreshControl = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header,
+    onRefresh: async () => {
       autoFilters.sync();
-      return applyFilters({ refresh: true, preservePage: true });
+      await invalidateRelatedReports?.();
+      await applyFilters({ refresh: true, preservePage: true });
     },
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading
       && !pendingMutations && !editor && !review && panel.hidden && clusterPanel.hidden });

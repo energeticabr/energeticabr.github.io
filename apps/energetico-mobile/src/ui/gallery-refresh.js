@@ -1,14 +1,24 @@
+import { provisionDescriptionIcon } from './provision-description-card.js';
+
 /** A read-only action: the current gallery owns loading, filters and error feedback. */
-export function attachGalleryRefreshButton({ document, root, container, onRefresh, isAvailable = () => true,
+export function attachGalleryRefreshButton({ document, root, container, header, onRefresh, isAvailable = () => true,
   button: existingButton }) {
   const button = existingButton || document.createElement('button');
   button.type = 'button';
-  button.textContent = 'Atualizar base de dados';
   button.classList.add('gallery-refresh-button');
   button.dataset.galleryRefresh = '';
-  button.setAttribute('aria-label', 'Atualizar base de dados');
-  container.classList.add('gallery-refresh-toolbar');
-  container.append(button);
+  if (header) {
+    button.replaceChildren(provisionDescriptionIcon(document, 'refresh'));
+    button.setAttribute('aria-label', 'Sincronizar dados da galeria e relatórios');
+    button.title = 'Sincronizar dados';
+    header.classList.add('gallery-refresh-header');
+    header.append(button);
+  } else {
+    button.textContent = 'Atualizar base de dados';
+    button.setAttribute('aria-label', 'Atualizar base de dados');
+    container.classList.add('gallery-refresh-toolbar');
+    container.append(button);
+  }
   let destroyed = false, busy = false, errorNotice = null, visibilityEpoch = 0;
 
   function available() {
@@ -43,7 +53,7 @@ export function attachGalleryRefreshButton({ document, root, container, onRefres
         errorNotice.dataset.galleryRefreshError = '';
         errorNotice.setAttribute('role', 'alert');
         errorNotice.textContent = 'Não foi possível atualizar a base de dados. Tente novamente.';
-        container.after(errorNotice);
+        (header || container).after(errorNotice);
       }
     } finally {
       busy = false;

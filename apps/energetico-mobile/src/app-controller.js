@@ -5597,6 +5597,12 @@ export function createAppController({
                 return rows;
               }
               : undefined,
+            invalidateRelatedReports: () => {
+              assertSession();
+              data.invalidateRelatedReports?.();
+              reportSnapshots.invalidate('open-supplier-payroll-report');
+              supplierPayrollSessionSource = null;
+            },
             onHome: () => {
               assertSession();
               return returnToMainMenu();
@@ -5650,6 +5656,12 @@ export function createAppController({
       try {
         if (!launchGallery) {
           const panel = await launchGalleryFactory({
+            invalidateRelatedReports: async () => {
+              assertSession();
+              const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);
+              data.invalidateRelatedReports?.();
+              assertSession();
+            },
             loadOrderSnapshot: async ({ id, signal } = {}) => {
               assertSession();
               const data = await getOrdersGalleryData(assertSession, LAUNCH_GALLERY_ID);

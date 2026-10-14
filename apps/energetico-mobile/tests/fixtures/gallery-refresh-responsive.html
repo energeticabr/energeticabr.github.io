@@ -12,7 +12,7 @@ import { galleryCases, galleryOptions } from '../helpers/gallery-create-cases.mj
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 try {
   const results = [];
-  for (const entry of galleryCases.filter(entry => entry.name !== 'launch')) {
+  for (const entry of galleryCases) {
     const gallery = entry.factory(galleryOptions(entry, document));
     await gallery.open();
     const root = document.querySelector(entry.root), refresh = root.querySelector('[data-gallery-refresh]');
@@ -21,15 +21,21 @@ try {
     const measure = async () => {
       await nextFrame();
       const r = refresh.getBoundingClientRect(), a = add.getBoundingClientRect(), f = filter.getBoundingClientRect();
-      const search = refresh.parentElement.querySelector('input[type="search"]');
+      const header = root.querySelector('header'), h = header.getBoundingClientRect();
+      const title = header.querySelector('h1'), t = title.getBoundingClientRect();
+      const search = root.querySelector('input[type="search"]');
       const s = search?.getBoundingClientRect();
-      return { width: r.width, height: r.height, addBottom: a.bottom, filterBottom: f.bottom, searchBottom: s?.bottom,
+      return { width: r.width, height: r.height,
         visible: r.width > 0 && r.height > 0 && !refresh.closest('details') && !refresh.closest('[hidden]'),
         fits: r.left >= 0 && r.right <= innerWidth,
-        secondRow: r.top >= a.bottom && r.top >= f.bottom,
+        inHeader: refresh.parentElement === header,
+        centered: Math.abs((t.left + t.right) / 2 - (h.left + h.right) / 2) <= 1,
+        syncAtRight: r.left >= (h.left + h.right) / 2 && (r.left >= t.right || r.bottom <= t.top),
         controlsTogether: Math.abs(f.bottom - a.bottom) < 1 && f.right <= a.left && (!s || Math.abs(s.bottom - a.bottom) <= 2),
-        overflow: root.scrollWidth > root.clientWidth + 1 || refresh.parentElement.scrollWidth > refresh.parentElement.clientWidth + 1,
-        hittable: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === refresh };
+        overflow: root.scrollWidth > root.clientWidth + 1,
+        headerOverflow: header.scrollWidth > header.clientWidth + 1,
+        overflowElement: [...root.querySelectorAll('*')].filter(node => node.scrollWidth > node.clientWidth + 1).slice(0, 3).map(node => node.className || node.tagName),
+        hittable: refresh.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) };
     };
     const collapsed = await measure(); filter.click(); const expanded = await measure();
     results.push({ name: entry.name, collapsed, expanded }); gallery.destroy();

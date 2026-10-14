@@ -1642,7 +1642,7 @@ test("galeria de folha usa leitura SharePoint Graph autenticada sem chamar rota 
       }, async loadPaymentsForPayrollId(id, options) {
         dataCalls.push(["report", id, options.signal instanceof AbortSignal]);
         return [{ id: "81", IDFOLHA: Number(id) }];
-      } };
+      }, invalidateRelatedReports() { dataCalls.push(['invalidate-linked']); } };
     },
     hrPayrollGalleryFactory: async options => {
       galleryOptions = options;
@@ -1656,11 +1656,13 @@ test("galeria de folha usa leitura SharePoint Graph autenticada sem chamar rota 
   await h.view.emit("select-reply", { replyId: "action_hr_gallery_idfolha", label: "GALERIA IDFOLHA" });
   const result = await galleryOptions.request("IDFOLHA", 1, 25, null);
   const reportRows = await galleryOptions.requestReport("12", { signal: new AbortController().signal });
+  galleryOptions.invalidateRelatedReports();
 
   assert.deepEqual(dataCalls, [
     ["token", "token"],
     ["IDFOLHA", { page: 1, pageSize: 25, cursor: null }],
     ["report", "12", true],
+    ['invalidate-linked'],
   ]);
   assert.equal(result.rows[0].MESREFERENCIA, "09/2026");
   assert.equal(reportRows[0].IDFOLHA, 12);

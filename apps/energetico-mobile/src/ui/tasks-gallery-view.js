@@ -163,7 +163,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     label: 'Adicionar uma nova tarefa', action: 'create-task', className: 'og-button tg-add-task',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
   let pendingMutations = 0;
-  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar,
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar, header,
     onRefresh: () => loadSnapshot({ refresh: true }),
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
   async function runMutation(operation) {

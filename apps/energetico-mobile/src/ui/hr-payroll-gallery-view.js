@@ -40,7 +40,7 @@ function displayValue(field, value) {
 }
 
 export function createHrPayrollGallery({ document: documentOption,
-  root: mountRootOption, gallery, request, requestReport, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment } = {}) {
+  root: mountRootOption, gallery, request, requestReport, invalidateRelatedReports, loadEditor, saveEditor, deleteItem, loadPaymentOptions, savePayment, onClose, onHome, onCreate, getReceiptAttachments, readReceiptAttachment } = {}) {
   const documentRef = documentOption || mountRootOption?.ownerDocument || globalThis.document;
   const mountRoot = mountRootOption || documentRef?.body;
   const config = GALLERIES[gallery];
@@ -162,10 +162,11 @@ export function createHrPayrollGallery({ document: documentOption,
     close: typeof onCreate === 'function' ? closeGallery : () => {},
     isAvailable: () => opened && !destroyed && !busy && !paymentComposer?.isOpen() });
   let pendingMutations = 0;
-  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar,
-    onRefresh: () => {
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar, header,
+    onRefresh: async () => {
       autoFilters.sync();
-      return loadPage(page, pageCursors[page] || null, false, true);
+      invalidateRelatedReports?.();
+      await loadPage(page, pageCursors[page] || null, false, true);
     },
     isAvailable: () => opened && !destroyed && !busy && !pendingMutations && !paymentComposer?.isOpen() });
   async function runMutation(operation) {
