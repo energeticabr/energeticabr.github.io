@@ -260,9 +260,9 @@ test("Opening today's report renders loading immediately and errors retry that d
   assert.equal(root.querySelector('[data-role="rhid-calendar-day"]'), null);
   assert.match(root.querySelector(".chat-rhid-report-page").textContent, /02\/10\/2026/);
   const retries = [];
-  view.on("open-rhid-attendance-today", event => retries.push(event));
-  root.querySelector('.chat-rhid-report-page [data-action="open-rhid-attendance-today"]').click();
-  assert.deepEqual(retries, [{ type: "open-rhid-attendance-today" }]);
+  view.on("rhid-attendance-report-generate", event => retries.push(event));
+  root.querySelector('.chat-rhid-report-page [data-action="generate-rhid-attendance-report"]').click();
+  assert.deepEqual(retries, [{ type: "rhid-attendance-report-generate", value: "2026-10-02" }]);
   assert.equal(view.closeRhidAttendanceReport(), true);
   assert.equal(root.querySelector(".chat-rhid-report-page"), null);
   view.destroy();
