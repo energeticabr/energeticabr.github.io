@@ -4378,7 +4378,7 @@ test("apagar a busca durante uma resposta restaura a lista completa", async t =>
   await new Promise(resolve => setTimeout(resolve, 80));
 
   assert.deepEqual(payloads, [
-    { text: "are" },
+    { text: "are", replyId: "filter_query" },
     { text: "Limpar filtro", replyId: "filter_clear" },
   ]);
   assert.equal(h.store.getState().draft, "");
@@ -4420,7 +4420,7 @@ test("três palavras aguardam o envio manual e então limpam o campo", async t =
   assert.equal(h.store.getState().draft, "empresa de teste");
 
   await h.view.emit("send-text", {});
-  assert.deepEqual(payloads, [{ text: "empresa de teste" }]);
+  assert.deepEqual(payloads, [{ text: "empresa de teste", replyId: "filter_query" }]);
   assert.equal(h.store.getState().draft, "");
 });
 
