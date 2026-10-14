@@ -36,6 +36,8 @@ try {
       const image = indicator.querySelector('img').getBoundingClientRect();
       const visible = node => getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none';
       const backdrop = getComputedStyle(screen).backgroundColor;
+      const indicatorBackdrop = getComputedStyle(indicator).backgroundColor;
+      const indicatorTextColor = getComputedStyle(indicator).color;
       let keyboardSafe = true;
       if (entry.name === 'launch' || entry.options?.kind) {
         const buttons = [...header.querySelectorAll('button:not(:disabled)')];
@@ -55,6 +57,8 @@ try {
         headerVisible: visible(header) && h.height > 0 && !header.querySelector('button').disabled,
         loaderVisible: visible(screen) && !screen.hidden && r.width > 0 && r.height > 0,
         opaque: backdrop.startsWith('rgb('),
+        indicatorBackdrop,
+        indicatorTextColor,
         centeredHit: Boolean(document.elementFromPoint(innerWidth / 2, (h.bottom + innerHeight) / 2)?.closest('.gallery-loading-screen')),
         fits: r.left >= 0 && r.right <= innerWidth && r.top >= h.bottom && r.bottom <= innerHeight,
         overflow: root.scrollWidth > root.clientWidth + 1,

@@ -16,6 +16,8 @@
   --accent: #f2c84b;
   --surface: #ffffff;
   --surface-soft: #e4f0f3;
+  --loading-card-background: rgb(228 240 243 / 88%);
+  --loading-card-text: var(--brand);
   --text: #102f3c;
   --muted: #58717c;
   --danger: #a52727;
@@ -82,7 +84,7 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 
 .auth-mascot { width: 124px; height: 124px; object-fit: contain; }
-.app-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 230px; padding: 24px 16px; text-align: center; color: var(--brand); }
+.app-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 230px; padding: 24px 16px; border-radius: 20px; background: var(--loading-card-background); text-align: center; color: var(--loading-card-text); }
 .app-loading__mascot { display: block; width: 110px; height: 150px; object-fit: contain; animation: loading-mascot-float 2.2s ease-in-out infinite; }
 .app-loading[data-loading-variant="1"] .app-loading__mascot { animation-name: loading-mascot-sway; }
 .app-loading[data-loading-variant="2"] .app-loading__mascot { animation-duration: 2.8s; }
@@ -506,7 +508,7 @@ button:disabled { cursor: wait; opacity: .55; }
   background: linear-gradient(#f6fafb, #edf5f7);
 }
 
-.chat-progress { flex-shrink: 0; color: var(--brand); background: var(--surface-soft); }
+.chat-progress { flex-shrink: 0; color: var(--brand); }
 .chat-progress:not(.sr-only) {
   position: fixed;
   top: 50%;
@@ -1242,7 +1244,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 }
 
 @media (prefers-color-scheme: dark) {
-  :root { --surface: #102b35; --surface-soft: #173844; --text: #edf7f9; --muted: #b2c8ce; }
+  :root { --surface: #102b35; --surface-soft: #173844; --loading-card-background: rgb(23 56 68 / 88%); --loading-card-text: #edf7f9; --text: #edf7f9; --muted: #b2c8ce; }
   .chat-transcript { background: #091e26; }
   .auth-card { background: #102b35; }
   .chat-composer textarea { border-color: #41616b; }
