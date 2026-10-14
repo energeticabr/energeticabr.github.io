@@ -2539,31 +2539,6 @@ function renderProvisionLines(provisions) {
   </details>`;
 }
 
-function renderRecovery(state) {
-  const preview = state.recoveryPreview;
-  const reference = state.recoveryReference;
-  if (!preview && !reference) return "";
-  const checking = state.recoveryBlocked;
-  const rowMarkup = (preview?.activeFlow?.rows || []).map(row =>
-    `<div><dt>${escapeHtml(row.label)}</dt><dd>${escapeHtml(row.value)}</dd></div>`).join("");
-  const pending = reference?.pendingNames?.length ? reference.pendingNames : preview?.pendingNames || [];
-  return `<details class="chat-recovery"${checking || reference ? " open" : ""}>
-    <summary>${checking ? "Prévia salva neste aparelho" : reference ? "Prévia da conversa anterior" : "Seu fluxo foi recuperado"}</summary>
-    ${state.recoveryReferenceCount > 1 ? `<p>${state.recoveryReferenceCount} textos anteriores preservados. Recupere ou dispense este para acessar o próximo.</p>` : ""}
-    ${preview?.activeFlow ? `<strong>${escapeHtml(preview.activeFlow.title)}</strong>` : ""}
-    ${checking ? `<p>Conferindo o ponto atual com a VM. Nada será reenviado automaticamente.</p>` : ""}
-    ${rowMarkup ? `<dl>${rowMarkup}</dl>` : ""}
-    ${checking && preview?.question ? `<p><strong>Última pergunta</strong><br>${formatChatText(preview.question)}</p>` : ""}
-    ${checking && preview?.draft ? `<p><strong>Texto digitado</strong><br>${escapeHtml(preview.draft)}</p>` : ""}
-    ${reference?.draft ? `<p><strong>Texto anterior — ${escapeHtml(reference.activeFlow?.title || "conversa")}</strong><br>${escapeHtml(reference.draft)}</p>
-      <p>${reference.uncertain ? "Havia um envio em andamento. Confira a resposta atual da VM antes de enviar novamente." : "Este texto não foi colocado na resposta atual para evitar misturar etapas."}</p>
-      <button type="button" data-action="recover-draft"${checking || state.draft || state.activeText || state.resuming ? " disabled" : ""}>Usar texto no campo</button>
-      ${state.draft ? `<small>O campo já contém texto. Esvazie-o para recuperar o texto anterior.</small>` : ""}` : ""}
-    ${pending.length ? `<p>Arquivos que ainda estavam pendentes: ${pending.map(escapeHtml).join(", ")}. Confira os anexos do fluxo; selecione novamente apenas os que não chegaram à VM.</p>` : ""}
-    ${!checking ? `<button type="button" data-action="dismiss-recovery">Dispensar prévia${reference?.draft ? " e texto anterior" : ""}</button>` : ""}
-  </details>`;
-}
-
 export function renderPublicLinks() {
   return `<nav aria-label="Privacidade e suporte"><a href="https://www.energeticabr.com/energetico-privacidade.html" target="_blank" rel="noopener noreferrer">Privacidade</a> · <a href="https://www.energeticabr.com/energetico-suporte.html" target="_blank" rel="noopener noreferrer">Suporte</a></nav>`;
 }
@@ -2664,7 +2639,6 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${state.error ? `<div class="error-banner" role="alert"><span>${escapeHtml(state.error)}</span><button type="button" data-action="retry-session"${state.resuming || state.activeText ? " disabled" : ""}>Retomar conversa</button></div>` : ""}
     <div class="chat-transcript" role="log" aria-live="polite" aria-relevant="additions text">
       ${state.recoveryWarning ? `<p class="error-banner" role="alert">${escapeHtml(state.recoveryWarning)}</p>` : ""}
-      ${renderRecovery(state)}
       ${rhidAttendanceReport?.open
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date)
