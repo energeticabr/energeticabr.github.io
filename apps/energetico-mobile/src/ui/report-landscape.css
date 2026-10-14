@@ -1,18 +1,18 @@
-/* Keep the landscape report horizontal on a portrait phone. The full-screen
-   viewport remains the clickable backdrop; only the dialog is width-fitted. */
+/* Keep the landscape report at its native size on a portrait phone. Rotation
+   maps its logical width to physical height, leaving only side dismissal gaps. */
 .report-landscape-viewport[data-report-portrait="true"] {
- position:fixed!important; inset:0!important;
- width:100vw!important; height:100dvh!important;
- max-width:none!important; max-height:none!important;
- transform:none!important;
- box-sizing:border-box;
- padding:0 max(24px,6.5vw,env(safe-area-inset-right)) 0 max(24px,6.5vw,env(safe-area-inset-left))!important;
-}
-.report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
- position:absolute!important; left:50%!important; top:50%!important;
+ position:fixed!important; inset:auto!important; top:0!important;
+ left:var(--report-physical-width)!important;
  width:var(--report-width)!important; height:var(--report-height)!important;
  max-width:none!important; max-height:none!important;
- transform:translate(-50%,-50%) scale(var(--report-scale,1)); transform-origin:center center;
- padding:3px!important; border-radius:0!important;
+ transform:rotate(90deg); transform-origin:0 0;
+ box-sizing:border-box;
+ padding:max(24px,6.5vw,env(safe-area-inset-right)) 0 max(24px,6.5vw,env(safe-area-inset-left))!important;
 }
+.report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
+ width:100%!important; height:100%!important; max-height:100%!important;
+ padding:3px max(3px,env(safe-area-inset-bottom)) 3px max(3px,env(safe-area-inset-top))!important; border-radius:0!important;
+}
+.report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--previous { left:max(16px,env(safe-area-inset-top)); }
+.report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--next { right:max(16px,env(safe-area-inset-bottom)); }
 .report-landscape-viewport[data-report-portrait="true"][data-report-compact-height="true"] .pr-content { padding-inline:48px; }

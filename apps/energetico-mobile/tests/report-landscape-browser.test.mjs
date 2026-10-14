@@ -7,35 +7,32 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
-test('portrait phone reports fit the physical width without rotation and keep lateral dismissal',{timeout:90000},async t=>{
+test('portrait phone reports fill physical height sideways and keep lateral dismissal',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
  try {
   await server.listen();
-  const logicalOffsets=[];
   for(const [width,height] of [[390,844],[844,390]]) {
    const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/report-landscape.html?controls`});
    const dom=new JSDOM(stdout);
    try {
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
     assert.equal(result.arrows.length,2);
-    assert.ok(result.arrows.every(arrow=>arrow.visible&&arrow.hit&&arrow.width>0&&arrow.height>0),JSON.stringify(result));
+    assert.ok(result.arrows.every(arrow=>arrow.visible&&arrow.hit&&arrow.width>=44&&arrow.height>=44),JSON.stringify(result));
     assert.deepEqual(result.navigated,['open-provision-report','open-management-report']);
     assert.equal(result.closedByX,true);
-    logicalOffsets.push(result.arrows.map(arrow=>arrow.direction==='previous'?arrow.logicalLeft:result.panelWidth-arrow.logicalRight));
     if(result.portrait) {
      const lateralTarget=Math.max(24,width*.065)-1;
      assert.ok(result.gaps.left>=lateralTarget&&result.gaps.right>=lateralTarget,JSON.stringify(result));
-     assert.ok(result.gaps.top>height*.2&&result.gaps.bottom>height*.2,'portrait report must not fill the physical Y axis: '+JSON.stringify(result));
+     assert.ok(Math.abs(result.gaps.top)<1&&Math.abs(result.gaps.bottom)<1,'portrait report must fill the physical Y axis: '+JSON.stringify(result));
      const matrix=result.transform.match(/^matrix\(([^)]+)\)$/)?.[1].split(',').map(Number);
-     assert.ok(matrix&&Math.abs(matrix[1])<.001&&Math.abs(matrix[2])<.001,'portrait report must remain visually horizontal: '+JSON.stringify(result));
+     assert.ok(matrix&&Math.abs(matrix[1]-1)<.001&&Math.abs(matrix[2]+1)<.001,'portrait report must be sideways: '+JSON.stringify(result));
      assert.equal(result.outsideIsBackdrop,true);
      assert.equal(result.closedOutside,true);
     }
    }finally{dom.window.close();}
   }
-  assert.ok(logicalOffsets.flat().every(offset=>offset>=-10&&offset<=10),'report arrows stay at the landscape edges after rotation: '+JSON.stringify(logicalOffsets));
  }finally{await server.close();}
 });
 
@@ -59,7 +56,7 @@ test('contractor filters keep their landscape row on a portrait phone',{timeout:
  }finally{await server.close();}
 });
 
-test('portrait width-fit keeps controls and expanded picker within physical safe areas',{timeout:90000},async t=>{
+test('sideways portrait keeps controls and expanded picker within physical safe areas',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
@@ -71,7 +68,7 @@ test('portrait width-fit keeps controls and expanded picker within physical safe
   try {
    const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);
    assert.ok(layout.controls.length>=10,'measure the actual visible report controls');
-   assert.ok(layout.dialog.top>100&&layout.dialog.bottom<744,'portrait report leaves physical Y space around the scaled sheet');
+   assert.ok(Math.abs(layout.dialog.top)<1&&Math.abs(layout.dialog.bottom-844)<1,'portrait report fills physical Y');
    assert.ok(layout.dialog.left>=insets.left-1&&layout.dialog.right<=390-insets.right+1);
    for(const bounds of [layout.popup,...layout.controls]) {
     assert.ok(bounds.left>=insets.left-1&&bounds.right<=390-insets.right+1,JSON.stringify({bounds,layout}));
@@ -82,7 +79,7 @@ test('portrait width-fit keeps controls and expanded picker within physical safe
  }finally{await server.close();}
 });
 
-test('attendance summary from the reference screen fits portrait width and dismisses from both side borders',{timeout:90000},async t=>{
+test('attendance summary fills portrait height sideways and dismisses from both side borders',{timeout:90000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
@@ -96,7 +93,7 @@ test('attendance summary from the reference screen fits portrait width and dismi
     assert.equal(layout.hasSummary,true,JSON.stringify(layout));
     if(layout.portrait) {
      assert.ok(layout.bounds.left>=24&&layout.bounds.right<=width-24,JSON.stringify(layout));
-     assert.ok(layout.bounds.top>height*.2&&layout.bounds.bottom<height*.8,JSON.stringify(layout));
+     assert.ok(Math.abs(layout.bounds.top)<1&&Math.abs(layout.bounds.bottom-height)<1,JSON.stringify(layout));
      assert.equal(layout.leftIsBackdrop,true);
      assert.equal(layout.rightIsBackdrop,true);
      assert.equal(layout.closedLeft,true);

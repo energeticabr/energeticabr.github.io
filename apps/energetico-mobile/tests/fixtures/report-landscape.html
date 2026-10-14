@@ -27,19 +27,18 @@ if(new URL(location.href).searchParams.has('safearea')) {
 }
 if(new URL(location.href).searchParams.has('controls')) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
- const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect(),panelWidth=panel.offsetWidth,transform=getComputedStyle(panel).transform;
- const scale=Number(root.style.getPropertyValue('--report-scale'))||1;
- const arrows=[...root.querySelectorAll('.report-navigation-arrow')].map(button=>{const r=button.getBoundingClientRect();return {direction:button.dataset.direction,width:r.width,height:r.height,logicalLeft:(r.left-rect.left)/scale,logicalRight:(r.right-rect.left)/scale,visible:getComputedStyle(button.closest('nav')).display!=='none',hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===button};});
+ const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect(),transform=getComputedStyle(root).transform;
+ const arrows=[...root.querySelectorAll('.report-navigation-arrow')].map(button=>{const r=button.getBoundingClientRect();return {direction:button.dataset.direction,width:r.width,height:r.height,visible:getComputedStyle(button.closest('nav')).display!=='none',hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===button};});
  for(const button of root.querySelectorAll('.report-navigation-arrow')){button.click();await new Promise(resolve=>requestAnimationFrame(resolve));}
  const close=root.querySelector('.report-close-control');close.click();const closedByX=root.hidden;
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const outside=document.elementFromPoint(root.dataset.reportPortrait==='true'?8:1,innerHeight/2),outsideIsBackdrop=outside===root;outside.click();
- document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',transform,panelWidth,gaps:{left:rect.left,right:innerWidth-rect.right,top:rect.top,bottom:innerHeight-rect.bottom},arrows,navigated,closedByX,closedOutside:root.hidden,outsideIsBackdrop});
+ document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',transform,gaps:{left:rect.left,right:innerWidth-rect.right,top:rect.top,bottom:innerHeight-rect.bottom},arrows,navigated,closedByX,closedOutside:root.hidden,outsideIsBackdrop});
 }
 if(contractorMode) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
  const root=view.element,filters=root.querySelector('.ccr-filters'),rects=[...filters.querySelectorAll('.ccr-filter')].map(element=>element.getBoundingClientRect()),portrait=root.dataset.reportPortrait==='true';
- document.documentElement.dataset.layout=JSON.stringify({portrait,columns:getComputedStyle(filters).gridTemplateColumns.split(' ').length,sameRow:rects.every(rect=>rect.width>1&&rect.height>1&&Math.abs(rect.bottom-rects[0].bottom)<1),reads,closeCount:root.querySelectorAll('.report-close-control').length});
+ document.documentElement.dataset.layout=JSON.stringify({portrait,columns:getComputedStyle(filters).gridTemplateColumns.split(' ').length,sameRow:rects.every(rect=>rect.width>1&&rect.height>1&&Math.abs((portrait?rect.left:rect.bottom)-(portrait?rects[0].left:rects[0].bottom))<1),reads,closeCount:root.querySelectorAll('.report-close-control').length});
 }
 if(attendanceMode) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
