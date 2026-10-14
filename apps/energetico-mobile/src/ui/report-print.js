@@ -36,6 +36,7 @@ function background(node,stop){for(let n=node;n&&n!==stop;n=n.parentElement){con
 function hidden(node){return Boolean(node.closest('[hidden]'))||styleOf(node)?.display==='none'||styleOf(node)?.visibility==='hidden';}
 function loadError(root){return [...root.querySelectorAll('[role="status"],[role="alert"],[class*="-notice"]')].some(node=>!node.classList.contains('report-pdf-status')&&!hidden(node)&&/^(?:Não foi possível|Falha na consulta|Data inválida|A data inicial não pode)/i.test(node.textContent.trim()));}
 function runsOf(node){
+ if(node.hasAttribute('data-report-empty-cell'))return [];
  const runs=[];
  function visit(n){
   if(n.nodeType===3){const text=n.textContent.replace(/\s+/g,' ');if(!text.trim())return;const parent=n.parentElement,weight=styleOf(parent)?.fontWeight;

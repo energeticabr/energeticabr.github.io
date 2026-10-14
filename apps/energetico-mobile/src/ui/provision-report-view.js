@@ -135,11 +135,24 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       const tr=provisionRow(row,today);body.append(tr);if(!row.children)continue;
       tr.classList.add('pr-description-group');
       const branch=tr.querySelector('[data-column=branch]'),toggle=button('pr-group-toggle','↓',`Expandir itens do descritivo ${row.id}`);
-      branch.classList.add('pr-group-branch');branch.replaceChildren(toggle,make('span','',row.branch||'—'));
-      const children=row.children.map((item,index)=>{const child=provisionRow(item,today);child.classList.add('pr-description-child');child.id=`pr-description-${instance}-${revision}-${row.id}-${index}`;return child;});
+      const branchContent=make('div','pr-group-branch-content');branchContent.append(make('span','',row.branch||'—'),toggle);
+      branch.classList.add('pr-group-branch');branch.replaceChildren(branchContent);
+      const children=row.children.map((item,index)=>{
+        const child=provisionRow(item,today);child.classList.add('pr-description-child');child.id=`pr-description-${instance}-${revision}-${row.id}-${index}`;
+        for(const name of ['branch','supplier','dueDate','schedule','status']){
+          const parentText=name==='branch'?branch.querySelector('span').textContent:tr.querySelector(`[data-column="${name}"]`).textContent;
+          const detail=child.querySelector(`[data-column="${name}"]`);
+          if(detail.textContent.replace(/\s+/g,' ').trim()!==parentText.replace(/\s+/g,' ').trim())continue;
+          const spoken=[...detail.children].map(node=>node.textContent.trim()).filter(Boolean).join(' · ')||detail.textContent.trim();
+          detail.setAttribute('aria-label',`Igual à linha principal: ${spoken}`);
+          detail.replaceChildren();detail.classList.add('pr-duplicate-cell');detail.dataset.reportEmptyCell='';
+        }
+        return child;
+      });
       for(const child of children){child.hidden=true;body.append(child);}
       labelRows(body,children);toggle.setAttribute('aria-controls',children.map(child=>child.id).join(' '));toggle.setAttribute('aria-expanded','false');
       toggle.dataset.reportScreenOnly='';
+      branch.addEventListener('click',event=>{if(!event.target.closest('button'))toggle.click();});
       toggle.addEventListener('click',()=>{
         const expanded=toggle.getAttribute('aria-expanded')!=='true';
         toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-label',`${expanded?'Recolher':'Expandir'} itens do descritivo ${row.id}`);toggle.textContent=expanded?'↑':'↓';

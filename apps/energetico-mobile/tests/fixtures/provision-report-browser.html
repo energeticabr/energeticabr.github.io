@@ -30,7 +30,7 @@ try {
   const grouped=new URLSearchParams(location.search).has('grouped');
   const descriptions=grouped?[{id:'42',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25'},
     {id:'43',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25'}]:[];
-  if(grouped){provisions[0].descriptionId='42';provisions[1].descriptionId='42';provisions[2].descriptionId='43';}
+  if(grouped){provisions[0].descriptionId='42';provisions[0].branch='FILIAL DO PAI';provisions[0].supplier='FORNECEDOR DE REFERÊNCIA';provisions[1].descriptionId='42';provisions[2].descriptionId='43';}
   const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
   const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
@@ -87,10 +87,17 @@ try {
     if(grouped){
       const summary=main.querySelector('[data-description-id="42"]'),toggle=summary.querySelector('button');
       const controlled=toggle.getAttribute('aria-controls').split(' ').map(id=>document.getElementById(id));
+      const branchCell=summary.querySelector('[data-column=branch]'),branchText=branchCell.querySelector('span');
       const annualBefore=annual.textContent,totalBefore=root.querySelector('[data-metric=pendingTotal]').textContent;
       const collapsedHidden=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
       toggle.focus();toggle.click();await new Promise(requestAnimationFrame);
       groupProbe={collapsedHidden,expanded:toggle.getAttribute('aria-expanded'),focusKept:document.activeElement===toggle,
+        branchRect:rect(branchCell),branchDisplay:getComputedStyle(branchCell).display,branchTextRect:rect(branchText),toggleRect:rect(toggle),
+        summaryFill:getComputedStyle(summary).backgroundColor,childFill:getComputedStyle(controlled[0]).backgroundColor,
+        equalBranch:controlled[0].querySelector('[data-column=branch]').textContent,
+        equalSupplier:controlled[0].querySelector('[data-column=supplier]').textContent,
+        equalStatus:controlled[0].querySelector('[data-column=status]').textContent,
+        differentBranch:controlled[1].querySelector('[data-column=branch]').textContent,
         originalIds:controlled.map(node=>node.dataset.id),originalDates:controlled.map(node=>node.querySelector('[data-column=dueDate]').textContent),
         branch:summary.querySelector('[data-column=branch] span').textContent,supplier:summary.querySelector('[data-column=supplier]').textContent,
         date:summary.querySelector('[data-column=dueDate]').textContent,total:summary.querySelector('[data-column=total]').textContent,
@@ -101,7 +108,7 @@ try {
         cellOverflows:[...main.querySelectorAll('tbody td')].filter(visible).filter(node=>node.scrollWidth-node.clientWidth>1).map(node=>node.textContent),
         totalsUnchanged:totalBefore===root.querySelector('[data-metric=pendingTotal]').textContent,
         annualUnchanged:annualBefore===annual.textContent};
-      toggle.click();groupProbe.collapsed=toggle.getAttribute('aria-expanded');groupProbe.hiddenAgain=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
+      branchCell.click();groupProbe.collapsed=toggle.getAttribute('aria-expanded');groupProbe.hiddenAgain=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
     }
     document.documentElement.dataset.layout=JSON.stringify({...initial,zoomProbe,groupProbe});
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
