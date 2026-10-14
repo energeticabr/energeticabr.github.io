@@ -43,4 +43,5 @@
 .tdr-limit { padding:8px; background:#fff3e0; border:1px solid #ef6c00; color:#8d4100; font-size:12px; }
 .tdr-retry { display:block; margin:15px auto; background:#075267; color:white; border:0; border-radius:8px; padding:10px 16px; }
 .tdr-dialog :focus-visible { outline:2px solid #1476c8; outline-offset:-2px; }
-@media(max-width:900px) { .tdr-table th,.tdr-table td { padding:4px 1px; } .tdr-brand { margin-bottom:5px; } }
+.tdr-overlay[data-report-max-900="true"] .tdr-table :is(th,td) { padding:4px 1px; }
+.tdr-overlay[data-report-max-900="true"] .tdr-brand { margin-bottom:5px; }

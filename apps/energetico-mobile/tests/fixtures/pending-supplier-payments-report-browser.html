@@ -27,6 +27,8 @@ try {
   const view=decorateReportPrint(decorateReportNavigation(createPendingSupplierPaymentsReportView({now:()=>new Date(2026,9,7,12),data:{async loadSnapshot(){loads++;return {complete:true,suppliers,presences,launches:[]};}}}),{action:'open-pending-supplier-payments-report'}),{action:'open-pending-supplier-payments-report'});
   await view.open();
   const root=view.element;
+  const portraitLayout={columns:getComputedStyle(root.querySelector('.psp-filters')).gridTemplateColumns.split(' ').length,contentMargin:getComputedStyle(root.querySelector('.psp-content')).marginInlineStart};
+  document.documentElement.dataset.portraitLayout=JSON.stringify(portraitLayout);
   if(matchMedia('(orientation:portrait)').matches) {
     const close=root.querySelector('.psp-close');
     document.documentElement.dataset.layout=JSON.stringify({portrait:true,loads,warning:!root.querySelector('.pl-orientation').hidden,closeVisible:getComputedStyle(close).display!=='none',busy:root.getAttribute('aria-busy'),tables:root.querySelectorAll('table').length});

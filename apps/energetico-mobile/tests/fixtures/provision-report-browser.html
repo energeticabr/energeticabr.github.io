@@ -55,6 +55,7 @@ try {
     const reachTotal=annualScroll?{scroll:annualScroll.scrollLeft,total:rect(annual.querySelector('tbody tr [data-column=total]')),wrapper:rect(annualScroll)}:null;
     const capture=captureFilteredReport(root,{title:'Provisões de pagamento e despesas recorrentes'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
     const initial={loads,portrait,warning:!root.querySelector('.pl-orientation').hidden,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
+      navigationPadding:parseFloat(getComputedStyle(content).paddingInlineStart),
       toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,panel:rect(root.querySelector('.pr-dialog')),content:rect(content),
       tableWidth:rect(main).width,availableWidth:main.closest('.pr-section-scroll').clientWidth,
       tableLayouts:[main,annual,root.querySelector('.pr-table--inactive')].map(table=>({

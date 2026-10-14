@@ -7,7 +7,7 @@
  max-width:none!important; max-height:none!important;
  transform:rotate(90deg); transform-origin:0 0;
  box-sizing:border-box;
- padding:max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))!important;
+ padding:max(24px,6.5vw,env(safe-area-inset-right)) 0 max(24px,6.5vw,env(safe-area-inset-left))!important;
 }
 .report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
  width:100%!important; height:100%!important; max-height:100%!important;

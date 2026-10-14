@@ -9,6 +9,24 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
+test('portrait provision report preserves landscape navigation spacing on a tablet',{timeout:90000},async t=>{
+  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const cacheRoot=await mkdtemp(join(tmpdir(),'provision-portrait-vite-'));
+  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cacheRoot,'cache'),optimizeDeps:{noDiscovery:true,include:['decimal.js']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
+  try{
+    await server.listen();
+    const paddings=[];
+    for(const [width,height] of [[1024,768],[768,1024]]){
+      const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-report-browser.html`});
+      const dom=new JSDOM(stdout);const layout=JSON.parse(dom.window.document.documentElement.dataset.layout);dom.window.close();
+      assert.equal(layout.error,undefined);paddings.push(layout.navigationPadding);
+    }
+    assert.deepEqual(paddings,[58,58],'turning the tablet must not collapse report navigation spacing');
+  }finally{await server.close();await rm(cacheRoot,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
+});
+
+
 // Break: responsive CSS hides the column headers and turns compact table rows
 // into tall cards, including inside the portrait phone's landscape canvas.
 test('provision report keeps the original compact tables in landscape and portrait without horizontal drag',{timeout:180000},async t=>{
