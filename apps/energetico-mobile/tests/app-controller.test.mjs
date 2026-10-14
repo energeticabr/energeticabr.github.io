@@ -2543,7 +2543,7 @@ test("filtro de banco é automático, preserva a digitação e limpa ao selecion
   const payloads = [];
   h.client.sendText = async payload => {
     payloads.push(payload);
-    if (!payload.replyId) {
+    if (payload.replyId === "filter_query") {
       return {
         status: "processed",
         activeFlow,
@@ -2565,6 +2565,7 @@ test("filtro de banco é automático, preserva a digitação e limpa ao selecion
   await new Promise(resolve => setTimeout(resolve, 20));
 
   assert.equal(payloads[0].text, "are");
+  assert.equal(payloads[0].replyId, "filter_query");
   assert.equal(h.store.getState().draft, "are");
   assert.equal(h.store.getState().messages.filter(message => message.role === "user").length, 0);
   assert.equal(h.store.getState().messages.at(-1).options[0].label, "AREIA MÉDIA");
@@ -2622,7 +2623,7 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
   await h.view.emit("database-filter-changed", { value: "Swi", filterKey: "supplier" });
   await new Promise(resolve => setTimeout(resolve, 20));
 
-  assert.deepEqual(payloads, [{ text: "Swi" }]);
+  assert.deepEqual(payloads, [{ text: "Swi", replyId: "filter_query" }]);
   assert.match(h.store.getState().messages.at(-1).question, /NENHUMA OPÇÃO CORRESPONDENTE/);
   assert.deepEqual(h.store.getState().messages.at(-1).options.map(option => option.reply), ["register_supplier"]);
 
@@ -2637,11 +2638,58 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
   await new Promise(resolve => setTimeout(resolve, 20));
   assert.equal(payloads.length, 2, "consultas com mais de duas palavras continuam aguardando envio manual");
   await h.view.emit("send-text", {});
+  assert.deepEqual(payloads.at(-1), { text: "Swift Materiais LTDA", replyId: "filter_query" });
   assert.equal(h.store.getState().messages.at(-1).options.filter(option => option.reply === "register_supplier").length, 1);
 
   await h.view.emit("select-reply", { replyId: "register_supplier", label: registration.label });
   assert.equal(h.store.getState().messages.at(-1).question, "QUAL É A RAZÃO SOCIAL DO FORNECEDOR?");
   assert.deepEqual(h.store.getState().messages.at(-1).options, []);
+});
+
+test("texto digitado em pesquisa numérica nunca escolhe ID; somente o botão seleciona", async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: "payment_provision", title: "CRIAR UMA PROVISÃO DE PAGAMENTO" };
+  const poll = (key, options) => ({
+    type: "poll", question: key === "product" ? "QUAL PRODUTO?" : "QUAL FILIAL?",
+    databaseFilter: true, databaseFilterKey: key, options,
+  });
+  h.store.ingestRemoteMessages([poll("product", [{ id: "8", reply: "8", label: "8 - OUTRO PRODUTO" }])], { activeFlow });
+  const payloads = [];
+  let currentKey = "product";
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return {
+      status: "processed", activeFlow,
+      messages: [poll(currentKey, [
+        { id: "8", reply: "8", label: "8 - OUTRO PRODUTO" },
+        { id: "657", reply: "657", label: "657 - VERGALHÃO 8MM" },
+        { id: "4", reply: "4", label: "4 - 004 - EDIFÍCIO XAVANTE" },
+      ])],
+    };
+  };
+  for (const value of ["8", "8mm"]) {
+    await h.view.emit("draft-changed", { value });
+    await h.view.emit("database-filter-changed", { value, filterKey: "product" });
+    for (let attempt = 0; attempt < 30 && payloads.at(-1)?.text !== value; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.deepEqual(payloads.at(-1), { text: value, replyId: "filter_query" });
+    assert.equal(h.store.getState().activeFlow.id, "payment_provision");
+  }
+  currentKey = "branch";
+  h.store.ingestRemoteMessages([poll("branch", [{ id: "0", reply: "0", label: "0 - OUTRA FILIAL" }])], { activeFlow });
+  for (const value of ["0", "004"]) {
+    await h.view.emit("draft-changed", { value });
+    await h.view.emit("database-filter-changed", { value, filterKey: "branch" });
+    for (let attempt = 0; attempt < 30 && payloads.at(-1)?.text !== value; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.deepEqual(payloads.at(-1), { text: value, replyId: "filter_query" });
+  }
+  await h.view.emit("select-reply", { replyId: "4", label: "4 - 004 - EDIFÍCIO XAVANTE" });
+  assert.deepEqual(payloads.at(-1), { text: "4 - 004 - EDIFÍCIO XAVANTE", replyId: "4" });
 });
 
 test("após validar uma presença mostra primeiro somente o mesmo dia e oferece outras datas", async t => {
