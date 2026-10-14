@@ -696,6 +696,9 @@ button { touch-action: manipulation; }
 .chat-rhid-attendance-report__identity { min-width: 0; align-self: center; }
 .chat-rhid-attendance-report__kicker { display: block; margin-bottom: 7px; color: #718096; font-size: 10px; font-weight: 800; letter-spacing: .03em; }
 .chat-rhid-attendance-report__identity h2 { margin: 0; color: #173b66; font-size: clamp(21px, 4vw, 31px); line-height: 1.05; }
+.chat-rhid-attendance-report__validate { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid #b82a39; border-radius: 10px; color: #fff; background: #b82a39; font: inherit; font-size: clamp(12px, 3vw, 16px); font-weight: 850; line-height: 1.1; cursor: pointer; }
+.chat-rhid-attendance-report__validate:focus-visible { outline: 3px solid #e3aa19; outline-offset: 2px; }
+.chat-rhid-attendance-report__validate:disabled { opacity: .65; cursor: wait; }
 .chat-rhid-attendance-report__header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; align-self: center; }
 .chat-rhid-attendance-report__updated, .chat-rhid-attendance-report__date { display: flex; min-width: 0; flex-direction: column; justify-content: center; padding: 12px 14px; border-radius: 12px; }
 .chat-rhid-attendance-report__updated { color: #fff; background: #173f6b; }

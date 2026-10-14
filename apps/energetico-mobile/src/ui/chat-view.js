@@ -1122,7 +1122,9 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
   return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
     <header class="chat-rhid-attendance-report__header">
-      <div class="chat-rhid-attendance-report__identity"><span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2></div>
+      <div class="chat-rhid-attendance-report__identity">${Number.isSafeInteger(table.pendingValidationCount) && table.pendingValidationCount > 0 && dateLabel && messageId
+        ? '<button class="chat-rhid-attendance-report__validate" type="button" data-action="rhid-day-validation-open" data-message-id="' + escapeHtml(messageId) + '" aria-label="Validar presenças pendentes de ' + escapeHtml(dateLabel) + '"' + (table.navigationBusy === true ? " disabled" : "") + '>VALIDAR PRESENÇAS</button>'
+        : '<span class="chat-rhid-attendance-report__kicker">RELATÓRIO DIÁRIO</span><h2>Presenças RHID</h2>'}</div>
       <div class="chat-rhid-attendance-report__header-actions">${refreshButton}${shareButton}</div>
       <div class="chat-rhid-attendance-report__updated" title="${escapeHtml(updateLabel)}"><span>${escapeHtml(updateHeading)}</span><strong>${escapeHtml(updateTime)}</strong></div>
       <div class="chat-rhid-attendance-report__date"><span>DATA DO RELATÓRIO</span><time datetime="${escapeHtml(date)}">${escapeHtml(dateLabel || "—")}</time></div>

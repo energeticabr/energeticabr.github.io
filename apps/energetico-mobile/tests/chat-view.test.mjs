@@ -1707,6 +1707,30 @@ test("relatório RHID segue o layout diário com indicadores e cartões individu
   dom.window.close();
 });
 
+test("relatório RHID troca o título por validação do dia somente com pendências", () => {
+  for (const pendingValidationCount of [2, 0]) {
+    const table = buildRhidAttendanceTable([
+      { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00" },
+    ]);
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+      id: "rhid-day", role: "assistant", type: "poll", question: "RHID", options: [],
+      detail_table: { ...table, reportDate: "2026-10-13", pendingValidationCount },
+    }] })));
+    const report = dom.window.document.querySelector(".chat-rhid-attendance-report");
+    const button = report.querySelector('[data-action="rhid-day-validation-open"]');
+    if (pendingValidationCount) {
+      assert.equal(button?.textContent.trim(), "VALIDAR PRESENÇAS");
+      assert.equal(commandFromTarget(button).messageId, "rhid-day");
+      assert.equal(report.querySelector(".chat-rhid-attendance-report__kicker"), null);
+      assert.equal(report.querySelector(".chat-rhid-attendance-report__identity h2"), null);
+    } else {
+      assert.equal(button, null);
+      assert.equal(report.querySelector(".chat-rhid-attendance-report__identity h2")?.textContent, "Presenças RHID");
+    }
+    dom.window.close();
+  }
+});
+
 test("relatório RHID mostra horário fora da faixa no cluster com asterisco e total efetivo", () => {
   for (const adjusted of [false, true]) {
     const table = buildRhidAttendanceTable([{ ID_PESSOA_RHID: "9", NOME_COLABORADOR: "MAURICIO",

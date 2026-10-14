@@ -422,6 +422,20 @@ export function createChatClient({
     return result;
   }
 
+  async function startRhidDayValidation(selectedDate) {
+    const date = String(selectedDate || "").trim();
+    if (!validIsoDate(date)) throw new Error("Selecione uma data válida para validar presenças.");
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "rhid_day_validation_start", date }),
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "A lista de presenças pendentes", { allowRecovery: true }));
+    if (!Array.isArray(result?.messages) || !result.messages.length) throw new Error("A VM não abriu a lista de presenças pendentes.");
+    return result;
+  }
+
   async function getRhidAttendanceMonth(selectedMonth, { signal } = {}) {
     const month = String(selectedMonth || "").trim();
     if (!/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month)) throw new Error("Selecione um mês válido para o calendário RHID.");
@@ -576,5 +590,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }
