@@ -27,13 +27,13 @@ if(new URL(location.href).searchParams.has('safearea')) {
 }
 if(new URL(location.href).searchParams.has('controls')) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
- const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect(),transform=getComputedStyle(root).transform;
+ const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect(),transform=getComputedStyle(root).transform,panelSize={width:panel.offsetWidth,height:panel.offsetHeight};
  const arrows=[...root.querySelectorAll('.report-navigation-arrow')].map(button=>{const r=button.getBoundingClientRect();return {direction:button.dataset.direction,width:r.width,height:r.height,visible:getComputedStyle(button.closest('nav')).display!=='none',hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===button};});
  for(const button of root.querySelectorAll('.report-navigation-arrow')){button.click();await new Promise(resolve=>requestAnimationFrame(resolve));}
  const close=root.querySelector('.report-close-control');close.click();const closedByX=root.hidden;
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
- const outside=document.elementFromPoint(root.dataset.reportPortrait==='true'?8:1,innerHeight/2),outsideIsBackdrop=outside===root;outside.click();
- document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',transform,gaps:{left:rect.left,right:innerWidth-rect.right,top:rect.top,bottom:innerHeight-rect.bottom},arrows,navigated,closedByX,closedOutside:root.hidden,outsideIsBackdrop});
+ const outside=document.elementFromPoint(root.dataset.reportPortrait==='true'?innerWidth/2:1,root.dataset.reportPortrait==='true'?rect.top/2:innerHeight/2),outsideIsBackdrop=outside===root;outside.click();
+ document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',transform,panelSize,gaps:{left:rect.left,right:innerWidth-rect.right,top:rect.top,bottom:innerHeight-rect.bottom},arrows,navigated,closedByX,closedOutside:root.hidden,outsideIsBackdrop});
 }
 if(contractorMode) {
  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -45,11 +45,14 @@ if(attendanceMode) {
  const root=view.element,panel=root.querySelector('[role=dialog]'),rect=panel.getBoundingClientRect();
  const bounds={left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom};
  const hasSummary=!!root.querySelector('[data-metric=pending]');
- const leftIsBackdrop=document.elementFromPoint(8,innerHeight/2)===root;
- document.elementFromPoint(8,innerHeight/2).click();const closedLeft=root.hidden;
- await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
- const rightIsBackdrop=document.elementFromPoint(innerWidth-8,innerHeight/2)===root;
- document.elementFromPoint(innerWidth-8,innerHeight/2).click();const closedRight=root.hidden;
- document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',bounds,hasSummary,leftIsBackdrop,rightIsBackdrop,closedLeft,closedRight});
+ let topIsBackdrop=false,bottomIsBackdrop=false,closedTop=false,closedBottom=false;
+ if(root.dataset.reportPortrait==='true') {
+  const topTarget=document.elementFromPoint(innerWidth/2,rect.top/2);topIsBackdrop=topTarget===root;
+  topTarget.click();closedTop=root.hidden;
+  await view.open();await new Promise(resolve=>requestAnimationFrame(resolve));
+  const bottomTap=(rect.bottom+innerHeight)/2,bottomTarget=document.elementFromPoint(innerWidth/2,bottomTap);bottomIsBackdrop=bottomTarget===root;
+  bottomTarget.click();closedBottom=root.hidden;
+ }
+ document.documentElement.dataset.layout=JSON.stringify({portrait:root.dataset.reportPortrait==='true',bounds,hasSummary,topIsBackdrop,bottomIsBackdrop,closedTop,closedBottom});
 }
 </script></body></html>

@@ -37,7 +37,7 @@ test('payment column titles keep an opaque, unbroken top border while the rows s
     assert.equal(pr.covered,true,'o título girado deve cobrir os dados durante o arraste');
     const pDark=(x,y)=>{const i=(y*pi.width+x)*pi.channels;return pd[i]<70&&pd[i+1]<70&&pd[i+2]<70;};
     const py0=Math.ceil(pr.top)+4,py1=Math.floor(pr.top+pr.height)-4;
-    const edges=[Math.floor(pr.left),Math.ceil(pr.left+pr.width)-1].map(x=>({x,dark:Array.from({length:py1-py0},(_,n)=>pDark(x,py0+n)).filter(Boolean).length}));
+    const edges=[Math.ceil(pr.left),Math.floor(pr.left+pr.width)-1].map(x=>({x,dark:Array.from({length:py1-py0},(_,n)=>pDark(x,py0+n)).filter(Boolean).length}));
     assert.ok(edges.every(edge=>edge.dark/(py1-py0)>0.8),`Bordas do título girado sumiram ao arrastar: ${JSON.stringify({header:pr,edges})}`);
   }finally{await server.close();}
 });

@@ -36,12 +36,13 @@ export function bindReportLandscape(root) {
 export function reportLayoutViewport(element) {
   const root = element.closest('.report-landscape-viewport'), win = element.ownerDocument.defaultView;
   if (root?.dataset.reportPortrait === 'true') {
-    // Pickers share this rotated containing block. Include backdrop and panel
-    // safe-area padding so expanded menus remain inside the opaque report.
+    // Pickers share this rotated containing block. Both axes must include
+    // backdrop and panel padding to keep menus within the visible report.
     const style=win.getComputedStyle(root);
     const panel=element.closest('[role="dialog"]')||root.querySelector('[role="dialog"]');
     const panelStyle=panel&&panel!==root?win.getComputedStyle(panel):null;
-    const top=parseFloat(style.paddingTop)||0,bottom=parseFloat(style.paddingBottom)||0;
+    const top=(parseFloat(style.paddingTop)||0)+(parseFloat(panelStyle?.paddingTop)||0);
+    const bottom=(parseFloat(style.paddingBottom)||0)+(parseFloat(panelStyle?.paddingBottom)||0);
     const left=(parseFloat(style.paddingLeft)||0)+(parseFloat(panelStyle?.paddingLeft)||0);
     const right=(parseFloat(style.paddingRight)||0)+(parseFloat(panelStyle?.paddingRight)||0);
     return {rotated:true,top,left,

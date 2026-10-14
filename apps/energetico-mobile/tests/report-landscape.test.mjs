@@ -58,10 +58,10 @@ test('expanded filters use the logical landscape bounds rather than physical por
 
 test('a sideways portrait report keeps safe areas within landscape bounds for pickers',async t=>{
   const {view,root}=setup(t,async()=>({launches:[row]}));await view.open();
-  root.style.padding='23px 0px 16px';
-  root.querySelector('[role=dialog]').style.padding='3px 34px 3px 59px';
+  root.style.padding='0px 34px 0px 59px';
+  root.querySelector('[role=dialog]').style.padding='23px 3px 11px 3px';
   const viewport=reportLayoutViewport(root.querySelector('.sfs-trigger'));
-  assert.deepEqual(viewport,{rotated:true,top:23,left:59,width:751,height:351});
+  assert.deepEqual(viewport,{rotated:true,top:23,left:62,width:745,height:356});
 });
 test('PDF measures unrotated column widths, preserving report proportions',async t=>{
   const {view,root}=setup(t,async()=>({launches:[row]}));await view.open();
