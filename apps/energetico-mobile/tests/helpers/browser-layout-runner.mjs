@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
-export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, gestureProbes = [], maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
+export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
   const pending = new Map();
@@ -131,7 +131,10 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     }
     const stdout = "<!doctype html>" + result.result.value;
     if (Buffer.byteLength(stdout) > maxBuffer) throw new RangeError("A medição de layout excedeu o limite de saída.");
-    return { stdout, stderr: "", gestureScales, gestureDetails };
+    const screenshot = captureScreenshot
+      ? Buffer.from((await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, sessionId)).data, "base64")
+      : undefined;
+    return { stdout, stderr: "", gestureScales, gestureDetails, screenshot };
   } finally {
     for (const request of pending.values()) clearTimeout(request.timer);
     socket?.close();
