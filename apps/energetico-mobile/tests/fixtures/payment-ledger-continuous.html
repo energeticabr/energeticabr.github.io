@@ -20,6 +20,12 @@ try {
   await frame();
   const counts=[root.querySelectorAll('tbody tr').length];
   scroll.scrollTop=70;await frame();root.querySelector('[data-action=print-report-pdf]').click();await printDone;await frame();
+  if(new URLSearchParams(location.search).has('header')){
+    scroll.scrollTop=70;await frame();
+    const header=[...root.querySelectorAll('.pl-table thead th')].find(cell=>cell.textContent==='FORNECEDOR');
+    const rect=header.getBoundingClientRect(),style=getComputedStyle(header),scrollRect=scroll.getBoundingClientRect();
+    document.documentElement.dataset.layout=JSON.stringify({header:{top:rect.top,left:rect.left,width:rect.width,height:rect.height,scrollTop:scrollRect.top,background:style.backgroundColor,borderTop:style.borderTopWidth,borderCollapse:getComputedStyle(root.querySelector('.pl-table')).borderCollapse,covered:document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2)===header}});
+  }else{
   const printer={rows:printed.pages[0].blocks.find(block=>block.type==='table').rows.length,visible:root.querySelectorAll('tbody tr').length,top:scroll.scrollTop};
   const first=root.querySelector('tbody tr');
   for(let i=0;i<3;i++){scroll.scrollTop=scroll.scrollHeight;await frame();counts.push(root.querySelectorAll('tbody tr').length);}
@@ -31,5 +37,6 @@ try {
   document.documentElement.dataset.layout=JSON.stringify({counts,anchored,printer,filteredInitial,filteredEnd,filterScroll,printRows:captured.pages[0].blocks.find(block=>block.type==='table').rows.length,restoredScroll:scroll.scrollTop===beforePrint,
     ids:[...root.querySelectorAll('[data-column=id]')].map(node=>node.textContent),pager:Boolean(root.querySelector('.pl-pager')),logoBackground:getComputedStyle(logo.parentElement).backgroundColor,logoLoaded:logo.naturalWidth>0,
     overflow:scroll.scrollWidth-scroll.clientWidth,documentOverflow:document.documentElement.scrollWidth-innerWidth,tableHeight:scroll.clientHeight});
+  }
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>

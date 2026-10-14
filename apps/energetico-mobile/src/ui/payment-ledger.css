@@ -27,9 +27,10 @@
 .pl-load-status { margin:0; padding:8px; text-align:center; font:600 12px/1.4 Arial,sans-serif; color:#17485b; }
 .pl-notice { flex-shrink:0; margin:0; border:1px solid #b72b2b; padding:6px; text-align:center; color:#a61d1d; font-size:12px; font-weight:700; }
 .pl-table-scroll { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
-.pl-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; background:white; color:black; font:normal clamp(6px,calc(.94 * var(--report-vw, 1vw)),11px)/1.16 Arial,sans-serif; }
-.pl-table th,.pl-table td { border:clamp(1px,calc(.23 * var(--report-vw, 1vw)),3px) solid black; padding:3px 2px; text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
-.pl-table th { position:sticky; top:0; background:white; z-index:1; font-size:inherit; font-weight:700; }
+.pl-table { --pl-grid:clamp(1px,calc(.23 * var(--report-vw, 1vw)),3px); width:100%; min-width:0; table-layout:fixed; border-collapse:separate; border-spacing:0; background:white; color:black; font:normal clamp(6px,calc(.94 * var(--report-vw, 1vw)),11px)/1.16 Arial,sans-serif; }
+.pl-table th,.pl-table td { border:0; border-left:var(--pl-grid) solid black; border-bottom:var(--pl-grid) solid black; padding:3px 2px; text-align:center; vertical-align:middle; overflow-wrap:anywhere; }
+.pl-table th:last-child,.pl-table td[data-column=supplierTotal] { border-right:var(--pl-grid) solid black; }
+.pl-table th { position:sticky; top:0; z-index:2; border-top:var(--pl-grid) solid black; background:white; font-size:inherit; font-weight:700; }
 .pl-table td[data-column=product],.pl-table td[data-column=supplier] { text-align:left; }
 .pl-table td[data-column=paymentDate],.pl-table td[data-column=order],.pl-table td[data-column=supplier],.pl-table td[data-column=total] { font-weight:700; }
 .pl-table td[data-column=id],.pl-table td[data-column=branch],.pl-table td[data-column=account],.pl-table td[data-column=unit],.pl-table td[data-column=quantity],.pl-table strong { font-weight:600; }
