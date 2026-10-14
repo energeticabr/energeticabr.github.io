@@ -31,12 +31,31 @@ test('all gallery loaders are centered below navigation without leaking content 
           const layout = result[state], message = `${width}x${height} ${result.name} ${state}: ${JSON.stringify(layout)}`;
           assert.equal(layout.missing, undefined, message);
           assert.ok(layout.covered && layout.headerVisible && layout.loaderVisible && layout.opaque && layout.centeredHit && layout.keyboardSafe, message);
+          assert.match(layout.indicatorBackdrop, /^rgba\([^)]*, 0\.[5-9][0-9]*\)$/, `mascot loader must keep a translucent card: ${message}`);
           assert.ok(Math.abs(layout.imageCenterX - width / 2) <= 2, message);
           assert.ok(Math.abs(layout.indicatorCenterY - layout.desiredCenterY) <= 2, message);
           assert.ok(layout.fits && !layout.overflow, message);
         }
         assert.equal(result.restored, true, `${result.name} content stays usable after loading`);
       }
+    }
+  } finally { await server.close(); }
+});
+
+test('mascot loading cards use a translucent dark backdrop in dark mode', { timeout: 45_000 }, async t => {
+  if (!browser) return t.skip('Chrome/Edge unavailable');
+  const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
+    fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
+  try {
+    await server.listen();
+    const { stdout } = await runBrowserLayout(browser, { width: 390, height: 844, colorScheme: 'dark',
+      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/gallery-loading-responsive.html` });
+    const dom = new JSDOM(stdout), results = JSON.parse(dom.window.document.documentElement.dataset.layout);
+    dom.window.close();
+    for (const result of results) {
+      assert.equal(result.initial.indicatorBackdrop, 'rgba(23, 56, 68, 0.88)', result.name);
+      assert.equal(result.refreshing.indicatorBackdrop, 'rgba(23, 56, 68, 0.88)', result.name);
+      assert.equal(result.initial.indicatorTextColor, 'rgb(237, 247, 249)', result.name);
     }
   } finally { await server.close(); }
 });
