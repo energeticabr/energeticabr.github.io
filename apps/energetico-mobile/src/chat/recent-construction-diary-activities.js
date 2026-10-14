@@ -12,7 +12,9 @@ export function createRecentConstructionDiaryActivitiesData({ tokenProvider, rep
   async function load({ today = new Date(), signal } = {}) {
     const check = () => { if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError'); };
     const start = provisionDayOffset(today, -4);
-    const after = provisionDayOffset(today, 1);
+    // Leave a one-day UTC margin at the end: a diary dated today at night in
+    // São Paulo can be stored by SharePoint with tomorrow's UTC timestamp.
+    const after = provisionDayOffset(today, 2);
     if (!start || !after) return [];
     const options = signal ? { signal } : {};
     check();
