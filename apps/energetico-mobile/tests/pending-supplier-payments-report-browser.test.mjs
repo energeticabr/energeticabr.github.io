@@ -7,6 +7,34 @@ import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 
+test('pending supplier report keeps landscape filters and arrow gutter when the phone is upright',{timeout:90000},async t=>{
+  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+  try{
+    await server.listen();
+    const layouts=[];
+    for(const [width,height] of [[844,390],[390,844]]){
+      const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/pending-supplier-payments-report-browser.html`});
+      const dom=new JSDOM(stdout);layouts.push(JSON.parse(dom.window.document.documentElement.dataset.portraitLayout));dom.window.close();
+    }
+    assert.deepEqual(layouts[1],layouts[0],'portrait rotation retains landscape report spacing and filter columns');
+  }finally{await server.close();}
+});
+
+test('printing the upright pending supplier report removes its compact screen gutter',{timeout:90000},async t=>{
+  const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),server:{host:'127.0.0.1',port:0},logLevel:'silent'});
+  try{
+    await server.listen();
+    const {stdout}=await runBrowserLayout(browser,{width:390,height:844,mediaType:'print',url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/pending-supplier-payments-report-browser.html`});
+    const dom=new JSDOM(stdout);
+    try {assert.equal(JSON.parse(dom.window.document.documentElement.dataset.portraitLayout).contentMargin,'0px');}
+    finally {dom.window.close();}
+  }finally{await server.close();}
+});
+
 // Break caught: duplicated safe-area margins or a dialog width cap waste space;
 // compact arrow rails must still protect financial cells and searchable filters.
 test('pending supplier report reserves both arrow edges and captures full tables on phone tablet and Windows desktop',{timeout:180000},async t=>{

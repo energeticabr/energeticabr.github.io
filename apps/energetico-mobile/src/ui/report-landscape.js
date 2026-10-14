@@ -20,6 +20,8 @@ export function bindReportLandscape(root) {
     root.dataset.reportPortrait = String(portrait);
     root.dataset.reportWidthMode = logicalWidth<=600?'narrow':logicalWidth<=900?'compact':'wide';
     root.dataset.reportCompactHeight = String(logicalHeight<=500);
+    for (const limit of [650,680,850,900]) root.setAttribute(`data-report-max-${limit}`,String(logicalWidth<=limit));
+    root.setAttribute('data-report-min-650',String(logicalWidth>=650));
     root.style.setProperty('--report-physical-width',`${width}px`);
     root.style.setProperty('--report-width',`${logicalWidth}px`);
     root.style.setProperty('--report-height',`${logicalHeight}px`);

@@ -23,7 +23,8 @@ test('rotated phone reports fill physical height, retain lateral dismissal and b
     assert.deepEqual(result.navigated,['open-provision-report','open-management-report']);
     assert.equal(result.closedByX,true);
     if(result.portrait) {
-     assert.ok(result.gaps.left>=16&&result.gaps.right>=16,JSON.stringify(result));
+     const lateralTarget=Math.max(24,width*.065)-1;
+     assert.ok(result.gaps.left>=lateralTarget&&result.gaps.right>=lateralTarget,JSON.stringify(result));
      assert.ok(Math.abs(result.gaps.top)<1&&Math.abs(result.gaps.bottom)<1,'only the physical sides may expose the backdrop: '+JSON.stringify(result));
      assert.equal(result.outsideIsBackdrop,true);
      assert.equal(result.closedOutside,true);

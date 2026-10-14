@@ -65,5 +65,4 @@
 /* Keep the original spreadsheet layout in every report canvas. Scaling the
    type to the available section width must not replace rows with cards. */
 @media(max-height:500px) { .pr-overlay[data-report-action] .pr-content { padding-inline:48px; } }
-@media(orientation:portrait) { .pr-overlay[data-report-action] .pr-content { padding-inline:2px; } }
 @media print { body.pr-printing>*:not(.pr-overlay) { display:none!important; } body.pr-printing .pr-overlay { position:static; display:block; padding:0; background:white; } body.pr-printing .pr-dialog,body.pr-printing .pr-report,body.pr-printing .pr-content { display:block; height:auto; max-height:none; overflow:visible; width:100%; padding:0; } body.pr-printing .pr-filters,body.pr-printing .pr-annual-zoom-toolbar { display:none; } body.pr-printing .pr-section-scroll[data-section=annual] { --pr-annual-zoom:1!important; overflow:visible; } body.pr-printing .pr-table { break-inside:auto; } body.pr-printing tr { break-inside:avoid; } }

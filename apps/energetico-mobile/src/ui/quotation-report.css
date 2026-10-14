@@ -28,4 +28,7 @@
 .qr-badge { display:inline-block; max-width:100%; box-sizing:border-box; border:1px solid; border-radius:20px; padding:3px 7px; font-size:.92em; font-weight:700; overflow-wrap:anywhere; }
 .qr-neutral { background:#f3f4f6; color:#4b5563; border-color:#e5e7eb; }.qr-pending.qr-badge { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }.qr-awaiting { background:#ffedd5; color:#c2410c; border-color:#fed7aa; }.qr-received { background:#dcfce7; color:#15803d; border-color:#bbf7d0; }
 .qr-empty { padding:clamp(14px,calc(2 * var(--report-vw, 1vw)),28px)!important; text-align:center; color:#64748b; }.qr-notice { padding:15px; text-align:center; font-size:14px; }.qr-retry { display:block; margin:15px auto; background:#075267; color:white; border:0; border-radius:8px; padding:10px 16px; }
-@media(max-width:900px) { .qr-budgets th,.qr-budgets td { padding:4px 2px; }.qr-badge { padding:2px 4px; }.qr-count { padding:3px 6px; }.qr-fact-table th,.qr-fact-table td { padding:5px 3px; } }
+.qr-overlay[data-report-max-900="true"] .qr-budgets :is(th,td) { padding:4px 2px; }
+.qr-overlay[data-report-max-900="true"] .qr-badge { padding:2px 4px; }
+.qr-overlay[data-report-max-900="true"] .qr-count { padding:3px 6px; }
+.qr-overlay[data-report-max-900="true"] .qr-fact-table :is(th,td) { padding:5px 3px; }

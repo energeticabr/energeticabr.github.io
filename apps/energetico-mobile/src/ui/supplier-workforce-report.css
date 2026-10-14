@@ -47,13 +47,12 @@
 .swr-measurement-text { background:#eff6ff; color:#1e3a8a; font-weight:700; }
 .swr-measurement-missing { background:#fff7ed; color:#9a3412; }
 .swr-empty { padding:16px; text-align:center; border:1px solid #cbd5e1; background:#f8fafc; }
-@media(max-width:900px) {
-  .swr-filters { grid-template-columns:84px repeat(4,minmax(0,1fr)); }
-  .swr-filters .pl-refresh,.swr-filters .report-print-actions { grid-row:span 2; }
-  .swr-branch { padding:8px; }
-  .swr-profession { margin-inline:5px; }
-  .swr-table th,.swr-table td { padding:6px 3px; }
-  .swr-table .swr-badge,.swr-frequency-box,.swr-description-box { padding:5px 3px; }
-}
+.swr-overlay[data-report-max-900="true"] .swr-filters { grid-template-columns:84px repeat(4,minmax(0,1fr)); }
+.swr-overlay[data-report-max-900="true"] .swr-filters :is(.pl-refresh,.report-print-actions) { grid-row:span 2; }
+.swr-overlay[data-report-max-900="true"] .swr-branch { padding:8px; }
+.swr-overlay[data-report-max-900="true"] .swr-profession { margin-inline:5px; }
+.swr-overlay[data-report-max-900="true"] .swr-table :is(th,td) { padding:6px 3px; }
+.swr-overlay[data-report-max-900="true"] :is(.swr-table .swr-badge,.swr-frequency-box,.swr-description-box) { padding:5px 3px; }
 @media(max-height:500px) { .swr-content { margin-inline:48px; } }
+@media screen { .swr-overlay[data-report-portrait="true"][data-report-compact-height="true"] .swr-content { margin-inline:48px; } }
 @media print { .swr-content { margin-inline:0; overflow:visible; }.swr-close { display:none; }.swr-branch,.swr-profession { break-inside:auto; }.swr-table thead { display:table-header-group; } }

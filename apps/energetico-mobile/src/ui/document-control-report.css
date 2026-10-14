@@ -38,4 +38,6 @@
 .dcr-footer { margin:0; padding:8px; text-align:right; background:#f8fafc; font-weight:700; }.dcr-empty { margin:0; padding:18px; text-align:center; background:#f8fafc; }
 .dcr-notice { padding:15px; text-align:center; font-size:14px; }.dcr-retry { display:block; margin:15px auto; background:#075267; color:white; border:0; border-radius:8px; padding:10px 16px; }
 .dcr-dialog :focus-visible { outline:2px solid #1476c8; outline-offset:-2px; }
-@media(max-width:900px) { .dcr-table th,.dcr-table td { padding:4px 1px; }.dcr-brand { margin-bottom:5px; }.dcr-badge { padding:2px; } }
+.dcr-overlay[data-report-max-900="true"] .dcr-table :is(th,td) { padding:4px 1px; }
+.dcr-overlay[data-report-max-900="true"] .dcr-brand { margin-bottom:5px; }
+.dcr-overlay[data-report-max-900="true"] .dcr-badge { padding:2px; }

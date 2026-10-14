@@ -1,5 +1,27 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {existsSync,mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {fileURLToPath} from 'node:url';import {createServer} from 'vite';import {JSDOM} from 'jsdom';import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
+test('portrait payroll report keeps its landscape controls while filling phone height and exposing only lateral backdrop',{timeout:120000},async t=>{
+ if(!browser)return t.skip('Chromium indisponível');
+ const app=fileURLToPath(new URL('..',import.meta.url)),repo=fileURLToPath(new URL('../../..',import.meta.url)),cache=mkdtempSync(join(tmpdir(),'payroll-portrait-vite-'));
+ const server=await createServer({root:app,cacheDir:cache,server:{host:'127.0.0.1',port:0,fs:{allow:[repo]}},logLevel:'silent'});
+ try{
+  await server.listen();
+  for(const logicalWidth of [844,660,860]){
+   const layouts=[];
+   for(const [width,height] of [[logicalWidth,390],[390,logicalWidth]]){
+    const {stdout}=await runBrowserLayout(browser,{width,height,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/supplier-payroll-reference-layout.html`});
+    const dom=new JSDOM(stdout);
+    layouts.push(JSON.parse(dom.window.document.documentElement.dataset.responsive));
+    dom.window.close();
+   }
+   const [landscape,portrait]=layouts;
+   assert.equal(portrait.portrait,true);
+   assert.ok(Math.abs(portrait.dialog.top)<1&&Math.abs(portrait.dialog.bottom-logicalWidth)<1,'portrait dialog fills physical height');
+   assert.ok(portrait.dialog.left>=16&&390-portrait.dialog.right>=16,'only lateral backdrop remains available to close');
+   for(const key of ['filterColumns','sheetIcon','metricIcon','rubrics'])assert.equal(portrait[key],landscape[key],`${logicalWidth}px ${key} must not change on rotation`);
+  }
+ }finally{await server.close();rmSync(cache,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
+});
 test('reference payroll layout fits horizontal phone tablet desktop with blue white stripes and shared midpoint arrows',{timeout:120000},async t=>{
  if(!browser)return t.skip('Chromium indisponível');const app=fileURLToPath(new URL('..',import.meta.url)),repo=fileURLToPath(new URL('../../..',import.meta.url)),cache=mkdtempSync(join(tmpdir(),'payroll-reference-vite-'));const server=await createServer({root:app,cacheDir:cache,server:{host:'127.0.0.1',port:0,fs:{allow:[repo]}},logLevel:'silent'});
  try{await server.listen();for(const [width,height] of [[844,390],[568,320],[1024,768],[1280,800],[1440,900],[1920,1080]]){

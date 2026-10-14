@@ -32,4 +32,7 @@
 .dr-empty { padding:18px 8px; border:2px solid #9c0000; background:#fff2f2; color:#9c0000; font-weight:700; text-align:center; }
 .dr-notice { padding:15px; text-align:center; font-size:14px; }.dr-retry { display:block; margin:15px auto; background:#075267; color:white; border:0; border-radius:8px; padding:10px 16px; }
 .dr-refresh:focus-visible,.dr-content:focus-visible,.dr-retry:focus-visible { outline:2px solid #1476c8; outline-offset:-2px; }
-@media(max-width:900px) { .dr-table th,.dr-table td { padding:3px 1px; }.dr-table tfoot td { padding:5px 1px; }.dr-branch-header { padding:6px 3px; }.dr-content { padding:2px; } }
+.dr-overlay[data-report-max-900="true"] .dr-table :is(th,td) { padding:3px 1px; }
+.dr-overlay[data-report-max-900="true"] .dr-table tfoot td { padding:5px 1px; }
+.dr-overlay[data-report-max-900="true"] .dr-branch-header { padding:6px 3px; }
+.dr-overlay[data-report-max-900="true"] .dr-content { padding:2px; }
