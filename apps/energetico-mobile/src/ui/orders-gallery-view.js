@@ -85,6 +85,7 @@ function safeFailure(error, fallback) {
 export function createOrdersGallery({
   document: documentRef = globalThis.document,
   data,
+  invalidateRelatedReports,
   openMediaCollection,
   onClose,
   onHome,
@@ -156,8 +157,13 @@ export function createOrdersGallery({
     label: 'Adicionar um novo pedido', action: 'create-order',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
   let pendingMutations = 0;
-  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar,
-    onRefresh: () => loadSnapshot({ refresh: true }),
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header,
+    onRefresh: async () => {
+      // Reports query rows on opening; invalidate their source contracts for every order.
+      data.invalidateRelatedReports?.();
+      invalidateRelatedReports?.();
+      await loadSnapshot({ refresh: true });
+    },
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
   async function runMutation(operation) {
     pendingMutations++; refreshShortcut.sync();

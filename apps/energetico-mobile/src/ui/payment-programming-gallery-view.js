@@ -260,7 +260,7 @@ export function createPaymentProgrammingGallery({
   const refreshButton = el("button", "og-button", "Atualizar dados"); refreshButton.type = "button";
   actions.append(clearButton);
   let pendingMutations = 0;
-  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, button: refreshButton,
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refreshButton,
     onRefresh: () => loadSnapshot({ refresh: true }),
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
   async function runMutation(operation) {

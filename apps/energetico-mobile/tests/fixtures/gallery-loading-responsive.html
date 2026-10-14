@@ -38,7 +38,7 @@ try {
       const backdrop = getComputedStyle(screen).backgroundColor;
       let keyboardSafe = true;
       if (entry.name === 'launch' || entry.options?.kind) {
-        const buttons = [...header.querySelectorAll('button')];
+        const buttons = [...header.querySelectorAll('button:not(:disabled)')];
         buttons[0].focus();
         root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
         keyboardSafe = document.activeElement === buttons.at(-1);

@@ -140,7 +140,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
           blocksBackground: layer.contains(document.elementFromPoint(b.x, b.top+10)),
           cardsRetained: document.querySelectorAll('.pg-card').length === 3,
           mascotLoaded: indicator.querySelector('img').complete && indicator.querySelector('img').naturalWidth > 0,
-          navigationEnabled: [...document.querySelectorAll('.og-header button')].every(button => !button.disabled),
+          navigationEnabled: [...document.querySelectorAll('.og-header .screen-navigation button')].every(button => !button.disabled),
           overflow: document.documentElement.scrollWidth > innerWidth,
         };
       })()`);

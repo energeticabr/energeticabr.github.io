@@ -96,6 +96,57 @@ for (const [action, , dataFactory, method] of reports) {
   });
 }
 
+test('orders gallery sync makes a cached order validation report read its sources again', async t => {
+  let reads = 0, galleryOptions;
+  const h = harness(t, {
+    paymentLedgerDataFactory: async () => ({ loadOrderValidationSnapshot: async () => ({ rows: [{ id: '42', version: ++reads }] }) }),
+    ordersGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }), invalidateRelatedReports() {} }),
+    ordersGalleryFactory: async options => { galleryOptions = options; return { open() {}, destroy() {} }; },
+  });
+  await h.controller.start();
+  assert.equal(await h.view.emit('open-order-validation-report'), true);
+  assert.equal(h.panels.at(-1).latest.rows[0].version, 1);
+  await h.view.emit('select-reply', { replyId: 'action_orders_gallery', label: 'GALERIA PEDIDOS' });
+  assert.ok(galleryOptions?.invalidateRelatedReports);
+  galleryOptions.invalidateRelatedReports();
+  assert.equal(await h.view.emit('open-order-validation-report'), true);
+  assert.equal(h.panels.at(-1).latest.rows[0].version, 2);
+});
+
+test('launch gallery sync discards the supplier payroll report source and snapshot', async t => {
+  let reads = 0, galleryOptions;
+  const h = harness(t, {
+    supplierPayrollReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: '42', version: ++reads }] }), loadPaymentsForPayrollIds: async () => [] }),
+    ordersGalleryDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [] }), invalidateRelatedReports() {} }),
+    launchGalleryFactory: async options => { galleryOptions = options; return { open() {}, destroy() {} }; },
+  });
+  await h.controller.start();
+  assert.equal(await h.view.emit('open-supplier-payroll-report'), true);
+  assert.equal(h.panels.at(-1).latest.rows[0].version, 1);
+  await h.view.emit('select-reply', { replyId: 'action_launch_gallery', label: 'GALERIA LANÇAMENTOS' });
+  assert.ok(galleryOptions?.invalidateRelatedReports);
+  await galleryOptions.invalidateRelatedReports();
+  assert.equal(await h.view.emit('open-supplier-payroll-report'), true);
+  assert.equal(h.panels.at(-1).latest.rows[0].version, 2);
+});
+
+test('payroll gallery sync discards the supplier payroll report source and snapshot', async t => {
+  let reads = 0, galleryOptions;
+  const h = harness(t, {
+    supplierPayrollReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: '42', version: ++reads }] }), loadPaymentsForPayrollIds: async () => [] }),
+    hrPayrollGalleryDataFactory: async () => ({ loadPage: async () => ({ rows: [] }), loadPaymentsForPayrollId: async () => [], invalidateRelatedReports() {} }),
+    hrPayrollGalleryFactory: async options => { galleryOptions = options; return { open() {}, destroy() {} }; },
+  });
+  await h.controller.start();
+  assert.equal(await h.view.emit('open-supplier-payroll-report'), true);
+  assert.equal(h.panels.at(-1).latest.rows[0].version, 1);
+  await h.view.emit('select-reply', { replyId: 'action_hr_gallery_idfolha', label: 'GALERIA IDFOLHA' });
+  assert.ok(galleryOptions?.invalidateRelatedReports);
+  galleryOptions.invalidateRelatedReports();
+  assert.equal(await h.view.emit('open-supplier-payroll-report'), true);
+  assert.equal(h.panels.at(-1).latest.rows[0].version, 2);
+});
+
 test('refresh capture invalidates before the view handler, including an icon click', async t => {
   let reads = 0;
   const h = harness(t, { quotationReportDataFactory: async () => ({ loadSnapshot: async () => ({ rows: [{ id: ++reads }] }) }) });

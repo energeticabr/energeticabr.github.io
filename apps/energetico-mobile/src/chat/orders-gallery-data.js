@@ -213,7 +213,8 @@ export function createOrdersGalleryData(options = {}) {
   });
   const launchGroups = createLaunchClusterData(sharedOptions);
   const linkedReport = createOrdersLinkedReportData(sharedOptions);
-  return Object.freeze({ ...data, loadLaunchGroup: launchGroups.loadGroup, loadLinkedReport: linkedReport.loadLinkedReport });
+  return Object.freeze({ ...data, loadLaunchGroup: launchGroups.loadGroup, loadLinkedReport: linkedReport.loadLinkedReport,
+    invalidateRelatedReports: () => { launchGroups.invalidate(); linkedReport.invalidate(); } });
 }
 
 export function createLaunchClusterData({
@@ -288,7 +289,7 @@ export function createLaunchClusterData({
     throw new OrdersGalleryDataError("launches_group_page_limit", "Os lançamentos do pedido ultrapassaram o limite seguro de páginas.");
   }
 
-  return Object.freeze({ loadGroup });
+  return Object.freeze({ loadGroup, invalidate: () => { resolvedList = undefined; } });
 }
 
 export function createTasksGalleryData(options = {}) {
@@ -605,6 +606,7 @@ export function createHrPayrollGalleryData({
       createPayrollSheetCreateData({ repository, siteKey: SITE_KEY, now, assertSession, attempts: sheetCreationAttempts }));
   }
   return Object.freeze({ loadPage, loadFilteredPage, loadPaymentsForPayrollId, loadEditor, saveEditor,
+    invalidateRelatedReports: () => { filterSnapshots.delete('FOLHAPGTO'); listRequests.delete('FOLHAPGTO'); },
     loadPaymentOptions: async options => (await payments()).loadOptions(options),
     savePayment: async (draft, options) => (await payments()).save(draft, options),
     loadSheetOptions: async options => (await sheets()).loadOptions(options),

@@ -179,5 +179,5 @@ export function createOrdersLinkedReportData({ repository, siteKey = 'personal' 
     abort(signal);
     return buildOrdersLinkedReport({ orderId, order, active, deleted });
   }
-  return Object.freeze({ loadLinkedReport });
+  return Object.freeze({ loadLinkedReport, invalidate: () => contracts.clear() });
 }

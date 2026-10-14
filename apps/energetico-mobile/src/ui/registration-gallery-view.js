@@ -257,7 +257,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const filterErrors = new Map();
   const filterSources = new Map([...filterControls.keys()].map(field => [field, data.getFilterSource?.(field)]).filter(([, source]) => source));
   let pendingMutations = 0;
-  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, button: refresh,
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header, button: refresh,
     onRefresh: () => load({ refresh: true }),
     isAvailable: () => !destroyed && !attachmentLoading && !pendingMutations });
   if (kind === 'provisionDescription') {
@@ -265,7 +265,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     search.before(searchWrap); searchWrap.append(provisionDescriptionIcon(doc, 'search'), search);
     const filter = createShortcut.toolbar.querySelector('.gallery-filter-button');
     filter.replaceChildren(provisionDescriptionIcon(doc, 'filter'), el('span', '', 'Filtros'));
-    refresh.prepend(provisionDescriptionIcon(doc, 'refresh'));
   }
   async function runMutation(operation) {
     pendingMutations++; refreshShortcut.sync();

@@ -111,7 +111,7 @@ for (const entry of galleryCases.filter(entry => ['orders', 'tasks', 'payments']
 for (const entry of galleryCases.filter(entry => ['launch', 'group'].includes(entry.name))) {
   test(`${entry.name}: busy keyboard navigation excludes hidden content`, async t => {
     const ctx = setup(t, entry, { onHome: () => {} }), opening = ctx.gallery.open(), root = ctx.root();
-    const buttons = [...root.querySelector(':scope > header').querySelectorAll('button')];
+    const buttons = [...root.querySelector(':scope > header').querySelectorAll('button:not(:disabled)')];
     assert.equal(buttons.length, 2);
     buttons[0].focus();
     root.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));

@@ -66,6 +66,19 @@ test('linked report reads the selected order and all exactly grouped active and 
   assert.equal(ctx.reads.filter(read => read.list === 'LANCAMENTOS').length, 2);
 });
 
+test('gallery sync invalidates all linked report contracts, independent of visible order IDs', async () => {
+  const columns = [];
+  const ctx = harness({ async getColumns(_site, list) { columns.push(list); return columnsFor(list); } });
+  await report(ctx, '319');
+  await report(ctx, '319');
+  assert.equal(columns.length, 3, 'ordinary report reads reuse only schema metadata, not row data');
+  ctx.data.invalidateRelatedReports();
+  await report(ctx, '319');
+  assert.deepEqual(columns, ['NOTASPENDENTES', 'LANCAMENTOS', 'ARQUIVOLANCAMENTOS',
+    'NOTASPENDENTES', 'LANCAMENTOS', 'ARQUIVOLANCAMENTOS']);
+  assert.equal(ctx.reads.filter(read => read.id === '319').length, 3, 'every report opening still reads fresh rows');
+});
+
 test('failed related reads never become a zero count report', async () => {
   const ctx = harness({ async getItemsPage(_site, list) { if (list === 'ARQUIVOLANCAMENTOS') throw new Error('Sem acesso ao arquivo'); return { items: [], hasMore: false }; } });
   await assert.rejects(report(ctx), /Sem acesso ao arquivo/);

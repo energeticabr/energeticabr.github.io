@@ -264,7 +264,7 @@ export function createRecurringExpensesGallery({
     label: 'Adicionar uma nova despesa recorrente', action: 'create-recurring-expense',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
   let pendingMutations = 0;
-  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar, button: refreshButton,
+  const refreshShortcut = attachGalleryRefreshButton({ document: doc, root, container: toolbar, header, button: refreshButton,
     onRefresh: () => loadSnapshot({ refresh: true }),
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading && !pendingMutations });
   async function runMutation(operation) {
