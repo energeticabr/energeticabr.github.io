@@ -3961,15 +3961,74 @@ test("resumo agrupa o fundo pelo ID de etapa e atividade juntos mesmo com fornec
   ]);
   t.after(() => dom.window.close());
   const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
-  const fills = rows.map(row => dom.window.getComputedStyle(row).backgroundColor);
+  const supplierRows = new Map(rows.map(row => [row.querySelectorAll(".chat-presence-table-cell b")[1].textContent, row]));
+  const fill = supplier => dom.window.getComputedStyle(supplierRows.get(supplier)).backgroundColor;
   assert.ok(dom.window.document.querySelector(".chat-presence-table--batch"), "data adicional mantém os campos empilhados");
-  assert.notEqual(fills[0], "rgba(0, 0, 0, 0)", "cada grupo tem fundo visível");
-  assert.equal(fills[0], fills[2], "presença, fornecedor e data não mudam a dupla etapa/atividade");
-  assert.equal(fills[0], fills[5], "o ID, não o texto renomeado da etapa, identifica o grupo");
-  assert.equal(new Set([fills[0], fills[1], fills[3], fills[4]]).size, 4, "alterar só um dos campos já muda o fundo");
-  assert.deepEqual(rows.map(row => row.querySelectorAll(".chat-presence-table-cell b")[1].textContent), ["LUIZ", "ANA", "CLEITON", "JOSÉ", "EDGAR", "MAURO"]);
-  assert.match(rows[2].querySelector(".chat-presence-table-cell--absent").textContent, /AUSENTE/);
-  assert.equal(rows[0].getAttribute("aria-label"), rows[2].getAttribute("aria-label"), "leitores de tela identificam o mesmo grupo");
+  assert.notEqual(fill("LUIZ"), "rgba(0, 0, 0, 0)", "cada grupo tem fundo visível");
+  assert.equal(fill("LUIZ"), fill("CLEITON"), "presença, fornecedor e data não mudam a dupla etapa/atividade");
+  assert.equal(fill("LUIZ"), fill("MAURO"), "o ID, não o texto renomeado da etapa, identifica o grupo");
+  assert.equal(new Set([fill("LUIZ"), fill("ANA"), fill("JOSÉ"), fill("EDGAR")]).size, 4, "alterar só um dos campos já muda o fundo");
+  assert.deepEqual([...supplierRows.keys()], ["LUIZ", "CLEITON", "MAURO", "ANA", "JOSÉ", "EDGAR"]);
+  assert.match(supplierRows.get("CLEITON").querySelector(".chat-presence-table-cell--absent").textContent, /AUSENTE/);
+  assert.equal(supplierRows.get("LUIZ").getAttribute("aria-label"), supplierRows.get("CLEITON").getAttribute("aria-label"), "leitores de tela identificam o mesmo grupo");
+});
+
+test("resumo em lote aproxima fornecedores da mesma tarefa sem perder a ordem interna", t => {
+  const dom = attendanceSummaryDocument([
+    attendanceSummaryRow("LUIZ", "127 - FUNDAÇÃO", "TUBULÃO"),
+    attendanceSummaryRow("ANA", "125 - PILARES", "CONCRETAGEM"),
+    attendanceSummaryRow("CLEITON", "127 - FUNDAÇÃO", "TUBULÃO", { presence: "AUSENTE" }),
+    attendanceSummaryRow("EDGAR", "125 - PILARES", "CONCRETAGEM"),
+    attendanceSummaryRow("MAURO", "127 - FUNDAÇÃO", "ESCAVAÇÃO"),
+  ]);
+  t.after(() => dom.window.close());
+  const style = dom.window.document.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  dom.window.document.head.append(style);
+  const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
+  assert.deepEqual(rows.map(row => row.querySelectorAll(".chat-presence-table-cell b")[1].textContent),
+    ["LUIZ", "CLEITON", "ANA", "EDGAR", "MAURO"]);
+  assert.equal(rows[0].style.backgroundColor, rows[1].style.backgroundColor);
+  assert.equal(rows[2].style.backgroundColor, rows[3].style.backgroundColor);
+  assert.notEqual(rows[1].style.backgroundColor, rows[2].style.backgroundColor);
+  assert.match(rows[1].textContent, /AUSENTE/);
+  assert.equal(dom.window.getComputedStyle(rows[1]).borderTopWidth, "2px", "cada fornecedor tem separação visível");
+  assert.equal(dom.window.getComputedStyle(rows[2]).borderTopWidth, "4px", "uma nova tarefa tem divisor mais forte");
+});
+
+test("agrupamento usa também o campo combinado de ID de etapa e atividade", t => {
+  const combined = supplier => attendanceSummaryRow(supplier, "127 - FUNDAÇÃO", "TUBULÃO", {
+    descriptorLabel: "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA",
+  });
+  const dom = attendanceSummaryDocument([
+    combined("LUIZ"),
+    attendanceSummaryRow("ANA", "125 - PILARES", "CONCRETAGEM"),
+    combined("CLEITON"),
+  ]);
+  t.after(() => dom.window.close());
+  const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
+  assert.deepEqual(rows.map(row => row.querySelectorAll(".chat-presence-table-cell b")[1].textContent),
+    ["LUIZ", "CLEITON", "ANA"]);
+  assert.equal(rows[0].style.backgroundColor, rows[1].style.backgroundColor);
+});
+
+test("feriado aparece em selo amarelo no resumo em lote sem reabrir outros campos de motivação", t => {
+  const holiday = [...attendanceSummaryRow("LUIZ", "127 - FUNDAÇÃO", "TUBULÃO", { presence: "AUSENTE" }),
+    { label: "MOTIVAÇÃO", value: "FERIADO" }];
+  const rain = [...attendanceSummaryRow("ANA", "125 - PILARES", "CONCRETAGEM", { presence: "AUSENTE" }),
+    { label: "MOTIVACAO", value: "CHUVA" }];
+  const dom = attendanceSummaryDocument([holiday, rain]);
+  t.after(() => dom.window.close());
+  const style = dom.window.document.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  dom.window.document.head.append(style);
+  const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
+  const holidayBadge = rows[0].querySelector(".chat-presence-table-cell--holiday b");
+  assert.equal(holidayBadge?.textContent, "FERIADO");
+  assert.equal(dom.window.getComputedStyle(holidayBadge).backgroundColor, "rgb(255, 242, 179)");
+  assert.equal(rows[1].querySelector(".chat-presence-table-cell--holiday"), null);
+  assert.doesNotMatch(rows[1].textContent, /CHUVA/);
+  assert.equal(rows[1].querySelectorAll(".chat-presence-table-cell").length, 5);
 });
 
 test("resumo não reutiliza fundos de grupos diferentes quando há mais tipos de atividade", t => {
