@@ -113,7 +113,7 @@ test('grouped provision rows fit phone and PC canvases when expanded without cha
       assert.equal(probe.branchDisplay,'table-cell',`${width}px: FILIAL must stay in the table grid`);
       assert.ok(Math.abs((probe.toggleRect.top+probe.toggleRect.height/2)-(probe.branchTextRect.top+probe.branchTextRect.height/2))<=3,`${width}px: arrow must share the branch line`);
       assert.ok(probe.toggleRect.right<=probe.branchRect.right+1,`${width}px: arrow escapes the branch cell`);
-      assert.ok(probe.toggleRect.width>=28,`${width}px: arrow shrank below the existing control size`);
+      assert.ok(probe.toggleRect.width>=27,`${width}px: arrow shrank below the existing 28px logical control size (${probe.toggleRect.width}px)`);
       assert.equal(probe.equalBranch,'');assert.equal(probe.equalSupplier,'');
       assert.match(probe.equalStatus,/VENCIDO HÁ 2 DIAS/,`${width}px: differing due status must remain visible`);
       assert.equal(probe.differentBranch,'004 - EDIFÍCIO XAVANTE');

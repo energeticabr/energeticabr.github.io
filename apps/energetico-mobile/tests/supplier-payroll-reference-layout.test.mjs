@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {existsSync,mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {fileURLToPath} from 'node:url';import {createServer} from 'vite';import {JSDOM} from 'jsdom';import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
 const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
-test('portrait payroll report keeps its landscape controls while filling phone height and exposing only lateral backdrop',{timeout:120000},async t=>{
+test('portrait payroll report keeps its landscape controls while fitting phone width with lateral backdrop',{timeout:120000},async t=>{
  if(!browser)return t.skip('Chromium indisponível');
  const app=fileURLToPath(new URL('..',import.meta.url)),repo=fileURLToPath(new URL('../../..',import.meta.url)),cache=mkdtempSync(join(tmpdir(),'payroll-portrait-vite-'));
  const server=await createServer({root:app,cacheDir:cache,server:{host:'127.0.0.1',port:0,fs:{allow:[repo]}},logLevel:'silent'});
@@ -16,8 +16,8 @@ test('portrait payroll report keeps its landscape controls while filling phone h
    }
    const [landscape,portrait]=layouts;
    assert.equal(portrait.portrait,true);
-   assert.ok(Math.abs(portrait.dialog.top)<1&&Math.abs(portrait.dialog.bottom-logicalWidth)<1,'portrait dialog fills physical height');
-   assert.ok(portrait.dialog.left>=16&&390-portrait.dialog.right>=16,'only lateral backdrop remains available to close');
+   assert.ok(portrait.dialog.top>logicalWidth*.2&&portrait.dialog.bottom<logicalWidth*.8,'portrait dialog leaves physical Y backdrop visible');
+   assert.ok(portrait.dialog.left>=24&&390-portrait.dialog.right>=24,'lateral backdrop remains available to close');
    for(const key of ['filterColumns','sheetIcon','metricIcon','rubrics'])assert.equal(portrait[key],landscape[key],`${logicalWidth}px ${key} must not change on rotation`);
   }
  }finally{await server.close();rmSync(cache,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
