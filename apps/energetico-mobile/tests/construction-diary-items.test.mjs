@@ -44,6 +44,25 @@ test('atividades começam em 1 e o índice vazio não pode ser enviado', t => {
   assert.equal(ctx.events.some(event => event.type === 'send-text'), false);
 });
 
+test('sugestões recentes substituem abandonar e apenas preenchem o rascunho até Enviar', t => {
+  const ctx = setup(t, { messages: [{ role: 'assistant', type: 'poll', question: 'DIGITE AS ATIVIDADES EXECUTADAS:',
+    options: [{ id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' }],
+    recentDiaryActivities: ['Impermeabilização arrimo', 'Escoramento laje'] }] });
+  assert.equal(ctx.root.querySelector('[data-reply-id="abandon_construction_diary"]'), null);
+  const suggestions = [...ctx.root.querySelectorAll('[data-action="append-diary-activity"]')];
+  assert.equal(suggestions.length, 2);
+  suggestions[0].click();
+  assert.equal(ctx.draft.value, '1. Impermeabilização arrimo;\n2. ');
+  assert.equal(ctx.events.some(event => event.type === 'send-text' || event.type === 'select-reply'), false);
+  ctx.root.querySelectorAll('[data-action="append-diary-activity"]')[1].click();
+  assert.equal(ctx.draft.value, '1. Impermeabilização arrimo;\n2. Escoramento laje;\n3. ');
+  ctx.root.querySelectorAll('[data-action="append-diary-activity"]')[0].click();
+  assert.equal(ctx.draft.value, '1. Impermeabilização arrimo;\n2. Escoramento laje;\n3. ');
+  ctx.root.querySelector('[data-chat-form]').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(ctx.events.at(-1).type, 'send-text');
+  assert.equal(ctx.state.draft, '1. Impermeabilização arrimo;\n2. Escoramento laje;');
+});
+
 const occurrencesQuestion = '💬 ⚠️ HOUVE OCORRÊNCIAS OU IMPREVISTOS? SE NÃO HOUVE, SELECIONE NADA APONTADO. CASO CONTRÁRIO, DIGITE O QUE OCORREU.\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
 function occurrencesMessages() {
   return [{ id: 'diary-occurrences', role: 'assistant', type: 'poll', question: occurrencesQuestion,

@@ -234,6 +234,11 @@ async function defaultPendingWorkDiariesReportDataFactory(options) {
   return createPendingConstructionDiaryData({ ...options, strictReport: true });
 }
 
+async function defaultRecentDiaryActivitiesDataFactory(options) {
+  const { createRecentConstructionDiaryActivitiesData } = await import('./chat/recent-construction-diary-activities.js');
+  return createRecentConstructionDiaryActivitiesData(options);
+}
+
 async function defaultDelegatedDeadlineReportViewFactory(options) {
   const { createDelegatedDeadlineReportView } = await import('./ui/delegated-deadline-report-view.js');
   return createDelegatedDeadlineReportView(options);
@@ -958,6 +963,7 @@ export function createAppController({
   registrationGalleryDataFactory = defaultRegistrationGalleryDataFactory,
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   pendingConstructionDiaryDataFactory,
+  recentDiaryActivitiesDataFactory = defaultRecentDiaryActivitiesDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
   payrollSheetCreateFactory = defaultPayrollSheetCreateFactory,
@@ -1316,6 +1322,12 @@ export function createAppController({
   let pendingConstructionDiarySessionDismissed = false;
   let pendingConstructionDiaryRequest = null;
   let pendingConstructionDiaryData = null;
+  let recentDiaryPoll = null;
+  let recentDiaryActivities = [];
+  let recentDiaryActivitiesLoading = false;
+  let recentDiaryActivitiesError = false;
+  let recentDiaryActivitiesRequest = null;
+  let recentDiaryActivitiesAbort = null;
   let pendingNoteLaunchOrderId = "";
   let pendingNoteLaunchFailed = false;
   let pendingNoteLaunchNeedsResync = false;
@@ -4162,6 +4174,19 @@ export function createAppController({
       waiters.forEach(resolve => resolve());
     }
     const state = store.getState();
+    const currentDiaryPoll = latestAssistantPoll(state.messages);
+    const diaryActivityPrompt = /^construction_diary_(?:create|fill)$/.test(String(state.activeFlow?.id || ""))
+      && /atividades\s+executadas/i.test(String(currentDiaryPoll?.question || currentDiaryPoll?.prompt || ""));
+    const activeDiaryPoll = diaryActivityPrompt && account && !stopped ? currentDiaryPoll : null;
+    if (activeDiaryPoll !== recentDiaryPoll) {
+      recentDiaryActivitiesAbort?.abort();
+      recentDiaryActivitiesAbort = null;
+      recentDiaryActivitiesRequest = null;
+      recentDiaryPoll = activeDiaryPoll;
+      recentDiaryActivities = [];
+      recentDiaryActivitiesLoading = Boolean(activeDiaryPoll);
+      recentDiaryActivitiesError = false;
+    }
     // Keep the checked batch visually stable while the VM records each item.
     const nextEpiSelectionIds = epiFinalizeProgress
       ? epiFinalizeProgress.products.map(product => String(product.id))
@@ -4193,6 +4218,15 @@ export function createAppController({
       }
     }
     renderMessages = decorateAttendanceRhidBadges(state, renderMessages);
+    if (activeDiaryPoll) {
+      const poll = latestAssistantPoll(renderMessages);
+      if (poll) {
+        renderMessages = renderMessages.slice();
+        renderMessages[renderMessages.lastIndexOf(poll)] = {
+          ...poll, recentDiaryActivities, recentDiaryActivitiesLoading, recentDiaryActivitiesError,
+        };
+      }
+    }
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
@@ -4232,6 +4266,45 @@ export function createAppController({
       signaturePlacement,
       error: sessionError || state.error,
     });
+    if (activeDiaryPoll && recentDiaryActivitiesLoading && !recentDiaryActivitiesRequest) {
+      const controller = new AbortController();
+      const requestAccount = account;
+      const requestRevision = sessionRevision;
+      const requestPoll = activeDiaryPoll;
+      recentDiaryActivitiesAbort = controller;
+      const current = () => !stopped && account === requestAccount && sessionRevision === requestRevision
+        && recentDiaryPoll === requestPoll && !controller.signal.aborted;
+      const request = (async () => {
+        try {
+          const data = await recentDiaryActivitiesDataFactory({ tokenProvider: async scopes => {
+            try { return await auth.getToken(scopes); }
+            catch (error) {
+              if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
+              await auth.authorize(scopes);
+              if (!current()) throw new Error("A sessão do diário foi encerrada.");
+              return auth.getToken(scopes);
+            }
+          } });
+          if (!current()) return;
+          const activities = await data.load({ signal: controller.signal });
+          if (!current()) return;
+          recentDiaryActivities = Array.isArray(activities) ? activities : [];
+          recentDiaryActivitiesError = false;
+        } catch {
+          if (!current()) return;
+          recentDiaryActivities = [];
+          recentDiaryActivitiesError = true;
+        } finally {
+          if (current()) {
+            recentDiaryActivitiesLoading = false;
+            recentDiaryActivitiesRequest = null;
+            recentDiaryActivitiesAbort = null;
+            render();
+          }
+        }
+      })();
+      recentDiaryActivitiesRequest = request;
+    }
   }
 
   function preparePresenceResult(result) {
@@ -10694,6 +10767,8 @@ export function createAppController({
   }
 
   function stop() {
+    recentDiaryActivitiesAbort?.abort();
+    recentDiaryActivitiesAbort = null;
     clearAttendanceRhidBadges();
     reportSnapshots.reset();
     unsubscribeReportMutations?.();

@@ -7349,13 +7349,13 @@ test("diário troca abandonar por finalizar na etapa de anexos e mantém o atalh
   dom.window.close();
 });
 
-test("diário preserva abandonar na pergunta de atividades e desativa os dois finalizar durante envio", () => {
+test("diário remove abandonar na pergunta de atividades e desativa os dois finalizar durante envio", () => {
   const state = signedInState({ activeFlow: { id: "construction_diary_fill" },
     messages: [{ role: "assistant", type: "poll", question: "DIGITE AS ATIVIDADES EXECUTADAS:",
       options: [{ id: "abandon_construction_diary", label: "ABANDONAR DIÁRIO DE OBRAS" }],
     }],
   });
-  assert.match(renderChatMarkup(state), /data-reply-id="abandon_construction_diary"/);
+  assert.doesNotMatch(renderChatMarkup(state), /data-reply-id="abandon_construction_diary"/);
   assert.doesNotMatch(renderChatMarkup(state), /data-action="finish-flow"/);
   state.messages[0].options.unshift({ id: "attachment_upload_continue", label: "ENVIAR ANEXO" });
   state.messages[0].question = "ENVIE UMA FOTO OU UM PDF.";
