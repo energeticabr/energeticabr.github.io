@@ -321,7 +321,8 @@ function assistantAvatar() {
 function hrGalleryAction(option) {
   const identifiers = [option?.id, option?.reply, option?.value].map(value => String(value || ""));
   return identifiers.includes("action_hr_gallery_idfolha")
-    || identifiers.includes("action_hr_gallery_folhapgto");
+    || identifiers.includes("action_hr_gallery_folhapgto")
+    || identifiers.includes("action_hr_gallery_presencas");
 }
 
 function isHrPayrollGalleryMenu(message) {
@@ -332,6 +333,7 @@ function hrPayrollGalleryOptions(options) {
   const definitions = [
     { id: "action_hr_gallery_idfolha", reply: "action_hr_gallery_idfolha", label: "📚 GALERIA IDFOLHA" },
     { id: "action_hr_gallery_folhapgto", reply: "action_hr_gallery_folhapgto", label: "💵 GALERIA FOLHA PGTO" },
+    { id: "action_hr_gallery_presencas", reply: "action_hr_gallery_presencas", label: "📋 GALERIA DE PRESENÇAS" },
   ];
   return definitions.map(definition => options.find(option => draftReplyId(option).trim().toLowerCase() === definition.id) || definition);
 }
@@ -1594,16 +1596,15 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const documentsGallery = isAuditMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_documents_gallery")
     : null;
-  const galleryChoices = [...galleryOptions]
-    .sort((left, right) => {
-      const rank = option => draftReplyId(option).trim().toLowerCase() === "action_hr_gallery_idfolha" ? 0 : 1;
-      return rank(left) - rank(right);
-    })
-    .map(option => pollButton(option, busy, { galleryButton: true }))
-    .join("");
+  const hrChoices = isHrGalleryMenu ? orderedChoiceOptions.map((option, index) => {
+    const sideOptions = [];
+    if (index < 2) sideOptions.push(galleryOptions[index]);
+    if (draftReplyId(option).trim().toLowerCase() === "action_validate_attendance") sideOptions.push(galleryOptions[2]);
+    return `<div class="chat-hr-menu-row"><div class="chat-choice-columns__flow"><div class="chat-choice-list">${pollButton(option, busy)}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${sideOptions.filter(Boolean).map(gallery => pollButton(gallery, busy, { galleryButton: true })).join("")}</aside></div>`;
+  }).join("") : "";
   const choicesMarkup = choices
     ? isHrGalleryMenu
-      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries"><div class="chat-choice-columns__flow"><div class="${choiceListClass}">${choices}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${galleryChoices}</aside></div>`
+      ? `<div class="chat-choice-columns chat-choice-columns--hr-galleries">${hrChoices}</div>`
       : isLaunchMenu
       ? suppliesMenuChoices(regularOptions, { orders: ordersGallery, launches: galleryOption, payments: paymentProgrammingGallery, provisionDescription: provisionDescriptionGallery, recurring: recurringExpensesGallery, quotes: quoteGallery }, busy)
       : pairedMenu

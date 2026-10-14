@@ -7,12 +7,53 @@ import { createRegistrationGalleryData } from "../src/chat/registration-gallery-
 import { createRegistrationGallery } from "../src/ui/registration-gallery-view.js";
 
 const cases = [
+  ["presenceDescriptions", "DESCRITIVOPRESENCA", "G17- HISTÓRICODEMONSTRATIVOPRESENCA", "FORNECEDOR"],
   ["group", "CADASTROGRUPO", "G10- HISTÓRICO GRUPO", "GRUPO"],
   ["family", "CADASTRO FAMÍLIA_1", "G8- HISTÓRICO FAMÍLIA", "FAMÍLIA"],
   ["subfamily", "CADASTROSUBFAMÍLIA", "G35- HISTÓRICO SUBFAMÍLIA", "SUBFAMÍLIAS CADASTRADAS"],
   ["product", "CADASTROPRODUTO", "G38- HISTÓRICO PRODUTO", "PRODUTO"],
   ["documents", "DOCUMENTOS_1", "G47- HISTÓRICO DOCUMENTOS COMERCIAL_1", "TIPODOCUMENTO"],
 ];
+
+test("Galeria de presenças mostra descritivos e ações de editar e deletar", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const doc = dom.window.document;
+  const opened = [];
+  const gallery = createRegistrationGallery({ document: doc, kind: "presenceDescriptions", data: {
+    async loadSnapshot() { return { rows: [{ id: "2249", fields: {
+      FORNECEDOR: "LUIZ BERNARDO DOS SANTOS", DATA: "2026-10-13T00:00:00-03:00",
+      FILIAL: "004 - EDIFÍCIO XAVANTE", ATIVIDADEEXECUTADA: "ALVENARIA",
+      IDDESCRITIVOETAPA: "17", PRESENCA: "PRESENTE", STATUS: "PENDENTE PGTO",
+    } }] }; },
+    async listAttachments() { return [{ fileName: "comprovante.pdf" }]; },
+    downloadAttachment(id, name) { return `${id}/${name}`; },
+  }, openMediaCollection(items) { opened.push(items); } });
+  await gallery.open();
+  const card = doc.querySelector('[data-registration-row="2249"]');
+  assert.match(card.textContent, /LUIZ BERNARDO DOS SANTOS/);
+  assert.match(card.textContent, /13\/10\/2026/);
+  assert.match(card.textContent, /ALVENARIA/);
+  assert.ok(card.querySelector('[data-gallery-action="edit"]'));
+  assert.ok(card.querySelector('[data-gallery-action="delete"]'));
+  card.querySelector('[data-action="registration-attachments"]').click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(opened, [[{ fileName: "comprovante.pdf", source: "2249/comprovante.pdf" }]]);
+  gallery.destroy(); dom.window.close();
+});
+
+test("descritivo de presença usa o formulário G17 e exclusão condicional do próprio registro", async () => {
+  const deletions = [];
+  const data = createRegistrationGalleryData({ kind: "presenceDescriptions", repository: {
+    async resolveList(_site, aliases) { assert.equal(aliases[0], "DESCRITIVOPRESENCA"); return { status: "resolved", id: "presence-list" }; },
+    async getColumns() { return ["FORNECEDOR", "DATA", "STATUS"].map(name => ({ name, displayName: name, text: {} })); },
+    async getItem(_site, list, id) { assert.equal(list, "presence-list"); return { id, eTag: '"v3"', fields: { FORNECEDOR: "LUIZ", STATUS: "PENDENTE" } }; },
+    async deleteItem(...args) { deletions.push(args); },
+  } });
+  const context = await data.loadEditor("2249");
+  assert.equal(context.contract.formVariant.formName, "Form20");
+  await data.deleteItem("2249");
+  assert.deepEqual(deletions, [["personal", "presence-list", "2249", { eTag: '"v3"' }]]);
+});
 
 for (const [kind, listName, screen, primaryField] of cases) {
   test(`${kind} consulta a lista do modelo PowerApps ${screen}`, async () => {

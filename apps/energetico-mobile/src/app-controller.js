@@ -408,6 +408,7 @@ const RECURRING_EXPENSES_GALLERY_ID = "action_recurring_expenses_gallery";
 const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
+  action_hr_gallery_presencas: "presenceDescriptions",
   action_financial_movement_gallery: 'financial_movement',
   action_investment_gallery: 'investment',
   action_institution_gallery: 'institution',
@@ -437,6 +438,7 @@ const REGISTRATION_GALLERY_KIND = Object.freeze({
 });
 const DOCUMENT_SIGNING_EDIT_SIGNATURE_ID = "document_signing_edit_signature";
 const GALLERY_CREATION_ACTIONS = Object.freeze({
+  action_hr_gallery_presencas: ["action_create_supplier_attendance", "CRIAR PRESENÇA DE FORNECEDOR"],
   action_financial_movement_gallery: ['action_financial_movement', 'APONTAR MOVIMENTAÇÃO'],
   action_investment_gallery: ['action_register_investment', 'CADASTRO INVESTIMENTO'],
   action_institution_gallery: ['action_register_institution', 'CADASTRO INSTITUIÇÃO'],
@@ -8500,7 +8502,7 @@ export function createAppController({
           const panel = await registrationGalleryFactory({
             kind, data,
             onCreate: galleryCreationHandler(replyId, assertSession),
-            ...(["provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
+            ...(["presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
                 const collection = (Array.isArray(items) ? items : []).map(item => ({

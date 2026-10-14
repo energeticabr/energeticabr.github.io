@@ -14,6 +14,20 @@ const AUDIT_ALIASES = { Criado: ["Created"], Modificado: ["Modified"], "Criado p
 // Lista e campos das galerias baseadas nas telas Power Apps.
 export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   ...FINANCIAL_GALLERY_MODELS,
+  presenceDescriptions: Object.freeze({
+    title: "GALERIA DE PRESENÇAS", screen: "G17- HISTÓRICODEMONSTRATIVOPRESENCA",
+    listName: "DESCRITIVOPRESENCA", aliases: ["DESCRITIVOPRESENCA", "DESCRITIVO PRESENCA"],
+    nativeCard: true, showAttachments: true, recordLabel: "registro de presença", recordArticle: "o",
+    searchPlaceholder: "Pesquisar fornecedor, atividade ou ID",
+    fields: ["FORNECEDOR", "ID", "DATA", "FILIAL", "PROFISSAO", "ATIVIDADEEXECUTADA", "IDDESCRITIVOETAPA", "ETAPA", "IMOVEL", "PRESENCA", "STATUS", "HORÁRIO", "HORARIOSAIDA1", "HORARIOENTRADA2", "HORARIOSAIDA2", "VLORDIARIO", "OBSERVAÇÃO", ...AUDIT_FIELDS],
+    filterFields: ["ID", "DATA", "FILIAL", "FORNECEDOR", "PRESENCA", "STATUS"],
+    dateFilterFields: ["DATA"],
+    fieldAliases: { ...AUDIT_ALIASES, "HORÁRIO": ["HOR_x00c1_RIO"], "OBSERVAÇÃO": ["OBSERVA_x00c7__x00c3_O"] },
+    fieldLabels: { DATA: "Data", FILIAL: "Filial", FORNECEDOR: "Fornecedor", PROFISSAO: "Profissão", ATIVIDADEEXECUTADA: "Atividade executada", IDDESCRITIVOETAPA: "ID descritivo etapa", ETAPA: "Etapa", IMOVEL: "Imóvel", PRESENCA: "Presença", STATUS: "Status", "HORÁRIO": "Entrada 1", HORARIOSAIDA1: "Saída 1", HORARIOENTRADA2: "Entrada 2", HORARIOSAIDA2: "Saída 2", VLORDIARIO: "Valor diário", "OBSERVAÇÃO": "Observação" },
+    fieldTypes: { DATA: "date", VLORDIARIO: "currency" },
+    sourceSort: { field: "ID", direction: "desc", type: "number" },
+    editFormVariant: "G17- HISTÓRICODEMONSTRATIVOPRESENCA.pa.yaml#Form20",
+  }),
   provisionDescription: Object.freeze({
     title: "GALERIA DESCRITIVO PROVISÃO",
     listName: "DESCRITIVOPROVISAO", aliases: ["DESCRITIVOPROVISAO"],

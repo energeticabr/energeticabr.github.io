@@ -1032,6 +1032,7 @@ test("menu RH mostra galerias IDFOLHA e FOLHA PGTO sem depender de opções do b
       question: "👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?",
       options: [
         { id: "action_create_supplier_attendance", reply: "action_create_supplier_attendance", label: "➕ CRIAR PRESENÇA DE FORNECEDOR" },
+        { id: "action_validate_attendance", reply: "action_validate_attendance", label: "👷 VALIDAR PRESENÇAS APONTADAS" },
         { id: "action_contract", reply: "action_contract", label: "📑 CONTRATO" },
       ],
     }],
@@ -1041,7 +1042,13 @@ test("menu RH mostra galerias IDFOLHA e FOLHA PGTO sem depender de opções do b
   assert.match(article, /chat-choice-columns--hr-galleries/);
   assert.match(article, /data-reply-id="action_hr_gallery_idfolha"[^>]*>[^]*?GALERIA IDFOLHA/);
   assert.match(article, /data-reply-id="action_hr_gallery_folhapgto"[^>]*>[^]*?GALERIA FOLHA PGTO/);
-  assert.ok(article.indexOf("CONTRATO") < article.indexOf("GALERIA IDFOLHA"));
+  assert.match(article, /data-reply-id="action_hr_gallery_presencas"[^>]*>[^]*?GALERIA DE PRESENÇAS/);
+  assert.match(article, /chat-hr-menu-row[^]*?VALIDAR PRESENÇAS APONTADAS[^]*?GALERIA DE PRESENÇAS[^]*?<\/div>/);
+  const dom = new JSDOM(article);
+  const validationRow = [...dom.window.document.querySelectorAll('.chat-hr-menu-row')]
+    .find(row => row.querySelector('[data-reply-id="action_validate_attendance"]'));
+  assert.ok(validationRow?.querySelector('[data-reply-id="action_hr_gallery_presencas"]'));
+  dom.window.close();
   assert.ok(article.indexOf("GALERIA IDFOLHA") < article.indexOf("GALERIA FOLHA PGTO"));
 });
 

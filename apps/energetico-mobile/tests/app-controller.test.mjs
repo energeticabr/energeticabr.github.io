@@ -444,6 +444,27 @@ test("descritivo provisão abre localmente e reutiliza a galeria sem enviar coma
   assert.throws(sessionGuard,/sessão/);
 });
 
+test("galeria de presenças conecta o visualizador de anexos sem enviar comando à VM", async t => {
+  let opened = 0;
+  const h = makeHarness({
+    registrationGalleryDataFactory: async ({ kind }) => {
+      assert.equal(kind, "presenceDescriptions");
+      return { loadSnapshot: async () => ({ rows: [] }) };
+    },
+    registrationGalleryFactory: async ({ kind, openMediaCollection }) => {
+      assert.equal(kind, "presenceDescriptions");
+      assert.equal(typeof openMediaCollection, "function");
+      return { open() { opened++; }, destroy() {} };
+    },
+  });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const before = h.chatCalls.length;
+  await h.view.emit("select-reply", { replyId: "action_hr_gallery_presencas" });
+  assert.equal(opened, 1);
+  assert.equal(h.chatCalls.length, before);
+});
+
 test('popup keeps partial parent synchronization visible with pending child IDs instead of reporting success',async t=>{
  const message='O descritivo 306 foi salvo, mas a sincronização não foi concluída. Itens pendentes: 92.';
  const h=makeHarness({pendingProvisionAttachmentsDataFactory:async()=>({listAttachments:async()=>[],downloadAttachment:async()=>new Blob(),updateDueDate:async()=>{throw Object.assign(new Error(message),{code:'PROVISION_DESCRIPTION_SYNC_INCOMPLETE'});}})});
@@ -2033,6 +2054,7 @@ const galleryCreationCases = [
     ['CADASTRO INVESTIMENTO', 'CADASTRO INSTITUIÇÃO', 'CADASTRO TIPO INVESTIMENTO', 'CADASTRO DE RENTABILIDADE', 'CADASTRO TRIBUTAÇÃO'][index], `${kind}_registration`,
   ]),
   ['action_provision_description_gallery', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_payment', 'CRIAR UMA PROVISÃO DE PAGAMENTO', 'payment'],
+  ['action_hr_gallery_presencas', 'registrationGalleryFactory', 'registrationGalleryDataFactory', 'action_create_supplier_attendance', 'CRIAR PRESENÇA DE FORNECEDOR', 'supplier_attendance'],
   ['action_launch_gallery', 'launchGalleryFactory', null, 'action_launch', 'EFETUAR LANÇAMENTO', 'launch'],
   ['action_orders_gallery', 'ordersGalleryFactory', 'ordersGalleryDataFactory', 'action_pending_order_registration', 'EFETUAR CADASTRO DE PEDIDO (NOTAS PENDENTES)', 'pending_order_registration'],
   ['action_tasks_gallery', 'tasksGalleryFactory', 'tasksGalleryDataFactory', 'action_task', 'ADICIONAR UMA NOVA TAREFA', 'task'],
