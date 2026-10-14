@@ -14,6 +14,11 @@ await new Promise(requestAnimationFrame);
 const heading=document.querySelector('.chat-choice-card > p');
 const date=heading.querySelector('strong');
 const box=heading.getBoundingClientRect();
-document.documentElement.dataset.layout=JSON.stringify({text:heading.textContent,date:date?.textContent,color:date&&getComputedStyle(date).color,weight:date&&getComputedStyle(date).fontWeight,left:box.left,right:box.right,viewport:innerWidth});
+const header=document.querySelector('.chat-attendance-heading');
+const author=header?.querySelector('strong')?.getBoundingClientRect();
+const button=header?.querySelector('button')?.getBoundingClientRect();
+document.documentElement.dataset.layout=JSON.stringify({text:heading.textContent,date:date?.textContent,color:date&&getComputedStyle(date).color,weight:date&&getComputedStyle(date).fontWeight,left:box.left,right:box.right,viewport:innerWidth,
+  hours:button&&author&&{label:header.querySelector('button').textContent,left:button.left,right:button.right,bottom:button.bottom,
+    authorRight:author.right,centers:Math.abs((author.top+author.bottom-button.top-button.bottom)/2),questionTop:box.top}});
 document.documentElement.dataset.ready='true';
 </script></body></html>

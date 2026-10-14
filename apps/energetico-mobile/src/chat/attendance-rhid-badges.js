@@ -56,6 +56,15 @@ export function attendanceRhidOptionContext(option, poll) {
   return { presenceId, name, date, ...(rhidId ? { rhidId } : {}) };
 }
 
+export function attendanceValidationDate(poll) {
+  if (!attendanceRhidPollEligible(poll) || poll.presentation === "attendance_supplier_sync"
+    || (poll.options || []).some(option => /supplier_sync_target:\d+$/.test(replyId(option)))) return "";
+  const records = (poll.options || []).map(option => attendanceRhidOptionContext(option, poll)).filter(Boolean);
+  const dates = new Set(records.map(record => record.date));
+  const date = records.length ? (dates.size === 1 ? [...dates][0] : "") : poll.presenceDateKey;
+  return isValidRhidReportDate(date) ? date : "";
+}
+
 function badge(status, date, minutes) {
   const brDate = date ? date.split("-").reverse().join("/") : "";
   const day = brDate ? ` em ${brDate}` : "";
