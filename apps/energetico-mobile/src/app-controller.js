@@ -3882,7 +3882,7 @@ export function createAppController({
       if (query) databaseFilterRequestedKey = context.key;
       const sent = await sendText(
         query || "Limpar filtro",
-        query ? undefined : "filter_clear",
+        query ? "filter_query" : "filter_clear",
         { silent: true, preserveDraft: true },
       );
       if (sent && revision === databaseFilterRevision) {
@@ -10114,7 +10114,10 @@ export function createAppController({
       olderReferences = olderReferences.slice(1);
       persistRecovery(); render();
     });
-    bind("send-text", () => sendText());
+    bind("send-text", () => sendText(
+      store.getState().draft,
+      latestDatabaseFilter(store.getState().messages) ? "filter_query" : undefined,
+    ));
     bind("date-selected", command => {
       const formatted = formatDatePickerValue(command.value);
       return formatted ? sendText(formatted) : false;
