@@ -35,7 +35,7 @@ try {
   const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data:{async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};}},now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
   const portrait=root.dataset.reportPortrait==='true';
-  const panelBounds=root.querySelector('[role="dialog"]').getBoundingClientRect();
+  const reportPanel=root.querySelector('[role="dialog"]'),panelBounds=reportPanel.getBoundingClientRect();
   const rect=node=>{
     const {left,right,top,bottom,width,height}=node.getBoundingClientRect();
     // Compare the actual columns in the shared landscape coordinate system.
@@ -55,7 +55,7 @@ try {
     const annualScroll=annual.closest('.pr-section-scroll');if(annualScroll){annualScroll.scrollLeft=annualScroll.scrollWidth;await new Promise(requestAnimationFrame);}
     const reachTotal=annualScroll?{scroll:annualScroll.scrollLeft,total:rect(annual.querySelector('tbody tr [data-column=total]')),wrapper:rect(annualScroll)}:null;
     const capture=captureFilteredReport(root,{title:'Provisões de pagamento e despesas recorrentes'}),tables=capture.pages[0].blocks.filter(b=>b.type==='table');
-    const initial={loads,portrait,warning:!root.querySelector('.pl-orientation').hidden,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
+    const initial={loads,portrait,physicalPanel:{left:panelBounds.left,right:panelBounds.right,top:panelBounds.top,bottom:panelBounds.bottom},panelSize:{width:reportPanel.offsetWidth,height:reportPanel.offsetHeight},warning:!root.querySelector('.pl-orientation').hidden,logoLoaded:logo.naturalWidth>0,documentOverflow:document.documentElement.scrollWidth-innerWidth,
       navigationPadding:parseFloat(getComputedStyle(content).paddingInlineStart),
       toolbarOverflow:toolbar.scrollWidth-toolbar.clientWidth,contentOverflow:content.scrollWidth-content.clientWidth,contentHeight:content.clientHeight,panel:rect(root.querySelector('.pr-dialog')),content:rect(content),
       tableWidth:rect(main).width,availableWidth:main.closest('.pr-section-scroll').clientWidth,

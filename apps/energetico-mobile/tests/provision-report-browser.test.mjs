@@ -35,11 +35,17 @@ test('provision report keeps the original compact tables in landscape and portra
   const temporaryRoot=resolve(tmpdir()),cacheRoot=await mkdtemp(join(temporaryRoot,'provision-report-vite-'));let server;
   try{
     server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cacheRoot,'cache'),optimizeDeps:{noDiscovery:true,include:['decimal.js']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});await server.listen();
-    for(const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,bottom:21}],[667,375],[568,320],[1024,768],[1060,600],[1280,589],[1792,1000],[1920,1080],[390,844]]){
+    const rotatedPanelSizes=new Map();
+    for(const [width,height,safeAreaInsets] of [[844,390],[844,390,{left:47,right:47,bottom:21}],[667,375],[568,320],[1024,768],[1060,600],[1280,589],[1792,1000],[1920,1080],[390,844],[589,1280]]){
       const {stdout}=await runBrowserLayout(browser,{width,height,safeAreaInsets,url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-report-browser.html`});
       const dom=new JSDOM(stdout);let result;try{result=JSON.parse(dom.window.document.documentElement.dataset.layout);}finally{dom.window.close();}
       assert.equal(result.error,undefined,`${width}px: ${result.error}`);
       assert.equal(result.warning,false);
+      if((width===1280&&height===589)||(width===589&&height===1280))rotatedPanelSizes.set(`${width}x${height}`,result.panelSize);
+      if(result.portrait){
+        assert.ok(Math.abs(result.physicalPanel.left)<1&&Math.abs(result.physicalPanel.right-width)<1,`${width}x${height}: report must occupy the physical X axis`);
+        assert.ok(result.physicalPanel.top>=7&&result.physicalPanel.bottom<=height-7,`${width}x${height}: tappable backdrop must remain above and below`);
+      }
       for(const [index,layout] of result.tableLayouts.entries()){
         assert.equal(layout.display,'table',`${width}x${height}: ${layout.section} turned into cards`);
         assert.equal(layout.headerDisplay,'table-row');assert.notEqual(layout.headerPosition,'absolute');
@@ -90,6 +96,7 @@ test('provision report keeps the original compact tables in landscape and portra
       assert.match(result.annualText,/1\.234\.567,89/);assert.match(result.annualText,/02\/01\/2026/);assert.match(result.annualText,/02\/12\/2026/);
       t.diagnostic(`${width}x${height}: compact table rows, no annual status dots, whole dates/amounts and colored text`);
     }
+    assert.deepEqual(rotatedPanelSizes.get('589x1280'),rotatedPanelSizes.get('1280x589'),'provision report must retain its layout when the phone rotates');
   }finally{
     await server?.close();if(dirname(resolve(cacheRoot))!==temporaryRoot||!basename(cacheRoot).startsWith('provision-report-vite-'))throw new Error('Cache fora do diretório temporário autorizado.');
     await rm(cacheRoot,{recursive:true,force:true,maxRetries:5,retryDelay:250});

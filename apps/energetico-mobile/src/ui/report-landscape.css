@@ -1,5 +1,5 @@
-/* Keep the landscape report at its native size on a portrait phone. Rotation
-   maps its logical width to physical height, leaving only side dismissal gaps. */
+/* The rotated landscape width becomes the phone's physical height. Keep the
+   dismissal gaps on that logical axis so they appear above and below. */
 .report-landscape-viewport[data-report-portrait="true"] {
  position:fixed!important; inset:auto!important; top:0!important;
  left:var(--report-physical-width)!important;
@@ -7,11 +7,11 @@
  max-width:none!important; max-height:none!important;
  transform:rotate(90deg); transform-origin:0 0;
  box-sizing:border-box;
- padding:max(24px,6.5vw,env(safe-area-inset-right)) 0 max(24px,6.5vw,env(safe-area-inset-left))!important;
+ padding:0 max(8px,env(safe-area-inset-bottom)) 0 max(8px,env(safe-area-inset-top))!important;
 }
 .report-landscape-viewport[data-report-portrait="true"] [role="dialog"] {
  width:100%!important; height:100%!important; max-height:100%!important;
- padding:3px max(3px,env(safe-area-inset-bottom)) 3px max(3px,env(safe-area-inset-top))!important; border-radius:0!important;
+ padding:max(3px,env(safe-area-inset-right)) 3px max(3px,env(safe-area-inset-left)) 3px!important; border-radius:0!important;
 }
 .report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--previous { left:max(16px,env(safe-area-inset-top)); }
 .report-landscape-viewport[data-report-portrait="true"] .report-navigation-arrow--next { right:max(16px,env(safe-area-inset-bottom)); }
