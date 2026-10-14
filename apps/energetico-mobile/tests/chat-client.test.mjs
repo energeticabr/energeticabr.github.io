@@ -243,6 +243,18 @@ test("abre validação RHID vinculada ao ID pendente usando sessão autenticada"
   await assert.rejects(client.startRhidPendingValidation({ date: "2026-09-25", personKey: "rhid:9", presenceId: "0" }), /presença inválido/i);
 });
 
+test("abre a lista de validação RHID pela data do relatório", async () => {
+  let request;
+  const client = clientWith(async (url, options) => {
+    request = options;
+    return jsonResponse({ status: "processed", messages: [{ type: "poll", question: "QUAL PRESENÇA?", options: [] }] });
+  });
+  const result = await client.startRhidDayValidation("2026-10-13");
+  assert.equal(result.messages[0].question, "QUAL PRESENÇA?");
+  assert.deepEqual(JSON.parse(request.body), { action: "rhid_day_validation_start", date: "2026-10-13" });
+  await assert.rejects(client.startRhidDayValidation("2026-10-32"), /data válida/i);
+});
+
 test("consulta resumo mensal RHID autenticado sem baixar relatórios diários", async () => {
   let request;
   const client = clientWith(async (url, options) => {

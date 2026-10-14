@@ -2406,6 +2406,8 @@ export function createAppController({
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         const table = { ...buildRhidAttendanceTable(rows), reportDate: reportDay };
+        table.pendingValidationCount = Number.isSafeInteger(report.pendingValidationCount) && report.pendingValidationCount >= 0
+          ? report.pendingValidationCount : 0;
         const updateLabel = rhidUpdateLabel(report);
         const message = {
           type: "poll",
@@ -2521,6 +2523,56 @@ export function createAppController({
     } catch (error) {
       if (!stopped && account === targetAccount && sessionRevision === targetRevision)
         setSessionError(error, "Não foi possível abrir a validação desta presença.");
+      return false;
+    } finally {
+      rhidPendingValidationRequests.delete(requestKey);
+    }
+  }
+
+  async function startRhidDayValidation({ messageId } = {}) {
+    const state = store.getState();
+    const report = state.messages.find(item => String(item?.id || "") === String(messageId || ""));
+    const table = report?.detail_table || report?.detailTable;
+    if (!account || stopped || flowBusy() || rhidPendingValidationRequests.size
+      || report?.type !== "poll" || table?.kind !== "rhid_attendance"
+      || table.navigationBusy === true || !isValidRhidReportDate(table.reportDate)
+      || !Number.isSafeInteger(table.pendingValidationCount) || table.pendingValidationCount < 1) return false;
+    if (state.attachments?.length) {
+      setSessionError(new Error("Conclua ou retire os anexos pendentes antes de abrir a validação de presença."));
+      return false;
+    }
+    const previous = rhidAttendanceReportPreviousSnapshot;
+    if (state.activeFlow?.id === "attendance_validation"
+      && previous?.activeFlow?.id === "attendance_validation"
+      && attendanceValidationDate(latestAssistantPoll(previous.messages)) === table.reportDate) {
+      rhidAttendanceReportPreviousSnapshot = null;
+      lastPresenceValidationDate = table.reportDate;
+      return store.restoreSnapshot(previous);
+    }
+    if (typeof client.startRhidDayValidation !== "function") return false;
+    const requestKey = "day:" + messageId;
+    rhidPendingValidationRequests.add(requestKey);
+    const targetAccount = account, targetRevision = sessionRevision;
+    try {
+      const remote = await client.startRhidDayValidation(table.reportDate);
+      if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
+      const current = store.getState();
+      if (!sameRecordsExceptPreview(current.messages, state.messages)
+        || !sameRecordsExceptPreview(current.attachments, state.attachments)
+        || current.activeFlow !== state.activeFlow) {
+        setSessionError(new Error("A validação foi aberta na VM, mas a tela mudou. Toque em Retomar conversa para sincronizar."));
+        return false;
+      }
+      lastPresenceValidationDate = table.reportDate;
+      const result = preparePresenceResult(remote);
+      sessionError = null;
+      store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false });
+      rememberCurrentAssistantPoll(result, result.messages);
+      hydrateMediaPreviews();
+      return true;
+    } catch (error) {
+      if (!stopped && account === targetAccount && sessionRevision === targetRevision)
+        setSessionError(error, "Não foi possível abrir as presenças pendentes desta data.");
       return false;
     } finally {
       rhidPendingValidationRequests.delete(requestKey);
@@ -10024,7 +10076,7 @@ export function createAppController({
         "open-media", "open-file", "open-pending-provisions", "open-pending-provision-attachment",
         "resize-signature", "signature-placement-edit", "pick-files", "pick-pending-provision-attachments",
         "capture-photo", "pick-photos", "pick-document-files",
-        "open-rhid-attendance-today", "rhid-attendance-report-today", "rhid-presence-validate-open", "attendance-validation-hours",
+        "open-rhid-attendance-today", "rhid-attendance-report-today", "rhid-presence-validate-open", "rhid-day-validation-open", "attendance-validation-hours",
       ].includes(type)) {
         disposeDepreciationReport();
         disposeDocumentControlReport();
@@ -10459,6 +10511,7 @@ export function createAppController({
     bind("rhid-refresh", refreshRhidAttendance);
     bind("rhid-attendance-report-navigate", navigateRhidAttendanceReport);
     bind("rhid-presence-validate-open", startRhidPendingValidation);
+    bind("rhid-day-validation-open", startRhidDayValidation);
     bind("rhid-attendance-month-load", loadRhidAttendanceMonth);
     bind("rhid-attendance-adjust-save", saveRhidAttendanceAdjustment);
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));

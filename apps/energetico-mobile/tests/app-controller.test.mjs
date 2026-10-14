@@ -544,7 +544,7 @@ test("HORÁRIO abre RHID do dia em validação sem PDF e permite voltar à lista
   const requested = [], previews = [];
   h.client.getRhidAttendanceReport = async date => {
     requested.push(date);
-    return { date, rows: [{ ID_PESSOA_RHID: '9', NOME_COLABORADOR: 'ANA', BATIDAS_RHID: '07:00; 12:00; 13:00; 17:00' }] };
+    return { date, pendingValidationCount: 1, rows: [{ ID_PESSOA_RHID: '9', NOME_COLABORADOR: 'ANA', BATIDAS_RHID: '07:00; 12:00; 13:00; 17:00' }] };
   };
   h.native.previewMedia = async () => previews.push(true);
   t.after(() => { h.controller.stop(); view.destroy(); dom.window.close(); });
@@ -566,7 +566,9 @@ test("HORÁRIO abre RHID do dia em validação sem PDF e permite voltar à lista
   assert.equal(h.store.getState().messages.at(-1).detail_table.reportDate, '2026-09-25');
   assert.ok(root.querySelector('.chat-rhid-attendance-report'));
   assert.deepEqual(previews, []);
-  root.querySelector('[data-reply-id="navigation_back"]').click();
+  root.querySelector('[data-action="rhid-day-validation-open"]').click();
+  for (let attempt = 0; attempt < 30 && !root.querySelector('[data-action="attendance-validation-hours"]'); attempt++)
+    await new Promise(resolve => setImmediate(resolve));
   assert.ok(root.querySelector('[data-action="attendance-validation-hours"]'));
   assert.equal(root.querySelector('[data-action="attendance-select-toggle"]').checked, true);
   assert.match(root.querySelector('.chat-choice-card > p').textContent, /25\/09\/2026/);
@@ -634,6 +636,31 @@ test("botão de presença abre diretamente o fluxo do ID pendente da pessoa e da
   assert.deepEqual(requests, [{ date: "2026-09-25", personKey: "rhid:9", presenceId: "21" }]);
   assert.equal(h.store.getState().messages.at(-1).question, "VALIDAR ANA?");
   assert.equal(h.store.getState().activeFlow?.id, "attendance_validation");
+});
+
+test("botão geral do relatório abre a lista completa de validação da data selecionada", async t => {
+  const h = makeHarness();
+  const historicalDay = "2026-09-25";
+  h.client.getRhidAttendanceReport = async date => ({ date, pendingValidationCount: 2, rows: [
+    { ID_PESSOA_RHID: "9", NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00" },
+  ] });
+  const dates = [];
+  h.client.startRhidDayValidation = async date => {
+    dates.push(date);
+    return { status: "processed", messages: [{ type: "poll", question: "QUAL PRESENÇA?", options: [
+      { id: "pending_attendance_record:1", title: "1 - ANA" },
+      { id: "pending_attendance_record:2", title: "2 - BIA" },
+    ] }], activeFlow: { id: "attendance_validation", title: "VALIDAR PRESENÇAS" }, attachments: [] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit("rhid-attendance-report-generate", { value: historicalDay });
+  const report = h.store.getState().messages.at(-1);
+  assert.equal(report.detail_table.pendingValidationCount, 2);
+  assert.equal(await h.view.emit("rhid-day-validation-open", { messageId: report.id }), true);
+  assert.deepEqual(dates, [historicalDay]);
+  assert.equal(h.store.getState().messages.at(-1).options.length, 2);
+  assert.equal(h.store.getState().activeFlow.id, "attendance_validation");
 });
 
 test("ajuste RHID salva justificativa e atualiza somente o relatório selecionado", async t => {
