@@ -98,8 +98,8 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
   let items=[];
   if(typeof repository.getItemsPage==='function'){
    let cursor='';const seen=new Set();
-   for(let pageNumber=1;pageNumber<=400;pageNumber++){
-    active(signal);const page=await repository.getItemsPage(siteKey,list,'$expand=fields&$top=200',{pageNumber,maxPages:400,...(cursor?{cursor}:{}),...(signal?{signal}:{})});active(signal);
+   for(let pageNumber=1;pageNumber<=100;pageNumber++){
+    active(signal);const page=await repository.getItemsPage(siteKey,list,'$expand=fields&$top=100',{pageNumber,maxPages:100,...(cursor?{cursor}:{}),...(signal?{signal}:{})});active(signal);
     if(!Array.isArray(page?.items)||page.complete===false||page.partial||page.truncated)throw new Error('A consulta paginada das provisões está incompleta.');
     items.push(...page.items);
     if(page.hasMore!==true){if(page.nextLink)throw new Error('Cursor de paginação conflitante.');return items;}

@@ -16,11 +16,36 @@ export function fixture(){
 }
 
 test('parent edit patches parent then every exact linked child across pages, preserving line amounts',async()=>{const f=fixture();await f.save({OBS:'new',FORMAPGTO:'PIX',DATAPREVISTOPGTO:'2026-11-01'});assert.deepEqual(f.calls.filter(c=>c[0]==='patch').map(c=>c.slice(1,3)),[['parents','42'],['children','2'],['children','3']]);assert.equal(f.records.children.get('9').fields.OBS,'foreign');for(const id of ['2','3']){assert.equal(f.records.children.get(id).fields.OBS,'new');assert.equal(f.records.children.get(id).fields.FORMAPGTO,'PIX');}assert.equal(f.records.children.get('2').fields.VALORTOTAL,'50');assert.equal(f.records.children.get('3').fields.PRODUTO,'B');});
+test('linked provision scan respects repository pagination and Graph batch limits before saving',async()=>{
+ const f=fixture();const getPage=f.repo.getItemsPage;const pages=[];
+ f.repo.getItemsPage=async(site,list,query,options)=>{
+  const top=Number(new URLSearchParams(query).get('$top'));
+  if(options.maxPages>100)throw new RangeError('O limite de páginas deve estar entre 1 e 100.');
+  if(top>100)throw new RangeError('O lote Graph deve conter entre 1 e 100 registros.');
+  pages.push({pageNumber:options.pageNumber,maxPages:options.maxPages,top});
+  return getPage(site,list,query,options);
+ };
+ await f.save({OBS:'new'});
+ assert.deepEqual(pages,[{pageNumber:1,maxPages:100,top:100},{pageNumber:2,maxPages:100,top:100},{pageNumber:1,maxPages:100,top:100},{pageNumber:2,maxPages:100,top:100}]);
+ assert.equal(f.records.parents.get('42').fields.OBS,'new');
+ assert.equal(f.records.children.get('2').fields.OBS,'new');
+ assert.equal(f.records.children.get('3').fields.OBS,'new');
+});
 test('parent total edits never copy aggregate value to individual prices',async()=>{const f=fixture();await f.save({VALORTOTAL:'999'});assert.equal(f.calls.filter(c=>c[0]==='patch').length,1);assert.equal(f.records.children.get('2').fields.VALORTOTAL,'50');});
 test('explicit clearing propagates dates and notes',async()=>{const f=fixture();await f.save({OBS:'',DATAPGTOEFETUADO:null});assert.equal(f.records.children.get('2').fields.OBS,'');assert.equal(f.records.children.get('2').fields.DATAPGTOEFETUADO,null);});
 test('parent schedule date is represented as date text in legacy child field without inventing paid status',async()=>{const f=fixture();await f.save({PGTOAGENDADO:'2026-10-12T03:00:00Z'});assert.equal(f.records.children.get('2').fields.PGTOAGENDADO,'2026-10-12T03:00:00Z');assert.equal(f.records.children.get('2').fields.STATUS,undefined);});
 test('missing child metadata rejects before modifying parent',async()=>{const f=fixture();f.columns.children=f.columns.children.filter(c=>c.name!=='OBS');await assert.rejects(f.save({OBS:'new'}),/OBS|metadados/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});
 test('incomplete pagination rejects before writes',async()=>{const f=fixture();f.repo.getItemsPage=async()=>({items:[],hasMore:true});await assert.rejects(f.save({OBS:'new'}),/pagin|completa|cursor/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});
+test('linked provision scan refuses a 101st page without changing the parent',async()=>{
+ const f=fixture();let pages=0;
+ f.repo.getItemsPage=async(_site,_list,_query,options)=>{
+  pages++;assert.equal(options.maxPages,100);
+  return {items:[],hasMore:true,nextLink:`next-${pages}`};
+ };
+ await assert.rejects(f.save({OBS:'new'}),/limite seguro de páginas/i);
+ assert.equal(pages,100);
+ assert.equal(f.calls.filter(call=>call[0]==='patch').length,0);
+});
 test('missing child ETag rejects before writes',async()=>{const f=fixture();delete f.records.children.get('3').eTag;await assert.rejects(f.save({OBS:'new'}),/ETag|versão/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});
 test('partial failure identifies remaining children and retries without rewriting parent or completed child',async()=>{const f=fixture();let failed=false;f.setBeforePatch((list,id)=>{if(list==='children'&&id==='3'&&!failed){failed=true;throw new Error('offline');}});await assert.rejects(f.save({OBS:'new'}),error=>error.code==='PROVISION_DESCRIPTION_SYNC_INCOMPLETE'&&error.parentId==='42'&&error.pendingChildIds.includes('3'));await f.save({OBS:'new'});assert.equal(f.calls.filter(c=>c[0]==='patch'&&c[1]==='parents').length,1);assert.equal(f.calls.filter(c=>c[0]==='patch'&&c[2]==='2').length,1);assert.equal(f.records.children.get('3').fields.OBS,'new');});
 test('relinked child is not overwritten after parent update',async()=>{const f=fixture();f.setBeforePatch((list)=>{if(list==='parents')f.records.children.get('3').fields.DESCRITIVOPROVISAO='99';});await assert.rejects(f.save({OBS:'new'}),/vínculo|vinculad|sincron/i);assert.equal(f.records.children.get('3').fields.OBS,'child old');});
