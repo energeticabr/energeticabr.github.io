@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { attendanceBadgePoll, attendanceBadgeState } from '../helpers/attendance-rhid-badge-fixture.mjs';
+const poll = attendanceBadgePoll();
+poll.options[0].detail_table = [[{label:'DATA',value:'13/10/2026'}],[{label:'IDDESCRITIVOETAPA',value:'384'}],[{label:'ATIVIDADE',value:'PINTURA EXTERNA'}]];
+if (new URLSearchParams(location.search).has('plain')) {
+  poll.options[0].label = '2101 - JOSÉ GERALDO DOS SANTOS E OUTROS SERVIÇOS DE PINTURA EXTERNA';
+  delete poll.options[0].rhidBadge;
+  poll.options[0].detailTable = poll.options[0].detail_table;
+  delete poll.options[0].detail_table;
+}
+const view = createChatView(document.querySelector('#app'));
+view.render(attendanceBadgeState(poll));
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+const row = document.querySelector('.chat-attendance-select__row');
+const name = row.querySelector('.chat-attendance-select__name');
+const arrow = row.querySelector('.chat-attendance-select__arrow');
+const card = row.querySelector('.chat-attendance-select__card');
+const bounds = node => { const {left,right,top,bottom} = node.getBoundingClientRect(); return {left,right,top,bottom}; };
+const range = document.createRange();
+range.selectNodeContents(name);
+const before = {name:bounds(name),arrow:bounds(arrow),card:bounds(card),nameAlign:getComputedStyle(name).textAlign,
+  textRects:[...range.getClientRects()].map(r=>({left:r.left,right:r.right,top:r.top,bottom:r.bottom}))};
+arrow.click();
+const detail = row.querySelector('.chat-attendance-select__detail');
+document.documentElement.dataset.layout = JSON.stringify({before,detail:bounds(detail),shown:!detail.hidden,
+  checkbox:row.querySelector('input').checked,values:[...detail.querySelectorAll('dd')].map(node=>node.textContent),viewport:innerWidth});
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
