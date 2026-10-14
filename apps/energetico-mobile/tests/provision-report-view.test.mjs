@@ -213,3 +213,36 @@ test('multi-item description starts collapsed and expands original linked rows w
   assert.deepEqual([...root.querySelectorAll('.pr-table--provisions tr[data-id]')].map(node=>node.dataset.id),['301']);
   assert.equal(root.querySelector('[data-metric=pendingTotal]').textContent.replace(/\s/g,''),'R$0,10');
 });
+
+// Break: expanded items repeat the summary's branch, supplier, date and status
+// instead of reserving their cells for differences and each item's own value.
+test('expanded description omits only equal parent fields while preserving item details',async t=>{
+  const first={...row,id:'501',descriptionId:'42',branch:'Filial do pai',supplier:'Fornecedor do pai',
+    product:'Areia',dueDate:'2026-10-20',schedule:'PENDENTE',status:'PAGAMENTO PREVISTO',total:120};
+  const second={...first,id:'502',branch:'Outra filial',supplier:'Outro fornecedor',product:'Cimento',
+    dueDate:'2026-10-21',total:80};
+  const descriptions=[{id:'42',branch:'Filial do pai',supplier:'Fornecedor do pai',dueDate:'2026-10-20'}];
+  const {view,root}=setup(t,async()=>({provisions:[first,second],recurrences:[recurrence],descriptions}));
+  await view.open();
+  const summary=root.querySelector('tr[data-description-id="42"]');
+  const branch=summary.querySelector('[data-column=branch]');
+  assert.deepEqual([...branch.firstElementChild.children].map(node=>node.localName),['span','button']);
+  const toggle=branch.querySelector('button');toggle.click();
+  const equal=root.querySelector('tr[data-id="501"]'),different=root.querySelector('tr[data-id="502"]');
+  for(const name of ['branch','supplier','dueDate','schedule','status']){
+    assert.equal(equal.querySelector(`[data-column="${name}"]`).textContent,'',`${name} repeats the parent`);
+  }
+  assert.match(equal.querySelector('[data-column=status]').getAttribute('aria-label'),/PAGAMENTO PREVISTO · VENCE EM 15 DIAS/);
+  const {captureFilteredReport}=await import('../src/ui/report-print.js');
+  const exported=captureFilteredReport(root,{title:'Provisões'}).pages[0].blocks.find(block=>block.type==='table');
+  for(const column of [0,1,3,4,6]){
+    assert.deepEqual(exported.rows[3].cells[column].runs,[],`PDF repeats parent column ${column}`);
+  }
+  assert.match(equal.querySelector('[data-column=product]').textContent,/^Areia \(Conferir quantidade\)$/);
+  assert.match(equal.querySelector('[data-column=total]').textContent,/120,00/);
+  assert.equal(different.querySelector('[data-column=branch]').textContent,'Outra filial');
+  assert.equal(different.querySelector('[data-column=supplier]').textContent,'Outro fornecedor');
+  assert.equal(different.querySelector('[data-column=dueDate]').textContent,'21/10/2026');
+  assert.match(different.querySelector('[data-column=product]').textContent,/^Cimento \(Conferir quantidade\)$/);
+  assert.match(different.querySelector('[data-column=total]').textContent,/80,00/);
+});
