@@ -27,7 +27,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -74,11 +74,31 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
 const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
+
+test('carrega atividades recentes somente na pergunta de atividades do diário', async t => {
+  let loads = 0;
+  const h = makeHarness({ recentDiaryActivitiesDataFactory: async () => ({
+    async load() { loads++; return ['Impermeabilização arrimo', 'Escoramento laje']; },
+  }) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const sentBeforeSuggestions = h.chatCalls.filter(call => call[0] === 'text').length;
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'DIGITE AS ATIVIDADES EXECUTADAS:',
+    options: [{ id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' }],
+  }], { activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' } });
+  assert.equal(h.store.getState().activeFlow?.id, 'construction_diary_fill');
+  assert.equal(h.store.getState().messages.at(-1)?.type, 'poll');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(loads, 1);
+  assert.deepEqual(h.view.renders.at(-1).messages.at(-1).recentDiaryActivities,
+    ['Impermeabilização arrimo', 'Escoramento laje']);
+  assert.equal(h.chatCalls.filter(call => call[0] === 'text').length, sentBeforeSuggestions);
+});
 
 function groupedPendingProvisionSnapshot() {
   return { sourceKind: "provision-description", due: true, today: "2026-10-11", checkedDate: "2026-10-11", rows: [{

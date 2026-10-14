@@ -23,6 +23,7 @@ import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
+import { appendRecentDiaryActivity } from "../chat/construction-diary-activity-suggestions.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 import { provisionDateKey, provisionDueState, provisionNumericValue } from "../chat/pending-provision-dates.js";
 import Decimal from "decimal.js";
@@ -61,6 +62,11 @@ function isIOSDevice(navigatorRef) {
 
 function isVoiceInputFlow(flow) {
   return VOICE_INPUT_FLOW_PATTERN.test(String(flow?.id || ""));
+}
+
+function isDiaryActivitiesQuestion(message, flow) {
+  return isVoiceInputFlow(flow) && message?.type === "poll"
+    && /atividades\s+executadas/i.test(String(message.question || message.prompt || ""));
 }
 
 function isDiaryNumberedTextPrompt(state) {
@@ -1475,6 +1481,9 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   let allOptions = orderProvisionPaymentMethodOptions(
     message, orderMeasurementUnitOptions(message, filteredOptions), activeFlow,
   );
+  if (isDiaryActivitiesQuestion(message, activeFlow)) {
+    allOptions = allOptions.filter(option => draftReplyId(option) !== "abandon_construction_diary");
+  }
   let finishOption = null;
   if (isDiaryAttachmentPrompt(message, activeFlow)
     || (isDocumentAttachmentPrompt(message, activeFlow) && attachmentFinishOption(message))) {
@@ -1643,6 +1652,14 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
         ? `<div class="chat-choice-columns chat-choice-columns--task-menu"><div class="chat-choice-columns__primary"><div class="${choiceListClass}">${choices}</div></div><div class="chat-choice-columns__secondary"><div class="chat-gallery-actions">${pollButton(taskGallery, busy, { galleryButton: true })}</div></div></div>`
       : `<div class="${choiceListClass}${launchPaymentSummary ? " chat-choice-list--launch-payment" : ""}">${choices}</div>`
     : "";
+  const recentDiaryActivitiesMarkup = currentPoll && isDiaryActivitiesQuestion(message, activeFlow)
+    ? `<div class="chat-diary-recent-activities" aria-label="Atividades dos últimos cinco dias">
+        ${Array.isArray(message.recentDiaryActivities) && message.recentDiaryActivities.length
+          ? `<p>Atividades dos últimos 5 dias — toque para adicionar:</p><div class="chat-choice-list">${message.recentDiaryActivities.map(activity => `<button type="button" data-action="append-diary-activity" data-value="${escapeHtml(activity)}"${busy ? " disabled" : ""}>${escapeHtml(activity)}</button>`).join("")}</div>`
+          : message.recentDiaryActivitiesLoading ? `<p>Consultando atividades dos últimos 5 dias…</p>`
+          : message.recentDiaryActivitiesError ? `<p>Não foi possível carregar as sugestões. Você pode digitar as atividades.</p>`
+          : `<p>Nenhuma atividade registrada nos últimos 5 dias. Digite as atividades.</p>`}
+      </div>` : "";
   const epiMarkup = isEpiProductSelection
     ? renderEpiProductSelection(choiceOptions, busy, currentPoll, currentPoll ? message.epiSelectedProductIds || [] : [])
     : "";
@@ -1740,6 +1757,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ${calendarPicker ? datePickerTriggerMarkup(busy) : ""}
     ${compressionMarkup}
     ${isAttendanceMultiSelect ? attendanceMarkup : isLaunchPayrollMultiSelect ? launchPayrollMarkup : isEpiProductSelection ? epiMarkup : choicesMarkup}
+    ${recentDiaryActivitiesMarkup}
   </div>`;
 }
 
@@ -4144,6 +4162,21 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "send-text") return;
     event.preventDefault?.();
+    if (command.type === "append-diary-activity") {
+      const activePoll = [...(lastState?.messages || [])].reverse()
+        .find(item => item?.role !== "user" && item?.type === "poll");
+      if (!isDiaryActivitiesQuestion(activePoll, lastState?.activeFlow) || composerBusy
+        || !activePoll?.recentDiaryActivities?.includes(command.value)) return;
+      const draft = root.querySelector('[data-role="draft"]');
+      const value = appendRecentDiaryActivity(draft?.value ?? lastState?.draft, command.value);
+      if (draft && value !== draft.value) {
+        draft.value = value;
+        draft.setSelectionRange?.(value.length, value.length);
+        resizeDraft(draft);
+        emit({ type: "draft-changed", value });
+      }
+      return;
+    }
     if (command.type === "attendance-detail-toggle") {
       const detail = clickedAction.closest(".chat-attendance-select__card")?.querySelector(".chat-attendance-select__detail");
       if (!detail) return;
