@@ -325,8 +325,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const refreshControl = attachGalleryRefreshButton({ document: doc, root, container: createShortcut.toolbar, header,
     onRefresh: async () => {
       autoFilters.sync();
-      await invalidateRelatedReports?.();
-      await applyFilters({ refresh: true, preservePage: true });
+      const invalidation = invalidateRelatedReports?.();
+      const loading = applyFilters({ refresh: true, preservePage: true });
+      await Promise.all([invalidation, loading]);
     },
     isAvailable: () => opened && !destroyed && !suspended && !busy && !listLoading && !detailLoading
       && !pendingMutations && !editor && !review && panel.hidden && clusterPanel.hidden });
