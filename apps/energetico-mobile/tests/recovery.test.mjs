@@ -28,8 +28,36 @@ function memoryRecovery() {
     setItem: (id, serialized) => saved.set(id, serialized), removeItem: id => saved.delete(id) } });
 }
 
-// Break caught: restarting the controller drops the last preview/draft or restores before authentication.
-test('reopen displays saved preview while waiting and restores draft only after same VM context', async () => {
+test('reopening resumes the VM question without showing a previous-conversation preview', async () => {
+  const recovery = memoryRecovery();
+  recovery.schedule('a1', {
+    activeFlow: flow,
+    question: 'Quais atividades foram realizadas?',
+    draft: '✅ FINALIZAR ANEXOS',
+    pendingNames: ['IMG_4971.jpeg', 'IMG_4972.jpeg'],
+    uncertain: true,
+  });
+  recovery.flush();
+  let resolve;
+  const h = harness({ recovery, sendText: () => new Promise(done => { resolve = done; }) });
+  const starting = h.controller.start();
+  await new Promise(setImmediate);
+  const waiting = renderChatMarkup(h.renders.at(-1));
+  assert.doesNotMatch(waiting, /chat-recovery|Prévia da conversa anterior|IMG_4971\.jpeg/);
+  resolve({ ...response(), messages: [{ type: 'poll',
+    question: 'COMO DESEJA PROSSEGUIR COM AS EVIDÊNCIAS?',
+    options: [{ id: 'diary_finish', label: '✅ FINALIZAR ANEXOS' }],
+  }] });
+  await starting;
+  const resumed = renderChatMarkup(h.renders.at(-1));
+  assert.match(resumed, /COMO DESEJA PROSSEGUIR COM AS EVIDÊNCIAS/);
+  assert.doesNotMatch(resumed, /chat-recovery|Texto anterior|IMG_4971\.jpeg/);
+  assert.deepEqual(h.calls, [{ text: '', replyId: 'input_continue' }]);
+  h.controller.stop();
+});
+
+// Break caught: restarting the controller loses a same-question draft or shows an obsolete local card.
+test('reopen waits for the VM without a preview and restores draft only after same context', async () => {
   const recovery = memoryRecovery();
   const first = harness({ recovery });
   await first.controller.start();
@@ -43,12 +71,13 @@ test('reopen displays saved preview while waiting and restores draft only after 
   assert.equal(waiting.recoveryPreview?.draft, 'Concretagem parcial');
   assert.equal(waiting.recoveryPreview?.activeFlow.title, 'DIÁRIO DE OBRAS');
   assert.equal(second.store.getState().draft, '');
-  assert.match(renderChatMarkup(waiting), /Obra teste/);
+  assert.doesNotMatch(renderChatMarkup(waiting), /Obra teste|chat-recovery/);
   resolve(response());
   await starting;
   assert.equal(second.store.getState().draft, 'Concretagem parcial');
   assert.deepEqual(second.calls, [{ text: '', replyId: 'input_continue' }]);
   assert.equal(second.store.getState().messages.length, 1);
+  assert.match(renderChatMarkup(second.renders.at(-1)), /Quais atividades foram realizadas/);
   second.controller.stop();
 });
 
@@ -407,13 +436,11 @@ test('same VM context with a changed question keeps draft as reference instead o
   assert.equal(second.renders.at(-1).recoveryReference?.draft, 'Título da primeira foto'); second.controller.stop();
 });
 
-test('preview is read-only escaped text and never renders stale reply buttons', () => {
+test('a saved local preview never renders old text, files, or reply buttons', () => {
   const markup = renderChatMarkup({ sessionStatus: 'authenticated', account: { name: 'Teste' }, messages: [],
     recoveryPreview: { activeFlow: { ...flow, title: '<img src=x>' }, question: '<script>bad()</script>', draft: 'Não enviado', pendingNames: ['foto.jpg'], savedAt: Date.now() }, recoveryBlocked: true,
   });
-  assert.match(markup, /&lt;img src=x&gt;/);
-  assert.match(markup, /&lt;script&gt;/);
-  assert.match(markup, /foto\.jpg/);
+  assert.doesNotMatch(markup, /chat-recovery|&lt;img src=x&gt;|&lt;script&gt;|foto\.jpg/);
   assert.doesNotMatch(markup, /data-action="select-reply"/);
   assert.doesNotMatch(markup, /<script>/);
 });
