@@ -808,6 +808,20 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-attendance-select__row input { flex: 0 0 22px; width: 22px; height: 22px; margin: 0; accent-color: #12634f; }
 .chat-attendance-select__row button, .chat-attendance-select__label { flex: 1; min-width: 0; min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); display: flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; color: #fff; background: var(--brand); text-align: center; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
 .chat-attendance-select__content { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+.chat-attendance-select:not([data-supplier-sync]) .chat-attendance-select__row > button { justify-content: flex-start; text-align: left; }
+.chat-attendance-select:not([data-supplier-sync]) .chat-attendance-select__name { align-self: stretch; text-align: left; }
+.chat-attendance-select__card { position: relative; flex: 1; min-width: 0; border-radius: 12px; background: var(--brand); overflow: hidden; }
+.chat-attendance-select__row .chat-attendance-select__record { width: 100%; justify-content: flex-start; text-align: left; }
+.chat-attendance-select__row .chat-attendance-select__record .chat-attendance-select__content { align-items: stretch; }
+.chat-attendance-select__row .chat-attendance-select__record .chat-attendance-select__name { display: block; box-sizing: border-box; width: 100%; padding-right: 42px; }
+.chat-attendance-select__row .chat-attendance-select__arrow { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; flex: none; width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; border: 1px solid rgba(255,255,255,.75); border-radius: 10px; background: rgba(255,255,255,.12); font-size: 25px; line-height: 1; }
+.chat-attendance-select__row .chat-attendance-select__arrow:focus-visible { outline: 3px solid #ffcf66; outline-offset: 2px; }
+.chat-attendance-select__detail { display: grid; gap: 6px; margin: 0 8px 8px; padding: 10px; border-radius: 8px; color: #16394b; background: #fff; font-size: 12px; overflow-wrap: anywhere; }
+.chat-attendance-select__detail[hidden] { display: none; }
+.chat-attendance-select__detail > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; border-bottom: 1px solid #d9e5e9; }
+.chat-attendance-select__detail > div:last-child { border-bottom: 0; }
+.chat-attendance-select__detail dt { font-weight: 800; }
+.chat-attendance-select__detail dd { margin: 0; }
 .chat-bubble:has(.chat-attendance-rhid-summary) { flex: 1 1 0; max-width: none; min-width: 0; }
 @media (max-width: 420px) {
   .chat-message:has(.chat-attendance-rhid-summary) { gap: 6px; }
@@ -827,7 +841,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-attendance-rhid-badge--inconsistent { color: #9a3412; background: #ffedd5; border-color: #fdba74; }
 .chat-attendance-rhid-badge--unregistered { color: #374151; background: #e5e7eb; border-color: #b9c0c9; }
 .chat-attendance-rhid-badge--neutral { color: #475569; background: #f1f5f9; border-color: #cbd5e1; }
-.chat-attendance-select__row:has(input:checked) button, .chat-attendance-select__row:has(input:checked) .chat-attendance-select__label { outline: 3px solid #35a871; outline-offset: -3px; }
+.chat-attendance-select__row:has(input:checked) > button, .chat-attendance-select__row:has(input:checked) .chat-attendance-select__card, .chat-attendance-select__row:has(input:checked) .chat-attendance-select__label { outline: 3px solid #35a871; outline-offset: -3px; }
 .chat-attendance-select__row input:disabled + .chat-attendance-select__label { opacity: .55; }
 .chat-attendance-select__row button:disabled { opacity: .55; }
 .chat-select-all { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid #c9dfd8; border-radius: 10px; color: #155846; background: #eff8f5; font-weight: 800; cursor: pointer; }
