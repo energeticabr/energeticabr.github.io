@@ -4296,6 +4296,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     }
     if (command.type === "cancel-rhid-attendance-report") {
       if (rhidAttendanceReportBusy) return;
+      attendanceReportSelection = null;
       rhidAttendanceReportOpen = false;
       rhidAttendanceReportDate = "";
       rhidAttendanceReportMessageId = "";

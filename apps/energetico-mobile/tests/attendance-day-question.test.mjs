@@ -100,6 +100,25 @@ test('RHID retry after HORÁRIO retains the historical date and does not claim t
   assert.deepEqual(commands,[{type:'rhid-attendance-report-generate',value:'2026-09-25'}]);
 });
 
+test('canceling a failed HORÁRIO visit does not restore abandoned selections later', t => {
+  const {view,dom}=render(t,[row(1,'2026-09-25'),row(2,'2026-09-25')]);
+  const doc=dom.window.document;
+  doc.querySelector('[data-action="attendance-select-toggle"][data-reply-id="1"]').click();
+  view.on('attendance-validation-hours',()=>view.openRhidAttendanceToday({date:'2026-09-25'}));
+  doc.querySelector('[data-action="attendance-validation-hours"]').click();
+  view.setRhidAttendanceReportStatus({busy:false,error:'Falha temporária'});
+  doc.querySelector('[data-action="cancel-rhid-attendance-report"]').click();
+  doc.querySelector('[data-action="attendance-select-toggle"][data-reply-id="1"]').click();
+  doc.querySelector('[data-action="attendance-select-toggle"][data-reply-id="2"]').click();
+  const state={sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[]};
+  view.render({...state,messages:[{id:'report',role:'assistant',type:'poll',options:[],
+    detail_table:{kind:'rhid_attendance',reportDate:'2026-09-25',rows:[],people:[]}}]});
+  view.render({...state,messages:[{id:'day',role:'assistant',type:'poll',presentation:'attendance_multi_select',
+    question,options:[row(1,'2026-09-25'),row(2,'2026-09-25')]}]});
+  assert.equal(doc.querySelector('[data-action="attendance-select-toggle"][data-reply-id="1"]').checked,false,
+    'abandoned A snapshot must not overwrite newer choices');
+});
+
 test('supplier synchronization and date selection keep their own questions', t => {
   for (const presentation of ['attendance_supplier_sync','list']) {
     const {heading}=render(t,[row(1,'2026-10-12')],{presentation,question:'ESCOLHA UMA OPÇÃO'});
