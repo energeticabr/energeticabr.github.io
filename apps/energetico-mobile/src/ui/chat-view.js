@@ -816,7 +816,10 @@ function presenceSummaryQuestion(question, table) {
     .filter(row => Array.isArray(row) && row.length >= 4 && row.every(cell =>
       cell && typeof cell === "object"
       && (cell.value == null || ["string", "number"].includes(typeof cell.value))))
-    .map(row => JSON.stringify(row.map(cell => normalizeValue(cell.value)))));
+    .flatMap(row => [
+      JSON.stringify(row.map(cell => normalizeValue(cell.value))),
+      JSON.stringify(row.map(cell => normalizeValue(`${cell.label}: ${cell.value ?? "-"}`))),
+    ]));
   const extraLines = lines.slice(1).filter(line =>
     !representedRows.has(JSON.stringify(line.split("|").map(normalizeValue))));
   return [ /^✅/.test(heading) ? heading : `✅ ${heading}`, ...extraLines ].join("\n").trim();
@@ -1054,10 +1057,13 @@ function isPresenceSummaryTable(table) {
   if (table?.kind && table.kind !== "presence") return false;
   const rows = Array.isArray(table) ? table : table?.rows;
   if (!Array.isArray(rows)) return false;
+  const title = normalizedDateText(table?.title);
+  if (/dados da presenca\b/.test(title)) return false;
+  const selectedSummary = /resumo das presencas selecionadas/.test(title);
   return rows.some(row => Array.isArray(row)
     && presenceSummaryField(row, ["fornecedor"])
-    && row.some(cell => ["iddescritivo", "iddescritivoetapa", "atividadeexecutada"]
-      .includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, "")))
+    && (selectedSummary || row.some(cell => ["iddescritivo", "iddescritivoetapa", "atividadeexecutada"]
+      .includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, ""))))
     // Older confirmations omit kind; recognize their attendance fields instead.
     && (table?.kind === "presence" || row.some(cell =>
       normalizedDateText(cell?.label).replace(/[^a-z]/g, "") === "presenca")));
@@ -1103,7 +1109,17 @@ function presenceDetailTableMarkup(table) {
       const groupIndex = groups.get(key);
       groupAttributes = ` style="background-color: ${presenceSummaryGroupFill(groupIndex)}" aria-label="Grupo de atividade ${groupIndex + 1}"`;
     }
-    return `<div class="chat-presence-table-row" role="row"${groupAttributes}>${row.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`;
+    const visibleCells = batch ? [
+      ["DATA", ["data"]],
+      ["FORNECEDOR", ["fornecedor"]],
+      ["IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA", ["iddescritivoetapaatividadeexecutada", "iddescritivoatividadeexecutada", "iddescritivoetapa", "iddescritivo"]],
+      ["ATIVIDADEEXECUTADA", ["atividadeexecutada"]],
+      ["PRESENCA", ["presenca"]],
+    ].map(([label, aliases]) => ({
+      ...row.find(cell => aliases.includes(normalizedDateText(cell?.label).replace(/[^a-z]/g, ""))),
+      label,
+    })) : row;
+    return `<div class="chat-presence-table-row" role="row"${groupAttributes}>${visibleCells.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`;
   }).join("")}</div>`;
 }
 
@@ -1820,6 +1836,18 @@ function presenceConfirmationMarkup(value = {}) {
   return `<div class="chat-presence-confirmation"><span>ID ${escapeHtml(id)}: PRESENÇA DE ${escapeHtml(supplier)} APONTADA COMO</span> <strong class="chat-presence-confirmation__status chat-presence-confirmation__status--${tone}">${presence}</strong></div>`;
 }
 
+function compactAttendanceBatchCompletionText(value) {
+  const text = String(value ?? "");
+  const firstLine = text.split(/\r?\n/, 1)[0];
+  const normalized = normalizedDateText(firstLine);
+  return /^\s*✅/.test(firstLine)
+    && /\d/.test(normalized)
+    && /presenc|cadastr/.test(normalized)
+    && /alterad|atualizad/.test(normalized)
+    && /registros confirmados/.test(normalizedDateText(text))
+    ? firstLine : text;
+}
+
 function renderMessage(message, account, busy, { finalSignedDocument = false, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceExpandedIds = [], currentPoll = false, attendanceHoursCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
     // Saved conversations can still contain the retired inline gallery.
@@ -1885,7 +1913,7 @@ const provisionShortcut = provisionOption ? `<button class="chat-main-provisions
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
   const body = !isUser && presenceConfirmation
     ? presenceConfirmationMarkup(presenceConfirmation)
-    : `${isUser ? `<p>${escapeHtml(message.text || "")}</p>` : `<p>${formatQuestionText(message.text)}</p>${paymentAuditTableMarkup(paymentAuditTable)}${presenceDateSummaryMarkup(message.presenceDateSummary)}`}`;
+    : `${isUser ? `<p>${escapeHtml(message.text || "")}</p>` : `<p>${formatQuestionText(compactAttendanceBatchCompletionText(message.text))}</p>${paymentAuditTableMarkup(paymentAuditTable)}${presenceDateSummaryMarkup(message.presenceDateSummary)}`}`;
   const datePicker = !isUser && isDateQuestion(message) ? datePickerTriggerMarkup(busy) : "";
   return `<article class="chat-message chat-message--${isUser ? "user" : "assistant"}">${avatar}<div class="chat-bubble"><strong>${escapeHtml(name)}</strong>${body}${datePicker}</div></article>`;
 }
