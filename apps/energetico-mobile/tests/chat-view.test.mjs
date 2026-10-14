@@ -3298,7 +3298,8 @@ test("confirmação de fornecedores mostra todas as linhas com dados e presença
     assert.equal(rendered.length, 25);
     for (let index = 0; index < rendered.length; index += 1) {
       assert.ok(rendered[index].textContent.includes(`FORNECEDOR ${index + 1}`));
-      assert.ok(rendered[index].textContent.includes(String(3000 + index)));
+      assert.equal(rendered[index].querySelectorAll('.chat-presence-table-cell').length, 5);
+      assert.ok(!rendered[index].textContent.includes(String(3000 + index)), "ID da presença não ocupa espaço no resumo");
       assert.ok(rendered[index].textContent.includes("12/10/2026"));
       assert.ok(rendered[index].textContent.includes("FUNDAÇÃO EM TUBULÃO"));
       assert.equal(rendered[index].querySelector('.chat-presence-table-cell--present b').textContent, "PRESENTE");
@@ -3728,6 +3729,100 @@ test("resumo em lote mostra somente a pergunta antes da tabela", () => {
   assert.match(markup, /126 - ALVENARIA/);
   assert.match(markup, /127 - PINTURA/);
   dom.window.close();
+});
+
+test("resumo completo da presença exibe só os cinco campos pedidos e separa itens compactos", t => {
+  const rows = ["LUIZ", "ANA"].map((supplier, index) => [
+    { label: "ID", value: String(2246 + index) },
+    { label: "DATA", value: "13/10/2026" },
+    { label: "FORNECEDOR", value: supplier },
+    { label: "IDDESCRITIVOETAPA", value: "127" },
+    { label: "ATIVIDADEEXECUTADA", value: "EXECUÇÃO FUNDAÇÃO EM TUBULÃO" },
+    { label: "PRESENCA", value: index ? "AUSENTE" : "PRESENTE", tone: index ? "absent" : "present" },
+    { label: "FILIAL", value: "004 - EDIFÍCIO XAVANTE" },
+    { label: "PROFISSAO", value: "PEDREIRO" },
+    { label: "VLORDIARIO", value: "250" },
+  ]);
+  const dom = attendanceSummaryDocument(rows);
+  t.after(() => dom.window.close());
+  const style = dom.window.document.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  dom.window.document.head.append(style);
+  const rendered = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
+  assert.equal(rendered.length, 2);
+  for (const row of rendered) {
+    assert.deepEqual([...row.querySelectorAll(".chat-presence-table-cell span")].map(cell => cell.textContent), [
+      "DATA", "FORNECEDOR", "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA", "ATIVIDADEEXECUTADA", "PRESENCA",
+    ]);
+    assert.equal(row.querySelectorAll(".chat-presence-table-cell").length, 5);
+    assert.equal(dom.window.getComputedStyle(row.querySelectorAll(".chat-presence-table-cell")[1]).borderTopStyle, "solid");
+  }
+  assert.equal(dom.window.getComputedStyle(rendered[1]).borderTopStyle, "solid");
+  assert.equal(rendered[0].querySelectorAll(".chat-presence-table-cell b")[2].textContent, "127");
+  assert.equal(rendered[1].querySelector(".chat-presence-table-cell--absent b").textContent, "AUSENTE");
+});
+
+test("resumo de presenças selecionadas mantém cinco campos quando a etapa está vazia", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "missing-stage", role: "assistant", type: "poll", question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?",
+    detail_table: { kind: "presence", title: "RESUMO DAS PRESENÇAS SELECIONADAS", rows: [[
+      { label: "DATA", value: "13/10/2026" }, { label: "FORNECEDOR", value: "LUIZ" },
+      { label: "PRESENCA", value: "PRESENTE" },
+      { label: "FILIAL", value: "004 - EDIFÍCIO XAVANTE" },
+    ]] }, options: [],
+  }] })));
+  t.after(() => dom.window.close());
+  const cells = [...dom.window.document.querySelectorAll(".chat-presence-table-cell")];
+  assert.equal(cells.length, 5);
+  assert.equal(cells[2].querySelector("span").textContent, "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA");
+  assert.equal(cells[2].querySelector("b").textContent, "-");
+  assert.equal(cells[3].querySelector("b").textContent, "-");
+  assert.doesNotMatch(dom.window.document.querySelector(".chat-presence-table").textContent, /FILIAL/);
+});
+
+test("dados de uma presença isolada continuam completos fora do resumo de selecionadas", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "single-presence", role: "assistant", type: "poll", question: "VALIDAR ESTA PRESENÇA?",
+    detail_table: { kind: "presence", title: "📋 DADOS DA PRESENÇA", rows: [[
+      { label: "DATA", value: "13/10/2026" }, { label: "FORNECEDOR", value: "LUIZ" },
+      { label: "IDDESCRITIVOETAPA", value: "127" }, { label: "ATIVIDADEEXECUTADA", value: "FUNDAÇÃO" },
+      { label: "PRESENCA", value: "PENDENTE" }, { label: "FILIAL", value: "004 - EDIFÍCIO XAVANTE" },
+    ]] }, options: [],
+  }] })));
+  t.after(() => dom.window.close());
+  const labels = [...dom.window.document.querySelectorAll(".chat-presence-table-cell span")].map(node => node.textContent);
+  assert.deepEqual(labels, ["DATA", "FORNECEDOR", "IDDESCRITIVOETAPA", "ATIVIDADEEXECUTADA", "PRESENCA", "FILIAL"]);
+});
+
+test("confirmação em lote não repete as linhas completas já presentes no resumo", t => {
+  const row = [
+    { label: "ID", value: "2246" }, { label: "DATA", value: "13/10/2026" },
+    { label: "FORNECEDOR", value: "LUIZ" }, { label: "IDDESCRITIVOETAPA", value: "127" },
+    { label: "ATIVIDADEEXECUTADA", value: "FUNDAÇÃO" }, { label: "PRESENCA", value: "PRESENTE" },
+    { label: "FILIAL", value: "004 - EDIFÍCIO XAVANTE" },
+  ];
+  const detail = row.map(cell => `${cell.label}: ${cell.value}`).join(" | ");
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{
+    id: "complete-summary", role: "assistant", type: "poll",
+    question: `CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?\n${detail}`,
+    detail_table: { kind: "presence", rows: [row] }, options: [],
+  }] })));
+  t.after(() => dom.window.close());
+  assert.equal(dom.window.document.querySelector(".chat-choice-card > p").textContent.trim(), "✅ CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?");
+  assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-cell").length, 5);
+});
+
+test("sucesso de alteração múltipla mantém apenas a confirmação superior", t => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [
+    { id: "batch-success", role: "assistant", type: "text", text: "✅ 8 CADASTROS ALTERADOS COM SUCESSO.\n🆔 REGISTROS CONFIRMADOS:\n• PRESENÇAS: IDS 2246, 2247, 2248" },
+    { id: "unrelated-success", role: "assistant", type: "text", text: "✅ PEDIDO GRAVADO.\n🆔 REGISTROS CONFIRMADOS: ID 12" },
+    { id: "next-step", role: "assistant", type: "text", text: "✅ 8 CADASTROS ALTERADOS.\nConfira os dados antes de prosseguir." },
+  ] })));
+  t.after(() => dom.window.close());
+  const texts = [...dom.window.document.querySelectorAll(".chat-message--assistant .chat-bubble > p")].map(node => node.textContent);
+  assert.equal(texts[0], "✅ 8 CADASTROS ALTERADOS COM SUCESSO.");
+  assert.match(texts[1], /REGISTROS CONFIRMADOS/);
+  assert.match(texts[2], /Confira os dados antes de prosseguir/);
 });
 
 function attendanceSummaryDocument(rows, kind = "presence") {
