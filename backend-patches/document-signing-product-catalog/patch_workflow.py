@@ -26,7 +26,7 @@ PRODUCT_SOURCE_AFTER = '''            "source": {
                 "label_field": "PRODUTO",
                 "value_field": "PRODUTO",
                 "fields": ["PRODUTO", "UNIDADE", "SATUS"],
-                # Paid historical products remain selectable after being blocked.
+                "filters": [{"field": "SATUS", "equals": "ATIVO"}],
                 "sort_field": "Id",
                 "sort_direction": "desc",
                 "top": 5000,

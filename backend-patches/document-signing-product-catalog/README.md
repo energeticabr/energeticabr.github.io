@@ -1,13 +1,12 @@
 # Produtos do comprovante de pagamento
 
 O seletor em **Assinar documentos → Comprovante de pagamento** deve listar
-produtos históricos e atuais do `CADASTROPRODUTO`, do maior `Id` para o menor.
-Um produto bloqueado para novos lançamentos ainda pode constar de um pagamento
-anterior; sua seleção para o comprovante não altera o cadastro ou o status.
+somente produtos `ATIVO` do `CADASTROPRODUTO`, do maior `Id` para o menor.
+Produtos `BLOQUEADO` permanecem ocultos, conforme a regra confirmada pelo usuário.
 
 No diagnóstico de 15/10/2026, a lista continha 619 registros: 572 `ATIVO` e
-47 `BLOQUEADO`. O filtro anterior mostrava só 572. A direção `asc` também
-revertia a ordenação por ID do cliente SharePoint. Por fim, o campo de busca
+47 `BLOQUEADO`. O filtro de status deve continuar a mostrar só os 572 ativos.
+A direção `asc` revertia a ordenação por ID do cliente SharePoint. O campo de busca
 do portal envia `reply_id=filter_query` e a expressão em `text`; o tratador
 usava o ID como busca e respondia incorretamente “selecione um produto”.
 

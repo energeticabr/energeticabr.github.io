@@ -18,7 +18,7 @@ import test_workflow as fixtures  # noqa: E402
 
 
 class PaymentProductCatalogTests(unittest.TestCase):
-    def test_receipt_catalog_includes_historical_blocked_products_in_descending_id_order(self):
+    def test_receipt_catalog_excludes_blocked_products_and_orders_active_ids_descending(self):
         client = SharePointClient.__new__(SharePointClient)
         client._resolve_source = lambda source, context: source
         client._internal_field = lambda _list, field: field
@@ -39,8 +39,8 @@ class PaymentProductCatalogTests(unittest.TestCase):
         step = WorkflowEngine._document_signing_payment_product_step()
         options = client.get_options(step, context={})
 
-        self.assertEqual([option["id"] for option in options], [104, 13, 8])
-        self.assertEqual(options[-1]["source_values"]["SATUS"], "BLOQUEADO")
+        self.assertEqual([option["id"] for option in options], [104, 13])
+        self.assertTrue(all(option["source_values"]["SATUS"] == "ATIVO" for option in options))
 
     def test_typed_filter_query_returns_matching_product_without_invalid_selection_error(self):
         case = fixtures.WorkflowTests("runTest")
@@ -50,7 +50,7 @@ class PaymentProductCatalogTests(unittest.TestCase):
             {"id": 104, "title": "104 - SERVIÇO RECENTE", "value": "SERVIÇO RECENTE",
              "source_values": {"Id": 104, "PRODUTO": "SERVIÇO RECENTE", "SATUS": "ATIVO"}},
             {"id": 8, "title": "8 - SERVIÇO ANTIGO", "value": "SERVIÇO ANTIGO",
-             "source_values": {"Id": 8, "PRODUTO": "SERVIÇO ANTIGO", "SATUS": "BLOQUEADO"}},
+             "source_values": {"Id": 8, "PRODUTO": "SERVIÇO ANTIGO", "SATUS": "ATIVO"}},
         ]
         state = {
             "key": "receipt-catalog-test", "batch_id": "receipt-catalog-test",
