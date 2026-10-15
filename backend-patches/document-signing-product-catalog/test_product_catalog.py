@@ -32,8 +32,9 @@ class PaymentProductCatalogTests(unittest.TestCase):
         def read_only(method, _endpoint, **kwargs):
             self.assertEqual(method, "GET")
             params = kwargs["params"]
+            self.assertEqual(params["$orderby"], "Id desc")
             filtered = [row for row in rows if row["SATUS"] == "ATIVO"] if "$filter" in params else rows
-            return {"value": filtered}
+            return {"value": sorted(filtered, key=lambda row: row["Id"], reverse=True)}
 
         client._request = read_only
         step = WorkflowEngine._document_signing_payment_product_step()

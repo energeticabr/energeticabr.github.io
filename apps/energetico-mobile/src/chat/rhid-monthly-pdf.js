@@ -104,7 +104,10 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
 
   function drawDay(day) {
     const slots = Array.from({ length: 4 }, (_, index) => day.slots[index] || "-");
-    const cells = [dateLabel(day.date), ...slots, day.total ?? "-"]
+    const unclassifiedPunches = Array.isArray(day.unclassifiedPunches) ? day.unclassifiedPunches : [];
+    const dateCell = unclassifiedPunches.length
+      ? `${dateLabel(day.date)}\nOutras batidas: ${unclassifiedPunches.join(", ")}` : dateLabel(day.date);
+    const cells = [dateCell, ...slots, day.total ?? "-"]
       .map((value, index) => wrapText(value, index === 5 ? bold : regular, SIZE, COLUMNS[index] - PADDING * 2));
     const length = Math.max(...cells.map(lines => lines.length));
     let offset = 0;

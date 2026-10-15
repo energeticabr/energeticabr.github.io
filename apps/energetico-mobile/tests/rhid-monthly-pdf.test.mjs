@@ -195,6 +195,21 @@ test('monthly PDF omits per-day adjustment and issue bands so a full month fits 
  assertInside(pages);
 });
 
+test('monthly PDF keeps unclassified punches visible in their day row without restoring issue notes',async t=>{
+ const name='TESTE BATIDAS';
+ const input=buildRhidMonthlyReport({month:'2026-10',supplier:{id:'4',name},snapshot:{
+  month:'2026-10',presentDates:[],rows:[{ID_PESSOA_RHID:'101',NOME_COLABORADOR:name,
+   DATA_REFERENCIA:'2026-10-01',BATIDAS_RHID:'07:00;07:15;12:00;13:00;17:00'}],
+ }});
+ assert.deepEqual(input.days[0].unclassifiedPunches,['07:00','07:15']);
+ const {pages,text}=await inspect(t,await build(input));
+ assert.equal(pages.length,1);
+ assert.match(text,/07:00/);
+ assert.match(text,/07:15/);
+ assert.doesNotMatch(text,/Batidas duplicadas|Ocorrência em|Ajustado/);
+ assertInside(pages);
+});
+
 test('monthly PDF shows the selected base period and excludes days outside it',async t=>{
  const input=report();const selected={...input,startDate:'2026-10-02',endDate:'2026-10-03',days:input.days.slice(1,3),total:'07:45',recordedDays:2,incompleteDays:1};
  const {text,pages}=await inspect(t,await build(selected));

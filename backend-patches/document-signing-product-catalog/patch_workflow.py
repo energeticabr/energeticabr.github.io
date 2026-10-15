@@ -45,8 +45,12 @@ FILTER_REPLY_METHOD = '''    @staticmethod
 
 '''
 
-RAW_REPLY_BEFORE = '''raw_reply = str(event.get("reply_id") or event.get("text") or "")'''
-RAW_REPLY_AFTER = '''raw_reply = self._document_signing_payment_reply(event)'''
+PAYMENT_REPLY_STAGES = (
+    "DOCUMENT_SIGNING_PAYMENT_METHOD_STAGE",
+    "DOCUMENT_SIGNING_PAYMENT_SUPPLIER_STAGE",
+    "DOCUMENT_SIGNING_PAYMENT_PRODUCT_STAGE",
+    "DOCUMENT_SIGNING_PAYMENT_UNIT_STAGE",
+)
 
 
 def replace_exact(source: str, before: str, after: str, expected: int) -> str:
@@ -60,7 +64,13 @@ def patch(source: str) -> str:
     source = replace_exact(source, PRODUCT_SOURCE_BEFORE, PRODUCT_SOURCE_AFTER, 1)
     source = replace_exact(source, FILTER_METHOD_ANCHOR,
                            FILTER_REPLY_METHOD + FILTER_METHOD_ANCHOR, 1)
-    source = replace_exact(source, RAW_REPLY_BEFORE, RAW_REPLY_AFTER, 4)
+    for stage in PAYMENT_REPLY_STAGES:
+        source = replace_exact(
+            source,
+            f'''        if state.get("stage") == {stage}:\n            raw_reply = str(event.get("reply_id") or event.get("text") or "")''',
+            f'''        if state.get("stage") == {stage}:\n            raw_reply = self._document_signing_payment_reply(event)''',
+            1,
+        )
     return source
 
 
