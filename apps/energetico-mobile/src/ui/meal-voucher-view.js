@@ -1,6 +1,7 @@
 import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucherDraft } from '../chat/meal-voucher.js';
 import { createLoadingIndicator } from './loading-indicator.js';
 import { applyScreenNavigation } from './screen-navigation.js';
+import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const money = amount => Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 let sequence = 0;
@@ -16,6 +17,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   const body = el('div', 'meal-voucher-body'), error = el('p', 'meal-voucher-error'), content = el('div', 'meal-voucher-content'), footer = el('footer', 'meal-voucher-footer'); error.hidden = true; error.setAttribute('role', 'alert');
   body.append(error, content); page.append(header, body, footer); (root || doc.body).append(page);
   let opened = false, destroyed = false, busy = false, mutating = false, epoch = 0, step = 'lines', previousFocus = null;
+  let detailPickers = null;
   let available = { suppliers: [], accounts: [], stages: [] }, orders = [], assignments = {}, result = null;
   let progress = {}, draft = {}, expectedFiles = [];
   const storageKey = sessionKey ? `energetico:meal-voucher:pending:${sessionKey}` : '';
@@ -119,6 +121,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     content.append(field('Mês de referência da IDFOLHA (um mês para todos)', month));
     content.append(field('Conta / forma de pagamento', formSelect('meal-account', available.accounts, draft.account?.id, choice => { draft.account = choice; })));
     content.append(field('Etapa da obra', formSelect('meal-stage', available.stages.filter(item => mealVoucherKey(item.branch) === mealVoucherKey(branch())), draft.stage?.id, choice => { draft.stage = choice; })));
+    detailPickers = bindSearchableFilterSelects(content);
     footer.append(button('Seguir', 'data-meal-next', async () => {
       let verified;
       try { verified = validateMealVoucherDraft(draft); } catch (cause) { showError(cause); return; }
@@ -154,6 +157,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     }, 'Gravando pedido e lançamentos…', true)));
   }
   function render(message) {
+    detailPickers?.destroy(); detailPickers = null;
     content.replaceChildren(); footer.replaceChildren(); footer.hidden = true; back.disabled = home.disabled = mutating;
     if (busy) { content.append(createLoadingIndicator(doc, message || 'Carregando vale-alimentação…')); return; }
     if (step === 'lines') renderLines();
@@ -178,7 +182,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   back.addEventListener('click', navigateBack); home.addEventListener('click', () => { if (close()) onHome(); });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
-  function close() { if (!opened || destroyed || mutating) return false; opened = false; epoch++; page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; opened = false; epoch++; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
   return Object.freeze({
     async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; if (progress.signature && !expectedFiles.length) { render(); return true; } await work(async () => {
       available = await data.loadOptions();
@@ -186,6 +190,6 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       else assignments = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier));
     }, 'Carregando fornecedores…'); return true; },
     close,
-    destroy() { destroyed = true; opened = false; epoch++; page.remove(); },
+    destroy() { destroyed = true; opened = false; epoch++; detailPickers?.destroy(); detailPickers = null; page.remove(); },
   });
 }

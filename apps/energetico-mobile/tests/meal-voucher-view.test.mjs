@@ -6,6 +6,54 @@ import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+test('dados do vale alimentação permitem filtrar conta e etapa digitando sem mudar a escolha até selecionar', async () => {
+  const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
+  const doc = dom.window.document;
+  const panel = createMealVoucherView({ documentRef: doc, data: {
+    loadOptions: async () => ({
+      suppliers: [{ id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' }],
+      accounts: [{ id: '8', label: 'ENERGÉTICA CAIXA' }, { id: '9', label: 'BANCO OBRA' }],
+      stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, { id: '6', label: 'ALVENARIA', branch: 'OBRA A' }],
+    }),
+    loadOrders: async () => [],
+    loadSheetAssignments: async () => ({ '1': { id: '11' } }),
+  } });
+  const type = (input, value) => { input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  try {
+    await panel.open();
+    type(doc.querySelector('[data-meal-value="1"]'), '10');
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    doc.querySelector('[data-meal-order-new]').click();
+
+    const account = doc.querySelector('[name="meal-account"]');
+    const stage = doc.querySelector('[name="meal-stage"]');
+    assert.equal(account.hidden, true);
+    assert.equal(stage.hidden, true);
+    const accountSearch = account.nextElementSibling.querySelector('[role="combobox"]');
+    accountSearch.focus(); type(accountSearch, 'banco');
+    assert.equal(account.value, '', 'digitar não confirma uma opção');
+    assert.deepEqual([...account.nextElementSibling.querySelectorAll('[role="option"]')].map(option => option.textContent), ['BANCO OBRA']);
+    account.nextElementSibling.querySelector('[role="option"]').click();
+    assert.equal(account.value, '9');
+
+    const stageSearch = stage.nextElementSibling.querySelector('[role="combobox"]');
+    stageSearch.focus(); type(stageSearch, 'fundacao');
+    assert.equal(stage.value, '');
+    assert.deepEqual([...stage.nextElementSibling.querySelectorAll('[role="option"]')].map(option => option.textContent), ['FUNDAÇÃO']);
+    stage.nextElementSibling.querySelector('[role="option"]').click();
+    assert.equal(stage.value, '7');
+
+    for (const [name, value] of [['meal-date', '2026-10-15'], ['meal-due-date', '2026-10-30'], ['meal-reference-month', '2026-10']]) {
+      type(doc.querySelector(`[name="${name}"]`), value);
+    }
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    doc.querySelector('.meal-voucher-navigation').click();
+    assert.equal(doc.querySelector('[name="meal-account"]').value, '9');
+    assert.equal(doc.querySelector('[name="meal-stage"]').value, '7');
+  } finally { panel.destroy(); dom.window.close(); }
+});
+
 test('destaca em verde somente linhas que serão incluídas no lançamento', async () => {
   const css = readFileSync(new URL('../src/ui/meal-voucher.css', import.meta.url), 'utf8');
   const dom = new JSDOM(`<!doctype html><style>${css}</style><body></body>`, { url: 'https://example.invalid' });
