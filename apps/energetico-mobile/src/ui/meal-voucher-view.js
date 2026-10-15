@@ -72,7 +72,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     const tbody = el('tbody');
     for (const supplier of available.suppliers) {
       let line = draft.lines.find(item => item.supplier.id === supplier.id);
-      if (!line) { line = { supplier, quantity: '1', unitValue: '' }; draft.lines.push(line); }
+      if (!line) { line = { supplier, quantity: '5', unitValue: '' }; draft.lines.push(line); }
       const row = el('tr'); row.dataset.mealSupplier = supplier.id;
       const identity = el('td'); identity.append(el('strong', '', supplier.label), el('small', '', `${supplier.branch || 'Sem filial'} · ${supplier.profession || 'Sem profissão'}`)); row.append(identity);
       const quantity = el('input'); quantity.type = 'text'; quantity.inputMode = 'decimal'; quantity.value = line.quantity; quantity.setAttribute('aria-label', `Quantidade de ${supplier.label}`); quantity.dataset.mealQuantity = supplier.id;
@@ -177,7 +177,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   return Object.freeze({
     async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; if (progress.signature && !expectedFiles.length) { render(); return true; } await work(async () => {
       available = await data.loadOptions();
-      if (!restorePending()) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '1', unitValue: '' }));
+      if (!restorePending()) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
       else assignments = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier));
     }, 'Carregando fornecedores…'); return true; },
     close,
