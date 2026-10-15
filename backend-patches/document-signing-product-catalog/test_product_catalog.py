@@ -68,6 +68,116 @@ class PaymentProductCatalogTests(unittest.TestCase):
         self.assertEqual(result["option_count"], 2)
         self.assertFalse(any("SELECIONE UM PRODUTO DA LISTA" in str(item) for item in case.messenger.sent))
 
+    def test_numeric_filter_query_does_not_select_product_with_same_id(self):
+        case = fixtures.WorkflowTests("runTest")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.sharepoint.options_by_key["document_signing_payment_product"] = [
+            {"id": 12, "title": "12 - GASOLINA", "value": "GASOLINA",
+             "source_values": {"Id": 12, "PRODUTO": "GASOLINA", "SATUS": "ATIVO"}},
+            {"id": 120, "title": "120 - DIESEL", "value": "DIESEL",
+             "source_values": {"Id": 120, "PRODUTO": "DIESEL", "SATUS": "ATIVO"}},
+        ]
+        state = {
+            "key": "receipt-numeric-filter", "batch_id": "receipt-numeric-filter",
+            "flow": "document_signing", "stage": "document_signing_payment_product",
+            "phone_number_id": "portal-admin", "options": [], "processed_message_ids": [],
+            "document_signing_payment_items": [],
+        }
+        self.assertTrue(case.engine._document_signing_prompt_payment_options(state, kind="product"))
+
+        result = case.engine._handle_document_signing_text(
+            fixtures.event("numeric-filter", "text", text="12", reply_id="filter_query"),
+            state, None,
+        )
+
+        self.assertEqual(result["status"], "filtered_options")
+        self.assertEqual(result["option_count"], 2)
+        self.assertEqual(state["stage"], "document_signing_payment_product")
+        self.assertEqual(case.messenger.sent[-1]["type"], "filtered_options")
+        self.assertFalse(any("SELECIONE UM PRODUTO DA LISTA" in str(item) for item in case.messenger.sent))
+
+        selected = case.engine._handle_document_signing_text(
+            fixtures.event("selected-product", "button", text="12 - GASOLINA", reply_id="12"),
+            state, result["etag"],
+        )
+        self.assertEqual(selected["status"], "awaiting_payment_quantity")
+        self.assertEqual(state["stage"], "document_signing_payment_quantity")
+
+    def test_unmatched_filter_query_does_not_report_invalid_product_selection(self):
+        case = fixtures.WorkflowTests("runTest")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.sharepoint.options_by_key["document_signing_payment_product"] = [
+            {"id": 12, "title": "12 - GASOLINA", "value": "GASOLINA",
+             "source_values": {"Id": 12, "PRODUTO": "GASOLINA", "SATUS": "ATIVO"}},
+        ]
+        state = {
+            "key": "receipt-no-match", "batch_id": "receipt-no-match",
+            "flow": "document_signing", "stage": "document_signing_payment_product",
+            "phone_number_id": "portal-admin", "options": [], "processed_message_ids": [],
+            "document_signing_payment_items": [],
+        }
+        self.assertTrue(case.engine._document_signing_prompt_payment_options(state, kind="product"))
+
+        result = case.engine._handle_document_signing_text(
+            fixtures.event("unmatched-filter", "text", text="999", reply_id="filter_query"),
+            state, None,
+        )
+
+        self.assertEqual(result["status"], "filtered_options")
+        self.assertEqual(result["option_count"], 0)
+        self.assertEqual(state["stage"], "document_signing_payment_product")
+        self.assertEqual(case.messenger.sent[-1]["type"], "filtered_options")
+        self.assertIn("NENHUM PRODUTO ENCONTRADO", case.messenger.sent[-1]["prompt"])
+        self.assertFalse(any("SELECIONE UM PRODUTO DA LISTA" in str(item) for item in case.messenger.sent))
+
+    def test_whatsapp_numeric_text_still_selects_product(self):
+        case = fixtures.WorkflowTests("runTest")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.sharepoint.options_by_key["document_signing_payment_product"] = [
+            {"id": 12, "title": "12 - GASOLINA", "value": "GASOLINA",
+             "source_values": {"Id": 12, "PRODUTO": "GASOLINA", "SATUS": "ATIVO"}},
+        ]
+        state = {
+            "key": "receipt-whatsapp-choice", "batch_id": "receipt-whatsapp-choice",
+            "flow": "document_signing", "stage": "document_signing_payment_product",
+            "phone_number_id": "business-phone-id", "options": [], "processed_message_ids": [],
+            "document_signing_payment_items": [],
+        }
+        self.assertTrue(case.engine._document_signing_prompt_payment_options(state, kind="product"))
+
+        result = case.engine._handle_document_signing_text(
+            fixtures.event("whatsapp-choice", "text", text="12"), state, None,
+        )
+
+        self.assertEqual(result["status"], "awaiting_payment_quantity")
+        self.assertEqual(state["stage"], "document_signing_payment_quantity")
+
+    def test_old_portal_numeric_text_without_filter_marker_only_filters(self):
+        case = fixtures.WorkflowTests("runTest")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.sharepoint.options_by_key["document_signing_payment_product"] = [
+            {"id": 12, "title": "12 - GASOLINA", "value": "GASOLINA",
+             "source_values": {"Id": 12, "PRODUTO": "GASOLINA", "SATUS": "ATIVO"}},
+        ]
+        state = {
+            "key": "receipt-old-portal-filter", "batch_id": "receipt-old-portal-filter",
+            "flow": "document_signing", "stage": "document_signing_payment_product",
+            "phone_number_id": "portal-admin", "options": [], "processed_message_ids": [],
+            "document_signing_payment_items": [],
+        }
+        self.assertTrue(case.engine._document_signing_prompt_payment_options(state, kind="product"))
+
+        result = case.engine._handle_document_signing_text(
+            fixtures.event("old-portal-filter", "text", text="12"), state, None,
+        )
+
+        self.assertEqual(result["status"], "filtered_options")
+        self.assertEqual(state["stage"], "document_signing_payment_product")
+
 
 if __name__ == "__main__":
     unittest.main()
