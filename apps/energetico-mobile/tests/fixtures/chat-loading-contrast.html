@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css"></head>
+<body><div class="chat-progress"><span class="app-loading app-loading--compact" role="status">
+  <span class="app-loading__spinner"></span><span class="app-loading__text">Processando sua resposta...</span>
+</span></div><script>
+  const rgb = value => [...value.matchAll(/[\d.]+/g)].map(match => Number(match[0]));
+  const luminance = channels => channels.slice(0, 3).map(channel => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+  const background = rgb(getComputedStyle(document.body).backgroundColor);
+  const card = document.querySelector('.chat-progress .app-loading');
+  const style = getComputedStyle(card);
+  const cardColor = rgb(style.backgroundColor);
+  const alpha = cardColor[3] ?? 1;
+  const visibleCard = cardColor.slice(0, 3).map((channel, index) => alpha * channel + (1 - alpha) * background[index]);
+  const a = luminance(visibleCard), b = luminance(background);
+  document.documentElement.dataset.layout = JSON.stringify({
+    contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+    borderWidth: parseFloat(style.borderTopWidth),
+    cardVisible: card.getBoundingClientRect().width > 0,
+  });
+</script></body></html>
