@@ -3344,6 +3344,92 @@ for (const presentation of ["accordion", "attendance_multi_select"]) {
   });
 }
 
+test('presença com jornada irregular exige justificativa antes de entrar no lote', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: 'irregular-day', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [
+      { id: 'pending_attendance_record:2249', label: '2249 - LUIZ', rhidBadge: { date: '2026-10-12', minutes: 524, status: 'inconsistent', label: '8h44' } },
+      { id: 'pending_attendance_record:2250', label: '2250 - ANA', rhidBadge: { date: '2026-10-12', minutes: 525, status: 'present', label: '8h45' } },
+    ] };
+  const state = signedInState({ messages: [poll] });
+  const saves = [], replies = [];
+  view.on('attendance-irregularity-save', async payload => { saves.push(payload); });
+  view.on('select-reply', payload => replies.push(payload.replyId));
+  view.render(state);
+  root.querySelector('input[data-reply-id="2249"]').click();
+  assert.equal(root.querySelector('input[data-reply-id="2249"]').checked, false);
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Por que ocorreu essa irregularidade/i);
+  root.querySelector('[data-action="attendance-irregularity-cancel"]').click();
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
+  assert.equal(root.querySelector('input[data-reply-id="2249"]').checked, false);
+  root.querySelector('input[data-reply-id="2249"]').click();
+  root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Saída antecipada autorizada.';
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(saves.map(({ id, date, explanation }) => ({ id, date, explanation })),
+    [{ id: '2249', date: '2026-10-12', explanation: 'Saída antecipada autorizada.' }]);
+  assert.equal(root.querySelector('input[data-reply-id="2249"]').checked, true);
+  assert.deepEqual(replies, [], 'marcar não define presença');
+  root.querySelector('input[data-reply-id="2250"]').click();
+  root.querySelector('[data-action="attendance-select-proceed"]').click();
+  assert.deepEqual(replies, ['attendance_batch:2249,2250']);
+});
+
+test('botão individual irregular só prossegue após gravação; falha mantém popup', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const state = signedInState({ messages: [{ id: 'fri', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [{ id: 'pending_attendance_record:30', label: '30 - JOÃO',
+      rhidBadge: { date: '2026-10-16', minutes: 501, status: 'present', label: '8h21' } }] }] });
+  const replies = [];
+  let fail = true;
+  view.on('attendance-irregularity-save', async () => { if (fail) throw new Error('Sem conexão'); });
+  view.on('select-reply', payload => replies.push(payload.replyId));
+  view.render(state);
+  root.querySelector('.chat-attendance-select__row button').click();
+  assert.deepEqual(replies, []);
+  root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Compensação.';
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Sem conexão/);
+  assert.deepEqual(replies, []);
+  fail = false;
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(replies, ['pending_attendance_record:30']);
+});
+
+test('selecionar todos solicita cada justificativa e cancelar não marca o próximo irregular', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const badge = minutes => ({ date: '2026-10-16', minutes, status: 'present', label: 'RHID' });
+  view.render(signedInState({ messages: [{ id: 'all-fri', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [
+      { id: 'pending_attendance_record:30', label: '30 - A', rhidBadge: badge(450) },
+      { id: 'pending_attendance_record:31', label: '31 - B', rhidBadge: badge(460) },
+      { id: 'pending_attendance_record:32', label: '32 - C', rhidBadge: badge(510) },
+    ] }] }));
+  const saves = [];
+  view.on('attendance-irregularity-save', async payload => { saves.push(payload.id); });
+  root.querySelector('[data-action="attendance-select-all"]').click();
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]').textContent.includes('30 - A'), true);
+  assert.deepEqual([...root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked')].map(input => input.dataset.replyId), ['31']);
+  root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Motivo A';
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]').textContent.includes('32 - C'), true);
+  root.querySelector('[data-action="attendance-irregularity-cancel"]').click();
+  assert.deepEqual(saves, ['30']);
+  assert.deepEqual([...root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked')].map(input => input.dataset.replyId), ['30', '31']);
+});
+
 test("uma nova data de validação não reaproveita IDs marcados na pergunta anterior", t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
