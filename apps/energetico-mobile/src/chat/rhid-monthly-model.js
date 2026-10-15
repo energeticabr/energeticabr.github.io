@@ -49,7 +49,9 @@ export function buildRhidMonthlyReport({month,supplier,snapshot,startDate:reques
   const total=netMinutes===null?null:hours(netMinutes);
   if(recorded){recordedDays++;if(total===null)incompleteDays++;}
   if(netMinutes!==null)minutes+=netMinutes;
-  return {date,slots,total,recorded,adjusted:Boolean(person&&Object.values(person.slots).some(slot=>slot.adjustment)),issues:person?.issues||[]};
+  const classifiedPunches=new Set(person?Object.values(person.slots).map(slot=>slot.rhid).filter(Boolean):[]);
+  const unclassifiedPunches=person?.rawPunches.filter(time=>!classifiedPunches.has(time))||[];
+  return {date,slots,total,recorded,adjusted:Boolean(person&&Object.values(person.slots).some(slot=>slot.adjustment)),issues:person?.issues||[],unclassifiedPunches};
  });
  return {month,startDate,endDate,supplier:{id:String(supplier.id),name:supplier.name},days,total:hours(minutes),recordedDays,incompleteDays};
 }
