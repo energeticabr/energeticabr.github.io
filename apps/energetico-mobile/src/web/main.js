@@ -19,6 +19,7 @@ import { bridgeMicrosoftAuthResponse } from "./redirect-bridge.js";
 import { createShortcutClient } from "./shortcut-client.js";
 import "../styles.css";
 import "../ui/supplier-payroll.css";
+import "../ui/meal-voucher.css";
 import "../ui/launch-gallery.css";
 import "../ui/searchable-filter-selects.css";
 import "../ui/gallery-record-actions.css";
