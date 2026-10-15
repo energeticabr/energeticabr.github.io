@@ -1,0 +1,28 @@
+.meal-voucher-page { position: fixed; z-index: 160; inset: 0; height: 100dvh; display: flex; flex-direction: column; background: #eef7fa; color: #17313d; font: inherit; }
+.meal-voucher-page[hidden], .meal-voucher-page [hidden] { display: none !important; }
+.meal-voucher-header { display: flex; align-items: center; gap: .7rem; flex: none; min-height: 64px; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left)); background: #073d54; color: white; }
+.meal-voucher-header h1 { flex: 1; margin: 0; text-align: center; font-size: 1.1rem; }
+.meal-voucher-navigation, .meal-voucher-button { min-height: 44px; border: 1px solid #397c86; border-radius: 10px; padding: .55rem .8rem; background: #fff; color: #074c5b; font: inherit; font-weight: 700; cursor: pointer; }
+.meal-voucher-navigation:disabled, .meal-voucher-button:disabled { opacity: .55; cursor: wait; }
+.meal-voucher-body { flex: 1; overflow: auto; min-height: 0; padding: 18px max(14px, env(safe-area-inset-right)) 22px max(14px, env(safe-area-inset-left)); }
+.meal-voucher-content { max-width: 920px; margin: auto; display: grid; gap: 14px; }
+.meal-voucher-content h2, .meal-voucher-content h3 { margin: 0; color: #0a5063; }
+.meal-voucher-content p { margin: 0; }
+.meal-voucher-error { max-width: 920px; margin: 0 auto 12px; padding: 12px; border-radius: 10px; background: #ffe6e6; color: #a41420; font-weight: 700; }
+.meal-voucher-search, .meal-voucher-field input, .meal-voucher-field select, .meal-voucher-field textarea { width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid #a4bdc5; border-radius: 8px; padding: 9px; background: #fff; color: #17313d; font: inherit; }
+.meal-voucher-field { display: grid; gap: 5px; font-weight: 700; }
+.meal-voucher-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: #fff; border: 1px solid #bed0d7; }
+.meal-voucher-table th:first-child { width: 43%; }
+.meal-voucher-table th:nth-child(2) { width: 14%; }
+.meal-voucher-table th:nth-child(3) { width: 22%; }
+.meal-voucher-table th, .meal-voucher-table td { padding: 9px; text-align: left; border-bottom: 1px solid #ccdce2; }
+.meal-voucher-table th { background: #deeff4; }
+.meal-voucher-table tr:nth-child(even) { background: #f4fafd; }
+.meal-voucher-table td small { display: block; color: #536e78; }
+.meal-voucher-table input { width: 100%; min-width: 0; min-height: 42px; box-sizing: border-box; border: 1px solid #acc4ca; border-radius: 7px; padding: 6px; font: inherit; }
+.meal-voucher-total { padding: 12px; background: #e2f3eb; border: 1px solid #91c8aa; border-radius: 10px; text-align: right; font-size: 1.2rem; font-weight: 800; }
+.meal-voucher-summary { margin: 0; padding: 0; list-style: none; }
+.meal-voucher-summary li { padding: 10px; border-bottom: 1px solid #bfd3dc; background: #fff; }
+.meal-voucher-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); background: #e2f0f5; border-top: 1px solid #bfd3dc; }
+.meal-voucher-footer .meal-voucher-button { background: #075a70; color: #fff; }
+@media (max-width: 600px) { .meal-voucher-table { font-size: .82rem; } .meal-voucher-table th, .meal-voucher-table td { padding: 5px; } .meal-voucher-table td small { font-size: .72rem; } .meal-voucher-header h1 { font-size: .9rem; } }

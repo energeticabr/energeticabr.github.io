@@ -1,0 +1,161 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createMealVoucherData } from '../src/chat/meal-voucher-data.js';
+
+function fixture() {
+  const names = {
+    FORNECEDORES: ['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'],
+    CADASTROCONTA: ['CONTA'], LANCAMENTOOBRA: ['ETAPA','FILIAL'],
+    IDFOLHA: ['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO: ['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
+    NOTASPENDENTES: ['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL'],
+    LANCAMENTOS: ['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS'],
+  };
+  const columns = Object.fromEntries(Object.entries(names).map(([list, labels]) => [list, labels.map(label => ({ name: label, displayName: label, ...(/DATA/.test(label) ? { dateTime: {} } : { text: {} }) }))]));
+  const rows = { FORNECEDORES: [
+    { id: '1', fields: { CADASTRO: 'Ana', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'PEDREIRO' } },
+    { id: '2', fields: { CADASTRO: 'Beto', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'SERVENTE' } },
+    { id: '3', fields: { CADASTRO: 'Caio', STATUS: 'INATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'PINTOR' } },
+  ], CADASTROCONTA: [{ id: '8', fields: { CONTA: 'CAIXA' } }], LANCAMENTOOBRA: [{ id: '7', fields: { ETAPA: 'FUNDAÇÃO', FILIAL: 'OBRA A' } }],
+  IDFOLHA: [{ id: '11', fields: { MESREFERENCIA: '10/2026', FORNECEDOR: 'Ana' } }, { id: '12', fields: { MESREFERENCIA: '10/2026', FORNECEDOR: 'Beto' } }],
+  FOLHAPGTO: [], NOTASPENDENTES: [], LANCAMENTOS: [] };
+  const writes = [], uploads = [];
+  let failSecond = false, changeSheetDuringLaunch = false;
+  const repo = {
+    resolveList: async (_site, aliases) => ({ status: 'resolved', id: aliases[0] }),
+    getColumns: async (_site, list) => columns[list],
+    getItemsPage: async (_site, list) => ({ items: rows[list], hasMore: false }),
+    getItem: async (_site, list, id) => rows[list].find(row => row.id === String(id)),
+    createItem: async (_site, list, fields) => { if (failSecond && list === 'LANCAMENTOS' && rows.LANCAMENTOS.length === 1) throw new Error('rede interrompida'); const row = { id: String(rows[list].length + (list === 'FORNECEDORES' ? 10 : 1)), fields, eTag: '"1"' }; rows[list].push(row); writes.push({ list, fields }); if (changeSheetDuringLaunch && list === 'LANCAMENTOS') rows.IDFOLHA[0].fields.MESREFERENCIA = '11/2026'; return row; },
+    updateItem: async (_site, list, id, fields) => { const row = rows[list].find(item => item.id === String(id)); Object.assign(row.fields, fields); writes.push({ list, fields, update: true }); return row; },
+    listAttachments: async () => uploads.map(fileName => ({ fileName })),
+    uploadAttachment: async (_site, _list, _id, file) => { uploads.push(file.name); },
+  };
+  return { repo, rows, writes, uploads, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; } };
+}
+const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
+
+test('busca todos os fornecedores elegíveis e cria um pedido com um lançamento por fornecedor', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo });
+  const options = await data.loadOptions();
+  assert.deepEqual(options.suppliers.map(s => s.label), ['Ana', 'Beto']);
+  const progress = { operationId: 'abc-1' };
+  const result = await data.post(draft(options.suppliers), progress);
+  assert.equal(result.total, 30);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.FORNECEDOR, 'DIVERSOS');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 30);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.PRODUTO), ['PEDREIRO', 'SERVENTE']);
+  assert.ok(f.rows.LANCAMENTOS.every(row => row.fields.AGRUPAR === result.orderId));
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.IDFOLHA), [11, 12]);
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.IDLANCAMENTO), result.lines.map(line => Number(line.id)));
+  assert.ok(f.rows.FOLHAPGTO.every(row => row.fields.TIPOPGTO === 'VALE REFEIÇÃO'));
+  assert.equal((await data.post(draft(options.suppliers), progress)).orderId, result.orderId);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('retoma falha parcial sem duplicar pedido e lançamento', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo });
+  const options = await data.loadOptions(), progress = { operationId: 'retry-1' };
+  f.failSecond();
+  await assert.rejects(data.post(draft(options.suppliers), progress), /rede interrompida/);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1);
+  assert.equal(f.rows.LANCAMENTOS.length, 1);
+  f.recover();
+  await data.post(draft(options.suppliers), progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('não cria pedido ou lançamentos quando falta IDFOLHA do mês para um fornecedor', async () => {
+  const f = fixture(); f.rows.IDFOLHA.pop();
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  await assert.rejects(data.post(draft(suppliers), { operationId: 'missing-sheet' }), /IDFOLHA|folha/i);
+  assert.equal(f.rows.NOTASPENDENTES.length, 0);
+  assert.equal(f.rows.LANCAMENTOS.length, 0);
+});
+
+test('não escolhe folha ambígua quando há duas IDFOLHA no mês do fornecedor', async () => {
+  const f = fixture(); f.rows.IDFOLHA.push({ id: '13', fields: { MESREFERENCIA: '2026-10', FORNECEDOR: 'Ana' } });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  await assert.rejects(data.post(draft(suppliers), { operationId: 'ambiguous-sheet' }), /IDFOLHA|folha/i);
+  assert.equal(f.rows.NOTASPENDENTES.length, 0);
+});
+
+test('fornecedores homônimos não podem compartilhar a mesma IDFOLHA por engano', async () => {
+  const f = fixture(); f.rows.FORNECEDORES.push({ id: '4', fields: { CADASTRO: 'Ana', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'PEDREIRO' } });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  const duplicates = suppliers.filter(row => row.label === 'Ana');
+  await assert.rejects(data.post(draft(duplicates), { operationId: 'same-name-1' }), /homônim|IDFOLHA/i);
+  assert.equal(f.rows.NOTASPENDENTES.length, 0);
+});
+
+test('pedido existente incompatível não recebe lançamentos', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA B', FORNECEDOR: 'DIVERSOS', STATUS: 'PENDENTE AUDITORIA', VALORTOTAL: 0 }, eTag: '"1"' });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  await assert.rejects(data.post({ ...draft(suppliers), orderMode: 'existing', orderId: '99' }, { operationId: 'bad-1' }), /filial/i);
+  assert.equal(f.rows.LANCAMENTOS.length, 0);
+});
+
+test('pedido aprovado não pode receber novos lançamentos', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA A', FORNECEDOR: 'DIVERSOS', STATUS: 'APROVADO SUBMETER', VALORTOTAL: 40 }, eTag: '"1"' });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  await assert.rejects(data.post({ ...draft(suppliers), orderMode: 'existing', orderId: '99' }, { operationId: 'approved-1' }), /pendente/i);
+  assert.equal(f.rows.LANCAMENTOS.length, 0);
+});
+
+test('pedido existente compatível soma o total uma única vez e mantém o mesmo ID', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA A', FORNECEDOR: 'DIVERSOS', STATUS: 'PENDENTE AUDITORIA', VALORTOTAL: 40 }, eTag: '"1"' });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  const selected = { ...draft(suppliers), orderMode: 'existing', orderId: '99' }, progress = { operationId: 'existing-1' };
+  const result = await data.post(selected, progress);
+  assert.equal(result.orderId, '99');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 70);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  await data.post(selected, progress);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 70);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+});
+
+test('anexos são vinculados ao pedido e retomada não duplica arquivo', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  const file = new File(['abc'], 'comprovante.pdf', { type: 'application/pdf' });
+  const selected = { ...draft(suppliers), files: [file] }, progress = { operationId: 'files-1' };
+  await data.post(selected, progress);
+  await data.post(selected, progress);
+  assert.deepEqual(f.uploads, ['comprovante.pdf']);
+});
+
+test('total de pedido existente é somado com centavos exatos', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA A', FORNECEDOR: 'Ana', STATUS: 'PENDENTE AUDITORIA', VALORTOTAL: 0.1 }, eTag: '"1"' });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  await data.post({ ...draft([suppliers[0]]), lines: [{ supplier: suppliers[0], quantity: '1', unitValue: '0,20' }], orderMode: 'existing', orderId: '99' }, { operationId: 'cent-1' });
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 0.3);
+});
+
+test('não cria lançamento nem FOLHAPGTO para fornecedor com quantidade ou valor em branco', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  const selected = draft(suppliers);
+  selected.lines[1].quantity = '';
+  await data.post(selected, { operationId: 'blank-1' });
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.FORNECEDOR), ['Ana']);
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.FORNECEDOR), ['Ana']);
+});
+
+test('IDFOLHA alterada durante o lote não recebe vínculo incorreto', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  f.changeSheetDuringLaunch();
+  await assert.rejects(data.post(draft([suppliers[0]]), { operationId: 'sheet-race-1' }), /IDFOLHA|folha/i);
+  assert.equal(f.rows.FOLHAPGTO.length, 0);
+});
