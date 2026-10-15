@@ -7,8 +7,8 @@ const BOTTOM = 48;
 const INNER_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const SIZE = 9;
 const LEADING = 10;
-const PADDING = 2;
-const COLUMNS = [64, 40, 40, 40, 40, 43, 264];
+const PADDING = 1.5;
+const COLUMNS = [70, 92, 92, 92, 92, 93];
 
 // Wrap words, literal line breaks and long tokens without shortening the text.
 function wrapText(value, font, size, width) {
@@ -95,7 +95,7 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
     if (!includeAttendanceHeader) return;
     page.drawRectangle({ x: MARGIN, y: y - 25, width: INNER_WIDTH, height: 25, color: navy });
     let x = MARGIN;
-    ["Data", "E", "S", "E2", "S2", "Total", "Observações"].forEach((label, index) => {
+    ["Data", "ENTRADA 1", "SAÍDA 1", "ENTRADA 2", "SAÍDA 2", "Total"].forEach((label, index) => {
       text(label, x + PADDING, y - 16, bold, SIZE, rgb(1, 1, 1));
       x += COLUMNS[index];
     });
@@ -103,14 +103,13 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
   }
 
   function drawDay(day) {
-    const notes = [!day.recorded ? "Sem registros" : day.total === null ? "Incompleto" : "Registrado"];
+    const notes = [];
     if (day.adjusted) notes.push("Ajustado");
+    if (day.recorded && day.total === null) notes.push("Incompleto");
     notes.push(...day.issues);
     const slots = Array.from({ length: 4 }, (_, index) => day.slots[index] || "-");
-    // The model normally has four slots. Preserve any unexpected extras as
-    // notes instead of silently dropping them to keep the table compact.
     if (day.slots.length > 4) notes.push(`Outras marcações: ${day.slots.slice(4).join(" / ")}`);
-    const cells = [dateLabel(day.date), ...slots, day.total ?? "-", notes.join(" · ")]
+    const cells = [dateLabel(day.date), ...slots, day.total ?? "-"]
       .map((value, index) => wrapText(value, index === 5 ? bold : regular, SIZE, COLUMNS[index] - PADDING * 2));
     const length = Math.max(...cells.map(lines => lines.length));
     let offset = 0;
@@ -135,6 +134,24 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
       y -= height;
       offset += count;
     }
+    if (!notes.length) return;
+    const remark = wrapText(`Ocorrência em ${dateLabel(day.date)}: ${notes.join(" · ")}`, regular, SIZE, INNER_WIDTH - PADDING * 2);
+    let remarkOffset = 0;
+    while (remarkOffset < remark.length) {
+      const remainingHeight = (remark.length - remarkOffset) * LEADING + PADDING * 2;
+      const freshHeight = PAGE_HEIGHT - 89 - wrapText(supplierName, bold, 10, INNER_WIDTH).length * 13 - 32 - BOTTOM;
+      if (y - remainingHeight < BOTTOM && remainingHeight <= freshHeight) addPage();
+      let capacity = Math.floor((y - BOTTOM - PADDING * 2) / LEADING);
+      if (capacity < 1) { addPage(); capacity = Math.floor((y - BOTTOM - PADDING * 2) / LEADING); }
+      const count = Math.min(remark.length - remarkOffset, capacity);
+      const height = count * LEADING + PADDING * 2;
+      page.drawRectangle({ x: MARGIN, y: y - height, width: INNER_WIDTH, height,
+        color: rgb(0.96, 0.98, 1), borderColor: rule, borderWidth: 0.5 });
+      remark.slice(remarkOffset, remarkOffset + count).forEach((line, index) =>
+        text(line, MARGIN + PADDING, y - PADDING - SIZE - index * LEADING));
+      y -= height;
+      remarkOffset += count;
+    }
   }
 
   function signatureGroup() {
@@ -148,10 +165,16 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
     }));
     const nameHeight = Math.max(...signatures.map(signature => signature.nameLines.length)) * 13;
     const labelHeight = (Math.max(...signatures.map(signature => signature.labelLines.length)) - 1) * 12;
-    const groupHeight = 16 + 64 + 13 + nameHeight + labelHeight + 8;
+    const declaration = "Declaração: o colaborador usufrui diariamente de 15 minutos de descanso para o lanche da manhã. De segunda a quinta-feira, usufrui mais 15 minutos de descanso para o lanche da tarde. Esses períodos foram descontados dos totais líquidos de horas trabalhadas neste relatório.";
+    const declarationLines = wrapText(declaration, regular, 8.5, INNER_WIDTH);
+    const declarationHeight = declarationLines.length * 11 + 8;
+    const signatureGap = 6;
+    const groupHeight = declarationHeight + signatureGap + 64 + 13 + nameHeight + labelHeight + 8;
     // Reserve both signatures at once; a continuation has report context only.
     if (y - groupHeight < BOTTOM) addPage(false);
-    const signatureBottom = y - 16 - 64;
+    declarationLines.forEach((line, index) => text(line, MARGIN, y - index * 11, regular, 8.5));
+    y -= declarationHeight;
+    const signatureBottom = y - signatureGap - 64;
     const nameTop = signatureBottom - 13;
     const labelTop = nameTop - nameHeight;
     const bottom = labelTop - labelHeight - 8;
@@ -188,7 +211,7 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
   y -= 14;
   signatureGroup();
   if (reports.length > 1 && pdf.getPageCount() - firstPage !== 1) {
-    throw new RangeError(`O relatório de ${supplierName} precisa de mais de uma página. Gere-o individualmente para preservar todas as observações.`);
+    throw new RangeError(`O relatório de ${supplierName} precisa de mais de uma página. Gere-o individualmente para preservar todas as ocorrências.`);
   }
   }
   pdf.getPages().forEach((sheet, index, pages) => sheet.drawText(`Página ${index + 1} de ${pages.length}`, {
