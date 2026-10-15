@@ -19,18 +19,18 @@ function fixture() {
   IDFOLHA: [{ id: '11', fields: { MESREFERENCIA: '10/2026', FORNECEDOR: 'Ana' } }, { id: '12', fields: { MESREFERENCIA: '10/2026', FORNECEDOR: 'Beto' } }],
   FOLHAPGTO: [], NOTASPENDENTES: [], LANCAMENTOS: [] };
   const writes = [], uploads = [];
-  let failSecond = false, changeSheetDuringLaunch = false;
+  let failSecond = false, changeSheetDuringLaunch = false, changeOrderDuringLaunch = false;
   const repo = {
     resolveList: async (_site, aliases) => ({ status: 'resolved', id: aliases[0] }),
     getColumns: async (_site, list) => columns[list],
     getItemsPage: async (_site, list) => ({ items: rows[list], hasMore: false }),
     getItem: async (_site, list, id) => rows[list].find(row => row.id === String(id)),
-    createItem: async (_site, list, fields) => { if (failSecond && list === 'LANCAMENTOS' && rows.LANCAMENTOS.length === 1) throw new Error('rede interrompida'); const row = { id: String(rows[list].length + (list === 'FORNECEDORES' ? 10 : 1)), fields, eTag: '"1"' }; rows[list].push(row); writes.push({ list, fields }); if (changeSheetDuringLaunch && list === 'LANCAMENTOS') rows.IDFOLHA[0].fields.MESREFERENCIA = '11/2026'; return row; },
+    createItem: async (_site, list, fields) => { if (failSecond && list === 'LANCAMENTOS' && rows.LANCAMENTOS.length === 1) throw new Error('rede interrompida'); const row = { id: String(rows[list].length + (list === 'FORNECEDORES' ? 10 : 1)), fields, eTag: '"1"' }; rows[list].push(row); writes.push({ list, fields }); if (changeSheetDuringLaunch && list === 'LANCAMENTOS') rows.IDFOLHA[0].fields.MESREFERENCIA = '11/2026'; if (changeOrderDuringLaunch && list === 'LANCAMENTOS') { rows.NOTASPENDENTES[0].fields.VALORTOTAL = 45; changeOrderDuringLaunch = false; } return row; },
     updateItem: async (_site, list, id, fields) => { const row = rows[list].find(item => item.id === String(id)); Object.assign(row.fields, fields); writes.push({ list, fields, update: true }); return row; },
     listAttachments: async () => uploads.map(fileName => ({ fileName })),
     uploadAttachment: async (_site, _list, _id, file) => { uploads.push(file.name); },
   };
-  return { repo, rows, writes, uploads, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; } };
+  return { repo, rows, writes, uploads, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
 
@@ -158,4 +158,34 @@ test('IDFOLHA alterada durante o lote não recebe vínculo incorreto', async () 
   f.changeSheetDuringLaunch();
   await assert.rejects(data.post(draft([suppliers[0]]), { operationId: 'sheet-race-1' }), /IDFOLHA|folha/i);
   assert.equal(f.rows.FOLHAPGTO.length, 0);
+});
+
+test('pedido existente reconcilia edição concorrente sem duplicar o acréscimo na retomada', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA A', FORNECEDOR: 'DIVERSOS', STATUS: 'PENDENTE AUDITORIA', VALORTOTAL: 40, OBS: 'Original' }, eTag: '"1"' });
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  const selected = { ...draft(suppliers), orderMode: 'existing', orderId: '99' };
+  f.changeOrderDuringLaunch();
+  await data.post(selected, { operationId: 'concurrent-1' });
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 75);
+  await data.post(selected, { operationId: 'concurrent-1' });
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 75);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+});
+
+test('renomeação de conta ou etapa impede gravar rótulos obsoletos', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  f.rows.CADASTROCONTA[0].fields.CONTA = 'BANCO';
+  await assert.rejects(data.post(draft(suppliers), { operationId: 'stale-account' }), /conta|cadastro/i);
+  assert.equal(f.rows.NOTASPENDENTES.length, 0);
+});
+
+test('anexo diferente com nome já existente não é descartado silenciosamente', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA A', FORNECEDOR: 'Ana', STATUS: 'PENDENTE AUDITORIA', VALORTOTAL: 40, OBS: '' }, eTag: '"1"' });
+  f.uploads.push('comprovante.pdf');
+  const data = createMealVoucherData({ repository: f.repo });
+  const { suppliers } = await data.loadOptions();
+  const file = new File(['novo'], 'comprovante.pdf', { type: 'application/pdf' });
+  await assert.rejects(data.post({ ...draft([suppliers[0]]), orderMode: 'existing', orderId: '99', files: [file] }, { operationId: 'same-name' }), /nome|anexo/i);
 });

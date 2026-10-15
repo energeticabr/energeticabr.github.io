@@ -55,3 +55,12 @@ test('vale alimentação: valores explicitamente zerados também não viram lan�
   assert.deepEqual(result.lines.map(line => line.supplier.label), ['Caio']);
   assert.equal(result.total, 8);
 });
+
+test('quantidade zero omite a linha mesmo que o valor restante seja inválido', () => {
+  const result = validateMealVoucherDraft({ ...base, lines: [
+    { supplier: suppliers[0], quantity: '0', unitValue: 'abc' },
+    { supplier: suppliers[1], quantity: '1', unitValue: '5' },
+  ] });
+  assert.deepEqual(result.lines.map(line => line.supplier.label), ['Beto']);
+  assert.equal(result.total, 5);
+});

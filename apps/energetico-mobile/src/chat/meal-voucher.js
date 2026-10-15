@@ -4,13 +4,24 @@ import { payrollDecimal, payrollKey, validPayrollDate } from './supplier-payroll
 export const MEAL_VOUCHER_REPLY_ID = 'action_meal_voucher_launch';
 export const mealVoucherKey = payrollKey;
 
+function amounts(line) {
+  if (!String(line.unitValue ?? '').trim() || !String(line.quantity ?? '').trim()) return null;
+  let quantity, unitValue, quantityError, valueError;
+  try { quantity = payrollDecimal(line.quantity); } catch (error) { quantityError = error; }
+  try { unitValue = payrollDecimal(line.unitValue); } catch (error) { valueError = error; }
+  if (quantity?.isZero() || unitValue?.isZero()) return null;
+  if (quantityError) throw quantityError;
+  if (valueError) throw valueError;
+  return { quantity, unitValue };
+}
+
 export function mealVoucherLines(rawLines = []) {
   const selected = [];
   const seen = new Set();
   for (const line of rawLines) {
-    if (!String(line.unitValue ?? '').trim() || !String(line.quantity ?? '').trim()) continue;
-    const quantity = payrollDecimal(line.quantity), unitValue = payrollDecimal(line.unitValue);
-    if (quantity.isZero() || unitValue.isZero()) continue;
+    const parsed = amounts(line);
+    if (!parsed) continue;
+    const { quantity, unitValue } = parsed;
     if (quantity.isNegative() || unitValue.isNegative()) throw new RangeError('Quantidade e valor devem ser maiores que zero.');
     const supplier = line.supplier;
     if (!/^[1-9]\d*$/.test(String(supplier?.id ?? '')) || !supplier.label)
@@ -28,9 +39,10 @@ export function mealVoucherLines(rawLines = []) {
 }
 
 export function mealVoucherTotal(lines = []) {
-  const total = lines.reduce((sum, line) => String(line.unitValue ?? '').trim() && String(line.quantity ?? '').trim()
-    ? sum.plus(payrollDecimal(line.quantity).times(payrollDecimal(line.unitValue)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP))
-    : sum, new Decimal(0));
+  const total = lines.reduce((sum, line) => {
+    const parsed = amounts(line);
+    return parsed ? sum.plus(parsed.quantity.times(parsed.unitValue).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)) : sum;
+  }, new Decimal(0));
   if (total.times(100).gt(Number.MAX_SAFE_INTEGER)) throw new RangeError('O total excede o limite de precisão.');
   return total.toNumber();
 }

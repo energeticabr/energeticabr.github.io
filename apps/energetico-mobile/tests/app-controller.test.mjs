@@ -10007,14 +10007,14 @@ test("folha não abre fora de Novo Pedido",async t=>{
 });
 
 test('vale-alimentação abre tela local sem enviar resposta à VM e encerra na troca de sessão', async t => {
- let opened=0,destroyed=0,assertSession;
- const h=makeHarness({mealVoucherDataFactory:async options=>{assertSession=options.assertSession;return {prepare:async()=>{}};},mealVoucherFactory:async()=>({open:async()=>{opened++;},destroy:()=>{destroyed++;}})});
+ let opened=0,destroyed=0,assertSession,sessionKey;
+ const h=makeHarness({mealVoucherDataFactory:async options=>{assertSession=options.assertSession;return {prepare:async()=>{}};},mealVoucherFactory:async options=>{sessionKey=options.sessionKey;return {open:async()=>{opened++;},destroy:()=>{destroyed++;}};}});
  t.after(()=>h.controller.stop());await h.controller.start();
  const poll={type:'poll',question:'COMO DESEJA EFETUAR O LANÇAMENTO?',options:[{id:'choice:tipo_lancamento:2',label:'LANÇAMENTO MÚLTIPLO'}]};
  h.store.ingestRemoteMessages([poll],{activeFlow:{id:'launch',title:'EFETUAR LANÇAMENTO',rows:[{label:'TIPO DE PEDIDO',value:'NOVO PEDIDO'}]}});
  const before=h.chatCalls.length;
  assert.equal(await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'}),true,JSON.stringify({error:h.view.renders.at(-1).error,flow:h.store.getState().activeFlow,messages:h.store.getState().messages.map(m=>({type:m.type,question:m.question,options:m.options}))}));
- assert.equal(opened,1);assert.equal(h.chatCalls.length,before);
+ assert.equal(opened,1);assert.equal(h.chatCalls.length,before);assert.ok(sessionKey);
  h.controller.stop();assert.equal(destroyed,1);assert.throws(assertSession,/sessão/i);
 });
 

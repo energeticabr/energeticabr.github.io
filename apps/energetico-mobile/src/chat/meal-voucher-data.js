@@ -135,7 +135,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     }
     return String(row.id);
   }
-  async function post(rawDraft, progress = {}) {
+  async function post(rawDraft, progress = {}, onProgress = () => {}) {
     if (posting) throw new Error('O lote já está sendo enviado.');
     if (!/^[A-Za-z0-9-]{1,80}$/.test(String(progress.operationId || ''))) throw new Error('A operação não foi identificada.');
     posting = true;
@@ -148,8 +148,8 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         const match = live.suppliers.find(row => row.id === line.supplier.id);
         if (!match || key(match.label) !== key(line.supplier.label) || key(match.branch) !== key(draft.branch) || key(match.profession) !== key(line.supplier.profession)) throw new Error('O cadastro de um fornecedor mudou; revise o lote.');
       }
-      if (!live.stages.some(row => row.id === draft.stage.id && key(row.branch) === key(draft.branch))) throw new Error('A etapa não pertence mais à filial.');
-      if (!live.accounts.some(row => row.id === draft.account.id)) throw new Error('A conta não está mais cadastrada.');
+      if (!live.stages.some(row => row.id === draft.stage.id && key(row.branch) === key(draft.branch) && key(row.label) === key(draft.stage.label))) throw new Error('A etapa foi alterada no cadastro; revise o lote.');
+      if (!live.accounts.some(row => row.id === draft.account.id && key(row.label) === key(draft.account.label))) throw new Error('A conta foi alterada no cadastro; revise o lote.');
       for (const file of draft.files) { const validation = validateAttachment(file); if (!validation.valid) throw new Error(validation.message); }
       const sheets = await loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier));
       const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
@@ -166,44 +166,59 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         if (key(value(orders, order, ['FILIAL'])) !== key(draft.branch)) throw new Error('O pedido pertence a outra filial.');
         if (!pending(value(orders, order, ['STATUS']))) throw new Error('O pedido não está pendente.');
         if (key(supplier) !== 'DIVERSOS' && (draft.lines.length !== 1 || key(supplier) !== key(draft.lines[0].supplier.label))) throw new Error('O fornecedor do pedido não é compatível com o lote.');
-        progress.previousOrderTotal ??= amount(value(orders, order, ['VALORTOTAL'], false)).toNumber();
+        if (draft.files.length) {
+          const existingFiles = await repository.listAttachments(siteKey, orders.id, orderId);
+          for (const file of draft.files) if (existingFiles.some(row => row.fileName === file.name) && !progress.uploadedFiles?.[file.name])
+            throw new Error(`O pedido já possui um anexo chamado ${file.name}. Renomeie o novo arquivo antes de enviar.`);
+        }
       } else {
         const fields = payload(orders, { FILIAL: draft.branch, FORNECEDOR: draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS', VALORTOTAL: draft.total, 'DATA PEDIDO': draft.date, STATUS: 'PENDENTE AUDITORIA', OBS: draft.obs, FORMAPGTO: draft.account.label, 'NOTA FISCAL': 'PENDENTE' }, ['DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL']);
         progress.signature = signature;
+        onProgress();
         orderId = await ensure(orders, fields, 'Title', `APP-vale-alimentacao-${progress.operationId}`, tokenCache);
       }
       progress.orderId = orderId;
       progress.signature = signature;
+      onProgress();
       progress.lines ??= {};
       const resultLines = [];
       for (const line of draft.lines) {
         const fields = payload(launches, { AGRUPAR: String(orderId), FILIAL: draft.branch, 'TIPO TRANSAÇÃO': 'CUSTO', DATA: draft.date, 'DATA PGTO PREVISTO': draft.dueDate, FORNECEDOR: line.supplier.label, PRODUTO: line.supplier.profession, ETAPA: draft.stage.label, QUANTIDADE: line.quantity, 'VALOR UNITÁRIO': line.unitValue, CONTA: draft.account.label, FRETE: 0, OBS: `VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
         const launchId = await ensure(launches, fields, '__PowerAppsId__', `APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}`, tokenCache);
         progress.lines[line.supplier.id] = launchId;
+        onProgress();
         resultLines.push({ supplier: line.supplier.label, id: launchId, total: line.total });
       }
       if (draft.orderMode === 'existing' && !progress.orderUpdated) {
         const current = await get(orders, orderId);
         const previous = amount(value(orders, current, ['VALORTOTAL'], false));
-        const target = amount(progress.previousOrderTotal).plus(amount(draft.total)).toDecimalPlaces(2);
-        if (!previous.equals(amount(progress.previousOrderTotal)) && !previous.equals(target)) throw new Error('O valor do pedido mudou; confira antes de retomar.');
-        if (!previous.equals(target)) {
-          const update = payload(orders, { VALORTOTAL: target.toNumber() });
+        const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
+        const obs = value(orders, current, ['OBS']);
+        if (!obs.includes(marker)) {
+          const target = previous.plus(amount(draft.total)).toDecimalPlaces(2);
+          const update = payload(orders, { VALORTOTAL: target.toNumber(), OBS: `${obs}${obs ? '\n' : ''}${marker}` });
           await repository.updateItem(siteKey, orders.id, orderId, update, { eTag: current.eTag || current['@odata.etag'] });
           assertSession();
           const saved = await get(orders, orderId);
-          if (!amount(value(orders, saved, ['VALORTOTAL'])).equals(target)) throw new Error('O total do pedido não foi confirmado.');
+          if (!amount(value(orders, saved, ['VALORTOTAL'])).equals(target) || !value(orders, saved, ['OBS']).includes(marker)) throw new Error('O total do pedido não foi confirmado.');
         }
         progress.orderUpdated = true;
+        onProgress();
       }
       if (draft.files.length) {
         const existing = await repository.listAttachments(siteKey, orders.id, orderId);
+        progress.uploadedFiles ??= {};
         for (const file of draft.files) {
-          if (existing.some(row => row.fileName === file.name)) continue;
+          if (existing.some(row => row.fileName === file.name)) {
+            if (!progress.uploadedFiles[file.name]) throw new Error(`O pedido já possui um anexo chamado ${file.name}. Renomeie o arquivo.`);
+            continue;
+          }
           await repository.uploadAttachment(siteKey, orders.id, orderId, file);
           assertSession();
           const verified = await repository.listAttachments(siteKey, orders.id, orderId);
           if (!verified.some(row => row.fileName === file.name)) throw new Error(`O anexo ${file.name} não foi confirmado.`);
+          progress.uploadedFiles[file.name] = true;
+          onProgress();
         }
       }
       progress.payroll ??= {};
@@ -217,6 +232,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         const fields = payload(payroll, { FORNECEDOR: line.supplier.label, TIPOPGTO: mealPaymentType, VALORUNITARIO: line.unitValue, QTD: line.quantity, DATA: draft.date, IDFOLHA: Number(sheet.id), IDLANCAMENTO: Number(resultLine.id) });
         const payrollId = await ensure(payroll, fields, 'Title', `APP-vale-alimentacao-${progress.operationId}-folha-${line.supplier.id}`, tokenCache);
         progress.payroll[line.supplier.id] = payrollId;
+        onProgress();
         resultLine.sheetId = sheet.id;
         resultLine.payrollId = payrollId;
       }

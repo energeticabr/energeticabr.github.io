@@ -5448,7 +5448,7 @@ export function createAppController({
           await data.prepare?.();
           assertSession();
           allowAuthorization = false;
-          const panel = await mealVoucherFactory({ data, assertSession, onHome: () => { assertSession(); return returnToMainMenu(); } });
+          const panel = await mealVoucherFactory({ data, assertSession, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
           if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
           mealVoucher = panel;
         }
