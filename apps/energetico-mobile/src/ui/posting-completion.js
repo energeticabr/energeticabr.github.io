@@ -12,6 +12,9 @@ const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const row = (label, value, name) => `<div class="launch-completion__row"><dt>${icon(name)}<span>${escapeHtml(label)}</span></dt><dd>${escapeHtml(value)}</dd></div>`;
 
 export function postingCompletionMarkup(receipt, notesMarkup = '', sender = null) {
+  if (receipt.kind === 'attendance-batch') {
+    return `<section class="launch-completion launch-completion--attendance-batch" aria-label="${escapeHtml(receipt.title)}"><header class="launch-completion__success"><span class="launch-completion__check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span><div><h2>${escapeHtml(receipt.title)}</h2></div></header></section>`;
+  }
   const settlement = receipt.kind === 'provision-settlement';
   const orderAttachments = receipt.kind === 'order-attachments';
   const diary = receipt.kind === 'diary';

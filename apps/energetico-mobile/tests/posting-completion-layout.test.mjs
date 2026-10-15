@@ -27,6 +27,7 @@ test('other posting cards remain readable on phone, tablet and PC with every ID 
         ['provision', ['IDS 501, 502', 'IDS 101, 102']],
         ['registration', ['ID 201']],
         ['technical', ['ID 901']],
+        ['recurring', ['ID 37']],
       ]) {
         const result = await runBrowserLayout(browser, { width, height, url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/posting-completion.html?sample=${sample}` });
         const dom = new JSDOM(result.stdout);

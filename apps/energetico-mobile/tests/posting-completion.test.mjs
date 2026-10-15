@@ -37,6 +37,52 @@ const diaryCompletion = `✅ 🟢 DIÁRIO DE OBRA PREENCHIDO NA BASE DE DADOS DI
 🆔 REGISTROS CONFIRMADOS:
 • DIÁRIO DE OBRAS: ID 214`;
 
+const recurringCompletion = `✅ 🟢 DESPESA RECORRENTE CRIADA NA BASE DE DADOS LOCACOES ÀS 21:18. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• REGISTRO EM LOCACOES: ID 37`;
+
+test('recurring expense creation uses the shared success receipt instead of old text', () => {
+  const doc = documentFor(recurringCompletion);
+  const card = doc.querySelector('.launch-completion');
+  assert.ok(card);
+  assert.equal(card.querySelector('h2').textContent, 'DESPESA RECORRENTE CRIADA!');
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['REGISTRO EM LOCACOES']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 37']);
+  assert.match(card.textContent, /base de dados LOCACOES às 21:18/);
+});
+
+test('batch attendance confirmation uses a compact success card without repeating IDs', () => {
+  const doc = documentFor('✅ 8 CADASTROS ALTERADOS COM SUCESSO.\n🆔 REGISTROS CONFIRMADOS:\n• PRESENÇAS: IDS 2246, 2247, 2248');
+  const card = doc.querySelector('.launch-completion--attendance-batch');
+  assert.ok(card);
+  assert.equal(card.querySelector('h2').textContent, '8 CADASTROS ALTERADOS COM SUCESSO');
+  assert.doesNotMatch(card.textContent, /2246|2247|2248|REGISTROS CONFIRMADOS/);
+});
+
+for (const text of [
+  '✅ 8 CADASTROS ALTERADOS COM SUCESSO.\n🆔 REGISTROS CONFIRMADOS:\n• PRESENÇAS: IDS 0, 2247',
+  '✅ 8 CADASTROS ALTERADOS COM SUCESSO.\n🆔 REGISTROS CONFIRMADOS:\n• PRESENÇAS: IDS 2246, 2247\n⚠️ Uma presença pendente',
+]) {
+  test('uncertain attendance batch remains visible instead of claiming compact success', () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.match(doc.querySelector('.chat-bubble').textContent, /CADASTROS ALTERADOS COM SUCESSO/);
+    if (text.includes('pendente')) assert.match(doc.querySelector('.chat-bubble').textContent, /Uma presença pendente/);
+  });
+}
+
+for (const text of [
+  recurringCompletion.replace('ID 37', 'ID 0'),
+  recurringCompletion.replace('21:18', '25:18'),
+  recurringCompletion + '\n❌ Falha ao registrar outra despesa.',
+]) {
+  test('unconfirmed recurring expense stays visible as text', () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.match(doc.querySelector('.chat-bubble').textContent, /DESPESA RECORRENTE CRIADA/);
+  });
+}
+
 test('diary completion uses the branded success receipt with the confirmed ID and source time', () => {
   const doc = documentFor(diaryCompletion);
   const card = doc.querySelector('.launch-completion--diary');

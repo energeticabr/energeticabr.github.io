@@ -3898,17 +3898,20 @@ test("confirmação em lote não repete as linhas completas já presentes no res
   assert.equal(dom.window.document.querySelectorAll(".chat-presence-table-cell").length, 5);
 });
 
-test("sucesso de alteração múltipla mantém apenas a confirmação superior", t => {
+test("sucesso de alteração múltipla usa cartão compacto e mantém apenas a confirmação superior", t => {
   const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [
     { id: "batch-success", role: "assistant", type: "text", text: "✅ 8 CADASTROS ALTERADOS COM SUCESSO.\n🆔 REGISTROS CONFIRMADOS:\n• PRESENÇAS: IDS 2246, 2247, 2248" },
     { id: "unrelated-success", role: "assistant", type: "text", text: "✅ PEDIDO GRAVADO.\n🆔 REGISTROS CONFIRMADOS: ID 12" },
     { id: "next-step", role: "assistant", type: "text", text: "✅ 8 CADASTROS ALTERADOS.\nConfira os dados antes de prosseguir." },
   ] })));
   t.after(() => dom.window.close());
-  const texts = [...dom.window.document.querySelectorAll(".chat-message--assistant .chat-bubble > p")].map(node => node.textContent);
-  assert.equal(texts[0], "✅ 8 CADASTROS ALTERADOS COM SUCESSO.");
-  assert.match(texts[1], /REGISTROS CONFIRMADOS/);
-  assert.match(texts[2], /Confira os dados antes de prosseguir/);
+  const card = dom.window.document.querySelector('.launch-completion--attendance-batch');
+  assert.ok(card);
+  assert.equal(card.querySelector('h2').textContent, '8 CADASTROS ALTERADOS COM SUCESSO');
+  assert.doesNotMatch(card.textContent, /2246|2247|2248/);
+  const texts = [...dom.window.document.querySelectorAll(".chat-message--assistant:not(.chat-message--launch-completion) .chat-bubble > p")].map(node => node.textContent);
+  assert.match(texts[0], /REGISTROS CONFIRMADOS/);
+  assert.match(texts[1], /Confira os dados antes de prosseguir/);
 });
 
 function attendanceSummaryDocument(rows, kind = "presence") {

@@ -1868,6 +1868,7 @@ function presenceConfirmationMarkup(value = {}) {
 
 function compactAttendanceBatchCompletionText(value) {
   const text = String(value ?? "");
+  if (/(?:⚠|❌|\b(?:falha|erro|pendente|incompleto)\b)/i.test(text)) return text;
   const firstLine = text.split(/\r?\n/, 1)[0];
   const normalized = normalizedDateText(firstLine);
   return /^\s*✅/.test(firstLine)
@@ -1935,7 +1936,7 @@ const provisionShortcut = provisionOption ? `<button class="chat-main-provisions
   if (completion) {
     const brandedReceipt = completion.kind === 'provision-settlement' || completion.kind === 'order-attachments' || completion.kind === 'diary';
     const sender = brandedReceipt ? { name, mascotUrl: MASCOT_URL } : null;
-    return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${brandedReceipt ? '' : avatar}<div class="chat-bubble">${brandedReceipt ? '' : `<div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong><time>${escapeHtml(completion.time)}</time></div>`}${postingCompletionMarkup(completion, completion.notes.length ? `<p>${formatChatText(completion.notes.join('\n'))}</p>` : '', sender)}</div></article>`;
+    return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${brandedReceipt ? '' : avatar}<div class="chat-bubble">${brandedReceipt ? '' : `<div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong>${completion.time ? `<time>${escapeHtml(completion.time)}</time>` : ''}</div>`}${postingCompletionMarkup(completion, completion.notes.length ? `<p>${formatChatText(completion.notes.join('\n'))}</p>` : '', sender)}</div></article>`;
   }
   const presenceConfirmation = message.presence_confirmation || message.presenceConfirmation;
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable

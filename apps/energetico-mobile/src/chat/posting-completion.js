@@ -36,7 +36,12 @@ export function postingCompletion(message) {
   const plain = lines.map(line => line.replaceAll('*', ''));
   if (/\bNÃO\b/i.test(plain[0] || '')) return null;
   if (plain.some(line => /❌|\b(?:erros?|falhas?)\b|NÃO (?:FOI|FORAM|GRAVAD|CADASTRAD|REGISTRAD|BAIXAD)/i.test(line))) return null;
-  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|ADICIONAD[OA]S?|PREENCHID[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS ((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
+  const attendanceBatch = plain.length === 3 && plain[0].match(/^✅\s+(\d+ (?:CADASTROS ALTERADOS|PRESENÇAS ATUALIZADAS) COM SUCESSO)\.$/i);
+  if (attendanceBatch && /^(?:🆔\s*)?REGISTROS CONFIRMADOS:$/i.test(plain[1])
+    && /^•\s*PRESENÇAS:\s*IDS? [1-9]\d*(?:,\s*[1-9]\d*)*$/i.test(plain[2])) {
+    return Object.freeze({ title: attendanceBatch[1], kind: 'attendance-batch', records: Object.freeze([]), notes: Object.freeze([]) });
+  }
+  const heading = plain[0]?.match(/^(?:✅\s*)?(?:🟢\s*)?([\p{L}\d][\p{L}\d /()&.,-]* (?:GRAVAD[OA]S?|CRIAD[OA]S?|CADASTRAD[OA]S?|REGISTRAD[OA]S?|ATUALIZAD[OA]S?|VINCULAD[OA]S?|ELIMINAD[OA]S?|ADICIONAD[OA]S?|PREENCHID[OA]S?|BAIXADO)) NA BASE DE DADOS ([\p{L}\d][\p{L}\d /()&.,_-]*) ÀS ((?:[01]\d|2[0-3]):[0-5]\d)\.?\s*(?:🕒)?$/iu);
   if (!heading || !/^(?:🆔\s*)?REGISTROS CONFIRMADOS:$/i.test(plain[1] || '')) return null;
   const descriptionSettlement = /^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^DESCRITIVOPROVIS[AÃ]O$/i.test(heading[2]);
   const settlement = descriptionSettlement || (/^PAGAMENTO AGENDADO BAIXADO$/i.test(heading[1]) && /^PROVIS[AÃ]O PGTOS$/i.test(heading[2]));
