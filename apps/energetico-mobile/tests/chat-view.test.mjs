@@ -7367,6 +7367,56 @@ test("diário remove abandonar na pergunta de atividades e desativa os dois fina
   dom.window.close();
 });
 
+test("diário oculta imediatamente a atividade adicionada e mantém as demais opções", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: 'diary-activities', role: 'assistant', type: 'poll',
+    question: 'DIGITE AS ATIVIDADES EXECUTADAS:', options: [],
+    recentDiaryActivities: ['ARMAÇÃO FERRAGEM PRIMEIRA LAJE', 'ESCORAMENTO LAJE'],
+  };
+  const base = { activeFlow: { id: 'construction_diary_fill' }, messages: [poll] };
+  const changes = [];
+  view.on('draft-changed', event => changes.push(event.value));
+  view.render(signedInState({ ...base, draft: '1. ' }));
+
+  const suggestions = () => [...root.querySelectorAll('[data-action="append-diary-activity"]')];
+  assert.equal(suggestions().filter(button => !button.hidden).length, 2);
+  suggestions()[0].click();
+  assert.match(root.querySelector('[data-role="draft"]').value, /1\. ARMAÇÃO FERRAGEM PRIMEIRA LAJE;/);
+  assert.equal(suggestions().filter(button => !button.hidden).length, 1);
+  assert.equal(suggestions().find(button => !button.hidden)?.dataset.value, 'ESCORAMENTO LAJE');
+  assert.equal(changes.length, 1);
+
+  view.render(signedInState({ ...base, draft: changes[0] }));
+  assert.equal(suggestions().filter(button => !button.hidden).length, 1);
+  suggestions().find(button => !button.hidden).click();
+  assert.equal(suggestions().filter(button => !button.hidden).length, 0);
+  assert.equal(changes.length, 2);
+  view.render(signedInState({ ...base, draft: changes[1] }));
+  assert.equal(suggestions().filter(button => !button.hidden).length, 0);
+});
+
+test("diário filtra sugestões já digitadas no rascunho e as restaura após edição", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: 'diary-activities', role: 'assistant', type: 'poll',
+    question: 'DIGITE AS ATIVIDADES EXECUTADAS:', options: [],
+    recentDiaryActivities: ['ARMAÇÃO FERRAGEM PRIMEIRA LAJE', 'ESCORAMENTO LAJE'],
+  };
+  const base = { activeFlow: { id: 'construction_diary_fill' }, messages: [poll] };
+  view.render(signedInState({ ...base, draft: '1. Armação ferragem primeira laje;\n2. ' }));
+  const buttons = [...root.querySelectorAll('[data-action="append-diary-activity"]')];
+  assert.equal(buttons[0].hidden, true);
+  assert.equal(buttons[1].hidden, false);
+
+  view.render(signedInState({ ...base, draft: '1. ' }));
+  assert.equal(root.querySelectorAll('[data-action="append-diary-activity"]:not([hidden])').length, 2);
+});
+
 test("diário não duplica finalizar quando a VM já oferece essa opção", () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({
     activeFlow: { id: "construction_diary_create" },

@@ -23,7 +23,7 @@ import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
 import { normalizeConstructionDiaryText } from "./construction-diary-text.js";
 import { numberDiaryActivityDraft, diaryActivitiesForSubmission } from "./construction-diary-items.js";
-import { appendRecentDiaryActivity } from "../chat/construction-diary-activity-suggestions.js";
+import { appendRecentDiaryActivity, diaryActivityInDraft } from "../chat/construction-diary-activity-suggestions.js";
 import { Capacitor, PowerBiZoom } from "../native/plugins.js";
 import { provisionDateKey, provisionDueState, provisionNumericValue } from "../chat/pending-provision-dates.js";
 import Decimal from "decimal.js";
@@ -1655,7 +1655,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const recentDiaryActivitiesMarkup = currentPoll && isDiaryActivitiesQuestion(message, activeFlow)
     ? `<div class="chat-diary-recent-activities" aria-label="Atividades dos últimos cinco dias">
         ${Array.isArray(message.recentDiaryActivities) && message.recentDiaryActivities.length
-          ? `<p>Atividades dos últimos 5 dias — toque para adicionar:</p><div class="chat-choice-list">${message.recentDiaryActivities.map(activity => `<button type="button" data-action="append-diary-activity" data-value="${escapeHtml(activity)}"${busy ? " disabled" : ""}>${escapeHtml(activity)}</button>`).join("")}</div>`
+          ? `<p>Atividades dos últimos 5 dias — toque para adicionar:</p><div class="chat-choice-list">${message.recentDiaryActivities.map(activity => `<button type="button" data-action="append-diary-activity" data-value="${escapeHtml(activity)}"${busy ? " disabled" : ""}${diaryActivityInDraft(draft, activity) ? " hidden" : ""}>${escapeHtml(activity)}</button>`).join("")}</div>`
           : message.recentDiaryActivitiesLoading ? `<p>Consultando atividades dos últimos 5 dias…</p>`
           : message.recentDiaryActivitiesError ? `<p>Não foi possível carregar as sugestões. Você pode digitar as atividades.</p>`
           : `<p>Nenhuma atividade registrada nos últimos 5 dias. Digite as atividades.</p>`}
@@ -3861,11 +3861,20 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
        ].every(key => lastState[key] === state[key]);
   }
 
+  function syncRecentDiaryActivities(draft) {
+    const section = root.querySelector?.(".chat-diary-recent-activities");
+    const buttons = [...(section?.querySelectorAll('[data-action="append-diary-activity"]') || [])];
+    if (!buttons.length) return;
+    for (const button of buttons) button.hidden = diaryActivityInDraft(draft, button.dataset.value);
+    section.hidden = buttons.every(button => button.hidden);
+  }
+
   function syncComposer(state, draftOnly = false) {
     const { draft } = composerControls;
     const diaryActivitiesInput = isDiaryNumberedTextPrompt(state);
     const draftValue = diaryActivitiesInput ? numberDiaryActivityDraft(state.draft).value : state.draft || "";
     if (!composing && draft && draft.value !== draftValue) draft.value = draftValue;
+    if (diaryActivitiesInput) syncRecentDiaryActivities(draftValue);
     if (!composing && draft && diaryActivitiesInput && !state.draft) draft.setSelectionRange?.(draftValue.length, draftValue.length);
     if (draft) {
       if (diaryActivitiesInput) draft.dataset.diaryActivitiesInput = "true";
@@ -4147,6 +4156,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         draft.value = value;
         draft.setSelectionRange?.(value.length, value.length);
         resizeDraft(draft);
+        syncRecentDiaryActivities(value);
         emit({ type: "draft-changed", value });
       }
       return;
