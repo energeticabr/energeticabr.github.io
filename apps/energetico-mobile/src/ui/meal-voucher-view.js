@@ -78,11 +78,16 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       const quantity = el('input'); quantity.type = 'text'; quantity.inputMode = 'decimal'; quantity.value = line.quantity; quantity.setAttribute('aria-label', `Quantidade de ${supplier.label}`); quantity.dataset.mealQuantity = supplier.id;
       const value = el('input'); value.type = 'text'; value.inputMode = 'decimal'; value.value = line.unitValue; value.setAttribute('aria-label', `Valor unitário de ${supplier.label}`); value.dataset.mealValue = supplier.id;
       const subtotal = el('td', 'meal-voucher-subtotal', '—');
-      const recalc = () => { try { subtotal.textContent = line.unitValue ? money(mealVoucherTotal([line])) : '—'; } catch { subtotal.textContent = 'Confira o valor'; } totals(); };
+      const recalc = () => { recalcSafe(); totals(); };
       quantity.addEventListener('input', () => { line.quantity = quantity.value; recalc(); });
       value.addEventListener('input', () => { line.unitValue = value.value; recalc(); });
       const qcell = el('td'), vcell = el('td'); qcell.append(quantity); vcell.append(value); row.append(qcell, vcell, subtotal); tbody.append(row); recalcSafe();
-      function recalcSafe() { try { subtotal.textContent = line.unitValue ? money(mealVoucherTotal([line])) : '—'; } catch { subtotal.textContent = 'Confira o valor'; } }
+      function recalcSafe() {
+        let selected = false;
+        try { mealVoucherLines([line]); selected = true; } catch { /* Linha incompleta ou inválida não será lançada. */ }
+        row.classList.toggle('meal-voucher-selected-row', selected);
+        try { subtotal.textContent = line.unitValue ? money(mealVoucherTotal([line])) : '—'; } catch { subtotal.textContent = 'Confira o valor'; }
+      }
     }
     table.append(tbody); content.append(table);
     search.addEventListener('input', () => { const term = mealVoucherKey(search.value); for (const row of tbody.children) row.hidden = !mealVoucherKey(row.querySelector('strong').textContent).includes(term); });

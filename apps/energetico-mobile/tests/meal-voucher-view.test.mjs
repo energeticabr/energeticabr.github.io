@@ -1,9 +1,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+test('destaca em verde somente linhas que serão incluídas no lançamento', async () => {
+  const css = readFileSync(new URL('../src/ui/meal-voucher.css', import.meta.url), 'utf8');
+  const dom = new JSDOM(`<!doctype html><style>${css}</style><body></body>`, { url: 'https://example.invalid' });
+  const doc = dom.window.document;
+  const suppliers = [
+    { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' },
+    { id: '2', label: 'Bruno', branch: 'OBRA A', profession: 'PEDREIRO' },
+  ];
+  const panel = createMealVoucherView({ documentRef: doc, data: {
+    loadOptions: async () => ({ suppliers, accounts: [], stages: [] }),
+  } });
+  await panel.open();
+  const row = doc.querySelector('[data-meal-supplier="2"]');
+  const value = row.querySelector('[data-meal-value]');
+  const quantity = row.querySelector('[data-meal-quantity]');
+  const background = () => dom.window.getComputedStyle(row).backgroundColor;
+  const plain = background();
+  const type = (input, text) => { input.value = text; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+
+  type(value, '10');
+  const green = background().match(/\d+/g)?.map(Number);
+  assert.ok(green && green[1] > green[0] && green[1] > green[2], 'a linha com valor deve ter fill verde');
+  assert.notEqual(background(), plain, 'o verde deve vencer o preenchimento alternado da tabela');
+  assert.notEqual(dom.window.getComputedStyle(doc.querySelector('[data-meal-supplier="1"]')).backgroundColor, background(), 'outras linhas não recebem o fill verde');
+
+  type(quantity, '');
+  assert.equal(background(), plain, 'quantidade vazia não será submetida');
+  type(quantity, '5');
+  assert.notEqual(background(), plain);
+  type(value, '0');
+  assert.equal(background(), plain, 'valor zero não será submetido');
+  type(value, '');
+  assert.equal(background(), plain, 'limpar o valor remove o destaque');
+  panel.destroy(); dom.window.close();
+});
 
 test('vale alimentação inicia cada quantidade em 5 e preserva alterações manuais', async () => {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
