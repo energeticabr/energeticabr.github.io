@@ -154,34 +154,18 @@ test("monthly PDF embeds supplied official raster offline at left on every emplo
   assert.ok(firstDay.transform[5] > lastDay.transform[5] && lastDay.transform[5] > total.transform[5]);
 });
 
-// Each pagination path must use the branded heading, including signature pages.
-test("monthly PDF repeats the official logo on oversized-note and signature-only continuation pages", async t => {
-  const logoBytes = new Uint8Array(await readFile(new URL("../../../assets/logo-energetica-oficial.png", import.meta.url)));
-  const notes = report();
-  notes.days[0].issues = ["W".repeat(8500)];
-  const signatures = recordedMonth();
-  signatures.days[30].issues = Array.from({ length: 35 }, (_, index) => `Conferência documental ${index + 1} com justificativa registrada no dia.`);
-  for (const input of [notes, signatures]) {
-    const output = await inspect(t, await build(input, { logoBytes }));
-    assert.ok(output.pages.length > 1);
-    await assertOfficialHeader(output);
-    assertInside(output.pages);
-  }
-});
-
 // Invalid explicitly supplied bytes must fail rather than silently lose branding.
 test("monthly PDF rejects invalid explicitly supplied logo bytes", async () => {
   await assert.rejects(() => build(report(), { logoBytes: new Uint8Array([0, 1, 2]) }));
 });
 
-// Dropping dates, effective slots, flags or totals loses employee report data.
-test("monthly PDF preserves the full calendar, effective hours, adjustment and incomplete days", async t => {
+// Dropping dates, effective slots or totals loses employee report data.
+test("monthly PDF preserves the full calendar, effective hours and incomplete-day count", async t => {
   const { pages, text } = await inspect(t, await build(report()));
   for (let day = 1; day <= 31; day++) assert.match(text, new RegExp(`${String(day).padStart(2, "0")}/10/2026`));
   for (const value of ["MAURÍCIO HONORATO DE SOUZA", "07:00", "12:00", "13:00", "17:00", "16:00", "08:30", "07:45"]) assert.ok(text.includes(value), `PDF sem ${value}`);
-  assert.match(text, /Ajustado/i);
-  assert.match(text, /Incompleto/i);
   assert.doesNotMatch(text, /Sem registros/i);
+  assert.doesNotMatch(text, /Ocorrência em|Incompleto|Ajustado/);
   assert.match(text, /Dias com registros: 3/);
   assert.match(text, /Dias incompletos: 1/);
   assert.match(text, /Total do mês: 16:15/);
@@ -199,6 +183,18 @@ test('monthly PDF uses full punch labels, no observations column and declares de
  assertInside(pages);
 });
 
+test('monthly PDF omits per-day adjustment and issue bands so a full month fits on one signed page',async t=>{
+ const input=recordedMonth();
+ input.days.forEach((day,index)=>{day.issues=[`ANOTACAO_RESTRITA_${index}`];day.adjusted=index===0;});
+ const {pdf,pages,text}=await inspect(t,await build(input));
+ assert.equal(pages.length,1,'31 daily rows and both signatures should share one page');
+ for(let day=1;day<=31;day++)assert.match(text,new RegExp(`${String(day).padStart(2,'0')}/10/2026`));
+ assert.doesNotMatch(text,/Ocorrência em|Ajustado|ANOTACAO_RESTRITA/);
+ assert.match(text,/Total do mês: 267:00/);
+ assert.equal(pdf.getForm().getFields().length,2);
+ assertInside(pages);
+});
+
 test('monthly PDF shows the selected base period and excludes days outside it',async t=>{
  const input=report();const selected={...input,startDate:'2026-10-02',endDate:'2026-10-03',days:input.days.slice(1,3),total:'07:45',recordedDays:2,incompleteDays:1};
  const {text,pages}=await inspect(t,await build(selected));
@@ -213,23 +209,6 @@ test('monthly PDF refuses mixing different custom base periods in one supplier b
  const first={...firstReport,startDate:'2026-10-01',endDate:'2026-10-02',days:firstReport.days.slice(0,2)};
  const second={...secondReport,supplier:{id:'7',name:'HELISON ROSA LUIS'},startDate:'2026-10-02',endDate:'2026-10-03',days:secondReport.days.slice(1,3)};
  await assert.rejects(()=>build([first,second]),TypeError);
-});
-
-// Cutting a tall row, shrinking it or failing to repeat headers breaks reading.
-test("monthly PDF continues oversized issues without losing characters or following dates", { timeout: 15000 }, async t => {
-  const input = report();
-  input.days[0].issues = ["INÍCIO " + "W".repeat(8500) + " FIM_NOTA", "SEGUNDA_NOTA\nULTIMA_LINHA"];
-  const { pages, text } = await inspect(t, await build(input));
-  assert.ok(pages.length >= 3);
-  assert.equal(text.replace(/[^W]/g, "").length, 8500);
-  assert.equal(text.match(/FIM_NOTA/g)?.length, 1);
-  assert.equal(text.match(/SEGUNDA_NOTA/g)?.length, 1);
-  assert.equal(text.match(/ULTIMA_LINHA/g)?.length, 1);
-  assert.match(text, /31\/10\/2026/);
-  for (const { items } of pages.filter(({ items }) => items.some(item => /\d{2}\/\d{2}\/\d{4}/.test(item.str)))) {
-    for (const heading of ["Data", "ENTRADA 1", "SAÍDA 1", "ENTRADA 2", "SAÍDA 2", "Total"]) assert.ok(items.some(item => item.str === heading), `falta cabeçalho ${heading}`);
-  }
-  assertInside(pages);
 });
 
 // A text field cannot sign a PDF; names and blank areas must survive pagination.
@@ -306,19 +285,6 @@ test("monthly PDF fits 31 recorded days, total and ample signatures on exactly o
   assertInside(pages);
 });
 
-// A signature-only continuation must not advertise an empty attendance table.
-test("monthly PDF omits attendance headers when only the signature group needs a continuation", async t => {
-  const input = recordedMonth();
-  input.days[30].issues = Array.from({ length: 35 }, (_, index) => `Conferência documental ${index + 1} com justificativa registrada no dia.`);
-  const { pdf, pages } = await inspect(t, await build(input));
-  const last = pages.at(-1).items;
-  assert.ok(!last.some(item => /\d{2}\/\d{2}\/\d{4}/.test(item.str)), "última página deve ser de assinaturas nesta prévia");
-  for (const heading of ["Data", "ENTRADA 1", "SAÍDA 1", "ENTRADA 2", "SAÍDA 2", "Total"]) assert.ok(!last.some(item => item.str === heading), `cabeçalho vazio ${heading}`);
-  const lastRef = pdf.getPages().at(-1).ref.toString();
-  for (const field of pdf.getForm().getFields()) assert.equal(field.acroField.getWidgets()[0].P().toString(), lastRef);
-  assertInside(pages);
-});
-
 // An invalid model must not become a misleading signed-looking empty report.
 test("monthly PDF rejects invalid reports", async () => {
   for (const input of [null, {}, { ...report(), month: "2026-13" }, { ...report(), supplier: { id: "4", name: "" } }, { ...report(), days: [] }]) {
@@ -344,9 +310,7 @@ test('monthly batch has exactly one isolated page and two canonical signature fi
  assert.equal(pdf.getForm().getFields().length,4);
 });
 
-test('monthly batch rejects empty, duplicate, mixed-period or overflowing reports without silently omitting notes',async()=>{
+test('monthly batch rejects empty, duplicate or mixed-period reports',async()=>{
  const first=report(),second={...report('2026-10','HELISON ROSA LUIS'),supplier:{id:'7',name:'HELISON ROSA LUIS'}};
  for(const value of [[],[first,first],[first,{...second,month:'2026-09'}]])await assert.rejects(()=>build(value),TypeError);
- first.days[0].issues=['W'.repeat(8500)];
- await assert.rejects(()=>build([first,second]),/MAURÍCIO.*página|página.*MAURÍCIO/);
 });
