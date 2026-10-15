@@ -68,6 +68,26 @@ test('provision report HOME event opens one local report with authenticated scop
   assert.equal(destroys, 1);
 });
 
+test('provision report sync invalidates cached SharePoint rows only after VM confirms flow completion',async t=>{
+  let data,reads=0,starts=0,statusReads=0;
+  const id='c'.repeat(32);
+  const h=harness({
+    client:{
+      refreshRecurringProvisions:async()=>{starts++;return {status:'running',requestId:id};},
+      getRecurringProvisionRefreshStatus:async()=>{statusReads++;return {status:'completed',requestId:id};},
+    },
+    paymentLedgerDataFactory:async()=>({loadProvisionReportSnapshot:async()=>({provisions:[{id:String(++reads)}],recurrences:[]})}),
+    provisionReportFactory:async options=>{data=options.data;return {open:()=>data.loadProvisionReportSnapshot(),destroy(){}};},
+  });
+  t.after(()=>h.controller.stop());await h.controller.start();
+  await h.view.emit('open-provision-report');
+  assert.equal(starts,0);assert.equal(reads,1);
+  await data.syncRecurringProvisions({signal:new AbortController().signal});
+  assert.equal(starts,1);assert.equal(statusReads,1);
+  const result=await data.loadProvisionReportSnapshot();
+  assert.equal(reads,2);assert.equal(result.provisions[0].id,'2');
+});
+
 test('provision report uses its own authorization resume ID and reacquires the requested scopes', async t => {
   let tokens = 0;
   const grants = [], scopesRequested = [];
