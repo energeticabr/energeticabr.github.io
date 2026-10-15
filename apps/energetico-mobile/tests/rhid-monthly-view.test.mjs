@@ -90,6 +90,40 @@ test('monthly form requires supplier, month and year and sends daily totals only
  assert.equal(doc.querySelector('[data-monthly-result]').hidden,true);assert.equal(doc.querySelector('[data-monthly-result]').childNodes.length,0);assert.equal(doc.querySelectorAll('tbody tr').length,0);
  assert.equal(doc.querySelector('.rhid-monthly-notice').hidden,true,'only the PDF is the successful result');
 });
+
+test('monthly period defaults to month boundaries and recalculates for 28, 29, 30 and 31 days',async t=>{
+ const {doc,dom}=await setup(t);const month=doc.querySelector('[name="month"]'),year=doc.querySelector('[name="year"]');
+ const start=doc.querySelector('[name="startDate"]'),end=doc.querySelector('[name="endDate"]');
+ assert.ok(start&&end,'both base-period date inputs must be shown');
+ assert.deepEqual([start.value,end.value],['2026-09-01','2026-09-30']);
+ for(const [yearValue,monthValue,last] of [['2026','02','28'],['2028','02','29'],['2028','04','30'],['2028','01','31']]){
+  year.value=yearValue;year.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  month.value=monthValue;month.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.deepEqual([start.value,end.value],[`${yearValue}-${monthValue}-01`,`${yearValue}-${monthValue}-${last}`]);
+  assert.deepEqual([start.min,start.max,end.min,end.max],[`${yearValue}-${monthValue}-01`,`${yearValue}-${monthValue}-${last}`,`${yearValue}-${monthValue}-01`,`${yearValue}-${monthValue}-${last}`]);
+ }
+});
+
+test('selected base period controls generated days and invalid dates do not query RHID',async t=>{
+ const reports=[];let reads=0;const {doc,dom}=await setup(t,{loadMonth:async()=>{reads++;return snapshot;}},{onReport:async report=>reports.push(report)});
+ doc.querySelector('[name="supplier"]').value='7';const start=doc.querySelector('[name="startDate"]'),end=doc.querySelector('[name="endDate"]');
+ start.value='2026-09-02';end.value='2026-09-01';
+ doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await tick();
+ assert.equal(reads,0);assert.match(doc.querySelector('[role="alert"]').textContent,/período|datas/i);
+ start.value='2026-09-01';end.value='2026-09-01';
+ doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await tick();await tick();
+ assert.equal(reads,1);assert.equal(reports[0].days.length,1);assert.equal(reports[0].total,'09:00');
+ assert.equal(reports[0].startDate,'2026-09-01');assert.equal(reports[0].endDate,'2026-09-01');
+});
+
+test('red Cancelar button beside generation closes the popup exactly like X without generating',async t=>{
+ let closes=0,reads=0;const {doc,view}=await setup(t,{loadMonth:async()=>{reads++;return snapshot;}},{onClose:()=>closes++});
+ const actions=doc.querySelector('.rhid-monthly-actions'),cancel=actions.querySelector('.rhid-monthly-cancel');
+ assert.equal(actions.firstElementChild,cancel);assert.equal(cancel.textContent,'Cancelar');assert.equal(cancel.type,'button');
+ cancel.click();assert.equal(view.element.hidden,true);assert.equal(doc.querySelector('#app').inert,false);assert.equal(closes,1);assert.equal(reads,0);
+ await view.open({month:'2026-09'});doc.querySelector('.rhid-monthly-close').click();
+ assert.equal(view.element.hidden,true);assert.equal(closes,2);
+});
 test('supplier options keep multiple choices when searching again without opening a keyboard',async t=>{
  const {doc,dom}=await setup(t,{loadSuppliers:async()=>Array.from({length:12},(_,i)=>({id:String(i+1),name:`FORNECEDOR ${i+1}`}))});
  const trigger=doc.querySelector('.sfs-field input');trigger.click();

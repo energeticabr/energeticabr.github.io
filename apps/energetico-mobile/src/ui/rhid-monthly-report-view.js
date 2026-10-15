@@ -1,4 +1,4 @@
-import {buildRhidMonthlyReport,isRhidReportMonth} from '../chat/rhid-monthly-model.js';
+import {buildRhidMonthlyReport,isRhidReportMonth,isRhidReportDateRange,rhidMonthDateBounds} from '../chat/rhid-monthly-model.js';
 import {bindSearchableFilterSelects} from './searchable-filter-selects.js';
 import {addReportCloseControl} from './report-close-control.js';
 
@@ -16,16 +16,26 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  const period=make('div','rhid-monthly-period'),monthLabel=make('label'),month=make('select');month.name='month';month.required=true;month.setAttribute('aria-label','Mês de referência');
  MONTHS.forEach((name,index)=>month.append(Object.assign(make('option','',name),{value:String(index+1).padStart(2,'0')})));monthLabel.append(make('span','','Mês de referência'),month);
  const yearLabel=make('label'),year=make('input');year.type='number';year.name='year';year.min='1000';year.max='9999';year.step='1';year.required=true;year.inputMode='numeric';year.setAttribute('aria-label','Ano de referência');yearLabel.append(make('span','','Ano'),year);period.append(monthLabel,yearLabel);
- const actions=make('div','rhid-monthly-actions'),submit=button('rhid-monthly-generate','Gerar relatório');submit.type='submit';actions.append(submit);
+ const datePeriod=make('div','rhid-monthly-date-period'),startLabel=make('label'),startDate=make('input'),endLabel=make('label'),endDate=make('input');
+ startDate.type=endDate.type='date';startDate.name='startDate';endDate.name='endDate';startDate.required=endDate.required=true;
+ startDate.setAttribute('aria-label','Início do período base');endDate.setAttribute('aria-label','Fim do período base');
+ startLabel.append(make('span','','Início do período'),startDate);endLabel.append(make('span','','Fim do período'),endDate);datePeriod.append(startLabel,endLabel);
+ const actions=make('div','rhid-monthly-actions'),cancel=button('rhid-monthly-cancel','Cancelar'),submit=button('rhid-monthly-generate','Gerar relatório');submit.type='submit';actions.append(cancel,submit);
  const retry=button('rhid-monthly-refresh','Atualizar fornecedores'),notice=make('p','rhid-monthly-notice');notice.setAttribute('role','status');notice.hidden=true;
  const result=make('div','rhid-monthly-result');result.dataset.monthlyResult='true';result.hidden=true;
- form.append(supplierLabel,period,retry,actions);panel.append(header,form,notice,result);root.append(panel);doc.body.append(root);
+ form.append(supplierLabel,period,datePeriod,retry,actions);panel.append(header,form,notice,result);root.append(panel);doc.body.append(root);
  addReportCloseControl({root, toolbar:header, onClose:close, button:closeButton, inline:true});
  let destroyed=false,revision=0,controller=null,picker=null,options=[],busy=false,returnFocus=null,app=null,oldInert=false,oldOverflow='';
  function suspend(){if(destroyed||root.hidden)return;picker?.close();root.style.visibility='hidden';root.inert=true;if(app)app.inert=oldInert;}
  function resume(){if(destroyed||root.hidden)return;root.style.visibility='';root.inert=false;if(app)app.inert=true;}
  function status(text,error=false){notice.textContent=text;notice.hidden=!text;notice.setAttribute('role',error?'alert':'status');}
- function setBusy(value){busy=value;for(const control of [supplier,month,year,retry,submit])control.disabled=value;picker?.sync();submit.disabled=value||!options.length;panel.setAttribute('aria-busy',String(value));}
+ function setBusy(value){busy=value;for(const control of [supplier,month,year,startDate,endDate,retry,submit])control.disabled=value;picker?.sync();submit.disabled=value||!options.length;panel.setAttribute('aria-busy',String(value));}
+ function resetDates(){
+  const selectedMonth=`${year.value}-${month.value}`;
+  const bounds=isRhidReportMonth(selectedMonth)?rhidMonthDateBounds(selectedMonth):{startDate:'',endDate:''};
+  for(const input of [startDate,endDate]){input.min=bounds.startDate;input.max=bounds.endDate;}
+  startDate.value=bounds.startDate;endDate.value=bounds.endDate;
+ }
  function clearResult(){result.hidden=true;result.replaceChildren();}
  function begin(){controller?.abort();controller=new AbortController();const current=++revision;return {signal:controller.signal,current};}
  const currentRequest=request=>!destroyed&&!root.hidden&&!request.signal.aborted&&request.current===revision;
@@ -45,13 +55,14 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
   const selectedIds=new Set([...supplier.selectedOptions].map(option=>option.value).filter(Boolean));
   const selected=options.filter(row=>selectedIds.has(String(row.id))),selectedMonth=`${year.value}-${month.value}`;
   if(!selected.length||!isRhidReportMonth(selectedMonth)){status('Selecione pelo menos um fornecedor, mês e ano válidos.',true);return;}
+  if(!isRhidReportDateRange(selectedMonth,startDate.value,endDate.value)){status('Selecione datas válidas, dentro do mês de referência e em ordem para o período.',true);return;}
   const request=begin();clearResult();setBusy(true);status('Consultando presenças do mês…');
   try{
    const eligible=await data.loadSuppliers({signal:request.signal});if(!currentRequest(request))return;
    const confirmed=selected.map(row=>eligible.find(candidate=>String(candidate.id)===String(row.id)&&candidate.name===row.name));
    if(confirmed.some(row=>!row)){populate(eligible);throw new Error('Um dos fornecedores não está mais ativo e empreiteiro. Confira a seleção antes de gerar.');}
    const snapshot=await data.loadMonth(selectedMonth,{signal:request.signal});if(!currentRequest(request))return;
-   const reports=confirmed.map(row=>buildRhidMonthlyReport({month:selectedMonth,supplier:row,snapshot}));
+   const reports=confirmed.map(row=>buildRhidMonthlyReport({month:selectedMonth,supplier:row,snapshot,startDate:startDate.value,endDate:endDate.value}));
    clearResult();
    picker?.close();status(`Preparando PDF de ${reports.length} funcionário(s)…`);
    await onReport(reports.length===1?reports[0]:reports,{signal:request.signal,resolveReturnFocus:()=>!destroyed&&!root.hidden?closeButton:null});if(!currentRequest(request))return;
@@ -63,8 +74,8 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
   if(root.hidden)return;controller?.abort();revision++;picker?.close();clearResult();status('');root.hidden=true;root.style.visibility='';root.inert=false;doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;onClose();
   const target=returnFocus?.isConnected?returnFocus:app?.querySelector('[data-action="open-rhid-monthly-report"]');target?.focus?.({preventScroll:true});returnFocus=null;
  }
- retry.addEventListener('click',()=>void loadSuppliers());form.addEventListener('submit',generate);
- form.addEventListener('change',()=>{if(!busy){clearResult();status('');}});
+ retry.addEventListener('click',()=>void loadSuppliers());cancel.addEventListener('click',close);form.addEventListener('submit',generate);
+ form.addEventListener('change',event=>{if(!busy){if(event.target===month||event.target===year)resetDates();clearResult();status('');}});
  root.addEventListener('click',event=>{if(event.target===root)close();});
  root.addEventListener('keydown',event=>{
   if(event.key==='Escape'){event.preventDefault();if(root.querySelector('.sfs-popup:not([hidden])')){picker.close();return;}close();return;}
@@ -76,7 +87,7 @@ export function createRhidMonthlyReportView({document:doc=globalThis.document,da
  return Object.freeze({element:root,async open({month:initialMonth}={}){
   if(destroyed)throw new Error('Relatório encerrado.');if(!root.hidden)return;
   const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).format(now()),reference=isRhidReportMonth(initialMonth)?initialMonth:local;
-  month.value=reference.slice(5);year.value=reference.slice(0,4);returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=Boolean(app?.inert);oldOverflow=doc.body.style.overflow;
+  month.value=reference.slice(5);year.value=reference.slice(0,4);resetDates();returnFocus=doc.activeElement;app=doc.getElementById('app');oldInert=Boolean(app?.inert);oldOverflow=doc.body.style.overflow;
   doc.body.style.overflow='hidden';if(app)app.inert=true;root.hidden=false;panel.focus();await loadSuppliers();
  },close,suspend,resume,destroy(){if(destroyed)return;close();destroyed=true;controller?.abort();picker?.destroy();root.remove();}});
 }

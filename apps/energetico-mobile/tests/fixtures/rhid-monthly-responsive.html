@@ -9,7 +9,7 @@ document.querySelector('form').requestSubmit();
 for(let i=0;i<100&&(!generatedReport||document.querySelector('.rhid-monthly-dialog').getAttribute('aria-busy')==='true');i++)await new Promise(resolve=>setTimeout(resolve,10));
 if(!generatedReport)throw new Error('O relatório mensal não chegou ao gerador de PDF.');
 await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-const controls=[...document.querySelectorAll('.rhid-monthly-period select,.rhid-monthly-period input,.rhid-monthly-actions button')].map(node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height,font:parseFloat(getComputedStyle(node).fontSize)};});
+const controls=[...document.querySelectorAll('.rhid-monthly-period select,.rhid-monthly-period input,.rhid-monthly-date-period input,.rhid-monthly-actions button')].map(node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,height:r.height,font:parseFloat(getComputedStyle(node).fontSize)};});
 const dialog=document.querySelector('.rhid-monthly-dialog'),result=document.querySelector('[data-monthly-result]'),notice=document.querySelector('.rhid-monthly-notice');
 document.querySelector('#layout-result').textContent=JSON.stringify({width:innerWidth,pageWidth:document.documentElement.scrollWidth,dialogWidth:dialog.clientWidth,dialogOverflow:dialog.scrollWidth>dialog.clientWidth+1,controls,pdfDays:generatedReport.days.length,htmlRows:document.querySelectorAll('tbody tr').length,resultHidden:result.hidden,resultChildren:result.childElementCount,noticeHidden:notice.hidden});
 document.documentElement.dataset.ready='true';

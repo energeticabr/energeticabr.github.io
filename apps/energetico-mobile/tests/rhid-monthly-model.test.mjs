@@ -27,7 +27,39 @@ test('monthly identity includes earlier names for the same RHID person',async()=
  const report=await build([row('2026-10-01','07:00;12:00;13:00;17:00',{NOME_COLABORADOR:'MAURICIO DE SOUZA'}),row('2026-10-02','07:00;12:00;13:00;17:00')]);
  assert.equal(report.total,'18:00');assert.equal(report.recordedDays,2);assert.equal(report.days[0].recorded,true);
 });
+test('a date range still includes earlier names linked to the current supplier RHID identity',async()=>{
+ const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
+ const month='2026-10';
+ const report=buildRhidMonthlyReport({month,supplier,startDate:'2026-10-01',endDate:'2026-10-01',snapshot:{month,presentDates:[],rows:[
+  row('2026-10-01','07:00;12:00;13:00;17:00',{NOME_COLABORADOR:'MAURICIO DE SOUZA'}),
+  row('2026-10-02','07:00;12:00;13:00;17:00'),
+ ]}});
+ assert.equal(report.days.length,1);assert.equal(report.days[0].total,'09:00');assert.equal(report.total,'09:00');
+});
 test('inconsistent present dates and unnamed monthly rows cannot become empty reports',async()=>{
  const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
  for(const snapshot of [{month:'2026-10',presentDates:['2026-10-01'],rows:[]},{month:'2026-10',presentDates:[],rows:[row('2026-10-01','07:00',{NOME_COLABORADOR:''})]}])assert.throws(()=>buildRhidMonthlyReport({month:'2026-10',supplier,snapshot}),/incomplet|inválid/i);
+});
+
+test('monthly report includes only the chosen inclusive base period in days and totals',async()=>{
+ const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
+ const month='2026-10';
+ const report=buildRhidMonthlyReport({month,supplier,startDate:'2026-10-02',endDate:'2026-10-03',snapshot:{month,presentDates:[],rows:[
+  row('2026-10-01','07:00;12:00;13:00;17:00'),
+  row('2026-10-02','07:00;12:00;13:00;16:00'),
+  row('2026-10-03','07:00;12:00;13:00;18:00'),
+ ]}});
+ assert.deepEqual(report.days.map(day=>day.date),['2026-10-02','2026-10-03']);
+ assert.equal(report.startDate,'2026-10-02');assert.equal(report.endDate,'2026-10-03');
+ assert.equal(report.total,'18:00');assert.equal(report.recordedDays,2);
+});
+
+test('monthly period accepts February leap day and rejects invalid or reversed dates',async()=>{
+ const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
+ const month='2028-02',snapshot={month,presentDates:[],rows:[]};
+ const report=buildRhidMonthlyReport({month,supplier,startDate:'2028-02-28',endDate:'2028-02-29',snapshot});
+ assert.deepEqual(report.days.map(day=>day.date),['2028-02-28','2028-02-29']);
+ for(const [startDate,endDate] of [['2028-02-29','2028-02-28'],['2028-02-30','2028-02-30'],['2028-01-31','2028-02-02'],['','2028-02-29']]){
+  assert.throws(()=>buildRhidMonthlyReport({month,supplier,startDate,endDate,snapshot}),/período|datas|data/i);
+ }
 });
