@@ -41,7 +41,7 @@ test('vale alimentação: lista fornecedores, soma valores e só posta depois da
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
     loadOrders: async () => [],
     loadSheetAssignments: async () => ({ '1': { id: '11' } }),
-    post: async draft => { posts++; return { orderId: '5', lines: [{ id: '9', supplier: 'Ana', sheetId: '11', payrollId: '31' }], total: Number(draft.lines[0].unitValue) }; },
+    post: async draft => { posts++; return { orderId: '5', lines: [{ id: '9', supplier: 'Ana', sheetId: '11', payrollId: '31' }], total: Number(draft.lines[0].quantity) * Number(draft.lines[0].unitValue) }; },
   } });
   await panel.open(); await tick();
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /Ana/);
@@ -65,6 +65,7 @@ test('vale alimentação: lista fornecedores, soma valores e só posta depois da
   doc.querySelector('[data-meal-confirm]').click(); await tick();
   assert.equal(posts, 1);
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /Pedido 5/);
+  assert.match(doc.querySelector('.meal-voucher-page').textContent, /50,00/);
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /Vínculo 31/);
   panel.destroy(); dom.window.close();
 });
@@ -80,7 +81,7 @@ test('envio interrompido retoma com o mesmo token após recriar a tela e mostra 
     post: async (draft, progress, onProgress) => {
       attempts.push(progress.operationId);
       if (attempts.length === 1) { progress.signature = 'iniciada'; progress.orderId = '5'; progress.lines = { '1': '9' }; onProgress(); throw new Error('rede interrompida'); }
-      return { orderId: '5', lines: [{ id: '9', supplier: 'Ana', sheetId: '11', payrollId: '31' }], total: Number(draft.lines[0].unitValue) };
+      return { orderId: '5', lines: [{ id: '9', supplier: 'Ana', sheetId: '11', payrollId: '31' }], total: Number(draft.lines[0].quantity) * Number(draft.lines[0].unitValue) };
     },
   };
   const panel = createMealVoucherView({ documentRef: doc, data, sessionKey: 'account-1', storage });
