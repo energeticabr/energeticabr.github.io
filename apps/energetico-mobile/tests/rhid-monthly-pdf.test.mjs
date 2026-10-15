@@ -210,6 +210,16 @@ test('monthly PDF keeps unclassified punches visible in their day row without re
  assertInside(pages);
 });
 
+test('monthly PDF preserves every anomalous punch when a day continues on another page',async t=>{
+ const input=report();
+ const times=Array.from({length:146},(_,index)=>`${String(Math.floor(index/60)).padStart(2,'0')}:${String(index%60).padStart(2,'0')}`);
+ input.days[0].unclassifiedPunches=times;
+ const {pages,text}=await inspect(t,await build(input));
+ assert.ok(pages.length>1,'long anomalous day should exercise a continuation page');
+ for(const time of times)assert.ok(text.includes(time),`PDF perdeu a batida ${time}`);
+ assertInside(pages);
+});
+
 test('monthly PDF shows the selected base period and excludes days outside it',async t=>{
  const input=report();const selected={...input,startDate:'2026-10-02',endDate:'2026-10-03',days:input.days.slice(1,3),total:'07:45',recordedDays:2,incompleteDays:1};
  const {text,pages}=await inspect(t,await build(selected));

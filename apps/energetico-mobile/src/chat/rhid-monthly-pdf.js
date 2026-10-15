@@ -124,7 +124,7 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
         color: day.adjusted ? rgb(0.93, 0.96, 0.99) : rgb(1, 1, 1), borderColor: rule, borderWidth: 0.5 });
       let x = MARGIN;
       cells.forEach((lines, column) => {
-        const chunk = column === 0 && offset > 0 ? [dateLabel(day.date), "(cont.)"].slice(0, count) : lines.slice(offset, offset + count);
+        const chunk = lines.slice(offset, offset + count);
         chunk.forEach((line, index) => text(line, x + PADDING, y - PADDING - SIZE - index * LEADING, column === 5 ? bold : regular));
         x += COLUMNS[column];
         if (column < COLUMNS.length - 1) page.drawLine({ start: { x, y }, end: { x, y: y - height }, thickness: 0.5, color: rule });
