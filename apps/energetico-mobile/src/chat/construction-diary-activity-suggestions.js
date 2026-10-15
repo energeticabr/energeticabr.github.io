@@ -23,6 +23,11 @@ function activityLines(value) {
     .filter(Boolean);
 }
 
+export function diaryActivityInDraft(draft, activity) {
+  const key = diarySuggestionKey(activityLines(activity)[0]);
+  return Boolean(key) && activityLines(draft).some(line => diarySuggestionKey(line) === key);
+}
+
 export function recentDiaryActivities(rows, { today = new Date(), dateField = 'DATA', activityField = 'ATIVIDADEEXECUTADA' } = {}) {
   const end = provisionDateKey(today);
   const start = provisionDayOffset(end, -4);

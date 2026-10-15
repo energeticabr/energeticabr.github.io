@@ -897,6 +897,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-presence-date-summary small { color: #60747d; font-size: 10px; }
 .chat-choice-list { display: grid; width: min(100%, 1120px); margin-inline: auto; gap: clamp(8px, 1vw, 14px); }
 .chat-diary-recent-activities { margin-top: 12px; }
+.chat-diary-recent-activities[hidden], .chat-diary-recent-activities button[hidden] { display: none !important; }
 .chat-diary-recent-activities > p { margin: 0 0 10px; font-size: .9em; color: #285c68; }
 .chat-diary-recent-activities .chat-choice-list button { text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .chat-message--launch-menu { gap: 0; }
