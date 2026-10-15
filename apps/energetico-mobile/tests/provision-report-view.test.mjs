@@ -46,14 +46,53 @@ test('responsive provision cells retain every field and month label without addi
   assert.deepEqual(tables.map(table=>table.rows.filter(row=>row.header).at(-1).cells.length),[7,14,8]);
   assert.equal(tables[0].rows[2].cells[0].runs.map(run=>run.text).join('').trim(),row.branch);
 });
-function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],recurrences:[recurrence]}), portrait=false) {
+function setup(t, loadProvisionReportSnapshot = async () => ({provisions:[row],recurrences:[recurrence]}), portrait=false, syncRecurringProvisions=async()=>{}) {
   assert.equal(typeof createProvisionReportView, 'function');
   const dom=new JSDOM('<main id="app"><button>Mascote</button></main>');let vertical=portrait;
   dom.window.matchMedia=()=>({get matches(){return vertical;}});
-  const view=createProvisionReportView({document:dom.window.document,data:{loadProvisionReportSnapshot},now:()=>new Date('2026-10-05T12:00:00Z')});
+  const view=createProvisionReportView({document:dom.window.document,data:{loadProvisionReportSnapshot,syncRecurringProvisions},now:()=>new Date('2026-10-05T12:00:00Z')});
   t.after(()=>{view.destroy();dom.window.close();});
   return {view,root:view.element,dom,rotate(v){vertical=v;dom.window.dispatchEvent(new dom.window.Event('resize'));}};
 }
+test('refresh waits for recurring-expense flow completion before fetching and showing new provisions',async t=>{
+  let release,fetches=0,syncs=0;
+  const completed=new Promise(resolve=>{release=resolve;});
+  const {view,root}=setup(t,async()=>({provisions:fetches++?[row,{...row,id:'315'}]:[row],recurrences:[recurrence]}),false,
+    async()=>{syncs++;await completed;});
+  await view.open();
+  assert.equal(syncs,0,'opening the report must not start the financial flow');
+  const refresh=root.querySelector('button[aria-label="Atualizar relatório de provisões"]');
+  assert.ok(refresh);
+  refresh.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(syncs,1);assert.equal(fetches,1);
+  assert.equal(refresh.disabled,true);assert.equal(root.querySelector('[aria-busy="true"]')!==null,true);
+  release();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(fetches,2);assert.equal(refresh.disabled,false);
+  assert.ok(root.querySelector('[data-section=provisions] tr[data-id="315"]'));
+});
+test('failed recurring-expense flow does not falsely finish with a SharePoint-only reload',async t=>{
+  let fetches=0;
+  const {view,root}=setup(t,async()=>{fetches++;return {provisions:[row],recurrences:[recurrence]};},false,
+    async()=>{throw new Error('O fluxo de provisões falhou.');});
+  await view.open();const refresh=root.querySelector('button[aria-label="Atualizar relatório de provisões"]');
+  refresh.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(fetches,1);assert.match(root.querySelector('.pl-notice').textContent,/falhou/);
+  assert.ok(root.querySelector('[data-section=provisions] tr[data-id="314"]'),'the old report stays visible with an error notice');
+  assert.equal(refresh.disabled,false);
+});
+test('closing and reopening during recurring sync rejoins the same flow before refreshing rows',async t=>{
+  let release,fetches=0,syncs=0;
+  const completion=new Promise(resolve=>{release=resolve;});
+  const {view,root}=setup(t,async()=>({provisions:fetches++?[row,{...row,id:'315'}]:[row],recurrences:[recurrence]}),false,
+    async()=>{syncs++;await completion;});
+  await view.open();root.querySelector('[aria-label="Atualizar relatório de provisões"]').click();
+  await new Promise(resolve=>setImmediate(resolve));view.close();
+  const reopened=view.open();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(syncs,1);assert.equal(fetches,1);
+  release();await reopened;
+  assert.equal(syncs,1);assert.equal(fetches,2);
+  assert.ok(root.querySelector('[data-section=provisions] tr[data-id="315"]'));
+});
 test('provision report waits for landscape, restores focus outside, and reloads after rotation',async t=>{
   let calls=0;const {view,root,dom,rotate}=setup(t,async()=>{calls++;return {provisions:[row],recurrences:[recurrence]};},true);
   const trigger=dom.window.document.querySelector('button');trigger.focus();await view.open();

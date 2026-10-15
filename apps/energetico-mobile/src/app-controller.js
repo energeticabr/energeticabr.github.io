@@ -6004,7 +6004,37 @@ export function createAppController({
               assertQuery();
               throw error;
             }
-          } };
+          }, ...(provision ? { async syncRecurringProvisions({ signal } = {}) {
+            assertSession();
+            if (typeof client.refreshRecurringProvisions !== 'function' || typeof client.getRecurringProvisionRefreshStatus !== 'function') {
+              throw new Error('A sincronização de despesas recorrentes está indisponível nesta sessão.');
+            }
+            const assertSync = () => {
+              assertSession();
+              if (signal?.aborted) throw new DOMException('Sincronização cancelada.', 'AbortError');
+            };
+            const delay = () => new Promise((resolve, reject) => {
+              const timer = setTimeout(() => { signal?.removeEventListener('abort', cancelled); resolve(); }, 4000);
+              const cancelled = () => { clearTimeout(timer); reject(new DOMException('Sincronização cancelada.', 'AbortError')); };
+              signal?.addEventListener('abort', cancelled, { once: true });
+            });
+            assertSync();
+            const started = await client.refreshRecurringProvisions({ signal });
+            assertSync();
+            let status = started;
+            for (let attempt = 0; status?.status === 'running' && attempt < 300; attempt++) {
+              if (attempt > 0) await delay();
+              assertSync();
+              status = await client.getRecurringProvisionRefreshStatus(started.requestId, { signal });
+            }
+            assertSync();
+            if (status?.status !== 'completed') {
+              throw new Error(status?.status === 'failed'
+                ? 'O fluxo de provisões falhou. Nenhum resultado novo foi confirmado.'
+                : 'A conclusão do fluxo de provisões não foi confirmada. Tente atualizar novamente mais tarde.');
+            }
+            invalidateGalleryReportSources();
+          } } : {}) };
           assertSession();
           if (validation && (flowBusy() || store.getState().activeFlow)) return false;
           const factory = validation ? orderValidationReportFactory : provision ? provisionReportFactory : management ? managementReportFactory : paymentLedgerFactory;

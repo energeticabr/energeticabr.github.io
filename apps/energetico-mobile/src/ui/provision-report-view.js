@@ -34,6 +34,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
   const content=make('div','pl-table-scroll pr-content');content.tabIndex=0;content.setAttribute('role','region');content.setAttribute('aria-label','Tabelas de provisões e recorrências');
   report.append(filters,notice,content);panel.append(warning,report);root.append(panel);doc.body.append(root);
   let snapshot=null,controller=null,revision=0,pickers=null,destroyed=false,returnFocus=null,oldOverflow='',app=null,oldInert=false;
+  let pendingSync=null,syncController=null;
   const landscape = bindReportLandscape(root);
   addReportCloseControl({root, toolbar:filters, onClose:close});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
@@ -190,14 +191,30 @@ export function createProvisionReportView({document:doc=globalThis.document,data
       control.value=unique.includes(current)?current:'';}
     pickers=bindSearchableFilterSelects(filters,{placement:'below',report:true});
   }
-  async function load(){
-    if(root.hidden||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();
-    showNotice('Carregando provisões do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
-    try{const result=await data.loadProvisionReportSnapshot({signal:active.signal});
+  async function load({sync=false}={}){
+    if(root.hidden||destroyed)return;pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;
+    const previousSnapshot=sync?snapshot:null;
+    if(!previousSnapshot){snapshot=null;content.replaceChildren();}
+    showNotice(sync||pendingSync?'Sincronizando despesas recorrentes e provisões…':'Carregando provisões do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
+    try{
+      if(sync){
+        if(typeof data.syncRecurringProvisions!=='function')throw new Error('A sincronização de despesas recorrentes está indisponível nesta sessão.');
+        if(!pendingSync){
+          syncController=new AbortController();
+          const operation=Promise.resolve().then(()=>data.syncRecurringProvisions({signal:syncController.signal}));
+          pendingSync=operation.finally(()=>{pendingSync=null;syncController=null;});
+        }
+      }
+      if(pendingSync){
+        await pendingSync;
+        if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
+        showNotice('Automação concluída. Carregando as novas provisões do SharePoint…');
+      }
+      const result=await data.loadProvisionReportSnapshot({signal:active.signal});
       if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;
       if(!Array.isArray(result?.provisions)||!Array.isArray(result?.recurrences))throw new Error('O SharePoint retornou dados incompletos para o relatório de provisões.');
       snapshot=result;populate();render();
-    }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;content.replaceChildren();showNotice(`Não foi possível carregar o relatório. Use Atualizar para tentar novamente. ${String(error?.message||'Falha na consulta.').replace(/https?:\/\/\S+/gi,'endereço SharePoint').replace(/Bearer\s+\S+/gi,'[oculto]').slice(0,240)}`);
+    }catch(error){if(active.signal.aborted||current!==revision||root.hidden||destroyed)return;if(!previousSnapshot)content.replaceChildren();showNotice(`Não foi possível atualizar o relatório. ${previousSnapshot?'Os dados anteriores foram preservados. ':''}Use Atualizar para tentar novamente. ${String(error?.message||'Falha na consulta.').replace(/https?:\/\/\S+/gi,'endereço SharePoint').replace(/Bearer\s+\S+/gi,'[oculto]').slice(0,240)}`);
     }finally{if(current===revision){report.setAttribute('aria-busy','false');refresh.disabled=false;}}
   }
   function orientationChanged() { landscape.update();if(win?.requestAnimationFrame)win.requestAnimationFrame(fitAnnualTokens);else fitAnnualTokens(); }
@@ -210,7 +227,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     else if(!event.shiftKey&&(doc.activeElement===last||doc.activeElement===panel)){event.preventDefault();first?.focus();}
   });
   for(const control of controls.values())control.addEventListener('change',()=>{render();content.scrollTop=0;});
-  refresh.addEventListener('click',()=>{void load();});
+  refresh.addEventListener('click',()=>{void load({sync:true});});
   win?.addEventListener('resize',orientationChanged);win?.addEventListener('orientationchange',orientationChanged);
   return Object.freeze({element:root,async open(){
     if(destroyed)throw new Error('O relatório de provisões foi encerrado.');if(!root.hidden)return;
@@ -218,5 +235,5 @@ export function createProvisionReportView({document:doc=globalThis.document,data
     pickers?.destroy();pickers=null;for(const [name] of FIELDS){const control=controls.get(name),value=name==='paymentStatus'?'PAGAMENTO PREVISTO':name==='recurrenceStatus'?'ATIVO':'';
       control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));if(value)control.append(Object.assign(make('option','',value),{value}));control.value=value;}
     root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
-  },close,destroy(){if(destroyed)return;close();destroyed=true;pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+  },close,destroy(){if(destroyed)return;close();destroyed=true;syncController?.abort();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }

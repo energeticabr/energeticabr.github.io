@@ -507,6 +507,36 @@ export function createChatClient({
     return result.rhidRefresh;
   }
 
+  async function refreshRecurringProvisions({ signal } = {}) {
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "provision_refresh" }), signal,
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "A sincronização de provisões"));
+    if (result?.provisionRefresh?.status !== "running" || !/^[a-f0-9]{32}$/i.test(String(result.provisionRefresh.requestId || ""))) {
+      throw new Error("A VM não confirmou o início da sincronização de provisões.");
+    }
+    return result.provisionRefresh;
+  }
+
+  async function getRecurringProvisionRefreshStatus(requestId, { signal } = {}) {
+    const id = String(requestId || "").trim();
+    if (!/^[a-f0-9]{32}$/i.test(id)) throw new Error("Pedido de sincronização de provisões inválido.");
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "provision_refresh_status", requestId: id }), signal,
+      cache: "no-store", credentials: "omit",
+    }, response => parsePortalResponse(response, "O acompanhamento da sincronização de provisões", { allowRecovery: true }), true);
+    if (!result?.provisionRefresh || result.provisionRefresh.requestId !== id) {
+      throw new Error("A VM não confirmou o estado da sincronização de provisões.");
+    }
+    return result.provisionRefresh;
+  }
+
   async function deleteAttachment(attachmentId) {
     const id = String(attachmentId || "").trim();
     if (!id) throw new Error("O anexo a excluir não foi identificado.");
@@ -590,5 +620,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }
