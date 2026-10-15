@@ -86,7 +86,7 @@ test('monthly form requires supplier, month and year and sends daily totals only
  const supplier=doc.querySelector('select[name="supplier"]');assert.equal(supplier.value,'');assert.deepEqual([...supplier.options].map(o=>o.textContent),['Selecione o fornecedor',...suppliers.map(s=>s.name)]);
  assert.equal(doc.querySelector('[name="month"]').value,'09');assert.equal(doc.querySelector('[name="year"]').value,'2026');
  supplier.value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{bubbles:true,cancelable:true}));await tick();await tick();
- assert.deepEqual(requests,['2026-09']);assert.equal(reports[0].supplier.name,'HELISON ROSA LUIS');assert.equal(reports[0].total,'09:00');assert.equal(reports[0].days.length,30);
+ assert.deepEqual(requests,['2026-09']);assert.equal(reports[0].supplier.name,'HELISON ROSA LUIS');assert.equal(reports[0].total,'08:30');assert.equal(reports[0].days.length,30);
  assert.equal(doc.querySelector('[data-monthly-result]').hidden,true);assert.equal(doc.querySelector('[data-monthly-result]').childNodes.length,0);assert.equal(doc.querySelectorAll('tbody tr').length,0);
  assert.equal(doc.querySelector('.rhid-monthly-notice').hidden,true,'only the PDF is the successful result');
 });
@@ -112,7 +112,7 @@ test('selected base period controls generated days and invalid dates do not quer
  assert.equal(reads,0);assert.match(doc.querySelector('[role="alert"]').textContent,/período|datas/i);
  start.value='2026-09-01';end.value='2026-09-01';
  doc.querySelector('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await tick();await tick();
- assert.equal(reads,1);assert.equal(reports[0].days.length,1);assert.equal(reports[0].total,'09:00');
+ assert.equal(reads,1);assert.equal(reports[0].days.length,1);assert.equal(reports[0].total,'08:30');
  assert.equal(reports[0].startDate,'2026-09-01');assert.equal(reports[0].endDate,'2026-09-01');
 });
 
@@ -148,7 +148,7 @@ test('monthly selection generates all selected employees from one monthly snapsh
  doc.querySelector('.sfs-dismiss').click();
  doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
  assert.equal(reads,1);assert.equal(reports.length,1);
- assert.deepEqual(reports[0].map(r=>[r.supplier.id,r.total]),[['4','00:00'],['7','09:00']]);
+ assert.deepEqual(reports[0].map(r=>[r.supplier.id,r.total]),[['4','00:00'],['7','08:30']]);
  assert.equal(doc.querySelectorAll('[data-monthly-result] table').length,0);
  assert.equal(doc.querySelector('[data-monthly-result]').hidden,true);
 });
@@ -245,7 +245,7 @@ test('monthly batch rejects every report if one selected employee is no longer e
 test('successful monthly generation opens the confirmed supplier report with a cancellable lifetime',async t=>{
  const reports=[];const {doc}=await setup(t,{}, {onReport:async(report,options)=>reports.push({report,options})});
  doc.querySelector('[name="supplier"]').value='7';doc.querySelector('form').dispatchEvent(new doc.defaultView.Event('submit',{cancelable:true}));await tick();await tick();
- assert.equal(reports.length,1);assert.equal(reports[0].report.supplier.name,'HELISON ROSA LUIS');assert.equal(reports[0].report.total,'09:00');
+ assert.equal(reports.length,1);assert.equal(reports[0].report.supplier.name,'HELISON ROSA LUIS');assert.equal(reports[0].report.total,'08:30');
  assert.equal(reports[0].options.signal.aborted,false);
 });
 test('PDF opening failures leave the report available with a visible retry error',async t=>{
