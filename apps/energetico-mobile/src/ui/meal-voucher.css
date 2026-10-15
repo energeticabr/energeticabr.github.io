@@ -18,6 +18,7 @@
 .meal-voucher-table th, .meal-voucher-table td { padding: 9px; text-align: left; border-bottom: 1px solid #ccdce2; }
 .meal-voucher-table th { background: #deeff4; }
 .meal-voucher-table tr:nth-child(even) { background: #f4fafd; }
+.meal-voucher-table tbody tr.meal-voucher-selected-row { background: #d7f1de; }
 .meal-voucher-table td small { display: block; color: #536e78; }
 .meal-voucher-table input { width: 100%; min-width: 0; min-height: 42px; box-sizing: border-box; border: 1px solid #acc4ca; border-radius: 7px; padding: 6px; font: inherit; }
 .meal-voucher-total { padding: 12px; background: #e2f3eb; border: 1px solid #91c8aa; border-radius: 10px; text-align: right; font-size: 1.2rem; font-weight: 800; }
