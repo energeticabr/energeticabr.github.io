@@ -42,9 +42,13 @@ export function buildRhidMonthlyReport({month,supplier,snapshot,startDate:reques
   const slots=person?Object.values(person.slots).map(slot=>slot.effective||'—'):['—','—','—','—'];
   const recorded=Boolean(person&&(person.rawPunches.length||slots.some(time=>time!=='—')));
   const rawTotal=String(table.rows[0]?.at(-1)??'');
-  const total=recorded&&/^\d+:\d{2}$/.test(rawTotal)&&slots.every(time=>time!=='—')?rawTotal:null;
+  const grossTotal=recorded&&/^\d+:\d{2}$/.test(rawTotal)&&slots.every(time=>time!=='—')?rawTotal:null;
+  const grossMinutes=grossTotal===null?null:grossTotal.split(':').map(Number).reduce((value,part)=>value*60+part,0);
+  const weekday=new Date(`${date}T00:00:00Z`).getUTCDay();
+  const netMinutes=grossMinutes===null?null:Math.max(0,grossMinutes-(weekday>=1&&weekday<=4?30:15));
+  const total=netMinutes===null?null:hours(netMinutes);
   if(recorded){recordedDays++;if(total===null)incompleteDays++;}
-  if(total!==null){const [h,m]=total.split(':').map(Number);minutes+=h*60+m;}
+  if(netMinutes!==null)minutes+=netMinutes;
   return {date,slots,total,recorded,adjusted:Boolean(person&&Object.values(person.slots).some(slot=>slot.adjustment)),issues:person?.issues||[]};
  });
  return {month,startDate,endDate,supplier:{id:String(supplier.id),name:supplier.name},days,total:hours(minutes),recordedDays,incompleteDays};
