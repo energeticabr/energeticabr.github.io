@@ -212,6 +212,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-confirmation__actions button { min-height: clamp(50px, 5.5vw, 68px); border-radius: 12px; padding: clamp(10px, 1.2vw, 16px) clamp(14px, 2vw, 26px); font-size: clamp(1rem, 1.8vw, 1.2rem); font-weight: 750; }
 .chat-confirmation__cancel { border: 1px solid #a9c5ce; color: var(--brand); background: white; }
 .chat-confirmation__confirm { border: 1px solid var(--brand); color: white; background: var(--brand); }
+.chat-attendance-irregularity label { display: block; margin-bottom: 8px; font-weight: 750; color: var(--brand-strong); }
+.chat-attendance-irregularity textarea { display: block; box-sizing: border-box; width: 100%; min-height: 120px; margin-bottom: 18px; padding: 12px; border: 1px solid #8cabb5; border-radius: 12px; background: white; color: #14333e; font: inherit; resize: vertical; }
+.chat-attendance-irregularity__error { color: #a5222a !important; margin: 0 0 14px !important; font-weight: 700; }
 .chat-pending-construction-diaries .chat-confirmation__actions { grid-template-columns: minmax(0, 1fr); }
 .chat-pending-construction-diaries .chat-confirmation__confirm { width: 100%; text-align: center; }
 .chat-rhid-report-page { margin: 0 auto; }

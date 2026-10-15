@@ -18,6 +18,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
 import { attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
+import { attendanceIrregularity } from "../chat/attendance-irregularity.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
 import { createVoiceInputController } from "./voice-input.js";
@@ -1677,14 +1678,15 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
         controls.push(pollButton(option, busy || !currentPoll));
         continue;
       }
-      if (!option.disabled) visibleIds.push(id);
+      const optionUnavailable = option.disabled || (!supplierSync && option.rhidBadge?.status === 'loading');
+      if (!optionUnavailable) visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       const nameMarkup = formatChatText(label);
       const rhidBadge = attendanceRhidBadgeMarkup(option.rhidBadge);
       const recordMarkup = rhidBadge
         ? `<span class="chat-attendance-select__content"><span class="chat-attendance-select__name">${nameMarkup}</span>${rhidBadge}</span>`
         : nameMarkup;
-      const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || option.disabled ? " disabled" : ""}>`;
+      const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || optionUnavailable ? " disabled" : ""}>`;
       const detailTable = option.detail_table || option.detailTable;
       const detailRows = Array.isArray(detailTable) ? detailTable : detailTable?.rows;
       const cells = Array.isArray(detailRows) ? detailRows.flat().filter(cell => cell && typeof cell === "object") : [];
@@ -1701,8 +1703,8 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       records.push(supplierSync
         ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${recordMarkup}</span></label>`
         : hasDetails
-          ? `<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><button class="chat-attendance-select__record" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${detailedRecordMarkup}</button>${detailMarkup}</div></div>`
-          : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll ? " disabled" : ""}>${recordMarkup}</button></div>`);
+          ? `<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><button class="chat-attendance-select__record" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable ? " disabled" : ""}>${detailedRecordMarkup}</button>${detailMarkup}</div></div>`
+          : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable ? " disabled" : ""}>${recordMarkup}</button></div>`);
     }
     const selectAll = visibleIds.length
       ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
@@ -2019,6 +2021,20 @@ function pendingDocumentDeleteMarkup() {
         <button class="chat-confirmation__cancel" type="button" data-action="cancel-pending-document-delete">Não</button>
         <button class="chat-confirmation__confirm" type="button" data-action="confirm-pending-document-delete">Sim</button>
       </div>
+    </div>
+  </div>`;
+}
+
+function attendanceIrregularityMarkup(dialog) {
+  if (!dialog) return '';
+  return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="attendance-irregularity-cancel" data-attendance-irregularity-dialog>
+    <div class="chat-confirmation chat-attendance-irregularity" role="dialog" aria-modal="true" aria-labelledby="attendance-irregularity-title">
+      <h2 id="attendance-irregularity-title">Por que ocorreu essa irregularidade?</h2>
+      <p>${escapeHtml(dialog.label)} — ${escapeHtml(dialog.irregularity.duration)} em ${escapeHtml(dialog.date.split('-').reverse().join('/'))}. Jornada esperada: ${escapeHtml(dialog.irregularity.limit)}.</p>
+      <label for="attendance-irregularity-reason">Justificativa</label>
+      <textarea id="attendance-irregularity-reason" data-role="attendance-irregularity-reason" maxlength="4000" rows="4" placeholder="Descreva o motivo da jornada irregular"${dialog.busy ? ' disabled' : ''}>${escapeHtml(dialog.reason || '')}</textarea>
+      ${dialog.error ? `<p class="chat-attendance-irregularity__error" role="alert">${escapeHtml(dialog.error)}</p>` : ''}
+      <div class="chat-confirmation__actions"><button class="chat-confirmation__cancel" type="button" data-action="attendance-irregularity-cancel"${dialog.busy ? ' disabled' : ''}>Cancelar</button><button class="chat-confirmation__confirm" type="button" data-action="attendance-irregularity-submit"${dialog.busy ? ' disabled' : ''}>${dialog.busy ? 'Salvando…' : 'Submeter'}</button></div>
     </div>
   </div>`;
 }
@@ -2560,7 +2576,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -2674,6 +2690,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     </form>
     ${signOutConfirm ? signOutConfirmationMarkup() : ""}
     ${pendingDocumentDelete ? pendingDocumentDeleteMarkup() : ""}
+    ${attendanceIrregularityMarkup(attendanceIrregularityDialog)}
     ${attachmentSource ? attachmentSourceMarkup() : ""}
     ${datePicker && !rhidAttendanceReport?.open ? datePickerMarkup(datePickerValue) : ""}
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
@@ -2720,6 +2737,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   const attendanceSelectedIds = new Set();
   const attendanceExpandedIds = new Set();
   let attendanceSelectionPollKey = "";
+  let attendanceOptions = new Map();
+  let attendanceIrregularityDialog = null;
+  let attendanceIrregularityQueue = [];
   let attendanceReportSelection = null;
   const launchPayrollSelectedIds = new Set();
   let launchPayrollSelectionPollKey = "";
@@ -3983,6 +4003,76 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     handlers.get(command.type)?.forEach(handler => handler(command));
   }
 
+  function rerenderAttendance() {
+    if (!lastState) return;
+    const state = lastState;
+    lastState = null;
+    render(state);
+  }
+
+  function attendanceIrregularOption(id) {
+    const option = attendanceOptions.get(id);
+    if (!option || option.disabled) return null;
+    const irregularity = attendanceIrregularity(option.rhidBadge);
+    return irregularity ? { option, irregularity } : null;
+  }
+
+  function openAttendanceIrregularity(id, mode = 'checkbox') {
+    const match = attendanceIrregularOption(id);
+    if (!match || attendanceIrregularityDialog) return false;
+    attendanceIrregularityDialog = {
+      id, date: match.irregularity.date, irregularity: match.irregularity,
+      label: String(match.option.label || match.option.title || id),
+      replyId: draftReplyId(match.option), mode, reason: '', error: '', busy: false,
+      pollKey: attendanceSelectionPollKey,
+    };
+    rerenderAttendance();
+    root.querySelector('[data-role="attendance-irregularity-reason"]')?.focus?.();
+    return true;
+  }
+
+  function nextAttendanceIrregularity() {
+    while (attendanceIrregularityQueue.length) {
+      const id = attendanceIrregularityQueue.shift();
+      if (!attendanceSelectedIds.has(id) && openAttendanceIrregularity(id)) return;
+    }
+    rerenderAttendance();
+  }
+
+  async function submitAttendanceIrregularity() {
+    const dialog = attendanceIrregularityDialog;
+    if (!dialog || dialog.busy) return;
+    const reason = String(root.querySelector('[data-role="attendance-irregularity-reason"]')?.value || '').trim();
+    if (!reason) {
+      dialog.error = 'Digite o motivo antes de submeter.';
+      rerenderAttendance();
+      return;
+    }
+    dialog.reason = reason;
+    dialog.error = '';
+    dialog.busy = true;
+    rerenderAttendance();
+    try {
+      const save = [...(handlers.get('attendance-irregularity-save') || [])][0];
+      if (!save) throw new Error('O salvamento da justificativa não está disponível.');
+      await save({ id: dialog.id, date: dialog.date, explanation: reason });
+      if (attendanceIrregularityDialog !== dialog || attendanceSelectionPollKey !== dialog.pollKey) return;
+      attendanceIrregularityDialog = null;
+      if (dialog.mode === 'direct') {
+        rerenderAttendance();
+        emit({ type: 'select-reply', replyId: dialog.replyId, label: dialog.label });
+      } else {
+        attendanceSelectedIds.add(dialog.id);
+        nextAttendanceIrregularity();
+      }
+    } catch (error) {
+      if (attendanceIrregularityDialog !== dialog) return;
+      dialog.busy = false;
+      dialog.error = String(error?.message || 'Não foi possível salvar. Tente novamente.');
+      rerenderAttendance();
+    }
+  }
+
   function resizeDraft(draft) {
     if (!draft) return;
     draft.style.height = "auto";
@@ -4172,8 +4262,19 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       else attendanceExpandedIds.add(command.replyId);
       return;
     }
+    if (command.type === 'attendance-irregularity-cancel') {
+      if (attendanceIrregularityDialog?.busy) return;
+      attendanceIrregularityDialog = null;
+      attendanceIrregularityQueue = [];
+      rerenderAttendance();
+      return;
+    }
+    if (command.type === 'attendance-irregularity-submit') {
+      void submitAttendanceIrregularity();
+      return;
+    }
     if (command.type === "attendance-select-proceed") {
-      if (!attendanceSelectedIds.size) return;
+      if (!attendanceSelectedIds.size || attendanceIrregularityDialog || attendanceIrregularityQueue.length) return;
       const supplierSync = clickedAction?.closest?.('.chat-attendance-select')?.dataset.supplierSync === "true";
       emit({ type: "select-reply", replyId: `${supplierSync ? "supplier_sync_batch" : "attendance_batch"}:${[...attendanceSelectedIds].join(",")}`, label: `${supplierSync ? "SUBMETER" : "PROSSEGUIR"} (${attendanceSelectedIds.size})` });
       return;
@@ -4206,6 +4307,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const warning = clickedAction.closest(".chat-attendance-select")?.querySelector(".chat-attendance-select__warning");
       if (warning) warning.hidden = false;
       return;
+    }
+    if (command.type === 'select-reply' && clickedAction?.closest?.('.chat-attendance-select__row')
+      && clickedAction.closest('.chat-attendance-select')?.dataset.supplierSync !== 'true') {
+      const id = attendanceSelectionId({ reply: command.replyId });
+      if (id && openAttendanceIrregularity(id, 'direct')) return;
     }
     if (command.type === "select-reply" && /^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) {
       pendingDocumentDelete = { id: command.replyId.split(":")[1], label: command.label || "" };
@@ -4653,6 +4759,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function input(event) {
+    if (event.target?.dataset?.role === 'attendance-irregularity-reason') {
+      if (attendanceIrregularityDialog) attendanceIrregularityDialog.reason = event.target.value;
+      return;
+    }
     if (event.target?.dataset?.role === "draft") {
       if (!composing && !event.isComposing && event.target.dataset.diaryActivitiesInput === "true") {
         const formatted = numberDiaryActivityDraft(event.target.value, event.target.selectionStart, event.target.selectionEnd, {
@@ -5123,14 +5233,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         .filter(input => !input.disabled)
         .map(input => String(input.dataset.replyId || ""));
       for (const id of ids) {
-        if (checkbox.checked) attendanceSelectedIds.add(id);
-        else attendanceSelectedIds.delete(id);
+        if (!checkbox.checked) attendanceSelectedIds.delete(id);
+        else if (checkbox.closest('.chat-attendance-select')?.dataset.supplierSync === 'true' || !attendanceIrregularOption(id)) attendanceSelectedIds.add(id);
+        else if (!attendanceSelectedIds.has(id)) attendanceIrregularityQueue.push(id);
       }
-      if (lastState) {
-        const state = lastState;
-        lastState = null;
-        render(state);
-      }
+      if (attendanceIrregularityQueue.length && checkbox.checked) nextAttendanceIrregularity();
+      else rerenderAttendance();
       return;
     }
     if (checkbox?.matches?.('input[data-action="launch-payroll-select-toggle"]') && !checkbox.disabled) {
@@ -5148,13 +5256,11 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (!checkbox?.matches?.('input[data-action="attendance-select-toggle"]') || checkbox.disabled) return;
     const id = String(checkbox.dataset.replyId || "");
     if (!/^\d+$/.test(id)) return;
+    if (checkbox.checked && checkbox.closest('.chat-attendance-select')?.dataset.supplierSync !== 'true'
+      && openAttendanceIrregularity(id)) return;
     if (checkbox.checked) attendanceSelectedIds.add(id);
     else attendanceSelectedIds.delete(id);
-    if (lastState) {
-      const state = lastState;
-      lastState = null;
-      render(state);
-    }
+    rerenderAttendance();
   }
 
   function compositionStart(event) {
@@ -5174,6 +5280,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     if (nextAttendancePollKey !== attendanceSelectionPollKey || !isAttendancePoll) {
       attendanceSelectedIds.clear();
       attendanceExpandedIds.clear();
+      attendanceIrregularityDialog = null;
+      attendanceIrregularityQueue = [];
       if (attendanceReportSelection?.key === nextAttendancePollKey) {
         for (const id of attendanceReportSelection.ids) attendanceSelectedIds.add(id);
         attendanceReportSelection = null;
@@ -5182,6 +5290,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const viewingRhid = (newestPoll?.detail_table || newestPoll?.detailTable)?.kind === "rhid_attendance";
     if (state.sessionStatus !== "authenticated" || (!viewingRhid && nextAttendancePollKey !== attendanceReportSelection?.key)) attendanceReportSelection = null;
     attendanceSelectionPollKey = nextAttendancePollKey;
+    attendanceOptions = new Map(isAttendancePoll ? (newestPoll.options || []).map(option => [attendanceSelectionId(option), option]).filter(([id]) => id) : []);
     const eligibleAttendanceIds = new Set(isAttendancePoll ? (newestPoll.options || []).filter(option => !option.disabled).map(attendanceSelectionId).filter(Boolean) : []);
     for (const id of attendanceSelectedIds) {
       if (!eligibleAttendanceIds.has(id)) attendanceSelectedIds.delete(id);
@@ -5281,6 +5390,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       ),
       attendanceSelectedIds: [...attendanceSelectedIds],
       attendanceExpandedIds: [...attendanceExpandedIds],
+      attendanceIrregularityDialog,
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);
