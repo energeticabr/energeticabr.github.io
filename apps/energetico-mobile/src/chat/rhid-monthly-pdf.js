@@ -1,4 +1,4 @@
-import { isRhidReportMonth } from "./rhid-monthly-model.js";
+import { isRhidReportMonth, isRhidReportDateRange, rhidMonthDateBounds } from "./rhid-monthly-model.js";
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;
@@ -48,6 +48,16 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
     || reports.some(report => report.month !== reports[0].month)) {
     throw new TypeError("Relatório mensal RHID inválido");
   }
+  const periods = reports.map(report => {
+    const bounds = rhidMonthDateBounds(report.month);
+    if ((report.startDate == null) !== (report.endDate == null)) throw new TypeError("Período mensal RHID inválido");
+    return { startDate: report.startDate ?? bounds.startDate, endDate: report.endDate ?? bounds.endDate, bounds };
+  });
+  if (periods.some(({ startDate, endDate }, index) => !isRhidReportDateRange(reports[index].month, startDate, endDate)
+    || reports[index].days.some(day => day.date < startDate || day.date > endDate))
+    || periods.some(({ startDate, endDate }) => startDate !== periods[0].startDate || endDate !== periods[0].endDate)) {
+    throw new TypeError("Período mensal RHID inválido");
+  }
 
   const { PDFDocument, StandardFonts, PDFHexString, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
@@ -59,7 +69,9 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
   const ink = rgb(0.07, 0.13, 0.22);
   const navy = rgb(0.08, 0.24, 0.43);
   const rule = rgb(0.82, 0.85, 0.89);
-  for (const report of reports) {
+  for (const [reportIndex, report] of reports.entries()) {
+  const { startDate, endDate, bounds } = periods[reportIndex];
+  const customPeriod = startDate !== bounds.startDate || endDate !== bounds.endDate;
   const firstPage = pdf.getPageCount();
   const supplierName = String(report.supplier.name).trim().normalize("NFC");
   let page;
@@ -73,7 +85,7 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
     page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     if (logo) page.drawImage(logo, { x: MARGIN, y: PAGE_HEIGHT - MARGIN - logoSize.height, ...logoSize });
     text("RELATÓRIO MENSAL RHID", headingX, PAGE_HEIGHT - 49, bold, 17, navy);
-    text(`Período: ${report.month.slice(5, 7)}/${report.month.slice(0, 4)}`, headingX, PAGE_HEIGHT - 69, bold, 10);
+    text(customPeriod ? `Período: ${dateLabel(startDate)} a ${dateLabel(endDate)}` : `Período: ${report.month.slice(5, 7)}/${report.month.slice(0, 4)}`, headingX, PAGE_HEIGHT - 69, bold, 10);
     y = PAGE_HEIGHT - 89;
     for (const line of wrapText(supplierName, bold, 10, INNER_WIDTH)) {
       text(line, MARGIN, y, bold, 10);
@@ -168,7 +180,7 @@ export async function buildRhidMonthlyPdf(input, { logoBytes } = {}) {
   for (const day of report.days) drawDay(day);
   if (y - 66 < BOTTOM) addPage(false);
   y -= 22;
-  text(`Total do mês: ${report.total}`, MARGIN, y, bold, 12, navy);
+  text(`${customPeriod ? 'Total do período' : 'Total do mês'}: ${report.total}`, MARGIN, y, bold, 12, navy);
   y -= 17;
   text(`Dias com registros: ${report.recordedDays}`, MARGIN, y);
   y -= 14;

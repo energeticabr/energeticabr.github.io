@@ -9,6 +9,7 @@
 .rhid-monthly-form { display: grid; gap: 16px; }
 .rhid-monthly-form label { display: grid; min-width: 0; gap: 8px; font-weight: 700; }
 .rhid-monthly-period { display: grid; grid-template-columns: minmax(0, 2fr) minmax(90px, 1fr); gap: 16px; }
+.rhid-monthly-date-period { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
 .rhid-monthly-form select, .rhid-monthly-form input { box-sizing: border-box; width: 100%; min-width: 0; height: 48px; border: 1px solid #abc5ce; border-radius: 10px; padding: 10px; font: inherit; font-size: 16px; color: #173b4b; background: #f4f8fb; }
 .rhid-monthly-form .sfs-wrapper { min-width: 0; }
 .rhid-monthly-selection-help { font-size: 14px; font-weight: 400; color: #526977; }
@@ -17,7 +18,7 @@
 .rhid-monthly-supplier .sfs-option[aria-selected="true"] { background: #e1edf5; }
 .rhid-monthly-refresh { justify-self: start; background: #e7f2f9; color: #135577; }
 .rhid-monthly-actions { display: flex; justify-content: flex-end; gap: 16px; }
-.rhid-monthly-cancel { background: #fff; color: #a01d28; }
+.rhid-monthly-cancel { background: #ba202c; border-color: #ba202c !important; color: #fff; font-weight: 700 !important; }
 .rhid-monthly-generate { background: #07586b; color: #fff; font-weight: 700 !important; }
 .rhid-monthly-dialog button:disabled { opacity: .5; cursor: default; }
 .rhid-monthly-notice { padding: 12px; background: #e7f2f9; border-radius: 10px; overflow-wrap: anywhere; }
@@ -34,4 +35,5 @@
 .rhid-monthly-table-scroll tr:nth-child(even) { background: #eef5f9; }
 .rhid-monthly-table-scroll .rhid-monthly-row--incomplete { background: #fff0d8; }
 .rhid-monthly-table-scroll .rhid-monthly-issues td { white-space: normal; color: #9b3228; font-size: 14px; }
+@media (max-width: 440px) { .rhid-monthly-date-period { grid-template-columns: 1fr; } .rhid-monthly-actions { gap: 10px; } .rhid-monthly-actions button { flex: 1 1 0; padding-inline: 8px; } }
 @media (min-width: 800px) { .rhid-monthly-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .rhid-monthly-actions { grid-column: 1 / -1; } }

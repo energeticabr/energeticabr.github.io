@@ -76,8 +76,8 @@ function setup(t, entry, {fail = false, immediate = false} = {}) {
 
 function closeControl(root) {
   const exits = [...root.querySelectorAll('button')].filter(node => !node.closest('[hidden]') &&
-    /fechar|voltar(?: ao menu inicial)?|início|cancelar/i.test(node.getAttribute('aria-label') || node.textContent));
-  assert.equal(exits.length, 1, 'each report exposes exactly one visible dismissal control');
+    /fechar|voltar(?: ao menu inicial)?|início/i.test(node.getAttribute('aria-label') || node.textContent));
+  assert.equal(exits.length, 1, 'each report exposes exactly one visible emoji dismissal control');
   const button = exits[0];
   assert.equal(button.textContent.trim(), '❌', 'the visible dismissal is the requested emoji');
   assert.match(button.getAttribute('aria-label') || '', /^Fechar\b/i);
@@ -87,10 +87,18 @@ function closeControl(root) {
   return button;
 }
 
+test('RHID monthly Cancelar is an additional action that closes like the sole emoji exit',async t=>{
+  const ctx=setup(t,cases.find(entry=>entry[0]==='rhid-monthly-report-view'),{immediate:true});
+  await ctx.open();
+  const root=ctx.root(),emoji=closeControl(root),cancel=root.querySelector('.rhid-monthly-cancel');
+  assert.ok(cancel);assert.notEqual(cancel,emoji);assert.equal(cancel.type,'button');
+  cancel.click();assert.equal(root.hidden,true);assert.equal(ctx.closes(),1);assert.equal(ctx.homes(),0);
+});
+
 for (const entry of cases) {
   const name = entry[0];
 
-  // Break: a report has no exit, duplicated home/cancel exits, or an exit disabled during loading.
+  // Break: a report has no emoji exit, duplicated home exits, or an exit disabled during loading.
   test(`${name}: the sole emoji exit closes loading and rejects the late response`, async t => {
     const ctx = setup(t, entry);
     const opening = ctx.open(); await tick();

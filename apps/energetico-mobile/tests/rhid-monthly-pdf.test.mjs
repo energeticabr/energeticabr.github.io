@@ -179,6 +179,22 @@ test("monthly PDF preserves the full calendar, effective hours, adjustment and i
   assertInside(pages);
 });
 
+test('monthly PDF shows the selected base period and excludes days outside it',async t=>{
+ const input=report();const selected={...input,startDate:'2026-10-02',endDate:'2026-10-03',days:input.days.slice(1,3),total:'08:00',recordedDays:2,incompleteDays:1};
+ const {text,pages}=await inspect(t,await build(selected));
+ assert.match(text,/Período: 02\/10\/2026 a 03\/10\/2026/);
+ assert.match(text,/02\/10\/2026/);assert.match(text,/03\/10\/2026/);
+ assert.doesNotMatch(text,/01\/10\/2026|04\/10\/2026/);
+ assert.match(text,/Total do período: 08:00/);assertInside(pages);
+});
+
+test('monthly PDF refuses mixing different custom base periods in one supplier batch',async()=>{
+ const firstReport=report(),secondReport=report('2026-10','HELISON ROSA LUIS');
+ const first={...firstReport,startDate:'2026-10-01',endDate:'2026-10-02',days:firstReport.days.slice(0,2)};
+ const second={...secondReport,supplier:{id:'7',name:'HELISON ROSA LUIS'},startDate:'2026-10-02',endDate:'2026-10-03',days:secondReport.days.slice(1,3)};
+ await assert.rejects(()=>build([first,second]),TypeError);
+});
+
 // Cutting a tall row, shrinking it or failing to repeat headers breaks reading.
 test("monthly PDF continues oversized issues without losing characters or following dates", { timeout: 15000 }, async t => {
   const input = report();
