@@ -1,4 +1,5 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
+import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
 import { signatureLayoutGeometry } from './web/signature-document-layout.js';
@@ -323,6 +324,16 @@ async function defaultSupplierPayrollFactory(options) {
 async function defaultSupplierPayrollDataFactory(options) {
   const { createSupplierPayrollData } = await import("./chat/supplier-payroll-data.js");
   return createSupplierPayrollData(options);
+}
+
+async function defaultMealVoucherFactory(options) {
+  const { createMealVoucherView } = await import('./ui/meal-voucher-view.js');
+  return createMealVoucherView(options);
+}
+
+async function defaultMealVoucherDataFactory(options) {
+  const { createMealVoucherData } = await import('./chat/meal-voucher-data.js');
+  return createMealVoucherData(options);
 }
 
 function errorMessage(error, fallback) {
@@ -970,6 +981,8 @@ export function createAppController({
   payrollSheetCreateFactory = defaultPayrollSheetCreateFactory,
   supplierPayrollFactory = defaultSupplierPayrollFactory,
   supplierPayrollDataFactory = defaultSupplierPayrollDataFactory,
+  mealVoucherFactory = defaultMealVoucherFactory,
+  mealVoucherDataFactory = defaultMealVoucherDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -1089,6 +1102,8 @@ export function createAppController({
   const registrationGalleryOpenings = new Map();
   let supplierPayroll = null;
   let supplierPayrollOpening = null;
+  let mealVoucher = null;
+  let mealVoucherOpening = null;
   let hrPayrollGallery = null;
   let hrPayrollGalleryName = "";
   let hrPayrollGalleryOpening = null;
@@ -5399,6 +5414,56 @@ export function createAppController({
     supplierPayrollOpening = null;
   }
 
+  function disposeMealVoucher() {
+    mealVoucher?.destroy?.();
+    mealVoucher = null;
+    mealVoucherOpening = null;
+  }
+
+  async function openMealVoucher() {
+    if (!account || stopped || flowBusy()) return false;
+    const state = store.getState();
+    if (!isSupplierPayrollMenu(latestAssistantPoll(state.messages), state.activeFlow)) return false;
+    if (mealVoucherOpening) return mealVoucherOpening;
+    const owner = account, revision = sessionRevision;
+    let allowAuthorization = true;
+    const assertSession = () => {
+      if (stopped || account !== owner || sessionRevision !== revision) throw new Error('A sessão de vale-alimentação foi encerrada.');
+    };
+    const tokenProvider = async scopes => {
+      assertSession();
+      try { return await auth.getToken(scopes); }
+      catch (error) {
+        if (error?.code !== 'AUTH_REQUIRED' || !allowAuthorization || typeof auth.authorize !== 'function') throw error;
+        await auth.authorize(scopes, { resumeAction: MEAL_VOUCHER_REPLY_ID });
+        assertSession();
+        return auth.getToken(scopes);
+      }
+    };
+    const opening = (async () => {
+      try {
+        if (!mealVoucher) {
+          const data = await mealVoucherDataFactory({ tokenProvider, assertSession });
+          assertSession();
+          await data.prepare?.();
+          assertSession();
+          allowAuthorization = false;
+          const panel = await mealVoucherFactory({ data, assertSession, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
+          if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
+          mealVoucher = panel;
+        }
+        await mealVoucher.open();
+        assertSession();
+        return true;
+      } catch (error) {
+        if (!stopped && account === owner && sessionRevision === revision) setSessionError(error, 'Não foi possível abrir o lançamento de vale-alimentação.');
+        return false;
+      }
+    })();
+    mealVoucherOpening = opening;
+    try { return await opening; } finally { if (mealVoucherOpening === opening) mealVoucherOpening = null; }
+  }
+
   function payrollReceiptTrayAccess(assertSession) {
     const receiptTray = () => {
       assertSession();
@@ -9576,6 +9641,7 @@ export function createAppController({
     disposeRegistrationGalleries();
     disposeHrPayrollGallery();
     disposeSupplierPayroll();
+    disposeMealVoucher();
     sessionRevision += 1;
     reportSnapshots.reset();
     supplierPayrollSessionSource = null;
@@ -10271,6 +10337,7 @@ export function createAppController({
     });
     bind("select-reply", command => {
       if (command.replyId === PAYROLL_LAUNCH_REPLY_ID) return openSupplierPayroll();
+      if (command.replyId === MEAL_VOUCHER_REPLY_ID) return openMealVoucher();
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
       if (command.replyId === NAVIGATION_BACK_ID) {
         const latestPoll = latestAssistantPoll(store.getState().messages);
@@ -10784,6 +10851,7 @@ export function createAppController({
     if (sharedResumeRequested) await resumeSharedFiles();
     const pendingAction = account ? auth.consumePendingAction?.() : null;
     if (pendingAction === PAYROLL_LAUNCH_REPLY_ID) await openSupplierPayroll();
+    else if (pendingAction === MEAL_VOUCHER_REPLY_ID) await openMealVoucher();
     else if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
     else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
@@ -10859,6 +10927,7 @@ export function createAppController({
     disposeRegistrationGalleries();
     disposeHrPayrollGallery();
     disposeSupplierPayroll();
+    disposeMealVoucher();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

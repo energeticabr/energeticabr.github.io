@@ -27,7 +27,7 @@ function makeView() {
   };
 }
 
-function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
+function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, mealVoucherFactory, mealVoucherDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
   const store = createConversationStore({ randomUUID: () => `id-${++next}`, historyMode });
   const view = suppliedView || makeView();
@@ -74,7 +74,7 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
   const provisionDataFactory = pendingProvisionAttachmentsDataFactory || (async () => ({
     loadUpcomingPayments: async () => [], listAttachments: async () => [], downloadAttachment: async () => new Blob(),
   }));
-  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, databaseFilterDebounceMs });
+  const controller = createAppController({ store, view, client, auth, native, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory: provisionDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, mealVoucherFactory, mealVoucherDataFactory, databaseFilterDebounceMs });
   return { store, view, client, auth, native, controller, chatCalls, discarded, exported };
 }
 
@@ -10004,6 +10004,18 @@ test("folha de Novo Pedido abre página local sem enviar opção à VM e limpa a
 test("folha não abre fora de Novo Pedido",async t=>{
  let opened=0;const h=makeHarness({supplierPayrollFactory:async()=>{opened++;return{};}});t.after(()=>h.controller.stop());await h.controller.start();
  assert.equal(await h.view.emit('select-reply',{replyId:'action_supplier_payroll_launch'}),false);assert.equal(opened,0);
+});
+
+test('vale-alimentação abre tela local sem enviar resposta à VM e encerra na troca de sessão', async t => {
+ let opened=0,destroyed=0,assertSession,sessionKey;
+ const h=makeHarness({mealVoucherDataFactory:async options=>{assertSession=options.assertSession;return {prepare:async()=>{}};},mealVoucherFactory:async options=>{sessionKey=options.sessionKey;return {open:async()=>{opened++;},destroy:()=>{destroyed++;}};}});
+ t.after(()=>h.controller.stop());await h.controller.start();
+ const poll={type:'poll',question:'COMO DESEJA EFETUAR O LANÇAMENTO?',options:[{id:'choice:tipo_lancamento:2',label:'LANÇAMENTO MÚLTIPLO'}]};
+ h.store.ingestRemoteMessages([poll],{activeFlow:{id:'launch',title:'EFETUAR LANÇAMENTO',rows:[{label:'TIPO DE PEDIDO',value:'NOVO PEDIDO'}]}});
+ const before=h.chatCalls.length;
+ assert.equal(await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'}),true,JSON.stringify({error:h.view.renders.at(-1).error,flow:h.store.getState().activeFlow,messages:h.store.getState().messages.map(m=>({type:m.type,question:m.question,options:m.options}))}));
+ assert.equal(opened,1);assert.equal(h.chatCalls.length,before);assert.ok(sessionKey);
+ h.controller.stop();assert.equal(destroyed,1);assert.throws(assertSession,/sessão/i);
 });
 
 function openPayrollMenu(h) {

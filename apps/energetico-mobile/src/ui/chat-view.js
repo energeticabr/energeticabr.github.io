@@ -4,6 +4,7 @@ import { postingCompletionMarkup } from "./posting-completion.js";
 import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
+import { MEAL_VOUCHER_REPLY_ID } from '../chat/meal-voucher.js';
 import { escapeHtml } from "./escape-html.js";
 import { normalizeProvisionSnapshotForFlow } from "../chat/provision-snapshot.js";
 import { galleryPairForOption, pairedGalleryMenu } from "./menu-gallery-pairs.js";
@@ -1521,6 +1522,15 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       id: PAYROLL_LAUNCH_REPLY_ID,
       reply: PAYROLL_LAUNCH_REPLY_ID,
       label: "💰 EFETUAR FOLHA DE PAGAMENTO",
+    });
+  }
+  if (currentPoll && isSupplierPayrollMenu(message, activeFlow)
+    && !options.some(option => draftReplyId(option) === MEAL_VOUCHER_REPLY_ID)) {
+    const payroll = options.findIndex(option => draftReplyId(option) === PAYROLL_LAUNCH_REPLY_ID);
+    options.splice(payroll + 1, 0, {
+      id: MEAL_VOUCHER_REPLY_ID,
+      reply: MEAL_VOUCHER_REPLY_ID,
+      label: '🥗 EFETUAR LANÇAMENTO VALE ALIMENTAÇÃO',
     });
   }
   const paymentAuditTable = message.payment_audit_table || message.paymentAuditTable
