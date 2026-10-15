@@ -8,8 +8,8 @@ const build=async (rows,month='2026-10')=>{
 };
 test('monthly calculation separates days and preserves effective corrections',async()=>{
  const report=await build([row('2026-10-01','07:00;12:00;13:00;17:00'),row('2026-10-02','07:00;12:00;13:00',{ADMIN_AJUSTES:{exit2:{time:'16:00',adjustedAt:'2026-10-02T20:00:00Z'}}}),row('2026-10-03','07:00'),row('2026-10-01','07:00;12:00;13:00;18:00',{NOME_COLABORADOR:'Outro fornecedor',ID_PESSOA_RHID:'102'})]);
- assert.equal(report.days.length,31);assert.equal(report.total,'17:00');assert.equal(report.recordedDays,3);assert.equal(report.incompleteDays,1);
- assert.equal(report.days[0].total,'09:00');assert.equal(report.days[1].total,'08:00');assert.equal(report.days[1].adjusted,true);
+ assert.equal(report.days.length,31);assert.equal(report.total,'16:15');assert.equal(report.recordedDays,3);assert.equal(report.incompleteDays,1);
+ assert.equal(report.days[0].total,'08:30');assert.equal(report.days[1].total,'07:45');assert.equal(report.days[1].adjusted,true);
  assert.equal(report.days[2].total,null);assert.equal(report.days[3].recorded,false);
 });
 test('monthly report does not merge same-name people with different RHID identities',async()=>{
@@ -25,7 +25,7 @@ test('monthly calendar handles leap February and marks no records without invent
 });
 test('monthly identity includes earlier names for the same RHID person',async()=>{
  const report=await build([row('2026-10-01','07:00;12:00;13:00;17:00',{NOME_COLABORADOR:'MAURICIO DE SOUZA'}),row('2026-10-02','07:00;12:00;13:00;17:00')]);
- assert.equal(report.total,'18:00');assert.equal(report.recordedDays,2);assert.equal(report.days[0].recorded,true);
+ assert.equal(report.total,'17:15');assert.equal(report.recordedDays,2);assert.equal(report.days[0].recorded,true);
 });
 test('a date range still includes earlier names linked to the current supplier RHID identity',async()=>{
  const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
@@ -34,7 +34,7 @@ test('a date range still includes earlier names linked to the current supplier R
   row('2026-10-01','07:00;12:00;13:00;17:00',{NOME_COLABORADOR:'MAURICIO DE SOUZA'}),
   row('2026-10-02','07:00;12:00;13:00;17:00'),
  ]}});
- assert.equal(report.days.length,1);assert.equal(report.days[0].total,'09:00');assert.equal(report.total,'09:00');
+ assert.equal(report.days.length,1);assert.equal(report.days[0].total,'08:30');assert.equal(report.total,'08:30');
 });
 test('inconsistent present dates and unnamed monthly rows cannot become empty reports',async()=>{
  const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
@@ -51,7 +51,30 @@ test('monthly report includes only the chosen inclusive base period in days and 
  ]}});
  assert.deepEqual(report.days.map(day=>day.date),['2026-10-02','2026-10-03']);
  assert.equal(report.startDate,'2026-10-02');assert.equal(report.endDate,'2026-10-03');
- assert.equal(report.total,'18:00');assert.equal(report.recordedDays,2);
+ assert.equal(report.total,'17:30');assert.equal(report.recordedDays,2);
+});
+
+test('monthly net hours discount morning every worked day and afternoon only Monday through Thursday',async()=>{
+ const report=await build([
+  row('2026-10-01','07:00;12:00;13:00;17:00'), // Thursday: 9h gross - 30m
+  row('2026-10-02','07:00;12:00;13:00;16:00'), // Friday: 8h gross - 15m
+  row('2026-10-03','07:00;12:00;13:00;17:00'), // Saturday: 9h gross - 15m
+  row('2026-10-04','07:00;12:00;13:00;17:00'), // Sunday: 9h gross - 15m
+  row('2026-10-05','07:00;12:00;13:00;17:00'), // Monday: 9h gross - 30m
+  row('2026-10-06','07:00'), // Incomplete: no invented net hours
+ ]);
+ assert.deepEqual(report.days.slice(0,6).map(day=>day.total),['08:30','07:45','08:45','08:45','08:30',null]);
+ assert.equal(report.total,'42:15');
+ assert.equal(report.incompleteDays,1);
+});
+
+test('monthly net hours never become negative after declared breaks',async()=>{
+ const report=await build([row('2026-10-05','07:00;12:00;13:00;17:00',{ADMIN_AJUSTES:{
+  entry1:{time:'11:00',reason:'Correção'},exit1:{time:'11:05',reason:'Correção'},
+  entry2:{time:'15:30',reason:'Correção'},exit2:{time:'15:35',reason:'Correção'},
+ }})]);
+ assert.equal(report.days[4].total,'00:00');
+ assert.equal(report.total,'00:00');
 });
 
 test('monthly period accepts February leap day and rejects invalid or reversed dates',async()=>{
