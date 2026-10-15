@@ -50,6 +50,48 @@ test('missing child ETag rejects before writes',async()=>{const f=fixture();dele
 test('partial failure identifies remaining children and retries without rewriting parent or completed child',async()=>{const f=fixture();let failed=false;f.setBeforePatch((list,id)=>{if(list==='children'&&id==='3'&&!failed){failed=true;throw new Error('offline');}});await assert.rejects(f.save({OBS:'new'}),error=>error.code==='PROVISION_DESCRIPTION_SYNC_INCOMPLETE'&&error.parentId==='42'&&error.pendingChildIds.includes('3'));await f.save({OBS:'new'});assert.equal(f.calls.filter(c=>c[0]==='patch'&&c[1]==='parents').length,1);assert.equal(f.calls.filter(c=>c[0]==='patch'&&c[2]==='2').length,1);assert.equal(f.records.children.get('3').fields.OBS,'new');});
 test('relinked child is not overwritten after parent update',async()=>{const f=fixture();f.setBeforePatch((list)=>{if(list==='parents')f.records.children.get('3').fields.DESCRITIVOPROVISAO='99';});await assert.rejects(f.save({OBS:'new'}),/vínculo|vinculad|sincron/i);assert.equal(f.records.children.get('3').fields.OBS,'child old');});
 test('concurrently modified child is not overwritten using a freshly stolen ETag',async()=>{const f=fixture();f.setBeforePatch((list)=>{if(list==='parents'){f.records.children.get('3').eTag='concurrent';f.records.children.get('3').fields.OBS='concurrent';}});await assert.rejects(f.save({OBS:'new'}),/versão|mudou|sincron/i);assert.equal(f.records.children.get('3').fields.OBS,'concurrent');});
+test('a newer parent version with only unrelated changes preserves them and saves the edited field',async()=>{
+ const f=fixture();f.records.parents.get('42').eTag='p2';f.records.parents.get('42').fields.FILIAL='002';
+ await f.save({OBS:'new'});
+ assert.equal(f.records.parents.get('42').fields.FILIAL,'002');
+ assert.equal(f.records.parents.get('42').fields.OBS,'new');
+ assert.equal(f.calls.find(call=>call[0]==='patch'&&call[1]==='parents')[4],'p2');
+});
+test('a partly applied multi-field edit finishes fields still at their original values',async()=>{
+ const f=fixture();f.records.parents.get('42').eTag='p2';f.records.parents.get('42').fields.OBS='new';
+ await f.save({OBS:'new',FORMAPGTO:'PIX'});
+ assert.equal(f.records.parents.get('42').fields.OBS,'new');
+ assert.equal(f.records.parents.get('42').fields.FORMAPGTO,'PIX');
+ assert.equal(f.records.children.get('2').fields.OBS,'new');
+ assert.equal(f.records.children.get('2').fields.FORMAPGTO,'PIX');
+});
+test('a newer child version with only unrelated changes preserves them while syncing the parent edit',async()=>{
+ const f=fixture();f.setBeforePatch(list=>{if(list==='parents'){f.records.children.get('3').eTag='c3v2';f.records.children.get('3').fields.PRODUTO='B atualizado';}});
+ await f.save({OBS:'new'});
+ assert.equal(f.records.children.get('3').fields.PRODUTO,'B atualizado');
+ assert.equal(f.records.children.get('3').fields.OBS,'new');
+ assert.equal(f.calls.find(call=>call[0]==='patch'&&call[1]==='children'&&call[2]==='3')[4],'c3v2');
+});
+test('a newer version of the edited parent field still blocks the save',async()=>{
+ const f=fixture();f.records.parents.get('42').eTag='p2';f.records.parents.get('42').fields.OBS='another edit';
+ await assert.rejects(f.save({OBS:'new'}),/versão|mudou/i);
+ assert.equal(f.records.parents.get('42').fields.OBS,'another edit');
+ assert.equal(f.calls.filter(call=>call[0]==='patch').length,0);
+});
+test('an unrelated update racing the parent PATCH is retried once with the new version',async()=>{
+ const f=fixture();let raced=false;
+ f.setBeforePatch(list=>{if(list==='parents'&&!raced){raced=true;f.records.parents.get('42').eTag='p2';f.records.parents.get('42').fields.FILIAL='002';}});
+ await f.save({OBS:'new'});
+ assert.deepEqual(f.calls.filter(call=>call[0]==='patch'&&call[1]==='parents').map(call=>call[4]),['p1','p2']);
+ assert.equal(f.records.parents.get('42').fields.FILIAL,'002');
+ assert.equal(f.records.parents.get('42').fields.OBS,'new');
+});
+test('a racing edit of the same parent field is never retried or overwritten',async()=>{
+ const f=fixture();f.setBeforePatch(list=>{if(list==='parents'){f.records.parents.get('42').eTag='p2';f.records.parents.get('42').fields.OBS='another edit';}});
+ await assert.rejects(f.save({OBS:'new'}),/stale|versão|mudou/i);
+ assert.equal(f.calls.filter(call=>call[0]==='patch'&&call[1]==='parents').length,1);
+ assert.equal(f.records.parents.get('42').fields.OBS,'another edit');
+});
 test('invalid calendar dates and mismatched parent identity fail before writes',async()=>{const f=fixture();await assert.rejects(f.save({DATAPREVISTOPGTO:'2026-02-30'}),/data/i);await assert.rejects(f.editor.save({list:{id:'children'},item:f.baseline,fields:{OBS:'new'}}),/lista|descritivo/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});
 test('session or cancellation before submission prevents all writes',async()=>{const f=fixture();const abort=new AbortController();abort.abort();await assert.rejects(f.save({OBS:'new'},{signal:abort.signal}),error=>error.name==='AbortError');const guarded=createProvisionDescriptionEditor({repository:f.repo,assertSession(){throw new Error('session ended');}});await assert.rejects(guarded.save({list:{id:'parents'},item:f.baseline,fields:{OBS:'new'}}),/session/);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});
 test('lost successful PATCH response is recovered by readback without repeating it',async()=>{const f=fixture(),original=f.repo.updateItem;f.repo.updateItem=async(...args)=>{const saved=await original(...args);if(args[1]==='children'&&args[2]==='2')throw new Error('response lost');return saved;};await f.save({OBS:'new'});assert.equal(f.calls.filter(c=>c[0]==='patch'&&c[2]==='2').length,1);assert.equal(f.records.children.get('3').fields.OBS,'new');});

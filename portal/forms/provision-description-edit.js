@@ -36,6 +36,10 @@ function equal(actual,expected,descriptor){
  return String(actual)===String(expected);
 }
 function matches(item,patch,columns){return Object.entries(patch).every(([name,value])=>equal(item.fields?.[name],value,columns.find(c=>c.name===name)||{}));}
+function editedFieldsUnchanged(item,baseline,patch,columns){return baseline&&Object.entries(patch).every(([name,wanted])=>{
+ const descriptor=columns.find(c=>c.name===name)||{},current=item.fields?.[name];
+ return equal(current,baseline[name],descriptor)||equal(current,wanted,descriptor);
+});}
 const intent = patch => JSON.stringify(Object.keys(patch).sort().map(name=>[name,patch[name]]));
 
 /** STATUS is currently Text on both lists. Discover values without changing its schema. */
@@ -142,22 +146,31 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
    for(const change of shared){const target=column(childColumns,change.logical);childPatch[target.name]=valueFor(change.value,change.descriptor,target);}
    const seen=new Set();children=(await linkedChildren(childList,link,signal)).filter(row=>String(row.fields?.[link.name]??'').trim()===id(item.id)).map(row=>{
     const childId=id(row.id);if(seen.has(childId))throw new Error('A consulta paginada retornou identidade de provisão duplicada.');seen.add(childId);
-    return {id:childId,eTag:version(row),patch:Object.freeze({...childPatch}),attempted:false,done:false};
+    return {id:childId,eTag:version(row),originalFields:{...row.fields},patch:Object.freeze({...childPatch}),attempted:false,done:false};
    }).sort((a,b)=>Number(a.id)-Number(b.id));
   }
   return {parentList:parent.id,parentColumns,patch:Object.freeze(patch),childList,childColumns,childPatch:Object.freeze(childPatch),link,children};
  }
  async function apply(list,itemId,expectedTag,patch,columns,state,signal,check=()=>{}){
   const current=await read(list,itemId,signal);check(current);
-  if(version(current)!==expectedTag){if(state.attempted&&matches(current,patch,columns))return current;throw new Error(`A versão da provisão/descritivo ${itemId} mudou. Recarregue e confira a sincronização.`);}
+  if(version(current)!==expectedTag){
+   if(matches(current,patch,columns))return current;
+   if(!editedFieldsUnchanged(current,state.originalFields,patch,columns))throw new Error(`A versão da provisão/descritivo ${itemId} mudou. Recarregue e confira a sincronização.`);
+   expectedTag=version(current);
+  }
   if(matches(current,patch,columns))return current;
-  active(signal);state.attempted=true;
-  try{await repository.updateItem(siteKey,list,itemId,patch,{eTag:expectedTag,...(signal?{signal}:{})});}
-  catch(error){
-   // A lost PATCH response may already be committed; recover by readback, never by wildcard/rebase.
-   const recovered=await read(list,itemId,signal);check(recovered);
-   if(matches(recovered,patch,columns))return recovered;
-   throw error;
+  let patchTag=expectedTag;
+  for(let attempt=0;attempt<2;attempt++){
+   active(signal);state.attempted=true;
+   try{await repository.updateItem(siteKey,list,itemId,patch,{eTag:patchTag,...(signal?{signal}:{})});break;}
+   catch(error){
+    // A lost response may already be committed. A 412 permits one retry only
+    // when the edited fields still equal the values originally loaded.
+    const recovered=await read(list,itemId,signal);check(recovered);
+    if(matches(recovered,patch,columns))return recovered;
+    if(Number(error?.status)!==412||attempt===1||!editedFieldsUnchanged(recovered,state.originalFields,patch,columns))throw error;
+    patchTag=version(recovered);
+   }
   }
   const saved=await read(list,itemId,signal);check(saved);
   if(!matches(saved,patch,columns))throw new Error(`A sincronização do registro ${itemId} não foi confirmada na releitura.`);
@@ -177,7 +190,7 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
    }
    else{
     const metadata=await contract(list,item,fields,signal);
-    operation={...metadata,parentId,eTag:originalTag,input:intent(fields),attempted:false,saved:null};
+    operation={...metadata,parentId,eTag:originalTag,originalFields:{...item.fields},input:intent(fields),attempted:false,saved:null};
     operations.set(parentId,operation);
    }
    if(!operation.saved)operation.saved=await apply(operation.parentList,parentId,operation.eTag,operation.patch,operation.parentColumns,operation,signal);
@@ -195,7 +208,7 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
     for(const row of rows){
      const childId=id(row.id);if(seen.has(childId))throw new Error('A conferência final retornou provisão duplicada.');seen.add(childId);
      let child=operation.children.find(candidate=>candidate.id===childId);
-     if(!child){child={id:childId,eTag:version(row),patch:operation.childPatch,attempted:false,done:false};operation.children.push(child);changed=true;}
+     if(!child){child={id:childId,eTag:version(row),originalFields:{...row.fields},patch:operation.childPatch,attempted:false,done:false};operation.children.push(child);changed=true;}
      else if(!matches(row,child.patch,operation.childColumns)){child.done=false;changed=true;}
     }
     if(changed)throw new Error('Os itens vinculados mudaram durante a sincronização; confira os pendentes e retome com os mesmos dados.');
