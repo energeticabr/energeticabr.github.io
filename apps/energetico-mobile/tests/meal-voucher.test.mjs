@@ -34,6 +34,12 @@ test('vale alimentação: pedido existente exige ID e datas válidas', () => {
   assert.throws(() => validateMealVoucherDraft({ ...base, dueDate: '2026-02-30' }), /data/i);
 });
 
+test('vale alimentação: pagamento efetuado opcional aceita vazio e rejeita data inválida', () => {
+  assert.equal(validateMealVoucherDraft({ ...base, paymentDate: '' }).paymentDate, '');
+  assert.equal(validateMealVoucherDraft({ ...base, paymentDate: '2026-10-16' }).paymentDate, '2026-10-16');
+  assert.throws(() => validateMealVoucherDraft({ ...base, paymentDate: '2026-02-30' }), /pagamento efetuado/i);
+});
+
 test('vale alimentação: sem quantidade ou sem valor não posta linha zerada, e exige mês de referência', () => {
   const result = validateMealVoucherDraft({ ...base, lines: [
     { supplier: suppliers[0], quantity: '', unitValue: '12' },

@@ -40,7 +40,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     return true;
   }
   function reset() {
-    draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', referenceMonth: '', account: null, stage: null, obs: '', files: [] };
+    draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', paymentDate: '', referenceMonth: '', account: null, stage: null, obs: '', files: [] };
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
     expectedFiles = []; result = null; step = 'lines';
   }
@@ -114,7 +114,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function renderDetails() {
     content.append(el('h2', '', 'Informe os dados dos lançamentos'));
     content.append(el('p', '', `Pedido: ${draft.orderMode === 'new' ? 'novo' : `ID ${draft.orderId}`} · Filial: ${branch()}. O produto será a profissão de cada fornecedor.`));
-    for (const [name, label, property] of [['meal-date', 'Data do lançamento', 'date'], ['meal-due-date', 'Data prevista de pagamento', 'dueDate']]) {
+    for (const [name, label, property] of [['meal-date', 'Data do lançamento', 'date'], ['meal-due-date', 'Data prevista de pagamento', 'dueDate'], ['meal-payment-date', 'Data do pagamento efetuado (deixe em branco se ainda não foi pago)', 'paymentDate']]) {
       const input = el('input'); input.type = 'date'; input.name = name; input.value = draft[property]; input.addEventListener('input', () => { draft[property] = input.value; }); content.append(field(label, input));
     }
     const month = el('input'); month.type = 'month'; month.name = 'meal-reference-month'; month.value = draft.referenceMonth; month.addEventListener('input', () => { draft.referenceMonth = month.value; });
@@ -142,7 +142,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function renderSummary() {
     const verified = validateMealVoucherDraft(draft);
     content.append(el('h2', '', 'Confirme os lançamentos de vale-alimentação'));
-    content.append(el('p', '', `Pedido ${verified.orderMode === 'new' ? 'novo' : `ID ${verified.orderId}`} · ${verified.branch} · Lançamento ${verified.date} · Vencimento ${verified.dueDate} · Mês de referência ${verified.referenceMonth} · ${verified.stage.label} · ${verified.account.label}`));
+    content.append(el('p', '', `Pedido ${verified.orderMode === 'new' ? 'novo' : `ID ${verified.orderId}`} · ${verified.branch} · Lançamento ${verified.date} · Vencimento ${verified.dueDate} · Pagamento efetuado ${verified.paymentDate || 'não informado'} · Mês de referência ${verified.referenceMonth} · ${verified.stage.label} · ${verified.account.label}`));
     const list = el('ul', 'meal-voucher-summary'); for (const line of verified.lines) list.append(el('li', '', `${line.supplier.label} — ${line.supplier.profession} — IDFOLHA ${assignments[line.supplier.id]?.id || 'não confirmada'} — ${line.quantity} × ${money(line.unitValue)} = ${money(line.total)}`)); content.append(list);
     content.append(el('p', 'meal-voucher-total', `Total: ${money(verified.total)}`));
     content.append(el('p', '', `OBS: ${verified.obs || 'nenhuma'} · Anexos: ${verified.files.length ? verified.files.map(file => file.name).join(', ') : 'nenhum'}`));

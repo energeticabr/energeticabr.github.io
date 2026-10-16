@@ -59,6 +59,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     }
     return result;
   }
+  function orderTotal(descriptor, value) { return column(descriptor, ['VALORTOTAL']).text ? String(value) : value; }
   async function all(descriptor) {
     const result = [], seen = new Set(); let cursor;
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
@@ -135,6 +136,29 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     }
     return String(row.id);
   }
+  async function ensureOrder(descriptor, fields, marker, tokenCache) {
+    const obsName = column(descriptor, ['OBS']).name;
+    if (!tokenCache.has(descriptor.id)) tokenCache.set(descriptor.id, await all(descriptor));
+    const matches = tokenCache.get(descriptor.id).filter(row => scalar(row.fields?.[obsName]).includes(marker));
+    if (matches.length > 1) throw new Error('Foram encontrados pedidos duplicados da operação. Confira os registros antes de retomar.');
+    let row = matches[0];
+    if (!row) {
+      assertSession();
+      row = await repository.createItem(siteKey, descriptor.id, fields);
+      assertSession();
+      tokenCache.get(descriptor.id).push(row);
+    }
+    if (!numericId(row?.id)) throw new Error('O SharePoint não confirmou o ID do pedido.');
+    const saved = await get(descriptor, row.id);
+    for (const [field, expected] of Object.entries(fields)) {
+      const actual = saved.fields?.[field];
+      const date = descriptor.columns.find(c => c.name === field)?.dateTime;
+      if (field === obsName ? !scalar(actual).includes(marker)
+        : !(typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected) || date && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10)))
+        throw new Error('O SharePoint não confirmou os dados do pedido gravado.');
+    }
+    return String(row.id);
+  }
   async function post(rawDraft, progress = {}, onProgress = () => {}) {
     if (posting) throw new Error('O lote já está sendo enviado.');
     if (!/^[A-Za-z0-9-]{1,80}$/.test(String(progress.operationId || ''))) throw new Error('A operação não foi identificada.');
@@ -172,10 +196,32 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
             throw new Error(`O pedido já possui um anexo chamado ${file.name}. Renomeie o novo arquivo antes de enviar.`);
         }
       } else {
-        const fields = payload(orders, { FILIAL: draft.branch, FORNECEDOR: draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS', VALORTOTAL: draft.total, 'DATA PEDIDO': draft.date, STATUS: 'PENDENTE AUDITORIA', OBS: draft.obs, FORMAPGTO: draft.account.label, 'NOTA FISCAL': 'PENDENTE' }, ['DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL']);
+        const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
+        const orderObs = `${draft.obs}${draft.obs ? '\n' : ''}${marker}`;
+        const fields = payload(orders, { FILIAL: draft.branch, FORNECEDOR: draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS', VALORTOTAL: orderTotal(orders, draft.total), 'DATA PEDIDO': draft.date, STATUS: 'PENDENTE AUDITORIA', OBS: orderObs, FORMAPGTO: draft.account.label, 'NOTA FISCAL': 'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
         progress.signature = signature;
         onProgress();
-        orderId = await ensure(orders, fields, 'Title', `APP-vale-alimentacao-${progress.operationId}`, tokenCache);
+        const legacyToken = `APP-vale-alimentacao-${progress.operationId}`;
+        const legacy = column(orders, ['Title'], false) && await findToken(orders, 'Title', legacyToken, tokenCache);
+        if (legacy) {
+          const saved = await get(orders, legacy.id);
+          const expectedSupplier = draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS';
+          if (key(value(orders, saved, ['FORNECEDOR'])) !== key(expectedSupplier)
+            || !amount(value(orders, saved, ['VALORTOTAL'])).equals(amount(draft.total))
+            || !pending(value(orders, saved, ['STATUS'])))
+            throw new Error('O pedido da tentativa anterior mudou; confira-o antes de retomar.');
+          const currentObs = value(orders, saved, ['OBS']);
+          if (key(value(orders, saved, ['FILIAL'])) !== key(draft.branch) || !currentObs.includes(marker)) {
+            const nextObs = currentObs.includes(marker) ? currentObs : `${currentObs}${currentObs ? '\n' : ''}${marker}`;
+            const repair = payload(orders, { FILIAL: draft.branch, OBS: nextObs });
+            await repository.updateItem(siteKey, orders.id, legacy.id, repair, { eTag: saved.eTag || saved['@odata.etag'] });
+            assertSession();
+          }
+          const repaired = await get(orders, legacy.id);
+          if (key(value(orders, repaired, ['FILIAL'])) !== key(draft.branch) || !value(orders, repaired, ['OBS']).includes(marker))
+            throw new Error('O pedido anterior não foi confirmado no SharePoint.');
+          orderId = String(legacy.id);
+        } else orderId = await ensureOrder(orders, fields, marker, tokenCache);
       }
       progress.orderId = orderId;
       progress.signature = signature;
@@ -183,7 +229,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       progress.lines ??= {};
       const resultLines = [];
       for (const line of draft.lines) {
-        const fields = payload(launches, { AGRUPAR: String(orderId), FILIAL: draft.branch, 'TIPO TRANSAÇÃO': 'CUSTO', DATA: draft.date, 'DATA PGTO PREVISTO': draft.dueDate, FORNECEDOR: line.supplier.label, PRODUTO: line.supplier.profession, ETAPA: draft.stage.label, QUANTIDADE: line.quantity, 'VALOR UNITÁRIO': line.unitValue, CONTA: draft.account.label, FRETE: 0, OBS: `VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+        const fields = payload(launches, { AGRUPAR: String(orderId), FILIAL: draft.branch, 'TIPO TRANSAÇÃO': 'CUSTO', DATA: draft.date, 'DATA PGTO PREVISTO': draft.dueDate, ...(draft.paymentDate ? { 'DATA PGTO EFETUADO': draft.paymentDate } : {}), FORNECEDOR: line.supplier.label, PRODUTO: line.supplier.profession, ETAPA: draft.stage.label, QUANTIDADE: line.quantity, 'VALOR UNITÁRIO': line.unitValue, CONTA: draft.account.label, FRETE: 0, OBS: `VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
         const launchId = await ensure(launches, fields, '__PowerAppsId__', `APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}`, tokenCache);
         progress.lines[line.supplier.id] = launchId;
         onProgress();
@@ -196,7 +242,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         const obs = value(orders, current, ['OBS']);
         if (!obs.includes(marker)) {
           const target = previous.plus(amount(draft.total)).toDecimalPlaces(2);
-          const update = payload(orders, { VALORTOTAL: target.toNumber(), OBS: `${obs}${obs ? '\n' : ''}${marker}` });
+          const update = payload(orders, { VALORTOTAL: orderTotal(orders, target.toNumber()), OBS: `${obs}${obs ? '\n' : ''}${marker}` });
           await repository.updateItem(siteKey, orders.id, orderId, update, { eTag: current.eTag || current['@odata.etag'] });
           assertSession();
           const saved = await get(orders, orderId);
