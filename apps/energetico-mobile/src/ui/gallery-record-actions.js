@@ -252,15 +252,16 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         defaultContext: { record: context.item.fields },
         relationshipSearch: context.relationshipSearch,
         powerAppsOptionSearch: context.powerAppsOptionSearch,
+        attachments: context.sheetAttachments ? { enabled: false } : context.attachments,
         onCancel: () => { if (active(state) && !state.busy) close(); },
-        onSubmit: async fields => {
+        onSubmit: async (fields, _rawValues, _relationshipLabels, attachmentChanges) => {
           await mutate(state, () => {
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
             const readOnly = new Set(context.columns.filter(c => c.readOnly).flatMap(c => [c.name,...(['lookup','person'].includes(c.control)?[`${c.name}LookupId`]:[])]));
             const filtered = Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name)));
             return state.sheetAttachmentBinding
               ? saveEditor(context, filtered, { attachments: state.sheetAttachmentBinding.changes(), signal: state.mutationAbort.signal })
-              : saveEditor(context, filtered);
+              : saveEditor(context, filtered, { attachments: attachmentChanges, signal: state.mutationAbort.signal });
           });
           // Re-evaluate conditional locks after a rejected save, once the
           // renderer has restored its own disabled-state snapshot.

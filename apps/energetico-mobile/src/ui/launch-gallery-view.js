@@ -1260,7 +1260,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     actions.append(cancel, reviewButton);
     form.append(grid, actions); form.addEventListener('submit', event => { event.preventDefault(); if (!busy) reviewEditor(); });
     panel.insertBefore(form, reviewHost);
-    editor = { operation, form, controls, schemaState, attachmentsAdded: [], pickers: bindSearchableFilterSelects(form, {selectionOnly:operation === 'update'}) };
+    editor = { operation, form, controls, schemaState, attachmentsAdded: [], attachmentsRemoved: new Set(), pickers: bindSearchableFilterSelects(form, {selectionOnly:operation === 'update'}) };
     focus(form.querySelector('.sfs-trigger, input:not([hidden]), textarea') ?? form);
   }
   function reviewEditor() {
@@ -1279,7 +1279,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     if (editor.schemaState?.loading) { notify('Aguarde a atualização das opções relacionadas.', true); return; }
     const fieldsChanged = editor.controls.some(({ control, initial }) =>
       (control.type === 'checkbox' ? control.checked : control.value) !== initial);
-    if (editor.operation === 'update' && !fieldsChanged) {
+    const removedAttachments = editor.operation === 'update' ? [...editor.attachmentsRemoved] : [];
+    if (editor.operation === 'update' && !fieldsChanged && !removedAttachments.length) {
       const file = editor.form.querySelector('.lg-attachment-picker')?.files?.[0];
       if (file) { reviewAttachment(file, { completeEditing: true }); return; }
       if (editor.attachmentsAdded.length) {
@@ -1319,8 +1320,15 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         before: editor.operation === 'update' ? shown(initial) : '—', after: shown(value) });
     }
     const operation = editor.operation;
-    if (operation === 'update' && !Object.keys(fields).length) {
+    if (operation === 'update' && !Object.keys(fields).length && !removedAttachments.length) {
       notify('Nenhuma alteração foi feita no lançamento.', true); return;
+    }
+    for (const fileName of removedAttachments) changes.push({ label: 'Anexo', before: fileName, after: 'Excluir ao confirmar' });
+    if (operation === 'update' && !Object.keys(fields).length) {
+      showReview('Confirme as alterações', changes, 'Confirmar alterações', 'attachment_remove',
+        { id: current.item.id, confirm: true, expectedModified: modified() });
+      review.deletions = removedAttachments;
+      return;
     }
     const payload = { id: current.item.id, ...(operation === 'payment' ? { date: fields.date } : { fields }), confirm: true, expectedModified: modified() };
     let key;
@@ -1336,6 +1344,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       payload.requestId = retryIds.get(key);
     }
     showReview('Confirme as alterações', changes, 'Confirmar alterações', operation, payload, undefined, key);
+    if (operation === 'update') review.deletions = removedAttachments;
   }
   function showReview(title, changes, confirmText, operation, payload, file, key) {
     clearReview();
@@ -1478,13 +1487,30 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
           await finishAttachmentUpload(pending, uploaded?.fileName || pending.file.name);
           return;
         }
+      } else if (pending.operation === 'update' || pending.operation === 'attachment_remove') {
+        if (pending.operation === 'update' && !pending.fieldsCommitted) {
+          await request('update', pending.payload);
+          pending.fieldsCommitted = true;
+        }
+        for (const fileName of pending.deletions || []) {
+          const fresh = await request('detail', { id: pending.payload.id });
+          if (!fresh?.item?.fields) throw new Error('Não foi possível verificar os anexos antes da exclusão.');
+          if (!(fresh.attachments || []).some(file => attachmentFileName(file) === fileName)) continue;
+          const freshModified = fresh.item.expectedModified ?? fresh.item.fields.Modified ?? fresh.item.fields.Modificado;
+          if (!pending.fieldsCommitted && !pending.deletedAny && freshModified !== pending.payload.expectedModified) {
+            throw new Error('O lançamento foi alterado. Reabra o registro antes de excluir anexos.');
+          }
+          await request('attachment_delete', { id: pending.payload.id, fileName, confirm: true,
+            expectedModified: freshModified || pending.payload.expectedModified });
+          pending.deletedAny = true;
+        }
       } else await request(pending.operation, pending.payload);
       if (destroyed) return;
       if (pending.key) retryIds.delete(pending.key);
       clearReview(); clearEditor();
       notify('Operação concluída.');
       needsDetailRefresh = true;
-      if (pending.operation === 'update' || pending.operation === 'delete') {
+      if (pending.operation === 'update' || pending.operation === 'delete' || pending.operation === 'attachment_remove') {
         ++detailVersion; current = null; selectedId = null; panel.hidden = true; panel.replaceChildren(); needsDetailRefresh = false;
       }
       if (pending.operation === 'update' && active(epoch)) focus(back);
@@ -1536,10 +1562,26 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       for (const attachment of attachments) {
         const fileName = attachmentFileName(attachment);
         if (!fileName) continue;
+        const row = element('div', 'lg-attachment-row');
+        if (editor?.attachmentsRemoved?.has(fileName)) {
+          row.classList.add('is-removed');
+          row.append(element('span', 'lg-attachment-item', fileName), button('↶ Retornar', () => {
+            editor.attachmentsRemoved.delete(fileName); clearReview();
+            editor.form.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
+          }));
+          row.lastChild.dataset.lgAttachmentRestore = fileName;
+          tray.append(row); continue;
+        }
         const open = button(`📎 ${fileName}`, () => viewAttachment(fileName), { disabled: !openMedia });
         open.classList.add('lg-attachment-item');
         open.setAttribute('aria-label', `Abrir anexo ${fileName}`);
-        tray.append(open);
+        const remove = button('×', () => {
+          editor.attachmentsRemoved.add(fileName); clearReview();
+          editor.form.querySelector('.lg-attachments')?.replaceWith(renderAttachments());
+        }, { danger: true });
+        remove.dataset.lgAttachmentRemove = fileName;
+        remove.setAttribute('aria-label', `Excluir anexo ${fileName}`);
+        row.append(open, remove); tray.append(row);
       }
       section.append(tray);
     }

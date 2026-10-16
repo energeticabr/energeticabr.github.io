@@ -6,6 +6,7 @@ import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from
 import { createPayrollSheetReader } from './payroll-sheet-options.js';
 import { createPayrollLaunchReader } from './payroll-launch-options.js';
 import { createPayrollSheetAttachments } from './payroll-sheet-attachments.js';
+import { validateAttachment } from '../../../../portal/data/attachments.js';
 
 function key(value) {
   return String(value || "").replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -16,6 +17,13 @@ function idValue(value) {
   const id = String(value ?? "").trim();
   if (!/^[1-9]\d{0,14}$/.test(id)) throw new RangeError("O ID do registro não é válido.");
   return id;
+}
+
+const attachmentKey = name => String(name || '').trim().toLocaleLowerCase('pt-BR');
+function verifiedAttachments(files) {
+  if (!Array.isArray(files) || files.some(file => !file || typeof file.name !== 'string' || !file.name.trim()
+    || /[\\/\u0000-\u001f]/.test(file.name))) throw new Error('Não foi possível confirmar os anexos deste registro.');
+  return files;
 }
 
 function version(value) {
@@ -204,11 +212,33 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       ? createForm43StatusPolicy({ repository, siteKey, orderId: id, orderColumns: rawColumns, statusFieldName: inputName(statusColumn), orderListId: list.id }) : null;
     const evaluateFieldLocks = form43 ? (draft = {}, options = {}) => form43.evaluate({ ...item.fields, ...draft }, options) : undefined;
     const sheetAttachments = isPayrollSheet ? createPayrollSheetAttachments({ repository, siteKey, list, item, columns, currentItem, assertSession }) : null;
+    let attachments = Object.freeze({ enabled: false });
+    if (!isPayrollSheet && typeof repository.listAttachments === 'function') {
+      try {
+        const existingFiles = frozenCopy(verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id)));
+        abort(signal);
+        attachments = Object.freeze({ enabled: true, canView: true,
+          canEdit: typeof repository.uploadAttachment === 'function' && typeof repository.deleteAttachment === 'function',
+          existingFiles,
+          async readExisting(file) {
+            const name = existingFiles.find(entry => attachmentKey(entry.name) === attachmentKey(file?.name))?.name;
+            if (!name || typeof repository.downloadAttachment !== 'function') throw new Error('O anexo não está disponível neste registro.');
+            assertSession();
+            return repository.downloadAttachment(siteKey, list.id, item.id, name);
+          } });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        attachments = Object.freeze({ enabled: true, canView: false, canEdit: false, existingFiles: [],
+          error: error?.message || 'Não foi possível consultar os anexos deste registro.' });
+      }
+    }
     const context = Object.freeze({ entity: frozenCopy({ ...entity, siteKey }), columns, item, contract, relationshipSearch, powerAppsOptionSearch,
+      attachments,
       ...(sheetAttachments ? { sheetAttachments } : {}),
       ...(refreshDerivedValues ? { refreshDerivedValues } : {}),
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
-    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn,sheetAttachments });
+    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn,sheetAttachments, attachments,
+      savedFields: null, attemptedUploads: new Set(), uploadedNames: new Set(), attemptedDeletions: new Set(), deletedNames: new Set() });
     return context;
   }
 
@@ -247,8 +277,100 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (!baseline) throw new Error("O contexto de edição não pertence a esta galeria. Reabra o registro.");
     if (baseline.saving) throw new Error("A gravação desta folha já está em andamento.");
     baseline.saving = true;
-    try { return await persistEditor(context, fields, options); }
+    try {
+      await assertAttachmentIntent(baseline, options.attachments, options.signal);
+      const saved = baseline.savedFields || await persistEditor(context, fields, options);
+      baseline.savedFields = saved;
+      await persistAttachments(baseline, options.attachments, options.signal);
+      contexts.delete(context);
+      return saved;
+    }
     finally { baseline.saving = false; }
+  }
+
+  async function assertAttachmentIntent(baseline, requested, signal) {
+    if (baseline.sheetAttachments) return;
+    const { uploads = [], deletions = [] } = requested || {};
+    if (!uploads.length && !deletions.length) return;
+    if (!baseline.attachments.canEdit) throw new Error('Os anexos deste registro não estão disponíveis para edição. Reabra o formulário.');
+    const originals = new Set(baseline.attachments.existingFiles.map(file => attachmentKey(file.name)));
+    const deletionKeys = deletions.map(attachmentKey);
+    if (new Set(deletionKeys).size !== deletionKeys.length || deletionKeys.some(name => !originals.has(name))) {
+      throw new Error('O anexo escolhido para exclusão não pertence a este registro. Reabra o formulário.');
+    }
+    const live = verifiedAttachments(await repository.listAttachments(siteKey, baseline.list.id, baseline.item.id));
+    assertSession(); abort(signal);
+    const liveNames = new Set(live.map(file => attachmentKey(file.name)));
+    for (const file of uploads) {
+      const checked = validateAttachment(file);
+      if (!checked.valid) throw new Error(checked.message);
+      const name = attachmentKey(checked.name);
+      if (originals.has(name) || liveNames.has(name) && !baseline.attemptedUploads.has(name)) {
+        throw new Error(`O anexo ${checked.name} já existe neste registro. Reabra o formulário.`);
+      }
+    }
+    if (deletionKeys.some(name => !liveNames.has(name) && !baseline.attemptedDeletions.has(name) && !baseline.deletedNames.has(name))) {
+      throw new Error('Um anexo foi alterado ou removido em outra sessão. Reabra o formulário.');
+    }
+  }
+
+  async function persistAttachments(baseline, requested, signal) {
+    const changes = Array.isArray(requested) ? { uploads: requested, deletions: [] } : requested || {};
+    const uploads = changes.uploads || [], deletions = changes.deletions || [];
+    if (!uploads.length && !deletions.length) return;
+    const { list, item, attachments } = baseline;
+    if (baseline.sheetAttachments && uploads.length) {
+      // IDFOLHA uploads are handled by prepare(), which preserves its receipt policy.
+      if (!deletions.length) return;
+    } else if ((!attachments.canEdit && !baseline.sheetAttachments) || typeof repository.listAttachments !== 'function') {
+      throw new Error('Os anexos deste registro não estão disponíveis para edição. Reabra o formulário.');
+    }
+    const originals = new Map((attachments.existingFiles || []).map(file => [attachmentKey(file.name), file.name]));
+    const selectedUploads = uploads.map(file => {
+      const checked = validateAttachment(file);
+      if (!checked.valid) throw new Error(checked.message);
+      if (originals.has(attachmentKey(checked.name))) throw new Error(`O anexo ${checked.name} já existe neste registro. Reabra o formulário para substituí-lo.`);
+      return { file, name: checked.name };
+    });
+    const selectedDeletions = deletions.map(name => {
+      const original = originals.get(attachmentKey(name));
+      if (!original && !baseline.sheetAttachments) throw new Error('O anexo escolhido para exclusão não pertence a este registro.');
+      return original || name;
+    });
+    for (const { file, name } of selectedUploads) {
+      assertSession(); abort(signal);
+      const live = verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id));
+      if (live.some(entry => attachmentKey(entry.name) === attachmentKey(name))) {
+        if (!baseline.uploadedNames.has(attachmentKey(name)) && !baseline.attemptedUploads.has(attachmentKey(name))) {
+          throw new Error(`O anexo ${name} já existe neste registro. Reabra o formulário.`);
+        }
+        if (!baseline.uploadedNames.has(attachmentKey(name))) {
+          // A previous upload may have succeeded even if its response was lost.
+          baseline.uploadedNames.add(attachmentKey(name));
+        }
+        continue;
+      }
+      baseline.attemptedUploads.add(attachmentKey(name));
+      await repository.uploadAttachment(siteKey, list.id, item.id, file, name, { signal });
+      baseline.uploadedNames.add(attachmentKey(name));
+      const confirmed = verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id));
+      if (!confirmed.some(entry => attachmentKey(entry.name) === attachmentKey(name))) throw new Error(`O envio de ${name} não foi confirmado.`);
+    }
+    for (const name of selectedDeletions) {
+      assertSession(); abort(signal);
+      if (baseline.deletedNames.has(attachmentKey(name))) continue;
+      const live = verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id));
+      if (!live.some(entry => attachmentKey(entry.name) === attachmentKey(name))) {
+        baseline.deletedNames.add(attachmentKey(name));
+        continue;
+      }
+      if (typeof repository.deleteAttachment !== 'function') throw new Error('A exclusão de anexos não está disponível.');
+      baseline.attemptedDeletions.add(attachmentKey(name));
+      await repository.deleteAttachment(siteKey, list.id, item.id, name);
+      const confirmed = verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id));
+      if (confirmed.some(entry => attachmentKey(entry.name) === attachmentKey(name))) throw new Error(`A exclusão de ${name} não foi confirmada.`);
+      baseline.deletedNames.add(attachmentKey(name));
+    }
   }
 
   async function persistEditor(context, fields, options = {}) {
@@ -321,7 +443,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     if (baseline.sheetAttachments) {
       const status = merged[baseline.statusColumn?.name];
       const inactive = (Array.isArray(status) ? status : [status]).some(value => String(value ?? '').trim().toUpperCase() === 'INATIVO');
-      eTag = await baseline.sheetAttachments.prepare(options.attachments ?? [], { inactive, signal: options.signal });
+      const sheetChanges = Array.isArray(options.attachments) ? { uploads: options.attachments, deletions: [] } : options.attachments || {};
+      eTag = await baseline.sheetAttachments.prepare(sheetChanges.uploads || [], { inactive, deletions: sheetChanges.deletions || [], signal: options.signal });
     }
     assertSession();
     abort(options.signal);
@@ -347,7 +470,6 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     abort(options.signal);
     const saved = persistEdit ? await persistEdit({list,item,fields:changed,requestedFields:merged,signal:options.signal})
       : await repository.updateItem(siteKey, list.id, item.id, changed, { eTag, ...(options.signal ? { signal: options.signal } : {}) });
-    contexts.delete(context);
     return saved || { id: item.id, fields: merged };
   }
 

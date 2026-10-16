@@ -67,6 +67,42 @@ test("save pins the loaded version and only sends modified editable values", asy
   assert.deepEqual(f.writes[0].values, { OBS: "NOVO" });
   assert.deepEqual(f.writes[0].options, { eTag: '"v1"' });
 });
+
+test("editor carrega anexos da propria linha e so os exclui apos SUBMETER", async () => {
+  const f = fixture(), calls = [], savedFiles = new Set(["ORIGINAL.pdf"]);
+  f.repository.listAttachments = async (_site, list, id) => {
+    assert.equal(id, "340"); assert.ok(list);
+    return [...savedFiles].map(name => ({ name, size: 4, type: "application/pdf" }));
+  };
+  f.repository.downloadAttachment = async (_site, _list, id, name) => {
+    assert.equal(id, "340"); assert.equal(name, "ORIGINAL.pdf"); return new Uint8Array([1, 2]).buffer;
+  };
+  f.repository.deleteAttachment = async (_site, _list, id, name) => {
+    calls.push(["delete", id, name]); savedFiles.delete(name);
+  };
+  f.repository.uploadAttachment = async () => { throw new Error("upload nao solicitado"); };
+  const data = createPaymentProgrammingGalleryData(f);
+  const context = await data.loadEditor("340");
+  assert.equal(context.attachments.enabled, true);
+  assert.deepEqual(context.attachments.existingFiles.map(file => file.name), ["ORIGINAL.pdf"]);
+  assert.equal((await context.attachments.readExisting({ name: "ORIGINAL.pdf" })).byteLength, 2);
+  assert.deepEqual(calls, [], "marcar X no formulario nao muda o servidor");
+  await data.saveEditor(context, {}, { attachments: { uploads: [], deletions: ["ORIGINAL.pdf"] } });
+  assert.deepEqual(calls, [["delete", "340", "ORIGINAL.pdf"]]);
+  assert.equal(f.writes.length, 0, "exclusao sem alteracao de campos nao faz update do item");
+});
+
+test("outro anexo com o mesmo nome nao pode ser aceito como upload proprio", async () => {
+  const f = fixture(), live = new Set();
+  f.repository.listAttachments = async () => [...live].map(name => ({ name, size: 1, type: 'application/pdf' }));
+  f.repository.uploadAttachment = async () => { throw new Error('nao deve sobrescrever'); };
+  f.repository.deleteAttachment = async () => { throw new Error('nao deve excluir'); };
+  const data = createPaymentProgrammingGalleryData(f), ctx = await data.loadEditor('340');
+  live.add('TERCEIRO.pdf');
+  const file = { name:'TERCEIRO.pdf', size:3, type:'application/pdf', arrayBuffer:async()=>new ArrayBuffer(3) };
+  await assert.rejects(data.saveEditor(ctx,{ OBS:'ALTERADO' },{ attachments:{ uploads:[file], deletions:[] } }),/já existe|conflito|reabra/i);
+  assert.equal(f.writes.length,0,'conflito de anexo precisa bloquear a alteracao financeira inteira');
+});
 test('generic launch editor forwards cancellation and live session guards to its mutation',async()=>{
  let live=true;const f=fixture(),data=createOrdersGalleryData({...f,listName:'LANCAMENTOS',listAliases:['LANCAMENTOS'],assertSession:()=>{if(!live)throw new DOMException('cancelled','AbortError');}});
  const context=await data.loadEditor('2');live=false;await assert.rejects(data.saveEditor(context,{}),{name:'AbortError'});assert.equal(f.writes.length,0);
