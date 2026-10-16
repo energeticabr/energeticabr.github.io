@@ -58,12 +58,13 @@ export function formAttachmentRowsMarkup({
   disabled = false,
 } = {}) {
   const removed = new Set((removedNames || []).map(name => normalizedFileName(name).toLocaleLowerCase("pt-BR")));
-  const visibleExisting = canView
-    ? existingFiles.filter(file => !removed.has(normalizedFileName(file?.name).toLocaleLowerCase("pt-BR")))
-    : [];
+  const visibleExisting = canView ? existingFiles : [];
   return [
-    ...visibleExisting.map(file => `<article class="attachment-row" data-form-attachment-existing="${escapeHtml(file.name)}"><div><strong>${escapeHtml(file.name)}</strong><p>${escapeHtml(formatBytes(file.size))} · Salvo no SharePoint</p></div><div class="attachment-actions"><button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-secondary" data-form-attachment-download="${escapeHtml(file.name)}">Baixar</button>${canEdit && !disabled ? `<button type="button" class="button-danger" data-form-attachment-remove-existing="${escapeHtml(file.name)}">Remover</button>` : ""}</div></article>`),
-    ...pendingFiles.map(file => `<article class="attachment-row is-pending" data-form-attachment-pending="${escapeHtml(file.name)}"><div><strong>${escapeHtml(file.name)}</strong><p>${escapeHtml(formatBytes(file.size))} · Será enviado ao salvar</p></div>${canEdit && !disabled ? `<div class="attachment-actions"><button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-danger" data-form-attachment-remove-upload="${escapeHtml(file.name)}">Remover</button></div>` : ""}</article>`),
+    ...visibleExisting.map(file => {
+      const staged = removed.has(normalizedFileName(file?.name).toLocaleLowerCase("pt-BR"));
+      return `<article class="attachment-row${staged ? " is-removed" : ""}" ${staged ? `data-form-attachment-removed="${escapeHtml(file.name)}"` : `data-form-attachment-existing="${escapeHtml(file.name)}"`}><div><strong>${escapeHtml(file.name)}</strong><p>${staged ? "Exclusão pendente · será excluído somente ao submeter" : `${escapeHtml(formatBytes(file.size))} · Salvo no SharePoint`}</p></div><div class="attachment-actions">${staged ? "" : `<button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-secondary" data-form-attachment-download="${escapeHtml(file.name)}">Baixar</button>`}${canEdit && !disabled ? staged ? `<button type="button" class="button-secondary" data-form-attachment-restore-existing="${escapeHtml(file.name)}">↶ Retornar</button>` : `<button type="button" class="button-danger" data-form-attachment-remove-existing="${escapeHtml(file.name)}" aria-label="Excluir ${escapeHtml(file.name)}">×</button>` : ""}</div></article>`;
+    }),
+    ...pendingFiles.map(file => `<article class="attachment-row is-pending" data-form-attachment-pending="${escapeHtml(file.name)}"><div><strong>${escapeHtml(file.name)}</strong><p>${escapeHtml(formatBytes(file.size))} · Será enviado ao salvar</p></div>${canEdit && !disabled ? `<div class="attachment-actions"><button type="button" class="button-secondary" data-form-attachment-open="${escapeHtml(file.name)}">Visualizar</button><button type="button" class="button-danger" data-form-attachment-remove-upload="${escapeHtml(file.name)}" aria-label="Retirar ${escapeHtml(file.name)}">×</button></div>` : ""}</article>`),
   ].join("") || '<p class="entity-empty">Nenhum anexo preparado.</p>';
 }
 

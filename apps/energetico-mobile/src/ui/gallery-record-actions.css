@@ -133,6 +133,20 @@
 .gallery-record-dialog .page-eyebrow { margin: 0 0 6px; color: #526672; font-size: .85rem; }
 .gallery-record-dialog .dynamic-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .gallery-record-dialog .dynamic-field { display: grid; align-content: start; gap: 6px; min-width: 0; font-weight: 600; }
+.gallery-record-dialog [data-edit-form] .dynamic-form-grid .dynamic-field > span:first-child,
+.gallery-record-dialog [data-edit-form] .dynamic-form-grid .dynamic-relationship > label:first-child,
+.gallery-record-dialog [data-edit-form] .dynamic-form-grid .dynamic-check > span,
+.gallery-record-dialog [data-edit-form] .dynamic-form-attachments .dynamic-field > span:first-child,
+.gallery-record-dialog [data-edit-form] .dynamic-form-attachments h3,
+.gallery-record-dialog [data-edit-form] .payroll-sheet-attachments h3 {
+  display: block; background: #a00000; color: #fff; padding: 7px 10px; border-radius: 3px; font-weight: 700;
+}
+.gallery-record-dialog [data-edit-form] .dynamic-form-attachments { margin-top: 20px; }
+.gallery-record-dialog [data-edit-form] .dynamic-form-attachments .attachment-row:not(.is-removed) { background: #3f63a5; color: #fff; }
+.gallery-record-dialog [data-edit-form] .dynamic-form-attachments .attachment-row:not(.is-removed) p { color: #fff; }
+.gallery-record-dialog [data-edit-form] .attachment-row.is-removed { background: #fff5f5; opacity: .82; }
+.gallery-record-dialog [data-edit-form] .attachment-row.is-removed strong { text-decoration: line-through; }
+.gallery-record-dialog [data-edit-form] [data-form-attachment-remove-existing] { min-width: 44px; font-size: 1.5rem; line-height: 1; }
 .gallery-record-dialog .dynamic-field input,
 .gallery-record-dialog .dynamic-field select,
 .gallery-record-dialog .dynamic-field textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid #aec2ca; border-radius: 8px; background: #fff; color: #172033; font: inherit; }
@@ -169,6 +183,10 @@
 .payroll-sheet-attachments p { line-height: 1.5; overflow-wrap: anywhere; }
 .payroll-sheet-attachment-list { display: grid; gap: 8px; margin: 12px 0; }
 .payroll-sheet-attachment { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid #cbdce3; border-radius: 8px; background: #fff; min-width: 0; }
+.payroll-sheet-attachment:not(.is-removed) { background: #3f63a5; color: #fff; }
+.payroll-sheet-attachment:not(.is-removed) small { color: #fff; }
+.payroll-sheet-attachment.is-removed { background: #fff5f5; }
+.payroll-sheet-attachment.is-removed strong { text-decoration: line-through; }
 .payroll-sheet-attachment > div:first-child { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
 .payroll-sheet-attachment small { display: block; margin-top: 4px; color: #526672; }
 .payroll-sheet-attachment-actions { display: flex; flex-wrap: wrap; gap: 8px; }

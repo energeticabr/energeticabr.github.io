@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createFormAttachmentDraft,
   formAttachmentFieldMarkup,
+  formAttachmentRowsMarkup,
   powerAppsFormDeclaresAttachments,
 } from "../portal/forms/form-attachments.js";
 import { persistEntityRecordWithAttachments } from "../portal/forms/entity-submit.js";
@@ -92,6 +93,18 @@ test("rascunho de edicao preserva anexos atuais e registra inclusoes e exclusoes
   assert.deepEqual(draft.changes().deletions, ["ANTIGO.pdf"]);
   assert.deepEqual(draft.changes().uploads.map(file => file.name), ["NOVO.pdf"]);
   assert.throws(() => draft.addUploads([pdf("MANTER.pdf")]), /já existe/i);
+});
+
+test("anexo marcado para exclusao continua visivel e pode ser restaurado antes de submeter", () => {
+  const files = [{ name: "COMPROVANTE.pdf", size: 50, type: "application/pdf" }];
+  const draft = createFormAttachmentDraft({ existingFiles: files });
+  draft.removeExisting("COMPROVANTE.pdf");
+  const marked = formAttachmentRowsMarkup({ canView: true, canEdit: true, existingFiles: files, removedNames: draft.changes().deletions });
+  assert.match(marked, /data-form-attachment-removed="COMPROVANTE\.pdf"/);
+  assert.match(marked, /data-form-attachment-restore-existing="COMPROVANTE\.pdf"/);
+  assert.deepEqual(draft.changes().deletions, ["COMPROVANTE.pdf"]);
+  draft.restoreExisting("COMPROVANTE.pdf");
+  assert.deepEqual(draft.changes().deletions, []);
 });
 
 test("criacao grava o item primeiro e usa as APIs existentes para anexar ao novo ID", async () => {

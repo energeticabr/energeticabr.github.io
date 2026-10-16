@@ -4,7 +4,7 @@ import { openPayrollReceiptPicker } from "./payroll-receipt-picker.js";
 
 /** Local staging only: uploads happen at the authenticated save boundary. */
 export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptAttachments, readReceiptAttachment } = {}) {
-  const doc = form.ownerDocument, files = [], saved = [];
+  const doc = form.ownerDocument, files = [], saved = [], removed = new Set();
   let disposed = false, picker = null;
   const abort = new AbortController();
   const presenter = createAttachmentPresenter({ documentRef: doc, windowRef: doc.defaultView });
@@ -43,18 +43,29 @@ export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptA
     for (const file of [...saved, ...files]) {
       const pending = files.includes(file);
       const row = element("article", undefined, "payroll-sheet-attachment");
+      const cut = !pending && removed.has(key(file.name));
+      if (cut) row.classList.add('is-removed');
       const details = element("div");
-      details.append(element("strong", file.name), element("small", pending ? "Será enviado ao SUBMETER" : "Salvo nesta folha"));
+      details.append(element("strong", file.name), element("small", cut ? "Exclusão pendente · somente ao SUBMETER" : pending ? "Será enviado ao SUBMETER" : "Salvo nesta folha"));
       const download = button("Baixar", async () => {
         try {
           const bytes = pending ? await file.arrayBuffer() : await context.sheetAttachments.read(file, { signal: abort.signal });
           if (!disposed) presenter.present({ bytes, name: file.name, type: file.type, mode: "download" });
         } catch (error) { setMessage(error.message, true); }
       });
-      const actions = element("div", undefined, "payroll-sheet-attachment-actions"); actions.append(download);
+      const actions = element("div", undefined, "payroll-sheet-attachment-actions");
+      if (!cut) actions.append(download);
       if (pending) {
         const remove = button("Remover", () => { files.splice(files.indexOf(file), 1); render(); });
         remove.dataset.sheetAttachmentRemove = ""; remove.setAttribute("aria-label", "Remover " + file.name);
+        actions.append(remove);
+      } else if (cut) {
+        const restore = button("↶ Retornar", () => { removed.delete(key(file.name)); render(); });
+        restore.dataset.sheetAttachmentRestoreExisting = ""; actions.append(restore);
+      } else {
+        const remove = button("×", () => { removed.add(key(file.name)); render(); });
+        remove.dataset.sheetAttachmentRemoveExisting = "";
+        remove.setAttribute("aria-label", "Excluir " + file.name);
         actions.append(remove);
       }
       row.append(details, actions); list.append(row);
@@ -92,7 +103,7 @@ export function bindPayrollSheetAttachments(form, context, { isBusy, getReceiptA
     saved.splice(0, saved.length, ...result); render(); setMessage("");
   }).catch(error => setMessage(error.message, true));
   return Object.freeze({
-    changes: () => [...files],
+    changes: () => ({ uploads: [...files], deletions: saved.filter(file => removed.has(key(file.name))).map(file => file.name) }),
     refresh: render,
     cleanup() { disposed = true; abort.abort(); picker?.close(); input.removeEventListener("change", changed); presenter.cleanup(); tray.remove(); },
   });

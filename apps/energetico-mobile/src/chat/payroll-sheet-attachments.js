@@ -33,7 +33,7 @@ export function createPayrollSheetAttachments({ repository, siteKey, list, item,
     guard(signal);
     return bytes;
   }
-  async function prepare(uploads, { inactive = false, signal } = {}) {
+  async function prepare(uploads, { inactive = false, deletions = [], signal } = {}) {
     guard(signal);
     if (!Array.isArray(uploads)) throw new TypeError("Os anexos precisam ser uma lista de arquivos.");
     const names = new Set();
@@ -45,17 +45,21 @@ export function createPayrollSheetAttachments({ repository, siteKey, list, item,
       names.add(key);
       return { file, name: validation.name, key };
     });
-    if (!selected.length && !inactive) return expectedETag;
+    if (!selected.length && !inactive && !deletions.length) return expectedETag;
     let current = await currentItem(list, item.id, signal);
     guard(signal);
     // Own successful uploads may advance ETag, but never authorize field changes.
     if (!sameFields(current) || (current.eTag !== expectedETag && !successfulUploads.size)) throw conflict();
     let files = await listFiles(signal);
+    const deletedKeys = new Set(deletions.map(nameKey));
+    if (deletedKeys.size !== deletions.length || [...deletedKeys].some(key => !files.some(file => nameKey(file.name) === key))) {
+      throw new Error('O anexo escolhido para exclusão não pertence mais a esta folha. Reabra o registro.');
+    }
     for (const entry of selected) {
       const existing = files.find(file => nameKey(file.name) === entry.key);
       if (existing && successfulUploads.get(entry.key) !== entry.file) throw new Error("O arquivo " + entry.name + " já existe nesta folha. Reabra o registro para conferir os anexos.");
     }
-    if (inactive && !selected.length && !files.length) throw new Error(INACTIVE_SHEET_RECEIPT_ERROR);
+    if (inactive && !selected.length && !files.some(file => !deletedKeys.has(nameKey(file.name)))) throw new Error(INACTIVE_SHEET_RECEIPT_ERROR);
     if (selected.length && typeof repository.uploadAttachment !== "function") throw new Error("O envio de anexos não está disponível.");
     for (const entry of selected) {
       const existing = files.find(file => nameKey(file.name) === entry.key);
@@ -78,7 +82,7 @@ export function createPayrollSheetAttachments({ repository, siteKey, list, item,
     // Keep this ETag: deletion after the confirmation must cause a conditional
     // update conflict, not be adopted by a later refreshed item read.
     files = await listFiles(signal);
-    if (inactive && !files.length) throw new Error(INACTIVE_SHEET_RECEIPT_ERROR);
+    if (inactive && !files.some(file => !deletedKeys.has(nameKey(file.name)))) throw new Error(INACTIVE_SHEET_RECEIPT_ERROR);
     if (selected.some(entry => !files.some(file => nameKey(file.name) === entry.key))) throw new Error("Um anexo enviado não está mais na folha. Reabra o registro para conferir.");
     return expectedETag;
   }

@@ -80,6 +80,53 @@ async function showDetail(ctx) {
 }
 const mutations = ctx => ctx.calls.filter(({ operation }) => !['snapshot', 'detail', 'attachment'].includes(operation));
 
+test('X do anexo no editor de lancamentos so exclui apos SUBMETER e permite Retornar', async t => {
+  let files = [{ fileName: 'um.pdf' }, { fileName: 'dois.png' }];
+  const ctx = await setup(t, { request: async (operation, payload) => {
+    if (operation === 'snapshot') return snapshot();
+    if (operation === 'detail') return detail({ attachments: files });
+    if (operation === 'attachment_delete') {
+      assert.equal(payload.confirm, true);
+      files = files.filter(file => file.fileName !== payload.fileName);
+      return { ok: true, id: payload.id, fileName: payload.fileName };
+    }
+    throw new Error('Operacao inesperada: ' + operation);
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  ctx.root().querySelector('[data-lg-attachment-remove="um.pdf"]').click();
+  assert.deepEqual(files.map(file => file.fileName), ['um.pdf', 'dois.png']);
+  assert.ok(ctx.root().querySelector('[data-lg-attachment-restore="um.pdf"]'));
+  ctx.root().querySelector('[data-lg-attachment-restore="um.pdf"]').click();
+  assert.equal(ctx.root().querySelector('[data-lg-attachment-restore="um.pdf"]'), null);
+  ctx.root().querySelector('[data-lg-attachment-remove="um.pdf"]').click();
+  button(ctx.root(), 'SUBMETER').click(); await settle();
+  assert.deepEqual(files.map(file => file.fileName), ['um.pdf', 'dois.png']);
+  button(ctx.root(), 'Confirmar alterações').click(); await settle(); await settle();
+  assert.deepEqual(files.map(file => file.fileName), ['dois.png'], JSON.stringify(ctx.calls) + ' ' + ctx.root().textContent.slice(-500));
+});
+
+test('edicao de campos e anexos confirma ambos sem repetir o update', async t => {
+  let quantity = 2.5, version = 'old-version', files = [{ fileName:'um.pdf' }];
+  const ctx = await setup(t, { request: async (operation,payload) => {
+    if (operation === 'snapshot') return snapshot();
+    if (operation === 'detail') return detail({ attachments:files,
+      item:{...row(),expectedModified:version,fields:{...row().fields,QUANTIDADE:quantity}} });
+    if (operation === 'update') { assert.equal(payload.expectedModified,'old-version'); quantity=3; version='new-version'; return {ok:true}; }
+    if (operation === 'attachment_delete') {
+      assert.equal(payload.expectedModified,'new-version');
+      files=[]; return {ok:true};
+    }
+    throw new Error('Operacao inesperada: '+operation);
+  } });
+  await ctx.gallery.open(); await showDetail(ctx);
+  input(ctx,'QUANTIDADE','3');
+  ctx.root().querySelector('[data-lg-attachment-remove="um.pdf"]').click();
+  button(ctx.root(),'SUBMETER').click(); await settle();
+  button(ctx.root(),'Confirmar alterações').click(); await settle(); await settle();
+  assert.equal(quantity,3); assert.deepEqual(files,[]);
+  assert.equal(ctx.calls.filter(call=>call.operation==='update').length,1);
+});
+
 test('manual refresh bypasses cached launch data, preserves filters and ignores repeated busy clicks', async t => {
   let generation = 0;
   const pending = deferred();

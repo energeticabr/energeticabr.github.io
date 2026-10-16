@@ -66,6 +66,32 @@ test('gallery edit offers only cancel and submit, and cancel discards the draft'
   assert.equal(ctx.get('[name=Title]').value, 'Original');
 });
 
+test('provisao mostra anexos depois de DATAEXECUCAOAGENDAMENTO e envia exclusao somente ao submeter', async t => {
+  const calls = [];
+  const ctx = await setup(t, {
+    loadEditor: async id => ({ ...context(id),
+      columns: [{ name:'DATAEXECUCAOAGENDAMENTO', label:'DATA EXECUÇÃO AGENDAMENTO', control:'date', editable:true }],
+      item:{ id, fields:{ DATAEXECUCAOAGENDAMENTO:'' } },
+      attachments:{ enabled:true, canView:true, canEdit:true,
+        existingFiles:[{name:'PROVISAO.pdf',size:25,type:'application/pdf'}],
+        readExisting:async()=>new ArrayBuffer(1) },
+    }),
+    saveEditor:async (_context,_fields,options)=>{ calls.push(options.attachments); return {id:'42',fields:{}}; },
+  });
+  click(ctx,'edit'); await settle(); await settle();
+  const field = ctx.get('[name=DATAEXECUCAOAGENDAMENTO]').closest('.dynamic-field');
+  const attachments = ctx.get('[data-form-attachments]');
+  assert.ok(field.compareDocumentPosition(attachments) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  ctx.get('[data-form-attachment-remove-existing]').click();
+  assert.deepEqual(calls, []);
+  assert.ok(ctx.get('[data-form-attachment-restore-existing]'));
+  ctx.get('[data-form-attachment-restore-existing]').click();
+  assert.ok(ctx.get('[data-form-attachment-remove-existing]'));
+  ctx.get('[data-form-attachment-remove-existing]').click();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+  assert.deepEqual(calls[0].deletions,['PROVISAO.pdf']);
+});
+
 test('editing dropdowns preserve labels under typing, deletion and paste but accept another option', async t => {
   const ctx = await setup(t, {loadEditor: async id => ({...context(id), columns: [
     {name:'STATUS', label:'Status', control:'select', editable:true, choices:['ATIVO','PENDENTE']},

@@ -1547,6 +1547,9 @@ export function bindFormAttachments(root, options = {}) {
   const removeExisting = event => {
     if (draft.removeExisting(event.currentTarget?.dataset?.formAttachmentRemoveExisting)) refreshList();
   };
+  const restoreExisting = event => {
+    if (draft.restoreExisting(event.currentTarget?.dataset?.formAttachmentRestoreExisting)) refreshList();
+  };
   const fileActions = Object.freeze({
     canView: () => options.canView === true,
     async downloadAttachment(name) {
@@ -1637,11 +1640,12 @@ export function bindFormAttachments(root, options = {}) {
     return undefined;
   };
   const delegatedClick = event => {
-    const target = event.target?.closest?.("[data-form-attachment-remove-upload],[data-form-attachment-remove-existing],[data-form-attachment-open],[data-form-attachment-download]");
+    const target = event.target?.closest?.("[data-form-attachment-remove-upload],[data-form-attachment-remove-existing],[data-form-attachment-restore-existing],[data-form-attachment-open],[data-form-attachment-download]");
     if (!target || !list?.contains?.(target)) return;
     const delegatedEvent = { currentTarget: target, target };
     if (target.dataset?.formAttachmentRemoveUpload) removeUpload(delegatedEvent);
     else if (target.dataset?.formAttachmentRemoveExisting) removeExisting(delegatedEvent);
+    else if (target.dataset?.formAttachmentRestoreExisting) restoreExisting(delegatedEvent);
     else if (target.dataset?.formAttachmentOpen) open(delegatedEvent);
     else if (target.dataset?.formAttachmentDownload) download(delegatedEvent);
   };

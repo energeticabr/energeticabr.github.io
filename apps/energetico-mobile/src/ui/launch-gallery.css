@@ -426,7 +426,16 @@
 .lg-editor-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .lg-editor-grid .lg-field-wide, .lg-editor-grid > .lg-attachments { grid-column: 1 / -1; }
 .lg-editor-grid > .lg-attachments { width: 100%; min-width: 0; padding: 14px; border: 1px solid var(--lg-line); border-radius: 8px; background: #f5f9fc; }
+.lg-editor .lg-attachments > .lg-section-title,
+.lg-editor .lg-attachment-add-title,
+.lg-editor .lg-check > .lg-label { display: block; padding: 6px 9px; color: #fff; background: var(--lg-red); }
 .lg-attachment-tray { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+.lg-attachment-row { display: flex; align-items: stretch; gap: 5px; min-width: 0; }
+.lg-attachment-row > .lg-attachment-item { flex: 1; min-width: 0; }
+.lg-attachment-row > .lg-button { min-width: 44px; }
+.lg-editor .lg-attachment-row:not(.is-removed) > .lg-attachment-item { background: #3f63a5; color: #fff; }
+.lg-attachment-row.is-removed { opacity: .8; background: #fff2f2; }
+.lg-attachment-row.is-removed > .lg-attachment-item { text-decoration: line-through; }
 .lg-attachment-item { max-width: 100%; overflow-wrap: anywhere; text-align: left; color: var(--lg-navy); background: #fff; border: 1px solid #8ea5ba; }
 .lg-attachment-add { display: grid; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--lg-line); }
 .lg-attachment-add-title { margin: 0; color: var(--lg-navy); font-size: .9rem; }

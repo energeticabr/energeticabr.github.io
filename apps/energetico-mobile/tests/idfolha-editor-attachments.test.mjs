@@ -18,6 +18,7 @@ function fixture({status='ATIVO',statusName='STATUS',hiddenStatus=false,existing
     async getItem(_site,_list,id){events.push('read item');return {id,eTag:'"v'+revision+'"',fields:{...fields}};},
     async listAttachments(site,list,id){assert.deepEqual([site,list,id],['personal','IDFOLHA','4']);events.push('list');return [...files];},
     async uploadAttachment(site,list,id,file,name){assert.deepEqual([site,list,id],['personal','IDFOLHA','4']);events.push('upload '+name);uploaded.push(file);files.push({name,size:file.size});revision++;},
+    async deleteAttachment(site,list,id,name){assert.deepEqual([site,list,id],['personal','IDFOLHA','4']);events.push('delete '+name);const index=files.findIndex(file=>file.name===name);if(index>=0)files.splice(index,1);revision++;},
     async downloadAttachment(){return new ArrayBuffer(1);},
     async updateItem(_site,_list,id,patch,options){events.push({patch,options});assert.equal(options.eTag,'"v'+revision+'"');fields={...fields,...patch};revision++;return {id,eTag:'"v'+revision+'"',fields};},
   };
@@ -204,12 +205,34 @@ test('closing editor during upload cancels the following status update',async t=
   await settle();assert.equal(typeof finish,'function');actions.close();await finish();await settle();
   assert.deepEqual(updates(f),[]);
 });
-test('existing attachments remain visible and cannot be deleted in this adding tray',async t=>{
+test('existing attachment X stages deletion and Retornar undoes it before SUBMETER',async t=>{
   const f=fixture({existing:[{name:'recibo-salvo.pdf'}]}),{doc}=await open(t,f);
   const tray=doc.querySelector('[data-sheet-attachments]');
   assert.match(tray.textContent,/recibo-salvo.pdf/);
   assert.match(tray.textContent,/Salvo nesta folha/);
-  assert.equal(tray.querySelector('[data-sheet-attachment-remove]'),null);
+  tray.querySelector('[data-sheet-attachment-remove-existing]').click();
+  assert.equal(f.files.length,1);
+  assert.match(tray.textContent,/Retornar/);
+  tray.querySelector('[data-sheet-attachment-restore-existing]').click();
+  await submit(doc,doc.defaultView);
+  assert.equal(f.files.length,1);
+  assert.ok(!f.events.includes('delete recibo-salvo.pdf'));
+});
+test('sheet deletion occurs only at submit and INATIVO keeps its receipt requirement',async t=>{
+  const f=fixture({existing:[{name:'recibo-salvo.pdf'}],status:'INATIVO'}),{doc}=await open(t,f);
+  doc.querySelector('[data-sheet-attachment-remove-existing]').click();
+  await submit(doc,doc.defaultView);
+  assert.equal(f.files.length,1);
+  assert.ok(!f.events.includes('delete recibo-salvo.pdf'));
+  assert.match(doc.querySelector('.gallery-record-dialog-error').textContent,/recibo/i);
+});
+test('ATIVO exclui o anexo marcado somente depois de SUBMETER',async t=>{
+  const f=fixture({existing:[{name:'recibo-salvo.pdf'}],status:'ATIVO'}),{doc}=await open(t,f);
+  doc.querySelector('[data-sheet-attachment-remove-existing]').click();
+  assert.equal(f.files.length,1);
+  await submit(doc,doc.defaultView);
+  assert.equal(f.files.length,0);
+  assert.ok(f.events.includes('delete recibo-salvo.pdf'));
 });
 test('late attachment listing during a failed save restores removable staged files',async t=>{
   const f=fixture();let resolveList,failUpload;const originalList=f.repository.listAttachments;let first=true;

@@ -233,7 +233,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     document: doc, host: root,
     actions: model.recordActions,
     loadEditor: (id, options) => data.loadEditor(id, options),
-    saveEditor: (context, fields) => runMutation(() => data.saveEditor(context, fields)),
+    saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: load,
   });
