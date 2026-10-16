@@ -849,7 +849,6 @@ function synchronizePresenceStageDescription(form, columns, entity, fieldName, o
 }
 
 function bindChoiceSelectors(form, columns, options = {}) {
-  const selectionOnly = options.mode === 'edit';
   const cleanups = [];
   const selectionChecks = [];
   const valueReaders = [];
@@ -868,6 +867,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const column = descriptors.get(String(native?.name || ""));
     if (!native || !mount || !column || column.control !== "select") continue;
 
+    const selectionOnly = options.mode === 'edit' && column.filterableInEdit !== true;
     const remoteSource = powerAppsRemoteSource(column);
     const multiple = column.allowMultipleValues === true;
     const retrySelection = retryChoiceOptions(options.retryState, column.name, multiple);

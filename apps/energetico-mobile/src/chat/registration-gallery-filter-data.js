@@ -40,7 +40,12 @@ export const REGISTRATION_GALLERY_FILTER_SOURCES = freeze({
       conditions: [{ sourceField: 'INSTITUICAO', filterField: 'INSTITUICAO', optional: true }] }),
   },
   investment: { INSTITUICAO: source('INSTITUICAOEMISSORA', 'INSTITUICAOEMISSORA') },
-  provisionDescription: { STATUS: source('DESCRITIVOPROVISAO', 'STATUS', { provisionDescriptionStatus: true }) },
+  provisionDescription: {
+    FILIAL: branch,
+    FORNECEDOR: suppliers,
+    FORMAPGTO: source('CADASTROCONTA', 'CONTA'),
+    STATUS: source('DESCRITIVOPROVISAO', 'STATUS', { provisionDescriptionStatus: true }),
+  },
   asset: { FILIAL: branch, IMOBILIZADO: source('CADASTROIMOBILIZADO', 'IMOBILIZADO', { listAliases: ['CADASTROIMOBILIZADO', 'CADASTRO IMOBILIZADO'] }) },
   assetFunction: {},
   assetProduct: { FUNCAO: source('FUNCAOIMOBILIZADO', 'FUNCAO', { listAliases: ['FUNCAOIMOBILIZADO', 'FUNÇÃO IMOBILIZADO'] }) },

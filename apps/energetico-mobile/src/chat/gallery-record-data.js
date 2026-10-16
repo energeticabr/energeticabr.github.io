@@ -117,7 +117,11 @@ function typedColumns(rawColumns, entity, metadataOnly) {
   return mapSharePointColumns(verified, entity).map(column => {
     const raw = verified.find(c => c.name === column.name);
     return Object.freeze({ ...column, allowMultipleValues: raw?.choice?.allowMultipleValues === true
-      || raw?.lookup?.allowMultipleValues === true || raw?.personOrGroup?.allowMultipleSelection === true });
+      || raw?.lookup?.allowMultipleValues === true || raw?.personOrGroup?.allowMultipleSelection === true,
+      ...(raw?.choice?.preserveCurrentValue === true ? {
+        powerApps: { ...column.powerApps, preserveCurrentValue: true },
+      } : {}),
+      ...(raw?.choice?.filterableInEdit === true ? { filterableInEdit: true } : {}) });
   });
 }
 
