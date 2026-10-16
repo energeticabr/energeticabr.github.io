@@ -15,6 +15,11 @@ test('monthly calculation separates days and preserves effective corrections',as
 test('monthly report does not merge same-name people with different RHID identities',async()=>{
  await assert.rejects(build([row('2026-10-01','07:00'),row('2026-10-02','12:00',{ID_PESSOA_RHID:'102'})]),/ambígu|identidade/i);
 });
+test('monthly report refuses an excluded nonregular clock-in person even if supplied directly',async()=>{
+ const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
+ const month='2026-10';
+ assert.throws(()=>buildRhidMonthlyReport({month,supplier:{id:'1',name:'BERNARDO NOTINI MOREIRA BAHIA'},snapshot:{month,presentDates:[],rows:[]}}),/fornecedor válido/i);
+});
 test('monthly report refuses missing, wrong-month and truncated snapshots',async()=>{
  const {buildRhidMonthlyReport}=await import('../src/chat/rhid-monthly-model.js');
  for(const snapshot of [{month:'2026-10'},{month:'2026-09',rows:[]},{month:'2026-10',rows:[],partial:true},{month:'2026-10',rows:[row('2026-10-32','07:00')]}])assert.throws(()=>buildRhidMonthlyReport({month:'2026-10',supplier,snapshot}),/inválid|incomplet/i);

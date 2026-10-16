@@ -1,3 +1,5 @@
+import { isExcludedFromRegularRhidReports } from "./rhid-report-participants.js";
+
 function punchText(value) {
   if (Array.isArray(value)) return value.flatMap(punchText);
   if (value && typeof value === "object") {
@@ -218,7 +220,7 @@ export function rhidIrregularCountsByDate(rows = [], month = "") {
   return counts;
 }
 
-export function buildRhidAttendanceTable(rows = []) {
+export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false } = {}) {
   const people = new Map();
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
@@ -226,7 +228,8 @@ export function buildRhidAttendanceTable(rows = []) {
     const rhidId = String(row.ID_PESSOA_RHID ?? "").trim();
     const id = rhidId || String(row.Id ?? "").trim();
     const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR").replace(/\s+/g, " ").trim();
-    if (/^PIS NAO LOCALIZADO\b/.test(normalizedName) || /\bNAO APAGAR\b/.test(normalizedName)) continue;
+    if (/^PIS NAO LOCALIZADO\b/.test(normalizedName) || /\bNAO APAGAR\b/.test(normalizedName)
+      || (!includeNonRegular && isExcludedFromRegularRhidReports(name))) continue;
     const key = rhidId ? `rhid:${rhidId}` : id ? `id:${id}` : `name:${normalizedName}`;
     if (!name && !id) continue;
     const times = punchTimes(row.BATIDAS_RHID);

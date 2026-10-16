@@ -20,6 +20,13 @@ test("badge exposes the same four effective punch slots as the daily report", ()
   assert.equal(actual.label, "08h30");
 });
 
+test("exclusão dos relatórios não altera a conferência de batidas de uma presença individual", () => {
+  const name = "BERNARDO NOTINI MOREIRA BAHIA";
+  const actual = badgeFor(context({ name }), report([row({ NOME_COLABORADOR: name })]));
+  assert.equal(actual.status, "present");
+  assert.deepEqual(actual.punches, { entry1: "07:00", exit1: "12:00", entry2: "13:00", exit2: "16:30" });
+});
+
 test("incomplete and afternoon-only punches keep their slots without invented entries or exits", () => {
   for (const [raw, expected] of [
     ["06:45", { entry1: "06:45", exit1: null, entry2: null, exit2: null }],

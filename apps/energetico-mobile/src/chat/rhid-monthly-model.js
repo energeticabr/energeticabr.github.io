@@ -1,4 +1,5 @@
 import {buildRhidAttendanceTable,isValidRhidReportDate} from './rhid-attendance-table.js';
+import {isExcludedFromRegularRhidReports} from './rhid-report-participants.js';
 
 export const rhidNameKey=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleUpperCase('pt-BR').replace(/\s+/g,' ').trim();
 export function isRhidReportMonth(value){return /^[1-9]\d{3}-(?:0[1-9]|1[0-2])$/.test(String(value??''));}
@@ -17,7 +18,7 @@ const hours=minutes=>`${String(Math.floor(minutes/60)).padStart(2,'0')}:${String
 export function buildRhidMonthlyReport({month,supplier,snapshot,startDate:requestedStart,endDate:requestedEnd}={}){
  const bounds=rhidMonthDateBounds(month),startDate=requestedStart??bounds.startDate,endDate=requestedEnd??bounds.endDate;
  if(!isRhidReportDateRange(month,startDate,endDate))throw new TypeError('Selecione datas válidas dentro do mês e em ordem para o período.');
- if(!supplier?.id||!rhidNameKey(supplier.name))throw new TypeError('Selecione um fornecedor válido.');
+ if(!supplier?.id||!rhidNameKey(supplier.name)||isExcludedFromRegularRhidReports(supplier.name))throw new TypeError('Selecione um fornecedor válido.');
  if(snapshot?.month!==month||!Array.isArray(snapshot.rows)||!Array.isArray(snapshot.presentDates)||snapshot.partial||snapshot.truncated||snapshot.error||snapshot.aborted)throw new TypeError('Consulta mensal inválida ou incompleta. Atualize o app e tente novamente.');
  const identities=new Set(),dates=new Set();
  for(const row of snapshot.rows){
