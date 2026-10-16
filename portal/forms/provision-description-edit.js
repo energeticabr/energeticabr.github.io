@@ -1,3 +1,5 @@
+import { provisionCanonicalTotal, provisionChildrenTotal, provisionUnitPriceForTotal } from './provision-parent-workflow.js';
+
 const COMMON = new Set(['FILIAL','FORNECEDOR','DATAPREVISTOPGTO','DATAPGTOEFETUADO','FORMAPGTO','OBS','PGTOAGENDADO','DATAPGTOAGENDADO','DATAEXECUCAOAGENDAMENTO','STATUS']);
 const DATES = new Set(['DATAPREVISTOPGTO','DATAPGTOEFETUADO','PGTOAGENDADO','DATAPGTOAGENDADO','DATAEXECUCAOAGENDAMENTO']);
 const CHILD_LISTS = ['PROVISÃO PGTOS','PROVISAO PGTOS','PROVISAO PAGAMENTOS'];
@@ -137,14 +139,23 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
    if(COMMON.has(resolvedLogical))shared.push({logical:resolvedLogical,descriptor,value:patch[name]});
   }
   let children=[],childList='',childColumns=[],link,childPatch={};
-  if(shared.length){
+  const totalEdit=Object.entries(patch).find(([name,value])=>key(name)==='VALORTOTAL'&&!equal(item.fields?.[name],value,parentColumns.find(c=>c.name===name)||{}));
+  if(shared.length||totalEdit){
    const resolved=await repository.resolveList(siteKey,CHILD_LISTS,signal?{signal}:{});active(signal);
    if(resolved?.status!=='resolved'||!resolved.id||resolved.id===parent.id)throw new Error('A lista de provisões filhas não foi localizada.');
    childList=resolved.id;childColumns=await repository.getColumns(siteKey,childList,signal?{signal}:{});active(signal);
    if(!Array.isArray(childColumns))throw new Error('Metadados das provisões indisponíveis.');
    link=column(childColumns,'DESCRITIVOPROVISAO');if(!link.text)throw new Error('O vínculo DESCRITIVOPROVISAO requer metadados textuais.');
    for(const change of shared){const target=column(childColumns,change.logical);childPatch[target.name]=valueFor(change.value,change.descriptor,target);}
-   const seen=new Set();children=(await linkedChildren(childList,link,signal)).filter(row=>String(row.fields?.[link.name]??'').trim()===id(item.id)).map(row=>{
+   const linked=(await linkedChildren(childList,link,signal)).filter(row=>String(row.fields?.[link.name]??'').trim()===id(item.id));
+   if(totalEdit){
+    if(linked.length!==1)throw new Error('O descritivo tem várias provisões vinculadas. Edite o valor da linha desejada para recalcular o total.');
+    const names=Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name=>[name,column(childColumns,name).name]));
+    const unitPrice=provisionUnitPriceForTotal(linked[0].fields,names,totalEdit[1]);
+    const target=childColumns.find(candidate=>candidate.name===names.VALORTOTAL);
+    childPatch[names.VALORTOTAL]=valueFor(unitPrice,{name:names.VALORTOTAL,text:{}},target);
+   }
+   const seen=new Set();children=linked.map(row=>{
     const childId=id(row.id);if(seen.has(childId))throw new Error('A consulta paginada retornou identidade de provisão duplicada.');seen.add(childId);
     return {id:childId,eTag:version(row),originalFields:{...row.fields},patch:Object.freeze({...childPatch}),attempted:false,done:false};
    }).sort((a,b)=>Number(a.id)-Number(b.id));
@@ -212,6 +223,12 @@ export function createProvisionDescriptionEditor({repository,siteKey='personal',
      else if(!matches(row,child.patch,operation.childColumns)){child.done=false;changed=true;}
     }
     if(changed)throw new Error('Os itens vinculados mudaram durante a sincronização; confira os pendentes e retome com os mesmos dados.');
+    const amountField=Object.keys(operation.patch).find(name=>key(name)==='VALORTOTAL');
+    if(amountField&&Object.hasOwn(operation.childPatch,operation.childColumns.find(c=>key(c.name)==='VALORTOTAL')?.name)){
+     const names=Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name=>[name,column(operation.childColumns,name).name]));
+     const amount=provisionChildrenTotal(rows,names);
+     if(amount!==provisionCanonicalTotal(operation.patch[amountField]))throw new Error('O total do descritivo não confere com a provisão vinculada. Confira e retome a sincronização.');
+    }
    }
    operation.saved=await confirmParent();
    operations.delete(parentId);return operation.saved;

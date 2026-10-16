@@ -138,6 +138,33 @@ function decimalText(value) {
   return `${digits.slice(0, -value.scale)}.${digits.slice(-value.scale)}`.replace(/0+$/, "").replace(/\.$/, "");
 }
 
+export const provisionCanonicalTotal = value => decimalText(decimal(value, 'VALORTOTAL'));
+
+export function provisionChildrenTotal(children, fields) {
+  let amount = { units: 0n, scale: 0 };
+  for (const item of children) amount = add(amount, total(item.fields || {}, fields));
+  return decimalText(amount);
+}
+
+export function provisionUnitPriceForTotal(fields, names, requestedTotal) {
+  const desired = decimal(requestedTotal, 'VALORTOTAL');
+  const freight = decimal(fields[names.FRETE], 'FRETE', true);
+  const quantity = decimal(fields[names.QTD], 'QTD');
+  if (quantity.units === 0n) throw new Error('A quantidade da provisão deve ser maior que zero.');
+  const scale = Math.max(desired.scale, freight.scale);
+  const amount = desired.units * 10n ** BigInt(scale - desired.scale)
+    - freight.units * 10n ** BigInt(scale - freight.scale);
+  if (amount < 0n) throw new Error('O total do descritivo não pode ser menor que o frete da provisão.');
+  for (let priceScale = 0; priceScale <= 12; priceScale++) {
+    const numerator = amount * 10n ** BigInt(quantity.scale + priceScale);
+    const denominator = quantity.units * 10n ** BigInt(scale);
+    if (numerator % denominator !== 0n) continue;
+    const unitPrice = decimalText({ units: numerator / denominator, scale: priceScale });
+    if (provisionChildrenTotal([{ fields: { ...fields, [names.VALORTOTAL]: unitPrice } }], names) === decimalText(desired)) return unitPrice;
+  }
+  throw new Error('O total solicitado não produz valor unitário exato para a quantidade desta provisão. Edite a linha diretamente.');
+}
+
 function selection(value = { mode: "new" }) {
   if (value.mode === "new") return Object.freeze({ mode: "new" });
   if (value.mode !== "existing") throw new Error("Selecione novo descritivo ou descritivo pendente.");
@@ -218,15 +245,13 @@ async function updateTotal(repository, entity, parent, child, state) {
     const eTag = requirePending(current, parent.fields, state.parentId);
     const children = await matchingItems(repository, entity.siteKey, child.list, child.columns, child.fields.DESCRITIVOPROVISAO, state.parentId);
     if (!Array.isArray(children) || !children.some(item => String(item.id) === state.childId)) throw new Error("A consulta completa ainda não confirmou a provisão salva para recalcular o total.");
-    let amount = { units: 0n, scale: 0 };
     const seen = new Set();
     for (const item of children) {
       const id = positiveId(item.id);
       if (seen.has(id) || String(item.fields?.[child.fields.DESCRITIVOPROVISAO]) !== state.parentId) throw new Error("A consulta paginada retornou vínculo/identidade conflitante.");
       seen.add(id);
-      amount = add(amount, total(item.fields || {}, child.fields));
     }
-    const value = decimalText(amount);
+    const value = provisionChildrenTotal(children, child.fields);
     try {
       await repository.updateItem(entity.siteKey, parent.list.id, state.parentId, { [parent.fields.VALORTOTAL]: value }, { eTag });
       const readback = await repository.getItem(entity.siteKey, parent.list.id, state.parentId, "$expand=fields");

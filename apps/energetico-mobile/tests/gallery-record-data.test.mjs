@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createOrdersGalleryData, createPaymentProgrammingGalleryData, createHrPayrollGalleryData } from "../src/chat/orders-gallery-data.js";
 import { createRegistrationGalleryData } from "../src/chat/registration-gallery-data.js";
+import { createGalleryRecordData } from "../src/chat/gallery-record-data.js";
 
 function fixture({ columns, fields, eTag = '"v1"', conflict = false } = {}) {
   const writes = [], reads = [], searches = [];
@@ -201,7 +202,8 @@ test("dependent options are rechecked against changed parents even when the chil
     if (source.valueField === "FILIAL") return [{ value: "B", label: "B" }];
     return [{ value: dependencies.FILIAL === "B" ? "CASA B" : "CASA A", label: "Casa" }];
   };
-  const data = createPaymentProgrammingGalleryData(f), context = await data.loadEditor("2");
+  const data = createGalleryRecordData({ repository: f.repository, siteKey: 'personal', listName: 'PROVISÃO PGTOS',
+    resolveList: async () => ({ id: 'PROVISÃO PGTOS' }) }), context = await data.loadEditor("2");
   const column = context.columns.find(c => c.name === "IMOVEL"), source = column.powerApps.optionSources[0];
   assert.equal(column.control, "select");
   assert.equal(source.kind, "dependent");
