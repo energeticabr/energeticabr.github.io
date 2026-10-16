@@ -7,22 +7,57 @@ import { createRegistrationGallery } from "../src/ui/registration-gallery-view.j
 import { createChatView } from "../src/ui/chat-view.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
 
-test("descritivo provisão consulta todas as páginas da lista pai, mapeia datas e ordena por maior ID", async () => {
+test("descritivo provisão consulta todas as páginas e mostra vencidos antes dos futuros, deixando datas vazias no fim", async () => {
   const calls = [];
   const data = createRegistrationGalleryData({ kind: "provisionDescription", repository: {
     async resolveList(site, aliases) { calls.push([site, aliases]); return { status: "resolved", id: "parent-list" }; },
     async getColumns() { return [{ name: "DATAPREVISTOPGTO", displayName: "DATA PREVISTO PGTO", dateTime: {} }]; },
     async getItemsPage(site, list, query, options) {
       assert.equal(site, "personal"); assert.equal(list, "parent-list");
-      return options.cursor ? { items: [{ id: "9", fields: { FORNECEDOR: "B", VALORTOTAL: "1234,56", DATAPREVISTOPGTO: "2026-10-09T03:00:00Z" } }], hasMore: false }
-        : { items: [{ id: "2", fields: { FORNECEDOR: "A", VALORTOTAL: "10" } }], hasMore: true, nextLink: "next-page" };
+      return options.cursor ? { items: [
+        { id: "9", fields: { FORNECEDOR: "B", VALORTOTAL: "1234,56", DATAPREVISTOPGTO: "2026-10-09T03:00:00Z" } },
+        { id: "7", fields: { FORNECEDOR: "C", VALORTOTAL: "20" } },
+      ], hasMore: false }
+        : { items: [{ id: "2", fields: { FORNECEDOR: "A", VALORTOTAL: "10", DATAPREVISTOPGTO: "01/10/2026" } }], hasMore: true, nextLink: "next-page" };
     },
   } });
   const snapshot = await data.loadSnapshot();
   assert.deepEqual(calls, [["personal", ["DESCRITIVOPROVISAO"]]]);
   assert.equal(snapshot.listName, "DESCRITIVOPROVISAO");
-  assert.deepEqual(snapshot.rows.map(row => row.id), ["9", "2"]);
-  assert.equal(snapshot.rows[0].fields["DATA PREVISTO PGTO"], "2026-10-09T03:00:00Z");
+  assert.deepEqual(snapshot.rows.map(row => row.id), ["2", "9", "7"]);
+  assert.equal(snapshot.rows[1].fields["DATA PREVISTO PGTO"], "2026-10-09T03:00:00Z");
+});
+
+test("galeria descritivo provisão deixa a ordenação visível e permite alternar vencimento, ID, fornecedor e valor", async t => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  t.after(() => dom.window.close());
+  const doc = dom.window.document;
+  const gallery = createRegistrationGallery({ document: doc, kind: "provisionDescription", data: {
+    async loadSnapshot() { return { rows: [
+      { id: "9", fields: { FORNECEDOR: "ZETA", STATUS: "PAGAMENTO PREVISTO", VALORTOTAL: "10", DATAPREVISTOPGTO: "2026-11-12T03:00:00Z" } },
+      { id: "2", fields: { FORNECEDOR: "ALFA", STATUS: "PAGAMENTO PREVISTO", VALORTOTAL: "30", DATAPREVISTOPGTO: "2026-10-01T03:00:00Z" } },
+      { id: "7", fields: { FORNECEDOR: "BETA", STATUS: "PAGAMENTO PREVISTO", VALORTOTAL: "20" } },
+    ] }; },
+  } });
+  t.after(() => gallery.destroy());
+  await gallery.open();
+  const root = doc.querySelector('[data-gallery-kind="provisionDescription"]');
+  const sort = root.querySelector('[data-gallery-sort]');
+  const ids = () => [...root.querySelectorAll('[data-registration-row]')].map(row => row.dataset.registrationRow);
+  assert.ok(sort, "opção de ordenação disponível");
+  assert.equal(root.querySelector('details.rg-filters').contains(sort), false, "ordenação visível mesmo com filtros fechados");
+  assert.equal(sort.value, "due:asc");
+  assert.deepEqual(ids(), ["2", "9", "7"]);
+  for (const [value, expected] of [
+    ["due:desc", ["9", "2", "7"]],
+    ["ID:desc", ["9", "7", "2"]],
+    ["supplier:asc", ["2", "7", "9"]],
+    ["amount:desc", ["2", "7", "9"]],
+  ]) {
+    sort.value = value;
+    sort.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    assert.deepEqual(ids(), expected, `ordem ${value}`);
+  }
 });
 
 test("descritivo provisão não consulta outra lista quando a lista pai está indisponível", async () => {
