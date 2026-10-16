@@ -102,6 +102,10 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function renderOrder() {
     content.append(el('h2', '', 'Deseja criar pedido novo ou usar um existente?'));
     content.append(el('p', '', `Filial: ${branch()} · Total do lote: ${money(mealVoucherTotal(draft.lines))}`));
+    if (progress.signature) {
+      content.append(el('p', '', `Pedido escolhido: ${draft.orderMode === 'new' ? 'novo' : `ID ${draft.orderId}`}`));
+      return;
+    }
     content.append(button('Criar pedido novo', 'data-meal-order-new', () => { draft.orderMode = 'new'; draft.orderId = ''; step = 'details'; render(); }));
     if (orders.length) {
       content.append(el('h3', '', 'Seguir com pedido existente'));
@@ -172,11 +176,24 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       for (const line of result.lines) list.append(el('li', '', `${line.supplier} · Lançamento ${line.id} · IDFOLHA ${line.sheetId} · Vínculo ${line.payrollId}`));
       content.append(list); footer.append(button('Concluir', 'data-meal-done', close));
     }
+    if (progress.signature && step !== 'summary' && step !== 'done') {
+      content.prepend(el('p', 'meal-voucher-warning', 'Envio já iniciado. Os dados do lote estão bloqueados; se houver anexos pendentes, selecione novamente os mesmos arquivos antes de retomar.'));
+      for (const control of content.querySelectorAll('input, select, textarea, button')) {
+        if (step !== 'extras' || !expectedFiles.length || control.type !== 'file') control.disabled = true;
+      }
+      detailPickers?.sync();
+      if (step !== 'extras' || !expectedFiles.length) {
+        footer.replaceChildren(button('Seguir', 'data-meal-next', () => {
+          step = { lines: 'order', order: 'details', details: 'extras', extras: 'summary' }[step];
+          render();
+        }));
+      }
+    }
     footer.hidden = !footer.childElementCount;
   }
   function navigateBack() {
     if (!opened || destroyed || mutating) return;
-    if (progress.signature || step === 'lines' || step === 'done') { close(); return; }
+    if (step === 'lines' || step === 'done') { close(); return; }
     if (busy) { epoch++; busy = false; }
     step = { order: 'lines', details: 'order', extras: 'details', summary: 'extras' }[step] || 'lines'; error.hidden = true; render();
   }
