@@ -97,14 +97,21 @@ function parentFixture({ tokenLabel = "Título" } = {}) {
     IDPROVISAOLookupId: 31, EXTRA: "NÃO EDITÁVEL", Attachments: false,
   } };
   const reads = [], writes = [];
+  const catalogs = {
+    'branch-list-id': { field: 'FILIAL', values: ['FILIAL A', 'FILIAL B'] },
+    'supplier-list-id': { field: 'CADASTRO', values: ['FORNECEDOR A', 'FORNECEDOR B'] },
+    'account-list-id': { field: 'CONTA', values: ['CAIXA', 'PIX'] },
+  };
   function assertParent(site, list) { assert.equal(site, "personal"); assert.equal(list, "parent-list-id"); }
   const data = createRegistrationGalleryData({ kind: "provisionDescription", repository: Object.freeze({
     async resolveList(site, aliases) {
       assert.equal(site, "personal");
-      return { status: "resolved", id: aliases.includes('DESCRITIVOPROVISAO') ? "parent-list-id" : "child-list-id" };
+      const catalog = { FILIAIS: 'branch-list-id', FORNECEDORES: 'supplier-list-id', CADASTROCONTA: 'account-list-id' }[aliases[0]];
+      return { status: "resolved", id: catalog || (aliases.includes('DESCRITIVOPROVISAO') ? "parent-list-id" : "child-list-id") };
     },
-    async getColumns(site, list) { if(list==='child-list-id')return [...columns,{name:'DESCRITIVOPROVISAO',text:{}}];assertParent(site, list); return columns; },
+    async getColumns(site, list) { if(catalogs[list])return [{name:catalogs[list].field,text:{}}];if(list==='child-list-id')return [...columns,{name:'DESCRITIVOPROVISAO',text:{}}];assertParent(site, list); return columns; },
     async getItemsPage(site, list) {
+      if(catalogs[list])return {items:catalogs[list].values.map((value,index)=>({id:String(index+1),fields:{[catalogs[list].field]:value}})),hasMore:false};
       if(list==='child-list-id')return {items:[
         {id:'101',fields:{STATUS:'PAGAMENTO PREVISTO'}},
         {id:'102',fields:{STATUS:'PAGAMENTO EFETUADO'}},
@@ -163,7 +170,17 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
     DATAPGTOAGENDADO: "2026-10-12T06:30", DATAEXECUCAOAGENDAMENTO: "2026-10-13T07:40",
     DATAPREVISTOPGTO: "2026-10-14T08:50",
   };
-  for (const [name, value] of Object.entries(draft)) form.querySelector(`[name="${name}"]`).value = value;
+  for (const [name, value] of Object.entries(draft)) {
+    if (['FILIAL', 'FORNECEDOR', 'FORMAPGTO'].includes(name)) {
+      const field = form.querySelector(`[data-searchable-field="${name}"]`);
+      const search = field.querySelector('.searchable-select-input');
+      search.value = value;
+      search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      const option = [...field.querySelectorAll('[role="option"]')].find(item => item.textContent === value);
+      assert.ok(option, `${name} must offer ${value}`);
+      option.click();
+    } else form.querySelector(`[name="${name}"]`).value = value;
+  }
   form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
   await waitFor(() => fixture.writes.length === 1 && !doc.querySelector('[data-gallery-record-screen]'));
   assert.ok(fixture.reads.length>=3,'baseline, conditional edit and readback are required');

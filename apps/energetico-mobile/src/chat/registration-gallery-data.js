@@ -295,10 +295,27 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
                 : kind === 'investment_type' && field === 'tipo' ? ['RENDA FIXA', 'RENDA VARIÁVEL'] : null;
               return choices ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column;
             });
-            if (kind !== "provisionDescription" || !allowed.some(column => registrationFieldKey(column.name) === "status" && !column.readOnly && !column.hidden)) return allowed;
-            const choices = await loadProvisionDescriptionStatusOptions({ repository, siteKey: options.siteKey || "personal", signal: args[2]?.signal });
-            return allowed.map(column => registrationFieldKey(column.name) === "status"
-              ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column);
+            if (kind !== "provisionDescription") return allowed;
+            const catalogFields = ['filial', 'fornecedor', 'formapgto'];
+            const editable = allowed.filter(column => !column.readOnly && !column.hidden);
+            const fields = catalogFields.filter(field => editable.some(column => registrationFieldKey(column.name) === field));
+            const catalogs = await Promise.all(fields.map(async field => [field, await filters.loadFilterOptions(field, {
+              refresh: true, signal: args[2]?.signal,
+            })]));
+            const optionsByField = new Map(catalogs.map(([field, entries]) => [field, entries.map(entry => entry.value)]));
+            if (editable.some(column => registrationFieldKey(column.name) === 'status')) {
+              optionsByField.set('status', await loadProvisionDescriptionStatusOptions({
+                repository, siteKey: options.siteKey || 'personal', signal: args[2]?.signal,
+              }));
+            }
+            return allowed.map(column => {
+              const choices = optionsByField.get(registrationFieldKey(column.name));
+              return choices ? { ...column, choice: {
+                choices, allowTextEntry: false, allowMultipleValues: false,
+                preserveCurrentValue: true,
+                filterableInEdit: catalogFields.includes(registrationFieldKey(column.name)),
+              } } : column;
+            });
           };
           const value = repository[property];
           return typeof value === "function" ? value.bind(repository) : value;

@@ -44,10 +44,11 @@ function fixture({ parents, parentStatus = { name: 'STATUS', text: {} }, childSt
   };
   const reads = [], writes = [];
   const repository = {
-    async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
-    async getColumns(_site, list) { return structuredClone(columns[list]); },
+    async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : aliases.includes('FORNECEDORES') ? 'suppliers' : 'children' }; },
+    async getColumns(_site, list) { return list === 'suppliers' ? [{ name: 'CADASTRO', text: {} }] : structuredClone(columns[list]); },
     async getItemsPage(_site, list, query, options = {}) {
       reads.push({ list, query, cursor: options.cursor });
+      if (list === 'suppliers') return { items: [{ id: '1', fields: { CADASTRO: 'A' } }], hasMore: false };
       if (list === 'parents') return { items: structuredClone(parents), hasMore: false };
       return options.cursor ? { items: structuredClone(children.slice(1)), hasMore: false }
         : { items: structuredClone(children.slice(0, 1)), hasMore: true, nextLink: 'second-status-page' };
