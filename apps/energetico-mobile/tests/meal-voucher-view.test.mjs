@@ -6,6 +6,60 @@ import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+test('revisão do vale mostra cartões por colaborador, total, OBS e anexos sem postar antes da confirmação', async () => {
+  const css = readFileSync(new URL('../src/ui/meal-voucher.css', import.meta.url), 'utf8');
+  const dom = new JSDOM(`<!doctype html><style>${css}</style><body></body>`, { url: 'https://example.invalid' });
+  const doc = dom.window.document;
+  const suppliers = [
+    { id: '1', label: 'Ana Silva', branch: 'OBRA A', profession: 'PEDREIRO' },
+    { id: '2', label: 'Bruno Souza', branch: 'OBRA A', profession: 'MESTRE DE OBRAS' },
+  ];
+  let posts = 0;
+  const panel = createMealVoucherView({ documentRef: doc, data: {
+    loadOptions: async () => ({ suppliers, accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
+    loadOrders: async () => [],
+    loadSheetAssignments: async () => ({ '1': { id: '11' }, '2': { id: '12' } }),
+    post: async () => { posts++; return { orderId: '5', lines: [], total: 100 }; },
+  } });
+  const type = (selector, value) => { const input = doc.querySelector(selector); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  try {
+    await panel.open();
+    type('[data-meal-value="1"]', '20');
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    doc.querySelector('[data-meal-order-new]').click();
+    for (const [name, value] of [['meal-date', '2026-10-15'], ['meal-due-date', '2026-10-30'], ['meal-reference-month', '2026-10']]) type(`[name="${name}"]`, value);
+    for (const [name, value] of [['meal-account', '8'], ['meal-stage', '7']]) {
+      const select = doc.querySelector(`[name="${name}"]`); select.value = value; select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    }
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    type('[name="meal-obs"]', 'Semana com feriado');
+    const file = new dom.window.File(['arquivo'], 'comprovante.pdf', { type: 'application/pdf' });
+    Object.defineProperty(doc.querySelector('[name="meal-files"]'), 'files', { value: [file], configurable: true });
+    doc.querySelector('[name="meal-files"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    doc.querySelector('[data-meal-next]').click();
+
+    const review = doc.querySelector('[data-meal-review]');
+    assert.ok(review, 'a revisão deve usar o layout em cartões');
+    assert.match(review.querySelector('[data-meal-order-card]').textContent, /Pedido novo/);
+    assert.match(review.querySelector('[data-meal-order-card]').textContent, /Pagamento efetuado não informado/);
+    assert.equal(review.querySelectorAll('[data-meal-person-card]').length, 1, 'só exibe fornecedores selecionados');
+    assert.match(review.querySelector('[data-meal-person-card]').textContent, /Ana Silva/);
+    assert.match(review.querySelector('[data-meal-person-card]').textContent, /IDFOLHA 11/);
+    assert.match(review.querySelector('[data-meal-person-card]').textContent, /5/);
+    assert.match(review.querySelector('[data-meal-person-card]').textContent, /R\$\s*20,00/);
+    assert.match(review.querySelector('[data-meal-review-total]').textContent, /R\$\s*100,00/);
+    assert.match(review.querySelector('[data-meal-review-total]').textContent, /5 dias/);
+    assert.match(review.querySelector('[data-meal-review-notes]').textContent, /Semana com feriado/);
+    assert.match(review.querySelector('[data-meal-review-files]').textContent, /comprovante\.pdf/);
+    assert.ok(doc.querySelector('[data-meal-review-back]'), 'há Voltar no rodapé da revisão');
+    assert.equal(posts, 0);
+    doc.querySelector('[data-meal-review-back]').click();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    doc.querySelector('[data-meal-next]').click();
+    assert.equal(posts, 0);
+  } finally { panel.destroy(); dom.window.close(); }
+});
+
 test('dados do vale alimentação permitem filtrar conta e etapa digitando sem mudar a escolha até selecionar', async () => {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document;
