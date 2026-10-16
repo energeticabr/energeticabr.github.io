@@ -168,12 +168,13 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
   await waitFor(() => fixture.writes.length === 1 && !doc.querySelector('[data-gallery-record-screen]'));
   assert.ok(fixture.reads.length>=3,'baseline, conditional edit and readback are required');
   assert.ok(fixture.reads.every(read=>JSON.stringify(read)===JSON.stringify(["personal", "parent-list-id", "9", "$expand=fields"])));
-  assert.deepEqual(fixture.writes, [["personal", "parent-list-id", "9", {
+  assert.deepEqual(fixture.writes.map(([site, list, id, values, options]) => [site, list, id, values, options.eTag]), [["personal", "parent-list-id", "9", {
     FILIAL: "FILIAL B", FORNECEDOR: "FORNECEDOR B", VALORTOTAL: "2345,67", OBS: "ALTERADO", FORMAPGTO: "PIX",
     DATAPGTOEFETUADO: "2026-10-10T04:10:00", PGTOAGENDADO: "2026-10-11T05:20:00",
     DATAPGTOAGENDADO: "2026-10-12T06:30:00", DATAEXECUCAOAGENDAMENTO: "2026-10-13T07:40:00",
     DATAPREVISTOPGTO: "2026-10-14T08:50:00",
-  }, { eTag: '"parent-v7"' }]]);
+  }, '"parent-v7"']]);
+  assert.ok(fixture.writes[0][4].signal instanceof AbortSignal, "a edição mantém o cancelamento durante a gravação");
   assert.equal(doc.querySelector('[data-gallery-action="delete"]'), null, "atualizar a galeria mantém somente edição");
 });
 
