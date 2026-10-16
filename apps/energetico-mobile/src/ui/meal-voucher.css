@@ -24,6 +24,47 @@
 .meal-voucher-total { padding: 12px; background: #e2f3eb; border: 1px solid #91c8aa; border-radius: 10px; text-align: right; font-size: 1.2rem; font-weight: 800; }
 .meal-voucher-summary { margin: 0; padding: 0; list-style: none; }
 .meal-voucher-summary li { padding: 10px; border-bottom: 1px solid #bfd3dc; background: #fff; }
+.meal-voucher-review { display: grid; gap: 12px; }
+.meal-voucher-review h2 { font-size: clamp(1.45rem, 4.5vw, 1.95rem); line-height: 1.15; }
+.meal-voucher-review-intro { color: #607482; }
+.meal-voucher-order-card { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 15px; border-radius: 16px; background: linear-gradient(110deg, #e6f3f8, #eef8fa); }
+.meal-voucher-order-icon { display: grid; place-items: center; flex: 0 0 52px; height: 52px; border-radius: 14px; background: #d5e9f2; color: #096276; font-size: 1.9rem; font-weight: 800; }
+.meal-voucher-order-info { min-width: 0; display: grid; gap: 7px; }
+.meal-voucher-order-meta { display: grid; gap: 4px; color: #526a78; font-size: .84rem; line-height: 1.3; }
+.meal-voucher-people-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.meal-voucher-people-title h3 { color: #173b56; font-size: 1.15rem; }
+.meal-voucher-daily-rate { padding: 6px 10px; border-radius: 99px; background: #d6effb; color: #16618a; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.meal-voucher-people { display: grid; gap: 9px; }
+.meal-voucher-person-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid #e5eff2; border-radius: 14px; background: #fff; box-shadow: 0 2px 9px #174e640c; }
+.meal-voucher-avatar { display: grid; place-items: center; flex: 0 0 45px; height: 45px; border-radius: 50%; background: #d9f0fd; color: #0b627c; font-weight: 800; }
+.meal-voucher-avatar-1 { background: #d5f3e6; color: #12613c; }
+.meal-voucher-avatar-2 { background: #ffebd0; color: #77502a; }
+.meal-voucher-avatar-3 { background: #eae6ff; color: #514696; }
+.meal-voucher-avatar-4 { background: #fce3e5; color: #874c5a; }
+.meal-voucher-person-details { display: grid; gap: 7px; flex: 1; min-width: 0; }
+.meal-voucher-person-identity { display: grid; line-height: 1.16; }
+.meal-voucher-person-identity strong { color: #17314a; font-size: .9rem; }
+.meal-voucher-person-identity small { color: #647688; }
+.meal-voucher-person-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.meal-voucher-metric { display: grid; gap: 3px; min-width: 0; padding: 7px 8px; border-radius: 9px; line-height: 1.12; }
+.meal-voucher-metric small { color: #516273; font-size: .7rem; }
+.meal-voucher-metric strong { color: #183548; font-size: .82rem; overflow-wrap: anywhere; }
+.meal-voucher-metric-sheet { background: #f0edfa; }
+.meal-voucher-metric-quantity { background: #e4f4fc; }
+.meal-voucher-metric-unit { background: #fff3e3; }
+.meal-voucher-metric-total { background: #e5f6ec; }
+.meal-voucher-metric-total strong { color: #0b603c; }
+.meal-voucher-review-total { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 15px; border: 1px solid #9bc9b0; border-radius: 13px; background: #e3f5ed; }
+.meal-voucher-review-total > div { display: grid; gap: 3px; }
+.meal-voucher-review-total small { color: #58716b; }
+.meal-voucher-review-total-value { color: #086341; font-size: 1.35rem; white-space: nowrap; }
+.meal-voucher-review-extras { display: grid; gap: 1px; overflow: hidden; border-radius: 13px; background: #fff; box-shadow: 0 2px 9px #174e640c; }
+.meal-voucher-review-extra { display: grid; gap: 3px; padding: 12px 15px; }
+.meal-voucher-review-extra + .meal-voucher-review-extra { border-top: 1px solid #e4edf0; }
+.meal-voucher-review-extra strong { color: #244058; font-size: .86rem; }
+.meal-voucher-review-extra p { color: #657889; font-size: .8rem; overflow-wrap: anywhere; }
 .meal-voucher-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); background: #e2f0f5; border-top: 1px solid #bfd3dc; }
 .meal-voucher-footer .meal-voucher-button { background: #075a70; color: #fff; }
-@media (max-width: 600px) { .meal-voucher-table { font-size: .82rem; } .meal-voucher-table th, .meal-voucher-table td { padding: 5px; } .meal-voucher-table td small { font-size: .72rem; } .meal-voucher-header h1 { font-size: .9rem; } }
+.meal-voucher-footer [data-meal-review-back] { background: #fff; color: #173b56; }
+@media (max-width: 600px) { .meal-voucher-table { font-size: .82rem; } .meal-voucher-table th, .meal-voucher-table td { padding: 5px; } .meal-voucher-table td small { font-size: .72rem; } .meal-voucher-header h1 { font-size: .9rem; } .meal-voucher-review { gap: 10px; } .meal-voucher-person-card { padding: 8px; } .meal-voucher-avatar { flex-basis: 38px; height: 38px; font-size: .85rem; } .meal-voucher-metric { padding: 6px 5px; } .meal-voucher-metric small { font-size: .63rem; } .meal-voucher-metric strong { font-size: .74rem; } .meal-voucher-review-total-value { font-size: 1.18rem; } .meal-voucher-footer:has([data-meal-review-back]) .meal-voucher-button { flex: 1; } }
+@media (max-width: 380px) { .meal-voucher-person-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .meal-voucher-people-title { align-items: flex-start; flex-direction: column; } }

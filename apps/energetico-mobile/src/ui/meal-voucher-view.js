@@ -145,15 +145,64 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   function renderSummary() {
     const verified = validateMealVoucherDraft(draft);
-    content.append(el('h2', '', 'Confirme os lançamentos de vale-alimentação'));
-    content.append(el('p', '', `Pedido ${verified.orderMode === 'new' ? 'novo' : `ID ${verified.orderId}`} · ${verified.branch} · Lançamento ${verified.date} · Vencimento ${verified.dueDate} · Pagamento efetuado ${verified.paymentDate || 'não informado'} · Mês de referência ${verified.referenceMonth} · ${verified.stage.label} · ${verified.account.label}`));
-    const list = el('ul', 'meal-voucher-summary'); for (const line of verified.lines) list.append(el('li', '', `${line.supplier.label} — ${line.supplier.profession} — IDFOLHA ${assignments[line.supplier.id]?.id || 'não confirmada'} — ${line.quantity} × ${money(line.unitValue)} = ${money(line.total)}`)); content.append(list);
-    content.append(el('p', 'meal-voucher-total', `Total: ${money(verified.total)}`));
-    content.append(el('p', '', `OBS: ${verified.obs || 'nenhuma'} · Anexos: ${verified.files.length ? verified.files.map(file => file.name).join(', ') : 'nenhum'}`));
+    const review = el('div', 'meal-voucher-review'); review.dataset.mealReview = '';
+    review.append(el('h2', '', 'Confirme os lançamentos de vale-alimentação'));
+    review.append(el('p', 'meal-voucher-review-intro', 'Revise os dados abaixo antes de confirmar o lançamento.'));
+
+    const order = el('section', 'meal-voucher-order-card'); order.dataset.mealOrderCard = '';
+    const orderIcon = el('span', 'meal-voucher-order-icon', '▥'); orderIcon.setAttribute('aria-hidden', 'true');
+    const orderInfo = el('div', 'meal-voucher-order-info');
+    orderInfo.append(el('strong', '', `Pedido ${verified.orderMode === 'new' ? 'novo' : `ID ${verified.orderId}`} · ${verified.branch}`));
+    const orderMeta = el('div', 'meal-voucher-order-meta');
+    for (const line of [
+      `Lançamento ${verified.date}  |  Vencimento ${verified.dueDate}`,
+      `Pagamento efetuado ${verified.paymentDate || 'não informado'}  |  Mês de referência ${verified.referenceMonth}`,
+      `${verified.stage.label}  ·  ${verified.account.label}`,
+    ]) orderMeta.append(el('span', '', line));
+    orderInfo.append(orderMeta); order.append(orderIcon, orderInfo); review.append(order);
+
+    const peopleTitle = el('div', 'meal-voucher-people-title');
+    peopleTitle.append(el('h3', '', `Colaboradores (${verified.lines.length})`));
+    if (verified.lines.every(line => line.unitValue === verified.lines[0].unitValue)) peopleTitle.append(el('span', 'meal-voucher-daily-rate', `${money(verified.lines[0].unitValue)} por dia`));
+    review.append(peopleTitle);
+    const people = el('div', 'meal-voucher-people');
+    for (const [index, line] of verified.lines.entries()) {
+      const card = el('article', 'meal-voucher-person-card'); card.dataset.mealPersonCard = line.supplier.id;
+      const avatar = el('span', `meal-voucher-avatar meal-voucher-avatar-${index % 5}`, line.supplier.label.trim().split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase()); avatar.setAttribute('aria-hidden', 'true');
+      const details = el('div', 'meal-voucher-person-details');
+      const identity = el('div', 'meal-voucher-person-identity'); identity.append(el('strong', '', line.supplier.label), el('small', '', line.supplier.profession)); details.append(identity);
+      const metrics = el('div', 'meal-voucher-person-metrics');
+      for (const [kind, label, value] of [
+        ['sheet', 'IDFOLHA ', assignments[line.supplier.id]?.id || 'não confirmada'],
+        ['quantity', 'Qtd. dias', line.quantity],
+        ['unit', 'Valor unitário', money(line.unitValue)],
+        ['total', 'Total', money(line.total)],
+      ]) {
+        const metric = el('div', `meal-voucher-metric meal-voucher-metric-${kind}`);
+        metric.append(el('small', '', label), el('strong', '', value)); metrics.append(metric);
+      }
+      details.append(metrics); card.append(avatar, details); people.append(card);
+    }
+    review.append(people);
+
+    const total = el('section', 'meal-voucher-review-total'); total.dataset.mealReviewTotal = '';
+    const totalLabel = el('div'); totalLabel.append(el('strong', '', 'Total do lançamento'), el('small', '', `${verified.lines.length} colaborador(es) · ${verified.lines.reduce((sum, line) => sum + line.quantity, 0)} dias`));
+    total.append(totalLabel, el('strong', 'meal-voucher-review-total-value', money(verified.total))); review.append(total);
+
+    const extra = el('div', 'meal-voucher-review-extras');
+    for (const [label, value, marker] of [
+      ['Observações', verified.obs || 'Nenhuma observação', 'mealReviewNotes'],
+      [`Anexos (${verified.files.length})`, verified.files.length ? verified.files.map(file => file.name).join(', ') : 'Nenhum anexo', 'mealReviewFiles'],
+    ]) {
+      const item = el('section', 'meal-voucher-review-extra'); item.dataset[marker] = '';
+      item.append(el('strong', '', label), el('p', '', value)); extra.append(item);
+    }
+    review.append(extra); content.append(review);
     if (progress.orderId || Object.keys(progress.lines || {}).length || Object.keys(progress.payroll || {}).length) {
       const saved = [`Pedido ${progress.orderId || 'a confirmar'}`, ...Object.values(progress.lines || {}).map(id => `Lançamento ${id}`), ...Object.values(progress.payroll || {}).map(id => `Vínculo ${id}`)];
       content.append(el('p', 'meal-voucher-warning', `Já gravados nesta tentativa: ${saved.join(' · ')}. Retomar não duplicará estes registros.`));
     }
+    footer.append(button('Voltar', 'data-meal-review-back', navigateBack));
     footer.append(button(progress.signature ? 'Retomar envio' : 'Confirmar e lançar', 'data-meal-confirm', () => work(async () => {
       savePending();
       result = await data.post(verified, progress, savePending);
