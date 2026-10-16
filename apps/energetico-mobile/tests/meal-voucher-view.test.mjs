@@ -198,3 +198,102 @@ test('envio interrompido retoma com o mesmo token após recriar a tela e mostra 
   assert.equal(cache.size, 0);
   resumed.destroy(); dom.window.close();
 });
+
+test('seta volta à pergunta anterior após falha no envio sem fechar o vale-alimentação', async () => {
+  const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
+  const doc = dom.window.document;
+  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
+  let homeCalls = 0;
+  const panel = createMealVoucherView({ documentRef: doc, onHome: () => { homeCalls++; }, data: {
+    loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
+    loadOrders: async () => [],
+    loadSheetAssignments: async () => ({ '1': { id: '11' } }),
+    post: async (_draft, progress, onProgress) => { progress.signature = 'envio-iniciado'; onProgress(); throw new Error('General exception while processing'); },
+  } });
+  const type = (selector, value) => { const input = doc.querySelector(selector); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  try {
+    await panel.open();
+    type('[data-meal-value="1"]', '10');
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    doc.querySelector('[data-meal-order-new]').click();
+    for (const [name, value] of [['meal-date', '2026-10-15'], ['meal-due-date', '2026-10-30'], ['meal-reference-month', '2026-10']]) type(`[name="${name}"]`, value);
+    for (const [name, value] of [['meal-account', '8'], ['meal-stage', '7']]) {
+      const select = doc.querySelector(`[name="${name}"]`); select.value = value; select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    }
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    type('[name="meal-obs"]', 'feriado');
+    doc.querySelector('[data-meal-next]').click();
+    doc.querySelector('[data-meal-confirm]').click(); await tick();
+    assert.match(doc.querySelector('.meal-voucher-error').textContent, /General exception/);
+
+    doc.querySelector('[aria-label="Voltar"]').click();
+    assert.equal(doc.querySelector('.meal-voucher-page').hidden, false);
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.equal(doc.querySelector('[name="meal-obs"]').value, 'feriado');
+    assert.equal(doc.querySelector('[name="meal-obs"]').disabled, true, 'lote iniciado é somente para revisão');
+    doc.querySelector('[aria-label="Voltar"]').click();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Informe os dados/);
+    assert.equal(doc.querySelector('[name="meal-date"]').value, '2026-10-15');
+    assert.equal(doc.querySelector('[name="meal-date"]').disabled, true);
+    doc.querySelector('[aria-label="Voltar"]').click();
+    assert.match(doc.querySelector('.meal-voucher-content').textContent, /Pedido escolhido: novo/);
+    doc.querySelector('[aria-label="Voltar"]').click();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Vale-alimentação dos fornecedores/);
+    assert.equal(doc.querySelector('[data-meal-value="1"]').value, '10');
+    assert.equal(doc.querySelector('[data-meal-value="1"]').disabled, true);
+    for (let index = 0; index < 3; index++) doc.querySelector('[data-meal-next]').click();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    doc.querySelector('[data-meal-next]').click();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Confirme os lançamentos/);
+    assert.match(doc.querySelector('[data-meal-confirm]').textContent, /Retomar envio/);
+    doc.querySelector('[aria-label="Início"]').click();
+    assert.equal(doc.querySelector('.meal-voucher-page').hidden, true);
+    assert.equal(homeCalls, 1);
+  } finally { panel.destroy(); dom.window.close(); }
+});
+
+test('retomada com anexos mantém somente a reescolha dos mesmos arquivos disponível', async () => {
+  const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
+  const doc = dom.window.document, cache = new Map();
+  const storage = { getItem: key => cache.get(key) || null, setItem: (key, value) => cache.set(key, value), removeItem: key => cache.delete(key) };
+  const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
+  const data = {
+    loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
+    loadOrders: async () => [], loadSheetAssignments: async () => ({ '1': { id: '11' } }),
+    post: async (_draft, progress, onProgress) => { progress.signature = 'envio-iniciado'; onProgress(); throw new Error('rede interrompida'); },
+  };
+  const attachment = new dom.window.File(['comprovante'], 'comprovante.pdf', { type: 'application/pdf', lastModified: 1234 });
+  const type = (selector, value) => { const input = doc.querySelector(selector); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
+  const original = createMealVoucherView({ documentRef: doc, data, storage, sessionKey: 'conta-anexo' });
+  try {
+    await original.open();
+    type('[data-meal-value="1"]', '10');
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    doc.querySelector('[data-meal-order-new]').click();
+    for (const [name, value] of [['meal-date', '2026-10-15'], ['meal-due-date', '2026-10-30'], ['meal-reference-month', '2026-10']]) type(`[name="${name}"]`, value);
+    for (const [name, value] of [['meal-account', '8'], ['meal-stage', '7']]) {
+      const select = doc.querySelector(`[name="${name}"]`); select.value = value; select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    }
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    const firstFiles = doc.querySelector('[name="meal-files"]');
+    Object.defineProperty(firstFiles, 'files', { value: [attachment], configurable: true });
+    firstFiles.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    doc.querySelector('[data-meal-next]').click();
+    doc.querySelector('[data-meal-confirm]').click(); await tick();
+  } finally { original.destroy(); }
+
+  const resumed = createMealVoucherView({ documentRef: doc, data, storage, sessionKey: 'conta-anexo' });
+  try {
+    await resumed.open(); await tick();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.equal(doc.querySelector('[name="meal-obs"]').disabled, true);
+    const files = doc.querySelector('[name="meal-files"]');
+    assert.equal(files.disabled, false, 'os anexos pendentes podem ser selecionados novamente');
+    doc.querySelector('[data-meal-next]').click();
+    assert.match(doc.querySelector('.meal-voucher-error').textContent, /Selecione novamente/);
+    Object.defineProperty(files, 'files', { value: [attachment], configurable: true });
+    files.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    doc.querySelector('[data-meal-next]').click();
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Confirme os lançamentos/);
+  } finally { resumed.destroy(); dom.window.close(); }
+});
