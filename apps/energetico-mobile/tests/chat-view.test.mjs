@@ -3957,7 +3957,7 @@ test("resumo completo da presença exibe só os cinco campos pedidos e separa it
   const rendered = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
   assert.equal(rendered.length, 2);
   for (const row of rendered) {
-    assert.deepEqual([...row.querySelectorAll(".chat-presence-table-cell span")].map(cell => cell.textContent), [
+    assert.deepEqual([...row.querySelectorAll(".chat-presence-table-cell__label > span:last-child")].map(cell => cell.textContent), [
       "DATA", "FORNECEDOR", "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA", "ATIVIDADEEXECUTADA", "PRESENCA",
     ]);
     assert.equal(row.querySelectorAll(".chat-presence-table-cell").length, 5);
@@ -3980,7 +3980,7 @@ test("resumo de presenças selecionadas mantém cinco campos quando a etapa est�
   t.after(() => dom.window.close());
   const cells = [...dom.window.document.querySelectorAll(".chat-presence-table-cell")];
   assert.equal(cells.length, 5);
-  assert.equal(cells[2].querySelector("span").textContent, "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA");
+  assert.equal(cells[2].querySelector(".chat-presence-table-cell__label > span:last-child").textContent, "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA");
   assert.equal(cells[2].querySelector("b").textContent, "-");
   assert.equal(cells[3].querySelector("b").textContent, "-");
   assert.doesNotMatch(dom.window.document.querySelector(".chat-presence-table").textContent, /FILIAL/);
@@ -4053,7 +4053,7 @@ function attendanceSummaryRow(supplier, descriptor, activity, overrides = {}) {
   ];
 }
 
-test("resumo sem kind mantém valores longos abaixo dos rótulos, sem colunas comprimidas", t => {
+test("resumo sem kind separa títulos e valores longos sem alterar os grupos", t => {
   const message = {
     id: "legacy-summary", role: "assistant", type: "poll",
     question: "CONFIRMA A ATUALIZAÇÃO DESTAS PRESENÇAS?",
@@ -4072,11 +4072,40 @@ test("resumo sem kind mantém valores longos abaixo dos rótulos, sem colunas co
   const rows = [...dom.window.document.querySelectorAll(".chat-presence-table-row")];
   const activity = rows[0].querySelectorAll(".chat-presence-table-cell")[3];
   assert.equal(dom.window.getComputedStyle(rows[0]).gridTemplateColumns, "minmax(0, 1fr)", "cada pessoa usa toda a largura");
-  assert.equal(dom.window.getComputedStyle(activity).gridTemplateColumns, "minmax(0, 1fr)", "rótulo não disputa largura com o valor");
+  assert.equal(dom.window.getComputedStyle(activity).gridTemplateColumns, "minmax(0, 1fr) minmax(0, 1.5fr)", "rótulo e valor ocupam áreas distintas");
   assert.equal(activity.querySelector("b").textContent, "EXECUÇÃO FUNDAÇÃO EM TUBULÃO");
-  assert.equal(rows[0].querySelector("span").textContent, "DATA");
+  assert.equal(rows[0].querySelector(".chat-presence-table-cell__label").textContent, "📅DATA");
   assert.equal(rows[0].style.backgroundColor, rows[1].style.backgroundColor);
   assert.notEqual(rows[0].style.backgroundColor, rows[2].style.backgroundColor);
+});
+
+test("resumo de confirmação identifica cada campo com emoji e destaca o valor separado", t => {
+  const dom = attendanceSummaryDocument([
+    attendanceSummaryRow("LUIZ", "127 - FUNDAÇÃO", "TUBULÃO"),
+    attendanceSummaryRow("CLEITON", "127 - FUNDAÇÃO", "TUBULÃO"),
+    attendanceSummaryRow("ANA", "128 - ALVENARIA", "ALVENARIA", { presence: "AUSENTE" }),
+  ]);
+  t.after(() => dom.window.close());
+  const style = dom.window.document.createElement("style");
+  style.textContent = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  dom.window.document.head.append(style);
+  const rows = [...dom.window.document.querySelectorAll(".chat-presence-table--batch .chat-presence-table-row")];
+  const fields = [...rows[0].querySelectorAll(".chat-presence-table-cell")];
+  assert.deepEqual(fields.map(field => [
+    field.querySelector(".chat-presence-table-cell__emoji")?.textContent,
+    field.querySelector(".chat-presence-table-cell__label")?.textContent.replace(/^[^\p{L}]+/u, ""),
+  ]), [
+    ["📅", "DATA"],
+    ["👤", "FORNECEDOR"],
+    ["🏷️", "IDDESCRITIVOETAPA-ATIVIDADEEXECUTADA"],
+    ["⚙️", "ATIVIDADEEXECUTADA"],
+    ["👥", "PRESENCA"],
+  ]);
+  assert.ok(fields.every(field => field.querySelector(".chat-presence-table-cell__emoji")?.getAttribute("aria-hidden") === "true"));
+  assert.ok(fields.every(field => dom.window.getComputedStyle(field.querySelector("b")).backgroundColor !== "rgba(0, 0, 0, 0)"));
+  assert.equal(rows[0].style.backgroundColor, rows[1].style.backgroundColor, "dados comuns seguem no mesmo grupo");
+  assert.notEqual(rows[1].style.backgroundColor, rows[2].style.backgroundColor, "dados diferentes seguem em grupos distintos");
+  assert.equal(rows[2].querySelector(".chat-presence-table-cell--absent b").textContent, "AUSENTE");
 });
 
 test("resumo datado apresenta todos os fornecedores uma vez, também no payload legado", t => {

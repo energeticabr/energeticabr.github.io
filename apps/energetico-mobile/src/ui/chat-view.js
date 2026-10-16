@@ -1117,7 +1117,8 @@ function presenceDetailTableMarkup(table) {
   const displayRows = batch
     ? [...groups.values()].flatMap((groupRows, groupIndex) => groupRows.map((row, index) => ({ row, groupIndex, groupStart: groupIndex > 0 && index === 0 })))
     : validRows.map(row => ({ row }));
-  return `<div class="chat-presence-table${batch ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(title)}</strong>${displayRows.map(({ row, groupIndex, groupStart }) => {
+  const summaryTitle = batch && !/^\s*📋/u.test(title) ? `📋 ${title}` : title;
+  return `<div class="chat-presence-table${batch ? " chat-presence-table--batch" : ""}" role="table" aria-label="Dados da presença do fornecedor"><strong>${formatChatText(summaryTitle)}</strong>${displayRows.map(({ row, groupIndex, groupStart }) => {
     const groupAttributes = batch
       ? ` style="background-color: ${presenceSummaryGroupFill(groupIndex)}" aria-label="Grupo de atividade ${groupIndex + 1}"`
       : "";
@@ -1137,7 +1138,14 @@ function presenceDetailTableMarkup(table) {
         visibleCells.push({ ...motivation, label: "MOTIVAÇÃO", holiday: true });
       }
     }
-    return `<div class="chat-presence-table-row${groupStart ? " chat-presence-table-row--group-start" : ""}" role="row"${groupAttributes}>${visibleCells.map(cell => `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}${cell.holiday ? " chat-presence-table-cell--holiday" : ""}" role="cell"><span>${escapeHtml(cell.label || "Campo")}</span><b>${escapeHtml(cell.value ?? "-")}</b></div>`).join("")}</div>`;
+    return `<div class="chat-presence-table-row${groupStart ? " chat-presence-table-row--group-start" : ""}" role="row"${groupAttributes}>${visibleCells.map(cell => {
+      const field = normalizedDateText(cell.label).replace(/[^a-z]/g, "");
+      const emoji = batch ? ({ data: "📅", fornecedor: "👤", iddescritivoetapaatividadeexecutada: "🏷️", atividadeexecutada: "⚙️", presenca: "👥", motivacao: "🎯" }[field] || "📌") : "";
+      const label = batch
+        ? `<span class="chat-presence-table-cell__label"><span class="chat-presence-table-cell__emoji" aria-hidden="true">${emoji}</span><span>${escapeHtml(cell.label || "Campo")}</span></span>`
+        : `<span>${escapeHtml(cell.label || "Campo")}</span>`;
+      return `<div class="chat-presence-table-cell${cell.muted ? " is-muted" : ""}${cell.tone === "present" || cell.tone === "absent" ? ` chat-presence-table-cell--${cell.tone}` : ""}${cell.holiday ? " chat-presence-table-cell--holiday" : ""}" role="cell">${label}<b>${escapeHtml(cell.value ?? "-")}</b></div>`;
+    }).join("")}</div>`;
   }).join("")}</div>`;
 }
 
