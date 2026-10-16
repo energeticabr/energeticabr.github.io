@@ -1473,7 +1473,7 @@ function attendanceRhidBadgeMarkup(badge) {
   return `<span class="chat-attendance-rhid-summary">${punches}<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span></span>`;
 }
 
-function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false, attendanceExpandedIds = []) {
+function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false, attendanceExpandedIds = [], attendanceIrregularityChecking = false) {
   const filteredOptions = databaseFilteredOptions(
     message,
     expiredTemporaryAttachmentOptions(message, menuOptionsWithoutApps(message, draftMenuOptions(message))),
@@ -1696,7 +1696,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       const recordMarkup = rhidBadge
         ? `<span class="chat-attendance-select__content"><span class="chat-attendance-select__name">${nameMarkup}</span>${rhidBadge}</span>`
         : nameMarkup;
-      const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || optionUnavailable ? " disabled" : ""}>`;
+      const checkbox = `<input type="checkbox" data-action="attendance-select-toggle" data-reply-id="${escapeHtml(id)}" aria-label="Selecionar ${escapeHtml(label)}"${selected.has(id) ? " checked" : ""}${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>`;
       const detailTable = option.detail_table || option.detailTable;
       const detailRows = Array.isArray(detailTable) ? detailTable : detailTable?.rows;
       const cells = Array.isArray(detailRows) ? detailRows.flat().filter(cell => cell && typeof cell === "object") : [];
@@ -1707,20 +1707,20 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       const hasDetails = !supplierSync && cells.some(cell => ["DATA", "IDDESCRITIVOETAPA", "IDDESCRITIVO-ATIVIDADEEXECUTADA", "ATIVIDADE", "ATIVIDADEEXECUTADA"].includes(String(cell.label || "").toUpperCase()));
       const expanded = attendanceExpandedIds.includes(id);
       const detailMarkup = hasDetails
-        ? `<button class="chat-attendance-select__arrow" type="button" data-action="attendance-detail-toggle" data-reply-id="${escapeHtml(id)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} detalhes de ${escapeHtml(label)}" aria-expanded="${expanded}"${busy || !currentPoll ? " disabled" : ""}><span aria-hidden="true">${expanded ? "⌃" : "⌄"}</span></button><dl class="chat-attendance-select__detail"${expanded ? "" : " hidden"}><div><dt>DATA</dt><dd>${detailValue("DATA")}</dd></div><div><dt>IDDESCRITIVO-ATIVIDADEEXECUTADA</dt><dd>${detailValue("IDDESCRITIVO-ATIVIDADEEXECUTADA", "IDDESCRITIVOETAPA")}</dd></div><div><dt>ATIVIDADEEXECUTADA</dt><dd>${detailValue("ATIVIDADEEXECUTADA", "ATIVIDADE")}</dd></div></dl>`
+        ? `<button class="chat-attendance-select__arrow" type="button" data-action="attendance-detail-toggle" data-reply-id="${escapeHtml(id)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} detalhes de ${escapeHtml(label)}" aria-expanded="${expanded}"${busy || !currentPoll || attendanceIrregularityChecking ? " disabled" : ""}><span aria-hidden="true">${expanded ? "⌃" : "⌄"}</span></button><dl class="chat-attendance-select__detail"${expanded ? "" : " hidden"}><div><dt>DATA</dt><dd>${detailValue("DATA")}</dd></div><div><dt>IDDESCRITIVO-ATIVIDADEEXECUTADA</dt><dd>${detailValue("IDDESCRITIVO-ATIVIDADEEXECUTADA", "IDDESCRITIVOETAPA")}</dd></div><div><dt>ATIVIDADEEXECUTADA</dt><dd>${detailValue("ATIVIDADEEXECUTADA", "ATIVIDADE")}</dd></div></dl>`
         : "";
       const detailedRecordMarkup = rhidBadge ? recordMarkup : `<span class="chat-attendance-select__name">${nameMarkup}</span>`;
       records.push(supplierSync
         ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${recordMarkup}</span></label>`
         : hasDetails
-          ? `<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><button class="chat-attendance-select__record" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable ? " disabled" : ""}>${detailedRecordMarkup}</button>${detailMarkup}</div></div>`
-          : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable ? " disabled" : ""}>${recordMarkup}</button></div>`);
+          ? `<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><button class="chat-attendance-select__record" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${detailedRecordMarkup}</button>${detailMarkup}</div></div>`
+          : `<div class="chat-attendance-select__row">${checkbox}<button type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${busy || !currentPoll || optionUnavailable || attendanceIrregularityChecking ? " disabled" : ""}>${recordMarkup}</button></div>`);
     }
     const selectAll = visibleIds.length
-      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
+      ? `<label class="chat-select-all"><input type="checkbox" data-action="attendance-select-all" aria-label="Selecionar todas as presenças"${visibleIds.every(id => selected.has(id)) ? " checked" : ""}${busy || !currentPoll || attendanceIrregularityChecking ? " disabled" : ""}><span>SELECIONAR TODOS</span></label>`
       : "";
     const submitLabel = supplierSync ? "SUBMETER" : "PROSSEGUIR";
-    return `<div class="chat-attendance-select"${supplierSync ? ' data-supplier-sync="true"' : ""}>${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !currentPoll || !selected.size ? " disabled" : ""}>${submitLabel}${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
+    return `<div class="chat-attendance-select"${supplierSync ? ' data-supplier-sync="true"' : ""}>${records.join("")}${selectAll}<p class="chat-attendance-select__warning" role="alert" hidden>Para editar separadamente as presenças, todos os checkbox devem estar desmarcados.</p><button class="chat-attendance-select__proceed" type="button" data-action="attendance-select-proceed"${busy || !currentPoll || attendanceIrregularityChecking || !selected.size ? " disabled" : ""}>${submitLabel}${selected.size ? ` (${selected.size})` : ""}</button>${controls.join("")}</div>`;
   })() : "";
   const launchPayrollMarkup = isLaunchPayrollMultiSelect ? (() => {
     const selected = new Set(launchPayrollSelectedIds.map(String));
@@ -1889,7 +1889,7 @@ function compactAttendanceBatchCompletionText(value) {
     ? firstLine : text;
 }
 
-function renderMessage(message, account, busy, { finalSignedDocument = false, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceExpandedIds = [], currentPoll = false, attendanceHoursCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
+function renderMessage(message, account, busy, { finalSignedDocument = false, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityChecking = false, currentPoll = false, attendanceHoursCurrent = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false } = {}) {
   if (message.type === "poll") {
     // Saved conversations can still contain the retired inline gallery.
     // Keep the history intact, but never restore its completion controls.
@@ -1913,7 +1913,7 @@ function renderMessage(message, account, busy, { finalSignedDocument = false, dr
     const attendanceShortcut = cargosShortcut ? `<button class="chat-main-attendance-summary-shortcut" type="button" data-action="open-attendance-summary" aria-label="Abrir resumo de presenças e ausências" title="Resumo de presenças e ausências"${busy ? ' disabled' : ''}><img src="${ATTENDANCE_SUMMARY_MASCOT_URL}" alt="Mascote do resumo de presenças"></button><button class="chat-main-stage-progress-shortcut" type="button" data-action="open-stage-progress" aria-label="Abrir relatório de etapas e atividades" title="Etapas e atividades da obra"${busy ? ' disabled' : ''}><img src="${STAGE_PROGRESS_MASCOT_URL}" alt="Mascote do relatório de etapas"></button><button class="chat-main-supplier-payroll-report-shortcut" type="button" data-action="open-supplier-payroll-report" aria-label="Abrir folhas de pagamento por fornecedor" title="Folhas de pagamento por fornecedor"${busy ? ' disabled' : ''}><img src="${SUPPLIER_PAYROLL_REPORT_MASCOT_URL}" alt="Energético com folha de pagamento"></button><button class="chat-main-supplier-workforce-shortcut" type="button" data-action="open-supplier-workforce-report" aria-label="Abrir fornecedores por filial, imóvel e profissão" title="Fornecedores por filial, imóvel e profissão"${busy ? ' disabled' : ''}><img src="${SUPPLIER_WORKFORCE_REPORT_MASCOT_URL}" alt="Energético com martelete"></button><button class="chat-main-contractor-control-shortcut" type="button" data-action="open-contractor-control-report" aria-label="Abrir controle de empreiteiros" title="Controle de empreiteiros"${busy ? ' disabled' : ''}><img src="${CONTRACTOR_CONTROL_REPORT_MASCOT_URL}" alt="Energético com carrinho de mão"></button><button class="chat-main-pending-supplier-payments-shortcut" type="button" data-action="open-pending-supplier-payments-report" aria-label="Abrir pagamentos pendentes por fornecedor" title="Pagamentos pendentes por fornecedor"${busy ? ' disabled' : ''}><img src="${PENDING_SUPPLIER_PAYMENTS_REPORT_MASCOT_URL}" alt="Energético com ferramentas e tijolos"></button><button class="chat-main-pending-work-diaries-shortcut" type="button" data-action="open-pending-work-diaries-report" aria-label="Abrir diários de obras pendentes" title="Diários de obras pendentes"${busy ? ' disabled' : ''}><img src="${PENDING_WORK_DIARIES_REPORT_MASCOT_URL}" alt="Energético com colher de pedreiro e tijolos"></button>` : '';
     const commercialShortcut = cargosShortcut ? `<nav class="chat-main-commercial-shortcuts" aria-label="Relatórios comerciais"><button class="chat-main-commercial-receipts-shortcut" type="button" data-action="open-commercial-receipts" aria-label="Abrir relatório comercial de contratos e pagamentos" title="Contratos e pagamentos"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_RECEIPTS_MASCOT_URL}" alt="Mascote do relatório comercial"></button><button class="chat-main-commercial-milestones-shortcut" type="button" data-action="open-commercial-milestones" aria-label="Abrir andamento comercial dos imóveis" title="Andamento comercial dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_MILESTONES_MASCOT_URL}" alt="Mascote do andamento comercial"></button><button class="chat-main-commercial-documents-shortcut" type="button" data-action="open-commercial-documents" aria-label="Abrir pendências documentais dos imóveis" title="Pendências documentais dos imóveis"${busy ? ' disabled' : ''}><img src="${COMMERCIAL_DOCUMENTS_MASCOT_URL}" alt="Mascote das pendências documentais"></button><button class="chat-main-sac-pathologies-shortcut" type="button" data-action="open-sac-pathologies" aria-label="Abrir acompanhamento de patologias" title="Acompanhamento de patologias"${busy ? ' disabled' : ''}><img src="${SAC_PATHOLOGIES_MASCOT_URL}" alt="Mascote do acompanhamento de patologias"></button></nav>` : '';
 const provisionShortcut = provisionOption ? `<button class="chat-main-provisions-shortcut" type="button" data-action="open-pending-provisions" aria-label="Abrir provisões de pagamento pendentes" title="Provisões de pagamento pendentes"${busy || provisionOption.disabled ? " disabled" : ""}><img src="${PENDING_PROVISIONS_MASCOT_URL}" alt="Mascote Energético"></button><button class="chat-main-payment-ledger-shortcut chat-main-provision-report-shortcut" type="button" data-action="open-provision-report" aria-label="Abrir relatório de provisões e despesas recorrentes" title="Relatório de provisões e despesas recorrentes"${busy ? " disabled" : ""}><img src="${PROVISION_REPORT_MASCOT_URL}" alt="Mascote do relatório de provisões"></button><button class="chat-main-payment-ledger-shortcut" type="button" data-action="open-payment-ledger" aria-label="Abrir relatório de pagamentos" title="Relatório de pagamentos"${busy ? " disabled" : ""}><img src="${PAYMENT_LEDGER_MASCOT_URL}" alt="Mascote do relatório de pagamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-management-shortcut" type="button" data-action="open-management-report" aria-label="Abrir resumo gerencial de gastos" title="Resumo gerencial de gastos"${busy ? " disabled" : ""}><img src="${MANAGEMENT_REPORT_MASCOT_URL}" alt="Mascote do resumo gerencial de gastos"></button><button class="chat-main-payment-ledger-shortcut chat-main-order-validation-shortcut" type="button" data-action="open-order-validation-report" aria-label="Abrir validação de notas pendentes e pedidos para baixa" title="Validação de notas pendentes e pedidos para baixa"${busy ? " disabled" : ""}><img src="${ORDER_VALIDATION_MASCOT_URL}" alt="Mascote da validação de notas"></button><button class="chat-main-payment-ledger-shortcut chat-main-quotation-shortcut" type="button" data-action="open-quotation-report" aria-label="Abrir cotações e orçamentos" title="Cotações e orçamentos"${busy ? " disabled" : ""}><img src="${QUOTATION_REPORT_MASCOT_URL}" alt="Mascote de cotações e orçamentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-depreciation-shortcut" type="button" data-action="open-depreciation-report" aria-label="Abrir controle de depreciação do imobilizado" title="Controle de depreciação do imobilizado"${busy ? " disabled" : ""}><img src="${DEPRECIATION_REPORT_MASCOT_URL}" alt="Mascote do controle de depreciação"></button><button class="chat-main-payment-ledger-shortcut chat-main-document-control-shortcut" type="button" data-action="open-document-control-report" aria-label="Abrir controle de documentos" title="Controle de documentos"${busy ? " disabled" : ""}><img src="${DOCUMENT_CONTROL_REPORT_MASCOT_URL}" alt="Mascote do controle de documentos"></button><button class="chat-main-payment-ledger-shortcut chat-main-task-association-shortcut" type="button" data-action="open-task-association-report" aria-label="Abrir atividades por associação" title="Atividades por associação"${busy ? " disabled" : ""}><img src="${TASK_ASSOCIATION_REPORT_MASCOT_URL}" alt="Mascote das atividades por associação"></button><button class="chat-main-payment-ledger-shortcut chat-main-delegated-deadline-shortcut" type="button" data-action="open-delegated-deadline-report" aria-label="Abrir tarefas delegadas por data fatal" title="Tarefas delegadas por data fatal"${busy ? ' disabled' : ''}><img src="${DELEGATED_DEADLINE_REPORT_MASCOT_URL}" alt="Mascote das tarefas delegadas por data fatal"></button>` : "";
-    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent, attendanceExpandedIds)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
+    return `<article class="chat-message chat-message--assistant${initialAreaMenu ? " chat-message--initial-area-menu" : ""}${provisionShortcut ? " chat-message--external-provisions" : ""}${cargosShortcut ? " chat-message--external-cargos" : ""}${commercialShortcut ? " chat-message--commercial-top" : ""}${launchMenu ? " chat-message--launch-menu" : ""}${pairedMenu ? ` chat-message--${pairedMenu.kind}-menu` : ""}${registrationMenu ? " chat-message--registration-menu" : ""}${auditMenu ? " chat-message--audit-menu" : ""}${taskMenu ? " chat-message--demand-menu" : ""}${hrGalleryMenu ? " chat-message--hr-gallery-menu" : ""}${rhidReport ? " chat-message--rhid-report" : ""}${launchPayment ? " chat-message--launch-payment" : ""}">${initialAreaMenu || launchMenu || pairedMenu || registrationMenu || auditMenu || taskMenu || hrGalleryMenu || rhidReport || launchPayment ? "" : assistantAvatar()}${commercialShortcut}${provisionShortcut}<div class="chat-bubble">${rhidReport || initialAreaMenu || launchMenu ? "" : attendanceHeader}${renderPoll(message, busy, draft, databaseFilterMessage, activeFlow, attendanceSelectedIds, currentPoll, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent, attendanceExpandedIds, attendanceIrregularityChecking)}</div>${cargosShortcut}${attendanceShortcut}</article>`;
   }
   if (message.type === "image" || message.type === "document") {
     const label = message.caption || message.fileName || "Arquivo gerado";
@@ -2038,6 +2038,14 @@ function pendingDocumentDeleteMarkup() {
 
 function attendanceIrregularityMarkup(dialog) {
   if (!dialog) return '';
+  if (dialog.readFailed) return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="attendance-irregularity-cancel" data-attendance-irregularity-dialog>
+    <div class="chat-confirmation chat-attendance-irregularity" role="dialog" aria-modal="true" aria-labelledby="attendance-irregularity-title">
+      <h2 id="attendance-irregularity-title">Verificar justificativa</h2>
+      <p>${escapeHtml(dialog.label)}</p>
+      <p class="chat-attendance-irregularity__error" role="alert">${escapeHtml(dialog.error)}</p>
+      <div class="chat-confirmation__actions"><button class="chat-confirmation__cancel" type="button" data-action="attendance-irregularity-cancel">Cancelar</button><button class="chat-confirmation__confirm" type="button" data-action="attendance-irregularity-retry">Tentar novamente</button></div>
+    </div>
+  </div>`;
   const date = dialog.date.split('-').reverse().join('/');
   const detail = dialog.irregularity.missingPunches?.length
     ? `Horários não preenchidos: ${dialog.irregularity.missingPunches.join(', ')} em ${date}. Justifique antes de selecionar.`
@@ -2591,7 +2599,7 @@ function renderSignedOut(status, error, showSettings, allowDemo) {
   </section>`;
 }
 
-export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
+export function renderChatMarkup(state = {}, { showSettings = false, allowDemo = false, demo = false, signOutConfirm = false, pendingDocumentDelete = false, attachmentSource = false, datePicker = false, datePickerValue = "", signaturePad = false, signaturePadError = "", signaturePlacement = null, signaturePlacementStampApplied = false, attendanceSelectedIds = [], attendanceExpandedIds = [], attendanceIrregularityDialog = null, attendanceIrregularityChecking = false, launchPayrollSelectedIds = [], rhidAttendanceReport = null, rhidAttendanceAdjustment = null, rhidRefresh = null } = {}) {
   if (state.sessionStatus !== "authenticated") {
     return renderSignedOut(state.sessionStatus, state.error, showSettings, allowDemo);
   }
@@ -2674,7 +2682,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         ? rhidAttendanceReport.busy
           ? rhidAttendanceReportLoadingMarkup(rhidAttendanceReport.date)
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
-        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
+        : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
     ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
@@ -2754,6 +2762,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let attendanceSelectionPollKey = "";
   let attendanceOptions = new Map();
   let attendanceIrregularityDialog = null;
+  let attendanceIrregularityPending = null;
   let attendanceIrregularityQueue = [];
   let attendanceReportSelection = null;
   const launchPayrollSelectedIds = new Set();
@@ -4034,15 +4043,38 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   function openAttendanceIrregularity(id, mode = 'checkbox') {
     const match = attendanceIrregularOption(id);
-    if (!match || attendanceIrregularityDialog) return false;
-    attendanceIrregularityDialog = {
-      id, date: match.irregularity.date, irregularity: match.irregularity,
-      label: String(match.option.label || match.option.title || id),
-      replyId: draftReplyId(match.option), mode, reason: '', error: '', busy: false,
-      pollKey: attendanceSelectionPollKey,
+    if (!match || attendanceIrregularityDialog || attendanceIrregularityPending) return false;
+    const pollKey = attendanceSelectionPollKey;
+    const showDialog = (error = '') => {
+      attendanceIrregularityDialog = {
+        id, date: match.irregularity.date, irregularity: match.irregularity,
+        label: String(match.option.label || match.option.title || id),
+        replyId: draftReplyId(match.option), mode, reason: '', error, readFailed: Boolean(error), busy: false, pollKey,
+      };
+      rerenderAttendance();
+      root.querySelector('[data-role="attendance-irregularity-reason"]')?.focus?.();
     };
+    const read = [...(handlers.get('attendance-irregularity-read') || [])][0];
+    if (!read) { showDialog(); return true; }
+    const pending = { id, pollKey };
+    attendanceIrregularityPending = pending;
     rerenderAttendance();
-    root.querySelector('[data-role="attendance-irregularity-reason"]')?.focus?.();
+    Promise.resolve().then(() => read({ id, date: match.irregularity.date })).then(reason => {
+      if (attendanceIrregularityPending !== pending || attendanceSelectionPollKey !== pollKey) return;
+      attendanceIrregularityPending = null;
+      if (!String(reason ?? '').trim()) { showDialog(); return; }
+      if (mode === 'direct') {
+        rerenderAttendance();
+        emit({ type: 'select-reply', replyId: draftReplyId(match.option), label: String(match.option.label || match.option.title || id) });
+      } else {
+        attendanceSelectedIds.add(id);
+        nextAttendanceIrregularity();
+      }
+    }).catch(error => {
+      if (attendanceIrregularityPending !== pending || attendanceSelectionPollKey !== pollKey) return;
+      attendanceIrregularityPending = null;
+      showDialog(String(error?.message || 'Não foi possível conferir a justificativa gravada.'));
+    });
     return true;
   }
 
@@ -4288,8 +4320,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       void submitAttendanceIrregularity();
       return;
     }
+    if (command.type === 'attendance-irregularity-retry') {
+      const dialog = attendanceIrregularityDialog;
+      if (!dialog?.readFailed) return;
+      attendanceIrregularityDialog = null;
+      openAttendanceIrregularity(dialog.id, dialog.mode);
+      return;
+    }
     if (command.type === "attendance-select-proceed") {
-      if (!attendanceSelectedIds.size || attendanceIrregularityDialog || attendanceIrregularityQueue.length) return;
+      if (!attendanceSelectedIds.size || attendanceIrregularityDialog || attendanceIrregularityPending || attendanceIrregularityQueue.length) return;
       const supplierSync = clickedAction?.closest?.('.chat-attendance-select')?.dataset.supplierSync === "true";
       emit({ type: "select-reply", replyId: `${supplierSync ? "supplier_sync_batch" : "attendance_batch"}:${[...attendanceSelectedIds].join(",")}`, label: `${supplierSync ? "SUBMETER" : "PROSSEGUIR"} (${attendanceSelectedIds.size})` });
       return;
@@ -5296,6 +5335,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceSelectedIds.clear();
       attendanceExpandedIds.clear();
       attendanceIrregularityDialog = null;
+      attendanceIrregularityPending = null;
       attendanceIrregularityQueue = [];
       if (attendanceReportSelection?.key === nextAttendancePollKey) {
         for (const id of attendanceReportSelection.ids) attendanceSelectedIds.add(id);
@@ -5406,6 +5446,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       attendanceSelectedIds: [...attendanceSelectedIds],
       attendanceExpandedIds: [...attendanceExpandedIds],
       attendanceIrregularityDialog,
+      attendanceIrregularityChecking: Boolean(attendanceIrregularityPending),
       launchPayrollSelectedIds: [...launchPayrollSelectedIds],
     }), state, { preserveSignaturePad, preserveSignaturePlacement });
     syncComposer(state);

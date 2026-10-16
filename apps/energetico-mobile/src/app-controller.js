@@ -10,7 +10,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import { attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
-import { saveAttendanceIrregularity } from './chat/attendance-irregularity-data.js';
+import { readAttendanceIrregularity, saveAttendanceIrregularity } from './chat/attendance-irregularity-data.js';
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -10291,6 +10291,26 @@ export function createAppController({
   }
 
   function bindCommands() {
+    bind('attendance-irregularity-read', async command => {
+      const owner = account, revision = sessionRevision;
+      const assertSession = () => {
+        if (stopped || sessionStatus !== 'authenticated' || account !== owner || sessionRevision !== revision) {
+          throw new Error('A sessão mudou. Abra novamente a presença antes de prosseguir.');
+        }
+      };
+      assertSession();
+      return readAttendanceIrregularity({ ...command, assertSession, tokenProvider: async scopes => {
+        assertSession();
+        const token = await auth.getToken(scopes).catch(async error => {
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          await auth.authorize(scopes, { resumeAction: 'attendance-irregularity-read' });
+          assertSession();
+          return auth.getToken(scopes);
+        });
+        assertSession();
+        return token;
+      } });
+    });
     bind('attendance-irregularity-save', async command => {
       const owner = account, revision = sessionRevision;
       const assertSession = () => {

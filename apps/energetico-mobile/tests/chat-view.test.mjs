@@ -3378,6 +3378,89 @@ test('presença com jornada irregular exige justificativa antes de entrar no lot
   assert.deepEqual(replies, ['attendance_batch:2249,2250']);
 });
 
+test('justificativa já gravada permite remarcar checkbox sem novo popup nem escrita', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: 'already-justified', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [{ id: 'pending_attendance_record:2262', label: '2262 - EDGAR',
+      rhidBadge: { date: '2026-10-15', minutes: 578, status: 'present', label: '9h38' } }] };
+  const reads = [], saves = [], replies = [];
+  view.on('attendance-irregularity-read', async payload => { reads.push(payload); return 'Compensação registrada.'; });
+  view.on('attendance-irregularity-save', async payload => { saves.push(payload); });
+  view.on('select-reply', payload => replies.push(payload.replyId));
+  view.render(signedInState({ messages: [poll] }));
+  root.querySelector('input[data-reply-id="2262"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
+  assert.equal(root.querySelector('input[data-reply-id="2262"]').checked, true);
+  root.querySelector('input[data-reply-id="2262"]').click();
+  root.querySelector('input[data-reply-id="2262"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('input[data-reply-id="2262"]').checked, true);
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
+  assert.deepEqual(reads, [{ id: '2262', date: '2026-10-15' }, { id: '2262', date: '2026-10-15' }]);
+  assert.deepEqual(saves, []);
+  root.querySelector('[data-action="attendance-select-proceed"]').click();
+  assert.deepEqual(replies, ['attendance_batch:2262']);
+});
+
+test('justificativa já gravada dispensa popup no botão individual e selecionar todos', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const badge = { date: '2026-10-15', minutes: 578, status: 'present', label: '9h38' };
+  const poll = { id: 'already-justified-all', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [
+      { id: 'pending_attendance_record:2262', label: '2262 - EDGAR', rhidBadge: badge },
+      { id: 'pending_attendance_record:2263', label: '2263 - MAURICIO', rhidBadge: badge },
+    ] };
+  const replies = [];
+  view.on('attendance-irregularity-read', async ({ id }) => id === '2262' ? 'Motivo salvo' : '');
+  view.on('select-reply', payload => replies.push(payload.replyId));
+  view.render(signedInState({ messages: [poll] }));
+  root.querySelector('.chat-attendance-select__row button').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
+  assert.deepEqual(replies, ['pending_attendance_record:2262']);
+  root.querySelector('[data-action="attendance-select-all"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('input[data-reply-id="2262"]').checked, true);
+  assert.equal(root.querySelector('input[data-reply-id="2263"]').checked, false);
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /2263 - MAURICIO/);
+});
+
+test('falha na consulta não solicita uma segunda justificativa e permite tentar novamente', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: 'lookup-failed', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [{ id: 'pending_attendance_record:2262', label: '2262 - EDGAR',
+      rhidBadge: { date: '2026-10-15', minutes: 578, status: 'present', label: '9h38' } }] };
+  let attempts = 0;
+  const saves = [];
+  view.on('attendance-irregularity-read', async () => {
+    if (++attempts === 1) throw new Error('Consulta indisponível');
+    return 'Justificativa já salva';
+  });
+  view.on('attendance-irregularity-save', async payload => saves.push(payload));
+  view.render(signedInState({ messages: [poll] }));
+  root.querySelector('input[data-reply-id="2262"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Consulta indisponível/);
+  assert.equal(root.querySelector('[data-role="attendance-irregularity-reason"]'), null);
+  assert.equal(root.querySelector('input[data-reply-id="2262"]').checked, false);
+  root.querySelector('[data-action="attendance-irregularity-retry"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
+  assert.equal(root.querySelector('input[data-reply-id="2262"]').checked, true);
+  assert.equal(attempts, 2);
+  assert.deepEqual(saves, []);
+});
+
 test('horários incompletos abrem o popup no checkbox e no botão do fornecedor', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');

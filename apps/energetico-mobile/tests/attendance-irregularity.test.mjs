@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { attendanceIrregularity } from '../src/chat/attendance-irregularity.js';
-import { saveAttendanceIrregularity } from '../src/chat/attendance-irregularity-data.js';
+import { readAttendanceIrregularity, saveAttendanceIrregularity } from '../src/chat/attendance-irregularity-data.js';
 import { buildAttendanceRhidBadge } from '../src/chat/attendance-rhid-badges.js';
 
 test('jornada de segunda a quinta exige justificativa fora de 8h45 a 9h30', () => {
@@ -62,4 +62,16 @@ test('bloqueia texto vazio, coluna ausente e registro de outra data', async () =
   await assert.rejects(saveAttendanceIrregularity({ repository, id: '2249', date: '2026-10-12', explanation: 'Teste' }), /IRREGULARIDADES/);
   repository.getColumns = async () => [{ name: 'IRREGULARIDADES', text: { allowMultipleLines: true } }];
   await assert.rejects(saveAttendanceIrregularity({ repository, id: '2249', date: '2026-10-12', explanation: 'Teste' }), /data/i);
+});
+
+test('consulta justificativa gravada somente no ID e dia corretos', async () => {
+  const repository = {
+    resolveList: async () => ({ status: 'resolved', id: 'list-id' }),
+    getItem: async () => ({ id: '2249', fields: { DATA: '2026-10-12', IRREGULARIDADES: '  Compensação já registrada.  ' } }),
+  };
+  assert.equal(await readAttendanceIrregularity({ repository, id: '2249', date: '2026-10-12' }), 'Compensação já registrada.');
+  repository.getItem = async () => ({ id: '2249', fields: { DATA: '2026-10-12', IRREGULARIDADES: '   ' } });
+  assert.equal(await readAttendanceIrregularity({ repository, id: '2249', date: '2026-10-12' }), '');
+  repository.getItem = async () => ({ id: '2249', fields: { DATA: '2026-10-13', IRREGULARIDADES: 'Motivo antigo' } });
+  await assert.rejects(readAttendanceIrregularity({ repository, id: '2249', date: '2026-10-12' }), /data/i);
 });
