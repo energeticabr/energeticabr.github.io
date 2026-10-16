@@ -171,8 +171,10 @@ for (const presentation of presentations) {
     }
   });
 
-  test(`filters use supplier names and bulk selection excludes disabled records (${presentation})`, t => {
+  test(`filters use supplier names and bulk selection excludes disabled records (${presentation})`, async t => {
     const { root, view, replies } = mounted(t);
+    const saves = [];
+    view.on("attendance-irregularity-save", async payload => { saves.push(payload); });
     const poll = attendanceBadgePoll(presentation);
     poll.options[2] = { ...poll.options[2], disabled: true };
     view.render(attendanceBadgeState(poll));
@@ -182,6 +184,15 @@ for (const presentation of presentations) {
     assert.equal(root.querySelectorAll(".chat-attendance-select__row").length, 1);
     assert.ok(rowFor(root, "2102"));
     root.querySelector('[data-action="attendance-select-all"]').click();
+    if (presentation !== "attendance_supplier_sync") {
+      const dialog = root.querySelector('[data-attendance-irregularity-dialog]');
+      assert.ok(dialog, "a ausência de batidas exige justificativa na seleção em lote");
+      assert.equal(rowFor(root, "2102").querySelector("input").checked, false);
+      dialog.querySelector('[data-role="attendance-irregularity-reason"]').value = "Sem batidas registradas.";
+      dialog.querySelector('[data-action="attendance-irregularity-submit"]').click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert.deepEqual(saves, [{ id: "2102", date: "2026-10-13", explanation: "Sem batidas registradas." }]);
+    }
     view.render(attendanceBadgeState(poll));
     assert.equal(rowFor(root, "2101").querySelector("input").checked, true);
     assert.equal(rowFor(root, "2102").querySelector("input").checked, true);
