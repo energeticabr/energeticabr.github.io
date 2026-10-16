@@ -31,7 +31,32 @@ test('linked provision scan respects repository pagination and Graph batch limit
  assert.equal(f.records.children.get('2').fields.OBS,'new');
  assert.equal(f.records.children.get('3').fields.OBS,'new');
 });
-test('parent total edits never copy aggregate value to individual prices',async()=>{const f=fixture();await f.save({VALORTOTAL:'999'});assert.equal(f.calls.filter(c=>c[0]==='patch').length,1);assert.equal(f.records.children.get('2').fields.VALORTOTAL,'50');});
+test('a multi-line parent total cannot be changed without choosing which provision line to adjust',async()=>{
+ const f=fixture();
+ await assert.rejects(f.save({VALORTOTAL:'999'}),/provisões|linhas|itens/i);
+ assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);
+});
+test('a sole linked provision receives a parent total edit as an exact unit-price change',async()=>{
+ const f=fixture();
+ f.records.parents.get('42').fields.VALORTOTAL='100';
+ f.baseline.fields.VALORTOTAL='100';
+ Object.assign(f.records.children.get('2').fields,{QTD:'2',VALORTOTAL:'50',FRETE:'0'});
+ f.columns.children.push(...['QTD','VALORTOTAL','FRETE'].map(name=>({name,text:{}})));
+ f.repo.getItemsPage=async()=>({items:[structuredClone(f.records.children.get('2'))],hasMore:false});
+ await f.save({VALORTOTAL:'80'});
+ assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'80');
+ assert.equal(f.records.children.get('2').fields.VALORTOTAL,'40');
+});
+test('a formatted parent total keeps the same numeric aggregate after propagation',async()=>{
+ const f=fixture();
+ f.records.parents.get('42').fields.VALORTOTAL='100';
+ f.baseline.fields.VALORTOTAL='100';
+ Object.assign(f.records.children.get('2').fields,{QTD:'2',VALORTOTAL:'50',FRETE:'0'});
+ f.columns.children.push(...['QTD','VALORTOTAL','FRETE'].map(name=>({name,text:{}})));
+ f.repo.getItemsPage=async()=>({items:[structuredClone(f.records.children.get('2'))],hasMore:false});
+ await f.save({VALORTOTAL:'80.00'});
+ assert.equal(f.records.children.get('2').fields.VALORTOTAL,'40');
+});
 test('explicit clearing propagates dates and notes',async()=>{const f=fixture();await f.save({OBS:'',DATAPGTOEFETUADO:null});assert.equal(f.records.children.get('2').fields.OBS,'');assert.equal(f.records.children.get('2').fields.DATAPGTOEFETUADO,null);});
 test('parent schedule date is represented as date text in legacy child field without inventing paid status',async()=>{const f=fixture();await f.save({PGTOAGENDADO:'2026-10-12T03:00:00Z'});assert.equal(f.records.children.get('2').fields.PGTOAGENDADO,'2026-10-12T03:00:00Z');assert.equal(f.records.children.get('2').fields.STATUS,undefined);});
 test('missing child metadata rejects before modifying parent',async()=>{const f=fixture();f.columns.children=f.columns.children.filter(c=>c.name!=='OBS');await assert.rejects(f.save({OBS:'new'}),/OBS|metadados/i);assert.equal(f.calls.filter(c=>c[0]==='patch').length,0);});

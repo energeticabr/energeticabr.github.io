@@ -126,7 +126,7 @@ function typedColumns(rawColumns, entity, metadataOnly) {
 }
 
 /** Edit contexts belong to one service instance; their loaded ETag is never refreshed on save. */
-export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{}, persistEdit } = {}) {
+export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{}, persistEdit, readOnlyEditFields = [] } = {}) {
   const aliases = new Set([listName, ...listAliases].map(key));
   const entity = suppliedEntity || ENTITIES.find(candidate => candidate.listNames.some(name => aliases.has(key(name))))
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
@@ -186,7 +186,9 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
               ? { [item.fields[column.name]]: item.fields[column.name].trim() || 'Sem status' } : {}) },
           powerApps: { closed: true, preserveCurrentValue: true } }
         : column) : contract.formColumns;
-    const columns = frozenCopy(isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions) : formColumns);
+    const locked = new Set(readOnlyEditFields.map(key));
+    const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions) : formColumns)
+      .map(column => locked.has(key(column.name)) ? { ...column, readOnly: true, disabled: true, editable: true } : column));
     contract = frozenCopy({ ...contract, formColumns: columns });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();

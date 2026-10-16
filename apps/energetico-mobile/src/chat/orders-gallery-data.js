@@ -1,5 +1,6 @@
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createProvisionDescriptionEditor } from "../../../../portal/forms/provision-description-edit.js";
+import { createProvisionPaymentEditor } from "../../../../portal/forms/provision-payment-edit.js";
 import { createSharePointAttachmentTransport, validateAttachment } from "../../../../portal/data/attachments.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
@@ -306,6 +307,8 @@ export function createTasksGalleryData(options = {}) {
 export function createPaymentProgrammingGalleryData(options = {}) {
   return createSharePointListData({
     ...options,
+    provisionPaymentSync: true,
+    readOnlyEditFields: ['FILIAL', 'FORNECEDOR', 'DESCRITIVOPROVISAO'],
     siteKey: options.siteKey || SITE_KEY,
     listAliases: options.listAliases || PENDING_PROVISION_LIST_ALIASES,
     listName: options.listName || "PROVISÃO PGTOS",
@@ -618,6 +621,7 @@ export function createPendingProvisionAttachmentsData(options = {}) {
   const grouped = options.sourceKind === "provision-description";
   const data = createSharePointListData({
     ...options,
+    provisionPaymentSync: !grouped,
     siteKey: options.siteKey || SITE_KEY,
     listAliases: grouped ? ["DESCRITIVOPROVISAO"] : options.listAliases || PENDING_PROVISION_LIST_ALIASES,
     listName: grouped ? "DESCRITIVOPROVISAO" : options.listName || "PROVISÃO PGTOS",
@@ -643,6 +647,8 @@ function createSharePointListData({
   listMissingCode = "orders_list_missing",
   preserveSourceOrder = false,
   filterKind,
+  provisionPaymentSync = false,
+  readOnlyEditFields = [],
   assertSession = () => {},
 } = {}) {
   let repository = suppliedRepository;
@@ -663,6 +669,7 @@ function createSharePointListData({
 
   const descriptionEditor = fieldKey(listName) === 'DESCRITIVOPROVISAO'
     ? createProvisionDescriptionEditor({repository,siteKey,assertSession}) : null;
+  const paymentEditor = provisionPaymentSync ? createProvisionPaymentEditor({ repository, siteKey, assertSession }) : null;
 
   let resolvedList;
   const attachmentCache = new Map();
@@ -744,7 +751,9 @@ function createSharePointListData({
   let editorDataPromise;
   function editorData() {
     return editorDataPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
-      createGalleryRecordData({ repository, siteKey, listAliases, listName, resolveList, assertSession }));
+      createGalleryRecordData({ repository, siteKey, listAliases, listName, resolveList, assertSession,
+        readOnlyEditFields,
+        ...(paymentEditor ? { persistEdit: paymentEditor.save } : {}) }));
   }
   const loadEditor = async (id, options) => (await editorData()).loadEditor(id, options);
   const saveEditor = async (context, fields, options) => (await editorData()).saveEditor(context, fields, options);
@@ -821,6 +830,7 @@ function createSharePointListData({
     assertSession();
     const result = descriptionEditor
       ? await descriptionEditor.save({list,item,fields:{[fieldName]:value}})
+      : paymentEditor ? await paymentEditor.save({ list, item, fields: { [fieldName]: value } })
       : await repository.updateItem(siteKey, list.id, id, { [fieldName]: value }, { eTag });
     return result;
   }

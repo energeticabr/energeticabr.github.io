@@ -586,16 +586,18 @@ test("lista e baixa anexos do pedido usando a API SharePoint com o ID do item", 
 
 test("atualiza somente a data prevista da provisão com o ETag atual", async () => {
   const calls = [];
+  const row = { id: "306", eTag: "etag-306", fields: { FORNECEDOR: "DIBRITA", DESCRITIVOPROVISAO: "" } };
   const repository = {
     async resolveList(...args) { calls.push(["resolveList", ...args]); return { status: "resolved", id: "list-provisions" }; },
     async getItemsPage() { return { items: [], hasMore: false }; },
-    async getItem(...args) { calls.push(["getItem", ...args]); return { id: "306", eTag: "etag-306", fields: { FORNECEDOR: "DIBRITA" } }; },
+    async getItem(...args) { calls.push(["getItem", ...args]); return structuredClone(row); },
     async getColumns(...args) { calls.push(["getColumns", ...args]); return [
       { name: "Title", displayName: "Título", readOnly: false },
-      { name: "Data_x0020_Previsto_x0020_PGTO", displayName: "DATA PREVISTO PGTO", readOnly: false },
+      { name: "Data_x0020_Previsto_x0020_PGTO", displayName: "DATA PREVISTO PGTO", dateTime: {}, readOnly: false },
+      { name: "DESCRITIVOPROVISAO", text: {}, readOnly: false },
       { name: "STATUS", displayName: "STATUS", readOnly: false },
     ]; },
-    async updateItem(...args) { calls.push(["updateItem", ...args]); return { id: "306" }; },
+    async updateItem(...args) { calls.push(["updateItem", ...args]); Object.assign(row.fields, args[3]); row.eTag = "etag-307"; return structuredClone(row); },
   };
   const data = createPendingProvisionAttachmentsData({ repository });
 

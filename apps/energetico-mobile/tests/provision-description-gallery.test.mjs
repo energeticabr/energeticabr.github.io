@@ -96,6 +96,10 @@ function parentFixture({ tokenLabel = "Título" } = {}) {
     Modified: "2026-10-08T03:00:00Z", AuthorLookupId: 1, EditorLookupId: 2,
     IDPROVISAOLookupId: 31, EXTRA: "NÃO EDITÁVEL", Attachments: false,
   } };
+  const child = { id: '101', eTag: '"child-v1"', fields: {
+    DESCRITIVOPROVISAO: '9', QTD: '1', VALORTOTAL: '1234,56', FRETE: '0',
+    STATUS: 'PAGAMENTO PREVISTO',
+  } };
   const reads = [], writes = [];
   const catalogs = {
     'branch-list-id': { field: 'FILIAL', values: ['FILIAL A', 'FILIAL B'] },
@@ -109,27 +113,32 @@ function parentFixture({ tokenLabel = "Título" } = {}) {
       const catalog = { FILIAIS: 'branch-list-id', FORNECEDORES: 'supplier-list-id', CADASTROCONTA: 'account-list-id' }[aliases[0]];
       return { status: "resolved", id: catalog || (aliases.includes('DESCRITIVOPROVISAO') ? "parent-list-id" : "child-list-id") };
     },
-    async getColumns(site, list) { if(catalogs[list])return [{name:catalogs[list].field,text:{}}];if(list==='child-list-id')return [...columns,{name:'DESCRITIVOPROVISAO',text:{}}];assertParent(site, list); return columns; },
+    async getColumns(site, list) { if(catalogs[list])return [{name:catalogs[list].field,text:{}}];if(list==='child-list-id')return [...columns,{name:'DESCRITIVOPROVISAO',text:{}},{name:'QTD',text:{}},{name:'FRETE',text:{}}];assertParent(site, list); return columns; },
     async getItemsPage(site, list) {
       if(catalogs[list])return {items:catalogs[list].values.map((value,index)=>({id:String(index+1),fields:{[catalogs[list].field]:value}})),hasMore:false};
       if(list==='child-list-id')return {items:[
-        {id:'101',fields:{STATUS:'PAGAMENTO PREVISTO'}},
+        structuredClone(child),
         {id:'102',fields:{STATUS:'PAGAMENTO EFETUADO'}},
       ],hasMore:false};
       assertParent(site, list);
       return { items: [{ ...item, eTag: '"snapshot-v2"' }], hasMore: false };
     },
     async getItem(site, list, id, query) {
+      if (list === 'child-list-id') { reads.push([site, list, id, query]); return structuredClone(child); }
       assertParent(site, list); reads.push([site, list, id, query]); return structuredClone(item);
     },
     async updateItem(site, list, id, fields, options) {
+      if (list === 'child-list-id') {
+        writes.push([site, list, id, fields, options]);
+        child.eTag='"child-v2"'; Object.assign(child.fields,fields); return structuredClone(child);
+      }
       assertParent(site, list); writes.push([site, list, id, fields, options]);
       item.eTag='"parent-v8"';Object.assign(item.fields,fields);return structuredClone(item);
     },
     async deleteItem() { assert.fail("nenhuma exclusão foi autorizada"); },
     async createItem() { assert.fail("edição não cria registros nem filhos"); },
   }) });
-  return { data, reads, writes };
+  return { data, reads, writes, child };
 }
 
 test("lápis abre o formulário real do pai e salva só campos comprovados com o ETag carregado", async t => {
@@ -182,16 +191,19 @@ test("lápis abre o formulário real do pai e salva só campos comprovados com o
     } else form.querySelector(`[name="${name}"]`).value = value;
   }
   form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
-  await waitFor(() => fixture.writes.length === 1 && !doc.querySelector('[data-gallery-record-screen]'));
+  await waitFor(() => fixture.writes.length === 2 && !doc.querySelector('[data-gallery-record-screen]'));
   assert.ok(fixture.reads.length>=3,'baseline, conditional edit and readback are required');
-  assert.ok(fixture.reads.every(read=>JSON.stringify(read)===JSON.stringify(["personal", "parent-list-id", "9", "$expand=fields"])));
-  assert.deepEqual(fixture.writes.map(([site, list, id, values, options]) => [site, list, id, values, options.eTag]), [["personal", "parent-list-id", "9", {
+  assert.ok(fixture.reads.filter(read=>read[1]==='parent-list-id').every(read=>JSON.stringify(read)===JSON.stringify(["personal", "parent-list-id", "9", "$expand=fields"])));
+  assert.deepEqual(fixture.writes.filter(write=>write[1]==='parent-list-id').map(([site, list, id, values, options]) => [site, list, id, values, options.eTag]), [["personal", "parent-list-id", "9", {
     FILIAL: "FILIAL B", FORNECEDOR: "FORNECEDOR B", VALORTOTAL: "2345,67", OBS: "ALTERADO", FORMAPGTO: "PIX",
     DATAPGTOEFETUADO: "2026-10-10T04:10:00", PGTOAGENDADO: "2026-10-11T05:20:00",
     DATAPGTOAGENDADO: "2026-10-12T06:30:00", DATAEXECUCAOAGENDAMENTO: "2026-10-13T07:40:00",
     DATAPREVISTOPGTO: "2026-10-14T08:50:00",
   }, '"parent-v7"']]);
   assert.ok(fixture.writes[0][4].signal instanceof AbortSignal, "a edição mantém o cancelamento durante a gravação");
+  assert.equal(fixture.child.fields.VALORTOTAL, '2345.67', 'o total editado no pai ajusta a única provisão vinculada');
+  assert.equal(fixture.child.fields.FILIAL, 'FILIAL B');
+  assert.equal(fixture.child.fields.FORNECEDOR, 'FORNECEDOR B');
   assert.equal(doc.querySelector('[data-gallery-action="delete"]'), null, "atualizar a galeria mantém somente edição");
 });
 
