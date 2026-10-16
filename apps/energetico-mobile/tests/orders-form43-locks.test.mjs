@@ -137,10 +137,12 @@ test('retained APROVADO unrelated edits use the button rules without adding mone
   } });
   Object.assign(f.order.fields, { STATUS: 'APROVADO', VALORTOTAL: 9999, CONSTACNO: 'NÃO', NOTAFISCAL: 'SUBMETIDO' });
   const context = await f.data.loadEditor('42');
+  const attachmentReadsAtOpen = f.reads.filter(read => read.attachments).length;
   await f.data.saveEditor(context, { OBSFISCAL: 'Nova conferência' });
   assert.deepEqual(f.writes[0].values, { OBSFISCAL: 'NOVA CONFERÊNCIA' });
   assert.equal(f.writes[0].options.eTag, '"loaded"');
-  assert.equal(f.reads.some(read => read.attachments), false, 'the source SUBMETER rule does not read attachment count');
+  assert.equal(f.reads.filter(read => read.attachments).length, attachmentReadsAtOpen,
+    'the source SUBMETER rule does not add an attachment-count condition beyond the editor opening');
   assert.equal(f.reads.filter(read => read.list === 'LANCAMENTOS').length, 1);
 });
 
@@ -221,7 +223,10 @@ test('a rejected STATUS save restores the effective native lock after the form r
 test('a stale Form43 unlock cannot bypass a newer draft waiting for attachment evidence', async t => {
   const active = deferred(); const attachments = deferred();
   const dom = new JSDOM('<main></main>', { url: 'https://example.test' });
-  const f = fixture({ getItemsPage() { return active.promise; }, listAttachments() { return attachments.promise; } });
+  let attachmentReads = 0;
+  const f = fixture({ getItemsPage() { return active.promise; }, listAttachments() {
+    return ++attachmentReads === 1 ? [] : attachments.promise;
+  } });
   const actions = createGalleryRecordActions({ document: dom.window.document, host: dom.window.document.querySelector('main'), loadEditor: f.data.loadEditor, saveEditor: f.data.saveEditor });
   const buttons = actions.render({ id: '42', fields: {} }); dom.window.document.body.append(buttons);
   t.after(() => { actions.destroy(); dom.window.close(); });
