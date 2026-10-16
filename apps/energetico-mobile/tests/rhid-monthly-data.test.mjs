@@ -11,6 +11,12 @@ test('supplier options use CADASTRO and require both EMPREITEIRO SIM and STATUS 
  const data=await source({pages:[{items:[item('1','Inativo','SIM','INATIVO'),item('2','Não empreiteiro','NÃO')],hasMore:true,nextLink:'next'},{items:[item('3','BETA'),item('4','ALFA',' sim ',' ativo ')],hasMore:false}]});
  assert.deepEqual(await data.loadSuppliers(),[{id:'4',name:'ALFA'},{id:'3',name:'BETA'}]);
 });
+test('monthly RHID options omit only Bernardo Notini Moreira Bahia',async()=>{
+ const data=await source({pages:[{items:[
+  item('1','Bernardo Notini Moreira Bahia'),item('2','LUIZ BERNARDO DOS SANTOS'),item('3','BERNARDO NOTINI'),
+ ],hasMore:false}]});
+ assert.deepEqual(await data.loadSuppliers(),[{id:'3',name:'BERNARDO NOTINI'},{id:'2',name:'LUIZ BERNARDO DOS SANTOS'}]);
+});
 test('supplier options refuse ambiguous metadata, names and incomplete pagination',async()=>{
  for(const args of [
   {metadata:[...columns,{name:'Another',displayName:'CADASTRO'}],pages:[]},

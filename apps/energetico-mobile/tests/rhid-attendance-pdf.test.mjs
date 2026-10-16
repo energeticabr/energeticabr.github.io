@@ -82,7 +82,7 @@ test("gera PDF RHID no layout diário com indicadores e cartões", async () => {
     rows: [
       ["CLEITON CESAR NONATO", "07:00", "11:59", "13:02", "—", "04:59 (parcial)"],
       ["EDGAR NELSON DA SILVA", "06:57", "12:54", "—", "—", "05:57"],
-      ["BERNARDO NOTINI MOREIRA BAHIA", "—", "—", "—", "—", "— (parcial)"],
+      ["BRUNO SEM BATIDA", "—", "—", "—", "—", "— (parcial)"],
     ],
   };
   const { pdf, loadingTask, pages } = await inspect(await buildPdf(table, {
@@ -94,7 +94,7 @@ test("gera PDF RHID no layout diário com indicadores e cartões", async () => {
     for (const value of ["RELATÓRIO DIÁRIO", "Presenças RHID", "COLABORADORES", "COM MARCAÇÃO", "SEM MARCAÇÃO", "03", "02", "01", "SEM MARCAÇÃO", "04:59", "PARCIAL"]) {
       assert.ok(text.includes(value), `PDF sem ${value}`);
     }
-    assert.ok(text.indexOf("BERNARDO NOTINI MOREIRA BAHIA") > text.indexOf("EDGAR NELSON DA SILVA"), "sem marcação deve ficar no fim");
+    assert.ok(text.indexOf("BRUNO SEM BATIDA") > text.indexOf("EDGAR NELSON DA SILVA"), "sem marcação deve ficar no fim");
   } finally {
     await loadingTask.destroy();
   }

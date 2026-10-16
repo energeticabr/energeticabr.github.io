@@ -158,7 +158,7 @@ function personBadge(person, date) {
   const duplicatePunches = new Set(rawTimes).size !== rawTimes.length;
   const tablePerson = buildRhidAttendanceTable(rows.map((row, index) => ({
     ...row, BATIDAS_RHID: parsed[index].times, STATUS_RHID: "",
-  }))).people[0];
+  })), { includeNonRegular: true }).people[0];
   if (!tablePerson) return badge(duplicatePunches ? "inconsistent" : "unavailable", date);
 
   // Use the report's effective slots (including approved adjustments), never
@@ -174,7 +174,7 @@ function personBadge(person, date) {
     // ADMIN_AJUSTES addresses the first two periods. Further raw pairs remain
     // part of the total; slot/range warnings are not the badge's duration rule.
     const adjusted = buildRhidAttendanceTable([{ Id: "badge", NOME_COLABORADOR: tablePerson.name,
-      BATIDAS_RHID: times.slice(0, 4), ADMIN_AJUSTES: adjustments }]).people[0];
+      BATIDAS_RHID: times.slice(0, 4), ADMIN_AJUSTES: adjustments }], { includeNonRegular: true }).people[0];
     if (!adjusted || SLOTS.some(slot => adjusted.slots[slot].rhidCandidates.length > 1)
       || SLOTS.flatMap(slot => adjusted.slots[slot].rhidCandidates).length !== Math.min(times.length, 4)) return dailyBadge("inconsistent");
     const effectiveSlots = SLOTS.map(slot => adjusted.slots[slot].effective);

@@ -1178,7 +1178,7 @@ test("atalho RHID abre a tela mesmo sem presenças no dia, sem PDF automático",
   assert.equal(previews.length, 0);
 });
 
-test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem refazer a consulta", async t => {
+test("compartilha PDF RHID sem o colaborador que não bate ponto regularmente, sem refazer a consulta", async t => {
   const h = makeHarness();
   const requested = [];
   const exported = [];
@@ -1207,9 +1207,8 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
   assert.equal(previews.length, 0, "abrir a tela diária não gera nem abre o PDF");
   assert.equal(exported.length, 0);
   const report = h.store.getState().messages.at(-1);
-  assert.equal(report.detail_table.rows.length, 9, "a tela e o PDF devem partir das mesmas nove pessoas");
+  assert.equal(report.detail_table.rows.length, 8, "a tela e o PDF devem partir das mesmas oito pessoas regulares");
   const expectedRows = [
-    ["BERNARDO NOTINI MOREIRA BAHIA", "—", "—", "12:31", "—", "— (parcial)"],
     ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"],
     ["EDGAR NELSON DA SILVA", "06:55", "12:00", "—", "—", "05:05 (parcial)"],
     ["FELICIANO ROGERIO DA SILVA", "06:54", "12:04", "13:00", "16:01", "08:11"],
@@ -1236,6 +1235,7 @@ test("compartilha como PDF todos os colaboradores do relatório RHID clicado sem
       pages.push(await (await viewer.getPage(pageNumber)).getTextContent());
     }
     const text = pages.flatMap(page => page.items).map(item => item.str).join(" ");
+    assert.equal(text.includes("BERNARDO NOTINI MOREIRA BAHIA"), false);
     for (let index = 0; index < expectedRows.length; index += 1) {
       const row = expectedRows[index];
       const name = row[0];

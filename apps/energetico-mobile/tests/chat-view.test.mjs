@@ -1680,7 +1680,7 @@ test("relatório RHID segue o layout diário com indicadores e cartões individu
       rows: [
         ["CLEITON CESAR NONATO", "07:00", "11:59", "13:02", "—", "04:59 (parcial)"],
         ["EDGAR NELSON DA SILVA", "06:57", "12:54", "—", "—", "05:57"],
-        ["BERNARDO NOTINI MOREIRA BAHIA", "—", "—", "—", "—", "— (parcial)"],
+        ["BRUNO SEM BATIDA", "—", "—", "—", "—", "— (parcial)"],
       ],
     },
   }] }));

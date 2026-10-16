@@ -2,6 +2,7 @@ import {SHAREPOINT_SITES} from '../../../../portal/config.js';
 import {createGraphClient} from '../../../../portal/data/graph-client.js';
 import {createSharePointRepository} from '../../../../portal/data/sharepoint-repository.js';
 import {rhidNameKey} from './rhid-monthly-model.js';
+import {isExcludedFromRegularRhidReports} from './rhid-report-participants.js';
 
 const key=value=>rhidNameKey(String(value??'').replace(/_x([0-9a-f]{4})_/gi,(_,code)=>String.fromCodePoint(parseInt(code,16)))).replace(/[^A-Z0-9]/g,'');
 const cancelled=()=>new DOMException('Consulta cancelada.','AbortError');
@@ -39,6 +40,7 @@ export function createRhidMonthlyData({tokenProvider,repository:suppliedReposito
     ids.add(id);
     if(rhidNameKey(item.fields[fields[1]])!=='SIM'||rhidNameKey(item.fields[fields[2]])!=='ATIVO')continue;
     const name=String(item.fields[fields[0]]??'').trim(),normalized=rhidNameKey(name);
+    if(isExcludedFromRegularRhidReports(name))continue;
     if(!normalized||names.has(normalized))throw new TypeError('CADASTRO de fornecedor vazio ou ambíguo. Corrija os nomes duplicados.');
     names.add(normalized);rows.push({id,name});
    }

@@ -43,6 +43,17 @@ test("relatório omite PIS não localizado sem perder colaboradores identificado
   assert.deepEqual(table.rows, [["ANA SOUZA", "07:00", "12:00", "—", "—", "05:00 (parcial)"]]);
 });
 
+test("relatório diário exclui somente Bernardo Notini Moreira Bahia, mesmo com batidas", () => {
+  const table = buildRhidAttendanceTable([
+    { ID_PESSOA_RHID: "1", NOME_COLABORADOR: " Bernardo  Notíni Moreira Bahia ", BATIDAS_RHID: "07:00; 12:00; 13:00; 17:00" },
+    { ID_PESSOA_RHID: "2", NOME_COLABORADOR: "LUIZ BERNARDO DOS SANTOS", BATIDAS_RHID: "07:01" },
+    { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "BERNARDO NOTINI", BATIDAS_RHID: "07:02" },
+  ]);
+  assert.deepEqual(table.rows.map(row => row[0]), ["BERNARDO NOTINI", "LUIZ BERNARDO DOS SANTOS"]);
+  assert.equal(table.people.length, 2);
+  assert.deepEqual(rhid.summarizeRhidAttendance(table), { collaborators: 2, withPunches: 2, withoutPunches: 0 });
+});
+
 test("inclui cadastrados sem batidas ao final e omite cadastro NÃO APAGAR", () => {
   const table = buildRhidAttendanceTable([
     { ID_PESSOA_RHID: "3", NOME_COLABORADOR: "ZÉ COM BATIDA", BATIDAS_RHID: "07:00" },
