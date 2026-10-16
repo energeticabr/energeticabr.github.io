@@ -49,6 +49,7 @@ export function mealVoucherTotal(lines = []) {
 
 export function validateMealVoucherDraft(draft) {
   if (!validPayrollDate(draft?.date) || !validPayrollDate(draft?.dueDate)) throw new RangeError('Informe uma data válida para lançamento e vencimento.');
+  if (draft?.paymentDate && !validPayrollDate(draft.paymentDate)) throw new RangeError('Informe uma data válida para o pagamento efetuado.');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(draft?.referenceMonth || ''))) throw new RangeError('Informe um mês de referência válido.');
   const lines = mealVoucherLines(draft.lines);
   const branch = lines[0].supplier.branch;

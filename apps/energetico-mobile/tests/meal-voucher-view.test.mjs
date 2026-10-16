@@ -121,12 +121,12 @@ test('vale alimentação: lista fornecedores, soma valores e só posta depois da
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document;
   const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
-  let posts = 0;
+  let posts = 0, postedPaymentDate;
   const panel = createMealVoucherView({ documentRef: doc, data: {
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
     loadOrders: async () => [],
     loadSheetAssignments: async () => ({ '1': { id: '11' } }),
-    post: async draft => { posts++; return { orderId: '5', lines: [{ id: '9', supplier: 'Ana', sheetId: '11', payrollId: '31' }], total: Number(draft.lines[0].quantity) * Number(draft.lines[0].unitValue) }; },
+    post: async draft => { posts++; postedPaymentDate = draft.paymentDate; return { orderId: '5', lines: [{ id: '9', supplier: 'Ana', sheetId: '11', payrollId: '31' }], total: Number(draft.lines[0].quantity) * Number(draft.lines[0].unitValue) }; },
   } });
   await panel.open(); await tick();
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /Ana/);
@@ -137,6 +137,7 @@ test('vale alimentação: lista fornecedores, soma valores e só posta depois da
   doc.querySelector('[data-meal-order-new]').click(); await tick();
   const date = doc.querySelector('[name="meal-date"]'); date.value = '2026-10-15'; date.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const due = doc.querySelector('[name="meal-due-date"]'); due.value = '2026-10-30'; due.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const paid = doc.querySelector('[name="meal-payment-date"]'); assert.ok(paid, 'a data de pagamento efetuado é perguntada antes da confirmação'); paid.value = '2026-10-16'; paid.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const month = doc.querySelector('[name="meal-reference-month"]'); month.value = '2026-10'; month.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   doc.querySelector('[name="meal-account"]').value = '8'; doc.querySelector('[name="meal-account"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   doc.querySelector('[name="meal-stage"]').value = '7'; doc.querySelector('[name="meal-stage"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
@@ -147,8 +148,10 @@ test('vale alimentação: lista fornecedores, soma valores e só posta depois da
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /PEDREIRO/);
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /2026-10/);
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /IDFOLHA 11/);
+  assert.match(doc.querySelector('.meal-voucher-page').textContent, /Pagamento efetuado 2026-10-16/);
   doc.querySelector('[data-meal-confirm]').click(); await tick();
   assert.equal(posts, 1);
+  assert.equal(postedPaymentDate, '2026-10-16');
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /Pedido 5/);
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /50,00/);
   assert.match(doc.querySelector('.meal-voucher-page').textContent, /Vínculo 31/);
