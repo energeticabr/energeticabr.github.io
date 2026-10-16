@@ -202,6 +202,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     }
   }
   let sortControl;
+  let sortBar;
   if (model.sortOptions) {
     const label = el("label", "rg-field", "Ordenar por");
     sortControl = el("select", "rg-input");
@@ -210,7 +211,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     sortControl.append(...model.sortOptions.map(sort => option(sort.label, sort.value)));
     if (model.defaultSort) sortControl.value = model.defaultSort;
     label.append(sortControl);
-    toolbar.append(label);
+    if (model.showSortOutsideFilters) {
+      sortBar = el("div", "rg-sort-bar");
+      sortBar.append(label);
+    } else toolbar.append(label);
   }
   const refresh = el("button", "rg-button", "Atualizar");
   refresh.type = "button";
@@ -225,7 +229,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const pageText = el("span", "", "Página 1");
   const next = el("button", "rg-button", "Próxima"); next.type = "button";
   pagination.append(previous, pageText, next);
-  root.append(header, createShortcut.toolbar, filterDisclosure, feedback, list, pagination);
+  root.append(header, createShortcut.toolbar, filterDisclosure, ...(sortBar ? [sortBar] : []), feedback, list, pagination);
   doc.body.append(root);
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando registros…' });
   const searchableFilters = bindSearchableFilterSelects(toolbar);
