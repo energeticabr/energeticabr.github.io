@@ -2038,10 +2038,14 @@ function pendingDocumentDeleteMarkup() {
 
 function attendanceIrregularityMarkup(dialog) {
   if (!dialog) return '';
+  const date = dialog.date.split('-').reverse().join('/');
+  const detail = dialog.irregularity.missingPunches?.length
+    ? `Horários não preenchidos: ${dialog.irregularity.missingPunches.join(', ')} em ${date}. Justifique antes de selecionar.`
+    : `${dialog.irregularity.duration} em ${date}. Jornada esperada: ${dialog.irregularity.limit}.`;
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="attendance-irregularity-cancel" data-attendance-irregularity-dialog>
     <div class="chat-confirmation chat-attendance-irregularity" role="dialog" aria-modal="true" aria-labelledby="attendance-irregularity-title">
       <h2 id="attendance-irregularity-title">Por que ocorreu essa irregularidade?</h2>
-      <p>${escapeHtml(dialog.label)} — ${escapeHtml(dialog.irregularity.duration)} em ${escapeHtml(dialog.date.split('-').reverse().join('/'))}. Jornada esperada: ${escapeHtml(dialog.irregularity.limit)}.</p>
+      <p>${escapeHtml(dialog.label)} — ${escapeHtml(detail)}</p>
       <label for="attendance-irregularity-reason">Justificativa</label>
       <textarea id="attendance-irregularity-reason" data-role="attendance-irregularity-reason" maxlength="4000" rows="4" placeholder="Descreva o motivo da jornada irregular"${dialog.busy ? ' disabled' : ''}>${escapeHtml(dialog.reason || '')}</textarea>
       ${dialog.error ? `<p class="chat-attendance-irregularity__error" role="alert">${escapeHtml(dialog.error)}</p>` : ''}

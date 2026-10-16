@@ -3378,6 +3378,43 @@ test('presença com jornada irregular exige justificativa antes de entrar no lot
   assert.deepEqual(replies, ['attendance_batch:2249,2250']);
 });
 
+test('horários incompletos abrem o popup no checkbox e no botão do fornecedor', async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const poll = { id: 'missing-punches', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+    question: 'VALIDAR PRESENÇAS', options: [
+      { id: 'pending_attendance_record:2266', label: '2266 - HELISON ROSA LUIS', rhidBadge: {
+        date: '2026-10-16', status: 'inconsistent', label: 'INCONSISTENTE',
+        punches: { entry1: '06:52', exit1: null, entry2: null, exit2: null },
+      } },
+    ] };
+  const saves = [], replies = [];
+  view.on('attendance-irregularity-save', async payload => { saves.push(payload); });
+  view.on('select-reply', payload => replies.push(payload.replyId));
+  view.render(signedInState({ messages: [poll] }));
+  root.querySelector('input[data-reply-id="2266"]').click();
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /S1.*E2.*S2/s);
+  assert.equal(root.querySelector('input[data-reply-id="2266"]').checked, false);
+  root.querySelector('[data-action="attendance-irregularity-cancel"]').click();
+  assert.equal(root.querySelector('input[data-reply-id="2266"]').checked, false);
+  root.querySelector('.chat-attendance-select__row button').click();
+  assert.ok(root.querySelector('[data-attendance-irregularity-dialog]'));
+  assert.deepEqual(replies, []);
+  root.querySelector('[data-action="attendance-irregularity-cancel"]').click();
+  assert.deepEqual(replies, []);
+  root.querySelector('input[data-reply-id="2266"]').click();
+  root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Batida ausente confirmada.';
+  root.querySelector('[data-action="attendance-irregularity-submit"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(saves, [{ id: '2266', date: '2026-10-16', explanation: 'Batida ausente confirmada.' }]);
+  assert.equal(root.querySelector('input[data-reply-id="2266"]').checked, true);
+  assert.deepEqual(replies, []);
+  root.querySelector('[data-action="attendance-select-proceed"]').click();
+  assert.deepEqual(replies, ['attendance_batch:2266']);
+});
+
 test('botão individual irregular só prossegue após gravação; falha mantém popup', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
