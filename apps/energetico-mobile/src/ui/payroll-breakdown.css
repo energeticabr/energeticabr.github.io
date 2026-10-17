@@ -1,0 +1,43 @@
+.payroll-breakdown-page{position:fixed;inset:0;z-index:2200;display:flex;flex-direction:column;background:#f0f8fa;color:#17343f;font-size:1rem;overflow:hidden}
+.payroll-breakdown-page[hidden]{display:none}
+.payroll-breakdown-header{display:flex;align-items:center;gap:.6rem;padding:calc(.8rem + env(safe-area-inset-top,0px)) 1rem .8rem;background:#07556a;color:#fff}
+.payroll-breakdown-header h1{flex:1;text-align:center;font-size:1rem;margin:0;line-height:1.35}
+.payroll-breakdown-header button{min-height:44px;min-width:44px;border:1px solid #aac8d0;border-radius:12px;background:#fff;color:#07556a}
+.payroll-breakdown-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:1rem}
+.payroll-breakdown-content{width:100%;max-width:960px;margin:auto;overflow-wrap:anywhere}
+.payroll-breakdown-content h2{font-size:1.35rem;color:#07556a;margin:.2rem 0 1rem}
+.payroll-breakdown-content h3{font-size:1rem;margin:0 0 .7rem}
+.payroll-breakdown-content input{box-sizing:border-box;min-width:0;width:100%;min-height:48px;padding:.65rem;border:1px solid #a8bec7;border-radius:11px;font:inherit;color:inherit;background:#fff}
+.payroll-breakdown-content input:focus-visible,.payroll-breakdown-page button:focus-visible,.payroll-breakdown-date summary:focus-visible{outline:3px solid #2895ce;outline-offset:2px}
+.payroll-breakdown-field{display:grid;gap:.4rem;min-width:0;font-weight:700}
+.payroll-breakdown-suppliers{display:grid;gap:.65rem;margin-top:1rem}
+.payroll-breakdown-button{min-height:48px;padding:.7rem 1rem;border:1px solid #7da5b0;border-radius:11px;background:#07556a;color:#fff;font:inherit;font-weight:750;cursor:pointer}
+.payroll-breakdown-button[hidden]{display:none}
+.payroll-breakdown-button:disabled{opacity:.6;cursor:wait}
+.payroll-breakdown-suppliers .payroll-breakdown-button{text-align:left;background:#fff;color:#07556a}
+.payroll-breakdown-footer{display:flex;justify-content:flex-end;gap:.7rem;padding:1rem 1rem calc(1rem + env(safe-area-inset-bottom,0px));background:#e0eff4;border-top:1px solid #b7ced7}
+.payroll-breakdown-footer[hidden]{display:none}
+.payroll-breakdown-footer [data-breakdown-edit]{background:#fff;color:#07556a}
+.payroll-breakdown-identity{padding:.9rem;background:#dfedf3;border-radius:12px;line-height:1.5}
+.payroll-breakdown-date{border:1px solid #afcbd0;border-radius:15px;margin:1rem 0;overflow:hidden;background:white}
+.payroll-breakdown-date summary{display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:1rem;background:#d9eee9;cursor:pointer;list-style:revert}
+.payroll-breakdown-date summary strong{font-size:.98rem}
+.payroll-breakdown-date summary:after{content:'⌄';font-size:1.3rem}
+.payroll-breakdown-date[open] summary:after{content:'⌃'}
+.payroll-breakdown-date-total{white-space:nowrap;font-weight:800;color:#176044}
+.payroll-breakdown-rubric{padding:1rem;border-top:1px solid #d8e3eb;background:#fff}
+.payroll-breakdown-rubric:nth-of-type(even){background:#edf3ff}
+.payroll-breakdown-rubric.payroll-breakdown-rubric--selected{background:#e0f5e7}
+.payroll-breakdown-inputs{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.payroll-breakdown-subtotal{margin:.5rem 0 0;text-align:right;color:#196344;font-weight:700}
+.payroll-breakdown-total{padding:1rem;background:#ddf2e7;text-align:right;font-size:1.2rem;font-weight:800;border-radius:12px}
+.payroll-breakdown-review{display:grid;gap:.75rem;margin:1rem 0}
+.payroll-breakdown-review article{padding:1rem;border:1px solid #bcd1d9;border-radius:12px;background:#fff}
+.payroll-breakdown-review p{margin:.5rem 0}
+.payroll-breakdown-review small{line-height:1.4;color:#526570}
+.payroll-breakdown-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #bed2db;margin:1rem 0}
+.payroll-breakdown-table th,.payroll-breakdown-table td{padding:.75rem;text-align:left;border-bottom:1px solid #d1e0e5}
+.payroll-breakdown-table td:last-child,.payroll-breakdown-table thead th:last-child{text-align:right;white-space:nowrap}
+.payroll-breakdown-table thead{background:#dcebf2}.payroll-breakdown-total-row{background:#ddf2e7;font-weight:800}
+.payroll-breakdown-error{padding:1rem;border-radius:12px;background:#ffe4e7;color:#9d1727;max-width:960px;margin:0 auto 1rem}
+@media(max-width:380px){.payroll-breakdown-body{padding:.75rem}.payroll-breakdown-date summary{flex-wrap:wrap;padding:.8rem}.payroll-breakdown-inputs{gap:.5rem}.payroll-breakdown-field{font-size:.9rem}.payroll-breakdown-footer{padding:.75rem .75rem calc(.75rem + env(safe-area-inset-bottom,0px))}.payroll-breakdown-footer button{flex:1;font-size:.95rem}}

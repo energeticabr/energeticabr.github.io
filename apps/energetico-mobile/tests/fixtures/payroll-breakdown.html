@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payroll-breakdown.css"><title>Desdobrar folha - prévia</title></head><body><main></main><script type="module">
+import { createPayrollBreakdownView } from '/src/ui/payroll-breakdown-view.js';
+import { validatePayrollBreakdown } from '/src/chat/payroll-breakdown.js';
+const suppliers = [{ id:'1', label:'CLEITON CESAR NONATO', branch:'004 - EDIFÍCIO XAVANTE', profession:'SERVENTE DE PEDREIRO' },{ id:'2', label:'EDGAR NELSON DA SILVA', branch:'004 - EDIFÍCIO XAVANTE', profession:'MESTRE DE OBRAS' }];
+window.view = createPayrollBreakdownView({ documentRef:document, now:()=>new Date('2026-10-16T12:00:00Z'), data:{loadSuppliers:async()=>suppliers,post:async draft=>{const summary=validatePayrollBreakdown(draft);return {...summary,lines:summary.lines.map((line,index)=>({...line,id:String(index+1),parentId:String(index+10)}))};}} });
+await window.view.open();
+</script></body></html>
