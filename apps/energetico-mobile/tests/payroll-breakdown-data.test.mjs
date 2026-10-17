@@ -252,3 +252,11 @@ test('rejeição explícita de limite de requisições permite retomar o POST se
   throttled = false; await f.data.post(draft(supplier), JSON.parse(JSON.stringify(progress)));
   assert.equal(f.rows.DESCRITIVOPROVISAO.length, 3); assert.equal(f.rows['PROVISÃO PGTOS'].length, 3);
 });
+
+test('lista de provisões sem TIPOPGTO mantém rubrica no pagamento da folha', async () => {
+  const f=fixture(), supplier=(await f.data.loadSuppliers())[0];
+  f.columns['PROVISÃO PGTOS']=f.columns['PROVISÃO PGTOS'].filter(c=>c.name!=='TIPOPGTO');
+  await f.data.post(draft(supplier),{operationId:'optional-payment-type'});
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row=>row.fields.TIPOPGTO),['SALÁRIO','VALE REFEIÇÃO','13 SALÁRIO']);
+  assert.ok(f.rows['PROVISÃO PGTOS'].every(row=>row.fields.IDFOLHA==='19'));
+});

@@ -198,7 +198,7 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
           DATAPREVISTOPGTO: line.date, DATAPGTOEFETUADO: null, DATAPGTOAGENDADO: null, DATAEXECUCAOAGENDAMENTO: null };
         const parentFields = payload(parent, { Title: `descritivo:${token}`, FOLHAOPERACAO: token, ...common, VALORTOTAL: line.total, PGTOAGENDADO: null });
         const childFields = payload(child, { Title: `provisao:${token}`, FOLHAOPERACAO: token, ...common, PRODUTO: live.profession, QTD: line.quantity,
-          VALORTOTAL: line.unitValue, FRETE: 0, ETAPA: '', STATUS: 'PAGAMENTO PREVISTO', PGTOAGENDADO: 'PENDENTE', TIPOPGTO: line.payrollType, DESCRITIVOPROVISAO: '1', IDFOLHA: sheetId }, ['ETAPA']);
+          VALORTOTAL: line.unitValue, FRETE: 0, ETAPA: '', STATUS: 'PAGAMENTO PREVISTO', PGTOAGENDADO: 'PENDENTE', TIPOPGTO: line.payrollType, DESCRITIVOPROVISAO: '1', IDFOLHA: sheetId }, ['ETAPA', 'TIPOPGTO']);
         const payrollFields = payload(payroll, { Title: payrollProvisionTitle('1'), FORNECEDOR: live.label,
           TIPOPGTO: line.payrollType, VALORUNITARIO: line.unitValue, QTD: line.quantity, DATA: line.date, IDFOLHA: sheetId, IDPROVISAO: '1' });
         return { line, parentFields, childFields, payrollFields, key: `${line.date}:${line.rubric}` };
