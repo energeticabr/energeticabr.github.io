@@ -25,6 +25,7 @@ export function createPayrollProvisionReader(repository, siteKey) {
         const matches = columns.filter(c => !c.computed && !c.hidden && [c.name,c.displayName].some(name => payrollKey(name) === payrollKey(label)));
         const exact = matches.filter(c => payrollKey(c.name) === payrollKey(label));
         const found = exact.length ? exact : matches;
+        if (!found.length && label === 'TIPOPGTO') continue;
         if (found.length !== 1) throw new Error(`O campo ${label} da provisão não foi identificado de forma única.`);
         fields[label] = found[0].name;
       }
@@ -41,7 +42,7 @@ export function createPayrollProvisionReader(repository, siteKey) {
     const canonical = label => Object.entries(payment).find(([name]) => payrollKey(name) === payrollKey(label))?.[1];
     if (String(value('IDFOLHA') ?? '').trim() !== String(canonical('IDFOLHA') ?? '').trim()
       || payrollKey(value('FORNECEDOR')) !== payrollKey(canonical('FORNECEDOR'))
-      || payrollKey(value('TIPOPGTO')) !== payrollKey(canonical('TIPOPGTO')))
+      || (payrollKey(value('TIPOPGTO')) && payrollKey(value('TIPOPGTO')) !== payrollKey(canonical('TIPOPGTO'))))
       throw new Error(`O vínculo da folha, fornecedor ou rubrica da provisão ${id} mudou.`);
     const unit = payrollDecimal(value('VALORTOTAL')), quantity = payrollDecimal(value('QTD'));
     if (!quantity.gt(0)) throw new Error(`Quantidade inválida na provisão ${id}.`);
