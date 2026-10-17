@@ -1,5 +1,6 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
+import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payroll-breakdown.js';
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
 import { signatureLayoutGeometry } from './web/signature-document-layout.js';
@@ -334,6 +335,16 @@ async function defaultMealVoucherFactory(options) {
 async function defaultMealVoucherDataFactory(options) {
   const { createMealVoucherData } = await import('./chat/meal-voucher-data.js');
   return createMealVoucherData(options);
+}
+
+async function defaultPayrollBreakdownFactory(options) {
+  const { createPayrollBreakdownView } = await import('./ui/payroll-breakdown-view.js');
+  return createPayrollBreakdownView(options);
+}
+
+async function defaultPayrollBreakdownDataFactory(options) {
+  const { createPayrollBreakdownData } = await import('./chat/payroll-breakdown-data.js');
+  return createPayrollBreakdownData(options);
 }
 
 function errorMessage(error, fallback) {
@@ -983,6 +994,8 @@ export function createAppController({
   supplierPayrollDataFactory = defaultSupplierPayrollDataFactory,
   mealVoucherFactory = defaultMealVoucherFactory,
   mealVoucherDataFactory = defaultMealVoucherDataFactory,
+  payrollBreakdownFactory = defaultPayrollBreakdownFactory,
+  payrollBreakdownDataFactory = defaultPayrollBreakdownDataFactory,
   databaseFilterDebounceMs = 300,
 }) {
   if (!store || !view || !client || !auth || !native) {
@@ -1104,6 +1117,8 @@ export function createAppController({
   let supplierPayrollOpening = null;
   let mealVoucher = null;
   let mealVoucherOpening = null;
+  let payrollBreakdown = null;
+  let payrollBreakdownOpening = null;
   let hrPayrollGallery = null;
   let hrPayrollGalleryName = "";
   let hrPayrollGalleryOpening = null;
@@ -5420,6 +5435,52 @@ export function createAppController({
     mealVoucherOpening = null;
   }
 
+  function disposePayrollBreakdown() {
+    payrollBreakdown?.destroy?.();
+    payrollBreakdown = null;
+    payrollBreakdownOpening = null;
+  }
+
+  async function openPayrollBreakdown() {
+    if (!account || stopped || flowBusy()) return false;
+    const state = store.getState();
+    if (!isPayrollBreakdownMenu(latestAssistantPoll(state.messages))) return false;
+    if (payrollBreakdownOpening) return payrollBreakdownOpening;
+    const owner = account, revision = sessionRevision;
+    let allowAuthorization = true;
+    const assertSession = () => {
+      if (stopped || account !== owner || sessionRevision !== revision) throw new Error('A sessão de desdobramento da folha foi encerrada.');
+    };
+    const tokenProvider = async scopes => {
+      assertSession();
+      try { const token = await auth.getToken(scopes); assertSession(); return token; }
+      catch (error) {
+        assertSession();
+        if (error?.code !== 'AUTH_REQUIRED' || !allowAuthorization || typeof auth.authorize !== 'function') throw error;
+        await auth.authorize(scopes, { resumeAction: PAYROLL_BREAKDOWN_REPLY_ID });
+        assertSession();
+        const token = await auth.getToken(scopes); assertSession(); return token;
+      }
+    };
+    const opening = (async () => {
+      try {
+        if (!payrollBreakdown) {
+          const data = await payrollBreakdownDataFactory({ tokenProvider, assertSession });
+          assertSession(); await data.prepare?.(); assertSession(); allowAuthorization = false;
+          const panel = await payrollBreakdownFactory({ data, assertSession, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
+          if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
+          payrollBreakdown = panel;
+        }
+        const opened = await payrollBreakdown.open(); assertSession(); return opened !== false;
+      } catch (error) {
+        if (!stopped && account === owner && sessionRevision === revision) setSessionError(error, 'Não foi possível abrir o desdobramento da folha.');
+        return false;
+      }
+    })();
+    payrollBreakdownOpening = opening;
+    try { return await opening; } finally { if (payrollBreakdownOpening === opening) payrollBreakdownOpening = null; }
+  }
+
   async function openMealVoucher() {
     if (!account || stopped || flowBusy()) return false;
     const state = store.getState();
@@ -9642,6 +9703,7 @@ export function createAppController({
     disposeHrPayrollGallery();
     disposeSupplierPayroll();
     disposeMealVoucher();
+    disposePayrollBreakdown();
     sessionRevision += 1;
     reportSnapshots.reset();
     supplierPayrollSessionSource = null;
@@ -10358,6 +10420,7 @@ export function createAppController({
     bind("select-reply", command => {
       if (command.replyId === PAYROLL_LAUNCH_REPLY_ID) return openSupplierPayroll();
       if (command.replyId === MEAL_VOUCHER_REPLY_ID) return openMealVoucher();
+      if (command.replyId === PAYROLL_BREAKDOWN_REPLY_ID) return openPayrollBreakdown();
       if (/^pending_document_delete:\d+$/i.test(String(command.replyId || ""))) return false;
       if (command.replyId === NAVIGATION_BACK_ID) {
         const latestPoll = latestAssistantPoll(store.getState().messages);
@@ -10872,6 +10935,7 @@ export function createAppController({
     const pendingAction = account ? auth.consumePendingAction?.() : null;
     if (pendingAction === PAYROLL_LAUNCH_REPLY_ID) await openSupplierPayroll();
     else if (pendingAction === MEAL_VOUCHER_REPLY_ID) await openMealVoucher();
+    else if (pendingAction === PAYROLL_BREAKDOWN_REPLY_ID) await openPayrollBreakdown();
     else if (pendingAction === LAUNCH_GALLERY_ID) await openLaunchGallery();
     else if (pendingAction === ORDERS_GALLERY_ID) await openOrdersGallery();
     else if (pendingAction === TASKS_GALLERY_ID) await openTasksGallery();
@@ -10948,6 +11012,7 @@ export function createAppController({
     disposeHrPayrollGallery();
     disposeSupplierPayroll();
     disposeMealVoucher();
+    disposePayrollBreakdown();
     flushRecovery();
     cancelFlowReminder();
     cancelAttachmentReminder();

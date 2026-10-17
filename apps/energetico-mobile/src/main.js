@@ -7,6 +7,7 @@ import { installAppZoomGuard } from "./web/app-zoom-guard.js";
 import "./styles.css";
 import "./ui/supplier-payroll.css";
 import './ui/meal-voucher.css';
+import './ui/payroll-breakdown.css';
 import "./ui/launch-gallery.css";
 import "./ui/searchable-filter-selects.css";
 import "./ui/orders-gallery.css";
