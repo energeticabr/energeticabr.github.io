@@ -1,0 +1,16 @@
+{
+  "files": {
+    "worker/clients.py": {
+      "before": "397869211b7891bc83431b38a76990eafd96bfc106d70cb2b3f9ac50da96bedc",
+      "mirrorBefore": "397869211b7891bc83431b38a76990eafd96bfc106d70cb2b3f9ac50da96bedc",
+      "after": "5685bbf1d67279514eae47529c996534565545327d6ab5f83f21656d27f02bdf"
+    },
+    "worker/provision_attachment_sync.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "abb7a8a2885ae806c1cd23a6ca3a6bb75f4a78d78df5ee42f2d3fb408c453fcd"
+    }
+  },
+  "patch": "56e0c1067c89a6ce2585806d775786beb1cbaf0b9ce938fc5c59b2b091209582",
+  "archive": "a5fa1271a919e8a1e5ea0cce3807f1ceb5c8ddb83dc01caff008d49152c01d18"
+}
