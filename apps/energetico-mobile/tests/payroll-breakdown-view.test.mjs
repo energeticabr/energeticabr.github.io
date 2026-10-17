@@ -36,6 +36,9 @@ test('fluxo filtra fornecedor, oferece sextas e fim do mês e só submete após 
   await h.click('[data-breakdown-edit]'); assert.equal(h.doc.querySelector('[data-breakdown-quantity="2026-10-02:salary"]').value, '5');
   await h.click('[data-breakdown-next]'); await h.click('[data-breakdown-submit]'); assert.equal(h.posts, 1);
   assert.match(h.doc.body.textContent, /Provisões criadas com sucesso/); assert.equal(h.dom.window.localStorage.length, 0);
+  await h.click('[data-breakdown-done]'); assert.equal(h.dom.window.localStorage.length, 0);
+  await h.view.open(); assert.ok(h.doc.querySelector('[data-breakdown-supplier="7"]'));
+  assert.equal(h.doc.querySelector('[data-breakdown-submit]'), null);
 });
 
 test('trocar mês recalcula o calendário e voltar do calendário retorna à pergunta do mês', async t => {

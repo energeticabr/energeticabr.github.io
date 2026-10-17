@@ -89,7 +89,9 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       state.attempted = true; changed();
       try { found = await scoped.createItem(SITE, descriptor.id, fields); }
       catch (cause) {
-        if ([400, 401, 403].includes(cause?.status)) { state.attempted = false; changed(); throw cause; }
+        // Explicit validation/auth/throttling rejections did not commit the POST.
+        // Transport failures and server errors remain recovery-only.
+        if ([400, 401, 403, 429].includes(cause?.status)) { state.attempted = false; changed(); throw cause; }
         found = await find(); if (!found) throw cause;
       }
       if (!id(found?.id)) found = await find();

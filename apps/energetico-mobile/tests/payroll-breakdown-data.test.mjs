@@ -100,3 +100,17 @@ test('sessão encerrada entre as gravações impede as próximas e persiste recu
   await assert.rejects(f.data.post(draft(supplier), progress), /Sessão/);
   assert.equal(f.writes.length, 1); assert.equal(progress.lines['2026-10-02:salary'].parent.attempted, true);
 });
+
+test('rejeição explícita de limite de requisições permite retomar o POST sem duplicar os itens anteriores', async () => {
+  const f = fixture(), supplier = (await f.data.loadSuppliers())[0], create = f.repo.createItem;
+  let throttled = true;
+  f.repo.createItem = async (...args) => {
+    if (throttled && args[1] === 'PROVISÃO PGTOS') throw Object.assign(new Error('Limite de requisições'), { status: 429 });
+    return create(...args);
+  };
+  const progress = { operationId: 'throttled' };
+  await assert.rejects(f.data.post(draft(supplier), progress), /Limite/);
+  assert.equal(f.rows.DESCRITIVOPROVISAO.length, 1); assert.equal(progress.lines['2026-10-02:salary'].child.attempted, false);
+  throttled = false; await f.data.post(draft(supplier), JSON.parse(JSON.stringify(progress)));
+  assert.equal(f.rows.DESCRITIVOPROVISAO.length, 3); assert.equal(f.rows['PROVISÃO PGTOS'].length, 3);
+});

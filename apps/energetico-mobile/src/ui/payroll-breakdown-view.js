@@ -29,7 +29,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   function reset() { draft = { supplier: null, month: currentMonth(), lines: [] }; progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` }; result = null; step = 'supplier'; }
   reset();
   function savePending() {
-    if (storageKey && progress.signature) storage.setItem(storageKey, JSON.stringify({ draft, progress }));
+    if (storageKey && progress.signature && step !== 'done') storage.setItem(storageKey, JSON.stringify({ draft, progress }));
   }
   function restorePending() {
     if (!storageKey) return false;
