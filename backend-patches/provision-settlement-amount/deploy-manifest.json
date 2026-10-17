@@ -1,0 +1,26 @@
+{
+  "files": {
+    "worker/provision_description_settlement.py": {
+      "before": "3c6e8cf990ecf27d0c9d2a5ecb744a7302b4b3a01435c537572abe58637d7d87",
+      "mirrorBefore": "3c6e8cf990ecf27d0c9d2a5ecb744a7302b4b3a01435c537572abe58637d7d87",
+      "after": "6115998cea9b8f99a37f59fc36a6e223d143dcae99a6add80ba0cfd4e97ee8d7"
+    },
+    "worker/provision_description_query.py": {
+      "before": "c6ec210b87065a5009f17573ea8d6ebcbe1c092e0aa04485c05fb75b41b43d1f",
+      "mirrorBefore": "c6ec210b87065a5009f17573ea8d6ebcbe1c092e0aa04485c05fb75b41b43d1f",
+      "after": "ec7db85c31cad0a2d85ebd1a090ed9b24991da4e46dfa85f3fabaec9f9b240fe"
+    },
+    "worker/clients.py": {
+      "before": "5685bbf1d67279514eae47529c996534565545327d6ab5f83f21656d27f02bdf",
+      "mirrorBefore": "5685bbf1d67279514eae47529c996534565545327d6ab5f83f21656d27f02bdf",
+      "after": "b13243e62aa526ca6b654cf7c6611c4139cdd8e0f3f58efd8dd2d098f086f292"
+    },
+    "worker/workflow.py": {
+      "before": "3e60d36ead2122649970f0f2d35579ccce3bf00e4f7fb277e29370d01add3505",
+      "mirrorBefore": "3e60d36ead2122649970f0f2d35579ccce3bf00e4f7fb277e29370d01add3505",
+      "after": "776de477f62044cc3a7067d17cdc823a92bea651c36926fe6f3f7be54feec5dd"
+    }
+  },
+  "patch": "dcc9d69f1cf1150d7c2207c1f059c90e3094756627fd1d9a38099fb72aad34ef",
+  "archive": "d4c8133d312fee70c53ae3300c9366858b844ef037196a00ead8bd320b3292f6"
+}
