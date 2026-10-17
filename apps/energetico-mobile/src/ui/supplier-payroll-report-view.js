@@ -70,9 +70,10 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
   const toolbar=make('div','spr-payment-toolbar');toolbar.append(make('h3','','▤ LANÇAMENTOS DE PAGAMENTO'));
   const exportSupplier=make('button','spr-export-supplier','⇩ Exportar');exportSupplier.type='button';exportSupplier.disabled=typeof exportMedia!=='function';exportSupplier.addEventListener('click',()=>void exportGroups([entry]));toolbar.append(exportSupplier);
   const table=make('table','spr-payments'),head=make('thead'),titles=make('tr'),body=make('tbody');
-  for(const label of ['DATA','ID PAGAMENTO','IDFOLHA','TIPO','ID LANÇAMENTO','DESCRIÇÃO','VALOR UNITÁRIO','QTD.','VALOR TOTAL','CONTA/FORMAPGTO','OBSERVAÇÕES','AÇÕES']){const th=make('th','',label);th.scope='col';titles.append(th);}head.append(titles);table.append(head,body);
+  for(const label of ['DATA','ID PAGAMENTO','IDFOLHA','TIPO','ID LANÇAMENTO','DESCRIÇÃO','VALOR UNITÁRIO','QTD.','VALOR TOTAL','CONTA/FORMAPGTO','OBSERVAÇÕES','PAGAMENTO','AÇÕES']){const th=make('th','',label);th.scope='col';titles.append(th);}head.append(titles);table.append(head,body);
   for(const row of rows){const tr=make('tr');paint(tr,row.type);
    for(const value of [formatOperationsDate(row.date),row.id,row.payrollId,row.type||'—',row.launchId||'—',row.description||'—',row.unitValue===null||row.unitValue===undefined?'Não calculado':Number(row.unitValue).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),row.quantity===null||row.quantity===undefined?'—':Number(row.quantity).toLocaleString('pt-BR'),money(row.totalCents),row.paymentMethod||'—',row.observations||'—'])tr.append(make('td','',String(value)));
+   tr.append(make('td','',row.paymentStatus||'PAGO'));
    const actions=make('td','spr-row-actions');
    for(const [kind,service,id,available,label] of [['payment',paymentActions,row.id,typeof loadEditor==='function'&&typeof saveEditor==='function','Editar pagamento'],['launch',launchActions,row.launchId,typeof loadLaunchEditor==='function'&&typeof saveLaunchEditor==='function','Editar lançamento']]){
     if(!id||!available)continue;const wrapper=service.render({id,fields:{}}),button=wrapper.querySelector('button');button.dataset.sprEdit=kind;button.setAttribute('aria-label',`${label} ID ${id}`);button.title=`${label} ID ${id}`;if(kind==='launch')button.textContent='▤';actions.append(wrapper);

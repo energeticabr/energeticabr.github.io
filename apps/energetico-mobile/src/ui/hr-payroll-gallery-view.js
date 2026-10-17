@@ -22,6 +22,7 @@ const GALLERIES = {
       ["VALORUNITARIO", "Valor unitário"], ["QTD", "Quantidade"],
       ["DATA", "Data"], ["IDFOLHA", "IDFOLHA"],
       ["IDLANCAMENTO", "ID do lançamento"],
+      ["PGTOAGENDADO", "Pagamento"],
     ],
   },
 };

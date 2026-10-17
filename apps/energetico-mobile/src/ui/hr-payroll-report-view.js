@@ -25,6 +25,7 @@ function parseNumber(value) {
 }
 
 function lineAmountCents(row) {
+  if (Number.isSafeInteger(row?.TOTALCENTAVOS)) return row.TOTALCENTAVOS;
   const unit = parseNumber(row?.VALORUNITARIO);
   const quantity = parseNumber(row?.QTD);
   if (unit === null || quantity === null) return null;
@@ -147,19 +148,20 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
     let uncalculated = 0;
     const amounts = rows.map(row => {
       const cents = lineAmountCents(row);
+      const paidCents = row.PGTOAGENDADO === 'PENDENTE' ? 0 : cents;
       const label = String(row.TIPOPGTO ?? "").trim() || "Sem tipo";
       const key = typeKey(label);
       const group = summaryGroups.find(item => item.types.includes(key));
       if (group) {
-        if (cents === null) group.incomplete = true;
-        else group.cents += cents;
+        if (paidCents === null) group.incomplete = true;
+        else group.cents += paidCents;
       }
       const current = byType.get(key) || { label, cents: 0, payments: [] };
       current.payments.push({ row, cents });
-      if (cents === null) uncalculated += 1;
+      if (paidCents === null) uncalculated += 1;
       else {
-        totalCents += cents;
-        current.cents += cents;
+        totalCents += paidCents;
+        current.cents += paidCents;
       }
       byType.set(key, current);
       return cents;
@@ -215,6 +217,7 @@ export function createHrPayrollReport({ document: documentOption, root: mountRoo
       );
       const fields = element(doc, "dl", "hr-payroll-payment-fields");
       const fieldValues = [
+        ...(row.PGTOAGENDADO ? [["Pagamento", row.PGTOAGENDADO]] : []),
         ["Data", formatDate(row.DATA)],
         ["ID do lançamento", display(row.IDLANCAMENTO)],
         ["Valor unitário", unitValue === null ? "—" : formatMoney(Math.round(unitValue * 100))],

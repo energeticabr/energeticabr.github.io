@@ -426,7 +426,7 @@ export function createHrPayrollGalleryData({
     const list = await resolveList(gallery);
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
     // STATUS is optional on IDFOLHA. Read it when available without selecting a possibly missing column.
-    const expandedFields = gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
+    const expandedFields = gallery === 'FOLHAPGTO' || gallery === 'IDFOLHA' && includeSearchFields ? 'fields' : `fields($select=${selectedFields})`;
     const result = await repository.getItemsPage(
       SITE_KEY,
       list.id,
@@ -436,6 +436,8 @@ export function createHrPayrollGalleryData({
     const rows = (Array.isArray(result?.items) ? result.items : []).map(item => {
       const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
       const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+      if (gallery === 'FOLHAPGTO' && fields.Title != null) row.Title = fields.Title;
+      if (gallery === 'FOLHAPGTO' && fields.IDPROVISAO != null) row.IDPROVISAO = fields.IDPROVISAO;
       const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
       if (eTag && eTag !== "*") row.eTag = eTag;
       for (const [key, aliases] of config.fields) {
@@ -525,7 +527,7 @@ export function createHrPayrollGalleryData({
     const config = HR_PAYROLL_GALLERIES[gallery];
     const list = await resolveList(gallery);
     const selectedFields = config.fields.map(([, aliases]) => aliases[0]).join(",");
-    const baseQuery = `$select=id&$expand=fields($select=${selectedFields})&$top=${HR_PAYROLL_REPORT_PAGE_SIZE}`;
+    const baseQuery = `$select=id&$expand=fields&$top=${HR_PAYROLL_REPORT_PAGE_SIZE}`;
 
     async function readPayments(query, headers) {
       const rows = [];
@@ -548,6 +550,8 @@ export function createHrPayrollGalleryData({
         for (const item of items) {
           const fields = item?.fields && typeof item.fields === "object" ? item.fields : {};
           const row = { id: String(item?.id ?? hrPayrollFieldValue(fields, ["ID"]) ?? "") };
+          if (fields.Title != null) row.Title = fields.Title;
+          if (fields.IDPROVISAO != null) row.IDPROVISAO = fields.IDPROVISAO;
           const eTag = String(item?.eTag || item?.["@odata.etag"] || item?.["odata.etag"] || "").trim();
           if (eTag && eTag !== "*") row.eTag = eTag;
           for (const [key, aliases] of config.fields) {

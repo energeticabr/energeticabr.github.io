@@ -25,11 +25,11 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).formatToParts(now());
     return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}`;
   };
-  let draft, progress;
-  function reset() { draft = { supplier: null, month: currentMonth(), lines: [] }; progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` }; result = null; step = 'supplier'; }
+  let draft, progress, payrollContext;
+  function reset() { draft = { supplier: null, month: currentMonth(), lines: [] }; progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` }; result = null; payrollContext = null; step = 'supplier'; }
   reset();
   function savePending() {
-    if (storageKey && progress.signature && step !== 'done') storage.setItem(storageKey, JSON.stringify({ draft, progress }));
+    if (storageKey && progress.signature && step !== 'done') storage.setItem(storageKey, JSON.stringify({ draft, progress, payrollContext }));
   }
   function restorePending() {
     if (!storageKey) return false;
@@ -39,7 +39,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       const saved = JSON.parse(raw);
       validatePayrollBreakdown(saved.draft);
       if (!/^[A-Za-z0-9-]{1,80}$/.test(String(saved.progress?.operationId || '')) || !saved.progress.signature) throw new Error();
-      draft = saved.draft; progress = saved.progress; step = 'review'; return true;
+      draft = saved.draft; progress = saved.progress; payrollContext = null; step = 'review'; return true;
     } catch { storage.removeItem(storageKey); return false; }
   }
   function showError(cause) { error.textContent = cause?.message || 'Não foi possível concluir. Tente novamente.'; error.hidden = false; }
@@ -83,7 +83,11 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     const month = el('input'); month.type = 'month'; month.value = draft.month; month.min = '1900-01'; month.dataset.breakdownMonth = '';
     month.addEventListener('input', () => { draft.month = month.value; });
     content.append(field('Mês e ano', month), el('p', '', 'Serão exibidas todas as sextas-feiras e o último dia do mês.'));
-    footer.append(button('Seguir', 'data-breakdown-next', () => { try { initializeLines(); step = 'schedule'; error.hidden = true; render(); } catch (cause) { showError(cause); } }));
+    footer.append(button('Seguir', 'data-breakdown-next', () => work(async active => {
+      initializeLines(); payrollContext = null;
+      if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; progress.sheetId = loaded.sheetId; }
+      step = 'schedule';
+    }, 'Consultando pagamentos da folha…')));
   }
   function lineTotal(line) {
     if (!String(line.unitValue).trim()) return 0;
@@ -124,9 +128,13 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   }
   function rubricTable(summary) {
     const table = el('table', 'payroll-breakdown-table'); table.setAttribute('aria-label', 'Totais por rubrica');
-    const head = el('thead'), hr = el('tr'); for (const label of ['Rubrica', 'Total previsto']) { const th = el('th', '', label); th.scope = 'col'; hr.append(th); } head.append(hr); table.append(head);
-    const tbody = el('tbody'); for (const row of summary.rubrics) { const tr = el('tr'); tr.append(el('th', '', row.label), el('td', '', money(row.total))); tbody.append(tr); }
-    const total = el('tr', 'payroll-breakdown-total-row'); total.append(el('th', '', 'Total geral'), el('td', '', money(summary.total))); tbody.append(total); table.append(tbody); return table;
+    const head = el('thead'), hr = el('tr'); for (const label of ['Rubrica', 'Total previsto', 'PAGO']) { const th = el('th', '', label); th.scope = 'col'; hr.append(th); } head.append(hr); table.append(head);
+    const tbody = el('tbody'); for (const row of summary.rubrics) {
+      const rubric = row.rubric || PAYROLL_RUBRICS.find(r => r.label === row.label)?.id;
+      const tr = el('tr'), heading = el('th', '', row.label); heading.scope = 'row';
+      tr.append(heading, el('td', '', money(row.total)), el('td', '', payrollContext ? money(payrollContext.paid[rubric] ?? 0) : '—')); tbody.append(tr);
+    }
+    const total = el('tr', 'payroll-breakdown-total-row'); total.append(el('th', '', 'Total geral'), el('td', '', money(summary.total)), el('td', '', payrollContext ? money(payrollContext.paidTotal) : '—')); tbody.append(total); table.append(tbody); return table;
   }
   function totalsPanel(initial) {
     const element = el('details', 'payroll-breakdown-totals');
@@ -142,7 +150,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   }
   function reviewStep() {
     const summary = validatePayrollBreakdown(draft); content.append(el('h2', '', 'Confira o desdobramento da folha')); identity();
-    content.append(el('p', '', `${summary.lines.length} provisão(ões) · Referência ${draft.month.split('-').reverse().join('/')} · Pagamento ainda não efetuado`));
+    content.append(el('p', '', `${summary.lines.length} provisão(ões) · Referência ${draft.month.split('-').reverse().join('/')}${progress.sheetId ? ` · IDFOLHA ${progress.sheetId}` : ''} · Pagamento ainda não efetuado`));
     const list = el('div', 'payroll-breakdown-review');
     for (const line of summary.lines) { const row = el('article'); row.append(el('h3', '', `📅 ${dateText(line.date)} · ${line.label}`), el('p', '', `${line.quantity.toLocaleString('pt-BR')} × ${money(line.unitValue)} = ${money(line.total)}`), el('small', '', line.observation)); list.append(row); }
     content.append(list, totalsPanel(summary).element);
@@ -150,6 +158,10 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     else footer.append(button('Voltar', 'data-breakdown-edit', navigateBack));
     footer.append(button(progress.signature ? 'Retomar envio' : 'Confirmar e criar provisões', 'data-breakdown-submit', () => work(async active => {
       result = await data.post(draft, progress, () => { active(); savePending(); }); active();
+      if (data.loadPayrollContext) {
+        try { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }
+        catch { active(); payrollContext = null; }
+      }
       if (storageKey) storage.removeItem(storageKey); step = 'done';
     }, 'Criando provisões e descritivos…', true)));
   }
@@ -180,7 +192,12 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     async open() {
       if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset();
       previousFocus = doc.activeElement; opened = true; page.hidden = false; epoch++;
-      if (progress.signature || restorePending()) { render(); return true; }
+      if (progress.signature || restorePending()) {
+        return work(async active => {
+          payrollContext = null;
+          if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }
+        }, 'Consultando pagamentos da folha…');
+      }
       return work(async active => { const loaded = await data.loadSuppliers(); active(); suppliers = loaded; }, 'Carregando fornecedores ativos…');
     }, close,
     destroy() { destroyed = true; opened = false; epoch++; page.remove(); },
