@@ -4,6 +4,7 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { bindPayrollEditorSource } from './payroll-editor-source.js';
 import { postingCompletionMarkup } from './posting-completion.js';
 import { deletionReceipt, galleryDeletionFields } from './gallery-deletion-receipt.js';
+import { editReceipt, galleryEditChanges } from './gallery-edit-receipt.js';
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
@@ -150,12 +151,11 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
       const refreshed = await onChanged?.({ operation: state.operation, id: state.row.id, item: state.persistedItem });
       if (active(state) && refreshed === false) throw new Error('Tente atualizar a galeria novamente.');
       if (active(state)) {
-        if (state.operation === 'delete') showDeletionSuccess(state);
-        else close();
+        showMutationSuccess(state);
       }
     } catch (error) {
       if (active(state) && state.persisted) {
-        if (state.operation === 'delete') showDeletionSuccess(state);
+        showMutationSuccess(state);
         showError(state, new Error(`A operação foi concluída, mas não foi possível atualizar a galeria. ${error?.message || "Tente novamente."}`));
         if (!state.refreshRetry) {
           state.refreshRetry = button("Tentar atualizar galeria", "data-gallery-refresh-retry", "", () => { void mutate(state, persist); });
@@ -180,17 +180,24 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     }
   }
 
-  function showDeletionSuccess(state) {
+  function showMutationSuccess(state) {
+    const deletion = state.operation === 'delete';
     state.success = true;
     state.refreshRetry = null;
+    state.overlay.classList.remove('gallery-record-overlay--screen');
+    state.dialog.classList.remove('gallery-record-screen', 'gallery-record-dialog--edit');
+    state.dialog.removeAttribute('data-gallery-record-screen');
+    state.dialog.setAttribute('role', 'dialog');
+    state.dialog.setAttribute('aria-modal', 'true');
     state.dialog.classList.add('gallery-record-dialog--success');
     state.dialog.removeAttribute('aria-labelledby');
-    state.dialog.setAttribute('aria-label', `Registro de ID ${state.row.id} excluído`);
+    state.dialog.setAttribute('aria-label', `Registro de ID ${state.row.id} ${deletion ? 'excluído' : 'editado'}`);
     const receipt = element('div');
-    receipt.setAttribute('data-gallery-delete-success', '');
+    receipt.setAttribute(deletion ? 'data-gallery-delete-success' : 'data-gallery-edit-success', '');
     receipt.setAttribute('role', 'status');
-    receipt.innerHTML = postingCompletionMarkup(deletionReceipt({ id: state.row.id,
-      galleryTitle, records: state.deletionSummary, confirmedAt: state.confirmedAt }));
+    receipt.innerHTML = postingCompletionMarkup(deletion
+      ? deletionReceipt({ id: state.row.id, galleryTitle, records: state.deletionSummary, confirmedAt: state.confirmedAt })
+      : editReceipt({ id: state.row.id, galleryTitle, changes: state.editChanges, confirmedAt: state.confirmedAt }));
     const dismiss = button('VOLTAR À GALERIA', 'data-gallery-receipt-close', '', () => { if (!state.busy) close(); });
     const buttons = element('div', 'gallery-record-dialog-buttons');
     buttons.append(dismiss);
@@ -297,9 +304,9 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
             if (typeof saveEditor !== "function") throw new Error("Não foi possível salvar este registro. Tente novamente.");
             const readOnly = new Set(context.columns.filter(c => c.readOnly).flatMap(c => [c.name,...(['lookup','person'].includes(c.control)?[`${c.name}LookupId`]:[])]));
             const filtered = Object.fromEntries(Object.entries(fields).filter(([name]) => !readOnly.has(name)));
-            return state.sheetAttachmentBinding
-              ? saveEditor(context, filtered, { attachments: state.sheetAttachmentBinding.changes(), signal: state.mutationAbort.signal })
-              : saveEditor(context, filtered, { attachments: attachmentChanges, signal: state.mutationAbort.signal });
+            const attachments = state.sheetAttachmentBinding ? state.sheetAttachmentBinding.changes() : attachmentChanges;
+            state.editChanges = galleryEditChanges(context, filtered, _relationshipLabels, attachments);
+            return saveEditor(context, filtered, { attachments, signal: state.mutationAbort.signal });
           });
           // Re-evaluate conditional locks after a rejected save, once the
           // renderer has restored its own disabled-state snapshot.
@@ -364,6 +371,20 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   }
 
   return Object.freeze({
+    showEditSuccess({ id, changes, confirmedAt = new Date(), trigger, refreshFailed = false }) {
+      if (disposed) return;
+      const state = openDialog({ id }, 'edit', trigger);
+      state.persisted = true;
+      state.confirmedAt = confirmedAt;
+      state.editChanges = changes;
+      showMutationSuccess(state);
+      if (refreshFailed) {
+        showError(state, new Error('A edição foi concluída, mas não foi possível atualizar a galeria.'));
+        state.refreshRetry = button('Tentar atualizar galeria', 'data-gallery-refresh-retry', '', () => { void mutate(state, () => {}); });
+        state.body.append(state.refreshRetry);
+      }
+      syncRecordButtons();
+    },
     isEditing: () => session?.operation === 'edit',
     render(row) {
       const wrapper = element("div", "gallery-record-actions");

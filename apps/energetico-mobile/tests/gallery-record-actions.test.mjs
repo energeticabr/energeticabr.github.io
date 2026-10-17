@@ -37,6 +37,40 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('edit shows a modal table with confirmed changes and restores gallery focus when dismissed', async t => {
+  const ctx = await setup(t, { galleryTitle: 'GALERIA DE EXEMPLO' });
+  const trigger = ctx.get('[data-gallery-action="edit"]');
+  trigger.click(); await settle(); await settle();
+  ctx.get('[name=Title]').value = '<b>Novo</b>';
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  const receipt = ctx.get('[data-gallery-edit-success]');
+  assert.ok(receipt, 'save must show a receipt instead of silently closing');
+  assert.match(receipt.textContent, /REGISTRO EDITADO/);
+  assert.match(receipt.textContent, /Original/);
+  assert.match(receipt.textContent, /<B>NOVO<\/B>/);
+  assert.match(receipt.textContent, /42/);
+  assert.match(receipt.textContent, /GALERIA DE EXEMPLO/);
+  assert.ok(receipt.querySelector('table'));
+  assert.equal(receipt.querySelector('b'), null);
+  assert.equal(ctx.get('[data-gallery-record-screen]'), null);
+  assert.equal(ctx.get('[data-gallery-record-dialog]').getAttribute('role'), 'dialog');
+  ctx.get('[data-gallery-receipt-close]').click();
+  assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
+  assert.equal(ctx.document.activeElement, trigger);
+  assert.equal(ctx.writes.length, 1);
+});
+
+test('rejected edit never shows a success receipt', async t => {
+  const ctx = await setup(t, { saveEditor: async () => { throw new Error('Falha na gravação'); } });
+  click(ctx, 'edit'); await settle(); await settle();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  assert.equal(ctx.get('[data-gallery-edit-success]'), null);
+  assert.ok(ctx.get('[data-form-save]'));
+  assert.match(ctx.get('[role=alert]').textContent, /Falha na gravação/);
+});
+
 test('delete receipt preserves displayed fields after refresh removes the record and closes without another mutation', async t => {
   const mutation = deferred();
   const ctx = await setup(t, {
@@ -395,6 +429,9 @@ test("metadata editor retains failed fields and saves through callback", async t
   form.dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
   assert.equal(ctx.changes[0].operation, "edit");
   assert.equal(ctx.changes[0].item.fields.Title, "ALTERADO");
+  assert.ok(ctx.get('[data-gallery-edit-success]'));
+  assert.match(ctx.get('[data-gallery-edit-success]').textContent, /ALTERADO/);
+  ctx.get('[data-gallery-receipt-close]').click();
   assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
 });
 
@@ -419,9 +456,9 @@ test("saved editor locks fields after refresh failure and retries without a seco
   });
   click(ctx, "edit"); await settle(); await settle();
   ctx.get('[data-dynamic-form]').dispatchEvent(new ctx.dom.window.Event("submit", { bubbles: true, cancelable: true })); await settle();
-  assert.equal(ctx.get('[name="Title"]').disabled, true);
-  assert.equal(ctx.get('[data-form-save]').disabled, true);
-  assert.equal(ctx.get('[data-form-cancel]').disabled, false);
+  assert.ok(ctx.get('[data-gallery-edit-success]'));
+  assert.equal(ctx.get('[data-form-save]'), null);
+  assert.equal(ctx.get('[data-gallery-receipt-close]').disabled, false);
   ctx.get('[data-gallery-refresh-retry]').click(); await settle();
   assert.equal(saves, 1);
   assert.equal(refreshes, 2);

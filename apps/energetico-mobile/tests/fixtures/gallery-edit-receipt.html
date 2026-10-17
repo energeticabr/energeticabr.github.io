@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prévia de edição — dados fictícios</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/hr-payroll-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createHrPayrollGallery } from '../../src/ui/hr-payroll-gallery-view.js';
+let row = { id: '42', FORNECEDOR: 'FORNECEDOR DE EXEMPLO', TIPOPGTO: 'SALÁRIO',
+  VALORUNITARIO: 250, QTD: 2, DATA: '2026-10-17', IDFOLHA: 5, IDLANCAMENTO: 3456 };
+const gallery = createHrPayrollGallery({ document, root: document.querySelector('#app'), gallery: 'FOLHAPGTO',
+  request: async () => ({ gallery: 'FOLHAPGTO', page: 1, rows: [row], hasMore: false }),
+  loadEditor: async () => ({ entity: { id: 'example', title: 'FOLHAPGTO' }, contract: { hasForm: true }, item: { id: row.id, fields: { ...row } }, columns: [
+    { name: 'DATA', label: 'Data', control: 'date', editable: true },
+    { name: 'TIPOPGTO', label: 'Tipo de pagamento', control: 'select', choices: ['SALÁRIO', 'PRÊMIO'], editable: true },
+  ] }),
+  saveEditor: async (_context, fields) => { row = { ...row, ...fields }; return { id: row.id, fields }; },
+});
+await gallery.open();
+</script></body></html>
