@@ -18,7 +18,12 @@
 .payroll-breakdown-footer{display:flex;justify-content:flex-end;gap:.7rem;padding:1rem 1rem calc(1rem + env(safe-area-inset-bottom,0px));background:#e0eff4;border-top:1px solid #b7ced7}
 .payroll-breakdown-footer[hidden]{display:none}
 .payroll-breakdown-footer [data-breakdown-edit]{background:#fff;color:#07556a}
-.payroll-breakdown-identity{padding:.9rem;background:#dfedf3;border-radius:12px;line-height:1.5}
+.payroll-breakdown-identity{margin:1rem 0;background:#dfedf3;border:1px solid #bfd3dc;border-radius:12px;line-height:1.5;overflow:hidden}
+.payroll-breakdown-identity table{width:100%;table-layout:fixed;border-collapse:collapse}
+.payroll-breakdown-identity th,.payroll-breakdown-identity td{padding:.75rem;text-align:left;vertical-align:top;border-bottom:1px solid #bfd3dc;overflow-wrap:anywhere}
+.payroll-breakdown-identity th{width:30%;max-width:8rem;font-size:.9rem;color:#365b68;font-weight:700}
+.payroll-breakdown-identity td{background:#f6fbfd;font-weight:700}
+.payroll-breakdown-identity tr:last-child th,.payroll-breakdown-identity tr:last-child td{border-bottom:0}
 .payroll-breakdown-date{border:1px solid #afcbd0;border-radius:15px;margin:1rem 0;overflow:hidden;background:white}
 .payroll-breakdown-date summary{display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:1rem;background:#d9eee9;cursor:pointer;list-style:revert}
 .payroll-breakdown-date summary strong{font-size:.98rem}
