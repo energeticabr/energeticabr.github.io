@@ -55,3 +55,12 @@ test('CSV identifica a provisão pendente sem incluí-la nos totais pagos export
   ] }]);
   assert.match(csv, /PENDENTE/); assert.match(csv, /TOTAL GERAL[^\r\n]*"0,00"/);
 });
+
+test('origem sem coluna TIPOPGTO usa a rubrica preservada no pagamento vinculado', async () => {
+  const f=fixture(); delete f.provision.fields.TIPOPGTO;
+  const pending=await f.read(f.fields);
+  assert.equal(pending.PGTOAGENDADO,'PENDENTE');
+  f.provision.fields.DATAPGTOEFETUADO='2026-10-12';
+  const paid=await f.read(f.fields);
+  assert.equal(paid.PGTOAGENDADO,'PAGO'); assert.equal(paid.TOTALCENTAVOS,21000);
+});
