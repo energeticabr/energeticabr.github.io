@@ -2,7 +2,7 @@
 
 O desdobramento usa a única IDFOLHA cadastrada para o fornecedor e o mês de referência escolhidos. Uma referência ausente ou ambígua impede o envio; o cadastro da folha continua no fluxo existente. PAGO soma pagamentos dessa referência, inclusive quando efetuados em outro mês.
 
-Cada linha cria um DESCRITIVOPROVISAO, uma PROVISÃO PGTOS e um FOLHAPGTO. A provisão recebe IDFOLHA e nasce com PGTOAGENDADO=PENDENTE e sem DATAPGTOEFETUADO. O pagamento da folha aponta para a provisão; seus valores e situação são consultados nessa origem a cada atualização. A baixa faz a mesma linha contribuir para os totais pagos. Agendamento sem pagamento não compensa. O total considera quantidade × valor unitário + frete e mantém os centavos. Os pagamentos anteriores vinculados a LANCAMENTOS mantêm sua origem.
+Cada linha cria um DESCRITIVOPROVISAO, uma PROVISÃO PGTOS e um FOLHAPGTO. A provisão recebe IDFOLHA e nasce com PGTOAGENDADO=PENDENTE e sem DATAPGTOEFETUADO. O pagamento da folha aponta para a provisão; seus valores e situação são consultados nessa origem a cada atualização. A baixa faz a mesma linha contribuir para os totais pagos. Agendamento sem pagamento não compensa. O total considera quantidade × valor unitário + frete e mantém os centavos. Os pagamentos anteriores vinculados a LANCAMENTOS mantêm sua origem. A rubrica é obrigatória em FOLHAPGTO; TIPOPGTO continua opcional na lista de provisões e, quando preenchido, é conferido na leitura.
 
 ## Preparação do SharePoint
 
