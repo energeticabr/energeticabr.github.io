@@ -23,6 +23,13 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
   }]));
   const suppliers = createSupplierPayrollData({ repository: scoped, tokenProvider, siteConfig, assertSession });
   let posting = false;
+  async function prepare() {
+    assertSession();
+    if (typeof tokenProvider !== 'function') return;
+    const token = await tokenProvider(['Sites.Read.All', 'Sites.ReadWrite.All']);
+    assertSession();
+    if (!token) throw new Error('Não foi possível autorizar a criação das provisões.');
+  }
   async function describe(names) {
     const list = await scoped.resolveList(SITE, names);
     if (!list?.id || list.status && list.status !== 'resolved') throw new Error(`A lista ${names[0]} não foi localizada.`);
@@ -137,5 +144,5 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       return { lines: result, total: draft.total, rubrics: draft.rubrics };
     } finally { posting = false; }
   }
-  return Object.freeze({ prepare: suppliers.prepare, loadSuppliers: suppliers.loadSuppliers, post });
+  return Object.freeze({ prepare, loadSuppliers: suppliers.loadSuppliers, post });
 }

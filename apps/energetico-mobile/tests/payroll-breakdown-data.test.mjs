@@ -32,6 +32,12 @@ const draft = supplier => ({ supplier, month: '2026-10', lines: [
   { date: '2026-10-31', rubric: 'vacation', quantity: '1', unitValue: '' },
 ] });
 
+test('prepara somente o acesso Graph usado pelas provisões', async () => {
+  const f = fixture(), requests = [];
+  const data = createPayrollBreakdownData({ repository: f.repo, tokenProvider: async scopes => { requests.push(scopes); return 'token'; } });
+  await data.prepare(); assert.deepEqual(requests, [['Sites.Read.All','Sites.ReadWrite.All']]); assert.equal(f.writes.length, 0);
+});
+
 test('consulta fornecedores elegíveis em todas as páginas e cria um descritivo por provisão', async () => {
   const f = fixture();
   f.rows.FORNECEDORES.push({ id: '4', fields: { ...f.rows.FORNECEDORES[0].fields, CADASTRO: 'Dani' } });
