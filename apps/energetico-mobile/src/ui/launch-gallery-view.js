@@ -1301,7 +1301,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       notify('Nenhuma alteração foi feita no lançamento.', true); return;
     }
     if (!editor.form.reportValidity()) return;
-    const fields = {}, changes = [];
+    const fields = {}, changes = editor.attachmentsAdded.map(fileName => ({ label: 'Anexo adicionado', before: '—', after: fileName }));
     for (const { definition, control, initial } of editor.controls) {
       const type = String(definition.type ?? '').toLowerCase();
       let value = control.type === 'checkbox' ? control.checked : control.type === 'number' && control.value !== '' ? Number(control.value) : control.value;
@@ -1357,7 +1357,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function showReview(title, changes, confirmText, operation, payload, file, key) {
     clearReview();
-    review = { operation, payload, file, key };
+    review = { operation, payload, file, key, changes: changes.map(change => ({ ...change })) };
     const card = element('div', 'lg-review-card');
     const intro = element('p', 'lg-review-intro', `Lançamento #${current.item.id} — confirma as informações abaixo?`);
     const table = element('table', 'lg-review-table');
@@ -1440,16 +1440,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   async function finishAttachmentEditing(id) {
     const epoch = session;
+    const changes = (editor?.attachmentsAdded || []).map(fileName => ({ label: 'Anexo adicionado', before: '—', after: fileName }));
+    const confirmedAt = new Date();
     clearReview(); clearEditor();
     ++detailVersion; detailLoading = false; current = null; selectedId = null;
     pendingAttachmentName = null; needsDetailRefresh = false;
     panel.hidden = true; panel.replaceChildren();
     notify('Anexos salvos. Edição concluída.');
     if (active(epoch)) focus(back);
-    if (opened) await loadSnapshot(applied);
-    if (active(epoch) && doc.activeElement === back) {
+    const refreshed = opened ? await loadSnapshot(applied) : undefined;
+    if (active(epoch)) {
       const card = [...cards.children].find(item => item.dataset.itemId === String(id));
-      focus(card?.querySelector('[data-gallery-action="edit"]') ?? back);
+      recordActions.showEditSuccess({ id, changes, confirmedAt, refreshFailed: refreshed === false,
+        trigger: card?.querySelector('[data-gallery-action="edit"]') ?? back });
     }
   }
   async function commitReview() {
@@ -1515,6 +1518,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         }
       } else await request(pending.operation, pending.payload);
       if (destroyed) return;
+      const confirmedAt = new Date();
+      const edited = ['update', 'attachment_remove'].includes(pending.operation);
       if (pending.key) retryIds.delete(pending.key);
       clearReview(); clearEditor();
       notify('Operação concluída.');
@@ -1524,10 +1529,13 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       }
       if (pending.operation === 'update' && active(epoch)) focus(back);
       if (opened) {
-        await Promise.all([loadSnapshot(applied), selectedId != null ? loadDetail(selectedId) : Promise.resolve()]);
-        if (pending.operation === 'update' && active(epoch) && doc.activeElement === back) {
+        const [refreshed] = await Promise.all([loadSnapshot(applied), selectedId != null ? loadDetail(selectedId) : Promise.resolve()]);
+        if (edited && active(epoch)) {
           const updatedCard = [...cards.children].find(card => card.dataset.itemId === String(pending.payload.id));
-          focus(updatedCard?.querySelector('[data-gallery-action="edit"]') ?? back);
+          recordActions.showEditSuccess({ id: pending.payload.id, confirmedAt, refreshFailed: refreshed === false,
+            changes: pending.changes.map(change => ({ ...change, after: change.after === 'Excluir ao confirmar' ? 'Removido' : change.after })),
+            trigger: doc.activeElement !== back && content.contains(doc.activeElement)
+              ? doc.activeElement : updatedCard?.querySelector('[data-gallery-action="edit"]') ?? back });
         }
       }
     } catch (error) {

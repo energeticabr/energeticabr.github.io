@@ -325,6 +325,11 @@ test('SUBMETER opens a modal table with only changed fields and saves only after
   button(popup, 'Confirmar alterações').click(); await settle();
   assert.deepEqual(mutations(ctx).map(({operation, payload}) => [operation, payload.fields]),
     [['update', {QUANTIDADE: 3}]]);
+  const receipt = ctx.root().querySelector('[data-gallery-edit-success]');
+  assert.ok(receipt, 'launch editor also shows the shared success receipt');
+  assert.match(receipt.textContent, /Quantidade/);
+  assert.match(receipt.textContent, /Antes2.5Depois3/);
+  assert.match(receipt.textContent, /17/);
 });
 
 test('modal review compares choice labels and dates without exposing unchanged fields', async t => {
@@ -1930,6 +1935,7 @@ test('edit is retained during list reload, explicitly reviewed, locked on save a
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true, 'confirmed edit returns to the gallery');
   assert.equal(ctx.root().querySelector('.lg-editor'), null);
   assert.ok(ctx.root().querySelector('.lg-record'), 'the gallery remains available');
+  ctx.root().querySelector('[data-gallery-receipt-close]').click();
   assert.equal(ctx.document.activeElement, ctx.root().querySelector('.lg-record [data-gallery-action="edit"]'),
     'keyboard focus returns to the gallery');
 });
@@ -2067,6 +2073,7 @@ for (const alreadyUploaded of [false, true]) for (const legacyBlank of [false, t
     assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
     assert.equal(popup.hidden, true);
     assert.ok(ctx.root().querySelector('.lg-record'), 'returns to the gallery');
+    assert.match(ctx.root().querySelector('[data-gallery-edit-success]').textContent, /IMG_4722\.jpeg/);
   });
 }
 
@@ -2170,6 +2177,8 @@ test('attachment-only summary lists each uploaded file and does not leak into a 
     ['Anexo adicionado', '—', 'um-novo.jpeg'], ['Anexo adicionado', '—', 'outro.pdf'],
   ]);
   button(ctx.root(), 'Confirmar alterações').click(); await settle();
+  assert.match(ctx.root().querySelector('[data-gallery-edit-success]').textContent, /um-novo.jpeg/);
+  ctx.root().querySelector('[data-gallery-receipt-close]').click();
   await showDetail(ctx);
   button(ctx.root(), 'SUBMETER').click();
   assert.equal(ctx.root().querySelector('.lg-review').hidden, true, 'old uploads do not create changes in another edit');
@@ -2216,6 +2225,9 @@ test('adding an attachment preserves unsaved fields and refreshes the SharePoint
   assert.equal(ctx.calls.findLast(call => call.operation === 'update').payload.fields.QUANTIDADE, 3);
   assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'DESCRIÇÃO'), false);
   assert.equal(Object.hasOwn(ctx.calls.findLast(call => call.operation === 'update').payload.fields, 'CONCLUÍDO'), false);
+  const receipt = ctx.root().querySelector('[data-gallery-edit-success]');
+  assert.match(receipt.textContent, /novo.pdf/);
+  assert.match(receipt.textContent, /Quantidade/);
 });
 
 test('a concurrent change to an edited field keeps the draft but blocks a stale update', async t => {
@@ -2489,6 +2501,7 @@ test('a confirmed edit returns to the gallery without reloading details or resen
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   assert.equal(details, 1);
   assert.equal(mutations(ctx).length, 1);
+  ctx.root().querySelector('[data-gallery-receipt-close]').click();
   await showDetail(ctx);
   assert.match(ctx.root().querySelector('.lg-detail').textContent, /Falha na atualização/);
   button(ctx.root().querySelector('.lg-detail'), 'Tentar novamente').click(); await settle();
@@ -2510,6 +2523,8 @@ test('confirmed edit restores gallery focus while its list refresh is pending', 
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   assert.equal(ctx.document.activeElement, button(ctx.root(), 'Voltar'));
   refresh.resolve(snapshot()); await settle();
+  assert.ok(ctx.root().querySelector('[data-gallery-edit-success]'));
+  ctx.root().querySelector('[data-gallery-receipt-close]').click();
   assert.equal(ctx.document.activeElement, ctx.root().querySelector('.lg-record [data-gallery-action="edit"]'));
 });
 
@@ -2545,6 +2560,8 @@ test('an edit refresh respects focus moved to a filter in the same gallery sessi
   const filter = ctx.root().querySelector('[name="id"]');
   filter.focus();
   refresh.resolve(snapshot()); await settle();
+  assert.ok(ctx.root().querySelector('[data-gallery-edit-success]'));
+  ctx.root().querySelector('[data-gallery-receipt-close]').click();
   assert.equal(ctx.document.activeElement, filter);
 });
 
