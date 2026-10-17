@@ -55,7 +55,15 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     try { active(); await action(active); active(); busy = mutating = false; render(); return true; }
     catch (cause) { if (opened && !destroyed && epoch === attempt) { busy = mutating = false; render(); showError(cause); } return false; }
   }
-  function identity() { content.append(el('p', 'payroll-breakdown-identity', `${draft.supplier.label} · ${draft.supplier.branch} · ${draft.supplier.profession}`)); }
+  function identity() {
+    const card = el('div', 'payroll-breakdown-identity'), table = el('table'), rows = el('tbody');
+    table.setAttribute('aria-label', 'Dados do fornecedor');
+    for (const [label, value] of [['Fornecedor', draft.supplier.label], ['Filial', draft.supplier.branch], ['Profissão', draft.supplier.profession]]) {
+      const row = el('tr'), heading = el('th', '', label); heading.scope = 'row';
+      row.append(heading, el('td', '', String(value ?? '').trim() || '—')); rows.append(row);
+    }
+    table.append(rows); card.append(table); content.append(card);
+  }
   function initializeLines() {
     draft.lines = payrollProvisionDates(draft.month).flatMap(day => PAYROLL_RUBRICS.map(rubric =>
       draft.lines.find(line => line.date === day.date && line.rubric === rubric.id) || { date: day.date, rubric: rubric.id, quantity: '1', unitValue: '' }));
