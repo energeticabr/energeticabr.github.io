@@ -40,7 +40,7 @@ def main():
     (destination / 'source.patch').write_bytes(patch)
     result = {'files': manifest, 'patch': digest(patch),
               'archive': digest((workspace / 'source-files.tar').read_bytes())}
-    (destination / 'deploy-manifest.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    (destination / 'deploy-manifest.json').write_bytes((json.dumps(result, indent=2) + '\n').encode('utf-8'))
     print(json.dumps(result, indent=2))
 
 
