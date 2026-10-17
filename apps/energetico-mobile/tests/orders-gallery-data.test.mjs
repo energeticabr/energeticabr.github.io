@@ -187,7 +187,7 @@ test("galerias de folha leem IDFOLHA e FOLHAPGTO com paginação e normalizaçã
     ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 1, maxPages: 100 }],
     ["getItemsPage", "personal", "list-IDFOLHA", "$select=id&$expand=fields($select=MESREFERENCIA,FORNECEDOR)&$top=25", { pageNumber: 2, maxPages: 100, cursor: "idfolha-next" }],
     ["resolveList", "personal", ["FOLHAPGTO"]],
-    ["getItemsPage", "personal", "list-FOLHAPGTO", "$select=id&$expand=fields($select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO)&$top=25", { pageNumber: 1, maxPages: 100 }],
+    ["getItemsPage", "personal", "list-FOLHAPGTO", "$select=id&$expand=fields&$top=25", { pageNumber: 1, maxPages: 100 }],
     ["resolveList", "personal", ["LANCAMENTOS", "LANÇAMENTOS"]],
   ]);
 });
@@ -250,7 +250,8 @@ test("relatório da folha percorre páginas e vincula somente o IDFOLHA escolhid
   assert.equal(itemQueries[0][4].headers?.Prefer, "HonorNonIndexedQueriesWarningMayFailRandomly");
   assert.doesNotMatch(itemQueries[1][3], /\$filter/);
   assert.match(itemQueries[1][3], /\$top=100/);
-  assert.match(itemQueries[1][3], /fields\(\$select=FORNECEDOR,TIPOPGTO,VALORUNITARIO,QTD,DATA,IDFOLHA,IDLANCAMENTO\)/);
+  // Optional provision keys must remain readable before their schema is installed.
+  assert.equal(new URLSearchParams(itemQueries[1][3]).get('$expand'), 'fields');
   assert.deepEqual(itemQueries.slice(1).map(([, , , , options]) => options), [
     { pageNumber: 1, maxPages: 100 },
     { pageNumber: 2, maxPages: 100, cursor: "payroll-next" },

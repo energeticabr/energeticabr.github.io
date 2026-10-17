@@ -11,6 +11,7 @@ function fixture() {
     { name: 'TIPOPGTO', text: {} }, { name: 'VALORUNITARIO', number: {} },
     { name: 'QTD', number: {} }, { name: 'IDLANCAMENTO', number: {} },
     { name: 'IDFOLHA', number: {} },
+    { name: 'IDPROVISAO', number: {} },
     { name: 'DATA', dateTime: { format: 'dateOnly' } },
   ];
   const fields = { Title: 'interno', FORNECEDOR: 'CLEITON', TIPOPGTO: 'SALÁRIO', VALORUNITARIO: 168.8, QTD: 3, IDLANCAMENTO: 3457, IDFOLHA:5, DATA: '2026-09-28' };
@@ -40,6 +41,7 @@ test('payroll editor hides title, locks source values and restricts supplier and
   const { data, writes } = fixture();
   const context = await data.loadEditor('FOLHAPGTO', '3');
   assert.equal(context.columns.some(c => c.name === 'Title'), false);
+  assert.equal(context.columns.some(c => c.name === 'IDPROVISAO'), false);
   for (const name of ['VALORUNITARIO', 'QTD']) assert.equal(context.columns.find(c => c.name === name).readOnly, true);
   assert.equal(context.columns.find(c=>c.name==='FORNECEDOR').readOnly,true);
   assert.equal(context.columns.find(c=>c.name==='FORNECEDOR').disabled,true);

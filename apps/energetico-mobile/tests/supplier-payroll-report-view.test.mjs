@@ -39,6 +39,12 @@ test('expansion reuses summaries for selected sheet ids and keeps payment made n
  assert.deepEqual(calls,[['8','12'],['9']]);assert.match(detail.textContent,/02\/11\/2026.*23.*8.*DIÁRIA.*60.*100,00.*2.*200,00/s);
  assert.match(detail.querySelector('.spr-total').textContent,/200,00/);
 });
+
+test('pending provision is visibly identified while its amount stays outside the paid total',async t=>{
+ const {view,root,dom}=setup(t,{loadPaymentsForPayrollIds:async ids=>ids.includes('8')?[{...rows[0],paymentStatus:'PENDENTE'}]:[]});
+ await view.open();const detail=root.querySelector('details');detail.open=true;detail.dispatchEvent(new dom.window.Event('toggle'));await tick();
+ assert.match(detail.querySelector('table').textContent,/PENDENTE/);assert.match(detail.querySelector('.spr-total').textContent,/Total: R\$\s*0,00/);
+});
 test('filters discard details and refresh failure removes stale data',async t=>{
  let loads=0;const {view,root,dom}=setup(t,{loadSnapshot:async()=>{if(loads++)throw Error('network');return snapshot;}});await view.open();
  const month=root.querySelector('[name=month]');month.value='2026-09';month.dispatchEvent(new dom.window.Event('change'));

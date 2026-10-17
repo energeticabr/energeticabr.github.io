@@ -100,3 +100,17 @@ test('menu de provisões exibe atalho somente na pergunta atual', () => {
   const dom = new JSDOM(renderChatMarkup({ ...state, messages: [menu, { id: 'next', role: 'assistant', type: 'poll', question: 'Fornecedor?', options: [] }] }));
   assert.equal(dom.window.document.querySelector('[data-reply-id="action_payroll_provision_breakdown"]'), null); dom.window.close();
 });
+
+test('PAGO mostra valores da folha selecionada em cada rubrica e no total', async t => {
+  const h = harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  const requests = [];
+  h.data.loadPayrollContext = async (supplier, month) => { requests.push([supplier.id, month]); return { sheetId: '19', paid: { salary: 300, meal: 50 }, paidTotal: 350 }; };
+  await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');
+  h.input('[data-breakdown-value="2026-10-02:salary"]', '100');
+  const table = h.doc.querySelector('[aria-label="Totais por rubrica"]');
+  assert.deepEqual([...table.querySelectorAll('thead th')].map(th => th.textContent), ['Rubrica','Total previsto','PAGO']);
+  const salary = [...table.querySelectorAll('tbody tr')].find(row => row.textContent.startsWith('Salário'));
+  assert.match(salary.cells[1].textContent, /100,00/); assert.match(salary.cells[2].textContent, /300,00/);
+  assert.match(table.querySelector('tbody tr:last-child').cells[2].textContent, /350,00/);
+  assert.deepEqual(requests, [['7','2026-10']]);
+});

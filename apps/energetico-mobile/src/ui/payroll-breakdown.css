@@ -51,5 +51,10 @@
 .payroll-breakdown-table th,.payroll-breakdown-table td{padding:.75rem;text-align:left;border-bottom:1px solid #d1e0e5}
 .payroll-breakdown-table td:last-child,.payroll-breakdown-table thead th:last-child{text-align:right;white-space:nowrap}
 .payroll-breakdown-table thead{background:#dcebf2}.payroll-breakdown-total-row{background:#ddf2e7;font-weight:800}
+.payroll-breakdown-table{table-layout:fixed;font-size:.9rem}
+.payroll-breakdown-table th:first-child{width:38%}
+.payroll-breakdown-table th,.payroll-breakdown-table td{padding:.65rem .35rem;overflow-wrap:anywhere}
+.payroll-breakdown-table td,.payroll-breakdown-table thead th:not(:first-child){text-align:right;white-space:normal}
+.payroll-breakdown-table td:last-child,.payroll-breakdown-table thead th:last-child{white-space:normal}
 .payroll-breakdown-error{padding:1rem;border-radius:12px;background:#ffe4e7;color:#9d1727;max-width:960px;margin:0 auto 1rem}
 @media(max-width:380px){.payroll-breakdown-body{padding:.75rem}.payroll-breakdown-date summary{flex-wrap:wrap;padding:.8rem}.payroll-breakdown-inputs{gap:.5rem}.payroll-breakdown-field{font-size:.9rem}.payroll-breakdown-footer{padding:.75rem .75rem calc(.75rem + env(safe-area-inset-bottom,0px))}.payroll-breakdown-footer button{flex:1;font-size:.95rem}}

@@ -109,6 +109,7 @@ export function summarizePayrollPayments(rows) {
   if (!Array.isArray(rows)) throw new TypeError('Lista de pagamentos inválida.');
   let total = new Decimal(0), uncalculated = 0;
   for (const row of rows) {
+    if (row?.paymentStatus === 'PENDENTE' || row?.PGTOAGENDADO === 'PENDENTE') continue;
     let cents = null;
     if (row && Object.hasOwn(row, 'totalCents')) {
       if (Number.isSafeInteger(row.totalCents)) cents = row.totalCents;
@@ -173,7 +174,7 @@ export function buildPayrollReportCsv(groups) {
   };
   const number = value => decimal(value)?.toFixed().replace('.',',') ?? 'Não calculado';
   const cents = value => !Number.isSafeInteger(value) ? 'Não calculado' : new Decimal(value).div(100).toFixed(2).replace('.',',');
-  const lines = [['REGISTRO','FORNECEDOR','PERÍODO INICIAL','PERÍODO FINAL','ID PAGAMENTO','IDFOLHA','TIPO','DATA','ID LANÇAMENTO','DESCRIÇÃO','VALOR UNITÁRIO','QTD.','VALOR TOTAL','CONTA/FORMAPGTO','OBSERVAÇÕES']];
+  const lines = [['REGISTRO','FORNECEDOR','PERÍODO INICIAL','PERÍODO FINAL','ID PAGAMENTO','IDFOLHA','TIPO','DATA','ID LANÇAMENTO','DESCRIÇÃO','VALOR UNITÁRIO','QTD.','VALOR TOTAL','CONTA/FORMAPGTO','OBSERVAÇÕES','PAGAMENTO']];
   for (const group of groups) {
     if (!Array.isArray(group.rows)||!Array.isArray(group.sheets)) throw new TypeError('Grupo incompleto.');
     const periods = [...new Set(group.sheets.map(s=>normalizePayrollMonth(s.month)))].map(payrollReferencePeriod);
@@ -182,10 +183,10 @@ export function buildPayrollReportCsv(groups) {
     for (const row of group.rows) {
       const p = byId.get(String(row.payrollId));
       if (!p) throw new TypeError('Pagamento fora das folhas selecionadas.');
-      lines.push(['PAGAMENTO',group.supplier,p.start,p.end,row.id,row.payrollId,row.type,formatOperationsDate(row.date),row.launchId,row.description,number(row.unitValue),number(row.quantity),cents(row.totalCents),row.paymentMethod,row.observations]);
+      lines.push(['PAGAMENTO',group.supplier,p.start,p.end,row.id,row.payrollId,row.type,formatOperationsDate(row.date),row.launchId,row.description,number(row.unitValue),number(row.quantity),cents(row.totalCents),row.paymentMethod,row.observations,row.paymentStatus||'PAGO']);
     }
     for (const total of summarizePayrollPaymentsByType(group.rows)) lines.push(['TOTAL POR TIPO',group.supplier,start,end,'','',total.type,'','','','','',cents(total.totalCents)]);
     lines.push(['TOTAL GERAL',group.supplier,start,end,'','','','','','','','',cents(summarizePayrollPayments(group.rows).totalCents)]);
   }
-  return '\ufeff' + lines.map(line=>Array.from({length:15},(_,i)=>[10,11,12].includes(i)?quoted(line[i]):text(line[i])).join(';')).join('\r\n')+'\r\n';
+  return '\ufeff' + lines.map(line=>Array.from({length:16},(_,i)=>[10,11,12].includes(i)?quoted(line[i]):text(line[i])).join(';')).join('\r\n')+'\r\n';
 }

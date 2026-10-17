@@ -1,11 +1,12 @@
 import { PAYROLL_RUBRICS } from './supplier-payroll.js';
+import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
 
 export const payrollFieldKey = value => String(value || '')
   .replace(/_x([0-9a-f]{4})_/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 export function payrollEditorColumns(columns, sheetOptions=[], launchOptions=[]) {
-  return columns.filter(c => payrollFieldKey(c.name) !== 'TITLE').map(column => {
+  return columns.filter(c => !['TITLE','IDPROVISAO'].includes(payrollFieldKey(c.name))).map(column => {
     const name = payrollFieldKey(column.name);
     if (['VALORUNITARIO', 'QTD'].includes(name)) return { ...column, readOnly: true, required: false };
     if(name==='FORNECEDOR') return {...column,readOnly:true,disabled:true,required:false};
@@ -20,6 +21,7 @@ export function payrollEditorColumns(columns, sheetOptions=[], launchOptions=[])
 
 /** Re-read linked financial values on every refresh; never write copied values back. */
 export function createPayrollSourceReader(repository, siteKey) {
+  const readProvision = createPayrollProvisionReader(repository, siteKey);
   let descriptorPromise;
   async function descriptor() {
     return descriptorPromise ||= (async () => {
@@ -33,6 +35,7 @@ export function createPayrollSourceReader(repository, siteKey) {
     })().catch(error => { descriptorPromise = null; throw error; });
   }
   return async function read(fields, signal) {
+    if (payrollProvisionId(fields)) return readProvision(fields, signal);
     const link = Object.entries(fields || {}).find(([n]) => payrollFieldKey(n) === 'IDLANCAMENTO')?.[1];
     if (link == null || String(link).trim() === '') return {};
     const id = String(link).trim();

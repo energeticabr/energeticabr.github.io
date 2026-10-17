@@ -3,6 +3,7 @@ import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
 import { createPayrollSourceReader, payrollFieldKey } from './payroll-editor-policy.js';
 import { normalizePayrollMonth, summarizePayrollPayments } from './supplier-payroll-report-model.js';
+import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
 
 const site = 'personal';
 const unnamed = 'Fornecedor não informado';
@@ -81,7 +82,8 @@ function normalizeItem(item, fields, list) {
     if (!/^(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}(?:T.*)?)$/.test(date)) throw new TypeError('Data de pagamento inválida.');
   }
   return Object.freeze({ id, supplier, type: scalar(values.type), date,
-    payrollId: validId(values.payrollId, true), launchId: validId(values.launchId, true) });
+    payrollId: validId(values.payrollId, true), launchId: validId(values.launchId, true),
+    ...(payrollProvisionId(item.fields) ? { provisionTitle: item.fields.Title } : {}) });
 }
 
 // Keep the existing source reader as financial source truth, but guard its otherwise
@@ -260,6 +262,7 @@ export function createSupplierPayrollReportData({ tokenProvider, repository: sup
     try {
       checkAbort(current.controller.signal);
       const read = guardedSourceReader(repository, signal);
+      const readProvision = createPayrollProvisionReader(repository, site);
       const rows = current.payments.filter(p => wanted.has(p.payrollId));
       // Validate every selected supplier before launching any financial reads.
       for (const row of rows) {
@@ -271,14 +274,16 @@ export function createSupplierPayrollReportData({ tokenProvider, repository: sup
       const result = [];
       for (let start = 0; start < rows.length; start += 4) {
         result.push(...await Promise.all(rows.slice(start, start + 4).map(async row => {
-          const source = row.launchId ? await abortable(() => readSource(
-            () => read({ IDLANCAMENTO: row.launchId }, signal), signal,
+          const source = row.provisionTitle || row.launchId ? await abortable(() => readSource(
+            () => row.provisionTitle ? readProvision({ Title: row.provisionTitle, IDFOLHA: row.payrollId, FORNECEDOR: row.supplier, TIPOPGTO: row.type }, signal)
+              : read({ IDLANCAMENTO: row.launchId }, signal), signal,
           ), signal) : {};
           checkAbort(signal);
           const unitValue = source.VALORUNITARIO ?? null, quantity = source.QTD ?? null;
           return Object.freeze({ ...row, supplier: row.supplier || current.sheets.get(row.payrollId).row.supplier,
             ...Object.fromEntries(['description','paymentMethod','observations'].filter(key=>Object.hasOwn(source,key)).map(key=>[key,source[key]])),
-            unitValue, quantity, totalCents: summarizePayrollPayments([{ unitValue, quantity }]).totalCents });
+            unitValue, quantity, totalCents: source.TOTALCENTAVOS ?? summarizePayrollPayments([{ unitValue, quantity }]).totalCents,
+            ...(row.provisionTitle ? { paymentStatus: source.PGTOAGENDADO, provisionId: source.IDPROVISAO, date: source.DATA } : {}) });
         })));
       }
       checkAbort(signal);

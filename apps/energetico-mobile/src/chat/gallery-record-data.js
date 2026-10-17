@@ -6,6 +6,7 @@ import { payrollEditorColumns, createPayrollSourceReader, payrollFieldKey } from
 import { createPayrollSheetReader } from './payroll-sheet-options.js';
 import { createPayrollLaunchReader } from './payroll-launch-options.js';
 import { createPayrollSheetAttachments } from './payroll-sheet-attachments.js';
+import { payrollProvisionId } from './payroll-provision-source.js';
 import { validateAttachment } from '../../../../portal/data/attachments.js';
 
 function key(value) {
@@ -159,6 +160,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       ]));
     } : undefined;
     if (isPayroll) item = frozenCopy({ ...item, fields: { ...item.fields, ...await refreshDerivedValues({}, { signal }) } });
+    const provisionLinked = isPayroll && Boolean(payrollProvisionId(item.fields));
     abort(signal);
     const mapped = typedColumns(Array.isArray(rawColumns) ? rawColumns : [], entity, metadataOnly);
     let contract = resolvePowerAppsUiContract(entity, mapped, { mode: "edit", ...(formVariantId ? { formVariantId } : {}) });
@@ -172,8 +174,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
     const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
     const [sheetOptions,launchOptions]=await Promise.all([
-      sheetColumn?payrollSheets.options(sheetSupplier,{signal}):[],
-      launchColumn?payrollLaunches.options({signal}):[],
+      sheetColumn && !provisionLinked ? payrollSheets.options(sheetSupplier,{signal}):[],
+      launchColumn && !provisionLinked ? payrollLaunches.options({signal}):[],
     ]);
     abort(signal);
     const formColumns = isPayrollSheet ? contract.formColumns.map(column =>
@@ -188,8 +190,9 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
         : column) : contract.formColumns;
     const locked = new Set(readOnlyEditFields.map(key));
     const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions) : formColumns)
-      .map(column => locked.has(key(column.name)) ? { ...column, readOnly: true, disabled: true, editable: true } : column));
-    contract = frozenCopy({ ...contract, formColumns: columns });
+      .filter(column => key(column.name) !== 'FOLHAOPERACAO')
+      .map(column => provisionLinked || locked.has(key(column.name)) ? { ...column, readOnly: true, disabled: true, editable: true, ...(provisionLinked ? { required: false } : {}) } : column));
+    contract = frozenCopy({ ...contract, formColumns: columns, ...(provisionLinked ? { readOnly: true } : {}) });
     const descriptors = new Map(columns.map(column => [column.name, column]));
     const relationshipOptions = new Map();
     const allowedColumn = candidate => {
