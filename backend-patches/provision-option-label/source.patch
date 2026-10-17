@@ -1,0 +1,22 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -91,15 +91,13 @@
+     options = []
+     for group in groups:
+         item_id = _identity(group['Id'])
+-        children = group.get('CHILDREN') or []
+-        amount = ('VALOR PENDENTE — INFORMAR NA BAIXA'
++        amount = ('VALOR PENDENTE'
+                   if group.get('settlementBlocked') else group['totalDisplay'])
+-        child_ids = ', '.join(_identity(item['Id']) for item in children)
++        due = _date(group.get('DATA PREVISTO PGTO'))
++        due_display = due.strftime('%d/%m/%Y') if due else '—'
+         options.append({
+             'id': f'provision_description:{item_id}', 'value': item_id,
+-            'title': f"DESCRITIVO {item_id} — {_text(group.get('FORNECEDOR'))} "
+-                     f"({_text(group.get('DATA PREVISTO PGTO'))[:10]}) — "
+-                     f"PROVISÕES {child_ids} — {amount}",
++            'title': f"{item_id} - {_text(group.get('FORNECEDOR'))} ({due_display}) - {amount}",
+             'source_values': copy.deepcopy(group), 'sourceKind': SOURCE_KIND,
+         })
+     return options
