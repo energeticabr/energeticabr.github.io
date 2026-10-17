@@ -37,6 +37,42 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('delete receipt preserves displayed fields after refresh removes the record and closes without another mutation', async t => {
+  const mutation = deferred();
+  const ctx = await setup(t, {
+    galleryTitle: 'GALERIA FOLHA PGTO',
+    getDeletionSummary: row => [{ label: 'Fornecedor', value: row.fields.Title }, { label: 'Data', value: '17/10/2026' }, { label: 'Valor', value: 'R$ 0,00' }],
+    deleteItem: () => mutation.promise,
+    onChanged: () => { ctx.buttons.remove(); ctx.row.fields.Title = 'Novo valor'; },
+  });
+  ctx.row.fields.Title = '<img src=x onerror=alert(1)> Fornecedor';
+  click(ctx, 'delete'); ctx.get('[data-gallery-confirm="yes"]').click();
+  assert.equal(ctx.get('[data-gallery-delete-success]'), null, 'pending deletion is not success');
+  mutation.resolve(); await settle();
+  const receipt = ctx.get('[data-gallery-delete-success]');
+  assert.ok(receipt, 'successful deletion must remain visible for acknowledgement');
+  assert.match(receipt.textContent, /GALERIA FOLHA PGTO/);
+  assert.match(receipt.textContent, /42/);
+  assert.match(receipt.textContent, /17\/10\/2026/);
+  assert.match(receipt.textContent, /R\$ 0,00/);
+  assert.match(receipt.textContent, /<img src=x onerror=alert\(1\)> Fornecedor/);
+  assert.doesNotMatch(receipt.textContent, /Novo valor|undefined/);
+  assert.equal(receipt.querySelector('img'), null);
+  assert.match(receipt.textContent, /Confirmação no aplicativo/);
+  ctx.get('[data-gallery-receipt-close]').click();
+  assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
+  assert.equal(ctx.document.activeElement, ctx.get('#gallery'));
+});
+
+test('late successful deletion cannot reopen a receipt after gallery teardown', async t => {
+  const mutation = deferred();
+  const ctx = await setup(t, { deleteItem: () => mutation.promise });
+  click(ctx, 'delete'); ctx.get('[data-gallery-confirm="yes"]').click();
+  ctx.actions.destroy(); mutation.resolve(); await settle();
+  assert.equal(ctx.get('[data-gallery-delete-success]'), null);
+  assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
+});
+
 test('every gallery editor opens as a full screen by default and cancel returns focus to its record', async t => {
   const ctx = await setup(t);
   const trigger = ctx.get('[data-gallery-action="edit"]'); trigger.focus(); trigger.click();
@@ -233,6 +269,8 @@ test("Sim blocks duplicate writes and awaits gallery refresh", async t => {
   assert.equal(changes, 1);
   assert.ok(ctx.get('[data-gallery-record-dialog]'));
   refresh.resolve(); await settle();
+  assert.ok(ctx.get('[data-gallery-delete-success]'));
+  ctx.get('[data-gallery-receipt-close]').click();
   assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
 });
 
@@ -243,10 +281,13 @@ test("successful deletion with failed refresh retries only the refresh", async t
   ctx.get('[data-gallery-confirm="yes"]').click(); await settle();
   assert.equal(writes, 1);
   assert.match(ctx.get('[role="alert"]').textContent, /concluída.*Falha ao atualizar/);
-  assert.equal(ctx.get('[data-gallery-confirm="yes"]').disabled, true);
+  assert.ok(ctx.get('[data-gallery-delete-success]'));
+  assert.equal(ctx.get('[data-gallery-confirm="yes"]'), null);
   ctx.get('[data-gallery-refresh-retry]').click(); await settle();
   assert.equal(writes, 1);
   assert.equal(refreshes, 2);
+  assert.ok(ctx.get('[data-gallery-delete-success]'));
+  ctx.get('[data-gallery-receipt-close]').click();
   assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
 });
 
@@ -256,6 +297,7 @@ test("delete errors keep confirmation and record actionable for retry", async t 
   click(ctx, "delete");
   ctx.get('[data-gallery-confirm="yes"]').click(); await settle();
   assert.match(ctx.get('[role="alert"]').textContent, /Sem conexão/);
+  assert.equal(ctx.get('[data-gallery-delete-success]'), null);
   assert.equal(ctx.get('[data-gallery-confirm="yes"]').disabled, false);
   assert.ok(ctx.buttons.isConnected);
   ctx.get('[data-gallery-confirm="yes"]').click(); await settle();
@@ -263,13 +305,16 @@ test("delete errors keep confirmation and record actionable for retry", async t 
   assert.equal(ctx.changes[0].operation, "delete");
 });
 
-test("successful mutation restores focus after reenabling the record action", async t => {
+test("closing deletion success focuses the gallery and never reactivates a stale deleted card", async t => {
   const ctx = await setup(t);
   const trigger = ctx.get('[data-gallery-action="delete"]');
   trigger.focus(); trigger.click();
   ctx.get('[data-gallery-confirm="yes"]').click(); await settle();
-  assert.equal(trigger.disabled, false);
-  assert.equal(ctx.document.activeElement, trigger);
+  ctx.get('[data-gallery-receipt-close]').click();
+  assert.equal(trigger.disabled, true);
+  assert.equal(ctx.document.activeElement, ctx.get('#gallery'));
+  trigger.dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(ctx.get('[data-gallery-confirm="yes"]'), null);
 });
 
 test("dialog traps Tab and Escape never bubbles to the outer gallery", async t => {
@@ -321,7 +366,10 @@ test("forced close keeps mutation latched until settled and suppresses stale ref
   click(ctx, "delete"); assert.equal(ctx.get('[data-gallery-record-dialog]'), null);
   deleting.resolve(); await settle();
   assert.equal(ctx.changes.length, 0);
-  assert.equal(ctx.get('[data-gallery-action="delete"]').disabled, false);
+  assert.equal(ctx.get('[data-gallery-action="delete"]').disabled, true);
+  const other = ctx.actions.render({ id: '43', fields: {} });
+  ctx.get('#gallery').append(other);
+  assert.equal(other.querySelector('[data-gallery-action="delete"]').disabled, false);
 });
 
 test("failed metadata load offers retry and never exposes a fake editor", async t => {

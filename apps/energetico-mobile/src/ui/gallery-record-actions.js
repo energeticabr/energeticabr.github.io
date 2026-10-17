@@ -2,12 +2,15 @@ import { createLoadingIndicator } from "./loading-indicator.js";
 import { bindForm43FieldLocks } from './orders-form43-locks-view.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { bindPayrollEditorSource } from './payroll-editor-source.js';
+import { postingCompletionMarkup } from './posting-completion.js';
+import { deletionReceipt, galleryDeletionFields } from './gallery-deletion-receipt.js';
 let dialogSequence = 0;
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Shared actions for gallery records; persistence remains owned by the gallery data layer. */
 export function createGalleryRecordActions({ document, host, loadEditor, saveEditor, deleteItem, onChanged, onError, onEdit, renderEditorExtra, getReceiptAttachments, readReceiptAttachment,
+  galleryTitle, getDeletionSummary = row => galleryDeletionFields(row.fields || row),
   actions = ["edit", "delete"] } = {}) {
   if (!document?.createElement) throw new TypeError("As ações do registro requerem um documento.");
   let disposed = false;
@@ -15,6 +18,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   let session = null;
   let mutationPending = false;
   const recordButtons = new Set();
+  const deletedIds = new Set();
   const element = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -31,7 +35,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   function syncRecordButtons() {
     for (const button of recordButtons) {
       if (!button.isConnected) recordButtons.delete(button);
-      else button.disabled = disposed || mutationPending;
+      else button.disabled = disposed || mutationPending || !!session?.success || deletedIds.has(button.dataset.recordId);
     }
   }
 
@@ -46,7 +50,12 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     previous?.mutationAbort?.abort();
     previous?.variantPicker?.destroy();
     previous?.overlay.remove();
-    if (previous?.focus?.isConnected) previous.focus.focus();
+    syncRecordButtons();
+    if (previous?.focus?.isConnected && !previous.focus.disabled) previous.focus.focus();
+    else if (previous && !disposed && host?.isConnected && !host.hidden) {
+      if (!host.hasAttribute('tabindex')) host.tabIndex = -1;
+      host.focus({ preventScroll: true });
+    }
   }
 
   function showError(state, error) {
@@ -134,12 +143,19 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
       if (!state.persisted) {
         state.persistedItem = await persist();
         state.persisted = true;
+        state.confirmedAt = new Date();
+        if (state.operation === 'delete') deletedIds.add(String(state.row.id));
       }
       if (!active(state)) return;
-      await onChanged?.({ operation: state.operation, id: state.row.id, item: state.persistedItem });
-      if (active(state)) close();
+      const refreshed = await onChanged?.({ operation: state.operation, id: state.row.id, item: state.persistedItem });
+      if (active(state) && refreshed === false) throw new Error('Tente atualizar a galeria novamente.');
+      if (active(state)) {
+        if (state.operation === 'delete') showDeletionSuccess(state);
+        else close();
+      }
     } catch (error) {
       if (active(state) && state.persisted) {
+        if (state.operation === 'delete') showDeletionSuccess(state);
         showError(state, new Error(`A operação foi concluída, mas não foi possível atualizar a galeria. ${error?.message || "Tente novamente."}`));
         if (!state.refreshRetry) {
           state.refreshRetry = button("Tentar atualizar galeria", "data-gallery-refresh-retry", "", () => { void mutate(state, persist); });
@@ -149,7 +165,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     } finally {
       mutationPending = false;
       syncRecordButtons();
-      if (!disposed && !session && epoch === state.epoch + 1 && state.focus?.isConnected) state.focus.focus();
+      if (!disposed && !session && epoch === state.epoch + 1 && state.focus?.isConnected && !state.focus.disabled) state.focus.focus();
       if (active(state)) {
         state.busy = false;
         state.dialog.setAttribute("aria-busy", "false");
@@ -164,9 +180,31 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     }
   }
 
+  function showDeletionSuccess(state) {
+    state.success = true;
+    state.refreshRetry = null;
+    state.dialog.classList.add('gallery-record-dialog--success');
+    state.dialog.removeAttribute('aria-labelledby');
+    state.dialog.setAttribute('aria-label', `Registro de ID ${state.row.id} excluído`);
+    const receipt = element('div');
+    receipt.setAttribute('data-gallery-delete-success', '');
+    receipt.setAttribute('role', 'status');
+    receipt.innerHTML = postingCompletionMarkup(deletionReceipt({ id: state.row.id,
+      galleryTitle, records: state.deletionSummary, confirmedAt: state.confirmedAt }));
+    const dismiss = button('VOLTAR À GALERIA', 'data-gallery-receipt-close', '', () => { if (!state.busy) close(); });
+    const buttons = element('div', 'gallery-record-dialog-buttons');
+    buttons.append(dismiss);
+    state.error.hidden = true;
+    state.body.replaceChildren(receipt, state.error, buttons);
+    state.dialog.replaceChildren(state.body);
+    state.dialog.scrollTop = 0;
+    state.dialog.focus({ preventScroll: true });
+  }
+
   function openDelete(row, trigger) {
-    if (disposed || mutationPending) return;
+    if (disposed || mutationPending || deletedIds.has(String(row.id))) return;
     const state = openDialog(row, "delete", trigger);
+    state.deletionSummary = getDeletionSummary(row).map(({ label, value }) => ({ label: String(label ?? ''), value: String(value ?? '') }));
     const actions = element("div", "gallery-record-dialog-buttons");
     const yes = button("Sim", "data-gallery-confirm", "yes", () => {
       void mutate(state, () => {
@@ -298,7 +336,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
   }
 
   async function edit(row, trigger) {
-    if (disposed || mutationPending) return;
+    if (disposed || mutationPending || deletedIds.has(String(row.id))) return;
     if (typeof onEdit === "function") {
       trigger.disabled = true;
       try { await onEdit(row); } catch (error) { await report(error); }
@@ -336,7 +374,8 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
         });
         control.className = `gallery-record-action gallery-record-action--${action}`;
         control.setAttribute("aria-label", `${action === "edit" ? "Editar" : "Deletar"} item de ID ${row.id}`);
-        control.disabled = disposed || mutationPending;
+        control.dataset.recordId = String(row.id);
+        control.disabled = disposed || mutationPending || deletedIds.has(String(row.id));
         if (action === "edit") control.textContent = "✏️";
         else control.append(icon(action));
         recordButtons.add(control);
@@ -350,6 +389,7 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
       close();
       syncRecordButtons();
       recordButtons.clear();
+      deletedIds.clear();
     },
   });
 }

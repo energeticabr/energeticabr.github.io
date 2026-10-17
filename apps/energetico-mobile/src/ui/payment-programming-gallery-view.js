@@ -6,6 +6,7 @@ import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { provisionTotal } from '../chat/pending-provision-dates.js';
@@ -297,12 +298,14 @@ export function createPaymentProgrammingGallery({
   const searchableSort = bindSearchableFilterSelects(listToolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
+    galleryTitle: 'GALERIA PROVISÃO PGTO',
+    getDeletionSummary: row => galleryDeletionFields(row.fields, displayValue),
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
-      return loadSnapshot();
+      return loadSnapshot({ refresh: true });
     },
   });
   const attachmentCounts = createGalleryAttachmentCounts({

@@ -5,6 +5,7 @@ import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { createMascotReportButton } from './report-action-button.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
@@ -384,6 +385,12 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando lançamentos…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root, actions: ['edit', 'delete'],
+    galleryTitle: 'GALERIA LANÇAMENTOS',
+    getDeletionSummary: row => [
+      ...galleryDeletionFields(row.fields, (name, value) =>
+        /^(VALOR|FRETE)/.test(key(name)) && numericAmount(value) != null ? moneyFieldValue(value) : fieldText(name, value)),
+      { label: 'VALOR TOTAL', value: moneyFieldValue(field(row.fields, 'VALOR TOTAL', 'TOTAL') ?? row.total) },
+    ],
     onEdit: async row => {
       if (!opened || destroyed || editor || !canChangeDetail()) return;
       notify('');
@@ -411,7 +418,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         ++detailVersion; current = null; selectedId = null;
         panel.hidden = true; panel.replaceChildren(); needsDetailRefresh = false;
       }
-      await loadSnapshot(applied);
+      return loadSnapshot(applied, { refresh: true });
     },
   });
   const attachmentCounts = createGalleryAttachmentCounts({
@@ -478,10 +485,12 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       void attachmentCounts.request(result.rows.filter(item => recordMedia(item)));
       listStatus.replaceChildren(element('p', 'lg-hint', result.rows.length ? `${result.count ?? result.rows.length} lançamento(s)` : 'Nenhum lançamento encontrado para estes filtros.'));
       pageLabel.textContent = `Página ${pages ? page : 0} de ${pages}`;
+      return true;
     } catch (error) {
       if (!active(epoch) || version !== listVersion) return;
       listStatus.replaceChildren(element('p', 'lg-error', failure(error, 'Erro ao carregar lançamentos')),
         button('Tentar novamente', () => loadSnapshot(data), { locked: false }));
+      return false;
     } finally {
       if (active(epoch) && version === listVersion) { listLoading = false; updateBusy(); }
     }

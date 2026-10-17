@@ -16,7 +16,7 @@ const cases = [
   ['tasks', createTasksGallery, '.tg-card'],
   ['payments', createPaymentProgrammingGallery, '.pg-card'],
   ['recurring', createRecurringExpensesGallery, '.re-card'],
-  ...['group', 'family', 'subfamily', 'product', 'documents'].map(kind => [kind, createRegistrationGallery, '[data-registration-row]', { kind }]),
+  ...['group', 'family', 'subfamily', 'product', 'documents', 'investment', 'institution', 'investment_type', 'profitability', 'taxation', 'financial_movement'].map(kind => [kind, createRegistrationGallery, '[data-registration-row]', { kind }]),
   ...['IDFOLHA', 'FOLHAPGTO'].map(gallery => [gallery, createHrPayrollGallery, '.hr-gallery-card', { gallery }]),
 ];
 
@@ -24,15 +24,16 @@ async function setup(t, kind, create, options) {
   const dom = new JSDOM('<button id="origin">Abrir galeria</button>', { url: 'https://example.test' });
   const document = dom.window.document;
   const calls = [];
-  let rows = [{ id: '3479', eTag: '"v1"', total: 526, hasAttachments: false, MESREFERENCIA: '09/2026', fields: {
+  const network = { offline: false };
+  let rows = [{ id: '3479', eTag: '"v1"', total: 526, hasAttachments: false, MESREFERENCIA: '09/2026', FORNECEDOR: 'José Geraldo', DATA: '2026-10-01', VALORUNITARIO: 526, fields: {
     FILIAL: '001 - CENTRAL', FORNECEDOR: 'José Geraldo', PRODUTO: 'PEDREIRO',
     STATUS: kind === 'payments' ? 'PAGAMENTO PREVISTO' : kind === 'tasks' ? 'EM ATENDIMENTO' : 'ATIVO',
-    TAREFA: 'Conferir materiais', DESCRICAO: 'Energia', GRUPO: 'MATERIAIS', FAMÍLIA: 'OBRA',
+    TAREFA: 'Conferir materiais', DESCRICAO: 'Energia', INSTITUICAO: 'Instituição de teste', GRUPO: 'MATERIAIS', FAMÍLIA: 'OBRA',
     'SUBFAMÍLIAS CADASTRADAS': 'ESTRUTURA', TIPODOCUMENTO: 'NOTA', CONCLUÍDO: 'PEDIDO FINALIZADO',
     RECORRENCIA: 'MENSAL', Modified: '2026-09-30T10:00:00Z', 'DATA PREVISTO PGTO': '2026-10-01',
   } }];
   const data = {
-    async loadSnapshot() { return { rows }; },
+    async loadSnapshot() { if (network.offline) throw new Error('Sem conexão'); return { rows }; },
     async listAttachments() { return []; },
     async loadEditor(id) {
       calls.push(['editor', String(id)]);
@@ -44,6 +45,7 @@ async function setup(t, kind, create, options) {
     async deleteItem(id) { calls.push(['delete', String(id)]); rows = []; },
   };
   const request = async operation => {
+    if (network.offline && (operation === 'snapshot' || operation === 'IDFOLHA' || operation === 'FOLHAPGTO')) throw new Error('Sem conexão');
     if (kind === 'IDFOLHA' || kind === 'FOLHAPGTO') return { gallery: kind, rows, page: 1, hasMore: false };
     if (operation === 'snapshot') return { rows, page: 1, pages: 1, count: rows.length, totals: {}, filterOptions: { branch: ['001 - CENTRAL'], product: ['PEDREIRO'] } };
     if (operation === 'detail') return { item: rows[0], attachments: [], editFields: [{ name: 'PRODUTO', label: 'Produto', type: 'text' }] };
@@ -53,7 +55,7 @@ async function setup(t, kind, create, options) {
   const gallery = create({ document, data, request, loadEditor: data.loadEditor, saveEditor: data.saveEditor, deleteItem: data.deleteItem, ...options, now: () => new Date('2026-09-30T12:00:00-03:00') });
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
-  return { dom, document, gallery, calls };
+  return { dom, document, gallery, calls, network };
 }
 
 for (const [kind, create, selector, options = {}] of cases) {
@@ -87,6 +89,46 @@ for (const [kind, create, selector, options = {}] of cases) {
     await settle(); await settle();
     assert.deepEqual(ctx.calls.filter(([operation]) => operation === 'delete'), [['delete', '3479']]);
     assert.equal(ctx.document.querySelector(selector), null, 'successful delete refreshes gallery');
+    const receipt = ctx.document.querySelector('[data-gallery-delete-success]');
+    assert.ok(receipt, `${kind} keeps the success summary after the row disappears`);
+    const table = receipt.querySelector('table');
+    assert.ok(table);
+    assert.equal(table.querySelector('td').textContent, '3479');
+    assert.match(receipt.textContent, /REGISTRO EXCLUÍDO/);
+    assert.doesNotMatch(receipt.textContent, /undefined|\[object Object\]/);
+    if (kind === 'FOLHAPGTO') {
+      assert.match(receipt.textContent, /José Geraldo/);
+      assert.match(receipt.textContent, /01\/10\/2026/);
+      assert.match(receipt.textContent.replace(/\s/g, ' '), /R\$ 526,00/);
+    }
+    if (kind === 'IDFOLHA') assert.match(receipt.textContent, /09\/2026/);
+    if (kind === 'launches') assert.match(receipt.textContent.replace(/\s/g, ' '), /R\$ 526,00/);
+    if (kind === 'family') assert.match(receipt.textContent, /OBRA/);
+    if (kind === 'financial_movement') assert.match(receipt.textContent, /Instituição de teste/);
+    ctx.document.querySelector('[data-gallery-receipt-close]').click();
+    assert.equal(ctx.document.querySelector('[data-gallery-record-dialog]'), null);
+    assert.equal(ctx.calls.filter(([operation]) => operation === 'delete').length, 1);
+  });
+}
+
+for (const [kind, create, selector, options = {}] of cases) {
+  test(`${kind}: refresh failure preserves confirmed deletion receipt and retries only the read`, async t => {
+    const ctx = await setup(t, kind, create, options);
+    const trigger = ctx.document.querySelector(`${selector} [data-gallery-action="delete"]`);
+    trigger.click(); ctx.network.offline = true;
+    ctx.document.querySelector('[data-gallery-confirm="yes"]').click();
+    await settle(); await settle();
+    assert.ok(ctx.document.querySelector('[data-gallery-delete-success]'));
+    assert.match(ctx.document.querySelector('.gallery-record-dialog [role="alert"]').textContent, /atualizar/);
+    const retry = ctx.document.querySelector('[data-gallery-refresh-retry]');
+    assert.ok(retry, `${kind} must expose refresh failure inside the success popup`);
+    ctx.network.offline = false; retry.click(); await settle(); await settle();
+    assert.ok(ctx.document.querySelector('[data-gallery-delete-success]'));
+    assert.equal(ctx.document.querySelector(selector), null);
+    ctx.document.querySelector('[data-gallery-receipt-close]').click();
+    trigger.click();
+    assert.equal(ctx.document.querySelector('[data-gallery-confirm="yes"]'), null);
+    assert.deepEqual(ctx.calls.filter(([operation]) => operation === 'delete'), [['delete', '3479']]);
   });
 }
 

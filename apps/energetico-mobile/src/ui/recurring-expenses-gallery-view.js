@@ -5,6 +5,7 @@ import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 
@@ -302,12 +303,14 @@ export function createRecurringExpensesGallery({
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando despesas recorrentes…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
+    galleryTitle: 'GALERIA DESPESAS RECORRENTES',
+    getDeletionSummary: row => galleryDeletionFields(row.fields, displayValue),
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
-      return loadSnapshot();
+      return loadSnapshot({ refresh: true });
     },
   });
   const attachmentCounts = createGalleryAttachmentCounts({
@@ -630,6 +633,7 @@ export function createRecurringExpensesGallery({
       listStatus.textContent = "Não foi possível carregar a lista.";
       cards.replaceChildren();
       pageLabel.textContent = "Página 0 de 0";
+      return false;
     } finally {
       if (opened && !destroyed && root.isConnected && requestSession === session) {
         listLoading = false;
