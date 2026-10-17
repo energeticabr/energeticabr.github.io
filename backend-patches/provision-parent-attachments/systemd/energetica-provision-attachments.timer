@@ -1,0 +1,11 @@
+[Unit]
+Description=Energetica - reconciliar anexos de provisoes a cada dois minutos
+
+[Timer]
+OnCalendar=*-*-* *:0/2:00
+AccuracySec=10s
+Persistent=true
+Unit=energetica-provision-attachments.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=Energetica - copiar anexos da provisao para o descritivo vinculado
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+WorkingDirectory=/opt/energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/worker/provision_attachment_sync.py
+TimeoutStartSec=15min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/energetica-whatsapp
+ReadOnlyPaths=/etc/energetica-whatsapp.env /etc/energetica-whatsapp
+MemoryHigh=400M
+MemoryMax=650M
+Nice=10

@@ -1,0 +1,301 @@
+"""Copy confirmed provision attachments to their linked description, never delete.
+
+The app calls sync_uploaded_attachment after storing the original. The same
+implementation runs periodically for SharePoint uploads and interrupted copies.
+"""
+from contextlib import contextmanager
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import tempfile
+import time
+from urllib.parse import quote, unquote, urljoin, urlsplit
+
+CHILD = 'PROVISÃO PGTOS'
+PARENT = 'DESCRITIVOPROVISAO'
+STATE_DIR = Path('/var/lib/energetica-whatsapp/provision-attachment-sync')
+
+
+class MissingLink(ValueError):
+    pass
+
+
+def item_id(value):
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError('ID de provisão/descritivo inválido')
+    text = str(value).strip()
+    if not re.fullmatch(r'[1-9][0-9]*', text):
+        raise ValueError('ID de provisão/descritivo inválido')
+    return int(text)
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def copy_name(child, digest, original):
+    if not original or '/' in original or '\\' in original:
+        raise ValueError('Nome de anexo inválido')
+    # Full content hash makes concurrent copies deterministic and collision-safe.
+    # Legacy upload URLs embed the name; avoid URL delimiters in the copy only.
+    original = re.sub(r'[^\w .()-]', '_', original)
+    suffix = Path(original).suffix.encode('utf-8')[:16].decode('utf-8', errors='ignore')
+    stem = original[:-len(Path(original).suffix)] if Path(original).suffix else original
+    stem = stem.encode('utf-8')[:135].decode('utf-8', errors='ignore')
+    return f'PROV-{child}-{digest}-{stem}{suffix}'
+
+
+@contextmanager
+def parent_lock(directory, parent):
+    import fcntl
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(str(directory / f'parent-{item_id(parent)}.lock'),
+                 os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'r+') as stream:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Cópia de anexos em andamento; tente novamente.')
+                time.sleep(0.1)
+        yield
+
+
+class SharePointStore:
+    def __init__(self, client):
+        self.client = client
+
+    def collection(self, endpoint, params=None):
+        base = self.client.site_url.rstrip('/') + '/_api/'
+        original = urljoin(base, endpoint)
+        origin = urlsplit(original)
+        allowed = (origin.scheme, origin.netloc, unquote(origin.path).casefold())
+        result, seen = [], set()
+        url = original
+        while url:
+            parsed = urlsplit(url)
+            if (parsed.scheme, parsed.netloc, unquote(parsed.path).casefold()) != allowed or parsed.fragment:
+                raise ValueError('Paginação de anexos fora da coleção esperada')
+            if url in seen or len(seen) >= 100:
+                raise ValueError('Paginação de anexos repetida ou excessiva')
+            seen.add(url)
+            payload = self.client._request('GET', url, params=params)
+            params = None
+            if not isinstance(payload, dict) or 'error' in payload:
+                raise ValueError('Resposta inválida na consulta de anexos')
+            data = payload.get('d', {})
+            rows = payload.get('value') if 'value' in payload else data.get('results') if isinstance(data, dict) else None
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ValueError('Coleção incompleta na consulta de anexos')
+            result.extend(rows)
+            if len(result) > 100000:
+                raise ValueError('Limite de consulta de anexos excedido')
+            links = [payload.get('@odata.nextLink'), payload.get('odata.nextLink'),
+                     data.get('__next') if isinstance(data, dict) else None]
+            links = [link for link in links if link not in (None, '')]
+            if any(not isinstance(link, str) for link in links) or len(set(links)) > 1:
+                raise ValueError('Continuação inválida da consulta de anexos')
+            url = urljoin(original, links[0]) if links else None
+        return result
+
+    def link(self, child):
+        fields, version = self.client.get_item_fields_with_etag(
+            item_id(child), ['DESCRITIVOPROVISAO'], target_list=CHILD)
+        raw = fields.get('DESCRITIVOPROVISAO')
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            raise MissingLink('Anexo preservado na provisão. Vincule um descritivo para copiar o arquivo.')
+        return item_id(raw), version
+
+    def parent_version(self, parent):
+        return self.client.get_item_fields_with_etag(item_id(parent), [], target_list=PARENT)[1]
+
+    def names(self, kind, item):
+        rows = self.collection(self.client._list_endpoint(kind) + f'/items({item_id(item)})/AttachmentFiles',
+                               {'$select': 'FileName', '$top': '5000'})
+        names = [row.get('FileName') for row in rows]
+        if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(names):
+            raise ValueError('Nomes de anexos incompletos ou duplicados')
+        return set(names)
+
+    def _response(self, kind, item, name):
+        filename = quote(name.replace("'", "''"), safe='')
+        endpoint = self.client._list_endpoint(kind) + f"/items({item_id(item)})/AttachmentFiles/getByFileName('{filename}')/$value"
+        return self.client._request('GET', endpoint, _return_response=True, stream=True,
+                                    headers={'Accept': 'application/octet-stream'})
+
+    def content(self, kind, item, name):
+        with self._response(kind, item, name) as response:
+            return response.content
+
+    def digest(self, kind, item, name):
+        digest = hashlib.sha256()
+        with self._response(kind, item, name) as response:
+            for chunk in response.iter_content(1024 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def put(self, parent, name, data):
+        # Parent upload bypasses the provision hook; never recurse or overwrite.
+        self.client._ensure_attachment_local(parent, name, data, target_list=PARENT)
+
+    def children(self):
+        field = self.client._internal_field(CHILD, 'DESCRITIVOPROVISAO')
+        rows = self.collection(self.client._list_endpoint(CHILD) + '/items',
+                               {'$select': f'Id,Attachments,{field}', '$top': '5000'})
+        seen, result = set(), []
+        for row in rows:
+            if not {'Id', 'Attachments', field}.issubset(row) or not isinstance(row['Attachments'], bool):
+                raise ValueError('Projeção incompleta das provisões')
+            child = item_id(row['Id'])
+            if child in seen:
+                raise ValueError('Provisão duplicada na paginação')
+            seen.add(child)
+            result.append({'Id': child, 'Attachments': row['Attachments'], 'DESCRITIVOPROVISAO': row[field]})
+        return result
+
+
+class Mirror:
+    def __init__(self, store, directory=None):
+        self.store = store
+        self.directory = Path(directory) if directory is not None else STATE_DIR
+
+    def metadata(self, child):
+        parent, version = self.store.link(child)
+        return {'parent': parent, 'childVersion': version,
+                'parentVersion': self.store.parent_version(parent),
+                'sourceNames': sorted(self.store.names(CHILD, child)),
+                'targetNames': sorted(self.store.names(PARENT, parent))}
+
+    @staticmethod
+    def fingerprint(metadata):
+        return sha(json.dumps(metadata, sort_keys=True, ensure_ascii=False).encode())
+
+    def sync(self, child, filenames=None, dry_run=False):
+        child = item_id(child)
+        parent, _ = self.store.link(child)
+        with parent_lock(self.directory / 'locks', parent):
+            before = self.metadata(child)
+            if before['parent'] != parent:
+                raise RuntimeError('Vínculo da provisão alterado durante a cópia; tente novamente.')
+            selected = set(before['sourceNames']) if filenames is None else set(filenames)
+            if not selected.issubset(before['sourceNames']):
+                raise RuntimeError('O anexo original ainda não foi confirmado na provisão.')
+            existing = {name: self.store.digest(PARENT, parent, name) for name in before['targetNames']}
+            result = {'child': child, 'parent': parent, 'copied': 0, 'reused': 0, 'planned': 0, 'files': []}
+            for name in sorted(selected):
+                content = self.store.content(CHILD, child, name)
+                digest = sha(content)
+                destination = next((key for key, value in existing.items() if value == digest), None)
+                if destination is not None:
+                    result['reused'] += 1
+                else:
+                    destination = copy_name(child, digest, name)
+                    if destination in existing:
+                        raise RuntimeError('Conflito de conteúdo no anexo de destino; nenhum arquivo foi substituído.')
+                    if self.store.link(child) != (parent, before['childVersion']):
+                        raise RuntimeError('Provisão alterada durante a cópia; tente novamente.')
+                    if dry_run:
+                        result['planned'] += 1
+                    else:
+                        self.store.put(parent, destination, content)
+                        if self.store.digest(PARENT, parent, destination) != digest:
+                            raise RuntimeError('A cópia do anexo não passou na conferência SHA-256.')
+                        result['copied'] += 1
+                    existing[destination] = digest
+                result['files'].append({'source': name, 'target': destination, 'sha256': digest})
+            if self.store.link(child) != (parent, before['childVersion']):
+                raise RuntimeError('Provisão alterada durante a cópia; tente novamente.')
+            after = self.metadata(child)
+            if any(after[key] != before[key] for key in ('parent', 'childVersion', 'sourceNames')):
+                raise RuntimeError('Provisão alterada durante a cópia; tente novamente.')
+            # Do not cache success if a destination disappeared during the run.
+            if not dry_run and not {item['target'] for item in result['files']}.issubset(after['targetNames']):
+                raise RuntimeError('O anexo de destino mudou durante a confirmação.')
+            result['fingerprint'] = self.fingerprint(after)
+            return result
+
+    def reconcile(self, cache, now=None, dry_run=False):
+        now = time.time() if now is None else now
+        report = {'checked': 0, 'cached': 0, 'copied': 0, 'reused': 0, 'planned': 0, 'unlinked': 0, 'errors': []}
+        for row in self.store.children():
+            if not row['Attachments']:
+                continue
+            child = item_id(row['Id'])
+            try:
+                metadata = self.metadata(child)
+                previous = cache.get(str(child), {})
+                if (not dry_run and previous.get('fingerprint') == self.fingerprint(metadata)
+                        and 0 <= now - previous.get('checkedAt', 0) < 3600):
+                    report['cached'] += 1
+                    continue
+                result = self.sync(child, dry_run=dry_run)
+                report['checked'] += 1
+                for field in ('copied', 'reused', 'planned'):
+                    report[field] += result[field]
+                if not dry_run:
+                    cache[str(child)] = {'fingerprint': result['fingerprint'], 'checkedAt': now}
+            except MissingLink:
+                report['unlinked'] += 1
+                cache.pop(str(child), None)
+            except Exception as exc:
+                cache.pop(str(child), None)
+                report['errors'].append({'child': child, 'type': type(exc).__name__})
+        return report
+
+
+def sync_uploaded_attachment(client, child, filename, target_list):
+    import unicodedata
+    normalized = ''.join(c for c in unicodedata.normalize('NFKD', str(target_list)) if not unicodedata.combining(c)).strip().casefold()
+    if normalized != 'provisao pgtos':
+        return None
+    return Mirror(SharePointStore(client)).sync(child, filenames={filename})
+
+
+def save_cache(path, cache):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.cache-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'version': 1, 'entries': cache}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def main():
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--child', type=int)
+    args = parser.parse_args()
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from channel_bridge import build_engine, load_env
+    load_env(Path('/etc/energetica-whatsapp.env'))
+    mirror = Mirror(SharePointStore(build_engine().sharepoint))
+    if args.child:
+        result = mirror.sync(args.child, dry_run=args.dry_run)
+        print(json.dumps(result, ensure_ascii=False))
+        return
+    path = STATE_DIR / 'cache.json'
+    data = json.loads(path.read_text()) if path.exists() else {'version': 1, 'entries': {}}
+    if data.get('version') != 1 or not isinstance(data.get('entries'), dict):
+        raise ValueError('Cache de anexos inválido')
+    report = mirror.reconcile(data['entries'], dry_run=args.dry_run)
+    if not args.dry_run:
+        save_cache(path, data['entries'])
+    print(json.dumps(report))
+    if report['errors']:
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    main()
