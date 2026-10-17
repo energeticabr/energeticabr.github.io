@@ -1,0 +1,25 @@
+name: Payroll provision compatibility check
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: payroll-provision-compat-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    if: github.head_ref == 'codex/payroll-provision-schema-compat'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/energetico-mobile
+      - run: node --test tests/payroll-breakdown-data.test.mjs tests/payroll-provision-source.test.mjs
+        working-directory: apps/energetico-mobile
