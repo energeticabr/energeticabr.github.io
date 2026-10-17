@@ -236,10 +236,13 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
     actions: model.recordActions,
+    galleryTitle: model.title,
+    getDeletionSummary: row => model.fields.filter(name => !model.computedFields?.[name])
+      .map(name => ({ label: name, value: rowFieldValue(row, name) })),
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
-    onChanged: load,
+    onChanged: () => load({ refresh: true }),
   });
 
   let rows = [];
@@ -767,6 +770,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       rows = [];
       page = 1;
       render();
+      return false;
     } finally {
       if (!destroyed && !root.hidden && root.isConnected && current === request) { loadingScreen.sync(false); root.setAttribute("aria-busy", "false"); createShortcut.sync(); refreshShortcut.sync(); }
     }

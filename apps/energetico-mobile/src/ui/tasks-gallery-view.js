@@ -4,6 +4,7 @@ import { applyScreenNavigation } from "./screen-navigation.js";
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { createTaskCompletionDialog } from './task-completion-dialog.js';
@@ -209,12 +210,14 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando tarefas…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
+    galleryTitle: 'GALERIA TAREFAS',
+    getDeletionSummary: row => galleryDeletionFields(row.fields, formatValue),
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       detail.hidden = true; detail.replaceChildren();
-      return loadSnapshot();
+      return loadSnapshot({ refresh: true });
     },
   });
   const attachmentCounts = createGalleryAttachmentCounts({

@@ -136,6 +136,8 @@ export function createHrPayrollGallery({ document: documentOption,
   const recordActions = createGalleryRecordActions({
     getReceiptAttachments, readReceiptAttachment,
     document: doc, host: root, loadEditor,
+    galleryTitle: config.title,
+    getDeletionSummary: row => config.fields.map(([name, label]) => ({ label, value: displayValue(name, row[name]) })),
     saveEditor: (...args) => runMutation(() => saveEditor(...args)),
     deleteItem: (...args) => runMutation(() => deleteItem(...args)),
     onChanged: () => {
@@ -293,6 +295,7 @@ export function createHrPayrollGallery({ document: documentOption,
         retry.addEventListener("click", () => { void loadPage(targetPage, cursor, false, refresh); });
         cards.append(retry);
       }
+      return false;
     } finally {
       if (opened && !destroyed && root.isConnected && epoch === session) {
         busy = false;

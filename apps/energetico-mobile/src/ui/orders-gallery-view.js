@@ -6,6 +6,7 @@ import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
+import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts } from './gallery-attachment-counts.js';
 import { renderOrdersLinkedReport } from './orders-linked-report-view.js';
@@ -237,12 +238,14 @@ export function createOrdersGallery({
   });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
+    galleryTitle: 'GALERIA PEDIDOS',
+    getDeletionSummary: row => galleryDeletionFields(row.fields, formatValue),
     loadEditor: (id, options) => data.loadEditor(id, options),
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
       closeDetails();
-      return loadSnapshot();
+      return loadSnapshot({ refresh: true });
     },
     renderEditorExtra: row => {
       if (typeof data.loadLinkedReport !== 'function') return null;
