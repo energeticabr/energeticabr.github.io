@@ -1,0 +1,197 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -92,7 +92,7 @@
+     for group in groups:
+         item_id = _identity(group['Id'])
+         children = group.get('CHILDREN') or []
+-        amount = ('VALOR PENDENTE — CORRIGIR NA GALERIA DE PROVISÕES'
++        amount = ('VALOR PENDENTE — INFORMAR NA BAIXA'
+                   if group.get('settlementBlocked') else group['totalDisplay'])
+         child_ids = ', '.join(_identity(item['Id']) for item in children)
+         options.append({
+@@ -153,7 +153,7 @@
+                 and command == 'description_review_again'):
+             self._mark_processed(state, event.get('message_id'))
+             try:
+-                self._description_start(state, self.sharepoint.get_provision_description(group['parent_id']))
++                self._description_start(state, self._description_read_for_settlement(group['parent_id']))
+                 state['stage'] = 'selecting_fields'
+                 etag = self._save(state, etag)
+                 return self._prompt_next_or_summary(state, etag)
+@@ -187,6 +187,22 @@
+         if not group or state.get('_description_child_commit'):
+             return base
+         flow = copy.deepcopy(base)
++        if group.get('choose_amount_line'):
++            options = [{
++                'id': 'description_amount_line:' + _identity(item['Id']),
++                'value': _identity(item['Id']),
++                'title': f"PROVISÃO {item['Id']} — {_text(item.get('PRODUTO'))} — "
++                         f"{_text(item.get('FORNECEDOR'))} — QTD {_text(item.get('QTD')) or 'PENDENTE'} — "
++                         f"VALOR UNITÁRIO {_text(item.get('VALOR TOTAL')) or 'PENDENTE'}",
++            } for item in group['children']]
++            flow['steps'] = [flow['steps'][0], {
++                'key': 'description_amount_line', 'kind': 'selection', 'persist': False,
++                'prompt': 'EM QUAL LINHA DESTE DESCRITIVO DESEJA INFORMAR O VALOR DO PAGAMENTO? '
++                          'Selecione a provisão para começar. As demais linhas também serão revisadas.',
++                'button_label': 'ESCOLHER LINHA',
++                'source': {'type': 'static', 'options': options},
++            }]
++            return flow
+         obs = group.get('parent', {}).get('OBS')
+         options = [{'id': 'description_observation_blank', 'title': 'SEM OBSERVAÇÃO', 'value': ''}]
+         if _text(obs):
+@@ -211,18 +227,31 @@
+                                        f"DO DESCRITIVO {group['parent_id']}?")
+         return flow
+ 
++    def _description_read_for_settlement(self, parent_id):
++        reader = getattr(self.sharepoint, 'get_provision_description_for_settlement', None)
++        return (reader or self.sharepoint.get_provision_description)(parent_id)
++
+     def _description_selection_source(self, state, selected):
+         source = selected.get('source_values') or {}
+         error = source.get('amountError') if source.get('settlementBlocked') else None
+-        if not source.get('settlementBlocked'):
++        if (callable(getattr(self.sharepoint, 'get_provision_description_for_settlement', None))
++                or not source.get('settlementBlocked')):
+             try:
+-                return self.sharepoint.get_provision_description(selected['value'])
++                source = self._description_read_for_settlement(selected['value'])
++                for child in source.get('CHILDREN') or []:
++                    if not _pending(child):
++                        try:
++                            provision_line_total({**child, 'FRETE': child.get('FRETE') or '0'})
++                        except ValueError:
++                            error = f"A PROVISÃO {child['Id']} JÁ BAIXADA OU NÃO PENDENTE TEM VALOR INVÁLIDO."
++                            raise
++                return source
+             except ValueError as exc:
+                 amount_errors = {f"Invalid provision number: {field}": field
+                                  for field in ('QTD', 'VALOR TOTAL', 'FRETE')}
+                 if str(exc) not in amount_errors:
+                     raise
+-                error = f"Valor ausente ou inválido em {amount_errors[str(exc)]}."
++                error = error or f"Valor ausente ou inválido em {amount_errors[str(exc)]}."
+         child_ids = ', '.join(_identity(item['Id']) for item in source.get('CHILDREN') or [])
+         self._send_text(state,
+             f"⚠️ DESCRITIVO {selected['value']} — {_text(source.get('FORNECEDOR'))}. "
+@@ -233,20 +262,58 @@
+             "NENHUM PAGAMENTO FOI ALTERADO.")
+         return None
+ 
+-    def _description_start(self, state, source):
+-        if source.get('settlementBlocked'):
+-            raise ValueError(source.get('amountError') or 'Valor inválido em uma provisão vinculada.')
++    def _description_start(self, state, source, *, first_child_id=None):
+         parent_id = _identity(source['Id'])
+         all_children = copy.deepcopy(source.get('CHILDREN') or [])
++        # Already paid children contribute to the complete total but cannot be
++        # edited by this settlement. Never invent their unknown amounts.
++        for child in all_children:
++            if _identity(child.get('DESCRITIVOPROVISAO')) != parent_id:
++                raise ValueError('Uma provisão não pertence ao descritivo selecionado.')
++            if not _pending(child):
++                provision_line_total({**child, 'FRETE': child.get('FRETE') or '0'})
+         children = sorted((item for item in all_children if _pending(item)), key=lambda item: int(item['Id']))
+         if not children:
+             raise RuntimeError('Este descritivo não possui mais provisões pendentes. Atualize a lista.')
++        if first_child_id is not None:
++            index = next(index for index, child in enumerate(children)
++                         if _identity(child['Id']) == first_child_id)
++            children.insert(0, children.pop(index))
+         state['provision_description'] = {
+             'parent_id': parent_id, 'parent': copy.deepcopy(source),
+             'original_children': all_children, 'children': children,
+             'index': 0, 'entries': [], 'common': None, 'prepared': False,
+         }
++        if source.get('settlementBlocked') and len(children) > 1 and first_child_id is None:
++            state['provision_description']['choose_amount_line'] = True
++            state['step_index'], state['options'] = 1, []
++            return
+         self._description_load_child(state, 0)
++
++    def _description_choose_amount_line(self, state, etag, selected):
++        group = state['provision_description']
++        selected_id = _identity(selected['value'])
++        if not group.get('choose_amount_line'):
++            raise ValueError('Selecione uma provisão vinculada a este descritivo.')
++        source = self._description_selection_source(state, {
++            'value': group['parent_id'], 'source_values': group['parent']})
++        if source is None:
++            etag = self._save(state, etag)
++            return {'status': 'provision_amount_required', 'batch_id': state['batch_id'], 'etag': etag}
++        pending = [item for item in source.get('CHILDREN') or [] if _pending(item)]
++        if not pending:
++            self._send_text(state, 'ESTE DESCRITIVO NÃO POSSUI MAIS PROVISÕES PENDENTES. SELECIONE OUTRO PAGAMENTO.')
++            state.pop('provision_description', None)
++            for key in ('fields', 'answers', 'selections', 'display_values'):
++                state[key] = {}
++            state['step_index'], state['options'] = 0, []
++            return self._prompt_next_or_summary(state, etag)
++        if not any(_identity(item['Id']) == selected_id for item in pending):
++            self._send_text(state, 'A LINHA ESCOLHIDA NÃO ESTÁ MAIS PENDENTE NESTE DESCRITIVO. A LISTA FOI ATUALIZADA.')
++            self._description_start(state, source)
++            return self._prompt_next_or_summary(state, etag)
++        self._description_start(state, source, first_child_id=selected_id)
++        return self._prompt_next_or_summary(state, etag)
+ 
+     def _description_load_child(self, state, index):
+         group = state['provision_description']
+@@ -391,7 +458,7 @@
+ 
+     def _description_preflight(self, state):
+         group = state['provision_description']
+-        fresh = self.sharepoint.get_provision_description(group['parent_id'])
++        fresh = self._description_read_for_settlement(group['parent_id'])
+         expected = {str(item['Id']): item for item in group['original_children']}
+         actual = {str(item['Id']): item for item in fresh.get('CHILDREN') or []}
+         if set(expected) != set(actual):
+--- a/worker/provision_description_query.py
++++ b/worker/provision_description_query.py
+@@ -289,7 +289,7 @@
+                 result.append(self._group(parent, children, allow_invalid_totals=True))
+         return sorted(result, key=_due_key)
+ 
+-    def get_provision_description(self, parent_id) -> dict:
++    def get_provision_description(self, parent_id, *, allow_invalid_totals=False) -> dict:
+         """Fresh complete group for retry, even if every child is now paid.
+ 
+         Invalid IDs raise ValueError; absent parents raise LookupError. REST,
+@@ -312,4 +312,5 @@
+         if parent["Id"] != parent_id:
+             raise ValueError("SharePoint returned a different provision parent ID")
+         linked = self._linked(self._children())
+-        return self._group(parent, linked.get(str(parent_id), []))
++        return self._group(parent, linked.get(str(parent_id), []),
++                           allow_invalid_totals=allow_invalid_totals)
+--- a/worker/clients.py
++++ b/worker/clients.py
+@@ -2091,6 +2091,15 @@
+             from provision_description_query import ProvisionDescriptionQuery
+         return ProvisionDescriptionQuery(self).get_provision_description(parent_id)
+ 
++    def get_provision_description_for_settlement(self, parent_id) -> dict:
++        """Complete fresh group; unknown pending amounts are entered in review."""
++        try:
++            from .provision_description_query import ProvisionDescriptionQuery
++        except ImportError:
++            from provision_description_query import ProvisionDescriptionQuery
++        return ProvisionDescriptionQuery(self).get_provision_description(
++            parent_id, allow_invalid_totals=True)
++
+     def get_pending_payment_provisions(self) -> list[dict]:
+         """Lê todas as provisões ainda pendentes, ordenadas pelo vencimento.
+ 
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -21981,6 +21981,9 @@
+             )
+ 
+         description_source = None
++        if (state.get("flow") == "payment_settlement"
++                and step.get("key") == "description_amount_line"):
++            return self._description_choose_amount_line(state, etag, selected)
+         if (state.get("flow") == "payment_settlement" and step.get("key") == "provisao_para_baixa"
+                 and str(selected.get("id") or "").startswith("provision_description:")):
+             description_source = self._description_selection_source(state, selected)
