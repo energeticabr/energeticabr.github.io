@@ -1,0 +1,92 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -90,15 +90,16 @@
+ def group_options(groups):
+     options = []
+     for group in groups:
+-        if group.get('settlementBlocked'):
+-            continue
+         item_id = _identity(group['Id'])
+         children = group.get('CHILDREN') or []
++        amount = ('VALOR PENDENTE — CORRIGIR NA GALERIA DE PROVISÕES'
++                  if group.get('settlementBlocked') else group['totalDisplay'])
++        child_ids = ', '.join(_identity(item['Id']) for item in children)
+         options.append({
+             'id': f'provision_description:{item_id}', 'value': item_id,
+             'title': f"DESCRITIVO {item_id} — {_text(group.get('FORNECEDOR'))} "
+                      f"({_text(group.get('DATA PREVISTO PGTO'))[:10]}) — "
+-                     f"{len(children)} provisão(ões) — {group['totalDisplay']}",
++                     f"PROVISÕES {child_ids} — {amount}",
+             'source_values': copy.deepcopy(group), 'sourceKind': SOURCE_KIND,
+         })
+     return options
+@@ -209,6 +210,28 @@
+         flow['confirmation_prompt'] = ('CONFIRMA A BAIXA DE TODOS OS ITENS PENDENTES '
+                                        f"DO DESCRITIVO {group['parent_id']}?")
+         return flow
++
++    def _description_selection_source(self, state, selected):
++        source = selected.get('source_values') or {}
++        error = source.get('amountError') if source.get('settlementBlocked') else None
++        if not source.get('settlementBlocked'):
++            try:
++                return self.sharepoint.get_provision_description(selected['value'])
++            except ValueError as exc:
++                amount_errors = {f"Invalid provision number: {field}": field
++                                 for field in ('QTD', 'VALOR TOTAL', 'FRETE')}
++                if str(exc) not in amount_errors:
++                    raise
++                error = f"Valor ausente ou inválido em {amount_errors[str(exc)]}."
++        child_ids = ', '.join(_identity(item['Id']) for item in source.get('CHILDREN') or [])
++        self._send_text(state,
++            f"⚠️ DESCRITIVO {selected['value']} — {_text(source.get('FORNECEDOR'))}. "
++            f"PROVISÕES: {child_ids or 'CONSULTE O DESCRITIVO'}. "
++            f"{error or 'Valor ausente ou inválido em uma provisão vinculada.'} "
++            "ABRA A GALERIA DE PROVISÕES E CORRIJA O VALOR DOS ITENS INDICADOS. "
++            "DEPOIS RETORNE A EFETUAR BAIXA E PESQUISE NOVAMENTE. "
++            "NENHUM PAGAMENTO FOI ALTERADO.")
++        return None
+ 
+     def _description_start(self, state, source):
+         if source.get('settlementBlocked'):
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -21376,9 +21376,14 @@
+                     and not state.get("multi_selections", {}).get(step["key"])
+                     and not state.get("selections", {}).get(step["key"])):
+                 return {"status": "invalid_supplier_sync_batch", "batch_id": state["batch_id"], "etag": etag}
+-        # Recarrega opções de formulários que já estavam abertos quando uma
+-        # etapa deixou de ser texto livre e passou a ser uma seleção.
+-        if not state.get("options"):
++        # Refresh pending descriptions even in sessions opened before a value
++        # correction, payment or deployment; never search a stale cached subset.
++        refresh_descriptions = (
++            state.get("flow") == "payment_settlement"
++            and step.get("key") == "provisao_para_baixa"
++            and callable(getattr(self.sharepoint, "get_pending_provision_descriptions", None))
++        )
++        if refresh_descriptions or not state.get("options"):
+             state["options"] = self._selection_options(state, step)
+         # A typed search is never a choice, even when it exactly matches an ID.
+         # Only an explicit option reply may advance the selection step.
+@@ -21975,11 +21980,17 @@
+                 state, etag
+             )
+ 
+-        self._apply_selected_option(state, step, selected)
++        description_source = None
+         if (state.get("flow") == "payment_settlement" and step.get("key") == "provisao_para_baixa"
+                 and str(selected.get("id") or "").startswith("provision_description:")):
+-            source = self.sharepoint.get_provision_description(selected["value"])
+-            self._description_start(state, source)
++            description_source = self._description_selection_source(state, selected)
++            if description_source is None:
++                self._save(state, etag)
++                return {"status": "provision_amount_required", "field": step["key"],
++                        "batch_id": state["batch_id"]}
++        self._apply_selected_option(state, step, selected)
++        if description_source is not None:
++            self._description_start(state, description_source)
+         if (
+             state.get("flow") == "attendance_demonstrative_closure"
+             and step["key"] == "demonstrativo_etapa_encerramento"
