@@ -53,6 +53,35 @@ test('trocar mês recalcula o calendário e voltar do calendário retorna à per
   await h.click('[data-breakdown-next]'); assert.match(h.doc.querySelector('[role=alert]').textContent, /pelo menos/);
 });
 
+test('total recolhido abre rubricas somadas entre datas e atualiza sem fechar ou postar', async t => {
+  const h = harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');
+  const panel = h.doc.querySelector('details.payroll-breakdown-totals');
+  assert.ok(panel, 'total deve ser expansível'); assert.equal(panel.open, false);
+  h.input('[data-breakdown-value="2026-10-02:salary"]', '100');
+  h.input('[data-breakdown-quantity="2026-10-09:salary"]', '2');
+  h.input('[data-breakdown-value="2026-10-09:salary"]', '50');
+  h.input('[data-breakdown-value="2026-10-02:award"]', '25,50');
+  assert.match(panel.querySelector('summary').textContent, /Total geral.*225,50/);
+  await h.click('.payroll-breakdown-totals > summary'); assert.equal(panel.open, true);
+  const table = () => panel.querySelector('table').textContent;
+  assert.match(table(), /Salário.*200,00.*Prêmio.*25,50/s);
+  h.input('[data-breakdown-value="2026-10-09:salary"]', '75');
+  assert.equal(panel.open, true); assert.match(table(), /Salário.*250,00/s);
+  h.input('[data-breakdown-value="2026-10-02:award"]', '');
+  assert.match(table(), /Prêmio.*0,00/s); assert.match(panel.querySelector('summary').textContent, /250,00/);
+  h.input('[data-breakdown-value="2026-10-02:salary"]', 'inválido');
+  assert.match(panel.textContent, /confira os valores/i); assert.equal(panel.querySelector('table'), null);
+  h.input('[data-breakdown-value="2026-10-02:salary"]', '100');
+  assert.match(table(), /Salário.*250,00/s); assert.equal(panel.open, true); assert.equal(h.posts, 0);
+  await h.click('[data-breakdown-next]');
+  assert.equal(h.doc.querySelector('details.payroll-breakdown-totals').open, false);
+  await h.click('.payroll-breakdown-totals > summary'); assert.equal(h.posts, 0);
+  await h.click('[data-breakdown-submit]');
+  assert.equal(h.doc.querySelector('details.payroll-breakdown-totals').open, false);
+  assert.match(h.doc.querySelector('.payroll-breakdown-totals summary').textContent, /250,00/);
+});
+
 test('falha no envio mantém o lote para retomada após recriar a tela e impede alteração', async t => {
   const h = harness(); let restored; t.after(() => { h.view.destroy(); restored?.destroy(); h.dom.window.close(); });
   await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');

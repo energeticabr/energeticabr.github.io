@@ -84,8 +84,14 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   function scheduleStep() {
     content.append(el('h2', '', 'Preencha as provisões de pagamento')); identity();
     content.append(el('p', '', 'Informe a quantidade e o valor unitário nas rubricas que deseja programar.'));
-    const total = el('p', 'payroll-breakdown-total'); total.setAttribute('aria-live', 'polite');
-    const updateTotal = () => { try { total.textContent = `Total geral: ${money(draft.lines.reduce((sum, line) => sum + lineTotal(line), 0))}`; } catch { total.textContent = 'Total geral: confira os valores'; } };
+    const total = totalsPanel();
+    const updateTotal = () => {
+      try {
+        const rubrics = PAYROLL_RUBRICS.map(rubric => ({ label: rubric.label,
+          total: draft.lines.filter(line => line.rubric === rubric.id).reduce((sum, line) => sum.plus(lineTotal(line)), payrollDecimal(0)).toNumber() }));
+        total.update({ rubrics, total: rubrics.reduce((sum, rubric) => sum.plus(rubric.total), payrollDecimal(0)).toNumber() });
+      } catch { total.update(null); }
+    };
     for (const [index, day] of payrollProvisionDates(draft.month).entries()) {
       const cluster = el('details', 'payroll-breakdown-date'); cluster.open = index === 0; cluster.dataset.breakdownDate = day.date;
       const summary = el('summary'), dateTotal = el('span', 'payroll-breakdown-date-total');
@@ -105,21 +111,33 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       }
       updateDay(); content.append(cluster);
     }
-    content.append(total); updateTotal();
+    content.append(total.element); updateTotal();
     footer.append(button('Seguir', 'data-breakdown-next', () => { try { validatePayrollBreakdown(draft); step = 'review'; error.hidden = true; render(); } catch (cause) { showError(cause); } }));
   }
   function rubricTable(summary) {
     const table = el('table', 'payroll-breakdown-table'); table.setAttribute('aria-label', 'Totais por rubrica');
     const head = el('thead'), hr = el('tr'); for (const label of ['Rubrica', 'Total previsto']) { const th = el('th', '', label); th.scope = 'col'; hr.append(th); } head.append(hr); table.append(head);
     const tbody = el('tbody'); for (const row of summary.rubrics) { const tr = el('tr'); tr.append(el('th', '', row.label), el('td', '', money(row.total))); tbody.append(tr); }
-    const total = el('tr', 'payroll-breakdown-total-row'); total.append(el('th', '', 'Total geral'), el('td', '', money(summary.total))); tbody.append(total); table.append(tbody); content.append(table);
+    const total = el('tr', 'payroll-breakdown-total-row'); total.append(el('th', '', 'Total geral'), el('td', '', money(summary.total))); tbody.append(total); table.append(tbody); return table;
+  }
+  function totalsPanel(initial) {
+    const element = el('details', 'payroll-breakdown-totals');
+    const trigger = el('summary', 'payroll-breakdown-total'), amount = el('span'), rows = el('div', 'payroll-breakdown-total-details');
+    amount.setAttribute('aria-live', 'polite');
+    trigger.append(amount, el('small', '', 'Totais por rubrica')); element.append(trigger, rows);
+    const update = summary => {
+      amount.textContent = summary ? `Total geral: ${money(summary.total)}` : 'Total geral: confira os valores';
+      rows.replaceChildren(summary ? rubricTable(summary) : el('p', '', 'Confira os valores preenchidos para visualizar os totais por rubrica.'));
+    };
+    if (initial) update(initial);
+    return { element, update };
   }
   function reviewStep() {
     const summary = validatePayrollBreakdown(draft); content.append(el('h2', '', 'Confira o desdobramento da folha')); identity();
     content.append(el('p', '', `${summary.lines.length} provisão(ões) · Referência ${draft.month.split('-').reverse().join('/')} · Pagamento ainda não efetuado`));
     const list = el('div', 'payroll-breakdown-review');
     for (const line of summary.lines) { const row = el('article'); row.append(el('h3', '', `📅 ${dateText(line.date)} · ${line.label}`), el('p', '', `${line.quantity.toLocaleString('pt-BR')} × ${money(line.unitValue)} = ${money(line.total)}`), el('small', '', line.observation)); list.append(row); }
-    content.append(list); rubricTable(summary);
+    content.append(list, totalsPanel(summary).element);
     if (progress.signature) content.append(el('p', '', 'O envio já foi iniciado. Retome para concluir as provisões pendentes.'));
     else footer.append(button('Voltar', 'data-breakdown-edit', navigateBack));
     footer.append(button(progress.signature ? 'Retomar envio' : 'Confirmar e criar provisões', 'data-breakdown-submit', () => work(async active => {
@@ -135,7 +153,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     if (step === 'schedule') scheduleStep();
     if (step === 'review') reviewStep();
     if (step === 'done') {
-      content.append(el('h2', '', '✅ Provisões criadas com sucesso'), el('p', '', `${result.lines.length} provisão(ões), cada uma com seu próprio descritivo.`)); rubricTable(result);
+      content.append(el('h2', '', '✅ Provisões criadas com sucesso'), el('p', '', `${result.lines.length} provisão(ões), cada uma com seu próprio descritivo.`), totalsPanel(result).element);
       const list = el('ul'); for (const line of result.lines) list.append(el('li', '', `${dateText(line.date)} · ${line.label} · Provisão ID ${line.id} · Descritivo ID ${line.parentId}`)); content.append(list);
       footer.append(button('Concluir', 'data-breakdown-done', close));
     }
