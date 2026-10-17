@@ -43,7 +43,9 @@ test('fluxo filtra fornecedor, oferece sextas e fim do mês e só submete após 
 
 test('trocar mês recalcula o calendário e voltar do calendário retorna à pergunta do mês', async t => {
   const h = harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); }); await h.view.open(); await h.click('[data-breakdown-supplier="7"]');
+  h.input('[type=month]', ''); await h.click('[data-breakdown-next]'); assert.equal(h.doc.querySelector('[role=alert]').hidden, false);
   h.input('[type=month]', '2024-02'); await h.click('[data-breakdown-next]');
+  assert.equal(h.doc.querySelector('[role=alert]').hidden, true);
   assert.ok(h.doc.querySelector('[data-breakdown-date="2024-02-29"]')); assert.equal(h.doc.querySelectorAll('[data-breakdown-date]').length, 5);
   await h.click('[aria-label="Voltar"]'); assert.equal(h.doc.querySelector('[type=month]').value, '2024-02');
   h.input('[type=month]', '2026-07'); await h.click('[data-breakdown-next]');

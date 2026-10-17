@@ -75,7 +75,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     const month = el('input'); month.type = 'month'; month.value = draft.month; month.min = '1900-01'; month.dataset.breakdownMonth = '';
     month.addEventListener('input', () => { draft.month = month.value; });
     content.append(field('Mês e ano', month), el('p', '', 'Serão exibidas todas as sextas-feiras e o último dia do mês.'));
-    footer.append(button('Seguir', 'data-breakdown-next', () => { try { initializeLines(); step = 'schedule'; render(); } catch (cause) { showError(cause); } }));
+    footer.append(button('Seguir', 'data-breakdown-next', () => { try { initializeLines(); step = 'schedule'; error.hidden = true; render(); } catch (cause) { showError(cause); } }));
   }
   function lineTotal(line) {
     if (!String(line.unitValue).trim()) return 0;
