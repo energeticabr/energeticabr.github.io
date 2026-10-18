@@ -4,19 +4,32 @@ import { attendanceIrregularity } from '../src/chat/attendance-irregularity.js';
 import { readAttendanceIrregularity, saveAttendanceIrregularity } from '../src/chat/attendance-irregularity-data.js';
 import { buildAttendanceRhidBadge } from '../src/chat/attendance-rhid-badges.js';
 
-test('jornada de segunda a quinta exige justificativa fora de 8h45 a 9h30', () => {
-  assert.equal(attendanceIrregularity({ date: '2026-10-12', minutes: 524 })?.limit, '8h45 a 9h30');
-  assert.equal(attendanceIrregularity({ date: '2026-10-12', minutes: 525 }), null);
-  assert.equal(attendanceIrregularity({ date: '2026-10-15', minutes: 570 }), null);
-  assert.equal(attendanceIrregularity({ date: '2026-10-15', minutes: 571 })?.limit, '8h45 a 9h30');
+for (const date of ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15']) {
+  test(`${date}: jornada de 9h só exige justificativa acima de 30 minutos de variação`, () => {
+    for (const minutes of [510, 511, 524, 525, 540, 569, 570]) {
+      assert.equal(attendanceIrregularity({ date, minutes }), null, `${minutes} minutos dentro da tolerância`);
+    }
+    assert.deepEqual(attendanceIrregularity({ date, minutes: 509 }),
+      { date, minutes: 509, limit: '8h30 a 9h30', duration: '8h29' });
+    assert.deepEqual(attendanceIrregularity({ date, minutes: 571 }),
+      { date, minutes: 571, limit: '8h30 a 9h30', duration: '9h31' });
+  });
+}
+
+test('sexta aceita inclusive 7h30 e 8h30 e o exemplo de 8h22 sem justificativa', () => {
+  const date = '2026-10-16';
+  for (const minutes of [450, 451, 459, 460, 480, 500, 501, 502, 509, 510]) {
+    assert.equal(attendanceIrregularity({ date, minutes }), null, `${minutes} minutos dentro da tolerância`);
+  }
+  assert.deepEqual(attendanceIrregularity({ date, minutes: 449 }),
+    { date, minutes: 449, limit: '7h30 a 8h30', duration: '7h29' });
+  assert.deepEqual(attendanceIrregularity({ date, minutes: 511 }),
+    { date, minutes: 511, limit: '7h30 a 8h30', duration: '8h31' });
 });
 
-test('sexta usa 7h40 a 8h20; fim de semana e jornadas desconhecidas não disparam', () => {
-  assert.ok(attendanceIrregularity({ date: '2026-10-16', minutes: 459 }));
-  assert.equal(attendanceIrregularity({ date: '2026-10-16', minutes: 460 }), null);
-  assert.equal(attendanceIrregularity({ date: '2026-10-16', minutes: 500 }), null);
-  assert.ok(attendanceIrregularity({ date: '2026-10-16', minutes: 501 }));
+test('fim de semana e jornadas desconhecidas não disparam', () => {
   assert.equal(attendanceIrregularity({ date: '2026-10-17', minutes: 100 }), null);
+  assert.equal(attendanceIrregularity({ date: '2026-10-18', minutes: 700 }), null);
   assert.equal(attendanceIrregularity({ date: '2026-10-12' }), null);
 });
 
