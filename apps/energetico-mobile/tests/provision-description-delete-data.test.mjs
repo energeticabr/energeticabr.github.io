@@ -96,6 +96,72 @@ test('preview freezes the parent and ALL children across pages/statuses without 
   assert.equal(f.reads.filter(read => read[0] === 'page').length, 2);
 });
 
+test('preview avoids the full-field scan that times out on large provision lists', async () => {
+  const f = fixture(), getPage = f.repository.getItemsPage;
+  f.repository.getItemsPage = async (...args) => {
+    const query = new URLSearchParams(args[2]);
+    if (query.get('$expand') === 'fields') throw Object.assign(new Error('Graph timeout'), {code:'request_timeout'});
+    assert.equal(query.get('$expand'), 'fields($select=DESCRITIVOPROVISAO,FORNECEDOR,PRODUTO,STATUS)');
+    assert.equal(query.has('$select'), false, 'keep the item ETag and identity in the response');
+    return getPage(...args);
+  };
+  const context = await f.service().preview('42');
+  assert.deepEqual(context.children.map(child => child.id), ['2','3']);
+  assert.equal(f.writes.length, 0);
+});
+
+for (const code of ['request_timeout', 'network_error']) test(`preview retries a transient ${code} on the same page without losing earlier children`, async () => {
+  const f = fixture(), getPage = f.repository.getItemsPage;
+  let failed = false;
+  f.repository.getItemsPage = async (...args) => {
+    if (args[3].cursor && !failed) { failed = true; throw Object.assign(new Error('Graph unavailable'), {code}); }
+    return getPage(...args);
+  };
+  const context = await f.service().preview('42');
+  assert.equal(failed, true);
+  assert.deepEqual(context.children.map(child => child.id), ['2','3']);
+  assert.equal(f.writes.length, 0);
+});
+
+test('persistent timeout is bounded and never permits deletion from an incomplete preview', async () => {
+  const f = fixture(); let attempts = 0;
+  f.repository.getItemsPage = async () => { attempts++; throw Object.assign(new Error('Graph timeout'), {code:'request_timeout'}); };
+  await assert.rejects(f.service().preview('42'), error => error.code === 'request_timeout');
+  assert.equal(attempts, 2);
+  assert.equal(f.writes.length, 0);
+});
+
+test('an expired request cannot retry under an invalidated session', async () => {
+  const f = fixture(); let attempts = 0;
+  f.repository.getItemsPage = async () => { attempts++; f.invalidate(); throw Object.assign(new Error('Graph timeout'), {code:'request_timeout'}); };
+  await assert.rejects(f.service().preview('42'), error => error.code === 'PROVISION_DESCRIPTION_DELETE_SESSION');
+  assert.equal(attempts, 1);
+  assert.equal(f.writes.length, 0);
+});
+
+for (const status of [401,403]) test(`preview does not retry authorization failure ${status}`, async () => {
+  const f = fixture(); let attempts = 0;
+  f.repository.getItemsPage = async () => { attempts++; throw httpError(status); };
+  await assert.rejects(f.service().preview('42'), error => error.status === status);
+  assert.equal(attempts, 1);
+  assert.equal(f.writes.length, 0);
+});
+
+test('a timed-out delete is reconciled without automatically repeating the mutation', async () => {
+  const f = fixture(), service = f.service(), context = await service.preview('42');
+  f.hooks.afterDelete = () => { throw Object.assign(new Error('Graph timeout'), {code:'request_timeout'}); };
+  assert.equal((await service.remove(context, {confirm:true})).deleted, true);
+  assert.deepEqual(f.writes.map(write => write.id), ['2','3','42']);
+});
+
+test('persistent timeout during confirmation verification makes no financial changes', async () => {
+  const f = fixture(), service = f.service(), context = await service.preview('42'); let attempts = 0;
+  f.repository.getItemsPage = async () => { attempts++; throw Object.assign(new Error('Graph timeout'), {code:'request_timeout'}); };
+  await assert.rejects(service.remove(context, {confirm:true}), error => error.code === 'request_timeout');
+  assert.equal(attempts, 2);
+  assert.equal(f.writes.length, 0);
+});
+
 test('No, omitted confirmation and forged or cross-service contexts write nothing', async () => {
   const f = fixture(), service = f.service(), context = await service.preview('42');
   for (const options of [undefined, {}, {confirm: false}, {confirm: 'true'}]) await assert.rejects(service.remove(context, options));

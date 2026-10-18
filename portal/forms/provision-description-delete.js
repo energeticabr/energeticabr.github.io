@@ -62,9 +62,16 @@ export function createProvisionDescriptionDeletion({repository, siteKey = 'perso
     }
   }
   async function remote(method, ...args) {
-    active();
-    try { return await repository[method](siteKey, ...args); }
-    finally { active(); } // Includes rejected requests; never recover under another account.
+    const readOnly = ['resolveList', 'getColumns', 'getItemsPage', 'getItem'].includes(method);
+    for (let attempt = 0; ; attempt++) {
+      active();
+      try { return await repository[method](siteKey, ...args); }
+      catch (cause) {
+        // Retry only reads, once, with the same page/item and session. A lost
+        // mutation response must still be reconciled by its exact item GET.
+        if (!readOnly || attempt !== 0 || !['request_timeout', 'network_error'].includes(cause?.code)) throw cause;
+      } finally { active(); } // Includes rejected requests; never recover under another account.
+    }
   }
   async function contract() {
     const parent = await remote('resolveList', ['DESCRITIVOPROVISAO']);
@@ -97,10 +104,14 @@ export function createProvisionDescriptionDeletion({repository, siteKey = 'perso
   }
   async function scan(schema, parentId) {
     const children = [], seenIds = new Set(), cursors = new Set();
+    // Keep default item metadata (including ETag), but avoid fetching every
+    // provision field on every page. The complete, unfiltered set is required.
+    const fields = [...new Set([schema.link, schema.childSupplier, schema.product, schema.status])];
+    const query = `$expand=fields($select=${fields.join(',')})&$top=100`;
     let cursor = '';
     // Enumerate the whole child list. Filtering on pending reminders would hide paid children.
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
-      const page = await remote('getItemsPage', schema.childList, '$expand=fields&$top=100', {
+      const page = await remote('getItemsPage', schema.childList, query, {
         pageNumber, maxPages: MAX_PAGES, ...(cursor ? {cursor} : {}),
       });
       if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean'
