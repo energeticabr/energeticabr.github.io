@@ -8,7 +8,7 @@ const poll = attendanceBadgePoll();
 const params = new URLSearchParams(location.search);
 poll.options[0].detail_table = [[{label:'DATA',value:'13/10/2026'}],[{label:'IDDESCRITIVOETAPA',value:'384'}],[{label:'ATIVIDADE',value:'PINTURA EXTERNA'}]];
 if (params.has('mode')) {
-  const name = params.get('name') === 'long' ? 'JOSÉ GERALDO DOS SANTOS E OUTROS SERVIÇOS DE PINTURA EXTERNA' : 'HELISON ROSA LUIS';
+  const name = params.get('name') === 'long' ? 'JOSÉ GERALDO DOS SANTOS E OUTROS SERVIÇOS DE PINTURA EXTERNA' : params.get('name') === 'tiny' ? 'ANA' : 'HELISON ROSA LUIS';
   const date = '2020-10-15';
   poll.options[0].detail_table[0][0].value = '15/10/2020';
   const punches = { regular:'06:53;12:00;13:00;17:00', irregular:'06:53;11:00;13:00;15:00', missing:'06:53' }[params.get('mode')];

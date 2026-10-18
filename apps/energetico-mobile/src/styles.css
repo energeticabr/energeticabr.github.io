@@ -832,7 +832,7 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-attendance-select__row .chat-attendance-select__record .chat-attendance-select__content { align-items: stretch; }
 .chat-attendance-select__row .chat-attendance-select__record .chat-attendance-select__name { display: block; box-sizing: border-box; width: 100%; padding-right: 42px; }
 /* Reserve the full detail-button height in the header, not in the hours grid. */
-.chat-attendance-select__card:has(> .chat-attendance-select__arrow) .chat-attendance-select__record .chat-attendance-select__name { display: flex; align-items: center; min-height: 44px; padding-right: 52px; }
+.chat-attendance-select__card:has(> .chat-attendance-select__arrow) .chat-attendance-select__record .chat-attendance-select__name { min-height: 44px; padding-right: 52px; }
 .chat-attendance-select__row .chat-attendance-select__arrow { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid #e5ae36; border-radius: 10px; background: #ffcf66; color: #07566b; font-size: 25px; line-height: 1; }
 .chat-attendance-select__row .chat-attendance-select__arrow:focus-visible { outline: 3px solid #ffcf66; outline-offset: 2px; }
 .chat-attendance-select__detail { display: grid; gap: 6px; margin: 0 8px 8px; padding: 10px; border-radius: 8px; color: #16394b; background: #fff; font-size: 12px; overflow-wrap: anywhere; }

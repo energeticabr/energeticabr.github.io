@@ -44,7 +44,7 @@ test('detail arrow has its own header space and visible solid fill, never coveri
   const contrast = (a,b) => { const x = luminance(a), y = luminance(b); return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); };
   try {
     await server.listen();
-    for (const width of [390,320,1280]) for (const mode of ['regular','irregular','missing']) for (const name of ['short','long']) {
+    for (const width of [390,320,1280]) for (const mode of ['regular','irregular','missing']) for (const name of ['tiny','short','long']) {
       const result = await runBrowserLayout(browser, { width, height:844,
         url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attendance-supplier-details.html?mode=${mode}&name=${name}`,
         captureScreenshot:Boolean(process.env.ATTENDANCE_ARROW_SCREENSHOT_DIR) && width===390 && name==='short' });
@@ -55,6 +55,7 @@ test('detail arrow has its own header space and visible solid fill, never coveri
       assert.ok(before.arrow.bottom <= before.summary.top + 1,diagnostic);
       assert.ok(before.punches.every(punch => !overlaps(before.arrow,punch)),diagnostic);
       assert.ok(before.textRects.every(rect => !overlaps(before.arrow,rect)),diagnostic);
+      assert.ok(Math.abs(before.textRects[0].left-before.name.left)<=1,`name must remain left aligned: ${diagnostic}`);
       assert.ok(before.arrow.right <= before.card.right + 1,diagnostic);
       assert.ok(before.arrow.right-before.arrow.left >= 44 && before.arrow.bottom-before.arrow.top >= 44,diagnostic);
       assert.match(before.arrowFill,/^rgb\(/, 'the detail button must have an opaque fill');
