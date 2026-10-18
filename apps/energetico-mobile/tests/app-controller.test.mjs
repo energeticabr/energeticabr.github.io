@@ -108,6 +108,104 @@ function groupedPendingProvisionSnapshot() {
   }] };
 }
 
+test('pending description delete opens a complete preview and No returns without deleting', async t => {
+  const preview = { id: '306', supplier: 'COFER', children: [{ id: '91' }, { id: '92' }, { id: '93', status: 'PAGO' }] };
+  let removes = 0;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    previewDeletion: async id => { assert.equal(id, '306'); return preview; },
+    deleteDescription: async () => { removes++; },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit('request-pending-provision-deletion', { paymentId: '306' }), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDeletion.status, 'ready');
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisionDeletion.children.map(row => row.id), ['91', '92', '93']);
+  assert.equal(removes, 0);
+  assert.equal(await h.view.emit('cancel-pending-provision-deletion'), true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDeletion, null);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+  assert.equal(removes, 0);
+});
+
+test('pending description deletion requires its preview and prevents double confirmation', async t => {
+  const preview = { id: '306', supplier: 'COFER', children: [{ id: '91' }] };
+  let release, removes = 0;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    previewDeletion: async () => preview,
+    deleteDescription: async (context, options) => {
+      assert.equal(context, preview); assert.deepEqual(options, { confirm: true }); removes++;
+      await new Promise(resolve => { release = resolve; });
+      return { id: '306', deleted: true, deletedChildIds: ['91'] };
+    },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit('confirm-pending-provision-deletion', { paymentId: '306' }), false);
+  await h.view.emit('request-pending-provision-deletion', { paymentId: '306' });
+  const first = h.view.emit('confirm-pending-provision-deletion', { paymentId: '306' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(removes, 1);
+  assert.equal(await h.view.emit('confirm-pending-provision-deletion', { paymentId: '306' }), false);
+  assert.equal(await h.view.emit('cancel-pending-provision-deletion'), false);
+  release();
+  assert.equal(await first, true);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDeletion, null);
+  assert.deepEqual(h.view.renders.at(-1).pendingProvisions.rows, []);
+});
+
+test('incomplete deletion keeps confirmation and pending parent for explicit retry', async t => {
+  const preview = { id: '306', supplier: 'COFER', children: [{ id: '91' }, { id: '92' }] };
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(), previewDeletion: async () => preview,
+    deleteDescription: async () => { throw Object.assign(new Error('A provisão 92 ainda não foi excluída. Tente concluir.'), { code: 'PROVISION_DESCRIPTION_DELETE_INCOMPLETE' }); },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('request-pending-provision-deletion', { paymentId: '306' });
+  assert.equal(await h.view.emit('confirm-pending-provision-deletion', { paymentId: '306' }), false);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDeletion.canConfirm, true);
+  assert.match(h.view.renders.at(-1).pendingProvisionDeletion.error, /92/);
+  assert.equal(h.view.renders.at(-1).pendingProvisions.rows.length, 1);
+});
+
+test('pending deletion preview cannot reopen after stop or cancellation', async t => {
+  let release;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    previewDeletion: async () => new Promise(resolve => { release = resolve; }),
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const request = h.view.emit('request-pending-provision-deletion', { paymentId: '306' });
+  await new Promise(resolve => setImmediate(resolve));
+  await h.view.emit('cancel-pending-provision-deletion');
+  release({ id: '306', children: [{ id: '91' }] });
+  assert.equal(await request, false);
+  assert.equal(h.view.renders.at(-1).pendingProvisionDeletion, null);
+});
+
+test('partial deletion with changed source requires a fresh preview, not the invalid retry context', async t => {
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    listAttachments: async () => [], downloadAttachment: async () => new Blob(),
+    previewDeletion: async () => ({ id: '306', children: [{ id: '91' }] }),
+    deleteDescription: async () => { throw Object.assign(new Error('Os vínculos mudaram. Atualize a confirmação.'),
+      { code: 'PROVISION_DESCRIPTION_DELETE_INCOMPLETE', requiresPreview: true, retryable: false }); },
+  }) });
+  h.client.getPendingProvisionSnapshot = async () => groupedPendingProvisionSnapshot();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  await h.view.emit('request-pending-provision-deletion', { paymentId: '306' });
+  await h.view.emit('confirm-pending-provision-deletion', { paymentId: '306' });
+  assert.equal(h.view.renders.at(-1).pendingProvisionDeletion.canConfirm, false);
+  assert.equal(await h.view.emit('confirm-pending-provision-deletion', { paymentId: '306' }), false);
+});
+
 test("grouped provisions retain authoritative totals and metadata without merging colliding child IDs", async t => {
   let childReads = 0;
   const providerKinds = [];

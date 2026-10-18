@@ -2235,6 +2235,46 @@ function groupedProvisionsWithBlockedAmounts() {
   ] };
 }
 
+test('grouped pending rows put a red deletion X immediately below the green check, including unknown totals', () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: groupedProvisionsWithBlockedAmounts() })));
+  const actions = dom.window.document.querySelector('[data-payment-id="306"] .chat-pending-provision__actions');
+  const check = actions.querySelector('[data-action="settle-pending-provision"]');
+  assert.equal(check.nextElementSibling.dataset.action, 'request-pending-provision-deletion');
+  assert.ok(check.nextElementSibling.classList.contains('chat-pending-provision__delete'));
+  assert.equal(check.nextElementSibling.disabled, false);
+  assert.match(check.nextElementSibling.getAttribute('aria-label'), /306/);
+  dom.window.close();
+});
+
+test('delete confirmation identifies parent and every linked provision with escaped text and No/Yes actions', () => {
+  const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: groupedProvisionsWithBlockedAmounts(),
+    pendingProvisionDeletion: { paymentId: '306', status: 'ready', canConfirm: true, supplier: 'COFER', children: [
+      { id: '91', product: '<img src=x onerror=alert(1)>', supplier: 'COFER' },
+      { id: '92', product: 'AREIA' }, { id: '93', product: 'CIMENTO', status: 'PAGO' },
+    ] },
+  })));
+  const dialog = dom.window.document.querySelector('[data-pending-provision-delete-dialog]');
+  assert.match(dialog.textContent, /certeza.*306/i);
+  assert.equal(dialog.querySelectorAll('[data-deletion-child-id]').length, 3);
+  assert.equal(dialog.querySelector('[data-action="cancel-pending-provision-deletion"]').textContent, 'Não');
+  assert.equal(dialog.querySelector('[data-action="confirm-pending-provision-deletion"]').disabled, false);
+  assert.equal(dialog.querySelector('img'), null);
+  assert.match(dialog.textContent, /<img src=x/);
+  dom.window.close();
+});
+
+test('loading or failed deletion preview never enables Yes or implies unknown children are an empty list', () => {
+  for (const status of ['loading', 'error']) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: groupedProvisionsWithBlockedAmounts(),
+      pendingProvisionDeletion: { paymentId: '306', status, canConfirm: false, children: [], error: status === 'error' ? 'Consulta incompleta.' : '' },
+    })));
+    const dialog = dom.window.document.querySelector('[data-pending-provision-delete-dialog]');
+    assert.equal(dialog.querySelector('[data-action="confirm-pending-provision-deletion"]').disabled, true);
+    assert.doesNotMatch(dialog.textContent, /Nenhuma provisão vinculada/);
+    dom.window.close();
+  }
+});
+
 test("grouped provisions blocked popup explains each invalid amount and disables only its settlement check", () => {
   const snapshot = groupedProvisionsWithBlockedAmounts();
   const dom = new JSDOM(renderChatMarkup(signedInState({ pendingProvisions: snapshot,

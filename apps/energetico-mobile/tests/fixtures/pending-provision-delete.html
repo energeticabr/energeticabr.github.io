@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const root = document.querySelector('#app'), view = createChatView(root);
+const snapshot = { sourceKind: 'provision-description', due: true, rows: [{ id: '18', supplier: 'FORNECEDOR DE TESTE',
+  dueDate: '2026-10-15', product: 'VALE ALIMENTAÇÃO', totalDisplay: 'R$ 180,00', childCount: 3 }] };
+const state = { sessionStatus: 'authenticated', account: { name: 'Teste' }, messages: [], draft: '', pendingFiles: [], pendingProvisions: snapshot };
+const children = [{id:'332',product:'VALE ALIMENTAÇÃO',supplier:'FORNECEDOR DE TESTE',status:'PAGAMENTO PREVISTO'},
+  {id:'333',product:'SALÁRIO',status:'PAGAMENTO PREVISTO'}, {id:'334',product:'AJUDA DE CUSTO',status:'PAGO'}];
+const evidence = { noWrites: 0, yesWrites: 0 };
+const render = () => view.render({ ...state });
+view.on('request-pending-provision-deletion', ({paymentId}) => {
+  state.pendingProvisionDeletion = { paymentId, supplier: 'FORNECEDOR DE TESTE', status: 'ready', canConfirm: true, children };
+  render();
+});
+view.on('cancel-pending-provision-deletion', () => { state.pendingProvisionDeletion = null; render(); });
+view.on('confirm-pending-provision-deletion', () => {
+  evidence.yesWrites++; state.pendingProvisionDeletion = null;
+  state.pendingProvisions = { ...snapshot, rows: [] }; render();
+});
+render();
+const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+await document.fonts.ready; await frame();
+const check = root.querySelector('[data-action="settle-pending-provision"]');
+const remove = check.nextElementSibling;
+evidence.underCheck = remove.getBoundingClientRect().top >= check.getBoundingClientRect().bottom;
+evidence.redFill = getComputedStyle(remove).backgroundColor;
+remove.click(); await frame();
+evidence.children = [...root.querySelectorAll('[data-deletion-child-id]')].map(el => el.dataset.deletionChildId);
+root.querySelector('[data-action="cancel-pending-provision-deletion"]').click(); await frame();
+evidence.afterNoRows = root.querySelectorAll('.chat-pending-provision--payment').length;
+evidence.noWrites = evidence.yesWrites;
+root.querySelector('[data-action="request-pending-provision-deletion"]').click(); await frame();
+root.querySelector('[data-action="confirm-pending-provision-deletion"]').click(); await frame();
+evidence.afterYesRows = root.querySelectorAll('.chat-pending-provision--payment').length;
+state.pendingProvisions = snapshot; render(); await frame();
+if (new URLSearchParams(location.search).get('view') !== 'list') {
+  root.querySelector('[data-action="request-pending-provision-deletion"]').click(); await frame();
+}
+const panel = root.querySelector('[role="dialog"]'), rect = panel.getBoundingClientRect();
+evidence.fits = rect.left >= 0 && rect.right <= innerWidth + 1 && rect.top >= 0 && rect.bottom <= innerHeight + 1;
+evidence.horizontalOverflow = panel.scrollWidth > panel.clientWidth + 1;
+document.documentElement.dataset.layout = JSON.stringify(evidence);
+document.documentElement.dataset.ready = 'true';
+</script></body></html>

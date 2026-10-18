@@ -1,7 +1,7 @@
 import { notifyDataMutation } from '../../../portal/data/data-mutations.js';
 
 const WRITES = new Set([
-  'saveEditor', 'deleteItem', 'updateItem', 'updateDueDate', 'uploadAttachment',
+  'saveEditor', 'deleteItem', 'deleteDescription', 'updateItem', 'updateDueDate', 'uploadAttachment',
   'savePayment', 'saveSheet', 'save', 'post', 'linkPayroll',
   'sendText', 'sendFile', 'saveRhidAttendanceAdjustment', 'refreshRhidAttendance',
   'startRhidPendingValidation', 'completeDelegatedTask', 'uploadLaunchGalleryFile',
