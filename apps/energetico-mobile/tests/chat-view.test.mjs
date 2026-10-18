@@ -3384,6 +3384,46 @@ for (const presentation of ["accordion", "attendance_multi_select"]) {
   });
 }
 
+for (const [date, minutes] of [
+  ['2026-10-15', [510, 524, 570]],
+  ['2026-10-16', [450, 502, 510]],
+]) {
+  for (const action of ['checkbox', 'individual', 'todos']) {
+    test(`${date}: ${action} aceita variações de até 30 minutos sem consultar ou gravar justificativa`, async t => {
+      const dom = new JSDOM('<main id="app"></main>');
+      const root = dom.window.document.querySelector('#app');
+      const view = createChatView(root);
+      t.after(() => { view.destroy(); dom.window.close(); });
+      const reads = [], saves = [], replies = [];
+      view.on('attendance-irregularity-read', async payload => { reads.push(payload); return ''; });
+      view.on('attendance-irregularity-save', async payload => { saves.push(payload); });
+      view.on('select-reply', payload => replies.push(payload.replyId));
+      view.render(signedInState({ messages: [{ id: `tolerance-${date}-${action}`, role: 'assistant', type: 'poll',
+        presentation: 'attendance_multi_select', question: 'VALIDAR PRESENÇAS', options: minutes.map((value, index) => ({
+          id: `pending_attendance_record:${index + 1}`, label: `${index + 1} - Pessoa`,
+          rhidBadge: { date, minutes: value, status: 'present', label: 'RHID' },
+        })) }] }));
+      if (action === 'todos') root.querySelector('[data-action="attendance-select-all"]').click();
+      else for (const id of ['1', '2', '3']) {
+        root.querySelector(action === 'checkbox'
+          ? `input[data-reply-id="${id}"]`
+          : `button[data-reply-id="pending_attendance_record:${id}"]`).click();
+      }
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
+      assert.deepEqual(reads, []);
+      assert.deepEqual(saves, []);
+      if (action === 'individual') {
+        assert.deepEqual(replies, ['pending_attendance_record:1', 'pending_attendance_record:2', 'pending_attendance_record:3']);
+      } else {
+        assert.equal(root.querySelectorAll('input[data-action="attendance-select-toggle"]:checked').length, 3);
+        root.querySelector('[data-action="attendance-select-proceed"]').click();
+        assert.deepEqual(replies, ['attendance_batch:1,2,3']);
+      }
+    });
+  }
+}
+
 test('presença com jornada irregular exige justificativa antes de entrar no lote', async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
@@ -3391,8 +3431,8 @@ test('presença com jornada irregular exige justificativa antes de entrar no lot
   t.after(() => { view.destroy(); dom.window.close(); });
   const poll = { id: 'irregular-day', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
     question: 'VALIDAR PRESENÇAS', options: [
-      { id: 'pending_attendance_record:2249', label: '2249 - LUIZ', rhidBadge: { date: '2026-10-12', minutes: 524, status: 'inconsistent', label: '8h44' } },
-      { id: 'pending_attendance_record:2250', label: '2250 - ANA', rhidBadge: { date: '2026-10-12', minutes: 525, status: 'present', label: '8h45' } },
+      { id: 'pending_attendance_record:2249', label: '2249 - LUIZ', rhidBadge: { date: '2026-10-12', minutes: 509, status: 'inconsistent', label: '8h29' } },
+      { id: 'pending_attendance_record:2250', label: '2250 - ANA', rhidBadge: { date: '2026-10-12', minutes: 510, status: 'present', label: '8h30' } },
     ] };
   const state = signedInState({ messages: [poll] });
   const saves = [], replies = [];
@@ -3402,6 +3442,7 @@ test('presença com jornada irregular exige justificativa antes de entrar no lot
   root.querySelector('input[data-reply-id="2249"]').click();
   assert.equal(root.querySelector('input[data-reply-id="2249"]').checked, false);
   assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Por que ocorreu essa irregularidade/i);
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Jornada esperada: 8h30 a 9h30/);
   root.querySelector('[data-action="attendance-irregularity-cancel"]').click();
   assert.equal(root.querySelector('[data-attendance-irregularity-dialog]'), null);
   assert.equal(root.querySelector('input[data-reply-id="2249"]').checked, false);
@@ -3545,7 +3586,7 @@ test('botão individual irregular só prossegue após gravação; falha mantém 
   t.after(() => { view.destroy(); dom.window.close(); });
   const state = signedInState({ messages: [{ id: 'fri', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
     question: 'VALIDAR PRESENÇAS', options: [{ id: 'pending_attendance_record:30', label: '30 - JOÃO',
-      rhidBadge: { date: '2026-10-16', minutes: 501, status: 'present', label: '8h21' } }] }] });
+      rhidBadge: { date: '2026-10-16', minutes: 511, status: 'present', label: '8h31' } }] }] });
   const replies = [];
   let fail = true;
   view.on('attendance-irregularity-save', async () => { if (fail) throw new Error('Sem conexão'); });
@@ -3553,6 +3594,7 @@ test('botão individual irregular só prossegue após gravação; falha mantém 
   view.render(state);
   root.querySelector('.chat-attendance-select__row button').click();
   assert.deepEqual(replies, []);
+  assert.match(root.querySelector('[data-attendance-irregularity-dialog]').textContent, /Jornada esperada: 7h30 a 8h30/);
   root.querySelector('[data-role="attendance-irregularity-reason"]').value = 'Compensação.';
   root.querySelector('[data-action="attendance-irregularity-submit"]').click();
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -3572,9 +3614,9 @@ test('selecionar todos solicita cada justificativa e cancelar não marca o próx
   const badge = minutes => ({ date: '2026-10-16', minutes, status: 'present', label: 'RHID' });
   view.render(signedInState({ messages: [{ id: 'all-fri', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
     question: 'VALIDAR PRESENÇAS', options: [
-      { id: 'pending_attendance_record:30', label: '30 - A', rhidBadge: badge(450) },
+      { id: 'pending_attendance_record:30', label: '30 - A', rhidBadge: badge(449) },
       { id: 'pending_attendance_record:31', label: '31 - B', rhidBadge: badge(460) },
-      { id: 'pending_attendance_record:32', label: '32 - C', rhidBadge: badge(510) },
+      { id: 'pending_attendance_record:32', label: '32 - C', rhidBadge: badge(511) },
     ] }] }));
   const saves = [];
   view.on('attendance-irregularity-save', async payload => { saves.push(payload.id); });
