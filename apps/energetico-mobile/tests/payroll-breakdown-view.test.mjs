@@ -108,9 +108,13 @@ test('PAGO mostra valores da folha selecionada em cada rubrica e no total', asyn
   await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');
   h.input('[data-breakdown-value="2026-10-02:salary"]', '100');
   const table = h.doc.querySelector('[aria-label="Totais por rubrica"]');
-  assert.deepEqual([...table.querySelectorAll('thead th')].map(th => th.textContent), ['Rubrica','Total previsto','PAGO']);
+  assert.deepEqual([...table.querySelectorAll('thead th')].map(th => th.textContent), ['Rubrica','PREVISTO','PAGO','TOTAL']);
   const salary = [...table.querySelectorAll('tbody tr')].find(row => row.textContent.startsWith('Salário'));
   assert.match(salary.cells[1].textContent, /100,00/); assert.match(salary.cells[2].textContent, /300,00/);
+  assert.match(salary.cells[3].textContent, /400,00/);
   assert.match(table.querySelector('tbody tr:last-child').cells[2].textContent, /350,00/);
+  assert.match(table.querySelector('tbody tr:last-child').cells[3].textContent, /450,00/);
+  h.input('[data-breakdown-value="2026-10-02:salary"]', '100,15');
+  assert.match(h.doc.querySelector('[aria-label="Totais por rubrica"] tbody tr:last-child td:last-child')?.textContent || '', /450,15/);
   assert.deepEqual(requests, [['7','2026-10']]);
 });

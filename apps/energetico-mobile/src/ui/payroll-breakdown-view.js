@@ -128,13 +128,16 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
   }
   function rubricTable(summary) {
     const table = el('table', 'payroll-breakdown-table'); table.setAttribute('aria-label', 'Totais por rubrica');
-    const head = el('thead'), hr = el('tr'); for (const label of ['Rubrica', 'Total previsto', 'PAGO']) { const th = el('th', '', label); th.scope = 'col'; hr.append(th); } head.append(hr); table.append(head);
+    const head = el('thead'), hr = el('tr'); for (const [label, className] of [['Rubrica', ''], ['PREVISTO', 'payroll-breakdown-forecast'], ['PAGO', 'payroll-breakdown-paid'], ['TOTAL', 'payroll-breakdown-combined']]) { const th = el('th', className, label); th.scope = 'col'; hr.append(th); } head.append(hr); table.append(head);
+    const tableMoney = value => money(value).replace('\u00a0', ' ');
+    const amounts = (forecast, paid) => [el('td', 'payroll-breakdown-forecast', tableMoney(forecast)), el('td', 'payroll-breakdown-paid', payrollContext ? tableMoney(paid) : '—'),
+      el('td', 'payroll-breakdown-combined', payrollContext ? tableMoney(payrollDecimal(forecast).plus(paid).toNumber()) : '—')];
     const tbody = el('tbody'); for (const row of summary.rubrics) {
       const rubric = row.rubric || PAYROLL_RUBRICS.find(r => r.label === row.label)?.id;
       const tr = el('tr'), heading = el('th', '', row.label); heading.scope = 'row';
-      tr.append(heading, el('td', '', money(row.total)), el('td', '', payrollContext ? money(payrollContext.paid[rubric] ?? 0) : '—')); tbody.append(tr);
+      tr.append(heading, ...amounts(row.total, payrollContext?.paid[rubric] ?? 0)); tbody.append(tr);
     }
-    const total = el('tr', 'payroll-breakdown-total-row'); total.append(el('th', '', 'Total geral'), el('td', '', money(summary.total)), el('td', '', payrollContext ? money(payrollContext.paidTotal) : '—')); tbody.append(total); table.append(tbody); return table;
+    const total = el('tr', 'payroll-breakdown-total-row'); total.append(el('th', '', 'Total geral'), ...amounts(summary.total, payrollContext?.paidTotal ?? 0)); tbody.append(total); table.append(tbody); return table;
   }
   function totalsPanel(initial) {
     const element = el('details', 'payroll-breakdown-totals');
