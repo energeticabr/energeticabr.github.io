@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/web/attachment-preview.css">
+</head><body><script type="module">
+import { createAttachmentPreview } from '/src/web/attachment-preview.js';
+const pending = () => new Promise(() => {});
+let finishText;
+const preview = createAttachmentPreview({ documentRef: document,
+  urlApi: { createObjectURL: () => 'blob:pending-fixture', revokeObjectURL() {} },
+  readText: () => new Promise(resolve => { finishText = resolve; }),
+  loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: pending(), destroy() {} }) }),
+});
+const measure = () => {
+  const bounds = node => node.getBoundingClientRect();
+  const dialog = document.querySelector('dialog'), card = dialog.querySelector('.app-loading');
+  const header = bounds(dialog.querySelector('header')), footer = bounds(dialog.querySelector('footer'));
+  const rect = bounds(card), close = bounds(dialog.querySelector('.attachment-preview-close'));
+  return { centerX: rect.x + rect.width / 2, centerY: rect.y + rect.height / 2,
+    expectedX: bounds(dialog).x + bounds(dialog).width / 2, expectedY: (header.bottom + footer.top) / 2,
+    top: rect.top, bottom: rect.bottom, headerBottom: header.bottom, footerTop: footer.top,
+    closeVisible: close.top >= 0 && close.bottom <= innerHeight,
+    overflow: dialog.scrollWidth > dialog.clientWidth + 1 };
+};
+const results = [];
+for (const layout of ['media', 'flow-summary', 'report-pdf']) {
+  for (const [name, source] of [['file', pending()], ['image', new Blob(['image'], {type:'image/png'})],
+    ['video', new Blob(['video'], {type:'video/mp4'})], ['audio', new Blob(['audio'], {type:'audio/mpeg'})],
+    ['text', new Blob(['text'], {type:'text/plain'})], ['pdf', new Blob(['pdf'], {type:'application/pdf'})]]) {
+    void preview.open(source, `resumo-a1e40b43c6accde8e1462349-${name}`, { layout, onSign() {}, onStamp() {} });
+    for (let turn = 0; turn < 4; turn++) await Promise.resolve();
+    results.push({ layout, name, ...measure() });
+  }
+  void preview.openCollection([{ source:pending(), fileName:'primeiro.png' }, { source:pending(), fileName:'segundo.png' }], { layout });
+  results.push({ layout, name:'collection', ...measure() });
+}
+const loaded = preview.open(new Blob(['text'], {type:'text/plain'}), 'texto.txt');
+finishText('Arquivo pronto para leitura'); await loaded;
+const ready = { loaderRemoved: !document.querySelector('.app-loading'),
+  textVisible: document.querySelector('.attachment-preview-content').textContent.includes('Arquivo pronto para leitura') };
+await preview.open(Promise.reject(new Error('offline')), 'erro.png');
+const failed = { loaderRemoved: !document.querySelector('.app-loading'),
+  explanationVisible: Boolean(document.querySelector('.attachment-preview-explanation')) };
+void preview.open(pending(), 'resumo-carregando.png');
+await new Promise(requestAnimationFrame);
+document.documentElement.dataset.layout = JSON.stringify({ results, ready, failed });
+</script></body></html>
