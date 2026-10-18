@@ -6,6 +6,102 @@ import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
+  const original = { lines:[{ supplier, quantity:'5', unitValue:'10' }], orderMode:'new', orderId:'', date:'2026-10-15', dueDate:'2026-10-30', paymentDate:'', referenceMonth:'2026-10', account:{ id:'8', label:'CAIXA' }, stage:{ id:'7', label:'FUNDAÇÃO', branch:'OBRA A' }, obs:'', files };
+  const draft = structuredClone({ ...original, files:[] }); change(draft);
+  const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:recover-case';
+  storage.setItem(key, JSON.stringify({ draft, progress:{ operationId:'recover-case', signature:JSON.stringify(original), editable:true }, files }));
+  let sheetReads = 0;
+  const panel = createMealVoucherView({ documentRef:doc, storage, sessionKey:'recover-case', data:{
+    loadOptions:async () => ({ suppliers:[supplier], accounts:[original.account], stages:[original.stage] }),
+    loadOrders:async () => [], canEditPending:canEdit,
+    loadSheetAssignments:async () => { sheetReads++; return { '1':{ id:'11' } }; },
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  return { panel, doc, dom, storage, key, get sheetReads() { return sheetReads; } };
+}
+
+test('recuperação editável aceita campos incompletos antes de consultar a folha', async t => {
+  const h = recoveryPanel(t, { change:draft => { draft.referenceMonth = ''; draft.paymentDate = ''; } });
+  await h.panel.open();
+  assert.equal(h.doc.querySelector('[name="meal-reference-month"]').disabled, false);
+  assert.equal(h.sheetReads, 0, 'a folha será conferida depois de corrigir e seguir');
+  assert.equal(h.doc.querySelector('[role="alert"]').hidden, true);
+});
+
+test('rascunho editável com valores apagados retorna aos fornecedores sem travar a abertura', async t => {
+  const h = recoveryPanel(t, { change:draft => { draft.lines[0].unitValue = ''; } });
+  await h.panel.open();
+  assert.ok(h.doc.querySelector('[data-meal-value="1"]'));
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').disabled, false);
+});
+
+test('registros encontrados restauram o lote original e preservam os anexos pendentes', async t => {
+  const file = { name:'comprovante.pdf', size:11, lastModified:123 };
+  const h = recoveryPanel(t, { canEdit:async () => false, files:[file], change:draft => { draft.date = '2026-11-02'; } });
+  await h.panel.open();
+  assert.ok(h.doc.querySelector('[name="meal-files"]'));
+  h.doc.querySelector('[aria-label="Voltar"]').click();
+  assert.equal(h.doc.querySelector('[name="meal-date"]').value, '2026-10-15');
+  assert.equal(h.doc.querySelector('[name="meal-date"]').disabled, true);
+  h.panel.close();
+  assert.deepEqual(JSON.parse(h.storage.getItem(h.key)).files, [file]);
+});
+
+test('permissão de edição salva não é reutilizada quando a consulta ao servidor falha', async t => {
+  let offline = true;
+  const h = recoveryPanel(t, { canEdit:async () => { if (offline) throw new Error('offline'); return true; } });
+  await h.panel.open();
+  assert.match(h.doc.querySelector('[role="alert"]').textContent, /offline/);
+  h.doc.querySelector('[aria-label="Voltar"]').click();
+  h.doc.querySelector('[aria-label="Voltar"]').click();
+  assert.equal(h.doc.querySelector('[name="meal-date"]').disabled, true);
+  h.panel.close(); offline = false; await h.panel.open();
+  assert.equal(h.doc.querySelector('[name="meal-date"]').disabled, false);
+});
+
+test('consulta indisponível recupera o original mesmo se o rascunho editável ficou incompleto', async t => {
+  const h = recoveryPanel(t, { change:draft => { draft.referenceMonth = ''; draft.lines[0].unitValue = ''; }, canEdit:async () => { throw new Error('offline'); } });
+  await h.panel.open();
+  assert.match(h.doc.querySelector('[role="alert"]').textContent, /offline/);
+  h.doc.querySelector('[aria-label="Voltar"]').click();
+  h.doc.querySelector('[aria-label="Voltar"]').click();
+  assert.equal(h.doc.querySelector('[name="meal-reference-month"]').value, '2026-10');
+  assert.equal(h.doc.querySelector('[name="meal-reference-month"]').disabled, true);
+});
+
+test('rascunho restaurado sem gravações libera os campos e posta os dados corrigidos', async t => {
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
+  const draft = { lines:[{ supplier, quantity:'5', unitValue:'10' }], orderMode:'new', orderId:'', date:'2026-10-15', dueDate:'2026-10-30', paymentDate:'', referenceMonth:'2026-10', account:{ id:'8', label:'CAIXA' }, stage:{ id:'7', label:'FUNDAÇÃO', branch:'OBRA A' }, obs:'', files:[] };
+  const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:edit-account';
+  storage.setItem(key, JSON.stringify({ draft, progress:{ operationId:'edit-view-1', signature:JSON.stringify(draft) }, files:[] }));
+  let inspected = 0, posted;
+  const panel = createMealVoucherView({ documentRef:doc, storage, sessionKey:'edit-account', data:{
+    loadOptions:async () => ({ suppliers:[supplier], accounts:[draft.account,{ id:'9', label:'BANCO' }], stages:[draft.stage,{ id:'6', label:'ALVENARIA', branch:'OBRA A' }] }),
+    loadOrders:async () => [], loadSheetAssignments:async () => ({ '1':{ id:'12' } }),
+    canEditPending:async () => { inspected++; return true; },
+    post:async (value, progress) => { posted = { ...value, operationId:progress.operationId }; return { orderId:'5', lines:[], total:50 }; },
+  } });
+  t.after(() => { panel.destroy(); dom.window.close(); });
+  await panel.open();
+  assert.equal(inspected, 1);
+  assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Informe os dados/);
+  const type = (name, value) => { const input = doc.querySelector(`[name="${name}"]`); assert.equal(input.disabled, false); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles:true })); };
+  for (const [name,value] of [['meal-date','2026-11-02'],['meal-due-date','2026-11-10'],['meal-payment-date','2026-11-03'],['meal-reference-month','2026-11']]) type(name, value);
+  for (const [name,value] of [['meal-account','9'],['meal-stage','6']]) {
+    const input = doc.querySelector(`[name="${name}"]`); assert.equal(input.disabled, false); input.value = value; input.dispatchEvent(new dom.window.Event('change', { bubbles:true }));
+  }
+  doc.querySelector('[data-meal-next]').click(); await tick();
+  doc.querySelector('[data-meal-next]').click();
+  doc.querySelector('[data-meal-confirm]').click(); await tick();
+  assert.equal(posted.date, '2026-11-02'); assert.equal(posted.dueDate, '2026-11-10'); assert.equal(posted.paymentDate, '2026-11-03');
+  assert.equal(posted.referenceMonth, '2026-11'); assert.equal(posted.account.id, '9'); assert.equal(posted.stage.id, '6');
+  assert.equal(posted.operationId, 'edit-view-1'); assert.equal(storage.getItem(key), null);
+});
+
 test('revisão do vale mostra cartões por colaborador, total, OBS e anexos sem postar antes da confirmação', async () => {
   const css = readFileSync(new URL('../src/ui/meal-voucher.css', import.meta.url), 'utf8');
   const dom = new JSDOM(`<!doctype html><style>${css}</style><body></body>`, { url: 'https://example.invalid' });

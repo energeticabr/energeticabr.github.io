@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMealVoucherData } from '../src/chat/meal-voucher-data.js';
+import { JSDOM } from 'jsdom';
+import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 function fixture() {
   const names = {
@@ -33,6 +35,102 @@ function fixture() {
   return { repo, columns, rows, writes, uploads, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
+
+test('falha antes de gravar permite corrigir datas, referência, conta e etapa mantendo a operação', async () => {
+  const f = fixture(), create = f.repo.createItem;
+  let rejected = false;
+  f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw new Error('dados rejeitados'); } return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'editable-1' };
+  await assert.rejects(data.post(original, progress), /rejeitados/);
+  assert.ok(progress.signature); assert.equal(f.writes.length, 0);
+  assert.equal(await data.canEditPending(original, progress), true);
+  f.rows.CADASTROCONTA.push({ id:'9', fields:{ CONTA:'BANCO' } });
+  f.rows.LANCAMENTOOBRA.push({ id:'6', fields:{ ETAPA:'ALVENARIA', FILIAL:'OBRA A' } });
+  f.rows.IDFOLHA.push({ id:'33', fields:{ MESREFERENCIA:'11/2026', FORNECEDOR:'Ana' } });
+  const corrected = { ...original, date:'2026-11-02', dueDate:'2026-11-10', paymentDate:'2026-11-03', referenceMonth:'2026-11',
+    account:{ id:'9', label:'BANCO' }, stage:{ id:'6', label:'ALVENARIA', branch:'OBRA A' } };
+  await data.post(corrected, progress);
+  assert.equal(progress.operationId, 'editable-1'); assert.equal(f.rows.NOTASPENDENTES.length, 1);
+  const fields = f.rows.LANCAMENTOS[0].fields;
+  assert.equal(fields.DATA, '2026-11-02T12:00:00Z'); assert.equal(fields['DATA PGTO PREVISTO'], '2026-11-10T12:00:00Z');
+  assert.equal(fields['DATA PGTO EFETUADO'], '2026-11-03T12:00:00Z'); assert.equal(fields.CONTA, 'BANCO'); assert.equal(fields.ETAPA, 'ALVENARIA');
+  assert.equal(f.rows.FOLHAPGTO[0].fields.IDFOLHA, 33);
+});
+
+test('resposta perdida não libera edição de um pedido que já foi gravado', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'uncertain-1', editable:true };
+  f.loseOrderResponse();
+  await assert.rejects(data.post(original, progress), /General exception/);
+  assert.equal(progress.orderId, undefined);
+  assert.equal(await data.canEditPending(original, progress), false);
+  const count = f.writes.length;
+  await assert.rejects(data.post({ ...original, paymentDate:'2026-10-16' }, progress), /não pode ser alterado|já.*gravad/i);
+  assert.equal(f.writes.length, count);
+  await data.post(original, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
+test('pedido existente apenas selecionado não bloqueia correção antes do primeiro lançamento', async () => {
+  const f = fixture(), create = f.repo.createItem;
+  f.rows.NOTASPENDENTES.push(...['98','99'].map(id => ({ id, fields:{ FILIAL:'OBRA A', FORNECEDOR:'DIVERSOS', STATUS:'PENDENTE', VALORTOTAL:100, OBS:'' }, eTag:'"1"' })));
+  let rejected = false;
+  f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw new Error('dados rejeitados'); } return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = { ...draft([suppliers[0]]), orderMode:'existing', orderId:'99' }, progress = { operationId:'existing-edit' };
+  await assert.rejects(data.post(original, progress), /rejeitados/);
+  assert.equal(await data.canEditPending(original, progress), true);
+  await data.post({ ...original, orderId:'98', paymentDate:'2026-10-16' }, progress);
+  assert.equal(f.rows.NOTASPENDENTES.find(row => row.id === '99').fields.VALORTOTAL, 100);
+  assert.equal(f.rows.NOTASPENDENTES.find(row => row.id === '98').fields.VALORTOTAL, 110);
+  assert.equal(f.rows.LANCAMENTOS[0].fields.AGRUPAR, '98');
+});
+
+test('inspeção de edição falha fechada e identifica lançamentos sem IDs no progresso local', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'inspect-1', signature:JSON.stringify(original) };
+  f.rows.LANCAMENTOS.push({ id:'3', fields:{ __PowerAppsId__:'APP-vale-alimentacao-inspect-1-1' } });
+  assert.equal(await data.canEditPending(original, progress), false);
+  f.rows.LANCAMENTOS.length = 0;
+  f.rows.FOLHAPGTO.push({ id:'4', fields:{ Title:'APP-vale-alimentacao-inspect-1-folha-1' } });
+  assert.equal(await data.canEditPending(original, progress), false);
+  f.rows.FOLHAPGTO.length = 0;
+  f.repo.getItemsPage = async () => { throw new Error('offline'); };
+  await assert.rejects(data.canEditPending(original, progress), /offline/);
+  assert.equal(f.writes.length, 0);
+});
+
+test('consulta incompleta não autoriza editar uma tentativa anterior', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo });
+  f.repo.getItemsPage = async () => ({ items:[] });
+  await assert.rejects(data.canEditPending(draft([]), { operationId:'incomplete', signature:JSON.stringify({ orderMode:'new' }) }), /incomplet|confirmar/i);
+  assert.equal(f.writes.length, 0);
+});
+
+test('tela recupera a tentativa sem gravações e confirma pagamento corrigido no serviço real', async t => {
+  const f = fixture(), create = f.repo.createItem;
+  let rejected = false;
+  f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw new Error('rejeitado'); } return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'view-data-recovery' };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:integration';
+  storage.setItem(key, JSON.stringify({ draft:original, progress, files:[] }));
+  const view = createMealVoucherView({ data, documentRef:doc, storage, sessionKey:'integration' });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  const paid = doc.querySelector('[name="meal-payment-date"]'); assert.equal(paid.disabled, false);
+  paid.value = '2026-10-16'; paid.dispatchEvent(new dom.window.Event('input', { bubbles:true }));
+  doc.querySelector('[data-meal-next]').click(); await new Promise(setImmediate);
+  doc.querySelector('[data-meal-next]').click();
+  doc.querySelector('[data-meal-confirm]').click(); await new Promise(setImmediate);
+  assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /sucesso/);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+  assert.equal(f.rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO'], '2026-10-16T12:00:00Z');
+  assert.equal(storage.getItem(key), null);
+});
 
 test('busca todos os fornecedores elegíveis e cria um pedido com um lançamento por fornecedor', async () => {
   const f = fixture(), data = createMealVoucherData({ repository: f.repo });

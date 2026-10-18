@@ -66,7 +66,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       assertSession();
       const page = await repository.getItemsPage(siteKey, descriptor.id, '$expand=fields&$top=100', { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
       assertSession();
-      if (!Array.isArray(page?.items)) throw new Error('A resposta do SharePoint está incompleta.');
+      if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean') throw new Error('A resposta do SharePoint está incompleta.');
       result.push(...page.items);
       if (!page.hasMore) return result;
       if (!page.nextLink || seen.has(page.nextLink)) throw new Error('A paginação do SharePoint está incompleta.');
@@ -159,6 +159,30 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     }
     return String(row.id);
   }
+  async function canEditPending(rawDraft, progress = {}) {
+    assertSession();
+    if (!/^[A-Za-z0-9-]{1,80}$/.test(String(progress.operationId || ''))) throw new Error('A operação não foi identificada.');
+    if (progress.orderUpdated || ['lines', 'payroll', 'uploadedFiles'].some(name => Object.keys(progress[name] || {}).length)) return false;
+    let original = rawDraft;
+    if (progress.signature) {
+      try { original = JSON.parse(progress.signature); } catch { throw new Error('Não foi possível conferir o lote anterior.'); }
+      if (!original || !['new', 'existing'].includes(original.orderMode)) throw new Error('O lote anterior está incompleto.');
+    }
+    if (original.orderMode === 'new' && progress.orderId) return false;
+    const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
+    const obs = column(orders, ['OBS']).name, title = column(orders, ['Title'], false)?.name;
+    const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
+    const records = await Promise.all([orders, launches, payroll].map(all));
+    if (records.some(rows => rows.some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields))))
+      throw new Error('Não foi possível confirmar todos os registros da tentativa anterior.');
+    const prefix = `APP-vale-alimentacao-${progress.operationId}`.toUpperCase();
+    const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`.toUpperCase();
+    const ownsToken = (raw, start) => { const token = scalar(raw).toUpperCase(); return token.startsWith(start) && /^\d+$/.test(token.slice(start.length)); };
+    assertSession();
+    return !records[0].some(row => scalar(row.fields[obs]).toUpperCase().includes(marker) || title && scalar(row.fields[title]).toUpperCase() === prefix)
+      && !records[1].some(row => ownsToken(row.fields[launchToken], `${prefix}-`))
+      && !records[2].some(row => ownsToken(row.fields[payrollToken], `${prefix}-FOLHA-`));
+  }
   async function post(rawDraft, progress = {}, onProgress = () => {}) {
     if (posting) throw new Error('O lote já está sendo enviado.');
     if (!/^[A-Za-z0-9-]{1,80}$/.test(String(progress.operationId || ''))) throw new Error('A operação não foi identificada.');
@@ -166,7 +190,11 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     try {
       const draft = validateMealVoucherDraft(rawDraft);
       const signature = JSON.stringify({ ...draft, files: draft.files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })) });
-      if (progress.signature && progress.signature !== signature) throw new Error('O lote não pode ser alterado depois que a postagem começou.');
+      if (progress.signature && progress.signature !== signature) {
+        if (!await canEditPending(rawDraft, progress)) throw new Error('O lote não pode ser alterado porque já existem registros gravados. Retome o envio com os dados originais.');
+        for (const name of ['orderId', 'orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
+      }
+      progress.editable = false;
       const live = await loadOptions();
       for (const line of draft.lines) {
         const match = live.suppliers.find(row => row.id === line.supplier.id);
@@ -285,5 +313,5 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       return { orderId, lines: resultLines, total: draft.total };
     } finally { posting = false; }
   }
-  return Object.freeze({ prepare, loadOptions, loadOrders, loadSheetAssignments, post });
+  return Object.freeze({ prepare, loadOptions, loadOrders, loadSheetAssignments, canEditPending, post });
 }
