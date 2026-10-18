@@ -84,8 +84,19 @@ test('launch total is highlighted left of pencil, status moves below controls an
           highlighted: getComputedStyle(total).borderStyle !== 'none' && getComputedStyle(total).backgroundColor !== 'rgba(0, 0, 0, 0)',
           fits: box.left >= heading.left && box.right <= heading.right,
           overflow: card.scrollWidth > card.clientWidth + 1 || total.scrollWidth > total.clientWidth + 1,
+          overflowNodes: [...card.querySelectorAll('*')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => [node.className?.baseVal ?? node.className, node.clientWidth, node.scrollWidth]),
           labels: [...card.querySelectorAll('.lg-record-finance .lg-record-label')].map(label => label.textContent),
-          freight: card.querySelector('.lg-record-finance .lg-record-field:last-child .lg-record-value').textContent.replace(/\u00a0/g, ' '),
+          freight: card.querySelector('.lg-record-freight .lg-record-value').textContent.replace(/\u00a0/g, ' '),
+          inclusiveTotal: card.querySelector('.lg-record-total-with-freight .lg-record-value')?.textContent.replace(/\u00a0/g, ' '),
+          details: [...card.querySelectorAll('.lg-record-detail-tile')].map(tile => {
+            const rect = tile.getBoundingClientRect(), trigger = tile.querySelector('.lg-cluster-trigger');
+            return { filled: getComputedStyle(tile).backgroundColor !== 'rgba(0, 0, 0, 0)',
+              fits: tile.scrollWidth <= tile.clientWidth + 1 && rect.left >= heading.left && rect.right <= heading.right + 1,
+              height: rect.height, selectable: trigger?.tagName === 'BUTTON' && !trigger.disabled,
+              hint: tile.querySelector('.lg-record-detail-hint')?.textContent,
+              icon: tile.querySelector('.lg-card-icon')?.getBoundingClientRect().width > 0,
+              arrow: tile.querySelector('.lg-record-chevron')?.getBoundingClientRect().width > 0 };
+          }),
           payment: payment ? { text: payment.querySelector('.lg-record-value').textContent,
             visible: paymentBox.height > 0 && !payment.closest('[hidden]'),
             belowDescription: paymentBox.top >= descriptionBox.bottom,
@@ -109,7 +120,9 @@ test('launch total is highlighted left of pencil, status moves below controls an
         assert.equal(layout.color, 'rgb(181, 31, 36)');
         assert.ok(layout.leftOfPencil && layout.aboveDivider && layout.statusBelowActions && layout.highlighted && layout.fits && !layout.overflow,
           `Layout inválido em ${width}px: ${JSON.stringify(layout)}`);
-        assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
+        assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE', 'TOTAL COM FRETE']);
+        for (const tile of layout.details) assert.ok(tile.filled && tile.fits && tile.height >= 44 && tile.selectable && tile.icon && tile.arrow && tile.hint,
+          `Detalhamento inválido em ${width}px: ${JSON.stringify(tile)}`);
         assert.ok(layout.description?.visible && layout.description.belowFreight &&
           layout.description.beforeDisclosure && layout.description.fullWidth &&
           layout.description.preservesLines && !layout.description.overflow,
@@ -120,7 +133,7 @@ test('launch total is highlighted left of pencil, status moves below controls an
       }
       if (width < height && width <= 700) {
         const normalTotal = layouts[2]; // The reported R$ 906,00 card, without a media rail.
-        assert.ok(normalTotal.totalWidth <= normalTotal.contentWidth + 24,
+        assert.ok(normalTotal.totalWidth <= normalTotal.contentWidth + 70,
           `Total must fit its text instead of stretching in portrait ${width}px: ${JSON.stringify(normalTotal)}`);
       }
       assert.equal(layouts[0].payment.text, 'ENERGÉTICA - CAIXA / PIX');
@@ -131,6 +144,7 @@ test('launch total is highlighted left of pencil, status moves below controls an
       assert.deepEqual(layouts[0].mascot, { width: 44, height: 44, fits: true, loaded: true }, `Mascote em ${width}px`);
       assert.equal(layouts[1].mascot, null);
       assert.equal(layouts[0].freight, 'R$ 40,00');
+      assert.equal(layouts[0].inclusiveTotal, 'R$ 13.040,00', 'freight is already included in the service total');
       assert.equal(layouts[1].text, 'VALOR TOTALR$ 123.456.789,99');
       assert.equal(layouts[1].freight, 'R$ 0,00');
       if (width === 390 && process.env.LAUNCH_TOTAL_SCREENSHOT) {

@@ -956,8 +956,49 @@ test('launch total precedes edit controls while status stays below and finance s
     assert.equal(actions.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
     const finance = card.querySelector('.lg-record-finance');
     assert.deepEqual([...finance.querySelectorAll('.lg-record-label')].map(label => label.textContent),
-      ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE']);
-    assert.equal(finance.querySelector('.lg-record-field:last-child .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantFreight);
+      ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE', 'TOTAL COM FRETE']);
+    assert.equal(finance.querySelector('.lg-record-freight .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantFreight);
+  }
+});
+
+test('visual cards identify supplier and order details without changing their cluster actions', async t => {
+  const item = { ...row(3600), fields: { ...row().fields, AGRUPAR: 423, FORNECEDOR: 'COFER' } };
+  const ctx = await setup(t, {
+    loadLaunchGroup: async () => [item],
+    loadOrderSnapshot: async () => ({ rows: [{ id: 423, fields: { ID: 423, FORNECEDOR: 'COFER' } }] }),
+    request: async operation => operation === 'snapshot' ? snapshot({ rows: [item] }) : detail({ item }),
+  });
+  await ctx.gallery.open();
+  for (const kind of ['supplier', 'order']) {
+    const tile = ctx.root().querySelector(`.lg-record-${kind}`);
+    assert.ok(tile.querySelector('svg[aria-hidden="true"]'), `${kind} has a decorative icon`);
+    assert.ok(tile.querySelector('.lg-record-detail-hint')?.textContent.includes('Detalhar'), 'visible detail affordance');
+    assert.equal(tile.querySelector('.lg-record-chevron')?.getAttribute('aria-hidden'), 'true');
+    tile.querySelector('.lg-record-label').click(); await settle(); await settle();
+    const modal = ctx.root().querySelector('.lg-cluster-modal');
+    assert.equal(modal.hidden, false, `${kind} tile opens the existing details`);
+    assert.equal(ctx.root().querySelector('.lg-record-extra').hidden, true);
+    button(modal, 'Fechar').click();
+  }
+  assert.ok(ctx.root().querySelector('.lg-total svg[aria-hidden="true"]'));
+});
+
+test('total with freight uses the authoritative inclusive amount without adding freight twice', async t => {
+  const cases = [
+    { id: 1, total: 139.06, fields: { QUANTIDADE: 6, 'VALOR UNITÁRIO': 21.51, FRETE: 10 }, want: 'R$ 139,06' },
+    { id: 2, total: null, fields: { QUANTIDADE: '0,3', 'VALOR UNITÁRIO': '0,10', FRETE: '0,02' }, want: 'R$ 0,05' },
+    { id: 3, total: 999, fields: { 'VALOR TOTAL': '1.234,56', FRETE: 10 }, want: 'R$ 1.234,56' },
+    { id: 4, total: 0, fields: { FRETE: 0 }, want: 'R$ 0,00' },
+    { id: 5, total: null, fields: {}, want: '—' },
+  ];
+  const ctx = await setup(t, { request: async () => snapshot({ rows: cases }) });
+  await ctx.gallery.open();
+  for (const sample of cases) {
+    const card = ctx.root().querySelector(`[data-item-id="${sample.id}"]`);
+    const total = card.querySelector('.lg-record-total-with-freight');
+    assert.equal(total?.querySelector('.lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.want);
+    assert.ok(total.querySelector('svg[aria-hidden="true"]'));
+    assert.equal(card.querySelector('[data-cluster-kind="order"]'), null, 'missing orders do not create fake detail targets');
   }
 });
 

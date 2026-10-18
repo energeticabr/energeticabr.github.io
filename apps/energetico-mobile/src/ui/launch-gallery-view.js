@@ -11,6 +11,7 @@ import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import Decimal from 'decimal.js';
+import { launchGalleryIcon } from './launch-gallery-icons.js';
 
 const FILTERS = [
   ['branch', 'Filial'], ['supplier', 'Fornecedor'], ['status', 'Concluído'], ['id', 'ID'],
@@ -258,10 +259,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     }
     return undefined;
   }
-  function summaryField(labelText, value, className = '') {
+  function summaryField(labelText, value, className = '', iconName = '') {
     if (value == null || display(value).trim() === '') return null;
     const pair = element('div', `lg-record-field${className ? ` ${className}` : ''}`);
     pair.append(element('span', 'lg-record-label', labelText), element('span', 'lg-record-value', fieldText(labelText, value)));
+    if (iconName) {
+      pair.classList.add('lg-record-field--icon');
+      pair.prepend(launchGalleryIcon(doc, iconName));
+    }
     return pair;
   }
   function creatorName(item) {
@@ -473,7 +478,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         if (count != null) value.append(element('span', 'lg-total-count', display(count)), doc.createTextNode(' '),
           element('span', 'lg-total-money', money(result.totals?.[totalKey])));
         else value.append(element('span', 'lg-total-money', money(result.totals?.[totalKey])));
-        pair.append(element('dt', '', title), value); return pair;
+        pair.append(launchGalleryIcon(doc, 'money'), element('dt', '', title), value); return pair;
       }));
       for (const [name, options] of Object.entries(result.filterOptions ?? {})) {
         const control = filterControls.get(name);
@@ -626,6 +631,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function clusterAction(labelText, value, kind) {
     if (value == null || display(value).trim() === '') return summaryField(labelText, value);
     const pair = element('div', `lg-record-field${kind === 'supplier' ? ' lg-record-supplier' : ' lg-record-order'}`);
+    pair.classList.add('lg-record-field--icon', 'lg-record-detail-tile');
     const trigger = button(display(value), () => {
       if (!canChangeDetail()) return;
       void openCluster(kind, value);
@@ -633,7 +639,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     trigger.classList.add('lg-cluster-trigger', 'lg-record-value');
     trigger.dataset.clusterKind = kind;
     trigger.setAttribute('aria-label', `${kind === 'supplier' ? 'Ver lançamentos do fornecedor' : 'Ver pedido agrupado'}: ${display(value)}`);
-    pair.append(element('span', 'lg-record-label', labelText));
+    pair.append(launchGalleryIcon(doc, kind), element('span', 'lg-record-label', labelText));
     if (kind === 'order') {
       const actions = element('div', 'lg-record-order-actions');
       const mascot = createMascotReportButton(doc, {
@@ -650,6 +656,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       actions.append(trigger, mascot);
       pair.append(actions);
     } else pair.append(trigger);
+    pair.append(element('span', 'lg-record-detail-hint', kind === 'order' ? 'Detalhar pedido' : 'Detalhar fornecedor'));
+    const chevron = element('span', 'lg-record-chevron', '›');
+    chevron.setAttribute('aria-hidden', 'true');
+    pair.append(chevron);
+    trigger.title = kind === 'order' ? 'Selecionar para detalhar o pedido' : 'Selecionar para detalhar o fornecedor';
+    pair.addEventListener('click', event => {
+      if (!event.target.closest('button')) trigger.click();
+    });
     return pair;
   }
   async function fetchLaunchRows(filters = {}, { signal, parallelPages = 1 } = {}) {
@@ -1004,7 +1018,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         ? 'lg-status-final' : normalizedStatus.includes('PENDENTE') ? 'lg-status-pending' : 'lg-status-other';
       headingSummary.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
-    const total = summaryField('VALOR TOTAL', moneyFieldValue(totalValue));
+    const total = summaryField('VALOR TOTAL', moneyFieldValue(totalValue), '', 'money');
     const headingActions = recordActions.render(item);
     headingActions.classList.add('lg-record-header-actions');
     if (total) { total.classList.add('lg-record-total'); headingActions.prepend(total); }
@@ -1021,17 +1035,19 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     summaryFields.append(...[
       clusterAction('FORNECEDOR', supplier, 'supplier'),
       clusterAction('PEDIDO', group, 'order'),
-      summaryField(paymentLabel, paymentDate),
+      summaryField(paymentLabel, paymentDate, 'lg-record-payment-date', 'calendar'),
     ].filter(Boolean));
 
     const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');
     const values = [
-      ['VALOR UNITÁRIO', moneyFieldValue(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO'))],
-      ['QUANTIDADE', quantityText],
-      ['FRETE', moneyFieldValue(field(fields, 'FRETE')) ?? '—'],
+      ['VALOR UNITÁRIO', moneyFieldValue(field(fields, 'VALOR UNITÁRIO', 'VALOR UNITARIO')), 'lg-record-unit-price', 'price'],
+      ['QUANTIDADE', quantityText, 'lg-record-quantity', 'quantity'],
+      ['FRETE', moneyFieldValue(field(fields, 'FRETE')) ?? '—', 'lg-record-freight', 'freight'],
+      // The service's total already includes freight; never add it a second time.
+      ['TOTAL COM FRETE', amountFor(item) == null ? '—' : money(amountFor(item)), 'lg-record-total-with-freight', 'calculator'],
     ];
-    for (const [name, value] of values) {
-      const entry = summaryField(name, value);
+    for (const [name, value, className, iconName] of values) {
+      const entry = summaryField(name, value, className, iconName);
       if (entry) finance.append(entry);
     }
     if (!summaryFields.childElementCount) summaryFields.hidden = true;
@@ -1109,7 +1125,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const samePayment = paymentMethod.normalize('NFC').toUpperCase() === account.normalize('NFC').toUpperCase();
     const paymentText = [account, paymentMethod && !samePayment ? paymentMethod : '']
       .filter(Boolean).join(' / ') || '—';
-    summary.append(summaryField('CONTA/FORMAPGTO', paymentText, 'lg-record-payment-method'));
+    summary.append(summaryField('CONTA/FORMAPGTO', paymentText, 'lg-record-payment-method', 'payment'));
     summary.append(expand);
     body.append(summary, extra);
     card.classList.add('gallery-record-card');
