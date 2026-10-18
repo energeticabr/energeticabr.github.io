@@ -11,7 +11,7 @@ import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPr
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
-import { readAttendanceIrregularity, saveAttendanceIrregularity } from './chat/attendance-irregularity-data.js';
+import { createAttendanceIrregularityData } from './chat/attendance-irregularity-data.js';
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
   expandPresenceDatesMessage,
@@ -925,6 +925,7 @@ export function createAppController({
   recovery,
   mediaLoadTimeoutMs = 30_000,
   rhidReportTimeoutMs = 30_000,
+  attendanceIrregularityDataFactory = createAttendanceIrregularityData,
   authTimeoutMs,
   authSignInTimeoutMs,
   signPdfAttachment = defaultSignPdfAttachment,
@@ -1310,6 +1311,45 @@ export function createAppController({
   }
   let starting = false;
   let sessionRevision = 0;
+  let attendanceIrregularitySource = null;
+  function getAttendanceIrregularitySource() {
+    const owner = account, revision = sessionRevision;
+    if (attendanceIrregularitySource?.owner === owner && attendanceIrregularitySource.revision === revision) {
+      attendanceIrregularitySource.assertSession();
+      return attendanceIrregularitySource.data;
+    }
+    const assertSession = () => {
+      if (stopped || !owner || sessionStatus !== 'authenticated' || account !== owner || sessionRevision !== revision
+        || (typeof auth.getAccount === 'function' && auth.getAccount()?.homeAccountId !== owner.homeAccountId)) {
+        throw new Error('A sessão mudou. Abra novamente a presença antes de prosseguir.');
+      }
+    };
+    assertSession();
+    const tokenRequests = new Map();
+    const tokenProvider = async scopes => {
+      assertSession();
+      const key = JSON.stringify(Array.isArray(scopes) ? [...new Set(scopes)].sort() : scopes);
+      if (tokenRequests.has(key)) return tokenRequests.get(key);
+      const pending = (async () => {
+        const token = await auth.getToken(scopes).catch(async error => {
+          assertSession();
+          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
+          const resumeAction = scopes?.includes('Sites.ReadWrite.All') ? 'attendance-irregularity-save' : 'attendance-irregularity-read';
+          await auth.authorize(scopes, { resumeAction });
+          assertSession();
+          return auth.getToken(scopes);
+        });
+        assertSession();
+        return token;
+      })();
+      tokenRequests.set(key, pending);
+      try { return await pending; }
+      finally { if (tokenRequests.get(key) === pending) tokenRequests.delete(key); }
+    };
+    const data = attendanceIrregularityDataFactory({ tokenProvider, assertSession });
+    attendanceIrregularitySource = { owner, revision, assertSession, data };
+    return data;
+  }
   const reportSnapshots = createReportSessionCache();
   // Payroll details depend on the source's complete sheet/payment scans, not
   // just the visible sheet rows. Retain that state within this auth session.
@@ -9872,6 +9912,7 @@ export function createAppController({
     disposeMealVoucher();
     disposePayrollBreakdown();
     sessionRevision += 1;
+    attendanceIrregularitySource = null;
     reportSnapshots.reset();
     supplierPayrollSessionSource = null;
     sharedResumeRequested = false;
@@ -10520,46 +10561,8 @@ export function createAppController({
   }
 
   function bindCommands() {
-    bind('attendance-irregularity-read', async command => {
-      const owner = account, revision = sessionRevision;
-      const assertSession = () => {
-        if (stopped || sessionStatus !== 'authenticated' || account !== owner || sessionRevision !== revision) {
-          throw new Error('A sessão mudou. Abra novamente a presença antes de prosseguir.');
-        }
-      };
-      assertSession();
-      return readAttendanceIrregularity({ ...command, assertSession, tokenProvider: async scopes => {
-        assertSession();
-        const token = await auth.getToken(scopes).catch(async error => {
-          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-          await auth.authorize(scopes, { resumeAction: 'attendance-irregularity-read' });
-          assertSession();
-          return auth.getToken(scopes);
-        });
-        assertSession();
-        return token;
-      } });
-    });
-    bind('attendance-irregularity-save', async command => {
-      const owner = account, revision = sessionRevision;
-      const assertSession = () => {
-        if (stopped || sessionStatus !== 'authenticated' || account !== owner || sessionRevision !== revision) {
-          throw new Error('A sessão mudou. Abra novamente a presença antes de salvar.');
-        }
-      };
-      assertSession();
-      return saveAttendanceIrregularity({ ...command, assertSession, tokenProvider: async scopes => {
-        assertSession();
-        const token = await auth.getToken(scopes).catch(async error => {
-          if (error?.code !== 'AUTH_REQUIRED' || typeof auth.authorize !== 'function') throw error;
-          await auth.authorize(scopes, { resumeAction: 'attendance-irregularity-save' });
-          assertSession();
-          return auth.getToken(scopes);
-        });
-        assertSession();
-        return token;
-      } });
-    });
+    bind('attendance-irregularity-read', async command => getAttendanceIrregularitySource().read(command));
+    bind('attendance-irregularity-save', async command => getAttendanceIrregularitySource().save(command));
     bind("draft-changed", command => {
       if (recoveryUncertain) return;
       draftEditRevision += 1;
@@ -11142,6 +11145,7 @@ export function createAppController({
   }
 
   function stop() {
+    attendanceIrregularitySource = null;
     recentDiaryActivitiesAbort?.abort();
     recentDiaryActivitiesAbort = null;
     clearAttendanceRhidBadges();

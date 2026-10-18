@@ -18,6 +18,27 @@ function attendanceRepository(repository, tokenProvider) {
   return createSharePointRepository(createGraphClient(tokenProvider, { fetch: globalThis.fetch }), SHAREPOINT_SITES, { attachmentTransport: transport });
 }
 
+/** Keep discovery/schema caches within one guarded auth session, never cache item data or ETags. */
+export function createAttendanceIrregularityData({ repository, tokenProvider, assertSession = () => {} } = {}) {
+  let source;
+  const access = () => {
+    assertSession();
+    return source ||= attendanceRepository(repository, tokenProvider);
+  };
+  const run = async (operation, input) => {
+    const current = access();
+    try { return await operation({ ...input, repository: current, assertSession }); }
+    catch (error) {
+      if (source === current) source = undefined;
+      throw error;
+    }
+  };
+  return {
+    read: input => run(readAttendanceIrregularity, input),
+    save: input => run(saveAttendanceIrregularity, input),
+  };
+}
+
 async function attendanceItem(repository, id, date) {
   const recordId = String(id ?? '').trim();
   if (!/^\d+$/.test(recordId) || !isValidRhidReportDate(date)) throw new Error('Registro ou data da presença inválidos.');
@@ -46,10 +67,12 @@ export async function saveAttendanceIrregularity({ repository, tokenProvider, as
   repository = attendanceRepository(repository, tokenProvider);
   const list = await repository.resolveList('personal', ['DESCRITIVOPRESENCA']);
   if (list.status !== 'resolved' || !list.id) throw new Error('A lista DESCRITIVOPRESENCA não está disponível.');
-  const columns = await repository.getColumns('personal', list.id);
+  const [columns, item] = await Promise.all([
+    repository.getColumns('personal', list.id),
+    repository.getItem('personal', list.id, recordId, '$expand=fields'),
+  ]);
   const column = columns.find(item => item.name === 'IRREGULARIDADES');
   if (!column?.text?.allowMultipleLines || column.readOnly) throw new Error('A coluna IRREGULARIDADES não está disponível como texto multilinha.');
-  const item = await repository.getItem('personal', list.id, recordId, '$expand=fields');
   if (String(item?.id) !== recordId || recordDate(item?.fields?.DATA) !== date) {
     throw new Error('A data do registro mudou. Atualize as presenças antes de prosseguir.');
   }
@@ -57,5 +80,6 @@ export async function saveAttendanceIrregularity({ repository, tokenProvider, as
   if (!eTag || eTag === '*') throw new Error('Não foi possível confirmar a versão do registro.');
   assertSession();
   await repository.updateItem('personal', list.id, recordId, { IRREGULARIDADES: note }, { eTag });
+  assertSession();
   return { id: recordId, date };
 }
