@@ -1939,3 +1939,166 @@ test("rollback recompõe exatamente principals e funcoes da ACL exclusiva anteri
   assert.deepEqual(added, [[7, 10], [7, 11]]);
   assert.deepEqual(result, { restored: true, unique: true, assignments: 2 });
 });
+
+const recycleListId = "12345678-1234-1234-1234-123456789abc";
+const recycleBinId = "abcdef01-2345-6789-abcd-ef0123456789";
+function recycleFixture(response = { value: recycleBinId }) {
+  const calls = [], checks = [], graph = createFakeGraph([]), config = { ...sites.company };
+  const hooks = {};
+  const repository = createSharePointRepository(graph, { company: config, personal: { ...sites.personal } }, {
+    restTransport: {
+      async request(site, path, options) {
+        calls.push({site, path, options});
+        if (hooks.request) return hooks.request(site, path, options);
+        return path.endsWith('/recycle()') ? response : undefined;
+      },
+    },
+  });
+  repository.setAuthorizationProvider({ async authorize(check) { checks.push(check); if (hooks.authorize) await hooks.authorize(check); } });
+  assert.equal(typeof repository.recycleItem, 'function', 'repository must expose conditional REST recycling');
+  assert.equal(typeof repository.restoreRecycledItem, 'function', 'repository must expose receipt-bound REST undo');
+  return {repository, calls, checks, graph, config, hooks};
+}
+
+for (const payload of [recycleBinId, {value: recycleBinId}, {d: {Recycle: recycleBinId}}]) {
+  test(`recycleItem returns an opaque frozen receipt from ${JSON.stringify(payload)} and uses exact REST endpoints`, async () => {
+    const f = recycleFixture(payload);
+    const receipt = await f.repository.recycleItem('company', recycleListId, '42', {eTag: 'W/"42,7"'});
+    assert.equal(typeof receipt, 'object');
+    assert.ok(receipt && Object.isFrozen(receipt));
+    assert.deepEqual(Reflect.ownKeys(receipt), []);
+    assert.equal(await f.repository.restoreRecycledItem('company', recycleListId, '42', receipt), undefined);
+    assert.deepEqual(f.calls.map(call => ({path: call.path, options: call.options})), [
+      {path: "/_api/web/lists(guid'12345678-1234-1234-1234-123456789abc')/items(42)/recycle()", options: {method: 'POST', permission: 'write', headers: {'IF-MATCH': 'W/"42,7"'}}},
+      {path: "/_api/web/RecycleBin('abcdef01-2345-6789-abcd-ef0123456789')/restore()", options: {method: 'POST', permission: 'write'}},
+    ]);
+    assert.ok(f.calls.every(call => call.site === f.config));
+    assert.deepEqual(f.checks, [
+      {action: 'delete', siteKey: 'company', listId: recycleListId, itemId: '42'},
+      {action: 'delete', siteKey: 'company', listId: recycleListId, itemId: '42'},
+    ]);
+    assert.deepEqual(f.graph.calls, [], 'even a Graph-configured site must recycle/restore via REST');
+  });
+}
+
+test('recycleItem captures the exact ETag before awaiting authorization', async () => {
+  const f = recycleFixture(), options = {eTag: '"original,9"'};
+  f.hooks.authorize = () => { options.eTag = '*'; };
+  await f.repository.recycleItem('company', recycleListId, 42, options);
+  assert.equal(f.calls[0].options.headers['IF-MATCH'], '"original,9"');
+});
+
+for (const eTag of [undefined, '', '*', ' * ', 'W/"*"', '"x"\r\nIf-Match: *', '"a", "b"', ' "1" ', 2]) {
+  test(`recycleItem rejects missing or unsafe ETag ${JSON.stringify(eTag)} without dispatch`, async () => {
+    const f = recycleFixture();
+    await assert.rejects(f.repository.recycleItem('company', recycleListId, '42', {eTag}));
+    assert.equal(f.calls.length, 0);
+  });
+}
+
+for (const [listId, itemId] of [
+  ['not-guid', '42'], [recycleListId + "')/items(9)", '42'],
+  [recycleListId, 0], [recycleListId, -1], [recycleListId, '1.2'], [recycleListId, '1e2'],
+  [recycleListId, '01'], [recycleListId, '42)/recycle()'], [recycleListId, '9007199254740993'], [recycleListId, true],
+]) {
+  test(`recycleItem rejects malformed exact target ${JSON.stringify([listId, itemId])}`, async () => {
+    const f = recycleFixture();
+    await assert.rejects(f.repository.recycleItem('company', listId, itemId, {eTag: '"1"'}));
+    assert.equal(f.calls.length, 0);
+  });
+}
+
+for (const payload of [undefined, null, {}, {id: recycleBinId}, {Recycle: recycleBinId}, {d: {Id: recycleBinId}}, {value: 42},
+  {value: ''}, {value: `guid'${recycleBinId}'`}, {value: recycleBinId + "')/restore()"},
+  {value: recycleBinId, d: {Recycle: '99999999-9999-9999-9999-999999999999'}},
+]) {
+  test(`recycleItem rejects unproven recycle GUID response ${JSON.stringify(payload)}`, async () => {
+    const f = recycleFixture(payload);
+    // Pass undefined explicitly through the hook instead of the fixture's default argument.
+    f.hooks.request = () => payload;
+    await assert.rejects(f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'}));
+    assert.equal(f.calls.length, 1, 'do not invent a receipt or dispatch a speculative restore');
+  });
+}
+
+test('restoreRecycledItem rejects forged, serialized, cloned, and cross-repository receipts', async () => {
+  const f = recycleFixture(), other = recycleFixture();
+  const receipt = await f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'});
+  for (const forged of [undefined, null, recycleBinId, {}, {id: recycleBinId}, {...receipt}, structuredClone(receipt), JSON.parse(JSON.stringify(receipt))]) {
+    await assert.rejects(f.repository.restoreRecycledItem('company', recycleListId, '42', forged));
+  }
+  await assert.rejects(other.repository.restoreRecycledItem('company', recycleListId, '42', receipt));
+  assert.equal(f.calls.length, 1);
+  assert.equal(other.calls.length, 0);
+});
+
+test('restoreRecycledItem binds the receipt to its site, exact list and positive original item ID', async () => {
+  const f = recycleFixture();
+  const receipt = await f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'});
+  for (const [site, list, id] of [
+    ['personal', recycleListId, '42'], ['company', '99999999-9999-9999-9999-999999999999', '42'],
+    ['company', recycleListId, '43'], ['company', 'bad', '42'], ['company', recycleListId, '42)/restore()'],
+  ]) await assert.rejects(f.repository.restoreRecycledItem(site, list, id, receipt));
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.checks.length, 1, 'forged and out-of-scope undo never reaches authorization or REST');
+  await f.repository.restoreRecycledItem('company', recycleListId, 42, receipt);
+  assert.equal(f.calls.length, 2);
+});
+
+test('restoreRecycledItem refuses a receipt after its configured site destination changes', async () => {
+  const f = recycleFixture(), receipt = await f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'});
+  f.config.path = '/sites/another-site';
+  await assert.rejects(f.repository.restoreRecycledItem('company', recycleListId, '42', receipt));
+  assert.equal(f.calls.length, 1);
+});
+
+test('recycleItem and receipt undo both enforce current delete authorization before REST dispatch', async () => {
+  const f = recycleFixture(), denied = Object.assign(new Error('ACL denied'), {status: 403});
+  f.hooks.authorize = () => { throw denied; };
+  await assert.rejects(f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'}), error => error === denied);
+  assert.equal(f.calls.length, 0);
+  f.hooks.authorize = undefined;
+  const receipt = await f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'});
+  f.hooks.authorize = () => { throw denied; };
+  await assert.rejects(f.repository.restoreRecycledItem('company', recycleListId, '42', receipt), error => error === denied);
+  assert.equal(f.calls.length, 1);
+  f.hooks.authorize = undefined;
+  await f.repository.restoreRecycledItem('company', recycleListId, '42', receipt);
+  assert.equal(f.calls.length, 2, 'authorization rejection does not consume a valid undo receipt');
+});
+
+for (const status of [401, 403, 404, 500]) test(`recycleItem propagates HTTP ${status} without fallback or retry`, async () => {
+  const f = recycleFixture(), failure = Object.assign(new Error('REST failed'), {status});
+  f.hooks.request = () => { throw failure; };
+  await assert.rejects(f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'}), error => error === failure);
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(f.graph.calls, []);
+});
+
+test('recycleItem maps a conditional 412 using the existing concurrency error contract', async () => {
+  const f = recycleFixture(), failure = Object.assign(new Error('ETag changed'), {status: 412});
+  f.hooks.request = () => { throw failure; };
+  await assert.rejects(f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'}), error => {
+    assert.equal(error.status, 412); assert.equal(error.code, 'concurrent_change'); assert.equal(error.cause, failure); return true;
+  });
+  assert.equal(f.calls.length, 1);
+});
+
+for (const status of [401, 403, 404, 500]) test(`restoreRecycledItem propagates HTTP ${status} and allows the SAME receipt retry`, async () => {
+  const f = recycleFixture(), receipt = await f.repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'});
+  const failure = Object.assign(new Error('restore failed or response lost'), {status});
+  f.hooks.request = () => { throw failure; };
+  await assert.rejects(f.repository.restoreRecycledItem('company', recycleListId, '42', receipt), error => error === failure);
+  f.hooks.request = undefined;
+  await f.repository.restoreRecycledItem('company', recycleListId, '42', receipt);
+  await f.repository.restoreRecycledItem('company', recycleListId, '42', receipt);
+  assert.deepEqual(f.calls.slice(1).map(call => call.path), Array(3).fill("/_api/web/RecycleBin('abcdef01-2345-6789-abcd-ef0123456789')/restore()"));
+  assert.equal(f.checks.length, 4, 'every retry checks delete permission on the original item');
+});
+
+test('recycleItem fails closed when a REST transport is unavailable and never sends Graph DELETE', async () => {
+  const graph = createFakeGraph([]), repository = createSharePointRepository(graph, sites);
+  assert.equal(typeof repository.recycleItem, 'function');
+  await assert.rejects(repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'}), /REST/);
+  assert.deepEqual(graph.calls, []);
+});

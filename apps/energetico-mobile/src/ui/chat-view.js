@@ -2162,6 +2162,7 @@ function pendingProvisionsMarkup(
   dateEditValue = "",
   dateEditError = "",
   dateEditBusy = false,
+  deletion = null,
 ) {
   if (!snapshot || !snapshot.due) return "";
   if (reminderOpen) {
@@ -2187,6 +2188,26 @@ function pendingProvisionsMarkup(
     </div>`;
   }
   const rows = Array.isArray(snapshot.rows) ? snapshot.rows : [];
+  if (deletion?.paymentId) {
+    const id = String(deletion.paymentId), busy = deletion.status === 'deleting';
+    const loaded = deletion.canConfirm === true || busy;
+    return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="cancel-pending-provision-deletion" data-pending-provisions-dialog>
+      <div class="chat-confirmation chat-pending-provisions chat-pending-provision-delete" role="dialog" aria-modal="true" aria-labelledby="pending-provision-delete-title" data-pending-provision-delete-dialog>
+        <h2 id="pending-provision-delete-title">Excluir descritivo ${escapeHtml(id)}</h2>
+        <p>Tem certeza que deseja deletar o descritivo ${escapeHtml(id)} de provisão de pgtos?</p>
+        <p><strong>${escapeHtml(deletion.supplier || '')}</strong></p>
+        ${deletion.status === 'loading' ? '<p role="status">Consultando todas as provisões vinculadas…</p>' : ''}
+        ${loaded ? `<p>O descritivo e as seguintes provisões vinculadas serão excluídos:</p>
+          ${(deletion.children || []).length ? `<ul class="chat-pending-provision-delete__items">${deletion.children.map(child => `<li data-deletion-child-id="${escapeHtml(child.id)}"><strong>Provisão ${escapeHtml(child.id)}</strong>${child.product ? ` — ${escapeHtml(child.product)}` : ''}${child.supplier ? ` — ${escapeHtml(child.supplier)}` : ''}${child.status ? `<small>${escapeHtml(child.status)}</small>` : ''}</li>`).join('')}</ul>` : '<p>Nenhuma provisão vinculada. Apenas o descritivo será excluído.</p>'}` : ''}
+        ${deletion.error ? `<p class="chat-pending-provision__error" role="alert">${escapeHtml(deletion.error)}</p>` : ''}
+        ${deletion.status === 'error' && !deletion.canConfirm ? `<button type="button" class="chat-confirmation__cancel" data-action="request-pending-provision-deletion" data-payment-id="${escapeHtml(id)}">Atualizar confirmação</button>` : ''}
+        <div class="chat-confirmation__actions">
+          <button type="button" class="chat-confirmation__cancel" data-action="cancel-pending-provision-deletion"${busy ? ' disabled' : ''}>Não</button>
+          <button type="button" class="chat-confirmation__confirm chat-pending-provision-delete__confirm" data-action="confirm-pending-provision-deletion" data-payment-id="${escapeHtml(id)}"${busy || !deletion.canConfirm ? ' disabled' : ''}>${busy ? 'Excluindo…' : deletion.status === 'error' && deletion.canConfirm ? 'Sim, concluir exclusão' : 'Sim, excluir'}</button>
+        </div>
+      </div>
+    </div>`;
+  }
   if (dateEditPaymentId) {
     const row = rows.find(item => String(item?.id ?? "").trim() === String(dateEditPaymentId));
     if (!row) return "";
@@ -2233,6 +2254,7 @@ function pendingProvisionsMarkup(
           const listId = `pending-provision-attachments-${paymentId}`;
           const edit = `<button class="chat-pending-provision__edit chat-pending-provision__edit--due-date" type="button" data-action="edit-pending-provision-due-date" data-payment-id="${escapeHtml(paymentId)}" aria-label="Editar vencimento de ${escapeHtml(row.supplier || paymentId)}" title="Editar data de vencimento"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✏️</button>`;
           const check = `<button class="chat-pending-provision__settle" type="button" data-action="settle-pending-provision" data-payment-id="${escapeHtml(paymentId)}" aria-label="Iniciar baixa do ${grouped ? "descritivo" : "pagamento"} ${escapeHtml(row.supplier || paymentId)}${paymentId ? ` (ID ${escapeHtml(paymentId)})` : ""}" title="Iniciar baixa ${grouped ? "deste descritivo" : "deste pagamento"}"${!paymentId || row.settlementBlocked === true || Boolean(settlingPaymentId) || reminderOpen ? " disabled" : ""}>✅</button>`;
+          const remove = grouped ? `<button class="chat-pending-provision__delete" type="button" data-action="request-pending-provision-deletion" data-payment-id="${escapeHtml(paymentId)}" aria-label="Excluir descritivo ${escapeHtml(paymentId)} e provisões vinculadas" title="Excluir descritivo e provisões vinculadas"${!paymentId || Boolean(settlingPaymentId) || reminderOpen ? ' disabled' : ''}>×</button>` : '';
           const branchId = `pending-provision-branch-${paymentId}`;
           const propertyId = `pending-provision-property-${paymentId}`;
           const controls = `${branchId} ${propertyId}${attachmentState.status === "available" ? ` ${listId}` : ""}`;
@@ -2249,7 +2271,7 @@ function pendingProvisionsMarkup(
               <div class="chat-pending-provision__due" data-field="dueDate">${pendingProvisionIcon("calendar")}<div><span>Vencimento</span><strong>${escapeHtml(timing.date)}</strong><small class="chat-pending-provision__timing">${escapeHtml(timing.label)}</small></div></div>
               <div class="chat-pending-provision__total" data-field="total"><span>Valor</span><strong>${escapeHtml(grouped ? row.totalDisplay || "—" : pendingProvisionAmount(row.total))}</strong></div>
             </div>
-            <div class="chat-pending-provision__supplier" data-field="supplier"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field"><span>Fornecedor</span><strong>${escapeHtml(row.supplier || "Fornecedor não informado")}</strong></div><div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.product))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${arrow}</div></div>
+            <div class="chat-pending-provision__supplier" data-field="supplier"><div class="chat-pending-provision__supplier-info">${groupDetails}<div class="chat-pending-provision__field"><span>Fornecedor</span><strong>${escapeHtml(row.supplier || "Fornecedor não informado")}</strong></div><div class="chat-pending-provision__field" data-field="product"><span>Produto</span><strong>${escapeHtml(pendingProvisionValue(row.product))}</strong></div></div><div class="chat-pending-provision__actions">${edit}${check}${remove}${arrow}</div></div>
             ${grouped && row.amountError ? `<p class="chat-pending-provision__error" data-field="amountError" role="status">Baixa bloqueada: ${escapeHtml(row.amountError)}</p>` : ""}
             ${[["branch", "Filial", row.branch], ["property", "Imóvel", row.property]].map(([name, label, value]) => `<div class="chat-pending-provision__detail" data-field="${name}" id="${escapeHtml(name === "branch" ? branchId : propertyId)}"${expanded ? "" : " hidden"}>${pendingProvisionIcon(name)}<div class="chat-pending-provision__field"><span>${label}</span><strong>${escapeHtml(pendingProvisionValue(value))}</strong></div></div>`).join("")}
             ${attachmentState.error ? `<small class="chat-pending-provision__error" role="status">${escapeHtml(attachmentState.error)}</small>` : ""}${attachmentState.actionError ? `<small class="chat-pending-provision__error" role="alert">${escapeHtml(attachmentState.actionError)}</small>` : ""}${attachmentList}</article>`;
@@ -2732,7 +2754,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
     ${signaturePad ? signaturePadMarkup(signaturePadError) : ""}
     ${placement?.status === "ready" && placement.open === false ? signaturePlacementReopenMarkup() : ""}
     ${placement && placement.open !== false ? signaturePlacementMarkup(placement, busy, signaturePlacementStampApplied) : ""}
-    ${showPendingReminders ? pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy) : ""}
+    ${showPendingReminders ? pendingProvisionsMarkup(state.pendingProvisions, state.pendingProvisionReminderOpen, state.pendingProvisionReminderError, state.pendingProvisionAttachments, state.pendingProvisionExpandedPaymentId, state.pendingProvisionSettlementPaymentId, state.pendingProvisionDateEditPaymentId, state.pendingProvisionDateEditValue, state.pendingProvisionDateEditError, state.pendingProvisionDateEditBusy, state.pendingProvisionDeletion) : ""}
     ${showPendingReminders && !state.pendingProvisions ? pendingConstructionDiariesMarkup(state.pendingConstructionDiaries, state.pendingConstructionDiaryFillingId, state.pendingConstructionDiaryError, state.busy) : ""}
     ${showPendingReminders && !state.pendingProvisions && !state.pendingConstructionDiaries ? pendingNotesMarkup(state.pendingNotes, state.pendingNoteLaunchOrderId, state.pendingNoteLaunchFailed ? state.error : "") : ""}
     ${rhidAttendanceAdjustmentMarkup(rhidAttendanceAdjustment)}
@@ -3915,6 +3937,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
          "pendingProvisionExpandedPaymentId", "pendingProvisionSettlementPaymentId",
          "pendingProvisionDateEditPaymentId", "pendingProvisionDateEditValue",
          "pendingProvisionDateEditError", "pendingProvisionDateEditBusy", "pendingProvisionUploadsRevision",
+         "pendingProvisionDeletion",
        ].every(key => lastState[key] === state[key]);
   }
 

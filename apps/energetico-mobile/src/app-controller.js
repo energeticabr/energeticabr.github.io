@@ -1387,6 +1387,9 @@ export function createAppController({
   let pendingProvisionDateEditValue = "";
   let pendingProvisionDateEditError = "";
   let pendingProvisionDateEditBusy = false;
+  let pendingProvisionDeletion = null;
+  let pendingProvisionDeletionContext = null;
+  let pendingProvisionDeletionRevision = 0;
   let pendingProvisionUploads = new Map();
   let pendingProvisionUploadsRevision = 0;
   let currentAssistantPollSnapshot = null;
@@ -1715,6 +1718,9 @@ export function createAppController({
   }
 
   function clearPendingProvisionAttachmentState({ clearData = false } = {}) {
+    pendingProvisionDeletionRevision += 1;
+    pendingProvisionDeletion = null;
+    pendingProvisionDeletionContext = null;
     pendingProvisionAttachmentGeneration += 1;
     pendingProvisionAttachmentStates = new Map();
     pendingProvisionAttachmentStateRevision += 1;
@@ -1787,8 +1793,11 @@ export function createAppController({
     const tokenProvider = async scopes => {
       assertCurrentSession();
       try {
-        return await auth.getToken(scopes);
+        const token = await auth.getToken(scopes);
+        assertCurrentSession();
+        return token;
       } catch (error) {
+        assertCurrentSession();
         if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
         if (!pendingProvisionSharePointAuthorization) {
           const authorization = Promise.resolve(auth.authorize(scopes)).finally(() => {
@@ -1800,7 +1809,9 @@ export function createAppController({
         }
         await pendingProvisionSharePointAuthorization;
         assertCurrentSession();
-        return auth.getToken(scopes);
+        const token = await auth.getToken(scopes);
+        assertCurrentSession();
+        return token;
       }
     };
     const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, ...(kind ? { sourceKind: kind } : {}) })).then(data => {
@@ -2750,6 +2761,7 @@ export function createAppController({
   }
 
   function dismissPendingProvisions() {
+    if (pendingProvisionDeletion?.status === 'deleting') return false;
     if (!pendingProvisionSnapshot) return false;
     pendingProvisionSnapshot = null;
     pendingProvisionReminderOpen = false;
@@ -3260,10 +3272,94 @@ export function createAppController({
     return poll;
   }
 
+  async function requestPendingProvisionDeletion(paymentId) {
+    const id = String(paymentId || '').trim();
+    const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? '').trim() === id);
+    if (!account || stopped || pendingProvisionReminderOpen || pendingProvisionDateEditPaymentId
+      || pendingProvisionSettlementPaymentId || pendingProvisionDeletion?.status === 'deleting' || !row
+      || (pendingProvisionSnapshot.sourceKind !== 'provision-description' && row.sourceKind !== 'provision-description')) return false;
+    const targetAccount = account, targetRevision = sessionRevision;
+    const revision = ++pendingProvisionDeletionRevision;
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision
+      && pendingProvisionDeletionRevision === revision && pendingProvisionDeletion?.paymentId === id;
+    pendingProvisionDeletionContext = null;
+    pendingProvisionDeletion = { paymentId: id, supplier: row.supplier, status: 'loading', canConfirm: false, children: [], error: '' };
+    render();
+    try {
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, 'provision-description');
+      if (!current()) return false;
+      if (typeof data.previewDeletion !== 'function') throw new Error('A consulta completa para excluir este descritivo não está disponível.');
+      const context = await data.previewDeletion(id);
+      if (!current()) return false;
+      if (String(context?.id) !== id || !Array.isArray(context.children)) throw new Error('Não foi possível conferir todas as provisões vinculadas.');
+      pendingProvisionDeletionContext = context;
+      pendingProvisionDeletion = { paymentId: id, supplier: context.supplier || row.supplier,
+        status: 'ready', canConfirm: true, children: context.children, error: '' };
+      render();
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      pendingProvisionDeletion = { ...pendingProvisionDeletion, status: 'error', canConfirm: false,
+        error: error?.message || 'Não foi possível conferir o descritivo e todas as provisões vinculadas. Nada foi excluído.' };
+      render();
+      return false;
+    }
+  }
+
+  function cancelPendingProvisionDeletion() {
+    if (!pendingProvisionDeletion || pendingProvisionDeletion.status === 'deleting') return false;
+    pendingProvisionDeletionRevision += 1;
+    pendingProvisionDeletion = null;
+    pendingProvisionDeletionContext = null;
+    render();
+    return true;
+  }
+
+  async function confirmPendingProvisionDeletion(paymentId) {
+    const id = String(paymentId || '').trim(), context = pendingProvisionDeletionContext;
+    if (!account || stopped || !context || id !== pendingProvisionDeletion?.paymentId
+      || pendingProvisionDeletion.status === 'deleting' || !pendingProvisionDeletion.canConfirm) return false;
+    const targetAccount = account, targetRevision = sessionRevision, revision = pendingProvisionDeletionRevision;
+    const current = () => !stopped && account === targetAccount && sessionRevision === targetRevision
+      && revision === pendingProvisionDeletionRevision && context === pendingProvisionDeletionContext;
+    pendingProvisionDeletion = { ...pendingProvisionDeletion, status: 'deleting', canConfirm: false, error: '' };
+    render();
+    try {
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, 'provision-description');
+      if (!current()) return false;
+      if (typeof data.deleteDescription !== 'function') throw new Error('A exclusão segura deste descritivo não está disponível.');
+      const result = await data.deleteDescription(context, { confirm: true });
+      if (!current()) return false;
+      if (result?.deleted !== true || String(result.id) !== id) throw new Error('Não foi possível confirmar a exclusão completa. Atualize a lista antes de tentar novamente.');
+      const rows = (pendingProvisionSnapshot?.rows || []).filter(row => String(row?.id ?? '') !== id);
+      pendingProvisionSnapshot = { ...pendingProvisionSnapshot, due: true, rows, count: rows.length };
+      pendingProvisionAttachmentStates.delete(id);
+      pendingProvisionUploads.delete(id);
+      pendingProvisionAttachmentStateRevision += 1;
+      pendingProvisionUploadsRevision += 1;
+      if (pendingProvisionExpandedPaymentId === id) pendingProvisionExpandedPaymentId = '';
+      pendingProvisionDeletion = null;
+      pendingProvisionDeletionContext = null;
+      pendingProvisionDeletionRevision += 1;
+      pendingProvisionSnapshotRevision += 1;
+      render();
+      return true;
+    } catch (error) {
+      if (!current()) return false;
+      const canRetry = error?.code === 'PROVISION_DESCRIPTION_DELETE_INCOMPLETE'
+        && error.requiresPreview !== true && error.retryable !== false;
+      pendingProvisionDeletion = { ...pendingProvisionDeletion, status: 'error', canConfirm: canRetry,
+        error: error?.message || 'A exclusão não foi confirmada. Confira os registros antes de tentar novamente.' };
+      if (!canRetry) pendingProvisionDeletionContext = null;
+      render();
+      return false;
+    }
+  }
+
   function editPendingProvisionDueDate(paymentId) {
     const id = String(paymentId || "").trim();
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
-    if (!account || stopped || pendingProvisionReminderOpen || pendingProvisionDateEditBusy || !row || !id) return false;
+    if (!account || stopped || pendingProvisionDeletion || pendingProvisionReminderOpen || pendingProvisionDateEditBusy || !row || !id) return false;
     pendingProvisionDateEditPaymentId = id;
     pendingProvisionDateEditValue = pendingProvisionDateInputValue(row.dueDate);
     pendingProvisionDateEditError = "";
@@ -3282,7 +3378,7 @@ export function createAppController({
 
   async function savePendingProvisionDueDate(paymentId, rawValue) {
     const id = String(paymentId || "").trim();
-    if (!account || stopped || pendingProvisionReminderOpen || pendingProvisionDateEditBusy
+    if (!account || stopped || pendingProvisionDeletion || pendingProvisionReminderOpen || pendingProvisionDateEditBusy
       || !id || id !== pendingProvisionDateEditPaymentId
       || !pendingProvisionSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
     const date = pendingProvisionDateIso(rawValue);
@@ -3496,7 +3592,7 @@ export function createAppController({
 
   async function settlePendingProvision(paymentId) {
     const id = String(paymentId || "").trim();
-    if (!account || stopped || flowBusy() || pendingProvisionReminderOpen
+    if (!account || stopped || pendingProvisionDeletion || flowBusy() || pendingProvisionReminderOpen
       || pendingProvisionSettlementPaymentId || !id) return false;
     const row = pendingProvisionSnapshot?.rows?.find(item => String(item?.id ?? "").trim() === id);
     if (!row || row.settlementBlocked === true) return false;
@@ -4294,6 +4390,7 @@ export function createAppController({
       pendingProvisionDateEditValue,
       pendingProvisionDateEditError,
       pendingProvisionDateEditBusy,
+      pendingProvisionDeletion,
       pendingProvisionUploads: pendingProvisionUploadsForView(),
       pendingProvisionUploadsRevision,
       signaturePlacement,
@@ -10777,6 +10874,9 @@ export function createAppController({
     bind("edit-pending-provision-due-date", command => editPendingProvisionDueDate(command.paymentId));
     bind("cancel-pending-provision-date-edit", cancelPendingProvisionDateEdit);
     bind("save-pending-provision-due-date", command => savePendingProvisionDueDate(command.paymentId, command.value));
+    bind('request-pending-provision-deletion', command => requestPendingProvisionDeletion(command.paymentId));
+    bind('cancel-pending-provision-deletion', cancelPendingProvisionDeletion);
+    bind('confirm-pending-provision-deletion', command => confirmPendingProvisionDeletion(command.paymentId));
     bind("settle-pending-provision", command => settlePendingProvision(command.paymentId));
     bind("toggle-pending-provision-attachments", command => togglePendingProvisionAttachments(command.paymentId));
     bind("retry-pending-provision-attachments", command => retryPendingProvisionAttachments(command.paymentId));

@@ -637,6 +637,7 @@ export function createPendingProvisionAttachmentsData(options = {}) {
     downloadAttachment: data.downloadAttachment,
     uploadAttachment: data.uploadAttachment,
     updateDueDate: data.updateDueDate,
+    ...(grouped ? { previewDeletion: data.previewDeletion, deleteDescription: data.deleteDescription } : {}),
   });
 }
 
@@ -658,11 +659,12 @@ function createSharePointListData({
   let repository = suppliedRepository;
   if (!repository) {
     if (typeof tokenProvider !== "function") throw new TypeError("A consulta SharePoint requer a sessão Microsoft ativa.");
-    const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
+    const guardedFetch = (...args) => { assertSession(); return fetchImpl(...args); };
+    const graph = createGraphClient(tokenProvider, { fetch: guardedFetch });
     const attachments = createSharePointAttachmentTransport({
       tokenProvider,
       allowedSites: Object.values(siteConfig),
-      fetch: fetchImpl,
+      fetch: guardedFetch,
     });
     repository = createSharePointRepository(graph, siteConfig, { attachmentTransport: attachments });
   }
@@ -674,6 +676,12 @@ function createSharePointListData({
   const descriptionEditor = fieldKey(listName) === 'DESCRITIVOPROVISAO'
     ? createProvisionDescriptionEditor({repository,siteKey,assertSession}) : null;
   const paymentEditor = provisionPaymentSync ? createProvisionPaymentEditor({ repository, siteKey, assertSession }) : null;
+  let descriptionDeletion;
+  function deletionService() {
+    if (!descriptionEditor) throw new Error('A exclusão em conjunto requer um descritivo de provisão.');
+    return descriptionDeletion ||= import('../../../../portal/forms/provision-description-delete.js')
+      .then(({ createProvisionDescriptionDeletion }) => createProvisionDescriptionDeletion({ repository, siteKey, assertSession }));
+  }
 
   let resolvedList;
   const attachmentCache = new Map();
@@ -907,5 +915,7 @@ function createSharePointListData({
 
   return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem,
     loadEditor, saveEditor, deleteItem, updateDueDate, loadUpcomingPayments,
+    ...(descriptionEditor ? { previewDeletion: async id => (await deletionService()).preview(id),
+      deleteDescription: async (context, options) => (await deletionService()).remove(context, options) } : {}),
     ...(filters ? { loadFilterOptions: filters.loadFilterOptions } : {}) });
 }

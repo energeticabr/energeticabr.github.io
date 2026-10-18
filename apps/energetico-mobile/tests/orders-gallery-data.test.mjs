@@ -4,6 +4,66 @@ import * as galleryData from "../src/chat/orders-gallery-data.js";
 
 const { createOrdersGalleryData, createPendingProvisionAttachmentsData, OrdersGalleryDataError } = galleryData;
 
+test('grouped pending data exposes confirmed child-first cascade, never the legacy provider', async () => {
+  const rows = { parents: new Map([['306', { id: '306', eTag: '"parent-1"', fields: { FORNECEDOR: 'COFER' } }]]),
+    children: new Map(['91','92','99'].map(id => [id, { id, eTag: `"child-${id}"`, fields: {
+      DESCRITIVOPROVISAO: id === '99' ? '999' : '306', FORNECEDOR: 'COFER', PRODUTO: 'CIMENTO', STATUS: 'PAGAMENTO PREVISTO',
+    } }])) };
+  const writes = [], recycled = new WeakMap();
+  const repository = {
+    async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
+    async getColumns(_site, list) { return (list === 'parents' ? ['FORNECEDOR'] : ['FORNECEDOR','PRODUTO','STATUS','DESCRITIVOPROVISAO']).map(name => ({ name, displayName: name, text: {} })); },
+    async getItemsPage(_site, list) { return { items: [...rows[list].values()].map(row => structuredClone(row)), hasMore: false }; },
+    async getItem(_site, list, id) {
+      if (!rows[list].has(id)) throw Object.assign(new Error('Missing synthetic item'), { status: 404 });
+      return structuredClone(rows[list].get(id));
+    },
+    async deleteItem(_site, list, id, { eTag }) { assert.equal(eTag, rows[list].get(id).eTag); writes.push([list,id]); rows[list].delete(id); },
+    async recycleItem(site, list, id, options) {
+      const original = structuredClone(rows[list].get(id)), receipt = Object.freeze({ id });
+      await this.deleteItem(site,list,id,options); recycled.set(receipt,{list,id,original}); return receipt;
+    },
+    async restoreRecycledItem(_site,list,id,receipt) { const original=recycled.get(receipt); assert.equal(original?.id,id); rows[list].set(id,original.original); },
+  };
+  const grouped = createPendingProvisionAttachmentsData({ sourceKind: 'provision-description', repository });
+  const preview = await grouped.previewDeletion('306');
+  assert.deepEqual(preview.children.map(row => row.id), ['91','92']);
+  assert.deepEqual(writes, []);
+  assert.equal((await grouped.deleteDescription(preview, { confirm: true })).deleted, true);
+  assert.deepEqual(writes, [['children','91'],['children','92'],['parents','306']]);
+  assert.equal(rows.children.has('99'), true);
+  const legacy = createPendingProvisionAttachmentsData({ repository });
+  assert.equal(legacy.previewDeletion, undefined);
+  assert.equal(legacy.deleteDescription, undefined);
+});
+
+for (const writeTransport of ['graph','rest']) test(`session invalidated during ${writeTransport} write-token acquisition cannot dispatch any DELETE`, async () => {
+  const parents = '11111111-1111-4111-8111-111111111111', children = '22222222-2222-4222-8222-222222222222';
+  const writes = []; let valid = true, writeTokens = 0;
+  const items = { [parents]: [{ id:'42', eTag:'"parent-1"', fields:{FORNECEDOR:'TESTE'} }],
+    [children]: [{ id:'2', eTag:'"child-1"', fields:{DESCRITIVOPROVISAO:'42', FORNECEDOR:'TESTE', PRODUTO:'TESTE', STATUS:'PAGAMENTO PREVISTO'} }] };
+  const data = createPendingProvisionAttachmentsData({ sourceKind:'provision-description',
+    siteConfig:{personal:{host:'example.sharepoint.com',path:'/sites/test',readTransport:'graph',writeTransport}},
+    assertSession:()=>{ if(!valid) throw new Error('Sessão encerrada.'); },
+    tokenProvider:async scopes=>{ if(scopes.includes('Sites.ReadWrite.All') || scopes.some(scope=>scope.endsWith('/AllSites.Write'))){writeTokens++;valid=false;} return 'synthetic-token'; },
+    fetchImpl:async (raw,options={})=>{
+      const url = new URL(raw), path = url.pathname;
+      if(options.method === 'DELETE' || options.method === 'POST') { writes.push(path); return new Response(null,{status:204}); }
+      if(path.includes('/sites/example.sharepoint.com:')) return Response.json({id:'site'});
+      if(path.endsWith('/sites/site/lists')) return Response.json({value:[{id:parents,displayName:'DESCRITIVOPROVISAO',list:{template:'genericList'}},{id:children,displayName:'PROVISÃO PGTOS',list:{template:'genericList'}}]});
+      const match = path.match(/\/lists\/([^/]+)\/(columns|items)(?:\/(\d+))?$/);
+      if(!match) throw new Error(`Unexpected synthetic path ${path}`);
+      if(match[2] === 'columns') return Response.json({value:(match[1] === parents ? ['FORNECEDOR'] : ['DESCRITIVOPROVISAO','FORNECEDOR','PRODUTO','STATUS']).map(name=>({name,displayName:name,text:{}}))});
+      if(match[3]) return Response.json(items[match[1]].find(item=>item.id===match[3]));
+      return Response.json({value:items[match[1]]});
+    },
+  });
+  const context = await data.previewDeletion('42');
+  await assert.rejects(data.deleteDescription(context,{confirm:true}), /sessão|session/i);
+  assert.equal(writeTokens,1, 'the real repository reached asynchronous write authorization');
+  assert.deepEqual(writes,[], 'no request may be dispatched after its token invalidated the session');
+});
+
 test("grouped provisions route attachments and due-date mutations to the description parent list", async () => {
   const calls = [];
   const parent={id:'306',eTag:'parent-etag',fields:{}};

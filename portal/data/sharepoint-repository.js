@@ -752,6 +752,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   const columnCache = new Map();
   const listRequests = new Map();
   const columnRequests = new Map();
+  const recycleReceipts = new WeakMap();
   let authorizationProvider;
 
   async function authorize(action, siteKey, listId, details = {}) {
@@ -1601,6 +1602,71 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     }
   }
 
+  function recycleTarget(siteKey, listId, itemId) {
+    const list = listGuid(listId).toLowerCase();
+    const item = restItemNumber(itemId);
+    if (!["string", "number"].includes(typeof itemId) || !/^[1-9]\d*$/.test(String(itemId)) || !Number.isSafeInteger(item)) {
+      throw new RangeError("O item SharePoint informado para reciclagem e invalido.");
+    }
+    if (typeof siteKey !== "string") throw new RangeError("O site SharePoint da reciclagem e invalido.");
+    const config = getSiteConfig(siteKey);
+    return { siteKey, list, item: String(item), host: config.host, path: config.path };
+  }
+
+  function recycleSite(target) {
+    if (!restTransport?.request) throw new Error("O transporte REST de reciclagem SharePoint nao foi configurado.");
+    const config = getSiteConfig(target.siteKey);
+    if (config.host !== target.host || config.path !== target.path) {
+      throw new Error("O destino SharePoint mudou desde a reciclagem; a restauracao foi recusada.");
+    }
+    return config;
+  }
+
+  /** Recycle rather than destroy; only this instance can use the opaque undo receipt. */
+  async function recycleItem(siteKey, listId, itemId, options = {}) {
+    const target = recycleTarget(siteKey, listId, itemId);
+    const rawTag = options?.eTag;
+    const eTag = requireEtag({ eTag: rawTag });
+    if (typeof rawTag !== "string" || rawTag !== eTag
+      || !/^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]+"$/.test(eTag) || /^(?:W\/)?"\*"$/.test(eTag)) {
+      throw new SharePointConflictError({ status: 428, code: "etag_required", message: "A reciclagem requer uma unica versao ETag especifica e segura." });
+    }
+    recycleSite(target);
+    await authorize("delete", siteKey, target.list, { itemId: target.item });
+    let payload;
+    try {
+      payload = await restTransport.request(recycleSite(target), `${restItemsCollectionPath(target.list)}(${target.item})/recycle()`, {
+        method: "POST", permission: "write", headers: { "IF-MATCH": eTag },
+      });
+    } catch (error) {
+      throw asConcurrencyError(error);
+    }
+    // Official Edm.Guid responses only. Never substitute the list/item ID after a lost response.
+    const values = typeof payload === "string" ? [payload] : [payload?.value, payload?.d?.Recycle].filter(value => value !== undefined);
+    if (values.length !== 1 || typeof values[0] !== "string") {
+      throw new Error("O SharePoint nao retornou um identificador GUID unico para desfazer a reciclagem.");
+    }
+    const recycledId = listGuid(values[0]);
+    const receipt = Object.freeze({});
+    recycleReceipts.set(receipt, Object.freeze({ ...target, recycledId }));
+    return receipt;
+  }
+
+  /** Retries retain the same receipt; callers verify the original item after a lost restore response. */
+  async function restoreRecycledItem(siteKey, listId, itemId, receipt) {
+    const original = receipt && typeof receipt === "object" ? recycleReceipts.get(receipt) : undefined;
+    if (!original) throw new Error("A restauracao requer o recibo original de reciclagem deste repositorio.");
+    const target = recycleTarget(siteKey, listId, itemId);
+    if (["siteKey", "list", "item", "host", "path"].some(name => target[name] !== original[name])) {
+      throw new Error("O recibo de reciclagem nao pertence a este site, lista e item SharePoint.");
+    }
+    recycleSite(original);
+    await authorize("delete", siteKey, original.list, { itemId: original.item });
+    return restTransport.request(recycleSite(original), `/_api/web/RecycleBin('${original.recycledId}')/restore()`, {
+      method: "POST", permission: "write",
+    });
+  }
+
   async function requestAttachment(siteKey, listId, itemId, path, options) {
     if (!attachmentTransport?.request) throw new Error("Anexos SharePoint não foram configurados para este portal.");
     const target = attachmentTarget(listId, itemId);
@@ -2115,6 +2181,8 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     updateItem,
     approveItem,
     deleteItem,
+    recycleItem,
+    restoreRecycledItem,
     listAttachments,
     uploadAttachment,
     deleteAttachment,

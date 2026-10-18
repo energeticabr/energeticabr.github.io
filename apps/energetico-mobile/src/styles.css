@@ -247,6 +247,13 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__edit:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .6; }
 .chat-pending-provision__settle { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #16804a; border-radius: 12px; color: white; background: #16804a; font-size: 1.35rem; line-height: 1; }
 .chat-pending-provision__settle:hover:not(:disabled) { background: #11693d; }
+.chat-pending-provision__delete { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid #a21c1c; border-radius: 12px; color: white; background: #b42318; font-size: 2rem; font-weight: 800; line-height: 1; }
+.chat-pending-provision__delete:hover:not(:disabled) { background: #951b13; }
+.chat-pending-provision__delete:disabled { opacity: .5; cursor: not-allowed; }
+.chat-pending-provision-delete__items { overflow-wrap: anywhere; padding-left: 1.4em; }
+.chat-pending-provision-delete__items li { margin-bottom: .7em; }
+.chat-pending-provision-delete__items small { display: block; color: #51636c; }
+.chat-pending-provision-delete .chat-pending-provision-delete__confirm { background: #b42318; color: #fff; border-color: #a21c1c; }
 .chat-pending-provision__settle:disabled { border-color: #aab7b0; background: #d3d9d6; cursor: not-allowed; filter: grayscale(1); }
 .chat-pending-provision__arrow { flex: 0 0 48px; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 1px solid transparent; border-radius: 12px; font-size: 1.7rem; font-weight: 850; line-height: 1; }
 .chat-pending-provision__arrow--available { border-color: #a21c1c; color: white; background: #b42318; }
