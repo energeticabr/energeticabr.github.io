@@ -662,7 +662,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     pair.append(chevron);
     trigger.title = kind === 'order' ? 'Selecionar para detalhar o pedido' : 'Selecionar para detalhar o fornecedor';
     pair.addEventListener('click', event => {
-      if (!event.target.closest('button')) trigger.click();
+      if (event.target.closest('button') || !opened || destroyed || trigger.disabled || !canChangeDetail()) return;
+      focus(trigger);
+      trigger.click();
     });
     return pair;
   }

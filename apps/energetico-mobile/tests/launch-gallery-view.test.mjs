@@ -974,11 +974,16 @@ test('visual cards identify supplier and order details without changing their cl
     assert.ok(tile.querySelector('svg[aria-hidden="true"]'), `${kind} has a decorative icon`);
     assert.ok(tile.querySelector('.lg-record-detail-hint')?.textContent.includes('Detalhar'), 'visible detail affordance');
     assert.equal(tile.querySelector('.lg-record-chevron')?.getAttribute('aria-hidden'), 'true');
-    tile.querySelector('.lg-record-label').click(); await settle(); await settle();
-    const modal = ctx.root().querySelector('.lg-cluster-modal');
-    assert.equal(modal.hidden, false, `${kind} tile opens the existing details`);
-    assert.equal(ctx.root().querySelector('.lg-record-extra').hidden, true);
-    button(modal, 'Fechar').click();
+    for (const target of [tile, tile.querySelector('.lg-record-label'), tile.querySelector('.lg-card-icon path'),
+      tile.querySelector('.lg-record-detail-hint'), tile.querySelector('.lg-record-chevron')]) {
+      ctx.root().querySelector('.lg-record-expand').focus();
+      target.dispatchEvent(new ctx.dom.window.MouseEvent('click', { bubbles: true })); await settle(); await settle();
+      const modal = ctx.root().querySelector('.lg-cluster-modal');
+      assert.equal(modal.hidden, false, `${kind} tile opens the existing details`);
+      assert.equal(ctx.root().querySelector('.lg-record-extra').hidden, true);
+      button(modal, 'Fechar').click();
+      assert.equal(ctx.document.activeElement, tile.querySelector('.lg-cluster-trigger'), `${kind} returns focus to its own button`);
+    }
   }
   assert.ok(ctx.root().querySelector('.lg-total svg[aria-hidden="true"]'));
 });
