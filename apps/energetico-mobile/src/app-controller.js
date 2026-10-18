@@ -10,7 +10,7 @@ import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-option
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
-import { attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
+import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
 import { readAttendanceIrregularity, saveAttendanceIrregularity } from './chat/attendance-irregularity-data.js';
 import {
   PRESENCE_OTHER_DATES_REPLY_ID,
@@ -1137,6 +1137,7 @@ export function createAppController({
   // These read-only indicators belong to the authenticated view, never to a
   // recovered conversation or to the presence values submitted to SharePoint.
   const attendanceRhidBadgeReports = new Map();
+  const attendanceRhidConfirmedAdjustments = new Map();
   let attendanceRhidBadgeOwner = null;
   let attendanceRhidBadgeRevision = -1;
   let attendanceRhidBadgeTimer = null;
@@ -2389,7 +2390,7 @@ export function createAppController({
             : "A atualização ainda não foi confirmada. Tente consultar novamente em alguns minutos.");
         }
         if (stopped || account !== refreshAccount || sessionRevision !== refreshRevision) return false;
-        clearAttendanceRhidBadges();
+        clearAttendanceRhidBadges("", { preserveConfirmed: true });
         render();
         view.setRhidRefreshStatus?.({ busy: false, message: "SharePoint atualizado com os dados disponíveis no RHID." });
         return true;
@@ -2668,7 +2669,53 @@ export function createAppController({
   }
 
   const rhidAttendanceAdjustmentRequests = new Set();
-  async function saveRhidAttendanceAdjustment({ messageId, personKey, slot, time, reason } = {}) {
+  async function saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId }) {
+    const state = store.getState();
+    const message = latestAssistantPoll(state.messages);
+    const option = message?.options?.find(item => attendanceRhidOptionContext(item, message)?.presenceId === String(presenceId));
+    const context = attendanceRhidOptionContext(option, message);
+    const entry = attendanceRhidBadgeReports.get(context?.date);
+    const target = entry?.status === "ready"
+      ? attendanceMissingPunchContext({ ...option, rhidBadge: buildAttendanceRhidBadge(context, entry.report) }, message, slot) : null;
+    const key = `${target?.date}:${personKey}:${slot}`;
+    if (!account || stopped || sessionStatus !== "authenticated" || flowBusy()
+      || attendanceRhidBadgeOwner !== account || attendanceRhidBadgeRevision !== sessionRevision
+      || String(message?.id || "") !== String(messageId || "") || !target || target.personKey !== personKey
+      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "")) || !String(reason || "").trim()
+      || typeof client.saveRhidAttendanceAdjustment !== "function" || rhidAttendanceAdjustmentRequests.has(key)) {
+      view.setRhidAttendanceAdjustmentStatus?.({ busy: false, adjustmentId, error: "Não foi possível validar o ajuste. Atualize as presenças e tente novamente." });
+      return false;
+    }
+    const owner = account, revision = sessionRevision;
+    rhidAttendanceAdjustmentRequests.add(key);
+    try {
+      const saved = await client.saveRhidAttendanceAdjustment({ date: target.date, personKey, slot, time, reason: String(reason).trim() });
+      if (stopped || account !== owner || sessionRevision !== revision) return false;
+      if (saved?.time !== time) throw new Error("A VM não confirmou o ajuste de ponto RHID.");
+      // Display the server-confirmed adjustment immediately, retaining raw RHID
+      // punches. A cached/lagging collection must not erase the just-saved time.
+      const latest = attendanceRhidBadgeReports.get(target.date);
+      const report = latest?.status === "ready" ? latest.report : entry.report;
+      attendanceRhidConfirmedAdjustments.set(JSON.stringify([target.date, personKey, slot]), {
+        date: target.date, personKey, slot, adjustment: { ...saved, time, reason: String(reason).trim() },
+      });
+      const confirmedReport = withConfirmedAttendanceAdjustments(report, target.date);
+      clearAttendanceRhidBadges(target.date);
+      attendanceRhidBadgeReports.set(target.date, { status: "ready", report: confirmedReport, expiresAt: Date.now() + 60_000 });
+      view.closeRhidAttendanceAdjustment?.({ adjustmentId });
+      render();
+      return true;
+    } catch (error) {
+      if (!stopped && account === owner && sessionRevision === revision)
+        view.setRhidAttendanceAdjustmentStatus?.({ busy: false, adjustmentId, error: error?.message || "Não foi possível salvar o horário." });
+      return false;
+    } finally {
+      rhidAttendanceAdjustmentRequests.delete(key);
+    }
+  }
+
+  async function saveRhidAttendanceAdjustment({ messageId, presenceId, personKey, slot, time, reason, adjustmentId } = {}) {
+    if (presenceId !== undefined) return saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId });
     const id = String(messageId || "").trim();
     const message = store.getState().messages.find(item => String(item?.id || "") === id);
     const table = message?.detail_table || message?.detailTable;
@@ -4199,15 +4246,38 @@ export function createAppController({
     });
   }
 
-  function clearAttendanceRhidBadges(day = "") {
+  function withConfirmedAttendanceAdjustments(report, day, { acknowledge = false } = {}) {
+    if (!report || report.date !== day || !Array.isArray(report.rows)) return report;
+    let rows = report.rows;
+    const keyFor = row => String(row?.ID_PESSOA_RHID || "").trim()
+      ? `rhid:${String(row.ID_PESSOA_RHID).trim()}` : `id:${String(row?.Id || "").trim()}`;
+    for (const [key, saved] of attendanceRhidConfirmedAdjustments) {
+      if (saved.date !== day) continue;
+      // A real administrative value acknowledges or supersedes our temporary
+      // overlay. A lagging collection with no adjustment does neither.
+      if (acknowledge && rows.some(row => keyFor(row) === saved.personKey
+        && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(row?.ADMIN_AJUSTES?.[saved.slot]?.time || "")))) {
+        attendanceRhidConfirmedAdjustments.delete(key);
+        continue;
+      }
+      rows = rows.map(row => keyFor(row) === saved.personKey
+        ? { ...row, ADMIN_AJUSTES: { ...row.ADMIN_AJUSTES, [saved.slot]: saved.adjustment } } : row);
+    }
+    return rows === report.rows ? report : { ...report, rows };
+  }
+
+  function clearAttendanceRhidBadges(day = "", { preserveConfirmed = false } = {}) {
     if (attendanceRhidBadgeTimer !== null) clearTimeout(attendanceRhidBadgeTimer);
     attendanceRhidBadgeTimer = null;
     attendanceRhidBadgeNextRefresh = 0;
     if (day) attendanceRhidBadgeReports.delete(day);
     else {
       attendanceRhidBadgeReports.clear();
-      attendanceRhidBadgeOwner = null;
-      attendanceRhidBadgeRevision = -1;
+      if (!preserveConfirmed) {
+        attendanceRhidConfirmedAdjustments.clear();
+        attendanceRhidBadgeOwner = null;
+        attendanceRhidBadgeRevision = -1;
+      }
     }
   }
 
@@ -4227,7 +4297,7 @@ export function createAppController({
         "Não foi possível consultar o RHID nesta data.");
     }).then(report => {
       if (!current()) return;
-      entry.report = report;
+      entry.report = withConfirmedAttendanceAdjustments(report, day, { acknowledge: true });
       entry.status = "ready";
       entry.expiresAt = Date.now() + 60_000;
       render();

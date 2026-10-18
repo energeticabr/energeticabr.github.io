@@ -19,7 +19,7 @@ import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-op
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt } from "../chat/attachment-finish.js";
 import { isRhidAttendanceDayFinalized, isRhidAttendanceRowDiscrepant, isRhidAttendanceRowWithoutPunches, isValidRhidReportDate, suggestedRhidAdjustmentTime, summarizeRhidAttendance } from "../chat/rhid-attendance-table.js";
 import { PRESENCE_OTHER_DATES_REPLY_ID } from "../chat/presence-date-scope.js";
-import { attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
+import { attendanceMissingPunchContext, attendanceValidationDate } from "../chat/attendance-rhid-badges.js";
 import { attendanceIrregularity } from "../chat/attendance-irregularity.js";
 import { createPowerBiDashboardView } from "./powerbi-dashboard-view.js";
 import { observeSignatureTrace } from "../web/signature-trace.js";
@@ -1460,7 +1460,7 @@ function attendanceDayQuestionMarkup(message) {
   return `QUAL PRESENÇA DESEJA VALIDAR DO DIA <strong class="chat-question-field">${date.split("-").reverse().join("/")}</strong> (${weekday})?`;
 }
 
-function attendanceRhidBadgeMarkup(badge) {
+function attendanceRhidBadgeMarkup(badge, { message, option, editable = false, selectionAttributes = "" } = {}) {
   const tones = {
     present: "present",
     absent: "absent",
@@ -1477,9 +1477,12 @@ function attendanceRhidBadgeMarkup(badge) {
   ].map(([slot, short, label, tone]) => {
     const raw = badge.punches?.[slot];
     const time = typeof raw === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(raw) ? raw : "";
+    if (editable && attendanceMissingPunchContext(option, message, slot)) {
+      return `<button type="button" class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone} chat-attendance-rhid-punch--editable" data-action="attendance-rhid-adjust-open" data-message-id="${escapeHtml(message.id)}" data-reply-id="${escapeHtml(attendanceSelectionId(option))}" data-slot="${slot}" data-rhid-slot="${slot}" aria-label="Preencher ${label} de ${escapeHtml(badge.correction.name)}">${short}- —</button>`;
+    }
     return `<span class="chat-attendance-rhid-punch chat-attendance-rhid-punch--${tone}" data-rhid-slot="${slot}" aria-label="${label}: ${time || "sem batida"}">${short}- ${time || "—"}</span>`;
   }).join("");
-  return `<span class="chat-attendance-rhid-summary">${punches}<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span></span>`;
+  return `<span class="chat-attendance-rhid-summary"${selectionAttributes}>${punches}<span class="chat-attendance-rhid-badge chat-attendance-rhid-badge--${tones[badge.status]}" data-rhid-date="${escapeHtml(badge.date || "")}" title="${description}" role="img" aria-label="${description}">${escapeHtml(badge.label)}</span></span>`;
 }
 
 function renderPoll(message, busy, draft = "", databaseFilterMessage = null, activeFlow = null, attendanceSelectedIds = [], currentPoll = false, rhidRefresh = null, launchPayrollSelectedIds = [], launchPayrollCurrent = false, attendanceExpandedIds = [], attendanceIrregularityChecking = false) {
@@ -1705,7 +1708,11 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       if (!optionUnavailable) visibleIds.push(id);
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       const nameMarkup = formatChatText(label);
-      const rhidBadge = attendanceRhidBadgeMarkup(option.rhidBadge);
+      const correctable = !supplierSync && !busy && currentPoll && !optionUnavailable && !attendanceIrregularityChecking
+        && ["exit1", "entry2", "exit2"].some(slot => attendanceMissingPunchContext(option, message, slot));
+      const selectionAttributes = ` data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"`;
+      const rhidBadge = attendanceRhidBadgeMarkup(option.rhidBadge, { message, option, editable: correctable,
+        selectionAttributes: correctable ? selectionAttributes : "" });
       const recordMarkup = rhidBadge
         ? `<span class="chat-attendance-select__content"><span class="chat-attendance-select__name">${nameMarkup}</span>${rhidBadge}</span>`
         : nameMarkup;
@@ -1723,6 +1730,12 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
         ? `<button class="chat-attendance-select__arrow" type="button" data-action="attendance-detail-toggle" data-reply-id="${escapeHtml(id)}" aria-label="${expanded ? "Ocultar" : "Mostrar"} detalhes de ${escapeHtml(label)}" aria-expanded="${expanded}"${busy || !currentPoll || attendanceIrregularityChecking ? " disabled" : ""}><span aria-hidden="true">${expanded ? "⌃" : "⌄"}</span></button><dl class="chat-attendance-select__detail"${expanded ? "" : " hidden"}><div><dt>DATA</dt><dd>${detailValue("DATA")}</dd></div><div><dt>IDDESCRITIVO-ATIVIDADEEXECUTADA</dt><dd>${detailValue("IDDESCRITIVO-ATIVIDADEEXECUTADA", "IDDESCRITIVOETAPA")}</dd></div><div><dt>ATIVIDADEEXECUTADA</dt><dd>${detailValue("ATIVIDADEEXECUTADA", "ATIVIDADE")}</dd></div></dl>`
         : "";
       const detailedRecordMarkup = rhidBadge ? recordMarkup : `<span class="chat-attendance-select__name">${nameMarkup}</span>`;
+      if (correctable) {
+        // Separate real buttons: a missing-slot control must never be nested
+        // inside the existing supplier button (HTML reparents nested buttons).
+        records.push(`<div class="chat-attendance-select__row">${checkbox}<div class="chat-attendance-select__card"><div class="chat-attendance-select__record chat-attendance-select__record--correctable"><span class="chat-attendance-select__content"><button type="button" class="chat-attendance-select__name chat-attendance-select__identity"${selectionAttributes}>${nameMarkup}</button>${rhidBadge}</span></div>${detailMarkup}</div></div>`);
+        continue;
+      }
       records.push(supplierSync
         ? `<label class="chat-attendance-select__row">${checkbox}<span class="chat-attendance-select__label">${recordMarkup}</span></label>`
         : hasDetails
@@ -2836,6 +2849,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let rhidAttendanceMonthPresentDates = [];
   let rhidAttendanceMonthIrregularCounts = {};
   let rhidAttendanceAdjustment = null;
+  let rhidAttendanceAdjustmentSequence = 0;
   let rhidRefresh = { busy: false, message: "", error: false };
   let pendingDateSeparatorDeletion = null;
   let pendingDocumentSeparatorDeletion = null;
@@ -4474,6 +4488,23 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       }
       return;
     }
+    if (command.type === "attendance-rhid-adjust-open") {
+      const message = [...(lastState?.messages || [])].reverse().find(item => item?.role !== "user" && item?.type === "poll");
+      const option = message?.options?.find(item => attendanceSelectionId(item) === command.replyId);
+      const target = attendanceMissingPunchContext(option, message, command.slot);
+      if (composerBusy || attendanceIrregularityDialog || attendanceIrregularityPending || rhidAttendanceAdjustment
+        || String(message?.id || "") !== String(command.messageId || "") || !target) return;
+      const label = { exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
+      rhidAttendanceAdjustment = {
+        adjustmentId: ++rhidAttendanceAdjustmentSequence,
+        messageId: message.id, presenceId: target.presenceId, personKey: target.personKey, slot: command.slot,
+        personName: target.personName, label, rhid: "", currentEffective: "", previous: null,
+        effective: suggestedRhidAdjustmentTime(command.slot, target.date),
+        reason: "NÃO BATEU PONTO, APESAR DE ESTAR PRESENTE", busy: false, error: "",
+      };
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
     if (command.type === "rhid-attendance-adjust-open") {
       const message = lastState?.messages?.find(item => String(item?.id || "") === String(command.messageId || ""));
       const table = message?.detail_table || message?.detailTable;
@@ -4516,9 +4547,10 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         return;
       }
       rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, effective: time, reason, busy: true, error: "" };
-      const { messageId, personKey, slot } = rhidAttendanceAdjustment;
+      const { messageId, presenceId, personKey, slot, adjustmentId } = rhidAttendanceAdjustment;
       if (lastState) { const state = lastState; lastState = null; render(state); }
-      emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason });
+      emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason,
+        ...(presenceId === undefined ? {} : { presenceId, adjustmentId }) });
       return;
     }
     if (command.type === "open-rhid-attendance-report") {
@@ -4849,6 +4881,13 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function input(event) {
+    if (rhidAttendanceAdjustment?.presenceId !== undefined && !rhidAttendanceAdjustment.busy) {
+      const role = event.target?.dataset?.role;
+      if (role === "rhid-adjustment-time" || role === "rhid-adjustment-reason") {
+        rhidAttendanceAdjustment[role === "rhid-adjustment-time" ? "effective" : "reason"] = event.target.value;
+        return;
+      }
+    }
     if (event.target?.dataset?.role === 'attendance-irregularity-reason') {
       if (attendanceIrregularityDialog) attendanceIrregularityDialog.reason = event.target.value;
       return;
@@ -5297,6 +5336,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function change(event) {
+    if (["rhid-adjustment-time", "rhid-adjustment-reason"].includes(event.target?.dataset?.role)) { input(event); return; }
     const checkbox = event.target;
     if (checkbox?.matches?.('input[data-action="epi-product-select-all"]') && !checkbox.disabled) {
       const productIds = [...checkbox.closest(".chat-epi-product-select").querySelectorAll('input[data-action="epi-product-select-toggle"]')]
@@ -5367,6 +5407,9 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
     const isAttendancePoll = isAttendanceSelectionPoll(newestPoll);
     const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";
+    if (rhidAttendanceAdjustment?.presenceId !== undefined
+      && (state.sessionStatus !== "authenticated" || !isAttendancePoll
+        || String(newestPoll?.id || "") !== String(rhidAttendanceAdjustment.messageId))) rhidAttendanceAdjustment = null;
     if (nextAttendancePollKey !== attendanceSelectionPollKey || !isAttendancePoll) {
       attendanceSelectedIds.clear();
       attendanceExpandedIds.clear();
@@ -5595,15 +5638,15 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
     return true;
   }
 
-  function setRhidAttendanceAdjustmentStatus({ busy = false, error = "" } = {}) {
-    if (!rhidAttendanceAdjustment) return false;
+  function setRhidAttendanceAdjustmentStatus({ busy = false, error = "", adjustmentId } = {}) {
+    if (!rhidAttendanceAdjustment || (adjustmentId !== undefined && adjustmentId !== rhidAttendanceAdjustment.adjustmentId)) return false;
     rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, busy: Boolean(busy), error: String(error || "") };
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;
   }
 
-  function closeRhidAttendanceAdjustment() {
-    if (!rhidAttendanceAdjustment) return false;
+  function closeRhidAttendanceAdjustment({ adjustmentId } = {}) {
+    if (!rhidAttendanceAdjustment || (adjustmentId !== undefined && adjustmentId !== rhidAttendanceAdjustment.adjustmentId)) return false;
     rhidAttendanceAdjustment = null;
     if (lastState) { const state = lastState; lastState = null; render(state); }
     return true;

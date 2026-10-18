@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createAppController } from '/src/app-controller.js';
+import { createConversationStore } from '/src/chat/conversation-store.js';
+const root = document.querySelector('#app'), view = createChatView(root), store = createConversationStore();
+const date = '2020-10-15', name = 'HELISON ROSA LUIS', writes = [], saves = [];
+const account = { homeAccountId: 'isolated-correction-test', name: 'Teste' };
+const controller = createAppController({ store, view,
+  auth: { initialize: async () => account, getToken: async () => 'test-token', signOut: async () => {} },
+  native: { importSharedItems: async () => [] },
+  pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
+  client: {
+    sendText: async payload => { writes.push(payload); return { status: 'processed', messages: [] }; },
+    getRhidAttendanceReport: async () => ({ date, rows: [{ Id: '10', ID_PESSOA_RHID: '23', DATA_REFERENCIA: date, NOME_COLABORADOR: name, BATIDAS_RHID: '06:52' }] }),
+    saveRhidAttendanceAdjustment: async payload => { saves.push(payload); return { time: payload.time, reason: payload.reason }; },
+  },
+});
+await controller.start();
+store.ingestRemoteMessages([{ id: 'correction-browser', role: 'assistant', type: 'poll', presentation: 'attendance_multi_select',
+  question: 'QUAL PRESENÇA DESEJA VALIDAR?', options: [{ id: 'pending_attendance_record:2266', label: `2266 - ${name}`, date, name,
+    detail_table: [[{ label: 'DATA', value: '15/10/2020' }, { label: 'ATIVIDADEEXECUTADA', value: 'FUNDAÇÃO' }]] }] }],
+  { resetConversation: true, activeFlow: { id: 'attendance_validation', title: 'VALIDAR PRESENÇAS APONTADAS' } });
+const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+await document.fonts.ready;
+for (let n = 0; n < 50 && !root.querySelector('[data-action="attendance-rhid-adjust-open"]'); n++) await frame();
+writes.length = 0;
+const button = root.querySelector('[data-action="attendance-rhid-adjust-open"][data-slot="exit1"]');
+const evidence = { realButton: button?.tagName === 'BUTTON', nestedButtons: root.querySelectorAll('button button').length };
+const identity = root.querySelector('.chat-attendance-select__identity');
+const identityBounds = identity.getBoundingClientRect(), identityRange = document.createRange();
+identityRange.selectNodeContents(identity);
+evidence.identityFits = [...identityRange.getClientRects()].every(rect => rect.top >= identityBounds.top - 1 && rect.bottom <= identityBounds.bottom + 1 && rect.right <= identityBounds.right + 1);
+button.click(); await frame();
+const dialog = root.querySelector('[data-rhid-adjustment-dialog] [role="dialog"]');
+const bounds = dialog.getBoundingClientRect();
+evidence.fits = bounds.left >= 0 && bounds.right <= innerWidth + 1 && bounds.top >= 0 && bounds.bottom <= innerHeight + 1;
+evidence.overflow = dialog.scrollWidth > dialog.clientWidth + 1;
+evidence.suggested = dialog.querySelector('input[type="time"]').value;
+evidence.reason = dialog.querySelector('textarea').value;
+root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await frame();
+evidence.saved = saves;
+evidence.displayed = root.querySelector('[data-rhid-slot="exit1"]').textContent;
+evidence.selected = root.querySelector('[data-action="attendance-select-toggle"]').checked;
+evidence.attendanceWrites = writes.length;
+evidence.closed = !root.querySelector('[data-rhid-adjustment-dialog]');
+if (new URLSearchParams(location.search).get('view') === 'dialog') {
+  root.querySelector('[data-action="attendance-rhid-adjust-open"][data-slot="entry2"]').click(); await frame();
+}
+document.documentElement.dataset.layout = JSON.stringify(evidence);
+document.documentElement.dataset.ready = 'true';
+addEventListener('pagehide', () => controller.stop(), { once: true });
+</script></body></html>

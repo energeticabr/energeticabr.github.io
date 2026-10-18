@@ -1,4 +1,4 @@
-import { buildRhidAttendanceTable, isValidRhidReportDate } from "./rhid-attendance-table.js";
+import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate } from "./rhid-attendance-table.js";
 
 const RECORD_ID = /^(?:choice:registro_presenca_pendente:|pending_attendance_record:|(?:choice:sincronizar_atividade_fornecedor_presenca:)?supplier_sync_target:)(\d+)$/;
 const DATE_IN_LABEL = /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})\b/g;
@@ -63,6 +63,23 @@ export function attendanceValidationDate(poll) {
   const dates = new Set(records.map(record => record.date));
   const date = records.length ? (dates.size === 1 ? [...dates][0] : "") : poll.presenceDateKey;
   return isValidRhidReportDate(date) ? date : "";
+}
+
+// The view may offer only unambiguous, genuinely empty slots. The controller
+// derives this again from its own report before accepting a save command.
+export function attendanceMissingPunchContext(option, poll, slot) {
+  if (!attendanceRhidPollEligible(poll) || poll.presentation === "attendance_supplier_sync"
+    || (poll.options || []).some(item => /supplier_sync_target:\d+$/.test(replyId(item)))
+    || !["exit1", "entry2", "exit2"].includes(slot) || option?.disabled) return null;
+  const context = attendanceRhidOptionContext(option, poll);
+  const badge = option?.rhidBadge;
+  const correction = badge?.correction;
+  const field = correction?.slots?.[slot];
+  if (!context || context.date !== badge?.date || !isRhidAttendanceDayFinalized(context.date)
+    || !["present", "absent", "inconsistent"].includes(badge?.status)
+    || !/^(?:rhid|id):[^\s:]+$/.test(correction?.personKey || "")
+    || !field || field.effective || field.rhid || field.rhidCandidates?.length) return null;
+  return { ...context, personKey: correction.personKey, personName: correction.name, field };
 }
 
 function badge(status, date, minutes) {
@@ -164,7 +181,8 @@ function personBadge(person, date) {
   // Use the report's effective slots (including approved adjustments), never
   // assign an afternoon-only punch to E1 just because it is first in the array.
   const punches = Object.fromEntries(SLOTS.map(slot => [slot, tablePerson.slots[slot].effective]));
-  const dailyBadge = (status, minutes) => ({ ...badge(status, date, minutes), punches });
+  const dailyBadge = (status, minutes) => ({ ...badge(status, date, minutes), punches,
+    correction: { personKey: tablePerson.personKey, name: tablePerson.name, slots: tablePerson.slots } });
   if (duplicatePunches) return dailyBadge("inconsistent");
 
   let times = tablePerson.rawPunches;

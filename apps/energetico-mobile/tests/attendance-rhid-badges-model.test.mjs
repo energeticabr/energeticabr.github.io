@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  attendanceMissingPunchContext,
   attendanceRhidOptionContext as contextFor,
   buildAttendanceRhidBadge as badgeFor,
   attendanceRhidPollEligible as eligible,
@@ -13,6 +14,11 @@ const option = (extra = {}) => ({ id: "pending_attendance_record:101", label: "1
 const context = (extra = {}) => ({ presenceId: "101", name: "ANA", date: day, ...extra });
 const row = (extra = {}) => ({ Id: "sharepoint-10", ID_PESSOA_RHID: "10", NOME_COLABORADOR: "ANA", DATA_REFERENCIA: day, BATIDAS_RHID: regular, ...extra });
 const report = (rows = [row()], extra = {}) => ({ date: day, rows, ...extra });
+
+test("replication inferred from choice IDs never accepts a validation-only missing-punch correction", () => {
+  const choice = option({ id: 'supplier_sync_target:101', rhidBadge: badgeFor(context(), report([row({ BATIDAS_RHID: '07:00' })])) });
+  assert.equal(attendanceMissingPunchContext(choice, poll([choice]), 'exit1'), null);
+});
 
 test("badge exposes the same four effective punch slots as the daily report", () => {
   const actual = badgeFor(context(), report());
