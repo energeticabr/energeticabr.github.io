@@ -24,13 +24,27 @@
       } },
     ];
     const gallery = createOrdersGallery({ document, data: {
-      async loadSnapshot() { return { rows }; },
+      async loadSnapshot() {
+        if (new URLSearchParams(location.search).has('failure')) throw new Error('A requisicao Microsoft Graph excedeu o tempo limite. ' + 'Falha temporária na consulta dos pedidos. '.repeat(5));
+        return { rows };
+      },
       async listAttachments(id) { return id === '353' ? [{ fileName: 'pedido.pdf' }, { fileName: 'foto.jpg' }] : []; },
       async loadEditor(id) { return { entity: { id: 'pedidos', title: 'Pedido' }, item: { id, fields: { FORNECEDOR: 'ISRAEL ESCORAMENTO E ARMAÇÕES' } },
         columns: [{ name: 'FORNECEDOR', label: 'Fornecedor', control: 'text', editable: true }], contract: { hasForm: true } }; },
       async loadLinkedReport() { return new Promise(() => {}); },
     } });
     await gallery.open();
+    if (new URLSearchParams(location.search).has('failure')) {
+      const root = document.querySelector('.og-overlay'), alert = root.querySelector('.og-notice'), sort = root.querySelector('.og-sort-field');
+      const rect = alert.getBoundingClientRect(), retry = [...root.querySelectorAll('button')].find(button => button.textContent === 'Tentar novamente');
+      document.documentElement.dataset.layout = JSON.stringify({
+        alertVisible: !alert.hidden && alert.getAttribute('role') === 'alert',
+        text: alert.textContent, sortHidden: sort.hidden,
+        fits: rect.left >= 0 && rect.right <= innerWidth && alert.scrollWidth <= alert.clientWidth + 1,
+        beforeRetry: rect.bottom <= retry.getBoundingClientRect().top,
+        noOverflow: root.querySelector('.og-content').scrollWidth <= root.querySelector('.og-content').clientWidth + 1,
+      });
+    }
     document.documentElement.dataset.ready = 'true';
   </script>
 </body>
