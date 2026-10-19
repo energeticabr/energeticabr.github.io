@@ -178,4 +178,5 @@
 }
 @media (max-width: 360px) {
   .tg-metric-icon { display: none; }
+  .tg-toolbar .tg-filter-toggle { min-width: 80px; }
 }

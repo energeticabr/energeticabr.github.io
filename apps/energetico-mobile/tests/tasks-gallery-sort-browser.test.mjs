@@ -24,7 +24,7 @@ test('task sort icon shares one toolbar row and popup fits portrait, landscape, 
       dom.window.close();
       const diagnostic = `${width}x${height}: ${JSON.stringify(result)}`;
       const [search, sort, filter, add] = result.bar;
-      assert.ok(search.width > 40 && sort.width >= 44 && sort.height >= 44, diagnostic);
+      assert.ok(search.width >= 90 && sort.width >= 44 && sort.height >= 44, diagnostic);
       assert.ok(search.right <= sort.x && sort.right <= filter.x && filter.right <= add.x, diagnostic);
       assert.ok(result.bar.every(rect => Math.abs(rect.bottom - search.bottom) < 1), diagnostic);
       assert.ok(add.right <= width && !result.overflow, diagnostic);
