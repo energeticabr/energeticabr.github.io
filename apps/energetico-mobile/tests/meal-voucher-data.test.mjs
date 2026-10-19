@@ -406,6 +406,17 @@ test('compatibilidade legada não autoriza sobrescrever filial alterada para out
   assert.equal(await data.canEditPending(original, progress), false); assert.equal(f.writes.length, 0);
 });
 
+test('pedido legado sem OBS original preserva notas de auditoria ao liberar edição', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = { ...draft([suppliers[0]]), obs:'' }, progress = { operationId:'legacy-blank-obs', signature:JSON.stringify(original) };
+  f.rows.NOTASPENDENTES.push({ id:'21', fields:{ Title:'APP-vale-alimentacao-legacy-blank-obs', FILIAL:'OBRA A',
+    FORNECEDOR:'Ana', VALORTOTAL:10, OBS:'Conferido pela auditoria', STATUS:'PENDENTE AUDITORIA' }, eTag:'"1"' });
+  assert.equal(await data.canEditPending(original, progress), true);
+  await data.post({ ...original, date:'2026-10-16' }, progress);
+  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /\nConferido pela auditoria$/);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
 test('pedido existente apenas selecionado não bloqueia correção antes do primeiro lançamento', async () => {
   const f = fixture(), create = f.repo.createItem;
   f.rows.NOTASPENDENTES.push(...['98','99'].map(id => ({ id, fields:{ FILIAL:'OBRA A', FORNECEDOR:'DIVERSOS', STATUS:'PENDENTE', VALORTOTAL:100, OBS:'' }, eTag:'"1"' })));

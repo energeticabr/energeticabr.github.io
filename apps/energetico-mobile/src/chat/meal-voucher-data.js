@@ -325,7 +325,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     const expected = candidates.find(({ fields, expectedObs }) => fields && typeof expectedObs === 'string' && Object.keys(baseline).every(name => Object.hasOwn(fields, name))
       && matchesFields(orders, row, { ...fields, [obs]:scalar(row.fields[obs]) })
       && JSON.stringify(revisions(row.fields[obs], progress.operationId)) === JSON.stringify(revisions(expectedObs, progress.operationId))
-      && (scalar(row.fields[obs]) === expectedObs || scalar(row.fields[obs]).startsWith(`${expectedObs}\n`)));
+      && (!expectedObs || scalar(row.fields[obs]) === expectedObs || scalar(row.fields[obs]).startsWith(`${expectedObs}\n`)));
     if (!expected) return blocked;
     const attachments = await repository.listAttachments(siteKey, orders.id, row.id);
     assertSession();
