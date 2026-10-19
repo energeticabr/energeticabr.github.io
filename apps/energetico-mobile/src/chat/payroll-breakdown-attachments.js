@@ -1,5 +1,5 @@
 import { validateAttachment } from '../../../../portal/data/attachments.js';
-import { payrollKey } from './supplier-payroll.js';
+import { payrollKey, validPayrollDate } from './supplier-payroll.js';
 import { payrollProvisionId } from './payroll-provision-source.js';
 
 const SITE = 'personal';
@@ -8,6 +8,22 @@ const identity = value => { const text = scalar(value); if (!/^[1-9]\d{0,14}$/.t
 const names = { provision: ['PROVISÃO PGTOS','PROVISAO PGTOS','PROVISAO PAGAMENTOS'], payroll: ['FOLHAPGTO'], launch: ['LANCAMENTOS'], order: ['NOTASPENDENTES'], sheet: ['IDFOLHA'] };
 const fileKey = name => name.normalize('NFC').toLocaleLowerCase('pt-BR');
 const digest = async bytes => [...new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
+function resumedTargetsMatch(previous, current) {
+  if (previous === current) return true;
+  try {
+    const before = JSON.parse(previous), after = JSON.parse(current);
+    const source = before.find(row=>row.kind==='provision'), settled = after.find(row=>row.kind==='provision');
+    // The sole permitted expansion is a previously unlinked, pending provision becoming settled.
+    if (!source || !settled || before.some(row=>!['sheet','payroll','provision'].includes(row.kind))
+      || source.fields.DATAPGTOEFETUADO || source.fields.IDLANCAMENTOS || source.fields.IDPEDIDO || !settled.fields.DATAPGTOEFETUADO) return false;
+    return before.every(old => {
+      const fresh = after.find(row=>row.kind===old.kind && row.listId===old.listId && row.id===old.id);
+      return fresh && Object.entries(old.fields).every(([field,value]) => value === fresh.fields[field]
+        || !value && (old.kind==='provision' && ['DATAPGTOEFETUADO','IDLANCAMENTOS','IDPEDIDO'].includes(field)
+          || old.kind==='payroll' && field==='IDLANCAMENTO' && after.some(row=>row.kind==='launch' && row.id===fresh.fields[field])));
+    });
+  } catch { return false; }
+}
 
 /** Never creates financial records: destinations are resolved afresh from this payment. */
 export function createPayrollBreakdownAttachments({ repository, assertSession = () => {} } = {}) {
@@ -82,7 +98,9 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
       const sourceSheet = provision.value('IDFOLHA',true), sourceType = provision.value('TIPOPGTO',true);
       if (sourceSheet && sourceSheet !== sheetId || sourceType && payrollKey(sourceType) !== payrollKey(type)) throw new Error('O vínculo da folha ou rubrica da provisão mudou.');
       if (title.startsWith('APP-folha-provisao-') && sourceSheet !== sheetId) throw new Error('O vínculo da folha da provisão mudou.');
-      paid = !!provision.value('DATAPGTOEFETUADO'); targets.push(provision);
+      const paidDate = provision.value('DATAPGTOEFETUADO');
+      if (paidDate && !validPayrollDate(paidDate.slice(0,10))) throw new Error('A data de pagamento da provisão é inválida.');
+      paid = !!paidDate; targets.push(provision);
       const linked = provision.value('IDLANCAMENTOS',true);
       if (linked && !/^[1-9]\d*(?:\s*[,;\r\n]\s*[1-9]\d*)*$/.test(linked)) throw new Error('O vínculo dos lançamentos é inválido.');
       const ids = [...new Set(linked.split(/[,;\r\n]/).map(v=>v.trim()).filter(Boolean))];
@@ -112,7 +130,7 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
       if (!entries.length) throw new Error('Selecione pelo menos um arquivo desta linha.');
       if (progress.manifest && JSON.stringify(progress.manifest) !== JSON.stringify(manifest)) throw new Error('Selecione novamente os mesmos arquivos, com o mesmo conteúdo, para retomar.');
       const input = {supplier,sheetId,paymentId}, resolved = await resolve(input);
-      if (progress.targets && progress.targets !== resolved.signature) throw new Error('O vínculo dos anexos mudou durante o envio. Confira os registros.');
+      if (progress.targets && !resumedTargetsMatch(progress.targets,resolved.signature)) throw new Error('O vínculo dos anexos mudou durante o envio. Confira os registros.');
       async function active() {
         repository.clearCache?.();
         if ((await resolve(input)).signature !== resolved.signature) throw new Error('O vínculo dos anexos mudou durante o envio.');

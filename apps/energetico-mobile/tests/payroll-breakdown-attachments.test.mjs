@@ -57,6 +57,12 @@ test('manifesto preservado exige os mesmos bytes após reiniciar sem recriar reg
   await assert.rejects(f.submit([],progress),/selecione novamente/i);
   await assert.rejects(f.submit([file('outro')],progress),/mesmos arquivos/i);assert.equal(f.writes.length,3);
 });
+test('baixa durante falha de anexo permite retomar somente a expansão dos vínculos da mesma provisão',async()=>{
+  const f=fixture({pending:true}),upload=f.repo.uploadAttachment,progress={};
+  f.repo.uploadAttachment=async()=>{throw new Error('Falha de rede');};await assert.rejects(f.submit([file()],progress),/Falha/);
+  Object.assign(f.rows['PROVISÃO PGTOS'][12],{DATAPGTOEFETUADO:'2026-10-12',IDLANCAMENTOS:'91',IDPEDIDO:'41'});f.repo.uploadAttachment=upload;
+  await f.submit([file()],JSON.parse(JSON.stringify(progress)));assert.equal(f.writes.length,3);
+});
 test('vínculo alterado entre destinos interrompe sem enviar a outro registro',async()=>{
   const f=fixture(),upload=f.repo.uploadAttachment;
   f.repo.uploadAttachment=async(...args)=>{await upload(...args);f.rows.LANCAMENTOS[91].AGRUPAR='42';};
