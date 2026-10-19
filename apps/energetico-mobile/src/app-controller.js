@@ -1188,7 +1188,10 @@ export function createAppController({
   let recoveryWarning = null;
   const previewUrls = new Set();
   const previewLoading = new Set();
-  const previewTimers = new Set();
+  const previewQueue = new Map();
+  let previewTimer = null;
+  let previewBusy = false;
+  let previewAbort = null;
   let signaturePlacementLoad = null;
   let pendingLiveSignatureCapture = null;
   let signaturePlacementData = null;
@@ -4835,26 +4838,60 @@ export function createAppController({
       || /\.pdf$/i.test(String(item.fileName || "").trim())
     ));
     for (const item of candidates) {
-      if (previewLoading.has(item.previewKey) || item.previewUrl) continue;
+      // Large originals remain available through Open/Share. Do not fetch a
+      // second complete copy just to decorate the tray during a mobile upload.
+      if (previewLoading.has(item.previewKey) || item.previewUrl
+        || Number(item.size) > AUTO_COMPRESSION_THRESHOLD_BYTES) continue;
       previewLoading.add(item.previewKey);
-      const timer = setTimeout(() => {
-        previewTimers.delete(timer);
-        client.fetchMedia(item)
-          .then(blob => createMediaThumbnail(blob, item.fileName || item.caption || "arquivo"))
-          .then(url => {
-            if (!url) return;
-            if (stopped || !account || account !== previewAccount) {
-              URL.revokeObjectURL(url);
-              return;
-            }
-            previewUrls.add(url);
-            if (item.previewKey.startsWith("message:")) store.setMessagePreview(item.id, url);
-            else store.setAttachmentPreview(item.id, url);
-          })
-          .catch(() => {})
-          .finally(() => previewLoading.delete(item.previewKey));
-      }, 100);
-      previewTimers.add(timer);
+      previewQueue.set(item.previewKey, { item, account: previewAccount, revision: sessionRevision });
+    }
+    scheduleMediaPreview();
+  }
+
+  function scheduleMediaPreview() {
+    if (stopped || previewBusy || previewTimer !== null || !previewQueue.size) return;
+    previewTimer = setTimeout(() => {
+      previewTimer = null;
+      void loadNextMediaPreview();
+    }, 100);
+  }
+
+  async function loadNextMediaPreview() {
+    if (stopped || previewBusy || !previewQueue.size) return;
+    // Give uploads and conversation writes first use of the connection. Only
+    // one optional download/decoder may hold the original in memory at a time.
+    if (flowBusy() || store.getState().pendingFiles.length) { scheduleMediaPreview(); return; }
+    const [key, task] = previewQueue.entries().next().value;
+    previewQueue.delete(key);
+    const { item } = task;
+    const currentItem = () => {
+      if (stopped || !account || account !== task.account || sessionRevision !== task.revision) return null;
+      const collection = key.startsWith('message:') ? store.getState().messages : store.getState().attachments;
+      return collection.find(candidate => candidate.id === item.id && candidate.mediaUrl === item.mediaUrl
+        && Number(candidate.size || 0) === Number(item.size || 0) && !candidate.previewUrl);
+    };
+    previewBusy = true;
+    const abort = new AbortController();
+    previewAbort = abort;
+    try {
+      if (!currentItem()) return;
+      const blob = await withTimeout(client.fetchMedia(item, { signal: abort.signal }), 15_000,
+        'A prévia do anexo demorou mais que o esperado.');
+      if (!currentItem() || blob.size > AUTO_COMPRESSION_THRESHOLD_BYTES) return;
+      const url = await createMediaThumbnail(blob, item.fileName || item.caption || 'arquivo');
+      if (!url) return;
+      if (!currentItem()) { URL.revokeObjectURL(url); return; }
+      previewUrls.add(url);
+      if (key.startsWith('message:')) store.setMessagePreview(item.id, url);
+      else store.setAttachmentPreview(item.id, url);
+    } catch {
+      // A missing optional thumbnail never blocks the original or the form.
+    } finally {
+      abort.abort();
+      if (previewAbort === abort) previewAbort = null;
+      previewLoading.delete(key);
+      previewBusy = false;
+      scheduleMediaPreview();
     }
   }
 
@@ -10549,6 +10586,9 @@ export function createAppController({
 
   async function maybeOfferAttachmentCompression(uploadedItem, result, uploadCompleted) {
     if (uploadCompleted || typeof client.compressAttachment !== "function") return false;
+    // The diary accepts batches of originals. Per-file compression is an
+    // optional tray action, not another blocking VM round-trip for every photo.
+    if (isConstructionDiaryFlow(store.getState().activeFlow)) return false;
     const uploadedFile = uploadedItem?.file;
     if (!(Number(uploadedFile?.size) > AUTO_COMPRESSION_THRESHOLD_BYTES)) return false;
     if (hasAttachmentCompressionChoice(result?.messages)) return false;
@@ -11275,8 +11315,10 @@ export function createAppController({
     attachmentRevision += 1;
     previewUrls.forEach(url => URL.revokeObjectURL(url));
     previewUrls.clear();
-    previewTimers.forEach(timer => clearTimeout(timer));
-    previewTimers.clear();
+    if (previewTimer !== null) clearTimeout(previewTimer);
+    previewTimer = null;
+    previewAbort?.abort();
+    previewQueue.clear();
     previewLoading.clear();
     signaturePlacementGeneration += 1;
     signaturePlacementLoad = null;

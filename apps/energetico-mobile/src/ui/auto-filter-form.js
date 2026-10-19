@@ -12,6 +12,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
   let timer = null;
   const searchableSelects = bindSearchableFilterSelects(form);
   const external = new Set(externalControls.filter(control => !form.contains(control)));
+  const composing = new Set();
 
   function values() {
     return JSON.stringify([...new Set([...form.elements, ...external])]
@@ -30,6 +31,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
 
   function sync() {
     cancelPending();
+    composing.clear();
     lastAppliedValues = values();
     searchableSelects.sync();
   }
@@ -43,6 +45,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
 
   function applyIfChanged() {
     cancelPending();
+    if (composing.size) return;
     const nextValues = values();
     if (nextValues === lastAppliedValues) return;
     lastAppliedValues = nextValues;
@@ -50,45 +53,76 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
     searchableSelects.sync();
   }
 
+  function isFilterEvent(event) {
+    return event.target?.dataset?.filterOptionSearch !== 'true' && event.target?.matches?.(FILTER_CONTROL)
+      && (form.contains(event.target) || external.has(event.target));
+  }
+
   function onInput(event) {
-    if (event.target?.dataset?.filterOptionSearch === 'true' || !event.target?.matches?.(FILTER_CONTROL) || !(form.contains(event.target) || external.has(event.target))) return;
+    if (!isFilterEvent(event)) return;
     cancelPending();
+    if (event.isComposing) composing.add(event.target);
+    if (composing.size) return;
     timer = view.setTimeout(applyIfChanged, delay);
   }
 
   function onChange(event) {
-    if (event.target?.dataset?.filterOptionSearch === 'true' || !event.target?.matches?.(FILTER_CONTROL) || !(form.contains(event.target) || external.has(event.target))) return;
+    if (!isFilterEvent(event)) return;
     applyIfChanged();
+  }
+
+  function onCompositionStart(event) {
+    if (!isFilterEvent(event)) return;
+    composing.add(event.target);
+    cancelPending();
+  }
+
+  function onCompositionEnd(event) {
+    if (!isFilterEvent(event)) return;
+    composing.delete(event.target);
+    onInput(event);
   }
 
   function onSubmit(event) {
     event.preventDefault();
+    if (composing.size) return;
     applyNow();
   }
 
   form.addEventListener('input', onInput);
   form.addEventListener('change', onChange);
   form.addEventListener('submit', onSubmit);
+  form.addEventListener('compositionstart', onCompositionStart);
+  form.addEventListener('compositionend', onCompositionEnd);
   for (const control of external) {
     control.addEventListener('input', onInput);
     control.addEventListener('change', onChange);
     control.addEventListener('search', onChange);
+    control.addEventListener('compositionstart', onCompositionStart);
+    control.addEventListener('compositionend', onCompositionEnd);
   }
 
   return Object.freeze({
     apply: applyNow,
     cancelPending,
     sync,
+    // A discarded async result must be fetched again even if typing returns to its query.
+    invalidate() { lastAppliedValues = null; },
     destroy() {
       cancelPending();
+      composing.clear();
       searchableSelects.destroy();
       form.removeEventListener('input', onInput);
       form.removeEventListener('change', onChange);
       form.removeEventListener('submit', onSubmit);
+      form.removeEventListener('compositionstart', onCompositionStart);
+      form.removeEventListener('compositionend', onCompositionEnd);
       for (const control of external) {
         control.removeEventListener('input', onInput);
         control.removeEventListener('change', onChange);
         control.removeEventListener('search', onChange);
+        control.removeEventListener('compositionstart', onCompositionStart);
+        control.removeEventListener('compositionend', onCompositionEnd);
       }
     },
   });

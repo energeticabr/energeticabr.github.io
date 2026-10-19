@@ -34,3 +34,22 @@ test("PDF acima do limite não inicia renderização", async () => {
   });
   assert.equal(result, null);
 });
+
+test('photo thumbnail retains a small raster instead of the full-resolution original', async () => {
+  const source = new Blob(['original photo'], { type: 'image/jpeg' });
+  let closed = false, drawn, retained;
+  const bitmap = { width: 6000, height: 4000, close: () => { closed = true; } };
+  const canvas = { getContext: () => ({ drawImage: (...args) => { drawn = args; } }),
+    toBlob: done => done(new Blob(['small thumbnail'], { type: 'image/jpeg' })) };
+  const url = await createMediaThumbnail(source, 'photo.jpg', {
+    documentRef: { createElement: () => canvas },
+    loadImageBitmap: async blob => { assert.equal(blob, source); return bitmap; },
+    urlApi: { createObjectURL: blob => { retained = blob; return 'blob:small-photo'; } },
+  });
+  assert.equal(url, 'blob:small-photo');
+  assert.equal(canvas.width, 520);
+  assert.equal(canvas.height, 347);
+  assert.deepEqual(drawn, [bitmap, 0, 0, 520, 347]);
+  assert.notEqual(retained, source);
+  assert.equal(closed, true, 'full-resolution decoder memory is released');
+});
