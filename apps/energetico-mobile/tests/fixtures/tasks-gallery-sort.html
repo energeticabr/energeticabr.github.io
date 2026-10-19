@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
   <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
   <link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/registration-gallery.css">
   <link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
 </head>
 <body>
@@ -27,6 +28,7 @@
   const root = document.querySelector('.tg-overlay'), toolbar = root.querySelector('.tg-toolbar');
   const search = toolbar.querySelector('[data-gallery-quick-search]'), sort = toolbar.querySelector('.tg-sort-toggle');
   const filter = toolbar.querySelector('.tg-filter-toggle'), add = toolbar.querySelector('[data-action="create-task"]');
+  if (new URLSearchParams(location.search).has('wide')) filter.style.fontFamily = 'monospace';
   const rect = element => {
     const { x, y, width, height, right, bottom } = element.getBoundingClientRect();
     return { x, y, width, height, right, bottom };
@@ -37,6 +39,8 @@
   const result = {
     bar, viewport: { width: innerWidth, height: innerHeight },
     overflow: document.documentElement.scrollWidth > innerWidth + 1,
+    toolbarTextFits: [sort, filter, add].every(button =>
+      button.scrollWidth <= button.clientWidth + 1 && button.scrollHeight <= button.clientHeight + 1),
     textFits: [...dialog.querySelectorAll('button')].every(button => button.scrollWidth <= button.clientWidth + 1),
     modalFits: popup.x >= 0 && popup.y >= 0 && popup.right <= innerWidth && popup.bottom <= innerHeight,
     focusInside: dialog.contains(document.activeElement), inert: root.querySelector('.og-content').inert,

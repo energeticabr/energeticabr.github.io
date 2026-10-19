@@ -178,5 +178,5 @@
 }
 @media (max-width: 360px) {
   .tg-metric-icon { display: none; }
-  .tg-toolbar .tg-filter-toggle { min-width: 80px; }
+  .tg-toolbar .tg-filter-toggle { width: 80px; min-width: 80px; padding-inline: 2px; font-size: .85rem; }
 }
