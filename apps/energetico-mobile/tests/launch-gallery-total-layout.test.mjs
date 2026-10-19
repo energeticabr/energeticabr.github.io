@@ -101,7 +101,9 @@ test('paid date stays left of total in a green band while supplier and order rem
           inclusiveTotal: card.querySelector('.lg-record-total-with-freight .lg-record-value')?.textContent.replace(/\u00a0/g, ' '),
           details: [...card.querySelectorAll('.lg-record-detail-tile')].map(tile => {
             const rect = tile.getBoundingClientRect(), trigger = tile.querySelector('.lg-cluster-trigger');
+            const fill = getComputedStyle(tile).backgroundColor.match(/[\\d.]+/g)?.map(Number);
             return { filled: getComputedStyle(tile).backgroundColor !== 'rgba(0, 0, 0, 0)',
+              blue: fill?.length >= 3 && fill[2] > fill[1] && fill[1] > fill[0],
               fits: tile.scrollWidth <= tile.clientWidth + 1 && rect.left >= heading.left && rect.right <= heading.right + 1,
               height: rect.height, selectable: trigger?.tagName === 'BUTTON' && !trigger.disabled,
               hint: tile.querySelector('.lg-record-detail-hint')?.textContent,
@@ -132,7 +134,7 @@ test('paid date stays left of total in a green band while supplier and order rem
         assert.ok(layout.green && layout.dateLeftOfTotal && layout.belowControls && layout.aboveDivider && layout.statusBelowActions && layout.highlighted && layout.fits && !layout.overflow,
           `Layout inválido em ${width}px: ${JSON.stringify(layout)}`);
         assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE', 'TOTAL COM FRETE']);
-        for (const tile of layout.details) assert.ok(tile.filled && tile.fits && tile.height >= 44 && tile.selectable && tile.icon && tile.arrow && tile.hint,
+        for (const tile of layout.details) assert.ok(tile.filled && tile.blue && tile.fits && tile.height >= 44 && tile.selectable && tile.icon && tile.arrow && tile.hint,
           `Detalhamento inválido em ${width}px: ${JSON.stringify(tile)}`);
         assert.ok(layout.description?.visible && layout.description.belowFreight &&
           layout.description.beforeDisclosure && layout.description.fullWidth &&
