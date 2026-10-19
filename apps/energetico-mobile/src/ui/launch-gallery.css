@@ -315,12 +315,6 @@
 .lg-record-finance .lg-record-value { color: var(--lg-navy); font-size: .9rem; font-weight: 900; }
 .lg-cluster-trigger { align-self: flex-start; max-width: 100%; margin: 0; padding: 0; border: 0; color: var(--lg-navy); background: transparent; font: inherit; font-size: .79rem; font-weight: 800; text-align: left; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; overflow-wrap: anywhere; cursor: pointer; }
 .lg-cluster-trigger:focus-visible { outline: 3px solid #f0b323; outline-offset: 2px; }
-.lg-record-order-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.lg-record-order-actions .lg-cluster-trigger { align-self: center; }
-.lg-record-order-actions .report-mascot-button { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; padding: 3px; border: 1px solid #a9c5d1; border-radius: 10px; background: #edf7fa; cursor: pointer; touch-action: manipulation; }
-.lg-record-order-actions .report-mascot-button img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
-.lg-record-order-actions .report-mascot-button:hover { background: #dceef4; }
-.lg-record-order-actions .report-mascot-button:focus-visible { outline: 3px solid #e6a929; outline-offset: 2px; }
 .lg-record-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; padding: 7px; border: 1px solid #d9e6ef; border-radius: 7px; background: #f1f7fb; }
 .lg-record-section-title { grid-column: 1 / -1; margin: 0; padding: 0 3px 4px; color: #3a657e; font-size: .72rem; font-weight: 850; text-transform: uppercase; }
 .lg-record-dates .lg-record-field { padding: 6px; border: 1px solid #e0eaf1; border-radius: 5px; background: #fff; margin-bottom: 5px; }
@@ -333,17 +327,13 @@
 .lg-record-field--icon { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-content: center; align-items: center; column-gap: 10px; row-gap: 3px; }
 .lg-record-field--icon > .lg-card-icon { grid-column: 1; grid-row: 1 / span 3; }
 .lg-record-field--icon > .lg-record-label { grid-column: 2; grid-row: 1; }
-.lg-record-field--icon > .lg-record-value,
-.lg-record-field--icon > .lg-record-order-actions { grid-column: 2; grid-row: 2; }
+.lg-record-field--icon > .lg-record-value { grid-column: 2; grid-row: 2; }
 .lg-record-summary-fields .lg-record-detail-tile { position: relative; grid-template-columns: 28px minmax(0, 1fr) 12px; padding: 10px; border: 1px solid #bad5e9; border-radius: 8px; background: #d6eafa; cursor: pointer; }
 .lg-record-detail-tile:hover, .lg-record-detail-tile:focus-within { background: #c4e1f6; border-color: #5e93b9; }
 .lg-record-detail-tile .lg-cluster-trigger { color: var(--lg-navy); background: transparent; text-decoration: none; min-height: 24px; }
 .lg-record-detail-tile .lg-cluster-trigger:hover:not(:disabled) { color: var(--lg-navy-strong); background: transparent; text-decoration: underline; }
 .lg-record-detail-tile .lg-record-detail-hint { grid-column: 2; grid-row: 3; color: #345b79; font-size: .6rem; line-height: 1.25; }
 .lg-record-chevron { grid-column: 3; grid-row: 1 / span 3; color: var(--lg-navy); font-size: 1.5rem; font-weight: 750; text-align: center; }
-.lg-record-order > .lg-card-icon { grid-row: 1; }
-.lg-record-order > .lg-record-order-actions { grid-column: 1 / 3; }
-.lg-record-order > .lg-record-detail-hint { grid-column: 1 / 3; }
 .lg-record-summary-fields > .lg-record-payment-date { padding: 10px 6px; }
 .lg-record-total-with-freight { margin: 8px 0 8px 8px; padding: 8px !important; border: 1px solid #add7b2 !important; border-radius: 8px; background: #e1f5df; }
 .lg-record-total-with-freight .lg-record-label,
