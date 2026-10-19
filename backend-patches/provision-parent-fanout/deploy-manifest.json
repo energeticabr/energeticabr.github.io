@@ -1,0 +1,26 @@
+{
+  "files": {
+    "worker/clients.py": {
+      "before": "b13243e62aa526ca6b654cf7c6611c4139cdd8e0f3f58efd8dd2d098f086f292",
+      "mirrorBefore": "b13243e62aa526ca6b654cf7c6611c4139cdd8e0f3f58efd8dd2d098f086f292",
+      "after": "9027dde471ec6750342be18206f54a9a21719053e9a78c93997b95b46c135af5"
+    },
+    "worker/provision_attachment_sync.py": {
+      "before": "abb7a8a2885ae806c1cd23a6ca3a6bb75f4a78d78df5ee42f2d3fb408c453fcd",
+      "mirrorBefore": "abb7a8a2885ae806c1cd23a6ca3a6bb75f4a78d78df5ee42f2d3fb408c453fcd",
+      "after": "00cac38ca83ff9961e4313ce055b25969037debc23aed744ac49838077489ebf"
+    },
+    "worker/provision_description_settlement.py": {
+      "before": "0a5b11b398c46f94f67122ac1439a3af64c7e2a50212109907406cdf8843431e",
+      "mirrorBefore": "0a5b11b398c46f94f67122ac1439a3af64c7e2a50212109907406cdf8843431e",
+      "after": "39c0dc1c93adbb85b974a124c2974ed5ec01cf4abae6a973cf1d99961380c502"
+    },
+    "worker/provision_parent_fanout.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "4c7c0526b68ddc1bc63cb299bc872e30e7c27b35a715272debd943984ad21f4e"
+    }
+  },
+  "patch": "92dbdbbf277fd531b4c0f47856e667fccc6a42e8661d1a3bef2a062d6e076410",
+  "archive": "9f046600666d1bf395b83ef4860ac875f894d231cd9e461130e099ea4f480eaf"
+}

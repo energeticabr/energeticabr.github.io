@@ -27,6 +27,7 @@ class Connector:
     def __init__(self):
         self.items, self.files, self.tokens, self.writes = {}, {}, {}, []
         self.uploads = []
+        self.versions = {}
         self.fail_child = self.lose_child = None
         self.fail_upload = self.lose_upload = self.corrupt_upload = False
         self.bad_launch = False
@@ -41,11 +42,13 @@ class Connector:
             self.files[CHILD, child] = {'proof.pdf': str(child).encode()}
         self.items[PARENT, 7] = {'Id': 7, 'FORNECEDOR': 'Supplier', 'FILIAL': 'Branch',
             'VALORTOTAL': '40', 'DATA PREVISTO PGTO': '2026-10-19'}
-        self.files[PARENT, 7] = {'sibling-aggregate.pdf': b'parent only'}
+        from provision_attachment_sync import copy_name, sha
+        # Genuine child-origin parent mirrors stay scoped to their own child.
+        self.files[PARENT, 7] = {copy_name(12, sha(b'12'), 'proof.pdf'): b'12'}
 
     def get_item_fields_with_etag(self, item, fields, target_list=None):
         row = self.items[target_list, int(item)]
-        return {k: row.get(k) for k in fields}, 'etag'
+        return {k: row.get(k) for k in fields}, str(self.versions.get((target_list, int(item)), 0))
 
     def get_provision_description_for_settlement(self, item):
         return {**copy.deepcopy(self.items[PARENT, int(item)]),
@@ -68,25 +71,33 @@ class Connector:
                 'attachments': set(names) <= self.files.get((target_list, int(item)), {}).keys()}
 
     def update_item_with_etag(self, item, fields, etag, target_list=None):
-        assert etag == 'etag'
+        key = target_list, int(item)
+        assert etag == str(self.versions.get(key, 0)), 'Stale SharePoint ETag rejected'
         if target_list == CHILD and item == self.fail_child:
             self.fail_child = None
             raise RuntimeError('child unavailable')
         self.items[target_list, int(item)].update(copy.deepcopy(fields))
+        self.versions[key] = self.versions.get(key, 0) + 1
         self.writes.append(('update', target_list, item))
         if target_list == CHILD and item == self.lose_child:
             self.lose_child = None
             raise RuntimeError('lost child response')
 
     def update_item(self, item, fields, target_list=None):
-        self.update_item_with_etag(item, fields, 'etag', target_list)
+        version = str(self.versions.get((target_list, int(item)), 0))
+        self.update_item_with_etag(item, fields, version, target_list)
 
     def _list_endpoint(self, kind): return kind
+    def _internal_field(self, kind, name): return name
 
     def _request(self, method, endpoint, **kwargs):
         from urllib.parse import unquote
         assert method == 'GET'
         endpoint = endpoint.removeprefix(self.site_url + '/_api/')
+        if endpoint == CHILD + '/items':
+            assert kwargs['params']['$filter'] == "DESCRITIVOPROVISAO eq '7'"
+            return {'value': [{'Id': i} for k, i in self.items if k == CHILD
+                             and self.items[k, i]['DESCRITIVOPROVISAO'] == '7']}
         match = re.fullmatch(r"(.+)/items\((\d+)\)/AttachmentFiles(?:/getByFileName\('(.+)'\)/\$value)?", endpoint)
         assert match, endpoint
         kind, item, name = match.groups()
@@ -104,6 +115,8 @@ class Connector:
         if name not in files:
             files[name] = b'corrupt' if self.corrupt_upload else data
             self.uploads.append((target_list, int(item), name))
+            key = target_list, int(item)
+            self.versions[key] = self.versions.get(key, 0) + 1
         if self.lose_upload:
             self.lose_upload = False
             raise RuntimeError('lost upload response')
