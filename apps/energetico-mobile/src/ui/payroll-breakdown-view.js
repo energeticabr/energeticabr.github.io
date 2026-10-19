@@ -284,7 +284,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     async open() {
       if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset();
       previousFocus = doc.activeElement; opened = true; page.hidden = false; epoch++;
-      if (progress.signature || restorePending() || Object.keys(historyAttachments).length) {
+      if (progress.signature || !draft.supplier && restorePending() || Object.keys(historyAttachments).length) {
         return work(async active => {
           payrollContext = null;
           if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }

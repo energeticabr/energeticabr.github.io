@@ -210,9 +210,13 @@ test('sucesso financeiro preserva diários históricos distintos até reselecion
   h.data.submitAttachments=createPayrollBreakdownAttachments({repository}).submit;
   await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');
   for(const id of [31,32]){choose(h,`[data-breakdown-files="payment:${id}"]`,[receipt()]);await h.click(`[data-breakdown-attachments-submit="payment:${id}"]`);assert.match(h.doc.querySelector('[role=alert]').textContent,/Upload/);}
-  h.input('[data-breakdown-value="2026-10-23:salary"]','10');h.view.close();await h.view.open();
+  h.input('[data-breakdown-value="2026-10-23:salary"]','10');
+  const newReceipt=new File(['novo recibo'],'novo-recibo.pdf',{type:'application/pdf'});
+  choose(h,'[data-breakdown-files="new:2026-10-23:salary"]',[newReceipt]);h.view.close();await h.view.open();
   assert.equal(h.doc.querySelector('[data-breakdown-value="2026-10-23:salary"]').value,'10','fechar antes de postar preserva o rascunho financeiro');
+  assert.match(h.doc.querySelector('[data-breakdown-files="new:2026-10-23:salary"]').closest('.payroll-breakdown-rubric').textContent,/Selecionados: novo-recibo.pdf/,'reabrir a mesma tela não descarta bytes ainda disponíveis');
   await h.click('[data-breakdown-next]');await h.click('[data-breakdown-submit]');
+  assert.equal(h.posted.lines.find(line=>line.date==='2026-10-23'&&line.rubric==='salary').files[0],newReceipt,'o mesmo recibo deve acompanhar a provisão nova');
   assert.match(h.doc.body.textContent,/Provisões criadas com sucesso/);assert.equal(h.dom.window.localStorage.length,1,'concluir financeiro não elimina anexos pendentes');
   const saved=JSON.parse(h.dom.window.localStorage.getItem(h.dom.window.localStorage.key(0)));
   assert.equal(saved.progress.signature,undefined);assert.equal(JSON.stringify(saved).includes('"files"'),false);
