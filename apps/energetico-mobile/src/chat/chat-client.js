@@ -59,6 +59,35 @@ async function readJson(response) {
   }
 }
 
+async function readMediaBlob(response, maxBytes) {
+  if (maxBytes === undefined) return response.blob();
+  const tooLarge = () => Object.assign(new Error('O original excede o limite da prévia automática.'), { code: 'MEDIA_PREVIEW_TOO_LARGE' });
+  if (Number(response.headers?.get('Content-Length')) > maxBytes) {
+    await response.body?.cancel?.().catch(() => {});
+    throw tooLarge();
+  }
+  if (!response.body?.getReader) {
+    const blob = await response.blob();
+    if (blob.size > maxBytes) throw tooLarge();
+    return blob;
+  }
+  const reader = response.body.getReader(), chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw tooLarge();
+      chunks.push(value);
+    }
+    return new Blob(chunks, { type: response.headers?.get('Content-Type') || '' });
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally { reader.releaseLock(); }
+}
+
 function confirmedResult(result, { allowRecovery = false } = {}) {
   const acceptedStatuses = allowRecovery
     ? new Set(["processed", "processed_with_recovery"])
@@ -590,7 +619,8 @@ export function createChatClient({
     }, response => parsePortalResponse(response, "A consulta do menu"), true);
   }
 
-  async function fetchMedia(message = {}, { signal } = {}) {
+  async function fetchMedia(message = {}, { signal, maxBytes } = {}) {
+    if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)) throw new TypeError('Limite de prévia inválido.');
     let mediaUrl;
     try {
       mediaUrl = new URL(String(message.mediaUrl || ""), baseUrl);
@@ -616,7 +646,7 @@ export function createChatClient({
         error.status = response.status;
         throw error;
       }
-      return response.blob();
+      return readMediaBlob(response, maxBytes);
     }, true);
   }
 

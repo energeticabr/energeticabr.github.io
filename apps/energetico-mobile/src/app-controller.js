@@ -4875,7 +4875,7 @@ export function createAppController({
     previewAbort = abort;
     try {
       if (!currentItem()) return;
-      const blob = await withTimeout(client.fetchMedia(item, { signal: abort.signal }), 15_000,
+      const blob = await withTimeout(client.fetchMedia(item, { signal: abort.signal, maxBytes: AUTO_COMPRESSION_THRESHOLD_BYTES }), 15_000,
         'A prévia do anexo demorou mais que o esperado.');
       if (!currentItem() || blob.size > AUTO_COMPRESSION_THRESHOLD_BYTES) return;
       const url = await createMediaThumbnail(blob, item.fileName || item.caption || 'arquivo');
