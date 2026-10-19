@@ -84,16 +84,34 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       })()`);
       assert.ok(layout.above && layout.aligned && !layout.overflow, JSON.stringify(layout));
       assert.equal(layout.green, 'rgb(37, 162, 78)');
-      await evaluate(`document.querySelector('.tg-card[data-item-id="176"] [data-action="complete"]').click()`);
+      await evaluate(`window.holdCompletion = true; document.querySelector('.tg-card[data-item-id="176"] [data-action="complete"]').click()`);
+      await waitFor(`Boolean(window.releaseCompletion)`);
+      const loading = await evaluate(`(() => {
+        const dialog = document.querySelector('.tg-completion-dialog'), rect = dialog.getBoundingClientRect();
+        return { buttons: dialog.querySelectorAll('button').length, fields: dialog.querySelectorAll('input').length,
+          loading: dialog.textContent.includes('Carregando conclusão'), focused: document.activeElement === dialog,
+          fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
+          overflow: dialog.scrollWidth > dialog.clientWidth + 1 };
+      })()`);
+      assert.equal(loading.buttons, 0, 'Cancelar não aparece antes dos demais controles');
+      assert.equal(loading.fields, 0);
+      assert.ok(loading.loading && loading.focused && loading.fits && !loading.overflow, JSON.stringify(loading));
+      if (width === 390 && process.env.TASK_COMPLETION_LOADING_SCREENSHOT) {
+        const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+        writeFileSync(process.env.TASK_COMPLETION_LOADING_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+      }
+      await evaluate(`window.holdCompletion = false; window.releaseCompletion()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);
       const modal = await evaluate(`(() => {
         const dialog = document.querySelector('.tg-completion-dialog'), rect = dialog.getBoundingClientRect();
         const top = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
         return { fields: [...dialog.querySelectorAll('input')].map(input => input.value), visible: dialog === top || dialog.contains(top),
+          buttons: [...dialog.querySelectorAll('button')].map(button => ({ text: button.textContent, visible: button.getBoundingClientRect().height >= 44 })),
           fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight,
           overflow: dialog.scrollWidth > dialog.clientWidth + 1, inert: document.querySelector('.og-content').inert };
       })()`);
       assert.deepEqual(modal.fields, ['2026-10-03', 'CONCLUÍDA']);
+      assert.deepEqual(modal.buttons, [{ text: 'Cancelar', visible: true }, { text: 'Submeter', visible: true }]);
       assert.ok(modal.visible && modal.fits && !modal.overflow && modal.inert, JSON.stringify(modal));
       if (width === 390 && process.env.TASK_COMPLETION_SCREENSHOT) {
         const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);

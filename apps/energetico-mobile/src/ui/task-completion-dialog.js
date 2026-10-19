@@ -71,7 +71,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     const cancel = el('button', 'gallery-record-dialog-button tg-completion-cancel', 'Cancelar');
     cancel.type = 'button'; cancel.setAttribute('data-task-completion-cancel', '');
     buttons.append(cancel);
-    dialog.append(el('h2', 'gallery-record-dialog-title', `Concluir tarefa #${row.id}`), message, body, buttons);
+    dialog.append(el('h2', 'gallery-record-dialog-title', `Concluir tarefa #${row.id}`), message, body);
     overlay.append(dialog); host.append(overlay);
     const current = { overlay, dialog, trigger, error: message, busy: false, persisted: false };
     state = current; onBlocked(true); dialog.focus({ preventScroll: true });
@@ -91,7 +91,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     });
     body.append(createLoadingIndicator(doc, 'Carregando conclusão…'));
     try {
-      const context = await data.loadEditor(row.id, { refresh: true });
+      const context = await data.loadEditor(row.id, { refresh: true, includeAttachments: false });
       if (!active(current)) return;
       const dateColumn = editableColumn(context, ['DATA CONCLUSÃO', 'field_8'], ['date', 'datetime-local']);
       const completedColumn = editableColumn(context, ['CONCLUÍDO', 'field_12'], ['text', 'textarea', 'select']);
@@ -109,7 +109,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
       submit.type = 'submit'; submit.setAttribute('data-task-completion-submit', '');
       buttons.append(submit); form.append(buttons); body.replaceChildren(form); date.focus({ preventScroll: true });
       async function reconcile() {
-        const latest = await data.loadEditor(row.id, { refresh: true });
+        const latest = await data.loadEditor(row.id, { refresh: true, includeAttachments: false });
         if (!active(current)) return;
         if (String(latest.item?.id) !== String(row.id)) throw new Error('Não foi possível verificar a conclusão desta tarefa.');
         const fields = latest.item.fields || {};
@@ -162,7 +162,7 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
           }
         }
       });
-    } catch (failure) { if (active(current)) { body.replaceChildren(); error(current, failure); cancel.focus(); } }
+    } catch (failure) { if (active(current)) { body.replaceChildren(); dialog.append(buttons); error(current, failure); cancel.focus(); } }
   }
   return Object.freeze({ open, close, destroy() { disposed = true; close(); } });
 }
