@@ -66,7 +66,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     assertSession();
     if (editable) {
       progress.editable = true;
-      for (const name of ['orderId', 'orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
+      for (const name of ['orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
     } else restoreOriginalDraft();
     savePending();
     return editable;
@@ -138,6 +138,11 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     content.append(el('p', '', `Filial: ${branch()} · Total do lote: ${money(mealVoucherTotal(draft.lines))}`));
     if (locked()) {
       content.append(el('p', '', `Pedido escolhido: ${draft.orderMode === 'new' ? 'novo' : `ID ${draft.orderId}`}`));
+      return;
+    }
+    if (progress.orderId && draft.orderMode === 'new') {
+      content.append(el('p', '', `O pedido ${progress.orderId} já foi criado e será reutilizado, sem duplicidade.`));
+      content.append(button('Editar os dados deste pedido', 'data-meal-order-new', () => { step = 'details'; render(); }));
       return;
     }
     content.append(button('Criar pedido novo', 'data-meal-order-new', () => { draft.orderMode = 'new'; draft.orderId = ''; step = 'details'; render(); }));
@@ -261,8 +266,8 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       for (const line of result.lines) list.append(el('li', '', `${line.supplier} · Lançamento ${line.id} · IDFOLHA ${line.sheetId} · Vínculo ${line.payrollId}`));
       content.append(list); footer.append(button('Concluir', 'data-meal-done', close));
     }
-    if (progress.signature && !locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'A tentativa anterior não gerou registros. Você pode corrigir os dados e confirmar novamente.'));
-    if (locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Esta tentativa está protegida para evitar duplicidade. Os dados originais são mantidos; Retomar envia somente os registros pendentes.'));
+    if (progress.signature && !locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Você pode corrigir os dados e confirmar novamente. Se o pedido já foi criado, ele será reutilizado, sem duplicidade.'));
+    if (locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Esta tentativa possui registros gravados ou ainda não foi possível conferi-los. Para evitar duplicidade, a edição está protegida. Retomar envia somente os registros pendentes.'));
     if (locked() && step !== 'summary' && step !== 'done') {
       for (const control of content.querySelectorAll('input, select, textarea, button')) {
         if (step !== 'extras' || !expectedFiles.length || control.type !== 'file') control.disabled = true;

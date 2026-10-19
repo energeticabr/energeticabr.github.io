@@ -58,18 +58,232 @@ test('falha antes de gravar permite corrigir datas, referência, conta e etapa m
   assert.equal(f.rows.FOLHAPGTO[0].fields.IDFOLHA, 33);
 });
 
-test('resposta perdida não libera edição de um pedido que já foi gravado', async () => {
+test('resposta perdida permite corrigir pedido vazio sem criar outro pedido', async () => {
   const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:'uncertain-1', editable:true };
   f.loseOrderResponse();
   await assert.rejects(data.post(original, progress), /General exception/);
   assert.equal(progress.orderId, undefined);
+  assert.equal(await data.canEditPending(original, progress), true);
+  await data.post({ ...original, paymentDate:'2026-10-16' }, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+  assert.equal(f.rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO'], '2026-10-16T12:00:00Z');
+});
+
+test('pedido vazio confirmado libera todos os dados e reaproveita o ID na confirmação corrigida', async () => {
+  const f = fixture(), create = f.repo.createItem;
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('lançamento rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft(suppliers), progress = { operationId:'empty-order-edit' };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  assert.equal(progress.orderId, '1');
+  assert.equal(await data.canEditPending(original, progress), true);
+  f.rows.CADASTROCONTA.push({ id:'9', fields:{ CONTA:'BANCO' } });
+  f.rows.LANCAMENTOOBRA.push({ id:'6', fields:{ ETAPA:'ALVENARIA', FILIAL:'OBRA A' } });
+  f.rows.IDFOLHA.push(...['Ana','Beto'].map((FORNECEDOR, i) => ({ id:String(33+i), fields:{ MESREFERENCIA:'11/2026', FORNECEDOR } })));
+  f.repo.createItem = create;
+  const corrected = { ...original, date:'2026-11-02', dueDate:'2026-11-10', paymentDate:'2026-11-03', referenceMonth:'2026-11', obs:'corrigido',
+    account:{ id:'9', label:'BANCO' }, stage:{ id:'6', label:'ALVENARIA', branch:'OBRA A' },
+    lines:suppliers.map(supplier => ({ supplier, quantity:4, unitValue:45 })) };
+  await data.post(corrected, progress);
+  await data.post(corrected, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 360);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields['DATA PEDIDO'], '2026-11-02T12:00:00Z');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.FORMAPGTO, 'BANCO');
+  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /^corrigido\n\[VALE ALIMENTAÇÃO empty-order-edit\]/);
+  assert.equal(f.rows.LANCAMENTOS.length, 2); assert.equal(f.rows.FOLHAPGTO.length, 2);
+  assert.ok(f.rows.LANCAMENTOS.every(row => row.fields.AGRUPAR === '1' && row.fields.ETAPA === 'ALVENARIA' && row.fields.CONTA === 'BANCO'
+    && row.fields.DATA === '2026-11-02T12:00:00Z' && row.fields['DATA PGTO PREVISTO'] === '2026-11-10T12:00:00Z' && row.fields['DATA PGTO EFETUADO'] === '2026-11-03T12:00:00Z'));
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row => row.fields.IDFOLHA), [33,34]);
+});
+
+test('a tela reaberta edita pedido já criado e só grava após nova confirmação', async t => {
+  const f = fixture(), create = f.repo.createItem;
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'empty-order-view' };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:empty-order';
+  storage.setItem(key, JSON.stringify({ draft:original, progress, files:[] }));
+  const view = createMealVoucherView({ data, documentRef:doc, storage, sessionKey:'empty-order' });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const count = f.writes.length;
+  await view.open();
+  for (const name of ['meal-date','meal-due-date','meal-payment-date','meal-reference-month','meal-account','meal-stage'])
+    assert.equal(doc.querySelector(`[name="${name}"]`)?.disabled, false, `${name} deve permitir edição`);
+  assert.equal(f.writes.length, count, 'abrir a edição não grava dados');
+  const date = doc.querySelector('[name="meal-payment-date"]'); date.value = '2026-10-16'; date.dispatchEvent(new dom.window.Event('input', { bubbles:true }));
+  view.close();
+  assert.equal(JSON.parse(storage.getItem(key)).progress.orderId, '1', 'a recuperação mantém o pedido original');
+  await view.open();
+  assert.equal(doc.querySelector('[name="meal-payment-date"]').value, '2026-10-16');
+  doc.querySelector('[data-meal-next]').click(); await new Promise(setImmediate);
+  doc.querySelector('[data-meal-next]').click();
+  assert.equal(f.writes.length, count);
+  f.repo.createItem = create;
+  doc.querySelector('[data-meal-confirm]').click(); await new Promise(setImmediate);
+  assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /sucesso/);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
+for (const committed of [false, true]) test(`correção retoma PATCH com resposta perdida (${committed ? 'gravado' : 'não gravado'}) e aceita nova revisão`, async () => {
+  const f = fixture(), create = f.repo.createItem, update = f.repo.updateItem;
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:`patch-${committed}` };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  f.rows.NOTASPENDENTES[0].fields.OBS += '\nConferido pela auditoria';
+  let lost = true;
+  f.repo.updateItem = async (...args) => {
+    assert.deepEqual(args[4], { eTag:'"1"' }, 'atualiza somente a versão conferida');
+    if (lost) { lost = false; if (committed) await update(...args); throw new Error('resposta perdida'); }
+    return update(...args);
+  };
+  const correction = { ...original, obs:'corrigido', date:'2026-10-16', lines:[{ supplier:suppliers[0], quantity:4, unitValue:45 }] };
+  await assert.rejects(data.post(correction, progress), /resposta perdida/);
+  const restored = JSON.parse(JSON.stringify(progress));
+  assert.equal(await data.canEditPending(correction, restored), true);
+  f.repo.createItem = create;
+  const final = { ...correction, obs:'revisado novamente', date:'2026-10-17' };
+  await data.post(final, restored);
+  await data.post(final, restored);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 180);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields['DATA PEDIDO'], '2026-10-17T12:00:00Z');
+  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /^revisado novamente\n/);
+  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /Conferido pela auditoria$/);
+});
+
+test('correção retoma o mesmo PATCH não gravado sem exigir outra edição', async () => {
+  const f = fixture(), create = f.repo.createItem, update = f.repo.updateItem;
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'patch-exact-retry' };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  f.repo.updateItem = async () => { throw new Error('offline'); };
+  const correction = { ...original, date:'2026-10-16' };
+  await assert.rejects(data.post(correction, progress), /offline/);
+  f.repo.updateItem = update; f.repo.createItem = create;
+  await data.post(correction, JSON.parse(JSON.stringify(progress)));
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].fields['DATA PEDIDO'], '2026-10-16T12:00:00Z');
+});
+
+test('pedido vazio com Title como FILIAL e total texto continua editável', async () => {
+  const f = fixture(), create = f.repo.createItem;
+  f.columns.NOTASPENDENTES = f.columns.NOTASPENDENTES.filter(c => c.name !== 'FILIAL');
+  f.columns.NOTASPENDENTES.find(c => c.name === 'Title').displayName = 'FILIAL';
+  const total = f.columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL'); total.number = undefined; total.text = {};
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'real-columns' };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  assert.equal(await data.canEditPending(original, progress), true);
+  f.repo.createItem = create;
+  await data.post({ ...original, lines:[{ supplier:suppliers[0], quantity:4, unitValue:45 }] }, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].fields.Title, 'OBRA A');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, '180');
+});
+
+for (const scenario of ['lançamento sem token','folha sem progresso','pedido auditado','anexo gravado','total alterado','sem versão','consulta incompleta'])
+  test(`não libera pedido vazio com ${scenario}`, async () => {
+    const f = fixture(), create = f.repo.createItem;
+    f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+    const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+    const original = draft([suppliers[0]]), progress = { operationId:'protected-order', editable:true };
+    await assert.rejects(data.post(original, progress), /rejeitado/);
+    if (scenario === 'lançamento sem token') f.rows.LANCAMENTOS.push({ id:'9', fields:{ AGRUPAR:'1' } });
+    if (scenario === 'folha sem progresso') f.rows.FOLHAPGTO.push({ id:'9', fields:{ Title:'APP-vale-alimentacao-protected-order-folha-1' } });
+    if (scenario === 'pedido auditado') f.rows.NOTASPENDENTES[0].fields.STATUS = 'APROVADO';
+    if (scenario === 'anexo gravado') f.uploads.push('comprovante.pdf');
+    if (scenario === 'total alterado') f.rows.NOTASPENDENTES[0].fields.VALORTOTAL = 999;
+    if (scenario === 'sem versão') delete f.rows.NOTASPENDENTES[0].eTag;
+    if (scenario === 'consulta incompleta') f.repo.getItemsPage = async () => ({ items:[] });
+    const count = f.writes.length;
+    if (scenario === 'consulta incompleta') await assert.rejects(data.canEditPending(original, progress), /incompleta/);
+    else assert.equal(await data.canEditPending(original, progress), false);
+    await assert.rejects(data.post({ ...original, date:'2026-10-16' }, progress));
+    assert.equal(f.writes.length, count);
+  });
+
+test('pedido vazio não pode ser substituído por outro pedido durante a correção', async () => {
+  const f = fixture(); f.loseOrderResponse();
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'same-order' };
+  await assert.rejects(data.post(original, progress), /General exception/);
+  const count = f.writes.length;
+  await assert.rejects(data.post({ ...original, orderMode:'existing', orderId:'99' }, progress), /não troque/i);
+  assert.equal(f.writes.length, count);
+});
+
+test('permissão anterior não permite editar um lote parcialmente gravado', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft(suppliers), progress = { operationId:'partial-edit', editable:true };
+  f.failSecond(); await assert.rejects(data.post(original, progress), /interrompida/);
   assert.equal(await data.canEditPending(original, progress), false);
   const count = f.writes.length;
-  await assert.rejects(data.post({ ...original, paymentDate:'2026-10-16' }, progress), /não pode ser alterado|já.*gravad/i);
+  await assert.rejects(data.post({ ...original, date:'2026-10-16' }, progress), /não pode ser alterado/);
   assert.equal(f.writes.length, count);
-  await data.post(original, progress);
-  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+  f.recover(); await data.post(original, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 2); assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('duas instâncias não podem retomar e corrigir simultaneamente a mesma operação', async () => {
+  const f = fixture(); f.loseOrderResponse();
+  const data = createMealVoucherData({ repository:f.repo }), other = createMealVoucherData({ repository:f.repo });
+  const { suppliers } = await data.loadOptions(), original = draft([suppliers[0]]), progress = { operationId:'concurrent-resume' };
+  await assert.rejects(data.post(original, progress), /General exception/);
+  const previousProgress = structuredClone(progress), getPage = f.repo.getItemsPage;
+  let concurrent, armed = true;
+  f.repo.getItemsPage = async (...args) => {
+    if (armed && args[1] === 'FORNECEDORES') {
+      armed = false;
+      concurrent = other.post(original, previousProgress).then(() => 'gravou', error => error.message);
+      await concurrent;
+    }
+    return getPage(...args);
+  };
+  await data.post({ ...draft([suppliers[1]]), lines:[{ supplier:suppliers[1], quantity:1, unitValue:20 }] }, progress);
+  assert.match(await concurrent, /sendo enviado|outra tela/i);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].fields.FORNECEDOR, 'Beto');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 20);
+  assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.LANCAMENTOS[0].fields.FORNECEDOR, 'Beto');
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
+test('falha de leitura antes do PATCH mantém a revisão anterior recuperável após recriar o serviço', async () => {
+  const f = fixture(); f.loseOrderResponse();
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'journal-before-read' };
+  await assert.rejects(data.post(original, progress), /General exception/);
+  const getPage = f.repo.getItemsPage; let orderReads = 0, persisted;
+  f.repo.getItemsPage = async (...args) => { if (args[1] === 'NOTASPENDENTES' && ++orderReads === 2) throw new Error('consulta indisponível'); return getPage(...args); };
+  const correction = { ...original, date:'2026-10-16' };
+  await assert.rejects(data.post(correction, progress, () => { persisted = JSON.parse(JSON.stringify(progress)); }), /consulta indisponível/);
+  f.repo.getItemsPage = getPage;
+  const restored = createMealVoucherData({ repository:f.repo });
+  assert.equal(await restored.canEditPending(correction, persisted), true);
+  await restored.post(correction, persisted);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].fields['DATA PEDIDO'], '2026-10-16T12:00:00Z');
+  assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
+test('resposta perdida recupera o ID para a tela não oferecer a troca do pedido já criado', async t => {
+  const f = fixture(); f.loseOrderResponse();
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'recover-order-choice' };
+  await assert.rejects(data.post(original, progress), /General exception/);
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  dom.window.localStorage.setItem('energetico:meal-voucher:pending:recover-choice', JSON.stringify({ draft:original, progress, files:[] }));
+  const view = createMealVoucherView({ data, documentRef:doc, storage:dom.window.localStorage, sessionKey:'recover-choice' });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  doc.querySelector('[aria-label="Voltar"]').click();
+  assert.match(doc.querySelector('.meal-voucher-content').textContent, /pedido 1 já foi criado/i);
+  assert.equal(doc.querySelectorAll('[data-meal-order-existing]').length, 0);
+  doc.querySelector('[data-meal-order-new]').click();
+  assert.equal(doc.querySelector('[name="meal-date"]').disabled, false);
 });
 
 test('pedido existente apenas selecionado não bloqueia correção antes do primeiro lançamento', async () => {
