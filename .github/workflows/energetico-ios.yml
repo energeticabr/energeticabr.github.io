@@ -128,6 +128,9 @@ jobs:
       - name: Validar segredos ausentes
         working-directory: apps/energetico-mobile
         run: pnpm secrets:verify
+      - name: Conferir layout da ordenação de tarefas
+        working-directory: apps/energetico-mobile
+        run: node --test tests/tasks-gallery-sort-browser.test.mjs
       - name: Executar testes
         working-directory: apps/energetico-mobile
         run: pnpm test

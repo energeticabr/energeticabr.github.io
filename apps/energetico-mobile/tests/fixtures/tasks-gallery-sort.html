@@ -38,6 +38,12 @@
   const dialog = root.querySelector('.tg-sort-dialog'), popup = rect(dialog);
   const result = {
     bar, viewport: { width: innerWidth, height: innerHeight },
+    fontVariant: new URLSearchParams(location.search).has('wide') ? 'monospace' : 'system',
+    toolbarText: [sort, filter, add].map(button => ({
+      text: button.textContent, client: [button.clientWidth, button.clientHeight],
+      scroll: [button.scrollWidth, button.scrollHeight], font: getComputedStyle(button).font,
+      padding: getComputedStyle(button).padding,
+    })),
     overflow: document.documentElement.scrollWidth > innerWidth + 1,
     toolbarTextFits: [sort, filter, add].every(button =>
       button.scrollWidth <= button.clientWidth + 1 && button.scrollHeight <= button.clientHeight + 1),
