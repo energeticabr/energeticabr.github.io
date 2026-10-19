@@ -35,6 +35,13 @@ function fixture() {
   return { repo, columns, rows, writes, uploads, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
+async function waitForSubmission(doc) {
+  for (let attempt=0; attempt<200; attempt++) {
+    if (doc.querySelector('[data-meal-done]') || !doc.querySelector('[role="alert"]').hidden) return;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  assert.fail('O envio não terminou dentro do prazo de teste');
+}
 
 test('falha antes de gravar permite corrigir datas, referência, conta e etapa mantendo a operação', async () => {
   const f = fixture(), create = f.repo.createItem;
@@ -123,7 +130,7 @@ test('a tela reaberta edita pedido já criado e só grava após nova confirmaç�
   doc.querySelector('[data-meal-next]').click();
   assert.equal(f.writes.length, count);
   f.repo.createItem = create;
-  doc.querySelector('[data-meal-confirm]').click(); await new Promise(setImmediate);
+  doc.querySelector('[data-meal-confirm]').click(); await waitForSubmission(doc);
   assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /sucesso/);
   assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
 });
@@ -286,6 +293,51 @@ test('resposta perdida recupera o ID para a tela não oferecer a troca do pedido
   assert.equal(doc.querySelector('[name="meal-date"]').disabled, false);
 });
 
+for (const finish of [false,true]) test(`aba antiga não pode enviar fornecedores substituídos mesmo com total idêntico (${finish ? 'concluído' : 'pedido vazio'})`, async () => {
+  const f = fixture(), create = f.repo.createItem;
+  f.rows.FORNECEDORES.push(...['Caio','Davi'].map((CADASTRO,i) => ({ id:String(i+4), fields:{ CADASTRO, STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA A', PROFISSAO:'PEDREIRO' } })));
+  f.rows.IDFOLHA.push(...['Caio','Davi'].map((FORNECEDOR,i) => ({ id:String(i+44), fields:{ MESREFERENCIA:'10/2026', FORNECEDOR } })));
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft(suppliers.filter(s => ['Ana','Beto'].includes(s.label))), progress = { operationId:`stale-${finish}` };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  const stale = structuredClone(progress), correction = draft(suppliers.filter(s => ['Caio','Davi'].includes(s.label)));
+  if (finish) f.repo.createItem = create;
+  if (finish) await data.post(correction, progress); else await assert.rejects(data.post(correction, progress), /rejeitado/);
+  const count = f.writes.length;
+  f.repo.createItem = create;
+  await assert.rejects(createMealVoucherData({ repository:f.repo }).post(original, stale), /versão|revisão|desatualizad/i);
+  assert.equal(f.writes.length, count);
+  await data.post(correction, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 30);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.FORNECEDOR), ['Caio','Davi']);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('retomada confere todos os itens existentes antes de criar qualquer novo item', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft(suppliers), progress = { operationId:'preflight-all' };
+  f.failSecond(); await assert.rejects(data.post(original, progress), /interrompida/);
+  f.rows.LANCAMENTOS[0].fields.QUANTIDADE = 99;
+  f.recover();
+  const count = f.writes.length;
+  const reversed = { ...original, lines:[...original.lines].reverse() };
+  // The same logical revision may be submitted with a different display order.
+  const unchangedProgress = { ...progress, signature:JSON.stringify((await import('../src/chat/meal-voucher.js')).validateMealVoucherDraft(reversed)) };
+  await assert.rejects(data.post(reversed, unchangedProgress), /dados|alterad|revisão|versão/i);
+  assert.equal(f.writes.length, count, 'não grava a linha faltante antes de descobrir a divergência');
+});
+
+for (const malformed of [false,true]) test(`retomada não cria itens se ${malformed ? 'há registro sem campos' : 'pagamento antes vazio foi alterado externamente'}`, async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft(suppliers), progress = { operationId:`preflight-safe-${malformed}` };
+  f.failSecond(); await assert.rejects(data.post(original, progress), /interrompida/); f.recover();
+  if (malformed) f.rows.LANCAMENTOS.push({ id:'99' }); else f.rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO'] = '2026-10-16T12:00:00Z';
+  const count = f.writes.length;
+  await assert.rejects(data.post(original, progress), /dados|alterad|incomplet|confirmar/i);
+  assert.equal(f.writes.length, count);
+});
+
 test('pedido existente apenas selecionado não bloqueia correção antes do primeiro lançamento', async () => {
   const f = fixture(), create = f.repo.createItem;
   f.rows.NOTASPENDENTES.push(...['98','99'].map(id => ({ id, fields:{ FILIAL:'OBRA A', FORNECEDOR:'DIVERSOS', STATUS:'PENDENTE', VALORTOTAL:100, OBS:'' }, eTag:'"1"' })));
@@ -339,7 +391,7 @@ test('tela recupera a tentativa sem gravações e confirma pagamento corrigido n
   paid.value = '2026-10-16'; paid.dispatchEvent(new dom.window.Event('input', { bubbles:true }));
   doc.querySelector('[data-meal-next]').click(); await new Promise(setImmediate);
   doc.querySelector('[data-meal-next]').click();
-  doc.querySelector('[data-meal-confirm]').click(); await new Promise(setImmediate);
+  doc.querySelector('[data-meal-confirm]').click(); await waitForSubmission(doc);
   assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /sucesso/);
   assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.FOLHAPGTO.length, 1);
   assert.equal(f.rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO'], '2026-10-16T12:00:00Z');

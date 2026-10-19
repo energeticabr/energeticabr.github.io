@@ -27,6 +27,16 @@ async function guardOperation(progress, action, inspection = false) {
       : await action();
   } finally { pendingOperations.delete(id); }
 }
+async function revisionMarker(draft, operationId) {
+  const canonical = JSON.stringify({ orderMode:draft.orderMode, orderId:draft.orderMode === 'existing' ? String(draft.orderId) : '',
+    date:draft.date, dueDate:draft.dueDate, paymentDate:draft.paymentDate || '', referenceMonth:draft.referenceMonth,
+    account:draft.account, stage:draft.stage, obs:draft.obs, files:draft.files.map(({ name,size,lastModified }) => ({ name,size,lastModified })),
+    lines:draft.lines.map(({ supplier,quantity,unitValue }) => ({ supplier,quantity,unitValue })).sort((a,b) => String(a.supplier.id).localeCompare(String(b.supplier.id))) });
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  const hash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2,'0')).join('');
+  return `[VALE REVISÃO ${operationId} ${hash}]`;
+}
+function revisions(obs, operationId) { return scalar(obs).split('\n').filter(line => line.startsWith(`[VALE REVISÃO ${operationId} `)); }
 function monthKey(raw) {
   const text = scalar(raw), brazil = text.match(/^(0?[1-9]|1[0-2])[/-](\d{4})$/), iso = text.match(/^(\d{4})[-/](0?[1-9]|1[0-2])(?:$|[-/T])/);
   return brazil ? `${brazil[2]}-${brazil[1].padStart(2, '0')}` : iso ? `${iso[1]}-${iso[2].padStart(2, '0')}` : '';
@@ -76,11 +86,12 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     return result;
   }
   function orderTotal(descriptor, value) { return column(descriptor, ['VALORTOTAL']).text ? String(value) : value; }
-  function orderFields(descriptor, draft, operationId) {
+  async function orderFields(descriptor, draft, operationId, versioned = true) {
     const marker = `[VALE ALIMENTAÇÃO ${operationId}]`;
+    const revision = versioned ? `\n${await revisionMarker(draft, operationId)}` : '';
     return payload(descriptor, { FILIAL:draft.branch, FORNECEDOR:draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS',
       VALORTOTAL:orderTotal(descriptor, draft.total), 'DATA PEDIDO':draft.date, STATUS:'PENDENTE AUDITORIA',
-      OBS:`${draft.obs}${draft.obs ? '\n' : ''}${marker}`, FORMAPGTO:draft.account.label, 'NOTA FISCAL':'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
+      OBS:`${draft.obs}${draft.obs ? '\n' : ''}${marker}${revision}`, FORMAPGTO:draft.account.label, 'NOTA FISCAL':'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
   }
   function matchesFields(descriptor, row, fields) {
     return Object.entries(fields).every(([name, expected]) => {
@@ -88,6 +99,51 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       return typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected)
         || descriptor.columns.find(c => c.name === name)?.dateTime && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10);
     });
+  }
+  function launchFields(descriptor, draft, line, orderId) {
+    return payload(descriptor, { AGRUPAR:String(orderId), FILIAL:draft.branch, 'TIPO TRANSAÇÃO':'CUSTO', DATA:draft.date,
+      'DATA PGTO PREVISTO':draft.dueDate, ...(draft.paymentDate ? { 'DATA PGTO EFETUADO':draft.paymentDate } : {}),
+      FORNECEDOR:line.supplier.label, PRODUTO:line.supplier.profession, ETAPA:draft.stage.label, QUANTIDADE:line.quantity,
+      'VALOR UNITÁRIO':line.unitValue, CONTA:draft.account.label, FRETE:0, OBS:`VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+  }
+  function payrollFields(descriptor, draft, line, sheet, launchId) {
+    return payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:mealPaymentType, VALORUNITARIO:line.unitValue,
+      QTD:line.quantity, DATA:draft.date, IDFOLHA:Number(sheet.id), IDLANCAMENTO:Number(launchId) });
+  }
+  async function preflightLines(launches, payroll, draft, sheets, orderId, operationId, tokenCache) {
+    const [savedLaunches, savedPayroll] = await Promise.all([all(launches), all(payroll)]);
+    if ([...savedLaunches,...savedPayroll].some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)))
+      throw new Error('Não foi possível confirmar todos os dados da tentativa anterior.');
+    const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
+    const paidColumn = column(launches, ['DATA PGTO EFETUADO'], false)?.name;
+    const prefix = `APP-vale-alimentacao-${operationId}-`;
+    const selected = new Map(draft.lines.map(line => [String(line.supplier.id), line]));
+    const owned = (rows, tokenName, start) => rows.filter(row => scalar(row.fields?.[tokenName]).startsWith(start) && /^\d+$/.test(scalar(row.fields[tokenName]).slice(start.length)));
+    for (const row of owned(savedLaunches, launchToken, prefix)) {
+      const line = selected.get(scalar(row.fields[launchToken]).slice(prefix.length));
+      if (!line || !matchesFields(launches, row, launchFields(launches, draft, line, orderId))
+        || !draft.paymentDate && paidColumn && scalar(row.fields[paidColumn])) throw new Error('A revisão do lote está desatualizada ou os dados de um lançamento foram alterados. Confira antes de retomar.');
+    }
+    const payrollPrefix = `${prefix}folha-`;
+    for (const row of owned(savedPayroll, payrollToken, payrollPrefix)) {
+      const supplierId = scalar(row.fields[payrollToken]).slice(payrollPrefix.length), line = selected.get(supplierId);
+      const launch = savedLaunches.find(item => scalar(item.fields?.[launchToken]) === `${prefix}${supplierId}`);
+      if (!line || !launch || !matchesFields(payroll, row, payrollFields(payroll, draft, line, sheets[supplierId], launch.id))) throw new Error('A revisão do lote está desatualizada ou os dados da folha foram alterados. Confira antes de retomar.');
+    }
+    tokenCache.set(launches.id, savedLaunches); tokenCache.set(payroll.id, savedPayroll);
+  }
+  async function confirmOrderRevision(orders, orderId, draft, operationId) {
+    const row = await get(orders, orderId), obsName = column(orders, ['OBS']).name, revision = await revisionMarker(draft, operationId);
+    const known = revisions(row.fields[obsName], operationId);
+    if (known.length && (known.length !== 1 || known[0] !== revision)) throw new Error('Esta tela está com uma revisão desatualizada do lote. Reabra o lançamento antes de continuar.');
+    if (!known.length && draft.orderMode === 'new') {
+      const eTag = row.eTag || row['@odata.etag'];
+      if (!eTag || eTag === '*') throw new Error('A versão do pedido não foi confirmada.');
+      await repository.updateItem(siteKey, orders.id, orderId, { [obsName]:`${scalar(row.fields[obsName])}\n${revision}` }, { eTag });
+      const saved = await get(orders, orderId);
+      if (JSON.stringify(revisions(saved.fields[obsName], operationId)) !== JSON.stringify([revision])) throw new Error('A revisão do pedido não foi confirmada.');
+    }
+    return revision;
   }
   async function all(descriptor) {
     const result = [], seen = new Set(); let cursor;
@@ -236,14 +292,20 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     const row = await get(orders, ownedOrders[0].id);
     if (!(row.eTag || row['@odata.etag']) || (row.eTag || row['@odata.etag']) === '*') return blocked;
     if (!pending(value(orders, row, ['STATUS']))) return blocked;
-    const baseline = orderFields(orders, validateMealVoucherDraft(original), progress.operationId);
+    const verified = validateMealVoucherDraft(original);
+    const baseline = await orderFields(orders, verified, progress.operationId);
     const candidates = [{ fields:baseline, expectedObs:baseline[obs] }];
+    if (!revisions(row.fields[obs], progress.operationId).length) {
+      const legacy = await orderFields(orders, verified, progress.operationId, false);
+      candidates.push({ fields:legacy, expectedObs:legacy[obs] });
+    }
     // Both outcomes of a lost PATCH response remain recognizable after reopening.
     if (String(progress.orderEdit?.id) === String(row.id)) candidates.push(
       { fields:progress.orderEdit.before, expectedObs:progress.orderEdit.beforeObs },
       { fields:progress.orderEdit.after, expectedObs:progress.orderEdit.afterObs });
     const expected = candidates.find(({ fields, expectedObs }) => fields && typeof expectedObs === 'string' && Object.keys(baseline).every(name => Object.hasOwn(fields, name))
       && matchesFields(orders, row, { ...fields, [obs]:scalar(row.fields[obs]) })
+      && JSON.stringify(revisions(row.fields[obs], progress.operationId)) === JSON.stringify(revisions(expectedObs, progress.operationId))
       && (scalar(row.fields[obs]) === expectedObs || scalar(row.fields[obs]).startsWith(`${expectedObs}\n`)));
     if (!expected) return blocked;
     const attachments = await repository.listAttachments(siteKey, orders.id, row.id);
@@ -310,7 +372,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         }
       } else {
         const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
-        const fields = orderFields(orders, draft, progress.operationId);
+        const fields = await orderFields(orders, draft, progress.operationId);
         if (edit?.order) {
           const obsName = column(orders, ['OBS']).name;
           const suffix = scalar(edit.order.row.fields[obsName]).slice(edit.order.expectedObs.length);
@@ -343,6 +405,8 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
           orderId = String(legacy.id);
         } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress });
       }
+      await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
+      const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
       progress.orderId = orderId;
       progress.signature = signature;
       delete progress.orderEdit;
@@ -350,7 +414,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       progress.lines ??= {};
       const resultLines = [];
       for (const line of draft.lines) {
-        const fields = payload(launches, { AGRUPAR: String(orderId), FILIAL: draft.branch, 'TIPO TRANSAÇÃO': 'CUSTO', DATA: draft.date, 'DATA PGTO PREVISTO': draft.dueDate, ...(draft.paymentDate ? { 'DATA PGTO EFETUADO': draft.paymentDate } : {}), FORNECEDOR: line.supplier.label, PRODUTO: line.supplier.profession, ETAPA: draft.stage.label, QUANTIDADE: line.quantity, 'VALOR UNITÁRIO': line.unitValue, CONTA: draft.account.label, FRETE: 0, OBS: `VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+        const fields = launchFields(launches, draft, line, orderId);
         const launchId = await ensure(launches, fields, '__PowerAppsId__', `APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}`, tokenCache);
         progress.lines[line.supplier.id] = launchId;
         onProgress();
@@ -363,7 +427,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         const obs = value(orders, current, ['OBS']);
         if (!obs.includes(marker)) {
           const target = previous.plus(amount(draft.total)).toDecimalPlaces(2);
-          const update = payload(orders, { VALORTOTAL: orderTotal(orders, target.toNumber()), OBS: `${obs}${obs ? '\n' : ''}${marker}` });
+          const update = payload(orders, { VALORTOTAL: orderTotal(orders, target.toNumber()), OBS: `${obs}${obs ? '\n' : ''}${marker}\n${revision}` });
           await repository.updateItem(siteKey, orders.id, orderId, update, { eTag: current.eTag || current['@odata.etag'] });
           assertSession();
           const saved = await get(orders, orderId);
@@ -396,7 +460,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         if (monthKey(value(sheetDescriptor, currentSheet, ['MESREFERENCIA', 'MES REFERENCIA'])) !== draft.referenceMonth
           || key(value(sheetDescriptor, currentSheet, ['FORNECEDOR'])) !== key(line.supplier.label))
           throw new Error(`A IDFOLHA de ${line.supplier.label} mudou durante o lançamento; confira e retome.`);
-        const fields = payload(payroll, { FORNECEDOR: line.supplier.label, TIPOPGTO: mealPaymentType, VALORUNITARIO: line.unitValue, QTD: line.quantity, DATA: draft.date, IDFOLHA: Number(sheet.id), IDLANCAMENTO: Number(resultLine.id) });
+        const fields = payrollFields(payroll, draft, line, sheet, resultLine.id);
         const payrollId = await ensure(payroll, fields, 'Title', `APP-vale-alimentacao-${progress.operationId}-folha-${line.supplier.id}`, tokenCache);
         progress.payroll[line.supplier.id] = payrollId;
         onProgress();
