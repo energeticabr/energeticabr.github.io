@@ -85,6 +85,70 @@ const stale = error => {
   return true;
 };
 
+for (const phase of ['lists', 'columns', 'records']) {
+  test(`preview does not serialize independent ${phase} reads behind a slow request`, async () => {
+    const f = fixture(), started = [];
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const methods = phase === 'lists' ? ['resolveList'] : phase === 'columns' ? ['getColumns'] : ['getItem', 'getItemsPage'];
+    for (const method of methods) {
+      const original = f.repository[method];
+      f.repository[method] = async (...args) => {
+        started.push(method === 'resolveList' ? args[1][0] : args[1]);
+        await gate;
+        return original(...args);
+      };
+    }
+    const pending = f.service().preview('42');
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual([...started], phase === 'lists' ? ['DESCRITIVOPROVISAO', 'PROVISÃO PGTOS'] : ['parents', 'children'],
+        'both independent reads must start before either slow response is released');
+      assert.deepEqual(f.writes, []);
+    } finally {
+      release();
+      const context = await pending;
+      assert.deepEqual(context.children.map(child => child.id), ['2', '3']);
+    }
+  });
+}
+
+for (const phase of ['lists', 'columns', 'records']) {
+  test(`a failed ${phase} read never publishes a preview while its parallel sibling is still pending`, async () => {
+    const f = fixture(), service = f.service();
+    let release, context;
+    const gate = new Promise(resolve => { release = resolve; });
+    const methods = phase === 'lists' ? ['resolveList'] : phase === 'columns' ? ['getColumns'] : ['getItem', 'getItemsPage'];
+    for (const method of methods) {
+      const original = f.repository[method];
+      f.repository[method] = async (...args) => {
+        const parent = method === 'resolveList' ? args[1][0] === 'DESCRITIVOPROVISAO' : args[1] === 'parents';
+        if (!parent) throw httpError(403);
+        await gate;
+        return original(...args);
+      };
+    }
+    try {
+      await assert.rejects(service.preview('42').then(value => { context = value; }), error => error.status === 403);
+      assert.equal(context, undefined);
+      assert.deepEqual(f.writes, []);
+    } finally {
+      release();
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    assert.equal(context, undefined, 'the late successful response cannot create a deletion capability');
+    assert.deepEqual(f.writes, []);
+  });
+}
+
+test('preview keeps paid children and whitespace links rather than filtering the list by exact text or status', async () => {
+  const f = fixture();
+  f.records.children.get('3').fields.DESCRITIVOPROVISAO = ' \t42\n';
+  const context = await f.service().preview('42');
+  assert.deepEqual(context.children.map(child => [child.id, child.status]), [['2', 'PENDENTE'], ['3', 'PAGO']]);
+  assert.deepEqual(f.writes, []);
+});
+
 test('preview freezes the parent and ALL children across pages/statuses without writes', async () => {
   const f = fixture(), context = await f.service().preview('42');
   assert.deepEqual(context, {id: '42', supplier: 'Fornecedor pai', children: [
