@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Abertura de galerias — dados sintéticos</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+<script type="module">
+  import { createTasksGallery } from '../../src/ui/tasks-gallery-view.js';
+  import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+  import { getRegistrationGalleryFilterSource } from '../../src/chat/registration-gallery-filter-data.js';
+  const results = [];
+  for (const kind of ['tasks', 'asset', 'workDiary', 'contracts', 'provisionDescription']) {
+    let releaseCatalog, opened = false;
+    const catalog = new Promise(resolve => { releaseCatalog = resolve; });
+    const started = performance.now();
+    const data = {
+      loadSnapshot: async () => ({ rows: [{ id: '901', hasAttachments: false, fields: {
+        TAREFA: 'CONFERÊNCIA SINTÉTICA', STATUS: kind === 'provisionDescription' ? 'PAGAMENTO PREVISTO' : 'ATIVO',
+        IMOBILIZADO: 'EQUIPAMENTO QA', FORNECEDOR: 'FORNECEDOR QA', FILIAL: 'FILIAL QA',
+        ETAPA: 'FUNDAÇÃO', TIPO: 'ATIVIDADE COMUM', 'CONCLUÍDO': 'EM ATENDIMENTO',
+      } }] }),
+      getFilterSource: field => getRegistrationGalleryFilterSource(kind, field),
+      loadFilterOptions: () => catalog,
+    };
+    const gallery = kind === 'tasks' ? createTasksGallery({ document, data }) : createRegistrationGallery({ document, kind, data });
+    const opening = gallery.open().then(() => { opened = true; });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const root = document.querySelector(kind === 'tasks' ? '.tg-overlay' : '.rg-overlay');
+    const card = root.querySelector('.tg-card, [data-registration-row]');
+    const cardVisible = !!card && card.getBoundingClientRect().height > 0;
+    const input = root.querySelector('input[type="search"]');
+    input.focus(); input.value = 'QA'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    const report = { kind, readyMs: performance.now() - started, opened,
+      readyBeforeCatalog: root.dataset.galleryLoading === 'false' && root.getAttribute('aria-busy') === 'false',
+      cardVisible,
+      searchUsable: document.activeElement === input && !input.disabled && !input.closest('[inert]'),
+      pendingFilters: root.querySelectorAll('select[aria-busy="true"]').length,
+      overflow: root.scrollWidth > innerWidth + 1 };
+    releaseCatalog([]); await opening;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    report.catalogFinished = root.querySelectorAll('select[aria-busy="true"]').length === 0;
+    results.push(report); gallery.destroy();
+  }
+  document.documentElement.dataset.layout = JSON.stringify(results);
+</script>
+</body>
+</html>

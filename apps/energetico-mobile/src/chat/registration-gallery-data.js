@@ -285,6 +285,9 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   const descriptionEditor = kind === 'provisionDescription' ? createProvisionDescriptionEditor({repository,siteKey:options.siteKey||'personal',assertSession:options.assertSession}) : null;
   function metadataEditor() {
     return editorPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) => {
+      // Editor refreshes and gallery filter selections have independent request
+      // generations: opening an editor must not cancel a visible filter load.
+      const editorFilters = createRegistrationGalleryFilterData({ repository, siteKey: options.siteKey || "personal", kind });
       const editorRepository = new Proxy(Object.create(null), {
         get(_target, property) {
           if (property === "getColumns") return async (...args) => {
@@ -295,7 +298,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
               (kind === "provisionDescription" ? [column.name] : [column.name, column.displayName])
                 .some(name => registrationFieldKey(name) === registrationFieldKey(field))));
             if (kind === 'investment' && allowed.some(column => registrationFieldKey(column.name) === 'instituicao')) {
-              const institutions = await filters.loadFilterOptions('INSTITUICAO', { refresh: true, signal: args[2]?.signal });
+              const institutions = await editorFilters.loadFilterOptions('INSTITUICAO', { refresh: true, signal: args[2]?.signal });
               const choices = institutions.map(option => option.value);
               return allowed.map(column => registrationFieldKey(column.name) === 'instituicao'
                 ? { ...column, choice: { choices, allowTextEntry: false, allowMultipleValues: false } } : column);
@@ -310,7 +313,7 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
             const catalogFields = ['filial', 'fornecedor', 'formapgto'];
             const editable = allowed.filter(column => !column.readOnly && !column.hidden);
             const fields = catalogFields.filter(field => editable.some(column => registrationFieldKey(column.name) === field));
-            const catalogs = await Promise.all(fields.map(async field => [field, await filters.loadFilterOptions(field, {
+            const catalogs = await Promise.all(fields.map(async field => [field, await editorFilters.loadFilterOptions(field, {
               refresh: true, signal: args[2]?.signal,
             })]));
             const optionsByField = new Map(catalogs.map(([field, entries]) => [field, entries.map(entry => entry.value)]));

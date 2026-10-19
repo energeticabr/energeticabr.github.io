@@ -500,12 +500,14 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     if (source.disabledUntil?.some(parent => !filters[parent])) {
       control.replaceChildren(option("Selecione o filtro anterior", ""));
       control.disabled = true;
+      control.removeAttribute("aria-busy");
       return;
     }
     // Closing while the request is pending must not turn the selected STATUS
     // into Todos when the same gallery reopens and rejects the old response.
-    control.replaceChildren(option("Carregando…", kind === 'provisionDescription' && field === 'STATUS' ? desiredValue : fixedValue));
+    control.replaceChildren(option("Carregando…", desiredValue));
     control.disabled = true;
+    control.setAttribute("aria-busy", "true");
     try {
       if (typeof data.loadFilterOptions !== "function") throw new Error("Fonte de filtro indisponível.");
       const options = await data.loadFilterOptions(field, { filters, refresh });
@@ -514,22 +516,26 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
       if (fixedValue && !options.some(item => String(item.value) === fixedValue)) control.append(option(fixedValue, fixedValue));
       retainProvisionStatusFilter(field, control, desiredValue);
-      if (refresh && desiredValue && ![...control.options].some(item => item.value === desiredValue)) control.append(option(selectedLabel || desiredValue, desiredValue));
+      if (desiredValue && ![...control.options].some(item => item.value === desiredValue)) control.append(option(selectedLabel || desiredValue, desiredValue));
       control.value = fixedValue || ([...control.options].some(item => item.value === desiredValue) ? desiredValue : "");
       control.disabled = policy?.disabled === true;
     } catch {
       if (destroyed || root.hidden || !root.isConnected || epoch !== filterEpoch || current !== filterRequests.get(field)) return;
-      control.replaceChildren(option("Indisponível", kind === 'provisionDescription' && field === 'STATUS' ? desiredValue : fixedValue));
+      control.replaceChildren(option("Indisponível", desiredValue));
       if (refresh && selectedValue && selectedValue !== fixedValue) {
         control.append(option(selectedLabel, selectedValue));
         control.value = selectedValue;
       }
       control.disabled = true;
       filterErrors.set(field, `Filtro ${fieldLabel(field)} indisponível. Tente atualizar.`);
+    } finally {
+      if (!destroyed && !root.hidden && root.isConnected && epoch === filterEpoch && current === filterRequests.get(field)) {
+        control.removeAttribute("aria-busy");
+      }
     }
   }
 
-  async function populateFilters({ refresh = false } = {}) {
+  function populateFilters() {
     for (const [field, control] of filterControls) {
       if (filterSources.has(field) || model.dateFilterFields?.includes(field)) continue;
       const selectedValue = control.multiple ? [...control.selectedOptions].map(option => option.value) : control.value;
@@ -551,11 +557,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       control.value = !hasLoaded && [...control.options].some(option => option.value === model.defaultFilters?.[field]) ? model.defaultFilters[field]
         : values.includes(selectedValue) ? selectedValue : "";
     }
-    await populateCatalogFilters([...filterSources.keys()], { refresh });
   }
 
   async function populateCatalogFilters(fields, options) {
     const pending = new Set(fields), epoch = filterEpoch;
+    for (const field of pending) {
+      const control = filterControls.get(field);
+      control.disabled = true;
+      control.setAttribute("aria-busy", "true");
+    }
     while (pending.size && !destroyed && !root.hidden && root.isConnected && epoch === filterEpoch) {
       const ready = [...pending].filter(field => ![...(filterSources.get(field).dependsOn || []), ...(filterSources.get(field).disabledUntil || [])].some(parent => pending.has(parent)));
       if (!ready.length) throw new Error("Não foi possível resolver as dependências dos filtros.");
@@ -688,13 +698,17 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (!model.readOnly) card.append(recordActions.render(row));
       list.append(card);
     }
-    feedback.textContent = loadFailed
-      ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
-      : [...filterErrors.values()].join(" ") || attachmentNotice || (filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.");
+    updateFeedback(filtered.length);
     pageText.textContent = `Página ${page} de ${pages}`;
     previous.disabled = page <= 1;
     next.disabled = page >= pages;
     requestAttachmentCounts(visibleRows);
+  }
+
+  function updateFeedback(count = filteredRows().length) {
+    feedback.textContent = loadFailed
+      ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
+      : [...filterErrors.values()].join(" ") || attachmentNotice || (count ? `${count} registro(s)` : "Nenhum registro encontrado.");
   }
 
   async function openAttachments(row) {
@@ -747,11 +761,22 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     createShortcut.sync();
     refreshShortcut.sync();
     feedback.textContent = '';
+    // Catalogs do not determine snapshot completeness. Keep only their controls
+    // busy while the complete records, totals and ordinary filters become usable.
+    void populateCatalogFilters([...filterSources.keys()], { refresh }).then(() => {
+      if (!destroyed && !root.hidden && root.isConnected && current === request && !loadFailed
+        && root.getAttribute("aria-busy") === "false") updateFeedback();
+    }).catch(() => {
+      if (!destroyed && !root.hidden && current === request) {
+        filterErrors.set("catalog", "Não foi possível carregar os filtros. Tente atualizar.");
+        if (root.getAttribute("aria-busy") === "false") updateFeedback();
+      }
+    });
     try {
       const snapshot = await data.loadSnapshot({ refresh });
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
-      await populateFilters({ refresh });
+      populateFilters();
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       const status = filterControls.get("STATUS");
       if (status && !model.filterFields) {
