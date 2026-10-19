@@ -137,3 +137,41 @@ test('conclusão rápida usa contrato real e envia somente data e concluído com
   assert.deepEqual(writes, [{ site: 'personal', list: 'tasks', id: '176',
     fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' }, options: { eTag: '"task-v1"' } }]);
 });
+
+test('conclusão sem anexos não espera a consulta de arquivos; editor completo continua carregando os anexos', async t => {
+  const createTasksGalleryData = await taskGalleryDataFactory(t), writes = [];
+  let release, context, fullContext, attachmentReads = 0;
+  const attachments = new Promise(resolve => { release = resolve; });
+  const data = createTasksGalleryData({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'tasks' }; },
+    async getItemsPage() { return { items: [], hasMore: false }; },
+    async getItem(_site, _list, id) { return { id, eTag: '"task-v1"', fields: { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição preservada' } }; },
+    async getColumns() { return [
+      { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
+      { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
+      { name: 'field_11', displayName: 'TAREFA', text: {}, required: true },
+    ]; },
+    async listAttachments() { attachmentReads++; return attachments; },
+    async updateItem(_site, _list, id, fields, options) { writes.push({ id, fields, options }); return { id, fields }; },
+  } });
+  const quick = data.loadEditor('176', { includeAttachments: false }).then(value => { context = value; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(context, 'os dois campos devem estar disponíveis mesmo com o serviço de anexos pendente');
+    assert.equal(attachmentReads, 0, 'a conclusão não deve disparar uma consulta que não utiliza');
+    assert.equal(context.attachments.enabled, false);
+    await assert.rejects(data.saveEditor(context, { field_8: '2026-10-03', field_12: 'CONCLUÍDA' },
+      { attachments: { deletions: ['old.pdf'] } }), /anexos.*não.*disponíveis/i);
+    assert.equal(writes.length, 0, 'um contexto sem anexos não pode apagar arquivos');
+    await data.saveEditor(context, { field_8: '2026-10-03', field_12: 'CONCLUÍDA' });
+    assert.deepEqual(writes, [{ id: '176', fields: { field_8: '2026-10-03', field_12: 'CONCLUÍDA' }, options: { eTag: '"task-v1"' } }]);
+    const full = data.loadEditor('176').then(value => { fullContext = value; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(fullContext, undefined, 'o editor completo ainda deve aguardar seus anexos');
+    assert.equal(attachmentReads, 1);
+    release([{ name: 'old.pdf', size: 10 }]);
+    await full;
+    assert.equal(fullContext.attachments.enabled, true);
+    assert.deepEqual(fullContext.attachments.existingFiles.map(file => file.name), ['old.pdf']);
+  } finally { release([]); await quick; }
+});

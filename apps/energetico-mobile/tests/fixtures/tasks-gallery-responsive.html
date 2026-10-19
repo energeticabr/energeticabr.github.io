@@ -27,7 +27,9 @@
     const gallery = createTasksGallery({ document, onCreate: () => { window.createdTasks++; }, now: () => new Date('2026-10-04T01:30:00Z'), data: {
       async loadSnapshot() { window.snapshots++; return { rows }; },
       async listAttachments(id) { return id === '176' ? [{ fileName: 'tarefa.pdf' }] : []; },
-      async loadEditor(id) { return { entity: { id: 'lancamentos-de-tarefas' }, item: { id, fields: {} },
+      async loadEditor(id) {
+        if (window.holdCompletion) await new Promise(resolve => { window.releaseCompletion = resolve; });
+        return { entity: { id: 'lancamentos-de-tarefas' }, item: { id, fields: {} },
         columns: [{ name: 'field_8', label: 'DATA CONCLUSÃO', control: 'date', editable: true },
           { name: 'field_12', label: 'CONCLUÍDO', control: 'text', editable: true }], contract: { hasForm: true } }; },
       async saveEditor(context, fields) { window.writes.push({ id: context.item.id, fields });

@@ -153,25 +153,62 @@ test('falha de leitura após save verifica os campos antes de permitir nova grav
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
 });
 
-test('Shift Tab no foco inicial do popup fica no último controle habilitado', async t => {
+test('carregamento não mostra Cancelar isolado e mantém o foco até exibir formulário e botões juntos', async t => {
   const waiting = deferred();
   const ctx = await setup(t, { data: { loadEditor: async () => waiting.promise } });
   await ctx.gallery.open();
   ctx.root().querySelector('[data-action="complete"]').click();
   const dialog = ctx.root().querySelector('.tg-completion-dialog');
   assert.equal(ctx.document.activeElement, dialog);
+  assert.match(dialog.textContent, /Carregando conclusão/);
+  assert.equal(dialog.querySelector('button'), null, 'nenhum botão deve aparecer antes dos campos');
   dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
-  assert.equal(ctx.document.activeElement, dialog.querySelector('[data-task-completion-cancel]'));
+  assert.equal(ctx.document.activeElement, dialog, 'Tab não pode focar um botão invisível ou fora do popup');
+  waiting.resolve(completionContext('176')); await settle(); await settle();
+  assert.ok(dialog.querySelector('[data-task-completion-form]'));
+  assert.deepEqual([...dialog.querySelectorAll('button')].map(button => button.textContent), ['Cancelar', 'Submeter']);
+  dialog.focus();
+  dialog.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+  assert.equal(ctx.document.activeElement, dialog.querySelector('[data-task-completion-submit]'));
 });
 
-test('serviço real reconcilia escrita confirmada cuja leitura posterior falhou sem novo PATCH', async t => {
+test('check usa o serviço real sem aguardar anexos que o popup de conclusão não mostra', async t => {
+  const { createTasksGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  let attachmentReads = 0, writes = 0, release;
+  const attachments = new Promise(resolve => { release = resolve; });
+  t.after(() => release([]));
+  const data = createTasksGalleryData({ repository: {
+    async resolveList() { return { status: 'resolved', id: 'tasks' }; },
+    async getItemsPage() { return { items: [{ id: '176', fields: { field_11: 'Tarefa de teste' } }], hasMore: false }; },
+    async getItem(_site, _list, id) { return { id, eTag: '"v1"', fields: { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Tarefa de teste' } }; },
+    async getColumns() { return [
+      { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
+      { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
+      { name: 'field_11', displayName: 'TAREFA', text: {}, required: true },
+    ]; },
+    async listAttachments() { attachmentReads++; return attachments; },
+    async updateItem() { writes++; },
+  } });
+  const ctx = await setup(t, { data }); await ctx.gallery.open();
+  const backgroundAttachmentReads = attachmentReads;
+  const dialog = await openCompletion(ctx);
+  assert.ok(dialog.querySelector('[data-task-completion-form]'), 'a consulta lenta de anexos não pode segurar o formulário');
+  assert.equal(attachmentReads, backgroundAttachmentReads, 'o popup não acrescenta consultas às contagens da galeria');
+  dialog.querySelector('[data-task-completion-cancel]').click();
+  assert.equal(writes, 0);
+});
+
+test('serviço real reconcilia escrita confirmada sem novo PATCH nem espera por anexos pendentes', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const { createTasksGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  const attachments = deferred();
+  t.after(() => attachments.resolve([]));
   let writes = 0, reads = 0, fields = { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição original', STATUS: 'EM ATENDIMENTO' };
   const data = createTasksGalleryData({ repository: {
     async resolveList() { return { status: 'resolved', id: 'tasks' }; },
     async getItemsPage() { return { items: [{ id: '176', fields }], hasMore: false }; },
     async getItem(_site, _list, id) { reads++; return { id, fields, eTag: writes ? '"v2"' : '"v1"' }; },
+    async listAttachments() { return attachments.promise; },
     async getColumns() { return [
       { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
       { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
@@ -345,13 +382,14 @@ test('fechar popup durante leitura ignora resposta tardia e campos não comprova
   const ctx = await setup(t, { data: { loadEditor: async () => loading.promise, saveEditor: async () => { writes++; } } });
   await ctx.gallery.open();
   ctx.root().querySelector('[data-action="complete"]').click();
-  ctx.root().querySelector('[data-task-completion-cancel]').click();
+  ctx.root().querySelector('.tg-completion-dialog').dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
   loading.resolve(completionContext('176')); await settle();
   assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
   ctx.data.loadEditor = async id => ({ ...completionContext(id), columns: [] });
   ctx.root().querySelector('[data-action="complete"]').click(); await settle();
   assert.match(ctx.root().querySelector('.tg-completion-dialog [role="alert"]').textContent, /campos|metadados/i);
   assert.equal(ctx.root().querySelector('[data-task-completion-form]'), null);
+  assert.ok(ctx.root().querySelector('[data-task-completion-cancel]'), 'falha de carregamento mantém uma saída acessível');
   assert.equal(writes, 0);
 });
 

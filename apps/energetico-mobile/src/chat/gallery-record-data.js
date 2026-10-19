@@ -148,7 +148,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     return frozenCopy({ ...item, id, eTag, fields: item.fields || {} });
   }
 
-  async function loadEditor(rawId, { signal, formVariantId } = {}) {
+  async function loadEditor(rawId, { signal, formVariantId, includeAttachments = true } = {}) {
     if (!entity) throw new Error("Não foi possível identificar o formulário seguro desta lista.");
     if (typeof repository.getColumns !== "function") throw new Error("Os metadados do formulário não estão disponíveis.");
     const id = idValue(rawId), list = frozenCopy(await resolveList(signal));
@@ -222,7 +222,9 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const evaluateFieldLocks = form43 ? (draft = {}, options = {}) => form43.evaluate({ ...item.fields, ...draft }, options) : undefined;
     const sheetAttachments = isPayrollSheet ? createPayrollSheetAttachments({ repository, siteKey, list, item, columns, currentItem, assertSession }) : null;
     let attachments = Object.freeze({ enabled: false });
-    if (!isPayrollSheet && typeof repository.listAttachments === 'function') {
+    // Field-only dialogs need fresh metadata and ETags, not the full editor's
+    // attachment inventory. Keep attachment capabilities disabled when omitted.
+    if (includeAttachments !== false && !isPayrollSheet && typeof repository.listAttachments === 'function') {
       try {
         const existingFiles = frozenCopy(verifiedAttachments(await repository.listAttachments(siteKey, list.id, item.id)));
         abort(signal);
