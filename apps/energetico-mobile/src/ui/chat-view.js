@@ -1686,12 +1686,12 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       : `<div class="${choiceListClass}${launchPaymentSummary ? " chat-choice-list--launch-payment" : ""}">${choices}</div>`
     : "";
   const recentDiaryActivitiesMarkup = currentPoll && isDiaryActivitiesQuestion(message, activeFlow)
-    ? `<div class="chat-diary-recent-activities" aria-label="Atividades dos últimos cinco dias">
+    ? `<div class="chat-diary-recent-activities" aria-label="Atividades dos últimos cinco diários concluídos anteriores a este diário">
         ${Array.isArray(message.recentDiaryActivities) && message.recentDiaryActivities.length
-          ? `<p>Atividades dos últimos 5 dias — toque para adicionar:</p><div class="chat-choice-list">${message.recentDiaryActivities.map(activity => `<button type="button" data-action="append-diary-activity" data-value="${escapeHtml(activity)}"${busy ? " disabled" : ""}${diaryActivityInDraft(draft, activity) ? " hidden" : ""}>${escapeHtml(activity)}</button>`).join("")}</div>`
-          : message.recentDiaryActivitiesLoading ? `<p>Consultando atividades dos últimos 5 dias…</p>`
+          ? `<p>Atividades dos últimos 5 diários concluídos anteriores a este diário — toque para adicionar:</p><div class="chat-choice-list">${message.recentDiaryActivities.map(activity => `<button type="button" data-action="append-diary-activity" data-value="${escapeHtml(activity)}"${busy ? " disabled" : ""}${diaryActivityInDraft(draft, activity) ? " hidden" : ""}>${escapeHtml(activity)}</button>`).join("")}</div>`
+          : message.recentDiaryActivitiesLoading ? `<p>Consultando os últimos 5 diários concluídos anteriores a este diário…</p>`
           : message.recentDiaryActivitiesError ? `<p>Não foi possível carregar as sugestões. Você pode digitar as atividades.</p>`
-          : `<p>Nenhuma atividade registrada nos últimos 5 dias. Digite as atividades.</p>`}
+          : `<p>Nenhuma atividade registrada nos últimos 5 diários concluídos anteriores a este diário. Digite as atividades.</p>`}
       </div>` : "";
   const epiMarkup = isEpiProductSelection
     ? renderEpiProductSelection(choiceOptions, busy, currentPoll, currentPoll ? message.epiSelectedProductIds || [] : [])

@@ -1,4 +1,4 @@
-import { provisionDateKey, provisionDayOffset } from './pending-provision-dates.js';
+import { provisionDateKey } from './pending-provision-dates.js';
 import { diaryActivityContent } from '../ui/construction-diary-items.js';
 
 export function diarySuggestionKey(value) {
@@ -7,11 +7,14 @@ export function diarySuggestionKey(value) {
     .replace(/\s+/g, ' ').trim().replace(/[;.!?]+$/, '');
 }
 
-function dateKey(value) {
+function dateKey(value, dateColumn) {
   // SharePoint date-only fields can be serialized as midnight UTC. Their
   // calendar date must not be shifted to the previous day in São Paulo.
   const text = String(value ?? '').trim();
-  if (/^\d{4}-\d{2}-\d{2}T00:00:00(?:\.\d+)?Z$/i.test(text)) return provisionDateKey(text.slice(0, 10));
+  if (!text) return '';
+  if (dateColumn?.dateTime?.format === 'dateOnly'
+    || !dateColumn?.dateTime?.format && /^\d{4}-\d{2}-\d{2}T00:00:00(?:\.\d+)?Z$/i.test(text))
+    return provisionDateKey(text.slice(0, 10));
   return provisionDateKey(value);
 }
 
@@ -28,14 +31,16 @@ export function diaryActivityInDraft(draft, activity) {
   return Boolean(key) && activityLines(draft).some(line => diarySuggestionKey(line) === key);
 }
 
-export function recentDiaryActivities(rows, { today = new Date(), dateField = 'DATA', activityField = 'ATIVIDADEEXECUTADA' } = {}) {
-  const end = provisionDateKey(today);
-  const start = provisionDayOffset(end, -4);
-  if (!end || !start) return [];
+export function recentDiaryActivities(rows, { diaryDate, branch, dateColumn,
+  dateField = 'DATA', activityField = 'ATIVIDADEEXECUTADA', statusField = 'STATUS', branchField = 'FILIAL' } = {}) {
+  const end = dateKey(diaryDate, dateColumn), branchKey = diarySuggestionKey(branch);
+  if (!end || !branchKey) return [];
   const dated = (Array.isArray(rows) ? rows : []).map(row => {
     const fields = row?.fields || row || {};
-    return { day: dateKey(fields[dateField]), text: fields[activityField] };
-  }).filter(row => row.day >= start && row.day <= end).sort((a, b) => b.day.localeCompare(a.day));
+    return { id: String(row?.id || ''), day: dateKey(fields[dateField], dateColumn), text: fields[activityField],
+      status: diarySuggestionKey(fields[statusField]), branch: diarySuggestionKey(fields[branchField]) };
+  }).filter(row => row.day && row.day < end && row.status === 'concluido' && row.branch === branchKey)
+    .sort((a, b) => b.day.localeCompare(a.day) || b.id.localeCompare(a.id, 'en', { numeric: true })).slice(0, 5);
   const seen = new Set();
   const activities = [];
   for (const row of dated) for (const activity of activityLines(row.text)) {
