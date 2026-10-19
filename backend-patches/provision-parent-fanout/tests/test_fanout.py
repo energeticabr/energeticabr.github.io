@@ -288,6 +288,23 @@ class FanoutTests(unittest.TestCase):
         self.client.files[LAUNCH, 60].clear()
         self.assertEqual(reconcile(self.client, cache, now=102)['copied'], 1)
 
+    def test_reconciler_handles_tenant_boolean_quirk_without_processing_empty_rows(self):
+        from provision_parent_fanout import reconcile
+        request = self.client._request
+        def tenant(method, endpoint, **kwargs):
+            if endpoint.endswith(PARENT + '/items'):
+                rows = [{'Id': 7, 'Attachments': True}, {'Id': 8, 'Attachments': False}]
+                if kwargs.get('params', {}).get('$filter') == 'Attachments eq true':
+                    rows = [rows[1]]  # Observed live tenant returns the inverse.
+                return {'value': rows}
+            return request(method, endpoint, **kwargs)
+        self.client._request = tenant
+        result = reconcile(self.client, {}, now=100)
+        self.assertEqual(result['errors'], [])
+        self.assertEqual(result['unlinked'], 0)
+        self.assertEqual(result['checked'], 1)
+        self.assertEqual(result['copied'], 3)
+
     def test_all_legacy_linked_orders_receive_common_document(self):
         self.client.items[CHILD, 12]['IDPEDIDO'] = '51'
         self.client.items[LAUNCH, 61]['AGRUPAR'] = '51'
