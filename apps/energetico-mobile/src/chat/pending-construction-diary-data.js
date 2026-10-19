@@ -28,7 +28,7 @@ export function createPendingConstructionDiaryData({
   if (!suppliedRepository && typeof tokenProvider !== "function") throw new TypeError("A consulta dos diários requer a sessão Microsoft ativa.");
   const repository = suppliedRepository || createSharePointRepository(createGraphClient(tokenProvider, { fetch: fetchImpl }), siteConfig);
 
-  async function loadSnapshot({ signal } = {}) {
+  async function loadSnapshot({ signal, includeDateMetadata = false } = {}) {
     const check = () => { if (signal?.aborted) throw signal.reason || new DOMException("Consulta cancelada.", "AbortError"); };
     check();
     const options = signal ? { signal } : {};
@@ -73,7 +73,9 @@ export function createPendingConstructionDiaryData({
       if (page?.hasMore !== true) {
         if (strictReport) buildPendingWorkDiariesReport({rows:reportRows,count:reportRows.length});
         const sorted = [...rows.values()].sort((a, b) => (provisionDateKey(a.date) || "9999").localeCompare(provisionDateKey(b.date) || "9999") || Number(a.id) - Number(b.id));
-        return Object.freeze({ rows: Object.freeze(sorted), count: sorted.length });
+        return Object.freeze({ rows: Object.freeze(sorted), count: sorted.length,
+          ...(includeDateMetadata ? { dateColumn: columns.find(column => column.name === date) } : {}),
+        });
       }
       if (!page.nextLink) throw new Error("A paginação dos diários não retornou o próximo cursor.");
       cursor = page.nextLink;

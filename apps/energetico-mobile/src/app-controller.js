@@ -1,5 +1,6 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
+import { diaryFieldVisitOptionId } from './chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payroll-breakdown.js';
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
@@ -240,6 +241,10 @@ async function defaultPendingWorkDiariesReportDataFactory(options) {
 async function defaultRecentDiaryActivitiesDataFactory(options) {
   const { createRecentConstructionDiaryActivitiesData } = await import('./chat/recent-construction-diary-activities.js');
   return createRecentConstructionDiaryActivitiesData(options);
+}
+
+async function defaultDiaryFieldVisitDataFactory(options) {
+  return (await import('./chat/diary-field-visits.js')).createDiaryFieldVisitData(options);
 }
 
 async function defaultDelegatedDeadlineReportViewFactory(options) {
@@ -988,6 +993,7 @@ export function createAppController({
   pendingProvisionAttachmentsDataFactory = defaultPendingProvisionAttachmentsDataFactory,
   pendingConstructionDiaryDataFactory,
   recentDiaryActivitiesDataFactory = defaultRecentDiaryActivitiesDataFactory,
+  diaryFieldVisitDataFactory = defaultDiaryFieldVisitDataFactory,
   hrPayrollGalleryFactory = defaultHrPayrollGalleryFactory,
   hrPayrollGalleryDataFactory = defaultHrPayrollGalleryDataFactory,
   payrollSheetCreateFactory = defaultPayrollSheetCreateFactory,
@@ -1401,6 +1407,7 @@ export function createAppController({
   let recentDiaryActivitiesError = false;
   let recentDiaryActivitiesRequest = null;
   let recentDiaryActivitiesAbort = null;
+  let diaryFieldVisitContext = null;
   let pendingNoteLaunchOrderId = "";
   let pendingNoteLaunchFailed = false;
   let pendingNoteLaunchNeedsResync = false;
@@ -4405,6 +4412,54 @@ export function createAppController({
     return decorated;
   }
 
+  function clearDiaryFieldVisits() {
+    diaryFieldVisitContext?.abort.abort();
+    diaryFieldVisitContext = null;
+  }
+
+  function decorateDiaryFieldVisits(state, messages) {
+    const poll = latestAssistantPoll(messages);
+    const diaryIds = isPendingConstructionDiaryPicker(poll, state.activeFlow)
+      ? [...new Set((poll?.options || []).map(diaryFieldVisitOptionId).filter(Boolean))] : [];
+    if (!account || stopped || sessionStatus !== 'authenticated' || !diaryIds.length) {
+      clearDiaryFieldVisits(); return messages;
+    }
+    if (diaryFieldVisitContext?.poll !== poll || diaryFieldVisitContext.account !== account
+      || diaryFieldVisitContext.revision !== sessionRevision) {
+      clearDiaryFieldVisits();
+      const context = { poll, account, revision: sessionRevision, abort: new AbortController(), visits: new Set(), loading: true, error: false };
+      diaryFieldVisitContext = context;
+      const current = () => !stopped && diaryFieldVisitContext === context && account === context.account && sessionRevision === context.revision;
+      const request = Promise.resolve().then(async () => {
+        if (!current()) return;
+        const data = await diaryFieldVisitDataFactory({ tokenProvider: async scopes => {
+          if (!current() || context.abort.signal.aborted) throw new Error('A sessão do diário foi encerrada.');
+          const token = await auth.getToken(scopes);
+          if (!current() || context.abort.signal.aborted) throw new Error('A sessão do diário foi encerrada.');
+          return token;
+        } });
+        if (!current() || context.abort.signal.aborted) return;
+        return data.load({ diaryIds, signal: context.abort.signal });
+      });
+      void withTimeout(request, 8_000, 'Consulta de visitas indisponível.').then(visits => {
+        if (!current() || context.abort.signal.aborted) return;
+        if (!Array.isArray(visits) || visits.some(id => !diaryIds.includes(String(id)))) throw new Error('IDs de visitas inconsistentes.');
+        context.visits = new Set(visits.map(String));
+      }).catch(() => {
+        if (current()) { context.error = true; context.abort.abort(); }
+      }).finally(() => {
+        if (current()) { context.loading = false; render(); }
+      });
+    }
+    const context = diaryFieldVisitContext;
+    const decorated = messages.slice();
+    decorated[decorated.lastIndexOf(poll)] = { ...poll,
+      options: poll.options.map(option => ({ ...option, diaryFieldVisit: context.visits.has(diaryFieldVisitOptionId(option)) })),
+      diaryFieldVisitsLoading: context.loading, diaryFieldVisitsError: context.error,
+    };
+    return decorated;
+  }
+
   function render() {
     if (!flowBusy() || stopped || !account) {
       const waiters = [...idleWaiters];
@@ -4457,6 +4512,7 @@ export function createAppController({
       }
     }
     renderMessages = decorateAttendanceRhidBadges(state, renderMessages);
+    renderMessages = decorateDiaryFieldVisits(state, renderMessages);
     if (activeDiaryPoll) {
       const poll = latestAssistantPoll(renderMessages);
       if (poll) {
@@ -9777,6 +9833,7 @@ export function createAppController({
 
   async function signIn() {
     const signInRevision = ++sessionRevision;
+    clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
     reportSnapshots.reset();
     supplierPayrollSessionSource = null;
@@ -9877,6 +9934,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
     disposeRhidMonthlyReport();
     pendingAutomaticExit = null;
@@ -11145,6 +11203,7 @@ export function createAppController({
   }
 
   function stop() {
+    clearDiaryFieldVisits();
     attendanceIrregularitySource = null;
     recentDiaryActivitiesAbort?.abort();
     recentDiaryActivitiesAbort = null;
