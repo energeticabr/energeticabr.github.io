@@ -3,6 +3,25 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import * as module from "../src/ui/supplier-payroll-view.js";
 const flush = () => new Promise((r) => setTimeout(r, 5));
+test('fundo dos comprovantes cancela download sem vincular e restaura a folha e o foco', async t => {
+  const h = await harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  await openRubrics(h);
+  const doc = h.dom.window.document;
+  const file = new File(['a'], 'recibo.pdf', { type: 'application/pdf' });
+  h.tray.push({ id: 'a', fileName: file.name, file });
+  let release; h.receipts.readReceiptAttachment = () => new Promise(resolve => { release = resolve; });
+  await h.click('[data-payroll-receipts="salary"]');
+  const overlay = doc.querySelector('[data-receipt-picker]');
+  overlay.querySelector('h2').click(); assert.equal(overlay.isConnected, true);
+  doc.querySelector('[data-receipt-id="a"]').checked = true;
+  await h.click('[data-receipt-confirm]');
+  overlay.click(); assert.equal(overlay.isConnected, false);
+  release(file); await flush();
+  assert.equal(doc.querySelector('.supplier-payroll-file-list').children.length, 0);
+  assert.equal(doc.querySelector('.supplier-payroll-body').inert, undefined);
+  assert.equal(doc.activeElement.dataset.payrollReceipts, 'salary');
+  assert.equal(h.closed, 0);
+});
 test("comprovante oferece bandeja atual, cancela sem vínculo e seleciona por rubrica", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });

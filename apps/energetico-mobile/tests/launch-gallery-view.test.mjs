@@ -372,7 +372,19 @@ test('cancel and Escape close only the review popup and preserve the edited draf
   assert.equal(mutations(ctx).length, 0);
 });
 
-test('Escape cannot dismiss a confirmation while its save is pending', async t => {
+test('backdrop dismisses only launch confirmation and preserves its draft without mutation', async t => {
+  const ctx = await setup(t); await ctx.gallery.open(); await showDetail(ctx);
+  const draft = input(ctx, 'QUANTIDADE', '4');
+  const submit = button(ctx.root(), 'SUBMETER'); submit.click();
+  const popup = ctx.root().querySelector('.lg-review');
+  popup.querySelector('.lg-review-card').click(); assert.equal(popup.hidden, false);
+  popup.click(); assert.equal(popup.hidden, true);
+  assert.equal(ctx.root().hidden, false); assert.equal(ctx.root().querySelector('.lg-detail').hidden, false);
+  assert.equal(draft.value, '4'); assert.equal(ctx.document.activeElement, submit);
+  assert.equal(mutations(ctx).length, 0);
+});
+
+test('Escape and backdrop cannot dismiss a confirmation while its save is pending', async t => {
   const pending = deferred();
   const ctx = await setup(t, { request: async operation => {
     if (operation === 'snapshot') return snapshot();
@@ -385,6 +397,7 @@ test('Escape cannot dismiss a confirmation while its save is pending', async t =
   const popup = ctx.root().querySelector('.lg-review');
   button(popup, 'Confirmar alterações').click();
   popup.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  popup.click();
   assert.equal(popup.hidden, false);
   pending.reject(new Error('Falha temporária'));
   await settle();

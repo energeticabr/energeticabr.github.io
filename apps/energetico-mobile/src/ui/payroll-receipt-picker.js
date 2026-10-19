@@ -197,6 +197,10 @@ export function openPayrollReceiptPicker({
   actions.append(cancel, search, confirm);
   panel.append(heading, info, list, sources, error, actions);
   overlay.append(panel);
+  overlay.addEventListener("click", event => {
+    event.stopPropagation();
+    if (event.target === overlay) close();
+  });
   overlay.addEventListener("keydown", event => {
     if (event.key === "Escape") {
       event.preventDefault();

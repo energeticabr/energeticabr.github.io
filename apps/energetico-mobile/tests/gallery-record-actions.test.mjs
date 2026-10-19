@@ -37,6 +37,30 @@ async function setup(t, overrides = {}) {
 const click = (ctx, action) => ctx.buttons.querySelector(`[data-gallery-action="${action}"]`).click();
 const key = (ctx, target, name, options = {}) => target.dispatchEvent(new ctx.dom.window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
 
+test('gallery backdrop cancels deletion without writes and never handles clicks inside or from nested popups', async t => {
+  const ctx = await setup(t); click(ctx, 'delete');
+  const overlay = ctx.get('.gallery-record-overlay'), dialog = ctx.get('[data-gallery-record-dialog]');
+  dialog.querySelector('h2').click(); assert.equal(overlay.isConnected, true);
+  const nested = ctx.document.createElement('div'); nested.className = 'gallery-record-overlay';
+  dialog.append(nested); nested.click(); assert.equal(overlay.isConnected, true);
+  overlay.click();
+  assert.equal(overlay.isConnected, false);
+  assert.equal(ctx.document.activeElement, ctx.get('[data-gallery-action="delete"]'));
+  assert.equal(ctx.writes.length, 0); assert.equal(ctx.changes.length, 0);
+});
+
+test('gallery backdrop stays blocked while deleting and dismisses only the confirmed receipt afterwards', async t => {
+  const mutation = deferred();
+  const ctx = await setup(t, { deleteItem: () => mutation.promise });
+  click(ctx, 'delete'); const overlay = ctx.get('.gallery-record-overlay');
+  ctx.get('[data-gallery-confirm="yes"]').click(); overlay.click();
+  assert.equal(overlay.isConnected, true);
+  mutation.resolve(); await settle();
+  assert.ok(ctx.get('[data-gallery-delete-success]'));
+  overlay.click(); assert.equal(overlay.isConnected, false);
+  assert.equal(ctx.changes.length, 1);
+});
+
 test('edit shows a modal table with confirmed changes and restores gallery focus when dismissed', async t => {
   const ctx = await setup(t, { galleryTitle: 'GALERIA DE EXEMPLO' });
   const trigger = ctx.get('[data-gallery-action="edit"]');
