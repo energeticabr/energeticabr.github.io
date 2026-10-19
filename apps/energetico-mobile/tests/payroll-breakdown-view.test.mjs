@@ -14,7 +14,7 @@ function harness(options = {}) {
     if (fail) throw new Error('Rede indisponível');
     return { ...summary, lines: summary.lines.map((line, index) => ({ ...line, id: String(index + 10), parentId: String(index + 20) })) };
   } };
-  const view = createPayrollBreakdownView({ data, documentRef, root: documentRef.querySelector('main'), sessionKey: 'account', storage: dom.window.localStorage, now: () => new Date('2026-10-16T12:00:00Z'), ...options });
+  const view = createPayrollBreakdownView({ data, documentRef, root: documentRef.querySelector('main'), sessionKey: 'account', storage: dom.window.localStorage, now: () => new Date('2026-10-01T12:00:00Z'), ...options });
   const click = async selector => { documentRef.querySelector(selector).click(); await new Promise(resolve => setImmediate(resolve)); };
   const input = (selector, value) => { const node = documentRef.querySelector(selector); node.value = value; node.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
   return { dom, doc: documentRef, data, view, click, input, get posts() { return posts; }, get posted() { return posted; }, fail: () => { fail = true; }, recover: () => { fail = false; } };
@@ -117,4 +117,35 @@ test('PAGO mostra valores da folha selecionada em cada rubrica e no total', asyn
   h.input('[data-breakdown-value="2026-10-02:salary"]', '100,15');
   assert.match(h.doc.querySelector('[aria-label="Totais por rubrica"] tbody tr:last-child td:last-child')?.textContent || '', /450,15/);
   assert.deepEqual(requests, [['7','2026-10']]);
+});
+
+test('cabeçalho geral inclui todo o pago mesmo sem novas provisões', async t => {
+  const h = harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadPayrollContext = async () => ({ sheetId:'19',paid:{salary:3405.89,meal:477.72},paidTotal:3883.61,payments:[] });
+  await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');
+  assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent, /3\.883,61/);
+  h.input('[data-breakdown-value="2026-10-23:salary"]', '100');
+  assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent, /3\.983,61/);
+  assert.equal(h.posts,0);
+});
+
+test('semana passada mostra pagos distintos em cinza e sem campos financeiros editáveis', async t => {
+  const h = harness({now:()=>new Date('2026-10-19T12:00:00Z')}); t.after(() => { h.view.destroy(); h.dom.window.close(); });
+  h.data.loadPayrollContext = async () => ({sheetId:'19',paid:{salary:320},paidTotal:320,payments:[
+    {id:'31',date:'2026-10-12',rubric:'salary',quantity:2,unitValue:100,total:200,launchId:'91'},
+    {id:'32',date:'2026-10-18',rubric:'salary',quantity:1,unitValue:120,total:120,launchId:'92'},
+  ]});
+  await h.view.open(); await h.click('[data-breakdown-supplier="7"]'); await h.click('[data-breakdown-next]');
+  const week=h.doc.querySelector('[data-breakdown-date="2026-10-16"]');
+  assert.ok(week.classList.contains('payroll-breakdown-date--past')); assert.equal(week.open,false);
+  assert.match(week.querySelector('summary').textContent,/320,00/);
+  await h.click('[data-breakdown-date="2026-10-16"] > summary');
+  assert.equal(week.open,true);
+  assert.equal(week.querySelectorAll('[data-breakdown-value],[data-breakdown-quantity]').length,0);
+  assert.equal(week.querySelectorAll('[data-breakdown-payment]').length,2);
+  assert.match(week.textContent,/12\/10\/2026/); assert.match(week.textContent,/18\/10\/2026/);
+  assert.match(week.querySelector('[data-breakdown-payment="31"]').textContent,/2.*100,00/s);
+  assert.match(week.querySelector('[data-breakdown-payment="32"]').textContent,/1.*120,00/s);
+  assert.ok(h.doc.querySelector('[data-breakdown-value="2026-10-23:salary"]'));
+  assert.equal(h.posts,0);
 });

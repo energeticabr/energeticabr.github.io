@@ -260,3 +260,21 @@ test('lista de provisões sem TIPOPGTO mantém rubrica no pagamento da folha', a
   assert.deepEqual(f.rows.FOLHAPGTO.map(row=>row.fields.TIPOPGTO),['SALÁRIO','VALE REFEIÇÃO','13 SALÁRIO']);
   assert.ok(f.rows['PROVISÃO PGTOS'].every(row=>row.fields.IDFOLHA==='19'));
 });
+
+test('contexto conserva data, quantidade e valor de cada pagamento sem regravar a folha', async () => {
+  const f=fixture(), supplier=(await f.data.loadSuppliers())[0];
+  f.columns.LANCAMENTOS=['VALORUNITARIO','QUANTIDADE'].map(name=>({name,displayName:name,number:{}}));
+  f.rows.LANCAMENTOS=[
+    {id:'91',fields:{VALORUNITARIO:100,QUANTIDADE:2}},
+    {id:'92',fields:{VALORUNITARIO:120,QUANTIDADE:1}},
+  ];
+  f.rows.FOLHAPGTO=[
+    {id:'31',fields:{Title:'pago-31',IDFOLHA:'19',FORNECEDOR:'Ana',TIPOPGTO:'SALÁRIO',IDLANCAMENTO:'91',DATA:'2026-10-12T00:00:00Z'}},
+    {id:'32',fields:{Title:'pago-32',IDFOLHA:'19',FORNECEDOR:'Ana',TIPOPGTO:'SALÁRIO',IDLANCAMENTO:'92',DATA:'2026-10-18T00:00:00Z'}},
+  ];
+  const context=await f.data.loadPayrollContext(supplier,'2026-10');
+  assert.equal(context.paidTotal,320); assert.equal(context.payments.length,2);
+  assert.deepEqual(context.payments.map(p=>[p.id,p.date,p.rubric,p.quantity,p.unitValue,p.total,p.launchId]),
+    [['31','2026-10-12','salary',2,100,200,'91'],['32','2026-10-18','salary',1,120,120,'92']]);
+  assert.equal(f.writes.length,0);
+});

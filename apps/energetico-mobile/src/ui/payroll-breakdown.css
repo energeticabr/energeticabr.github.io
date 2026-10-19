@@ -30,6 +30,12 @@
 .payroll-breakdown-date summary:after{content:'⌄';font-size:1.3rem}
 .payroll-breakdown-date[open] summary:after{content:'⌃'}
 .payroll-breakdown-date-total{white-space:nowrap;font-weight:800;color:#176044}
+.payroll-breakdown-date--past{border-color:#bac2c8;background:#f0f1f2}
+.payroll-breakdown-date--past summary{background:#e0e3e6;color:#42515b}
+.payroll-breakdown-date--past .payroll-breakdown-date-total{color:#42515b}
+.payroll-breakdown-week{padding:0 1rem;font-size:.9rem;color:#526570}
+.payroll-breakdown-payment{padding:1rem;border-top:1px solid #d1d8dc;background:#f2f3f4}
+.payroll-breakdown-payment p{line-height:1.6;margin:.5rem 0}
 .payroll-breakdown-rubric{padding:1rem;border-top:1px solid #d8e3eb;background:#fff}
 .payroll-breakdown-rubric:nth-of-type(even){background:#edf3ff}
 .payroll-breakdown-rubric.payroll-breakdown-rubric--selected{background:#e0f5e7}

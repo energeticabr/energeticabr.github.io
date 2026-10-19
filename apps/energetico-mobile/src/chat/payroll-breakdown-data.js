@@ -3,7 +3,7 @@ import Decimal from 'decimal.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
 import { createSupplierPayrollData } from './supplier-payroll-data.js';
-import { payrollKey, PAYROLL_RUBRICS } from './supplier-payroll.js';
+import { payrollKey, PAYROLL_RUBRICS, validPayrollDate } from './supplier-payroll.js';
 import { createPayrollSourceReader } from './payroll-editor-policy.js';
 import { payrollProvisionTitle } from './payroll-provision-source.js';
 import { ensurePayrollProvisionSchema } from './payroll-provision-schema.js';
@@ -96,7 +96,7 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
   }
   async function loadPayrollContext(supplier, month) {
     const sheetId = await sheetFor(supplier, month), payments = await describe(['FOLHAPGTO']);
-    const paid = Object.fromEntries(PAYROLL_RUBRICS.map(r => [r.id, 0]));
+    const paid = Object.fromEntries(PAYROLL_RUBRICS.map(r => [r.id, 0])), history = [], seen = new Set();
     for (const row of await rows(payments)) {
       if (String(readValue(payments,row,'IDFOLHA') ?? '').trim() !== sheetId) continue;
       if (payrollKey(readValue(payments,row,'FORNECEDOR')) !== payrollKey(supplier.label)) throw new Error('O fornecedor do pagamento diverge da folha.');
@@ -112,10 +112,16 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       const next = new Decimal(paid[rubric.id]).plus(total);
       if (!Number.isSafeInteger(next.times(100).toNumber())) throw new Error('O total pago excede o limite monetário.');
       paid[rubric.id] = next.toNumber();
+      const date = String(source.DATA || readValue(payments,row,'DATA') || '').slice(0,10);
+      if (!validPayrollDate(date) || !id(row.id) || seen.has(String(row.id))) throw new Error(`Confira a data e a identidade do pagamento ${row.id}.`);
+      seen.add(String(row.id));
+      history.push({ id: String(row.id), date, rubric: rubric.id, label: rubric.label,
+        quantity: source.QTD, unitValue: source.VALORUNITARIO, total: total.toNumber(),
+        provisionId: source.IDPROVISAO || '', launchId: String(fields.IDLANCAMENTO || '') });
     }
     const total = Object.values(paid).reduce((sum, value) => sum.plus(value), new Decimal(0));
     if (!Number.isSafeInteger(total.times(100).toNumber())) throw new Error('O total pago excede o limite monetário.');
-    return { sheetId, paid, paidTotal: total.toNumber() };
+    return { sheetId, paid, paidTotal: total.toNumber(), payments: history };
   }
   function verify(descriptor, row, fields) {
     if (!id(row?.id)) throw new Error('O SharePoint não confirmou o registro.');
