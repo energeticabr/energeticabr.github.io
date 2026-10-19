@@ -1,0 +1,19 @@
+--- a/worker/provision_parent_fanout.py
++++ b/worker/provision_parent_fanout.py
+@@ -168,9 +168,15 @@
+     now = time.time() if now is None else now
+     store = mirror.SharePointStore(client)
+     report = {'checked': 0, 'cached': 0, 'copied': 0, 'reused': 0, 'planned': 0, 'unlinked': 0, 'errors': []}
++    # This tenant inverts the REST Attachments=true filter. Read the paginated
++    # lightweight projection and select the actual boolean locally instead.
+     rows = store.collection(client._list_endpoint(PARENT) + '/items',
+-                            {'$select': 'Id,Attachments', '$filter': 'Attachments eq true', '$top': '5000'})
++                            {'$select': 'Id,Attachments', '$top': '5000'})
+     for row in rows:
++        if not isinstance(row.get('Attachments'), bool):
++            raise ValueError('Indicador de anexos ausente ou inválido no descritivo.')
++        if not row['Attachments']:
++            continue
+         parent = mirror.item_id(row.get('Id'))
+         try:
+             # Include links and inventories, not just parent Modified (SP may leave it unchanged).

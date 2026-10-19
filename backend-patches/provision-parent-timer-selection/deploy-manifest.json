@@ -1,0 +1,11 @@
+{
+  "files": {
+    "worker/provision_parent_fanout.py": {
+      "before": "4c7c0526b68ddc1bc63cb299bc872e30e7c27b35a715272debd943984ad21f4e",
+      "mirrorBefore": "4c7c0526b68ddc1bc63cb299bc872e30e7c27b35a715272debd943984ad21f4e",
+      "after": "7a59018a31428e5d91611b325b417f63ecc5d6e760f0a9c50a78f69822fd8eaf"
+    }
+  },
+  "patch": "e342efdef70ef9a4bf2a75d51e12b9da7bf725e598185f82c3d29e8ef356351b",
+  "archive": "2280d8a596cee40a23aaff995faccc439a0508ca75b3fc6f3aab72b5cdae4150"
+}
