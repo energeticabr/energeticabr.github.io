@@ -74,14 +74,16 @@ export function createProvisionDescriptionDeletion({repository, siteKey = 'perso
     }
   }
   async function contract() {
-    const parent = await remote('resolveList', ['DESCRITIVOPROVISAO']);
-    const child = await remote('resolveList', CHILD_LISTS);
+    const [parent, child] = await Promise.all([
+      remote('resolveList', ['DESCRITIVOPROVISAO']), remote('resolveList', CHILD_LISTS),
+    ]);
     if (parent?.status !== 'resolved' || child?.status !== 'resolved'
       || typeof parent.id !== 'string' || !parent.id.trim() || typeof child.id !== 'string' || !child.id.trim() || child.id === parent.id) {
       throw stale('As listas pai e filha não foram comprovadas.');
     }
-    const parentColumns = await remote('getColumns', parent.id);
-    const childColumns = await remote('getColumns', child.id);
+    const [parentColumns, childColumns] = await Promise.all([
+      remote('getColumns', parent.id), remote('getColumns', child.id),
+    ]);
     const link = descriptor(childColumns, 'DESCRITIVOPROVISAO');
     if (!object(link.text) || link.text.allowMultipleLines || link.lookup || link.number || link.calculated || link.computed) {
       throw stale('O vínculo DESCRITIVOPROVISAO requer metadados textuais simples.');
@@ -224,9 +226,14 @@ export function createProvisionDescriptionDeletion({repository, siteKey = 'perso
   async function preview(value) {
     active();
     const id = identity(value), schema = await contract();
-    const parent = record(await remote('getItem', schema.parentList, id, '$expand=fields'), schema, true);
+    // These are independent reads. Keep the complete, fresh child enumeration
+    // (including paid/legacy whitespace links), but do not wait for the parent
+    // response before starting its pages. Mutations still use verify() below.
+    const [item, children] = await Promise.all([
+      remote('getItem', schema.parentList, id, '$expand=fields'), scan(schema, id),
+    ]);
+    const parent = record(item, schema, true);
     if (parent.id !== id) throw stale('A identidade do descritivo consultado não confere.');
-    const children = await scan(schema, id);
     const context = Object.freeze({id, supplier: parent.supplier,
       children: Object.freeze(children.map(child => Object.freeze({id: child.id, supplier: child.supplier, product: child.product, status: child.status}))),
     });
