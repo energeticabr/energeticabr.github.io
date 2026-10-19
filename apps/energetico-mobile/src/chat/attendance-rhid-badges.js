@@ -185,7 +185,14 @@ function personBadge(person, date) {
     correction: { personKey: tablePerson.personKey, name: tablePerson.name, slots: tablePerson.slots } });
   if (duplicatePunches) return dailyBadge("inconsistent");
 
-  let times = tablePerson.rawPunches;
+  // Exclude only the unchosen member of a resolved same-period pair. Preserve
+  // ambiguous candidates and further work pairs under the existing review rules.
+  const unchosen = new Set(SLOTS.flatMap(slot => {
+    const field = tablePerson.slots[slot];
+    return field.rhid && field.rhidCandidates.length === 2
+      ? field.rhidCandidates.filter(time => time !== field.rhid) : [];
+  }));
+  let times = tablePerson.rawPunches.filter(time => !unchosen.has(time));
   const adjustments = Object.fromEntries(SLOTS.filter(slot => tablePerson.slots[slot].adjustment)
     .map(slot => [slot, tablePerson.slots[slot].adjustment]));
   if (Object.keys(adjustments).length) {

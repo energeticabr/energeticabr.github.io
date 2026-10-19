@@ -129,8 +129,8 @@ function assignOutsideRhidPunches(candidates, outside, adjustments) {
     && RHID_SLOTS.slice(0, index).flatMap(anchors).every(anchor => anchor < time)
     && RHID_SLOTS.slice(index + 1).flatMap(anchors).every(anchor => anchor > time));
   const forced = outside.map(time => ({ time, slots: compatibleSlots(time) })).filter(item => item.slots.length === 1);
-  // Retain competing punches together so the existing duplicate policy applies;
-  // never silently choose the first punch when only one chronological gap exists.
+  // Retain competing outside-range punches for review; a chronological gap
+  // alone cannot prove that both belong to the same regular period.
   for (const { time, slots } of forced) {
     const slot = slots[0][0];
     candidates[slot].push(time);
@@ -282,11 +282,13 @@ export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false 
     const slots = {};
     for (const [slot, label] of RHID_SLOTS) {
       const rhidCandidates = candidates[slot];
-      const closePair = rhidCandidates.length === 2
-        && (Number(rhidCandidates[1].slice(0, 2)) * 60 + Number(rhidCandidates[1].slice(3)))
-          - (Number(rhidCandidates[0].slice(0, 2)) * 60 + Number(rhidCandidates[0].slice(3))) < 5;
-      const rhid = rhidCandidates.length === 1 ? rhidCandidates[0] : closePair ? rhidCandidates[1] : null;
-      if (rhidCandidates.length > 1 && !closePair) issues.push(`Batidas duplicadas em ${label}: ${rhidCandidates.join(", ")}`);
+      const samePeriodPair = rhidCandidates.length === 2
+        && rhidCandidates.every(time => classifyRhidPunch(time) === slot);
+      // Candidates are chronological: start work later and leave work earlier.
+      // Keep every original punch for audit; manual adjustments still win below.
+      const rhid = rhidCandidates.length === 1 ? rhidCandidates[0]
+        : samePeriodPair ? rhidCandidates[slot.startsWith('entry') ? 1 : 0] : null;
+      if (rhidCandidates.length > 1 && !samePeriodPair) issues.push(`Batidas duplicadas em ${label}: ${rhidCandidates.join(", ")}`);
       const adjustment = person.adjustments[slot] || null;
       slots[slot] = {
         rhid, rhidCandidates, effective: adjustment?.time || rhid || null,
