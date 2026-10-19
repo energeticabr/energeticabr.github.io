@@ -10,6 +10,7 @@ import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { provisionTotal } from '../chat/pending-provision-dates.js';
+import { launchGalleryIcon } from './launch-gallery-icons.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS = "PAGAMENTO PREVISTO";
@@ -467,14 +468,21 @@ export function createPaymentProgrammingGallery({
   function appendSummaryField(list, label, value, icon, { wide = false } = {}) {
     const pair = el("div", `og-card-field pg-card-field pg-summary-field${wide ? " pg-summary-field--wide" : ""}${label === "OBS" ? " pg-observation" : ""}`);
     pair.dataset.field = label;
-    const symbol = el("span", "pg-summary-icon", icon);
+    const symbol = el("span", "pg-summary-icon");
     symbol.setAttribute("aria-hidden", "true");
+    symbol.append(cardIcon(icon));
     const visibleLabel = {
       "DATA PREVISTA PGTO": "Data prevista pgto", "VALOR UNITÁRIO": "Valor unitário", FRETE: "Frete", QTD: "Qtd.",
       FILIAL: "Filial", "IMÓVEL": "Imóvel", AGENDAMENTO: "Agendamento",
     }[label] || label;
     pair.append(symbol, el("dt", "", visibleLabel), el("dd", "", displayValue(label, value)));
     list.append(pair);
+  }
+
+  function cardIcon(name) {
+    const icon = launchGalleryIcon(doc, name);
+    icon.classList.add('pg-card-icon');
+    return icon;
   }
 
   function renderCard(row) {
@@ -486,41 +494,46 @@ export function createPaymentProgrammingGallery({
     const main = el("div", "og-card-main");
     const heading = el("header", "og-card-heading pg-card-heading");
     const headingCopy = el("div", "pg-heading-copy");
-    headingCopy.append(el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Fornecedor não informado")));
-    heading.append(el("span", "og-card-id", id), headingCopy);
+    headingCopy.append(cardIcon('supplier'), el('span', 'pg-supplier-label', 'Fornecedor'),
+      el("h2", "", text(field(fields, ["FORNECEDOR"]) || "Fornecedor não informado")));
+    const identifier = el('div', 'pg-id-badge');
+    identifier.append(el("span", "og-card-id", id));
+    heading.append(identifier, headingCopy);
     const statusText = text(field(fields, ["STATUS"]) || "Status não informado");
     const paid = /pago|efetuado|quitado/i.test(statusText);
     const pending = /pendente|previst/i.test(statusText);
     const status = el("span", `og-status pg-status${pending ? " og-status--pending" : paid ? " pg-status--paid" : ""}`, statusText);
     const timingText = paymentTiming(fields, now());
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
-    if (timing) headingCopy.append(timing);
+    if (timing) identifier.append(timing);
+    card.classList.toggle('pg-card--overdue', timingText.startsWith('VENCIDO'));
     if (!timing || key(statusText) !== key(DEFAULT_STATUS)) headingCopy.append(status);
     const toolbar = el("div", "pg-card-toolbar");
     const total = el("div", "pg-card-total");
-    total.append(el("span", "", "Valor total"), el("strong", "", displayValue("VALOR TOTAL", paymentTotal(fields))));
-    toolbar.append(total, recordActions.render(row));
+    total.append(cardIcon('money'), el("span", "", "Valor total"), el("strong", "", displayValue("VALOR TOTAL", paymentTotal(fields))));
+    toolbar.append(recordActions.render(row));
     heading.append(toolbar);
     const description = text(field(fields, ["DESCRICAOPGTO", "DESCRIÇÃO PGTO", "PRODUTO"]) || "").trim();
-    const descriptionBand = description ? el("div", "pg-description") : null;
-    if (descriptionBand) descriptionBand.append(el("span", "pg-description-label", "Descrição"), el("strong", "", description));
+    const descriptionBand = el("div", "pg-description");
+    descriptionBand.append(cardIcon('order'), el("span", "pg-description-label", "Descrição"), el("strong", "", description || '—'));
+    const values = el('div', 'pg-card-values');
+    values.append(total, descriptionBand);
     const summary = el("dl", "og-card-fields pg-card-fields pg-card-grid");
-    appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "▣");
-    appendSummaryField(summary, "VALOR UNITÁRIO", field(fields, ["VALOR TOTAL", "VALORTOTAL"]), "$");
-    appendSummaryField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]), "◇");
-    appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "▦");
-    appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "⌂");
-    appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "◷");
+    appendSummaryField(summary, "VALOR UNITÁRIO", field(fields, ["VALOR TOTAL", "VALORTOTAL"]), "currency");
+    appendSummaryField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]), "quantity");
     const freight = field(fields, ["FRETE"]);
-    appendSummaryField(summary, "FRETE", text(freight).trim() ? freight : 0, "▱", { wide: true });
+    appendSummaryField(summary, "FRETE", text(freight).trim() ? freight : 0, "freight");
+    appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "calendar");
+    appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "branch");
+    appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "property");
+    appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "clock");
     const observation = text(field(fields, ["OBS", "OBSERVACAO", "OBSERVAÇÃO"]) || "").trim();
-    main.append(heading);
-    if (descriptionBand) main.append(descriptionBand);
+    main.append(heading, values);
     main.append(summary);
     const extra = el("dl", "pg-card-extra");
     const paidAt = field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]);
-    if (paidAt) appendSummaryField(extra, "DATA DO PAGAMENTO", paidAt, "▣");
-    if (observation) appendSummaryField(extra, "OBS", observation, "▤", { wide: true });
+    if (paidAt) appendSummaryField(extra, "DATA DO PAGAMENTO", paidAt, "calendar");
+    if (observation) appendSummaryField(extra, "OBS", observation, "order", { wide: true });
     if (extra.children.length) main.append(extra);
     card.classList.add('gallery-record-card');
     card.append(main);
