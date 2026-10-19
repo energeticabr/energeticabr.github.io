@@ -37,10 +37,10 @@ const draft = supplier => ({ supplier, month: '2026-10', lines: [
   { date: '2026-10-31', rubric: 'vacation', quantity: '1', unitValue: '' },
 ] });
 
-test('prepara somente o acesso Graph usado pelas provisões', async () => {
+test('prepara Graph e anexos SharePoint antes de abrir o formulário', async () => {
   const f = fixture(), requests = [];
   const data = createPayrollBreakdownData({ repository: f.repo, tokenProvider: async scopes => { requests.push(scopes); return 'token'; } });
-  await data.prepare(); assert.deepEqual(requests, [['Sites.Read.All','Sites.ReadWrite.All']]); assert.equal(f.writes.length, 0);
+  await data.prepare(); assert.equal(requests.length,2); assert.deepEqual(requests[0], ['Sites.Read.All','Sites.ReadWrite.All']); assert.match(requests[1][0], /AllSites.Read$/); assert.match(requests[1][1], /AllSites.Write$/); assert.equal(f.writes.length, 0);
 });
 
 test('preparação cria IDFOLHA opcional somente quando ausente e confirma o esquema sem registros financeiros', async () => {
@@ -277,4 +277,22 @@ test('contexto conserva data, quantidade e valor de cada pagamento sem regravar 
   assert.deepEqual(context.payments.map(p=>[p.id,p.date,p.rubric,p.quantity,p.unitValue,p.total,p.launchId]),
     [['31','2026-10-12','salary',2,100,200,'91'],['32','2026-10-18','salary',1,120,120,'92']]);
   assert.equal(f.writes.length,0);
+});
+
+test('anexo inválido impede o lote antes de criar qualquer registro financeiro', async()=>{
+  const f=fixture(),supplier=(await f.data.loadSuppliers())[0],raw=draft(supplier);
+  raw.lines[0].files=[{name:'programa.exe',size:2,type:'application/octet-stream',arrayBuffer:async()=>new Uint8Array([1,2]).buffer}];
+  await assert.rejects(f.data.post(raw,{operationId:'bad-file'}),/tipo/i);assert.equal(f.writes.length,0);
+});
+test('arquivos da linha são verificados na provisão e retomada conserva financeiro e manifesto', async()=>{
+  const f=fixture(),supplier=(await f.data.loadSuppliers())[0],raw=draft(supplier),files=new Map();raw.lines=raw.lines.slice(0,1);
+  const bytes=new Uint8Array([1,2,3]).buffer;raw.lines[0].files=[{name:'recibo.pdf',size:3,type:'application/pdf',arrayBuffer:async()=>bytes}];
+  f.repo.listAttachments=async(_s,l,id)=>[...(files.get(`${l}:${id}`)||new Map()).keys()].map(name=>({name}));
+  f.repo.downloadAttachment=async(_s,l,id,name)=>files.get(`${l}:${id}`).get(name);
+  let fail=true;
+  f.repo.uploadAttachment=async(_s,l,id,file,name)=>{if(fail)throw new Error('Falha de anexo');const dest=files.get(`${l}:${id}`)||new Map();files.set(`${l}:${id}`,dest);dest.set(name,await file.arrayBuffer());};
+  const progress={operationId:'files-retry'};await assert.rejects(f.data.post(raw,progress),/Falha de anexo/);assert.equal(f.writes.length,3);
+  const restored=JSON.parse(JSON.stringify(progress)),missing={...raw,lines:raw.lines.map(({files,...line})=>line)};
+  await assert.rejects(f.data.post(missing,restored),/selecione novamente/i);assert.equal(f.writes.length,3);
+  fail=false;await f.data.post(raw,restored);assert.equal(f.writes.length,3);assert.equal(files.get('PROVISÃO PGTOS:1').size,1);
 });
