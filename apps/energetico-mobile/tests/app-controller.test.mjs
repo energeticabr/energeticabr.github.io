@@ -321,12 +321,51 @@ test("grouped provisions check selects only the namespaced parent and leaves the
   assert.match(h.view.renders.at(-1).messages.at(-1).question, /FILHO 91/);
 });
 
+test("grouped provisions check accepts the VM transport ID and sends only the canonical parent reply", async t => {
+  for (const option of [
+    { id: "choice:provisao_para_baixa:provision_description:28", reply: "provision_description:28", label: "28 - ARCELOR MITTAL (19/10/2026) - R$ 8.186,02" },
+    { id: "choice:provisao_para_baixa:provision_description:28", label: "28 - ARCELOR MITTAL (19/10/2026) - R$ 8.186,02" },
+  ]) {
+    const h = makeHarness();
+    const calls = [];
+    h.client.getPendingProvisionSnapshot = async () => ({
+      sourceKind: "provision-description", due: true,
+      rows: [{ id: "28", sourceKind: "provision-description", childCount: 4, pendingChildIds: ["342", "343", "344", "345"] }],
+    });
+    h.client.sendText = async payload => {
+      calls.push(payload.replyId);
+      if (payload.replyId === "input_continue") return {
+        status: "processed", activeFlow: { id: "payment_settlement", stepKey: "provisao_para_baixa" },
+        messages: [{ type: "poll", question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+          { id: "choice:provisao_para_baixa:28", reply: "choice:provisao_para_baixa:28", label: "28 - CHILD" }, option,
+        ] }],
+      };
+      if (payload.replyId === "provision_description:28") return {
+        status: "processed", activeFlow: { id: "payment_settlement", stepKey: "qtd_pagamento" },
+        messages: [{ type: "poll", question: "DESEJA MANTER A QUANTIDADE DO FILHO 342?", options: [] }],
+      };
+      throw new Error(`Unexpected or financial reply: ${payload.replyId}`);
+    };
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "28" }), true);
+    assert.deepEqual(calls, ["input_continue", "provision_description:28"]);
+    assert.equal(h.view.renders.at(-1).error, null);
+    assert.match(h.store.getState().messages.at(-1).question, /FILHO 342/);
+  }
+});
+
 test("grouped provisions never fall back to a bare child ID or a parent value without its namespace", async t => {
   for (const options of [
     [{ id: "306", reply: "306", label: "306 - CHILD" }],
     [{ id: "other", value: "306", label: "306 - COFER" }],
     [{ id: "provision_description:307", value: "306", label: "306 - COFER" }],
     [{ id: "provision_description:306", reply: "306", value: "306", label: "306 - COFER" }],
+    [{ id: "choice:provisao_para_baixa:provision_description:307", reply: "provision_description:306", label: "306 - COFER" }],
+    [{ id: "choice:another_step:provision_description:306", reply: "provision_description:306", label: "306 - COFER" }],
+    [{ id: "choice:provisao_para_baixa:306", reply: "provision_description:306", label: "306 - COFER" }],
+    [{ id: "provision_description:306", reply: "provision_description:306" },
+      { id: "choice:provisao_para_baixa:provision_description:306", reply: "provision_description:306" }],
   ]) {
     const h = makeHarness();
     const calls = [];
@@ -363,6 +402,23 @@ test("legacy provisions check ignores namespaced parent options with a colliding
   assert.deepEqual(calls, ["input_continue", "306"]);
 });
 
+test("legacy provisions check cannot select a wrapped parent from its numeric display label", async t => {
+  const h = makeHarness();
+  const calls = [];
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: "306" }] });
+  h.client.sendText = async payload => {
+    calls.push(payload.replyId);
+    return { status: "processed", activeFlow: { id: "payment_settlement" }, messages: [{ type: "poll",
+      question: "QUAL PAGAMENTO AGENDADO FOI PAGO?", options: [
+        { id: "choice:provisao_para_baixa:provision_description:306", label: "306 - PARENT" },
+      ] }] };
+  };
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  assert.equal(await h.view.emit("settle-pending-provision", { paymentId: "306" }), false);
+  assert.deepEqual(calls, ["input_continue"]);
+});
+
 test("grouped provisions check closes immediately and abandons an existing draft before selecting the parent", async t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector("#app");
@@ -388,7 +444,7 @@ test("grouped provisions check closes immediately and abandons an existing draft
       case "group_pending": return poll("PENDÊNCIAS", [{ id: "pending_payment_settlement", label: "BAIXAR PAGAMENTO AGENDADO" }]);
       case "pending_payment_settlement": return poll("QUAL DESCRITIVO DE PROVISÃO DESEJA BAIXAR?", [
         { id: "306", label: "306 - CHILD" },
-        { id: "provision_description:306", reply: "provision_description:306", value: "306", label: "306 - COFER" },
+        { id: "choice:provisao_para_baixa:provision_description:306", reply: "provision_description:306", value: "306", label: "306 - COFER" },
       ], { id: "payment_settlement", stepKey: "provisao_para_baixa" });
       case "provision_description:306": return poll("QUAL A QUANTIDADE DO FILHO 91?", [], { id: "payment_settlement" });
       default: throw new Error(`Unexpected or financial reply: ${payload.replyId}`);

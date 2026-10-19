@@ -3060,7 +3060,12 @@ export function createAppController({
     const id = String(paymentId || "").trim();
     if (!/^\d+$/.test(id)) return null;
     const matches = (Array.isArray(poll?.options) ? poll.options : []).filter(option => {
-      const references = [option?.reply, option?.id].map(value => String(value ?? "").trim()).filter(Boolean);
+      // The VM poll has a canonical reply plus a UI transport ID such as
+      // choice:provisao_para_baixa:provision_description:28. Strip only that
+      // known selection envelope; conflicting parents/children still fail shut.
+      const references = [option?.reply, option?.id]
+        .map(value => String(value ?? "").trim().replace(/^choice:provisao_para_baixa:/, ""))
+        .filter(Boolean);
       if (sourceKind === "provision-description") {
         return references.length > 0 && references.every(value => value === `provision_description:${id}`);
       }
@@ -3072,7 +3077,10 @@ export function createAppController({
       const label = String(option?.label || option?.title || option?.text || "").trim();
       return new RegExp(`^#?${id}\\s*(?:[-–—:])`).test(label);
     });
-    return matches.length === 1 ? matches[0] : null;
+    if (matches.length !== 1) return null;
+    return sourceKind === "provision-description"
+      ? { ...matches[0], reply: `provision_description:${id}` }
+      : matches[0];
   }
 
   function pendingNoteOption(poll, replyId) {
