@@ -13,9 +13,9 @@
     "worker/payroll_row_attachments.py": {
       "before": null,
       "mirrorBefore": null,
-      "after": "e232eb2b008f209bece4dcfa79de656465c6305c824f89ce2dfb22f4f91ffc38"
+      "after": "935186b4ee54ae3ae903d34617edc1478ea8e6019acbfe5e75ef9c301c2b2f84"
     }
   },
-  "patch": "3322f5a270f74ac5b5c52996abb67a2c10895ef97f07ef73d8b88c07c86ae650",
-  "archive": "7da0fbfc9a50177c8c35829bef87188a39116765c9a242b0834879c69f9463e4"
+  "patch": "44cba436c5a43d50e0192be0be64283034adf927370713b699ef13817c7c8d07",
+  "archive": "f8b6e6382654d6dd79e051f0164e643436dc4b88c36906df3d68470df9b4d3cc"
 }

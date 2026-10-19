@@ -141,6 +141,24 @@ class Fixture:
     def launch(self, child): return self.client.items[CHILD, child]['IDLANCAMENTOS']
     def order(self, child=11): return self.client.items[CHILD, child]['IDPEDIDO']
 
+    def existing(self, child, launch, order):
+        links = {'IDLANCAMENTOS': str(launch), 'IDPEDIDO': str(order)}
+        self.client.items[CHILD, child].update(links)
+        group = self.state.get('provision_description')
+        if group:
+            for key in ('original_children', 'children'):
+                next(row for row in group[key] if row['Id'] == child).update(links)
+            next(entry for entry in group['entries'] if entry['fields']['Id'] == child)['fields'].update(links)
+        else:
+            self.state['fields'].update(links)
+        self.client.items['LANCAMENTOS', launch] = {'FORNECEDOR': 'Supplier', 'FILIAL': 'Branch',
+            'IDPGTOAGENDADO': str(child), 'AGRUPAR': str(order)}
+        self.client.items['NOTASPENDENTES', order] = {'FORNECEDOR': 'Supplier', 'FILIAL': 'Branch'}
+
+
+def forbid_financial_creation(*args, **kwargs):
+    raise AssertionError('Existing-link settlement must never call ensure_item')
+
 
 class PropagationTests(unittest.TestCase):
     def test_each_child_only_its_launch_and_shared_order_union(self):
@@ -291,6 +309,95 @@ class PropagationTests(unittest.TestCase):
         self.assertEqual(len(f.client.tokens), 3)  # one order and two own launches
         self.assertEqual(f.client.files, original_files)
         self.assertEqual(f.client.uploads, [])
+
+    def test_continue_without_new_launch_reuses_existing_links_and_bytes(self):
+        f = Fixture(grouped=False, launch=False)
+        f.existing(11, 740, 730)
+        f.client.ensure_item = forbid_financial_creation
+        f.files_for(CHILD, 11)['missing.pdf'] = b'missing'
+        f.state['attachments'] = [{'sharepoint_name': 'session.pdf', 'bytes': b'session'}]
+        for kind, target in (('LANCAMENTOS', 740), ('NOTASPENDENTES', 730)):
+            f.client.files[kind, target] = {'renamed.bin': b'11', 'old-session.png': b'session'}
+        self.assertEqual(f.commit()['status'], 'completed')
+        for kind, target in (('LANCAMENTOS', 740), ('NOTASPENDENTES', 730)):
+            self.assertEqual(set(f.files_for(kind, target).values()), {b'11', b'session', b'missing'})
+            self.assertEqual(len(f.files_for(kind, target)), 3)
+        saved = copy.deepcopy(f.client.files)
+        self.assertEqual(f.commit()['status'], 'completed')
+        self.assertEqual(f.client.files, saved)
+        self.assertEqual(len(f.client.uploads), 3)  # source session + two missing copies
+        self.assertEqual(f.client.tokens, {})
+        self.assertEqual(f.launch(11), '740')
+        self.assertEqual(f.order(), '730')
+
+    def test_existing_links_foreign_incomplete_or_ambiguous_stop_before_paid(self):
+        cases = ('missing_order', 'missing_launch', 'multiple_launches', 'multiple_orders',
+                 'malformed_launch', 'foreign_source', 'foreign_launch_supplier',
+                 'foreign_launch_branch', 'foreign_order_supplier', 'foreign_order_branch',
+                 'wrong_backlink', 'wrong_order', 'missing_target', 'stale_empty_context')
+        for case in cases:
+            with self.subTest(case=case):
+                f = Fixture(grouped=False, launch=False)
+                f.existing(11, 740, 730)
+                f.client.ensure_item = forbid_financial_creation
+                source = f.client.items[CHILD, 11]
+                if case in ('missing_order', 'multiple_orders'):
+                    source['IDPEDIDO'] = f.state['fields']['IDPEDIDO'] = None if case == 'missing_order' else '730,731'
+                elif case in ('missing_launch', 'multiple_launches', 'malformed_launch'):
+                    value = {'missing_launch': None, 'multiple_launches': '740;741', 'malformed_launch': 'oops'}[case]
+                    source['IDLANCAMENTOS'] = f.state['fields']['IDLANCAMENTOS'] = value
+                elif case == 'foreign_source':
+                    source['FORNECEDOR'] = 'Foreign'
+                elif case.startswith('foreign_'):
+                    kind = 'LANCAMENTOS' if '_launch_' in case else 'NOTASPENDENTES'
+                    target = 740 if kind == 'LANCAMENTOS' else 730
+                    field = 'FORNECEDOR' if case.endswith('supplier') else 'FILIAL'
+                    f.client.items[kind, target][field] = 'Foreign'
+                elif case == 'wrong_backlink':
+                    f.client.items['LANCAMENTOS', 740]['IDPGTOAGENDADO'] = '12'
+                elif case == 'wrong_order':
+                    f.client.items['LANCAMENTOS', 740]['AGRUPAR'] = '731'
+                elif case == 'missing_target':
+                    del f.client.items['NOTASPENDENTES', 730]
+                elif case == 'stale_empty_context':
+                    f.state['fields'].update({'IDLANCAMENTOS': None, 'IDPEDIDO': None})
+                result = f.commit()
+                self.assertEqual(result['status'], 'failed')
+                self.assertTrue(result.get('error'))
+                self.assertIsNone(source['PGTOAGENDADO'])
+                self.assertEqual(f.client.uploads, [])
+                self.assertEqual(f.client.tokens, {})
+
+    def test_group_no_new_launch_propagates_existing_shared_order_and_retries(self):
+        f = Fixture(launch=False)
+        f.existing(11, 740, 730)
+        f.existing(12, 741, 730)
+        f.client.ensure_item = forbid_financial_creation
+        f.client.fail_child = 12
+        self.assertEqual(f.commit()['status'], 'failed')
+        f.files_for('LANCAMENTOS', 740).clear()
+        self.assertEqual(f.commit()['status'], 'completed')
+        self.assertEqual(set(f.files_for('LANCAMENTOS', 740).values()), {b'11'})
+        self.assertEqual(set(f.files_for('LANCAMENTOS', 741).values()), {b'12'})
+        self.assertEqual(set(f.files_for('NOTASPENDENTES', 730).values()), {b'11', b'12'})
+        self.assertEqual(f.client.tokens, {})
+        self.assertEqual((f.launch(11), f.launch(12), f.order()), ('740', '741', '730'))
+
+    def test_existing_launch_replacement_still_requires_relink_authorization(self):
+        f = Fixture(grouped=False)
+        f.existing(11, 740, 730)
+        f.client.ensure_item = forbid_financial_creation
+        self.assertEqual(f.commit()['status'], 'failed')
+        self.assertIsNone(f.client.items[CHILD, 11]['PGTOAGENDADO'])
+        self.assertEqual(f.client.uploads, [])
+        authorized = Fixture(grouped=False)
+        authorized.existing(11, 740, 730)
+        authorized.state['payment_settlement_relink_authorized'] = True
+        self.assertEqual(authorized.commit()['status'], 'completed')
+        self.assertEqual(len(authorized.client.tokens), 2)
+        self.assertEqual((authorized.launch(11), authorized.order()), ('501', '500'))
+        self.assertEqual(set(authorized.files_for('LANCAMENTOS', 501).values()), {b'11'})
+        self.assertEqual(authorized.files_for('LANCAMENTOS', 740), {})
 
 
 if __name__ == '__main__': unittest.main()

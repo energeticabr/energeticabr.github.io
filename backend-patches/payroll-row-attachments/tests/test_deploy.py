@@ -166,5 +166,3 @@ def test_check_only_does_not_write_live_sources(tmp_path, monkeypatch):
     result = deploy.rollout(manifest, candidate, runner, check_only=True)
     assert result['status'] == 'checked'
     assert (roots[0] / 'worker/workflow.py').read_text() == 'VALUE = 1\n'
-
-

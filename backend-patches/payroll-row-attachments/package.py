@@ -45,7 +45,7 @@ def package(baseline, candidate, output, mirror_hashes, archive_output=None):
             info.size, info.mode, info.mtime = len(data), 0o644, 0
             archive.addfile(info, io.BytesIO(data))
     (output / 'deploy-manifest.json').write_text(json.dumps(
-        {'files': manifest, 'patch': digest(patch), 'archive': digest(archive_output.read_bytes())}, indent=2) + '\n', encoding='utf-8')
+        {'files': manifest, 'patch': digest(patch), 'archive': digest(archive_output.read_bytes())}, indent=2) + '\n', encoding='utf-8', newline='\n')
     return manifest
 
 
@@ -59,5 +59,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(json.dumps(package(args.baseline, args.candidate, args.output,
                              json.loads(args.mirror_hashes.read_text(encoding='utf-8')), args.archive_output), indent=2))
-
-

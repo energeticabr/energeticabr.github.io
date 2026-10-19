@@ -95,7 +95,7 @@
          }
 --- /dev/null
 +++ b/worker/payroll_row_attachments.py
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,118 @@
 +"""Settlement-only child -> own launch + shared order attachment propagation.
 +
 +No financial creation, parent enumeration, scheduler or persistent sync state.
@@ -120,34 +120,44 @@
 +
 +
 +def propagate(client, child, expected, record, parent=None):
-+    """Use settlement-confirmed IDs, then revalidate live links before copying.
++    """Use confirmed generated IDs or freshly verified existing financial links.
 +
 +    Before the conditional paid write, expected contains the original child
 +    links. On journal recovery it contains the already-paid expected links.
 +    """
 +    child = item_id(child)
 +    launch, order = record.get('launch_item'), record.get('related_item')
-+    if not launch and not order:
-+        return []
-+    if not launch or not order:
-+        raise RuntimeError('Vínculos incompletos para os anexos da baixa.')
-+    launch_id, order_id = item_id(launch['item_id']), item_id(order['item_id'])
-+    if (launch.get('target_list') != LAUNCH or order.get('target_list') != ORDER
-+            or not _verified(launch.get('verified')) or not _verified(order.get('verified'))):
-+        raise RuntimeError('Destinos da baixa não confirmados para anexos.')
 +    source_fields = ['FORNECEDOR', 'FILIAL', 'IDPEDIDO', 'IDLANCAMENTOS', 'DESCRITIVOPROVISAO']
 +    source, version = client.get_item_fields_with_etag(child, source_fields, target_list=CHILD)
++    old_links = tuple(_text(expected.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
++    actual_links = tuple(_text(source.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
 +    for key in ('FORNECEDOR', 'FILIAL'):
 +        if not _text(expected.get(key)):
 +            raise RuntimeError('Fornecedor/filial ausente na origem dos anexos.')
-+    old_links = tuple(_text(expected.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
-+    actual_links = tuple(_text(source.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
-+    if actual_links not in {old_links, (str(order_id), str(launch_id))}:
-+        raise RuntimeError('Vínculos financeiros da provisão divergentes.')
 +    for key in ('FORNECEDOR', 'FILIAL', 'DESCRITIVOPROVISAO'):
 +        wanted = parent if key == 'DESCRITIVOPROVISAO' and parent is not None else expected.get(key)
 +        if _text(source.get(key)) != _text(wanted):
 +            raise RuntimeError('Vínculo da provisão alterado antes da cópia de anexos.')
++    if not launch and not order:
++        if actual_links != old_links:
++            raise RuntimeError('Vínculos existentes da provisão mudaram; revise antes de baixar.')
++        if actual_links == ('', ''):
++            return []
++        if not all(actual_links):
++            raise RuntimeError('Vínculos existentes incompletos para os anexos da baixa.')
++        # Singular canonical IDs only. Multi-ID or malformed representations
++        # fail visibly rather than selecting one target and silently losing files.
++        order_id = item_id(source['IDPEDIDO'])
++        launch_id = item_id(source['IDLANCAMENTOS'])
++    else:
++        if not launch or not order:
++            raise RuntimeError('Vínculos incompletos para os anexos da baixa.')
++        launch_id, order_id = item_id(launch['item_id']), item_id(order['item_id'])
++        if (launch.get('target_list') != LAUNCH or order.get('target_list') != ORDER
++                or not _verified(launch.get('verified')) or not _verified(order.get('verified'))):
++            raise RuntimeError('Destinos da baixa não confirmados para anexos.')
++    if actual_links not in {old_links, (str(order_id), str(launch_id))}:
++        raise RuntimeError('Vínculos financeiros da provisão divergentes.')
 +
 +    launch_fields = {key: source[key] for key in ('FORNECEDOR', 'FILIAL')}
 +    launch_fields.update({'IDPGTOAGENDADO': str(child), 'AGRUPAR': str(order_id)})
