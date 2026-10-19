@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alinhamento do menu RH — dados sintéticos</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+</head>
+<body>
+<main id="app"></main>
+<script type="module">
+  import { createChatView } from '../../src/ui/chat-view.js';
+  const view = createChatView(document.querySelector('#app'));
+  const option = (id, label) => ({ id, reply: id, label });
+  view.render({
+    sessionStatus: 'authenticated', account: { name: 'Teste' }, draft: '', pendingFiles: [],
+    messages: [{ id: 'hr-menu', role: 'assistant', type: 'poll',
+      question: '👥 RECURSOS HUMANOS\nQUAL FLUXO VOCÊ DESEJA INICIAR?',
+      options: [
+        option('action_create_supplier_attendance', '➕ CRIAR PRESENÇA DE FORNECEDOR'),
+        option('action_register_hr_activity', '🛠️ CADASTRAR ATIVIDADE'),
+        option('action_hr_registrations', '🗂️ EFETUAR CADASTROS'),
+        option('action_validate_attendance', '👷 VALIDAR PRESENÇAS APONTADAS'),
+        option('action_link_attendance_payment', '🔗 VINCULAR PGTO PRESENÇA'),
+        option('action_hr_reports', '📊 OBTER DADOS'),
+        option('action_contract', '📄 CONTRATO'),
+      ],
+    }],
+  });
+  await document.fonts.ready;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const rect = element => {
+    if (!element) return null;
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  };
+  const menu = document.querySelector('.chat-choice-columns--hr-galleries');
+  const rows = [...menu.querySelectorAll('.chat-hr-menu-row')].map(row => ({
+    row: rect(row), primary: rect(row.querySelector('.chat-choice-columns__flow button')),
+    gallery: rect(row.querySelector('[data-gallery-button]')),
+    ids: [...row.querySelectorAll('[data-reply-id]')].map(button => button.dataset.replyId),
+    buttonsFit: [...row.querySelectorAll('button')].every(button =>
+      button.scrollWidth <= button.clientWidth + 1 && button.scrollHeight <= button.clientHeight + 1),
+  }));
+  document.documentElement.dataset.layout = JSON.stringify({
+    rows, overflow: menu.scrollWidth > menu.clientWidth + 1 || document.documentElement.scrollWidth > innerWidth + 1,
+  });
+</script>
+</body>
+</html>

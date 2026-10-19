@@ -1658,11 +1658,10 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const documentsGallery = isAuditMenu
     ? displayOptions.find(option => draftReplyId(option).trim().toLowerCase() === "action_documents_gallery")
     : null;
-  const hrChoices = isHrGalleryMenu ? orderedChoiceOptions.map((option, index) => {
-    const sideOptions = [];
-    if (index < 2) sideOptions.push(galleryOptions[index]);
-    if (draftReplyId(option).trim().toLowerCase() === "action_validate_attendance") sideOptions.push(galleryOptions[2]);
-    return `<div class="chat-hr-menu-row"><div class="chat-choice-columns__flow"><div class="chat-choice-list">${pollButton(option, busy)}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${sideOptions.filter(Boolean).map(gallery => pollButton(gallery, busy, { galleryButton: true })).join("")}</aside></div>`;
+  const hrChoices = isHrGalleryMenu ? Array.from({ length: Math.max(orderedChoiceOptions.length, galleryOptions.length) }, (_, index) => {
+    const option = orderedChoiceOptions[index];
+    const sideOptions = index < galleryOptions.length ? [galleryOptions[index]] : [];
+    return `<div class="chat-hr-menu-row"><div class="chat-choice-columns__flow"><div class="chat-choice-list">${option ? pollButton(option, busy) : ""}</div></div><aside class="chat-choice-columns__galleries" aria-label="Galerias de RH">${sideOptions.filter(Boolean).map(gallery => pollButton(gallery, busy, { galleryButton: true })).join("")}</aside></div>`;
   }).join("") : "";
   const choicesMarkup = choices
     ? isHrGalleryMenu
