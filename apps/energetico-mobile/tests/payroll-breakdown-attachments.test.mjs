@@ -101,6 +101,41 @@ test('sem provisão preexistente entrega apenas aos vínculos válidos e informa
   const f=fixture({direct:true});f.rows.LANCAMENTOS[91].IDPGTOAGENDADO='';
   const result=await f.submit();assert.equal(result.status,'missing-provision');assert.equal(f.writes.length,2);
 });
+
+function legacyMealFixture() {
+  const f=fixture({direct:true});
+  f.rows.FOLHAPGTO[31].TIPOPGTO='VALE REFEIÇÃO';
+  f.rows.LANCAMENTOS[91].IDPGTOAGENDADO='';
+  f.rows.NOTASPENDENTES[41].FORNECEDOR='OPERADORA ALIMENTAÇÃO';
+  return f;
+}
+
+for(const provider of ['OPERADORA ALIMENTAÇÃO','DIVERSOS'])test(`anexo de alimentação legado usa somente lançamento próprio e pedido vinculado ${provider}`,async()=>{
+  const f=legacyMealFixture();f.rows.NOTASPENDENTES[41].FORNECEDOR=provider;
+  const result=await f.submit();
+  assert.equal(result.status,'missing-provision');
+  assert.deepEqual(f.writes.map(w=>w.slice(0,2)),[['LANCAMENTOS','91'],['NOTASPENDENTES','41']]);
+});
+
+for(const [reason,mutate] of [
+  ['funcionário do pagamento',f=>f.rows.FOLHAPGTO[31].FORNECEDOR='Beto'],
+  ['funcionário do lançamento',f=>f.rows.LANCAMENTOS[91].FORNECEDOR='Beto'],
+  ['folha',f=>f.rows.FOLHAPGTO[31].IDFOLHA='20'],
+  ['filial do lançamento',f=>f.rows.LANCAMENTOS[91].FILIAL='OUTRA'],
+  ['filial do pedido',f=>f.rows.NOTASPENDENTES[41].FILIAL='OUTRA'],
+  ['operadora ausente',f=>f.rows.NOTASPENDENTES[41].FORNECEDOR=''],
+  ['rubrica não alimentar',f=>f.rows.FOLHAPGTO[31].TIPOPGTO='SALÁRIO'],
+  ['provisão existente',f=>{f.rows.LANCAMENTOS[91].IDPGTOAGENDADO='12';f.rows['PROVISÃO PGTOS'][12].TIPOPGTO='VALE REFEIÇÃO';}],
+])test(`pedido de operadora não autoriza anexos quando diverge ${reason}`,async()=>{
+  const f=legacyMealFixture();mutate(f);
+  await assert.rejects(f.submit(),/fornecedor|filial|folha/i);assert.equal(f.writes.length,0);
+});
+
+test('mudança de operadora depois do primeiro upload interrompe os demais destinos',async()=>{
+  const f=legacyMealFixture(),upload=f.repo.uploadAttachment;
+  f.repo.uploadAttachment=async(...args)=>{await upload(...args);f.rows.NOTASPENDENTES[41].FORNECEDOR='OUTRA OPERADORA';};
+  await assert.rejects(f.submit(),/vínculo/i);assert.equal(f.writes.length,1);
+});
 test('arquivo inválido e sessão encerrada impedem todos os uploads',async()=>{
   const f=fixture();await assert.rejects(f.submit([file('texto','programa.exe')]),/tipo/i);f.stop();await assert.rejects(f.submit(),/Sessão/);assert.equal(f.writes.length,0);
 });

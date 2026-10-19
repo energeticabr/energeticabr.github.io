@@ -2,6 +2,7 @@ import Decimal from 'decimal.js';
 import { payrollKey } from './supplier-payroll.js';
 import { payrollFieldKey } from './payroll-editor-policy.js';
 import { createPayrollProvisionReader, payrollProvisionId } from './payroll-provision-source.js';
+import { payrollOrderSupplierMatches } from './payroll-order-ownership.js';
 
 const scalar = value => String(value?.LookupValue ?? value?.Value ?? value?.value ?? value ?? '').trim();
 const identity = value => {
@@ -60,7 +61,12 @@ export function createPayrollBreakdownSourceReader(repository, siteKey) {
       const provisionOrder = provision('IDPEDIDO',true);
       if (provisionOrder !== orderId) throw new Error('O pedido vinculado à provisão mudou.');
     }
-    if (orderId) { const order = await read(['NOTASPENDENTES'],orderId); owned(order); }
+    if (orderId) {
+      const order = await read(['NOTASPENDENTES'],orderId);
+      if (!payrollOrderSupplierMatches({supplier:supplier.label,orderSupplier:order('FORNECEDOR'),paymentType:payment.TIPOPGTO,hasProvision:!!provisionId}))
+        throw new Error('O fornecedor do vínculo financeiro mudou.');
+      if (payrollKey(order('FILIAL')) !== payrollKey(supplier.branch)) throw new Error('A filial do vínculo financeiro mudou.');
+    }
     const decimal = raw => {
       const normalized = raw.includes(',') ? raw.replace(/\./g,'').replace(',','.') : raw;
       if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) throw new Error(`O lançamento ${launchId} contém valores inválidos.`);
