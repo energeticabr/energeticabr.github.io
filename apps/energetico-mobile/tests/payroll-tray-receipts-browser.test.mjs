@@ -14,9 +14,12 @@ test('payroll tray picker selects internally and fits mobile, tablet, desktop an
   const app = resolve(fileURLToPath(new URL('..',import.meta.url)));
   const built = await build({configFile:false,root:join(app,'pwa'),base:'/energetico/',logLevel:'silent',build:{write:false}});
   const css = built.output.filter(a=>a.type==='asset'&&a.fileName.endsWith('.css')).map(a=>a.source).join('\n');
-  const server = await createServer({root:app,server:{host:'127.0.0.1',port:0},logLevel:'silent'});
   const profile = mkdtempSync(join(tmpdir(),'payroll-tray-'));
+  const server = await createServer({root:app,cacheDir:join(profile,'vite-cache'),
+    optimizeDeps:{noDiscovery:true,include:['decimal.js']},
+    server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
   const pending = new Map(); let child,socket;
+  const browserErrors = [];
   try {
     await server.listen();
     child=spawn(browser,['--headless=new','--disable-gpu','--no-first-run','--no-sandbox','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',windowsHide:true});
@@ -27,10 +30,13 @@ test('payroll tray picker selects internally and fits mobile, tablet, desktop an
     socket=new WebSocket(`ws://127.0.0.1:${port}${path}`);
     await new Promise((done,fail)=>{socket.addEventListener('open',done,{once:true});socket.addEventListener('error',fail,{once:true});});
     let seq=0;
-    socket.addEventListener('message',e=>{const r=JSON.parse(e.data),p=pending.get(r.id);if(!p)return;pending.delete(r.id);clearTimeout(p.timer);r.error?p.fail(new Error(r.error.message)):p.done(r.result);});
+    socket.addEventListener('message',e=>{const r=JSON.parse(e.data),p=pending.get(r.id);if(!p){if(r.method==='Runtime.exceptionThrown'||r.method==='Network.loadingFailed'||(r.method==='Log.entryAdded'&&r.params.entry.level==='error'))browserErrors.push({method:r.method,params:r.params});return;}pending.delete(r.id);clearTimeout(p.timer);r.error?p.fail(new Error(r.error.message)):p.done(r.result);});
     const send=(method,params={},sessionId)=>new Promise((done,fail)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);fail(new Error(method+' timed out'));},15000);pending.set(id,{done,fail,timer});socket.send(JSON.stringify({id,method,params,sessionId}));});
     const {targetId}=await send('Target.createTarget',{url:'about:blank'});
     const {sessionId}=await send('Target.attachToTarget',{targetId,flatten:true});
+    await send('Runtime.enable',{},sessionId);
+    await send('Network.enable',{},sessionId);
+    await send('Log.enable',{},sessionId);
     await send('Page.setInterceptFileChooserDialog', {enabled:true}, sessionId);
     const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true},sessionId);assert.ok(!r.exceptionDetails,JSON.stringify(r.exceptionDetails));return r.result.value;};
     for(const [width,pwa] of [[320,false],[390,false],[768,false],[1365,false],[390,true]]){
@@ -38,7 +44,7 @@ test('payroll tray picker selects internally and fits mobile, tablet, desktop an
       await send('Page.navigate',{url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/payroll-tray-receipts.html?width=${width}&pwa=${pwa}`},sessionId);
       let ready=false;
       for(let n=0;n<120&&!ready;n++){ready=await evaluate(`location.search==='?width=${width}&pwa=${pwa}'&&document.documentElement?.dataset.ready==='true'`);if(!ready)await delay(100);}
-      assert.ok(ready, ready ? undefined : JSON.stringify({width,pwa,page:await evaluate(`({url:location.href,ready:document.documentElement?.dataset.ready,text:document.body?.innerText})`)}));
+      assert.ok(ready, ready ? undefined : JSON.stringify({width,pwa,browserErrors,page:await evaluate(`({url:location.href,ready:document.documentElement?.dataset.ready,text:document.body?.innerText})`)}));
       if(pwa)await evaluate(`(()=>{document.querySelectorAll('style,link[rel=stylesheet]').forEach(n=>n.remove());const s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.append(s);})()`);
       const state=await evaluate(`(()=>{const d=document.querySelector('.payroll-receipt-dialog'),r=d.getBoundingClientRect(),c=d.querySelector('[data-receipt-cancel]').getBoundingClientRect(),b=d.querySelector('[data-receipt-search]'),q=b.getBoundingClientRect(),s=d.querySelector('[data-receipt-confirm]').getBoundingClientRect();return {inside:r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight,overflow:d.scrollWidth>d.clientWidth+1,space:q.left-c.right,lastSpace:s.left-q.right,sameRow:c.top===q.top&&q.top===s.top,tap:[c,q,s].every(r=>r.width>=44&&r.height>=44),blue:getComputedStyle(b).backgroundColor,inputs:document.querySelectorAll('input[type=file]').length,options:d.querySelectorAll('input[type=checkbox]').length,inert:document.querySelector('.supplier-payroll-body').inert};})()`);
       assert.ok(state.inside&&!state.overflow&&state.space>=7&&state.lastSpace>=7&&state.sameRow&&state.tap&&state.inert,JSON.stringify(state));
