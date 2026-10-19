@@ -34,6 +34,19 @@ test('provisão pendente guarda arquivo para propagação na baixa sem criar lan
 test('origem direta resolve a provisão pelo lançamento e não aceita IDs de destino do chamador',async()=>{
   const f=fixture({direct:true});await f.submit();assert.equal(f.writes.length,3);
 });
+
+test('anexos da origem direta reconhecem Title FILIAL com espelhos Graph somente leitura',async()=>{
+  const f=fixture({direct:true}),columns=f.repo.getColumns;
+  f.repo.getColumns=async(site,list)=>list!=='LANCAMENTOS'?columns(site,list):[
+    ...(await columns(site,list)).filter(c=>c.name!=='FILIAL'),
+    {name:'Title',displayName:'FILIAL',readOnly:false,text:{}},
+    {name:'LinkTitle',displayName:'FILIAL',readOnly:true},
+    {name:'LinkTitleNoMenu',displayName:'FILIAL',readOnly:true},
+    {name:'LinkTitle2',displayName:'FILIAL',readOnly:true,hidden:true},
+  ];
+  f.rows.LANCAMENTOS[91].Title='OBRA A';delete f.rows.LANCAMENTOS[91].FILIAL;
+  assert.equal((await f.submit()).status,'complete');assert.equal(f.writes.length,3);
+});
 test('troca de folha, fornecedor, filial ou vínculo reverso é recusada antes de qualquer upload',async()=>{
   for(const mutate of [f=>f.rows.FOLHAPGTO[31].IDFOLHA='20',f=>f.rows['PROVISÃO PGTOS'][12].FORNECEDOR='Beto',f=>f.rows.LANCAMENTOS[91].FILIAL='OUTRA',f=>f.rows.LANCAMENTOS[91].IDPGTOAGENDADO='13',f=>f.rows['PROVISÃO PGTOS'][12].IDPEDIDO='42']){
     const f=fixture();mutate(f);await assert.rejects(f.submit(),/vínculo|fornecedor|filial|folha|pedido/i);assert.equal(f.writes.length,0);

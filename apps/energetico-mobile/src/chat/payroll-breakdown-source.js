@@ -28,8 +28,12 @@ export function createPayrollBreakdownSourceReader(repository, siteKey) {
       return (labels, optional = false) => {
         labels = Array.isArray(labels) ? labels : [labels];
         const keys = labels.map(payrollFieldKey);
-        const matches = columns.filter(c => !c.computed && [c.name,c.displayName].some(n => keys.includes(payrollFieldKey(n))));
-        const exact = matches.filter(c => keys.includes(payrollFieldKey(c.name))), found = exact.length ? exact : matches;
+        const matches = columns.filter(c => !c.computed && !c.hidden && [c.name,c.displayName].some(n => keys.includes(payrollFieldKey(n))));
+        const exact = matches.filter(c => keys.includes(payrollFieldKey(c.name)));
+        // Graph can expose read-only LinkTitle mirrors without a computed facet.
+        // A renamed writable Title is the actual source, not those visual links.
+        const writable = matches.filter(c => !c.readOnly);
+        const found = exact.length ? exact : writable.length ? writable : matches;
         if (!found.length && optional) return '';
         if (found.length !== 1) throw new Error(`O campo ${labels[0]} de ${names[0]} não foi identificado de forma única.`);
         return scalar(item.fields?.[found[0].name]);

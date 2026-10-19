@@ -288,6 +288,29 @@ function legacyFixture(){
   return f;
 }
 const legacySupplier={id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'};
+
+test('histórico usa Title renomeado FILIAL e ignora espelhos Graph somente leitura sem facet computed',async()=>{
+  const f=legacyFixture();
+  f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FILIAL');
+  f.columns.LANCAMENTOS.push({name:'Title',displayName:'FILIAL',readOnly:false,text:{}},
+    {name:'LinkTitle',displayName:'FILIAL',readOnly:true},
+    {name:'LinkTitleNoMenu',displayName:'FILIAL',readOnly:true},
+    {name:'LinkTitle2',displayName:'FILIAL',readOnly:true,hidden:true});
+  f.rows.LANCAMENTOS[0].fields.Title='OBRA A';delete f.rows.LANCAMENTOS[0].fields.FILIAL;
+  const context=await f.data.loadPayrollContext(legacySupplier,'2026-10');
+  assert.equal(context.paidTotal,200);assert.equal(f.writes.length,0);
+  f.rows.LANCAMENTOS[0].fields.Title='OUTRA OBRA';
+  await assert.rejects(f.data.loadPayrollContext(legacySupplier,'2026-10'),/filial/i);
+  assert.equal(f.writes.length,0);
+});
+
+test('histórico não escolhe arbitrariamente entre duas colunas graváveis com rótulo FILIAL',async()=>{
+  const f=legacyFixture();
+  f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FILIAL');
+  f.columns.LANCAMENTOS.push({name:'Title',displayName:'FILIAL',text:{}},{name:'Branch2',displayName:'FILIAL',text:{}});
+  await assert.rejects(f.data.loadPayrollContext(legacySupplier,'2026-10'),/FILIAL/);
+  assert.equal(f.writes.length,0);
+});
 for(const [reason,mutate] of [
   ['fornecedor alheio',f=>f.rows.LANCAMENTOS[0].fields.FORNECEDOR='Beto'],
   ['filial alheia',f=>f.rows.LANCAMENTOS[0].fields.FILIAL='OUTRA OBRA'],
