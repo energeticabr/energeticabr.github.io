@@ -4840,8 +4840,11 @@ export function createAppController({
     for (const item of candidates) {
       // Large originals remain available through Open/Share. Do not fetch a
       // second complete copy just to decorate the tray during a mobile upload.
-      if (previewLoading.has(item.previewKey) || item.previewUrl
+      if (item.previewUrl
         || Number(item.size) > AUTO_COMPRESSION_THRESHOLD_BYTES) continue;
+      // Metadata echoes rotate media URLs. Refresh waiting descriptors rather
+      // than stranding earlier files behind the stale URL from the first upload.
+      if (previewLoading.has(item.previewKey) && !previewQueue.has(item.previewKey)) continue;
       previewLoading.add(item.previewKey);
       previewQueue.set(item.previewKey, { item, account: previewAccount, revision: sessionRevision });
     }
@@ -4864,11 +4867,15 @@ export function createAppController({
     const [key, task] = previewQueue.entries().next().value;
     previewQueue.delete(key);
     const { item } = task;
-    const currentItem = () => {
+    const latestItem = () => {
       if (stopped || !account || account !== task.account || sessionRevision !== task.revision) return null;
       const collection = key.startsWith('message:') ? store.getState().messages : store.getState().attachments;
-      return collection.find(candidate => candidate.id === item.id && candidate.mediaUrl === item.mediaUrl
-        && Number(candidate.size || 0) === Number(item.size || 0) && !candidate.previewUrl);
+      return collection.find(candidate => candidate.id === item.id);
+    };
+    const currentItem = () => {
+      const candidate = latestItem();
+      return candidate?.mediaUrl === item.mediaUrl && Number(candidate?.size || 0) === Number(item.size || 0)
+        && !candidate?.previewUrl ? candidate : null;
     };
     previewBusy = true;
     const abort = new AbortController();
@@ -4891,6 +4898,10 @@ export function createAppController({
       if (previewAbort === abort) previewAbort = null;
       previewLoading.delete(key);
       previewBusy = false;
+      const latest = latestItem();
+      if (latest && !latest.previewUrl && (latest.mediaUrl !== item.mediaUrl || Number(latest.size || 0) !== Number(item.size || 0))) {
+        hydrateMediaPreviews();
+      }
       scheduleMediaPreview();
     }
   }
@@ -10588,7 +10599,9 @@ export function createAppController({
     if (uploadCompleted || typeof client.compressAttachment !== "function") return false;
     // The diary accepts batches of originals. Per-file compression is an
     // optional tray action, not another blocking VM round-trip for every photo.
-    if (isConstructionDiaryFlow(store.getState().activeFlow)) return false;
+    const currentFlow = store.getState().activeFlow;
+    if (/^(?:construction_diary|diary|diario_obra|diario_de_obras)(?:_|$)/.test(normalizedChoiceText(currentFlow?.id))
+      || /\bdiario\s+de\s+obras?\b/.test(normalizedChoiceText(currentFlow?.title))) return false;
     const uploadedFile = uploadedItem?.file;
     if (!(Number(uploadedFile?.size) > AUTO_COMPRESSION_THRESHOLD_BYTES)) return false;
     if (hasAttachmentCompressionChoice(result?.messages)) return false;

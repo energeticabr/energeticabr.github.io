@@ -1,0 +1,11 @@
+{
+  "files": {
+    "local_app.py": {
+      "before": "4d6c996ad378a887b9e325d2d17a87e300c1b71c6eacde274f7b24b6fd188e12",
+      "mirrorBefore": "4d6c996ad378a887b9e325d2d17a87e300c1b71c6eacde274f7b24b6fd188e12",
+      "after": "26fce982cd4d48fc83d9f8e3aac078d0bd7cdc89a6c6ba8afc2b1ee1e651216a"
+    }
+  },
+  "patch": "db32730285c796c6a048d4932bf8c3a0f61a46d23f335bd78b35d9c5af0a890b",
+  "archive": "c4e0240bd2cc313fd07825a2532f23e629b5c083baa12a12f4859d325e2b76f8"
+}

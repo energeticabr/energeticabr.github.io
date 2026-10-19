@@ -105,3 +105,71 @@ test('a queued thumbnail cannot redownload an attachment removed from the curren
   t.mock.timers.tick(100); await settle();
   assert.deepEqual(h.fetched, []);
 });
+
+test('a successful batch uses the newest media URLs for all queued attachment previews', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const receipts = [], h = harness(t, receipts), urls = [];
+  h.native.pickDocuments = async () => ['one', 'two'].map(id => ({ name: `${id}.jpg`, type: 'image/jpeg', size: 1000 }));
+  h.client.sendFile = async file => {
+    receipts.push(attachment(file.name));
+    for (const item of receipts) item.mediaUrl = `/api/portal-media/${item.id}-echo-${receipts.length}`;
+    return { status: 'processed', activeFlow: flow, messages: [], attachments: receipts.map(item => ({ ...item })) };
+  };
+  h.client.fetchMedia = async item => { urls.push(item.mediaUrl); return new Blob(['photo'], { type: 'image/jpeg' }); };
+  await h.controller.start(); await h.emit('pick-files');
+  for (let i = 0; i < 4; i++) { t.mock.timers.tick(100); await settle(); }
+  assert.deepEqual(urls, ['/api/portal-media/one.jpg-echo-2', '/api/portal-media/two.jpg-echo-2']);
+  assert.equal(h.store.getState().attachments.every(item => Boolean(item.previewUrl)), true);
+});
+
+test('an in-flight preview invalidated by a new URL queues that current version after it settles', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const receipts = [attachment('one')], h = harness(t, receipts), pending = [];
+  h.client.fetchMedia = item => new Promise(resolve => pending.push({ url: item.mediaUrl, resolve }));
+  await h.controller.start(); t.mock.timers.tick(100); await settle();
+  receipts[0] = { ...receipts[0], mediaUrl: '/api/portal-media/one-renewed' };
+  await h.controller.refreshAttachments();
+  pending[0].resolve(new Blob(['old'], { type: 'image/jpeg' })); await settle();
+  t.mock.timers.tick(100); await settle();
+  assert.deepEqual(pending.map(item => item.url), ['/api/portal-media/one', '/api/portal-media/one-renewed']);
+  pending[1].resolve(new Blob(['current'], { type: 'image/jpeg' })); await settle();
+  assert.match(h.store.getState().attachments[0].previewUrl, /^blob:/);
+});
+
+test('removing an in-flight attachment never restores it or retries its obsolete preview', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const receipts = [attachment('removed')], h = harness(t, receipts);
+  let finish, downloads = 0;
+  h.client.fetchMedia = () => { downloads++; return new Promise(resolve => { finish = resolve; }); };
+  await h.controller.start(); t.mock.timers.tick(100); await settle();
+  receipts.splice(0); await h.controller.refreshAttachments();
+  finish(new Blob(['old'], { type: 'image/jpeg' })); await settle();
+  t.mock.timers.tick(1000); await settle();
+  assert.deepEqual(h.store.getState().attachments, []); assert.equal(downloads, 1);
+});
+
+test('an unchanged unavailable preview is not automatically retried in a loop', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness(t, [attachment('unavailable')]);
+  let downloads = 0;
+  h.client.fetchMedia = async () => { downloads++; throw new Error('404'); };
+  await h.controller.start();
+  for (let i = 0; i < 5; i++) { t.mock.timers.tick(1000); await settle(); }
+  assert.equal(downloads, 1); assert.equal(h.renders.at(-1).error, null);
+});
+
+for (const id of ['construction_stage_registration', 'construction_stage_demonstrative_create']) {
+  test(`${id} keeps its existing compression offer because it is not a work diary`, async t => {
+    const receipts = [], h = harness(t, receipts), activeFlow = { id, title: 'ETAPA DE OBRA' };
+    h.client.sendText = async () => ({ status: 'processed', activeFlow, messages: [], attachments: receipts });
+    h.native.pickDocuments = async () => [{ name: 'report.pdf', type: 'application/pdf', size: 8_000_000 }];
+    h.client.sendFile = async file => {
+      receipts.push({ ...attachment('report', file.size), fileName: file.name, mimeType: file.type });
+      return { status: 'processed', activeFlow, messages: [], attachments: [...receipts] };
+    };
+    let offers = 0;
+    h.client.compressAttachment = async () => { offers++; return { status: 'processed', activeFlow, messages: [], attachments: [...receipts] }; };
+    await h.controller.start(); await h.emit('pick-files');
+    assert.equal(offers, 1);
+  });
+}
