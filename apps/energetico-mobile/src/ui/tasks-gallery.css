@@ -38,7 +38,12 @@
 .tg-metric--done dd { color: #166336; }
 .tg-metric--pending dd { color: #ac2731; }
 .tg-filter-form { padding: 0; }
-.tg-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: end; }
+.tg-toolbar.gallery-create-toolbar.gallery-quick-search-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 46px auto 46px; gap: clamp(6px, 1vw, 8px); align-items: end; }
+.tg-toolbar .tg-sort-toggle { width: 46px; min-width: 46px; height: 46px; padding: 10px; border-radius: 9px; border-color: #b9cede; color: #0d3767; background: #eef6fc; }
+.tg-sort-toggle svg { display: block; width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tg-sort-choices { display: grid; gap: 10px; margin-bottom: 18px; }
+.tg-sort-dialog .tg-sort-choice { width: 100%; min-height: 48px; padding: 12px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.tg-sort-dialog .tg-sort-choice[aria-pressed="true"] { border-color: #07566b; color: #fff; background: #07566b; }
 .tg-toolbar .tg-add-task {
   width: 46px;
   min-width: 46px;

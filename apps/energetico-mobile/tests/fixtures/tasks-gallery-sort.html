@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ordenação de tarefas — dados sintéticos</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+  <link rel="stylesheet" href="../../src/ui/tasks-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+</head>
+<body>
+<script type="module">
+  import { createTasksGallery } from '../../src/ui/tasks-gallery-view.js';
+  let loads = 0;
+  const gallery = createTasksGallery({ document, onCreate: () => {}, data: {
+    listAttachments: async () => [],
+    loadSnapshot: async () => { loads++; return { rows: [
+      { id: '11', fields: { TAREFA: 'Conferir documentos', field_7: '2026-10-01' } },
+      { id: '33', fields: { TAREFA: 'Conferir contratos', field_7: '2026-10-03' } },
+      { id: '22', fields: { TAREFA: 'Conferir relatórios', field_7: '2026-10-02' } },
+    ] }; },
+  } });
+  await gallery.open(); await document.fonts.ready;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const root = document.querySelector('.tg-overlay'), toolbar = root.querySelector('.tg-toolbar');
+  const search = toolbar.querySelector('[data-gallery-quick-search]'), sort = toolbar.querySelector('.tg-sort-toggle');
+  const filter = toolbar.querySelector('.tg-filter-toggle'), add = toolbar.querySelector('[data-action="create-task"]');
+  const rect = element => {
+    const { x, y, width, height, right, bottom } = element.getBoundingClientRect();
+    return { x, y, width, height, right, bottom };
+  };
+  const bar = [search, sort, filter, add].map(rect);
+  sort.click();
+  const dialog = root.querySelector('.tg-sort-dialog'), popup = rect(dialog);
+  const result = {
+    bar, viewport: { width: innerWidth, height: innerHeight },
+    overflow: document.documentElement.scrollWidth > innerWidth + 1,
+    textFits: [...dialog.querySelectorAll('button')].every(button => button.scrollWidth <= button.clientWidth + 1),
+    modalFits: popup.x >= 0 && popup.y >= 0 && popup.right <= innerWidth && popup.bottom <= innerHeight,
+    focusInside: dialog.contains(document.activeElement), inert: root.querySelector('.og-content').inert,
+  };
+  dialog.querySelector('[data-sort-value="id-desc"]').click();
+  result.ids = [...root.querySelectorAll('.tg-card')].map(card => card.dataset.itemId);
+  result.closed = !root.querySelector('.tg-sort-dialog') && document.activeElement === sort;
+  result.loads = loads;
+  if (new URLSearchParams(location.search).get('shot') === 'popup') sort.click();
+  document.documentElement.dataset.layout = JSON.stringify(result);
+</script>
+</body>
+</html>
