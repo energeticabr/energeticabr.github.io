@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import { File } from 'node:buffer';
 import { createPayrollBreakdownView } from '../src/ui/payroll-breakdown-view.js';
 import { validatePayrollBreakdown } from '../src/chat/payroll-breakdown.js';
 import { renderChatMarkup } from '../src/ui/chat-view.js';
@@ -10,7 +11,7 @@ function harness(options = {}) {
   let posts = 0, posted, fail = false;
   const supplier = { id: '7', label: 'FORNECEDOR TESTE', branch: '004 - EDIFÍCIO XAVANTE', profession: 'PEDREIRO' };
   const data = { loadSuppliers: async () => [supplier, { ...supplier, id: '8', label: 'OUTRO FORNECEDOR' }], post: async (draft, progress, changed) => {
-    posts++; posted = structuredClone(draft); const summary = validatePayrollBreakdown(draft); progress.signature = JSON.stringify(summary); changed();
+    posts++; posted = { ...draft, lines:draft.lines.map(line=>({...line})) }; const summary = validatePayrollBreakdown(draft); progress.signature = JSON.stringify(summary); changed();
     if (fail) throw new Error('Rede indisponível');
     return { ...summary, lines: summary.lines.map((line, index) => ({ ...line, id: String(index + 10), parentId: String(index + 20) })) };
   } };
@@ -148,4 +149,42 @@ test('semana passada mostra pagos distintos em cinza e sem campos financeiros ed
   assert.match(week.querySelector('[data-breakdown-payment="32"]').textContent,/1.*120,00/s);
   assert.ok(h.doc.querySelector('[data-breakdown-value="2026-10-23:salary"]'));
   assert.equal(h.posts,0);
+});
+
+const receipt=()=>new File(['recibo'],'salario.pdf',{type:'application/pdf'});
+function choose(h,selector,files) { const input=h.doc.querySelector(selector);assert.ok(input,'cada linha deve oferecer anexos');Object.defineProperty(input,'files',{configurable:true,value:files});input.dispatchEvent(new h.dom.window.Event('change',{bubbles:true})); }
+test('cada rubrica nova oferece anexos, preservados até a conferência sem postar antecipadamente',async t=>{
+  const h=harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');
+  assert.equal(h.doc.querySelectorAll('[data-breakdown-files]').length,42);
+  h.input('[data-breakdown-value="2026-10-02:salary"]','100');choose(h,'[data-breakdown-files="new:2026-10-02:salary"]',[receipt()]);
+  await h.click('[data-breakdown-next]');assert.match(h.doc.querySelector('.payroll-breakdown-review').textContent,/salario.pdf/);assert.equal(h.posts,0);
+  await h.click('[data-breakdown-submit]');assert.equal(h.posted.lines[0].files[0].name,'salario.pdf');
+});
+test('submeter anexos de linha paga usa apenas a operação de anexo e informa destinos',async t=>{
+  const h=harness({now:()=>new Date('2026-10-19T12:00:00Z')});t.after(()=>{h.view.destroy();h.dom.window.close();});
+  h.data.loadPayrollContext=async()=>({sheetId:'19',paid:{salary:100},paidTotal:100,payments:[{id:'31',date:'2026-10-12',rubric:'salary',quantity:1,unitValue:100,total:100}]});
+  const requests=[];h.data.submitAttachments=async request=>{requests.push(request);return {status:'complete'};};
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');
+  await h.click('[data-breakdown-date="2026-10-16"] > summary');choose(h,'[data-breakdown-files="payment:31"]',[receipt()]);
+  await h.click('[data-breakdown-attachments-submit="payment:31"]');assert.equal(requests.length,1);assert.equal(requests[0].paymentId,'31');assert.equal(requests[0].sheetId,'19');
+  assert.match(h.doc.body.textContent,/Provisão.*lançamento.*pedido/s);assert.equal(h.posts,0);
+});
+test('retomada não serializa File e oferece reseleção sem desbloquear os valores financeiros',async t=>{
+  const h=harness();let restored;t.after(()=>{h.view.destroy();restored?.destroy();h.dom.window.close();});
+  h.data.post=async(draft,progress,changed)=>{progress.signature=JSON.stringify(validatePayrollBreakdown(draft));progress.attachments={'2026-10-02:salary':{manifest:[{name:'salario.pdf',size:6,sha256:'a'.repeat(64)}]}};changed();throw new Error('Falha de upload');};
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');
+  h.input('[data-breakdown-value="2026-10-02:salary"]','100');choose(h,'[data-breakdown-files="new:2026-10-02:salary"]',[receipt()]);
+  await h.click('[data-breakdown-next]');await h.click('[data-breakdown-submit]');
+  const saved=JSON.parse(h.dom.window.localStorage.getItem(h.dom.window.localStorage.key(0)));
+  assert.equal('files' in saved.draft.lines[0],false);assert.equal(saved.progress.attachments['2026-10-02:salary'].manifest[0].name,'salario.pdf');
+  h.view.destroy();restored=createPayrollBreakdownView({data:h.data,documentRef:h.doc,sessionKey:'account',storage:h.dom.window.localStorage});await restored.open();
+  assert.match(h.doc.body.textContent,/selecione novamente/i);assert.ok(h.doc.querySelector('[data-breakdown-files="new:2026-10-02:salary"]'));assert.equal(h.doc.querySelector('[data-breakdown-value]'),null);
+});
+test('baixa ocorrida durante envio não duplica no total uma provisão que passou a paga',async t=>{
+  const h=harness();t.after(()=>{h.view.destroy();h.dom.window.close();});let settled=false;
+  h.data.loadPayrollContext=async()=>({sheetId:'19',paid:{salary:settled?100:0},paidTotal:settled?100:0,payments:settled?[{id:'31',date:'2026-10-02',rubric:'salary',quantity:1,unitValue:100,total:100}]:[]});
+  h.data.post=async raw=>{settled=true;const summary=validatePayrollBreakdown(raw);return {...summary,lines:summary.lines.map(line=>({...line,id:'12',parentId:'20',paymentId:'31'}))};};
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');h.input('[data-breakdown-value="2026-10-02:salary"]','100');await h.click('[data-breakdown-next]');await h.click('[data-breakdown-submit]');
+  assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent,/100,00/);assert.doesNotMatch(h.doc.querySelector('.payroll-breakdown-total').textContent,/200,00/);
 });
