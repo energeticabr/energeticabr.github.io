@@ -5,10 +5,10 @@ O popup e os relatórios do menu Pendências usam `DESCRITIVOPROVISAO`. O valor 
 ## Fluxo
 
 1. Selecionar o descritivo (`provision_description:<ID>`).
-2. Revisar quantidade/preço e demais perguntas individuais de cada provisão. Data efetiva, forma de pagamento e observação são comuns, solicitadas uma vez.
+2. Revisar quantidade/preço de cada provisão. Data efetiva, forma de pagamento, observação, decisão de lançar todas as linhas e etapa são comuns, solicitadas uma vez.
 3. Conferir o resumo de todos os itens; antes da confirmação não há gravação financeira.
 4. Gravar e verificar o descritivo, incluindo somatório recalculado e comprovantes novos.
-5. Gravar e verificar cada provisão, em ordem numérica, preservando a criação opcional de pedido/lançamento separado.
+5. Gravar e verificar cada provisão, em ordem numérica. A conversão opcional usa um único pedido e um lançamento por linha, conforme o patch sucessor [`grouped-provision-single-order`](../grouped-provision-single-order/README.md).
 
 `PGTOAGENDADO` no pai é DateTime: sua data de agendamento é preservada. O marcador textual `PAGO` aplica-se somente aos filhos. Campos canônicos de data são resolvidos contra os metadados reais da lista do pai.
 
