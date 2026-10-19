@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0;font:16px Arial,sans-serif}*{box-sizing:border-box}</style></head><body>
+<script type="module">
+import '../../src/ui/meal-voucher.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createMealVoucherData } from '../../src/chat/meal-voucher-data.js';
+import { createMealVoucherView } from '../../src/ui/meal-voucher-view.js';
+try {
+  const names = {
+    FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'], CADASTROCONTA:['CONTA'], LANCAMENTOOBRA:['ETAPA','FILIAL'],
+    IDFOLHA:['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
+    NOTASPENDENTES:['Title','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL'],
+    LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS'],
+  };
+  const columns = Object.fromEntries(Object.entries(names).map(([list, fields]) => [list, fields.map(name => ({ name,
+    displayName:list === 'NOTASPENDENTES' && name === 'Title' ? 'FILIAL' : name,
+    ...(/DATA/.test(name) ? { dateTime:{} } : { text:{} }) }))]));
+  const rows = {
+    FORNECEDORES:[{ id:'1', fields:{ CADASTRO:'Colaborador de teste', STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA TESTE', PROFISSAO:'PEDREIRO' } }],
+    CADASTROCONTA:[{ id:'8', fields:{ CONTA:'CAIXA' } },{ id:'9', fields:{ CONTA:'BANCO' } }],
+    LANCAMENTOOBRA:[{ id:'7', fields:{ ETAPA:'FUNDAÇÃO', FILIAL:'OBRA TESTE' } },{ id:'6', fields:{ ETAPA:'ALVENARIA', FILIAL:'OBRA TESTE' } }],
+    IDFOLHA:[{ id:'11', fields:{ MESREFERENCIA:'10/2026', FORNECEDOR:'Colaborador de teste' } },{ id:'12', fields:{ MESREFERENCIA:'11/2026', FORNECEDOR:'Colaborador de teste' } }],
+    NOTASPENDENTES:[], LANCAMENTOS:[], FOLHAPGTO:[],
+  };
+  let rejectLaunch = true, writes = 0;
+  const repository = {
+    resolveList:async (_site, aliases) => ({ status:'resolved', id:aliases[0] }),
+    getColumns:async (_site, list) => columns[list],
+    getItemsPage:async (_site, list) => ({ items:rows[list], hasMore:false }),
+    getItem:async (_site, list, id) => structuredClone(rows[list].find(row => row.id === String(id))),
+    createItem:async (_site, list, fields) => {
+      if (list === 'LANCAMENTOS' && rejectLaunch) throw new Error('Falha de teste antes do lançamento');
+      const row = { id:String(rows[list].length+1), fields:structuredClone(fields), eTag:'"1"' }; rows[list].push(row); writes++; return row;
+    },
+    updateItem:async (_site, list, id, fields, options) => {
+      const row = rows[list].find(row => row.id === String(id));
+      if (options.eTag !== row.eTag) throw new Error('Versão inválida');
+      Object.assign(row.fields, fields); writes++; return row;
+    }, listAttachments:async () => [],
+  };
+  const data = createMealVoucherData({ repository }), available = await data.loadOptions();
+  const draft = { lines:[{ supplier:available.suppliers[0], quantity:4, unitValue:45 }], orderMode:'new', orderId:'',
+    date:'2026-10-15', dueDate:'2026-10-15', paymentDate:'', referenceMonth:'2026-10', account:available.accounts[0], stage:available.stages[0], obs:'', files:[] };
+  const progress = { operationId:'browser-empty-order' };
+  try { await data.post(draft, progress); } catch (error) { if (!error.message.includes('Falha de teste')) throw error; }
+  localStorage.setItem('energetico:meal-voucher:pending:browser', JSON.stringify({ draft, progress, files:[] }));
+  const view = createMealVoucherView({ data, sessionKey:'browser' }); await view.open();
+  const result = { enabled:true, pickers:true, persists:false, noEarlyWrites:false, noOverflow:true, webLock:false };
+  let releaseLock, acquiredLock;
+  const acquired = new Promise(resolve => { acquiredLock = resolve; });
+  const held = navigator.locks.request(`energetico:meal-voucher:operation:${progress.operationId}`, async () => {
+    acquiredLock(); await new Promise(resolve => { releaseLock = resolve; });
+  });
+  await acquired;
+  try { await data.post(draft, structuredClone(progress)); }
+  catch (error) { result.webLock = error.message.includes('outra tela') && !await data.canEditPending(draft, progress) && writes === 1; }
+  finally { releaseLock(); await held; }
+  const edit = (name, value) => {
+    const input = document.querySelector(`[name="${name}"]`);
+    if (!input || input.disabled) throw new Error(`${name} continua bloqueado`);
+    input.focus(); input.value = value; input.dispatchEvent(new Event('input', { bubbles:true }));
+  };
+  for (const [name, value] of [['meal-date','2026-11-02'],['meal-due-date','2026-11-10'],['meal-payment-date','2026-11-03'],['meal-reference-month','2026-11']]) edit(name, value);
+  for (const [name, label] of [['meal-account','BANCO'],['meal-stage','ALVENARIA']]) {
+    const select = document.querySelector(`[name="${name}"]`), search = select.nextElementSibling.querySelector('[role="combobox"]');
+    if (select.disabled || search.disabled) throw new Error(`${name} continua bloqueado`);
+    search.scrollIntoView({ block:'center' }); search.focus(); search.value = label; search.dispatchEvent(new Event('input', { bubbles:true }));
+    const option = [...select.nextElementSibling.querySelectorAll('[role="option"]')].find(option => option.textContent === label);
+    if (!option || option.getAttribute('aria-disabled') === 'true') throw new Error('Opção indisponível');
+    option.click();
+    if (select.selectedOptions[0].textContent !== label) throw new Error('Escolha não persistiu');
+  }
+  view.close(); await view.open();
+  result.persists = document.querySelector('[name="meal-payment-date"]').value === '2026-11-03';
+  result.noOverflow = [...document.querySelectorAll('.meal-voucher-field')].every(node => node.getBoundingClientRect().right <= innerWidth+1);
+  const wait = async selector => {
+    for (let n=0;n<200;n++) { if (document.querySelector(selector)) return; await new Promise(resolve => setTimeout(resolve,10)); }
+    throw new Error(`A tela não avançou: ${selector}`);
+  };
+  document.querySelector('[data-meal-next]').click(); await wait('[name="meal-obs"]'); edit('meal-obs','Semana corrigida');
+  document.querySelector('[data-meal-next]').click(); await wait('[data-meal-confirm]');
+  result.noEarlyWrites = writes === 1;
+  rejectLaunch = false; document.querySelector('[data-meal-confirm]').click(); await wait('[data-meal-done]');
+  result.orders = rows.NOTASPENDENTES.length; result.launches = rows.LANCAMENTOS.length; result.payroll = rows.FOLHAPGTO.length;
+  result.orderDate = rows.NOTASPENDENTES[0].fields['DATA PEDIDO']; result.orderAccount = rows.NOTASPENDENTES[0].fields.FORMAPGTO;
+  result.paid = rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO']; result.stage = rows.LANCAMENTOS[0].fields.ETAPA; result.sheet = rows.FOLHAPGTO[0].fields.IDFOLHA;
+  document.documentElement.dataset.layout = JSON.stringify(result);
+} catch (error) { document.documentElement.dataset.layout = JSON.stringify({ error:error.stack }); }
+</script></body></html>

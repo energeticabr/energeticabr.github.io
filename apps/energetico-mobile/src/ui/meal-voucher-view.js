@@ -21,16 +21,25 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let available = { suppliers: [], accounts: [], stages: [] }, orders = [], assignments = {}, result = null;
   let progress = {}, draft = {}, expectedFiles = [];
   const storageKey = sessionKey ? `energetico:meal-voucher:pending:${sessionKey}` : '';
+  let pendingSnapshot = null;
   function savedFiles(files) { return files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })); }
-  function clearPending() { if (storageKey) storage.removeItem(storageKey); }
+  function clearPending() {
+    if (storageKey && storage.getItem(storageKey) === pendingSnapshot) { storage.removeItem(storageKey); pendingSnapshot = null; }
+  }
   function savePending() {
     if (!storageKey) return;
+    if (storage.getItem(storageKey) !== pendingSnapshot) {
+      const conflict = new Error('O lote mudou em outra tela. Revise os dados atualizados antes de confirmar.');
+      conflict.code = 'MEAL_DRAFT_CHANGED'; throw conflict;
+    }
     const files = expectedFiles.length && (locked() || !draft.files.length) ? expectedFiles : savedFiles(draft.files);
-    storage.setItem(storageKey, JSON.stringify({ draft: { ...draft, files: [] }, progress, files }));
+    const next = JSON.stringify({ draft: { ...draft, files: [] }, progress, files });
+    storage.setItem(storageKey, next); pendingSnapshot = next;
   }
   function restorePending() {
     if (!storageKey) return false;
     const raw = storage.getItem(storageKey);
+    pendingSnapshot = raw;
     if (!raw) return false;
     let saved;
     try { saved = JSON.parse(raw); } catch { clearPending(); return false; }
@@ -66,7 +75,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     assertSession();
     if (editable) {
       progress.editable = true;
-      for (const name of ['orderId', 'orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
+      for (const name of ['orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
     } else restoreOriginalDraft();
     savePending();
     return editable;
@@ -82,7 +91,17 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     try { assertSession(); await action(); assertSession(); if (!opened || destroyed || epoch !== revision) return false; busy = false; mutating = false; render(); return true; }
     catch (cause) {
       if (opened && !destroyed && epoch === revision) {
-        if (mutation && progress.signature) {
+        if (cause?.code === 'MEAL_DRAFT_CHANGED') {
+          try {
+            if (restorePending()) {
+              const editable = await refreshEditability();
+              if (editable) { step = 'details'; orders = await data.loadOrders(branch()); }
+              else assignments = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier));
+            } else {
+              reset(); draft.lines = available.suppliers.map(supplier => ({ supplier, quantity:'5', unitValue:'' }));
+            }
+          } catch (recoveryError) { cause = recoveryError; }
+        } else if (mutation && progress.signature) {
           try { await refreshEditability(); } catch { progress.editable = false; }
         }
         if (opened && !destroyed && epoch === revision) { busy = false; mutating = false; render(); showError(cause); }
@@ -138,6 +157,11 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     content.append(el('p', '', `Filial: ${branch()} · Total do lote: ${money(mealVoucherTotal(draft.lines))}`));
     if (locked()) {
       content.append(el('p', '', `Pedido escolhido: ${draft.orderMode === 'new' ? 'novo' : `ID ${draft.orderId}`}`));
+      return;
+    }
+    if (progress.orderId && draft.orderMode === 'new') {
+      content.append(el('p', '', `O pedido ${progress.orderId} já foi criado e será reutilizado, sem duplicidade.`));
+      content.append(button('Editar os dados deste pedido', 'data-meal-order-new', () => { step = 'details'; render(); }));
       return;
     }
     content.append(button('Criar pedido novo', 'data-meal-order-new', () => { draft.orderMode = 'new'; draft.orderId = ''; step = 'details'; render(); }));
@@ -261,8 +285,8 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       for (const line of result.lines) list.append(el('li', '', `${line.supplier} · Lançamento ${line.id} · IDFOLHA ${line.sheetId} · Vínculo ${line.payrollId}`));
       content.append(list); footer.append(button('Concluir', 'data-meal-done', close));
     }
-    if (progress.signature && !locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'A tentativa anterior não gerou registros. Você pode corrigir os dados e confirmar novamente.'));
-    if (locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Esta tentativa está protegida para evitar duplicidade. Os dados originais são mantidos; Retomar envia somente os registros pendentes.'));
+    if (progress.signature && !locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Você pode corrigir os dados e confirmar novamente. Se o pedido já foi criado, ele será reutilizado, sem duplicidade.'));
+    if (locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Esta tentativa possui registros gravados ou ainda não foi possível conferi-los. Para evitar duplicidade, a edição está protegida. Retomar envia somente os registros pendentes.'));
     if (locked() && step !== 'summary' && step !== 'done') {
       for (const control of content.querySelectorAll('input, select, textarea, button')) {
         if (step !== 'extras' || !expectedFiles.length || control.type !== 'file') control.disabled = true;
@@ -285,12 +309,14 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   back.addEventListener('click', navigateBack); home.addEventListener('click', () => { if (close()) onHome(); });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
-  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done') savePending(); opened = false; epoch++; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; epoch++; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
   return Object.freeze({
     async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; const inMemory = Boolean(progress.signature); await work(async () => {
       available = await data.loadOptions();
-      const restored = !inMemory && restorePending();
-      if (!inMemory && !restored) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
+      const changedElsewhere = storageKey && storage.getItem(storageKey) !== pendingSnapshot;
+      const restored = (!inMemory || changedElsewhere) && restorePending();
+      if (inMemory && changedElsewhere && !restored) reset();
+      if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
       else {
         const editable = await refreshEditability();
         if (editable) {
