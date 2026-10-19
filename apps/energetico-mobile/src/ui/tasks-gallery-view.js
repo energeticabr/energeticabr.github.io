@@ -8,6 +8,7 @@ import { galleryDeletionFields } from './gallery-deletion-receipt.js';
 import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { createTaskCompletionDialog } from './task-completion-dialog.js';
+import { createTaskSortDialog } from './task-sort-dialog.js';
 import { normalizeGalleryItem } from '../chat/orders-gallery-data.js';
 import { attachGalleryCreateShortcut } from './gallery-create-shortcut.js';
 
@@ -161,6 +162,14 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   });
   toolbar.append(searchField, filterToggle);
   placeGalleryQuickSearch({ input: searchControl, toolbar });
+  const sortToggle = el('button', 'og-button tg-sort-toggle');
+  sortToggle.type = 'button';
+  sortToggle.setAttribute('aria-label', 'Ordenar tarefas');
+  sortToggle.setAttribute('aria-haspopup', 'dialog');
+  sortToggle.setAttribute('aria-expanded', 'false');
+  sortToggle.title = 'Ordenar tarefas';
+  sortToggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3v18m-4-4 4 4 4-4M14 5h7M14 10h5M14 15h3"/></svg>';
+  filterToggle.before(sortToggle);
   const createShortcut = attachGalleryCreateShortcut({ document: doc, root, toolbar, filterToggle, onCreate, close,
     label: 'Adicionar uma nova tarefa', action: 'create-task', className: 'og-button tg-add-task',
     isAvailable: () => opened && !destroyed && !listLoading && !attachmentLoading });
@@ -580,6 +589,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
 
   async function loadSnapshot({ refresh = false } = {}) {
     if (!opened || destroyed) return false;
+    sortDialog.close();
     attachmentCounts.reset();
     const current = session; controller?.abort(); const loadController = controller = new AbortController(); listLoading = true;
     showNotice(""); listStatus.textContent = ''; cards.replaceChildren(); updateBusy();
@@ -598,6 +608,15 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
 
   const autoFilters = bindAutoFilterForm(form, applyLocalFilters);
+  const sortDialog = createTaskSortDialog({
+    document: doc, host: root, background: [header, content, detail],
+    onSelect: value => { sort.value = value; autoFilters.apply(); },
+  });
+  sortToggle.addEventListener('click', () => {
+    if (!opened || destroyed || listLoading || attachmentLoading || pendingMutations || content.inert) return;
+    sortDialog.open(sortToggle, [...sort.options].filter(option => option.value)
+      .map(option => ({ value: option.value, label: option.textContent })), sort.value || 'fatal-asc');
+  });
   doc.defaultView?.addEventListener("resize", refreshExpandButtons);
   clearButton.addEventListener("click", () => { for (const [name, control] of controls) control.value = name === "status" ? DEFAULT_STATUS_FILTER : name === "sort" ? "fatal-asc" : name === "pageSize" ? "10" : ""; sortValue = "fatal-asc"; pageSize = 10; autoFilters.apply(); });
   previous.addEventListener("click", () => { if (page > 1) { page -= 1; renderList(); } });
@@ -611,6 +630,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   }
   function close() {
     if (!opened) return;
+    sortDialog.close();
     recordActions.close();
     completionDialog.close();
     autoFilters.cancelPending();
@@ -618,6 +638,6 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     detail.hidden = true; detail.replaceChildren(); root.hidden = true; updateBusy();
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true }); returnFocus = null;
   }
-  function destroy() { if (destroyed) return; loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
+  function destroy() { if (destroyed) return; sortDialog.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); completionDialog.destroy(); recordActions.destroy(); autoFilters.destroy(); doc.defaultView?.removeEventListener("resize", refreshExpandButtons); close(); destroyed = true; attachmentCounts.destroy(); root.remove(); }
   return Object.freeze({ open, close, destroy, reload: loadSnapshot });
 }
