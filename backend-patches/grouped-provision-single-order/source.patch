@@ -1,0 +1,307 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -1,7 +1,7 @@
+ """Read contracts and durable preparation/settlement of a provision description.
+ 
+ No remote writes before confirmation. Financial children retain their individual
+-amounts and optional launch decisions; shared payment facts belong to the parent.
++amounts; launch choice, stage and one aggregate order belong to the group.
+ """
+ from __future__ import annotations
+ 
+@@ -223,7 +223,99 @@
+         flow['blank_review_fields'] = [item for item in flow.get('blank_review_fields', []) if item['field'] != 'OBS']
+         flow['confirmation_prompt'] = ('CONFIRMA A BAIXA DE TODOS OS ITENS PENDENTES '
+                                        f"DO DESCRITIVO {group['parent_id']}?")
++        launch_phase = group.get('launch_phase') == 'choosing'
++        editing_launch = group.get('editing_common') and group.get('editing_phase') == 'field'
++        for step in flow['steps']:
++            key = step['key']
++            if key in {'submeter_lancamentos', 'resolver_idlancamentos_existente',
++                       'autorizar_novo_lancamento_baixa', 'etapa_baixa', 'tipo_despesa_baixa'}:
++                step['when'] = {'field': '__description_hidden_step__', 'equals': 'SIM'}
++                step['editable'] = key in {'submeter_lancamentos', 'etapa_baixa'}
++                if launch_phase or editing_launch:
++                    if key == 'submeter_lancamentos':
++                        step.pop('when', None)
++                        step['prompt'] = self._description_launch_prompt(state)
++                    elif key == 'etapa_baixa':
++                        step['when'] = {'field': 'submeter_lancamentos', 'equals': 'SIM'}
++                        step['prompt'] = 'QUAL É A ETAPA PARA TODAS AS LINHAS DESTE DESCRITIVO?'
++                    elif key == 'autorizar_novo_lancamento_baixa' and any(
++                            _text(entry['fields'].get('IDLANCAMENTOS')) for entry in group['entries']):
++                        step['when'] = {'field': 'submeter_lancamentos', 'equals': 'SIM'}
++        flow['attachments_after_fields'] = bool(launch_phase or group.get('prepared'))
+         return flow
++
++    def _description_launch_prompt(self, state):
++        group = state['provision_description']
++        lines = [f"DESCRITIVO {group['parent_id']} — RESUMO DAS LINHAS:"]
++        for entry in group['entries']:
++            fields = entry['fields']
++            amount = provision_line_total({**fields, 'FRETE': fields.get('FRETE') or '0'})
++            lines.append(f"PROVISÃO {fields['ID PROVISÃO']} — {_text(fields.get('PRODUTO'))} — "
++                         f"QTD {_text(fields.get('QTD'))} — TOTAL {_currency(amount)}")
++        if any(_text(entry['fields'].get('IDLANCAMENTOS')) for entry in group['entries']):
++            lines.append('ATENÇÃO: HÁ LANÇAMENTOS VINCULADOS. SIM EXIGE A SENHA PARA SUBSTITUÍ-LOS.')
++        lines.append('DESEJA ADICIONAR TODAS ESTAS LINHAS EM LANÇAMENTOS? '
++                     'SERÁ UTILIZADO UM ÚNICO PEDIDO PARA ESTE DESCRITIVO.')
++        return '\n'.join(lines)
++
++    def _description_begin_launch_choice(self, state, etag):
++        group = state['provision_description']
++        group['launch_phase'] = 'choosing'
++        group['prepared'] = False
++        group['index'] = 0
++        for key in ('editing_phase', 'editing_index', 'editing_common'):
++            group.pop(key, None)
++        group.pop('launch_settings', None)
++        # Keep the reviewed line dictionaries intact; this is a group question,
++        # not another pass through the last child's individual fields.
++        state['fields'] = {**copy.deepcopy(group['entries'][0]['fields']), **group['common']}
++        state['answers'] = {}
++        state['selections'] = {}
++        state['options'] = []
++        state.pop('edit_step_indices', None)
++        state.pop('payment_settlement_relink_authorized', None)
++        steps = self._flow_config(state)['steps']
++        state['step_index'] = next(i for i, step in enumerate(steps) if step['key'] == 'submeter_lancamentos')
++        etag = self._save(state, etag)
++        return self._prompt_next_or_summary(state, etag)
++
++    def _description_apply_launch_settings(self, state):
++        group = state['provision_description']
++        answer = _text(state.get('answers', {}).get('submeter_lancamentos')).upper()
++        if answer not in {'SIM', 'NÃO', 'NAO'}:
++            raise RuntimeError('Confirme uma única decisão de lançamento para todas as linhas.')
++        settings = {'submeter_lancamentos': 'SIM' if answer == 'SIM' else 'NÃO',
++                    'ETAPA': state['fields'].get('ETAPA') if answer == 'SIM' else None,
++                    'relink_authorized': bool(state.get('payment_settlement_relink_authorized'))}
++        if answer == 'SIM' and not _text(settings['ETAPA']):
++            raise RuntimeError('Escolha a etapa comum antes de confirmar os lançamentos.')
++        if answer == 'SIM' and any(_text(e['fields'].get('IDLANCAMENTOS')) for e in group['entries']) and not settings['relink_authorized']:
++            raise RuntimeError('A substituição dos lançamentos existentes exige autorização por senha.')
++        if answer == 'SIM':
++            self._description_resolve_expenses(group, group['entries'])
++        group['launch_settings'] = settings
++        group['launch_phase'] = 'done'
++        self._description_sync_launch_settings(group)
++
++    def _description_resolve_expenses(self, group, entries):
++        expense_step = next(step for step in self.config['sharepoint']['payment_settlement_flow']['steps']
++                            if step['key'] == 'tipo_despesa_baixa')
++        for entry in entries:
++            if _text(entry['fields'].get('TIPO DESPESA')):
++                continue
++            options = self.sharepoint.get_options(expense_step, {**entry['fields'], **group['common']})
++            values = list(dict.fromkeys(option.get('value') for option in options if _text(option.get('value'))))
++            if len(values) > 1:
++                raise RuntimeError('O tipo de despesa do produto precisa ser definido antes da baixa.')
++            entry['fields']['TIPO DESPESA'] = values[0] if values else None
++
++    def _description_sync_launch_settings(self, group):
++        settings = group['launch_settings']
++        for entry in group['entries']:
++            entry['answers']['submeter_lancamentos'] = settings['submeter_lancamentos']
++            entry['answers']['etapa_baixa'] = settings.get('ETAPA')
++            entry['fields']['ETAPA'] = settings.get('ETAPA')
++            entry['relink_authorized'] = bool(settings.get('relink_authorized'))
+ 
+     def _description_read_for_settlement(self, parent_id):
+         reader = getattr(self.sharepoint, 'get_provision_description_for_settlement', None)
+@@ -319,7 +411,8 @@
+         if _identity(child.get('DESCRITIVOPROVISAO')) != group['parent_id']:
+             raise RuntimeError('Uma provisão não pertence ao descritivo selecionado.')
+         group['index'] = index
+-        state['fields'] = {key: copy.deepcopy(value) for key, value in child.items() if key in CHILD_FIELDS}
++        state['fields'] = {key: copy.deepcopy(value) for key, value in child.items()
++                           if key in CHILD_FIELDS or key == 'TIPO DESPESA'}
+         state['fields']['ID PROVISÃO'] = _identity(child['Id'])
+         if not index:
+             state['fields']['OBS'] = group['parent'].get('OBS')
+@@ -345,6 +438,22 @@
+         group = state.get('provision_description')
+         if not group or state.get('flow') != 'payment_settlement':
+             return None
++        if (group.get('prepared') and group.get('editing_common')
++                and not group.get('launch_settings') and not (group.get('journal') or {}).get('intent')):
++            group['common'] = _common(state['fields'])
++            return self._description_begin_launch_choice(state, etag)
++        if group.get('prepared') and group.get('editing_phase') != 'field':
++            # Returning from attachment review must not save the group-question
++            # display fields over an individual child entry.
++            return None
++        if group.get('launch_phase') == 'choosing' or (group.get('prepared') and group.get('editing_common')):
++            if group.get('editing_common'):
++                group['common'] = _common(state['fields'])
++            self._description_apply_launch_settings(state)
++            group['prepared'] = True
++            for key in ('editing_phase', 'editing_index', 'editing_common'):
++                group.pop(key, None)
++            return None
+         common = _common(state['fields'])
+         was_prepared = bool(group.get('prepared'))
+         if not group.get('common') or group.get('editing_common'):
+@@ -353,17 +462,24 @@
+         entry['relink_authorized'] = bool(state.get('payment_settlement_relink_authorized'))
+         index = group['index']
+         if index < len(group['entries']):
++            if _text(group['entries'][index]['fields'].get('PRODUTO')) != _text(entry['fields'].get('PRODUTO')):
++                entry['fields']['TIPO DESPESA'] = None
++                if (group.get('launch_settings') or {}).get('submeter_lancamentos') == 'SIM':
++                    self._description_resolve_expenses(group, [entry])
+             group['entries'][index] = entry
+         else:
+             group['entries'].append(entry)
+         if was_prepared:
++            if group.get('launch_settings'):
++                self._description_sync_launch_settings(group)
++            for key in ('editing_phase', 'editing_index', 'editing_common'):
++                group.pop(key, None)
+             return None
+         if index + 1 < len(group['children']):
+             self._description_load_child(state, index + 1)
+             etag = self._save(state, etag)
+             return self._prompt_next_or_summary(state, etag)
+-        group['prepared'] = True
+-        return None
++        return self._description_begin_launch_choice(state, etag)
+ 
+     def _description_edit_step(self):
+         return {'key': 'edit_field', 'prompt': 'QUAL PROVISÃO OU DADO COMUM VOCÊ DESEJA EDITAR?',
+@@ -374,7 +490,7 @@
+         group['editing_phase'] = 'choose'
+         group.pop('editing_index', None)
+         options = [{'id': 'description_edit_back', 'title': '↩️ VOLTAR AO RESUMO', 'value': '__back_to_summary__'},
+-                   {'id': 'description_edit_common', 'title': 'DADOS COMUNS — DATA, FORMA PGTO E OBS', 'value': '__common__'},
++                   {'id': 'description_edit_common', 'title': 'DADOS COMUNS — DATA, FORMA PGTO, OBS, LANÇAMENTOS E ETAPA', 'value': '__common__'},
+                    {'id': 'description_edit_attachments', 'title': '📎 ANEXOS DO DESCRITIVO', 'value': '__edit_attachments__'}]
+         for index, entry in enumerate(group['entries']):
+             fields = entry['fields']
+@@ -423,7 +539,8 @@
+             if index == '__back_to_summary__':
+                 result.append(option)
+             elif isinstance(index, int) and 0 < index < len(steps):
+-                shared = steps[index].get('target_field') in COMMON_FIELDS
++                shared = (steps[index].get('target_field') in COMMON_FIELDS
++                          or steps[index]['key'] in {'submeter_lancamentos', 'etapa_baixa'})
+                 if shared == bool(group.get('editing_common')):
+                     result.append(option)
+         return result
+@@ -488,8 +605,36 @@
+     def _description_commit(self, state, etag, flow):
+         group = state['provision_description']
+         try:
++            entry_ids = [_identity(entry['fields']['ID PROVISÃO']) for entry in group.get('entries', [])]
++            expected_ids = {_identity(row['Id']) for row in group['original_children'] if _pending(row)}
++            if len(entry_ids) != len(set(entry_ids)) or set(entry_ids) != expected_ids:
++                raise RuntimeError('O resumo não contém exatamente uma linha para cada provisão pendente. Revise o descritivo.')
++            if not group.get('launch_settings') and not (group.get('journal') or {}).get('intent'):
++                if any(_text(e.get('answers', {}).get('submeter_lancamentos')).upper() == 'SIM'
++                       for e in group.get('entries', [])):
++                    return self._description_begin_launch_choice(state, etag)
++            if (group.get('journal') or {}).get('intent') and not group.get('launch_settings') and any(
++                    _text(e.get('answers', {}).get('submeter_lancamentos')).upper() == 'SIM'
++                    for e in group.get('entries', [])):
++                raise RuntimeError('Esta baixa foi iniciada no formato anterior. Os vínculos existentes '
++                                   'precisam ser conferidos antes de continuar; nenhum novo pedido foi criado.')
+             if not group.get('prepared') or len(group['entries']) != len(group['children']):
+                 raise RuntimeError('Todos os itens precisam ser revisados antes da baixa.')
++            if group.get('launch_settings'):
++                self._description_sync_launch_settings(group)
++                if group['launch_settings']['submeter_lancamentos'] == 'SIM':
++                    fields = [entry['fields'] for entry in group['entries']]
++                    for key in ('FILIAL', 'FORNECEDOR'):
++                        values = {_text(row.get(key)).casefold() for row in fields}
++                        if len(values) != 1 or not next(iter(values)):
++                            raise RuntimeError('Um único pedido exige a mesma filial e fornecedor em todas as linhas.')
++                    if not _text(group['launch_settings'].get('ETAPA')):
++                        raise RuntimeError('A etapa comum é obrigatória para os lançamentos.')
++                    if any(_text(row.get('IDLANCAMENTOS')) for row in fields) and not group['launch_settings'].get('relink_authorized'):
++                        raise RuntimeError('A substituição dos lançamentos existentes exige autorização por senha.')
++                    if any(_text(row.get('IDPEDIDO')) for row in group['original_children']):
++                        raise RuntimeError('Este descritivo já possui pedido vinculado. Confira os vínculos existentes '
++                                           'antes de gerar novos lançamentos; nenhum novo pedido foi criado.')
+             # Same-host coordination complements remote conditional writes.
+             # The namespace is distinct from DOCUMENTOS locks, using a stable
+             # large positive key; no document ID in the supported SP range collides.
+@@ -562,6 +707,30 @@
+                 journal['parent'] = {'item_id': int(group['parent_id']), 'target_list': PARENT_LIST,
+                                      'verified': parent_verification, 'attachment_names': names}
+                 etag = self._save(state, etag)
++                shared_order = None
++                if (group.get('launch_settings') or {}).get('submeter_lancamentos') == 'SIM':
++                    first = group['entries'][0]['fields']
++                    order_total = _sum(provision_line_total({**e['fields'], 'FRETE':e['fields'].get('FRETE') or '0'})
++                                       for e in group['entries'])
++                    order_fields = {'FILIAL':first['FILIAL'], 'FORNECEDOR':first['FORNECEDOR'],
++                                    'VALORTOTAL':_canonical(order_total), 'DATA PEDIDO':common['DATA PGTO EFETUADO'],
++                                    'STATUS':'PENDENTE AUDITORIA', 'FORMAPGTO':common['FORMAPGTO'], 'NOTA FISCAL':'PENDENTE'}
++                    if _text(common['OBS']):
++                        order_fields['OBS'] = common['OBS']
++                    intent = {'token':f"WA-BAIXA-PEDIDO-DESCRITIVO-{group['parent_id']}", 'fields':order_fields}
++                    if journal.get('order_intent') and journal['order_intent'] != intent:
++                        raise RuntimeError('Os dados do pedido comum mudaram durante a retomada.')
++                    journal['order_intent'] = copy.deepcopy(intent)
++                    etag = self._save(state, etag)
++                    order_id = self.sharepoint.ensure_item(intent['token'], order_fields,
++                        target_list='NOTASPENDENTES', idempotency_field='Title', merge_existing=False)
++                    verified = self.sharepoint.verify_item(order_id, order_fields, [], target_list='NOTASPENDENTES')
++                    if not _verified(verified):
++                        raise RuntimeError('Não foi possível confirmar o pedido único do descritivo.')
++                    shared_order = {'item_id':order_id, 'target_list':'NOTASPENDENTES',
++                                    'expected_fields':copy.deepcopy(order_fields), 'verified':verified}
++                    journal['shared_order'] = copy.deepcopy(shared_order)
++                    etag = self._save(state, etag)
+                 for item_id in sorted(entries, key=int):
+                     if item_id in journal['children']:
+                         saved = journal['children'][item_id]
+@@ -584,6 +753,8 @@
+                     child_state['payment_settlement_relink_authorized'] = entry['relink_authorized']
+                     child_state['_description_child_commit'] = True
+                     child_state['_description_child_etag'] = child_etag
++                    if shared_order:
++                        child_state['_description_shared_order'] = copy.deepcopy(shared_order)
+                     journal['in_flight'] = {'id': item_id, 'expected_fields': copy.deepcopy(child_state['fields'])}
+                     etag = self._save(state, etag)
+                     def checkpoint(expected_fields, prepared_record):
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -33270,13 +33270,18 @@
+                 }
+                 if context.get("OBS") not in {None, ""}:
+                     pending_fields["OBS"] = context["OBS"]
+-                pending_id = self.sharepoint.ensure_item(
+-                    f"WA-BAIXA-PEDIDO-{state['batch_id']}",
+-                    pending_fields,
+-                    target_list="NOTASPENDENTES",
+-                    idempotency_field="Title",
+-                    merge_existing=False,
+-                )
++                shared_order = state.get("_description_shared_order") if state.get("_description_child_commit") else None
++                if shared_order:
++                    pending_id = int(shared_order["item_id"])
++                    pending_fields = shared_order["expected_fields"]
++                else:
++                    pending_id = self.sharepoint.ensure_item(
++                        f"WA-BAIXA-PEDIDO-{state['batch_id']}",
++                        pending_fields,
++                        target_list="NOTASPENDENTES",
++                        idempotency_field="Title",
++                        merge_existing=False,
++                    )
+                 pending_verification = self.sharepoint.verify_item(
+                     pending_id,
+                     pending_fields,
+@@ -33288,6 +33293,11 @@
+                     "target_list": "NOTASPENDENTES",
+                     "verified": pending_verification,
+                 }
++                if shared_order and not (pending_verification is True or (
++                    isinstance(pending_verification, dict) and pending_verification.get("fields") is True
++                    and pending_verification.get("attachments") is True
++                )):
++                    raise RuntimeError("O pedido comum não foi confirmado; nenhum lançamento será criado.")
+ 
+                 launch_fields = {
+                     "FILIAL": context["FILIAL"],
