@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 
 async function setup(t, overrides = {}) {
@@ -247,7 +246,7 @@ test("G28 segue o cartão compacto da referência sem atalho de detalhes", async
   const card = ctx.root().querySelector('.pg-card[data-item-id="313"]');
   assert.equal(card.querySelector(".pg-card-heading .pg-status"), null, "a situação prevista não duplica o prazo");
   assert.equal(card.querySelector(".pg-card-heading h2").textContent, "ML COMERCIO CIMENTO");
-  assert.equal(card.querySelectorAll(".pg-card-grid .pg-card-field:not(.pg-summary-field--wide)").length, 6);
+  assert.equal(card.querySelectorAll(".pg-card-grid .pg-card-field:not(.pg-summary-field--wide)").length, 7);
   assert.match(card.querySelector('.pg-card-field[data-field="FILIAL"]').textContent, /004 - EDIFÍCIO XAVANTE/);
   assert.match(card.querySelector('.pg-card-field[data-field="IMÓVEL"]').textContent, /TODOS/);
   assert.match(card.querySelector('.pg-description').textContent, /Cimento entregue/);
@@ -272,7 +271,7 @@ test("G28 apresenta provisão sem anexos no cartão compacto da segunda referên
   assert.equal(card.querySelector(".pg-description-label").textContent, "Descrição");
   assert.equal(card.querySelector(".pg-description strong").textContent, "SEGURO PARA 7 TRABALHADORES CONFORME CCT");
   assert.deepEqual([...card.querySelectorAll(".pg-card-grid .pg-card-field")].map(field => field.dataset.field), [
-    "DATA PREVISTA PGTO", "VALOR UNITÁRIO", "QTD", "FILIAL", "IMÓVEL", "AGENDAMENTO", "FRETE",
+    "VALOR UNITÁRIO", "QTD", "FRETE", "DATA PREVISTA PGTO", "FILIAL", "IMÓVEL", "AGENDAMENTO",
   ]);
   assert.equal(card.querySelector('.pg-card-field[data-field="DATA PREVISTA PGTO"] dt').textContent, "Data prevista pgto");
   assert.equal(card.querySelector('.pg-card-field[data-field="QTD"] dt').textContent, "Qtd.");
@@ -294,6 +293,29 @@ test("G28 mantém um status pendente específico mesmo quando o prazo é mostrad
   assert.equal(card.querySelector(".pg-card-heading .pg-status")?.textContent, "PENDENTE APROVAÇÃO");
 });
 
+test("G28 identifica fornecedor e vencimento junto ao ID com ícones sem esconder ações", async t => {
+  const ctx = await setup(t, { rows: [{ id: '332', hasAttachments: false, fields: {
+    ID: 332, FORNECEDOR: 'SWILE', STATUS: 'PAGAMENTO PREVISTO', DATAPGTOPREVISTO: '2026-10-15',
+    VALORTOTAL: 1, QTD: 1, DESCRICAOPGTO: 'VALE ALIMENTAÇÃO', OBS: 'Observação independente',
+  } }], now: () => new Date('2026-10-18T12:00:00-03:00') });
+  await ctx.gallery.open();
+  const card = ctx.root().querySelector('.pg-card');
+  assert.match(card.querySelector('.pg-id-badge')?.textContent || '', /332.*VENCIDO HÁ 3 DIAS/);
+  assert.equal(card.querySelector('.pg-heading-copy .pg-supplier-label')?.textContent, 'Fornecedor');
+  assert.ok(card.classList.contains('pg-card--overdue'));
+  assert.equal(card.querySelector('.pg-heading-copy h2')?.textContent, 'SWILE');
+  for (const panel of [card.querySelector('.pg-heading-copy'), card.querySelector('.pg-card-total'),
+    card.querySelector('.pg-description'), ...card.querySelectorAll('.pg-summary-field')]) {
+    assert.ok(panel.querySelector('svg[aria-hidden="true"] path[d]'), 'decorative vector icon in each data cluster');
+  }
+  assert.ok(card.querySelector('.pg-card-values .pg-card-total'));
+  assert.ok(card.querySelector('.pg-card-values .pg-description'));
+  assert.ok(card.querySelector('.pg-card-heading [data-gallery-action="edit"]'));
+  assert.ok(card.querySelector('.pg-card-heading [data-gallery-action="delete"]'));
+  assert.match(card.querySelector('.pg-observation').textContent, /Observação independente/);
+  assert.equal(ctx.calls.filter(([operation]) => operation !== 'snapshot').length, 0, 'rendering does not mutate data');
+});
+
 test("G28 separa total calculado, preço unitário e frete sem duplicar a multiplicação", async t => {
   const fixtures = [
     { id: "501", amount: 120.25, quantity: 2, freight: 5, total: "R$ 245,50", unit: "R$ 120,25", shipping: "R$ 5,00" },
@@ -312,14 +334,14 @@ test("G28 separa total calculado, preço unitário e frete sem duplicar a multip
   for (const fixture of fixtures) {
     const card = ctx.root().querySelector(`.pg-card[data-item-id="${fixture.id}"]`);
     const total = card.querySelector(".pg-card-total");
-    assert.ok(total, "total calculado deve aparecer ao lado do lápis");
+    assert.ok(total, "total calculado deve aparecer no bloco financeiro");
     assert.equal(normalText(total.querySelector("strong")), fixture.total);
     assert.equal(normalText(card.querySelector('[data-field="VALOR UNITÁRIO"] dd')), fixture.unit);
     assert.equal(normalText(card.querySelector('[data-field="VALOR UNITÁRIO"] dt')), "Valor unitário");
     assert.equal(normalText(card.querySelector('[data-field="FRETE"] dd')), fixture.shipping);
     assert.equal(card.querySelector('[data-field="VALOR TOTAL"]'), null, "grade não confunde unitário com total");
     const edit = card.querySelector('[data-gallery-action="edit"]');
-    assert.ok(total.compareDocumentPosition(edit) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(edit.compareDocumentPosition(total) & ctx.dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   }
 });
 
@@ -462,16 +484,4 @@ test("falha da lista SharePoint fica visível com opção de tentar novamente", 
   await settle();
   assert.equal(loads, 2);
   assert.match(ctx.root().querySelector(".pg-list-status").textContent, /Nenhum pagamento/i);
-});
-
-test("layout G28 mantém filtros compactos e seis dados em grade de três colunas", () => {
-  const styles = readFileSync(new URL("../src/ui/orders-gallery.css", import.meta.url), "utf8");
-  assert.match(styles, /\.pg-filter-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
-  assert.match(styles, /\.pg-cards\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
-  assert.match(styles, /\.pg-card-fields\.pg-card-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s);
-  assert.match(styles, /\.pg-overlay \.pg-card\.gallery-record-card[^}]*display:\s*block/s);
-  assert.match(styles, /\.pg-description\s*\{[^}]*background:/s);
-  assert.match(styles, /\.pg-list-toolbar\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s);
-  assert.match(styles, /\.pg-deadline--today[^}]*color:/s);
-  assert.match(styles, /\.pg-deadline--overdue[^}]*color:/s);
 });

@@ -10,7 +10,7 @@ import { createServer } from "vite";
 
 const appRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const browser = [process.env.CHROME_BIN, "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"].find(path => path && existsSync(path));
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
 
 test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", { timeout: 90_000 }, async t => {
   if (!browser) return t.skip("Chrome/Edge indisponível");
@@ -55,7 +55,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
       return response.result.value;
     };
     const port = server.httpServer.address().port;
-    for (const [width, height, expectedColumns] of [[390, 844, 3], [320, 740, 2], [1365, 768, 3], [844, 390, 3]]) {
+    for (const [width, height] of [[390, 844], [320, 740], [430, 932], [700, 1000], [1024, 768], [1365, 768], [844, 390]]) {
       await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/payment-programming-gallery-responsive.html?width=${width}` }, sessionId);
       let ready = false;
@@ -70,12 +70,16 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
         const fields = [...card.querySelectorAll('.pg-card-grid .pg-card-field')];
         const actions = [...card.querySelectorAll('.gallery-record-actions > button')].map(button => button.getBoundingClientRect());
         const titleRect = card.querySelector('.pg-card-heading h2').getBoundingClientRect();
-        const totalsAligned = [...document.querySelectorAll('.pg-card')].every(item => {
+        const valueClustersAligned = [...document.querySelectorAll('.pg-card')].every(item => {
           const total = item.querySelector('.pg-card-total').getBoundingClientRect();
-          const edit = item.querySelector('[data-gallery-action="edit"]').getBoundingClientRect();
-          return total.right <= edit.left && Math.abs((total.top+total.bottom)/2 - (edit.top+edit.bottom)/2) < 1;
+          const description = item.querySelector('.pg-description').getBoundingClientRect();
+          const heading = item.querySelector('.pg-card-heading').getBoundingClientRect();
+          return total.top >= heading.bottom && Math.abs(total.top-description.top) < 1 && total.right <= description.left;
         });
-        const grid = getComputedStyle(card.querySelector('.pg-card-grid'));
+        const box = label => card.querySelector('[data-field="'+label+'"]').getBoundingClientRect();
+        const unit = box('VALOR UNITÁRIO'), quantity = box('QTD'), freight = box('FRETE');
+        const due = box('DATA PREVISTA PGTO'), branch = box('FILIAL'), property = box('IMÓVEL'), schedule = box('AGENDAMENTO');
+        const totalStyle = getComputedStyle(card.querySelector('.pg-card-total'));
         const cardRect = card.getBoundingClientRect();
         const attachedRect = attached.getBoundingClientRect();
         const attachedChildrenOutside = [...attached.querySelectorAll('*')].filter(node => {
@@ -90,14 +94,18 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
           cardOverflow: card.scrollWidth > card.clientWidth + 1,
           attachedCardOverflow: attached.scrollWidth > attached.clientWidth + 1,
           attachedChildrenOutside,
-          fieldColumns: grid.gridTemplateColumns.split(' ').length,
+          metricsTogether: Math.abs(unit.top-quantity.top)<1 && Math.abs(unit.top-freight.top)<1 && unit.right<=quantity.left && quantity.right<=freight.left,
+          pairsTogether: Math.abs(due.top-branch.top)<1 && Math.abs(property.top-schedule.top)<1 && due.right<=branch.left && property.right<=schedule.left && due.top>=unit.bottom && property.top>=due.bottom,
+          totalHighlighted: totalStyle.color === 'rgb(23, 103, 55)' && totalStyle.backgroundColor !== 'rgba(0, 0, 0, 0)',
+          identifierContainsDeadline: !!card.querySelector('.pg-id-badge .pg-deadline'),
+          decorativeIcons: [...card.querySelectorAll('svg.pg-card-icon[aria-hidden="true"]')].filter(n=>n.getBoundingClientRect().width>0).length >= 10,
           fieldCount: fields.length,
-          totalsAligned,
+          valueClustersAligned,
           total: card.querySelector('.pg-card-total strong').textContent.replace(/\\s+/g, ' '),
           attachedTotal: attached.querySelector('.pg-card-total strong').textContent.replace(/\\s+/g, ' '),
           unit: attached.querySelector('[data-field="VALOR UNITÁRIO"] dd').textContent.replace(/\\s+/g, ' '),
           freight: attached.querySelector('[data-field="FRETE"] dd').textContent.replace(/\\s+/g, ' '),
-          actionsSideBySide: actions.length === 2 && Math.abs(actions[0].top - actions[1].top) < 1,
+          actionsSideBySide: actions.length === 2 && actions.every(r=>r.width>=44 && r.height>=44) && Math.abs(actions[0].top - actions[1].top) < 1,
           descriptionAboveFields: card.querySelector('.pg-description').getBoundingClientRect().bottom <= fields[0].getBoundingClientRect().top,
           emptyRail: Boolean(card.querySelector('.pg-attachment-rail')),
           attachedRail: Boolean(attached.querySelector('.pg-attachment-rail')),
@@ -107,13 +115,14 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
       assert.ok(layout.documentWidth <= width && layout.cardRight <= width + 1 &&
         !layout.contentOverflow && !layout.cardOverflow && !layout.attachedCardOverflow && layout.attachedChildrenOutside.length === 0,
         `G28 extrapola a tela ${width}px: ${JSON.stringify(layout)}`);
-      assert.equal(layout.fieldColumns, expectedColumns, `grade de ${width}px: ${JSON.stringify(layout)}`);
+      assert.ok(layout.metricsTogether && layout.pairsTogether, `grade financeira e pares de ${width}px: ${JSON.stringify(layout)}`);
       assert.equal(layout.fieldCount, 7);
       assert.equal(layout.total, "R$ 89,99");
       assert.equal(layout.attachedTotal, "R$ 1.250,00");
       assert.equal(layout.unit, "R$ 120,00");
       assert.equal(layout.freight, "R$ 50,00");
-      assert.ok(layout.totalsAligned, `total à esquerda do lápis em ${width}px: ${JSON.stringify(layout)}`);
+      assert.ok(layout.valueClustersAligned && layout.totalHighlighted && layout.identifierContainsDeadline && layout.decorativeIcons,
+        `blocos coloridos e cabeçalho em ${width}px: ${JSON.stringify(layout)}`);
       assert.ok(layout.actionsSideBySide && layout.descriptionAboveFields && !layout.emptyRail && layout.attachedRail && !layout.headerOverlap,
         `composição de ${width}px: ${JSON.stringify(layout)}`);
       if (width === 390 && process.env.PAYMENT_GALLERY_SCREENSHOT) {

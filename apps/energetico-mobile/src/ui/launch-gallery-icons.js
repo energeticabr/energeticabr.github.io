@@ -8,6 +8,10 @@ const PATHS = {
   calculator: 'M5 2h14v20H5zM8 5h8v4H8zM8 13h1M14 13h2M8 17h1M14 17h2',
   payment: 'M2 4h20v16H2zM2 9h20M6 15h5M16 15h2',
   money: 'M3 6c0-4 12-4 12 0s-12 4-12 0ZM3 6v10c0 4 12 4 12 0V6M3 11c0 4 12 4 12 0M15 10c9-2 10 4 3 5M15 15c9-2 10 4 3 5',
+  currency: 'M12 2v20M17 6H9a4 4 0 0 0 0 8h6a4 4 0 0 1 0 8H6',
+  branch: 'M4 22V2h13v20M1 22h21M17 12h4v10M7 6h1M12 6h1M7 10h1M12 10h1M7 14h1M12 14h1M8 22v-4h5v4',
+  property: 'm3 11 9-9 9 9v11H3V11Z',
+  clock: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM12 5v7h6',
 };
 
 export function launchGalleryIcon(doc, name) {
