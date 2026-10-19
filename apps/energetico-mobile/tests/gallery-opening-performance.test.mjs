@@ -41,10 +41,13 @@ for (const entry of cases) {
       : root.querySelector('[data-filter-field="FILIAL"]');
     assert.equal(control.disabled, true);
     assert.equal(control.getAttribute('aria-busy'), 'true', 'only the unfinished filter is loading');
+    const card = root.querySelector('.tg-card, [data-registration-row]');
     catalog.resolve([{ value: 'QA', label: 'QA' }]);
     await opening; await settle(); await settle();
     assert.notEqual(control.getAttribute('aria-busy'), 'true');
     assert.equal(control.disabled, false);
+    assert.equal(root.querySelector('.tg-card, [data-registration-row]'), card,
+      'catalog completion must not replace cards the user may already be interacting with');
   });
 }
 

@@ -516,7 +516,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       control.replaceChildren(option("Todos", ""), ...options.map(item => option(item.label, String(item.value))));
       if (fixedValue && !options.some(item => String(item.value) === fixedValue)) control.append(option(fixedValue, fixedValue));
       retainProvisionStatusFilter(field, control, desiredValue);
-      if (refresh && desiredValue && ![...control.options].some(item => item.value === desiredValue)) control.append(option(selectedLabel || desiredValue, desiredValue));
+      if (desiredValue && ![...control.options].some(item => item.value === desiredValue)) control.append(option(selectedLabel || desiredValue, desiredValue));
       control.value = fixedValue || ([...control.options].some(item => item.value === desiredValue) ? desiredValue : "");
       control.disabled = policy?.disabled === true;
     } catch {
@@ -698,13 +698,17 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (!model.readOnly) card.append(recordActions.render(row));
       list.append(card);
     }
-    feedback.textContent = loadFailed
-      ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
-      : [...filterErrors.values()].join(" ") || attachmentNotice || (filtered.length ? `${filtered.length} registro(s)` : "Nenhum registro encontrado.");
+    updateFeedback(filtered.length);
     pageText.textContent = `Página ${page} de ${pages}`;
     previous.disabled = page <= 1;
     next.disabled = page >= pages;
     requestAttachmentCounts(visibleRows);
+  }
+
+  function updateFeedback(count = filteredRows().length) {
+    feedback.textContent = loadFailed
+      ? `Não foi possível carregar ${model.title.toLowerCase()}. Tente atualizar.`
+      : [...filterErrors.values()].join(" ") || attachmentNotice || (count ? `${count} registro(s)` : "Nenhum registro encontrado.");
   }
 
   async function openAttachments(row) {
@@ -761,11 +765,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     // busy while the complete records, totals and ordinary filters become usable.
     void populateCatalogFilters([...filterSources.keys()], { refresh }).then(() => {
       if (!destroyed && !root.hidden && root.isConnected && current === request && !loadFailed
-        && root.getAttribute("aria-busy") === "false") render();
+        && root.getAttribute("aria-busy") === "false") updateFeedback();
     }).catch(() => {
       if (!destroyed && !root.hidden && current === request) {
         filterErrors.set("catalog", "Não foi possível carregar os filtros. Tente atualizar.");
-        if (root.getAttribute("aria-busy") === "false") render();
+        if (root.getAttribute("aria-busy") === "false") updateFeedback();
       }
     });
     try {
