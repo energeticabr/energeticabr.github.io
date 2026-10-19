@@ -120,6 +120,25 @@ export function classifyRhidPunch(value) {
   return RHID_SLOTS.find(([, , start, end]) => minutes >= start && minutes <= end)?.[0] || null;
 }
 
+// Infer a shifted lunch only from a unique, approximately one-hour raw pair
+// between known morning/evening punches. Never replace an already complete lunch.
+function assignShiftedRhidLunch(candidates, outside) {
+  const recognized = new Set();
+  if ((candidates.exit1.length && candidates.entry2.length)
+    || ![1, 2].includes(candidates.entry1.length) || ![1, 2].includes(candidates.exit2.length)) return recognized;
+  const midday = [...candidates.exit1, ...candidates.entry2,
+    ...outside.filter(time => time >= '11:00' && time <= '14:30')].sort();
+  if (midday.length !== 2) return recognized;
+  const [departure, arrival] = midday;
+  const minutes = time => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+  const interval = minutes(arrival) - minutes(departure);
+  if (departure > '13:30' || interval < 45 || interval > 90) return recognized;
+  candidates.exit1 = [departure];
+  candidates.entry2 = [arrival];
+  recognized.add(departure); recognized.add(arrival);
+  return recognized;
+}
+
 // Only fill genuinely empty raw slots. Keep in-range punches/duplicates in place,
 // respect chronological neighbours and retain the outside-range warning for audit.
 function assignOutsideRhidPunches(candidates, outside, adjustments) {
@@ -277,7 +296,9 @@ export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false 
       if (slot) candidates[slot].push(time);
       else outside.push(time);
     }
-    const outsideSlots = assignOutsideRhidPunches(candidates, outside, person.adjustments);
+    const shiftedLunch = assignShiftedRhidLunch(candidates, outside);
+    const unclassifiedOutside = outside.filter(time => !shiftedLunch.has(time));
+    const outsideSlots = assignOutsideRhidPunches(candidates, unclassifiedOutside, person.adjustments);
     const issues = [];
     const slots = {};
     for (const [slot, label] of RHID_SLOTS) {
@@ -296,7 +317,7 @@ export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false 
         adjustment, outOfRange: outsideSlots.has(slot),
       };
     }
-    for (const time of outside) issues.push(`Batida fora das faixas: ${time}`);
+    for (const time of unclassifiedOutside) issues.push(`Batida fora das faixas: ${time}`);
     for (const time of person.duplicates) issues.push(`Batidas duplicadas no RHID: ${time}`);
     for (const time of person.malformed) issues.push(`Batida inválida do RHID: ${time}`);
     const ordered = RHID_SLOTS.map(([slot]) => slots[slot].effective).filter(Boolean);
