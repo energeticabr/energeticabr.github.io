@@ -122,6 +122,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
   let rows = []; let filteredRows = []; let page = 1; let pageSize = 10; let listLoading = false; let attachmentLoading = false;
   let filterValues = Object.create(null); let sortValue = "fatal-asc"; let controller = null; let detailsSession = 0;
   let supplierOptions = [];
+  let supplierRequest = 0;
 
   const root = el("section", "og-overlay tg-overlay");
   root.hidden = true; root.tabIndex = -1; root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true");
@@ -548,34 +549,44 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     }
   }
 
+  async function loadSuppliers() {
+    const current = session, loadController = controller, request = ++supplierRequest;
+    const active = () => opened && !destroyed && root.isConnected && current === session
+      && controller === loadController && request === supplierRequest;
+    const control = controls.get("supplier");
+    control.disabled = true; control.setAttribute("aria-busy", "true");
+    supplierNotice.hidden = false; supplierNotice.textContent = "Carregando fornecedores…";
+    try {
+      const options = typeof data.loadFilterOptions === "function"
+        ? await data.loadFilterOptions("FORNECEDOR", { signal: loadController.signal, refresh: true }) : [];
+      if (!active()) return;
+      if (!Array.isArray(options) || options.some(option => typeof option?.value !== "string")) {
+        throw new Error("A consulta não retornou opções de fornecedores válidas.");
+      }
+      supplierOptions = options;
+      filterOptions(); control.disabled = false;
+      supplierNotice.hidden = true; supplierNotice.replaceChildren();
+    } catch (error) {
+      if (!active() || error?.name === "AbortError") return;
+      supplierNotice.hidden = false;
+      supplierNotice.textContent = safeFailure(error, "Não foi possível carregar fornecedores");
+      const retry = el("button", "og-button", "Tentar novamente fornecedores"); retry.type = "button";
+      retry.addEventListener("click", () => { void loadSuppliers(); }); supplierNotice.append(" ", retry);
+    } finally {
+      if (active()) control.removeAttribute("aria-busy");
+    }
+  }
+
   async function loadSnapshot({ refresh = false } = {}) {
     if (!opened || destroyed) return false;
     attachmentCounts.reset();
     const current = session; controller?.abort(); const loadController = controller = new AbortController(); listLoading = true;
     showNotice(""); listStatus.textContent = ''; cards.replaceChildren(); updateBusy();
+    void loadSuppliers();
     try {
-      const [result, suppliers] = await Promise.all([
-        data.loadSnapshot({ signal: loadController.signal, refresh }),
-        typeof data.loadFilterOptions === "function"
-          ? data.loadFilterOptions("FORNECEDOR", { signal: loadController.signal, refresh: true })
-            .then(options => {
-              if (!Array.isArray(options) || options.some(option => typeof option?.value !== "string")) {
-                throw new Error("A consulta não retornou opções de fornecedores válidas.");
-              }
-              return { options };
-            }).catch(error => ({ error }))
-          : { options: [] },
-      ]);
+      const result = await data.loadSnapshot({ signal: loadController.signal, refresh });
       if (!opened || destroyed || !root.isConnected || current !== session || controller !== loadController) return false;
       if (!Array.isArray(result?.rows)) throw new Error("A consulta não retornou uma lista de tarefas válida.");
-      supplierOptions = suppliers.options || supplierOptions;
-      controls.get("supplier").disabled = Boolean(suppliers.error);
-      supplierNotice.hidden = !suppliers.error; supplierNotice.replaceChildren();
-      if (suppliers.error) {
-        supplierNotice.textContent = safeFailure(suppliers.error, "Não foi possível carregar fornecedores");
-        const retry = el("button", "og-button", "Tentar novamente fornecedores"); retry.type = "button";
-        retry.addEventListener("click", () => { void loadSnapshot(); }); supplierNotice.append(" ", retry);
-      }
       rows = sortRows(result.rows.filter(row => /^\d{1,15}$/.test(String(row?.id || ""))));
       filterOptions(); updateMetrics(); applyLocalFilters(); return true;
     } catch (error) {

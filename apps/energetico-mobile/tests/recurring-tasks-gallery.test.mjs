@@ -5,6 +5,7 @@ import { renderChatMarkup } from '../src/ui/chat-view.js';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 import { createRegistrationGalleryFilterData } from '../src/chat/registration-gallery-filter-data.js';
+import { waitGalleryCatalogs } from './helpers/wait-gallery-catalogs.mjs';
 
 const column = (name, displayName = name, extra = {}) => ({ name, displayName, ...extra });
 const page = items => ({ items, hasMore: false });
@@ -163,10 +164,12 @@ test('supplier filter preserves the PowerApps account lock and Arthur default af
     t.after(() => { gallery.destroy(); dom.window.close(); });
     await gallery.open();
     const supplier = dom.window.document.querySelector('[data-filter-field="FORNECEDOR"]');
+    await waitGalleryCatalogs(dom.window.document.querySelector('.rg-overlay'));
     assert.equal(supplier.disabled, locked, userEmail);
     assert.equal(supplier.value, defaultSupplier, userEmail);
     assert.equal(dom.window.document.querySelectorAll('[data-registration-row]').length, defaultSupplier ? 1 : 2);
     await gallery.open();
+    await waitGalleryCatalogs(dom.window.document.querySelector('.rg-overlay'));
     assert.equal(supplier.disabled, locked, `refresh ${userEmail}`);
     assert.equal(supplier.value, defaultSupplier, `refresh ${userEmail}`);
   }

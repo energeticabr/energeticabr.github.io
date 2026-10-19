@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createRegistrationGalleryData } from '../src/chat/registration-gallery-data.js';
 import { createRegistrationGallery } from '../src/ui/registration-gallery-view.js';
 import { createSharePointRepository } from '../../../portal/data/sharepoint-repository.js';
+import { waitGalleryCatalogs } from './helpers/wait-gallery-catalogs.mjs';
 
 test('STATUS discovery respects real Graph page limits and includes choices on later pages', async t => {
   const graph = { async request(path, options = {}) {
@@ -73,6 +74,7 @@ async function view(t, f) {
   t.after(() => { gallery.destroy(); dom.window.close(); });
   await gallery.open();
   const root = dom.window.document.querySelector('[data-gallery-kind="provisionDescription"]');
+  await waitGalleryCatalogs(root);
   return { dom, gallery, root, ids: () => [...root.querySelectorAll('[data-registration-row]')].map(row => row.dataset.registrationRow),
     change(control, value) { assert.ok(control, 'the requested filter must exist'); control.value = value; control.dispatchEvent(new dom.window.Event('change', { bubbles: true })); } };
 }
@@ -177,6 +179,7 @@ for (const selected of [predicted, paid]) test(`closing during STATUS refresh pr
   await refreshing;
   assert.equal(v.root.hidden, true, 'the old response cannot resurrect a closed gallery');
   await v.gallery.open();
+  await waitGalleryCatalogs(v.root);
   assert.equal(control.value, selected);
   assert.equal(start.value, '2026-10-10');
   assert.equal(end.value, '2026-10-16');
