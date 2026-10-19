@@ -3,10 +3,39 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createOrdersGalleryData } from '../src/chat/orders-gallery-data.js';
 import { createOrdersGallery } from '../src/ui/orders-gallery-view.js';
+import { createGraphClient } from '../../../portal/data/graph-client.js';
+import { createSharePointRepository } from '../../../portal/data/sharepoint-repository.js';
 
 const failure = (code = 'request_timeout', status = 0) => Object.assign(
   new Error('A requisicao Microsoft Graph excedeu o tempo limite.'),
   { name: 'GraphRequestError', code, status, retryAfter: undefined });
+
+test('real repository retries a cached failed site discovery and can recover after manual retry', async () => {
+  const sites = { personal: { host: 'tenant.sharepoint.com', path: '/sites/test', readTransport: 'graph', writeTransport: 'graph' } };
+  const calls = []; let siteAttempts = 0, failuresRemaining = 1;
+  const graph = createGraphClient(async () => 'synthetic-token-not-a-credential', { fetch: async (url, options) => {
+    assert.equal(options.method, 'GET');
+    const path = new URL(url).pathname;
+    calls.push(path);
+    if (path === '/v1.0/sites/tenant.sharepoint.com:/sites/test') {
+      siteAttempts++;
+      if (failuresRemaining-- > 0) return new Response(JSON.stringify({ error: { code: 'serviceUnavailable', message: 'Temporary synthetic outage' } }), { status: 503 });
+      return Response.json({ id: 'test-site' });
+    }
+    if (path === '/v1.0/sites/test-site/lists') return Response.json({ value: [{ id: 'orders-list', displayName: 'NOTASPENDENTES', list: { template: 'genericList' } }] });
+    if (path === '/v1.0/sites/test-site/lists/orders-list/items') return Response.json({ value: [{ id: '9', fields: { VALORTOTAL: 50 } }] });
+    throw new Error(`Unexpected synthetic path: ${path}`);
+  } });
+  const repository = createSharePointRepository(graph, sites);
+  const data = createOrdersGalleryData({ repository, siteConfig: sites });
+  assert.deepEqual((await data.loadSnapshot()).rows.map(row => row.id), ['9']);
+  assert.equal(siteAttempts, 2, 'a retry must make an actual Graph request, not reuse the unavailable-site entry');
+  assert.equal(calls.filter(path => path.endsWith('/items')).length, 1);
+  const manual = createOrdersGalleryData({ repository: createSharePointRepository(graph, sites), siteConfig: sites });
+  failuresRemaining = 2;
+  await assert.rejects(manual.loadSnapshot(), /Temporary synthetic outage/);
+  assert.deepEqual((await manual.loadSnapshot()).rows.map(row => row.id), ['9']);
+});
 
 test('orders recover a temporary discovery and page failure without rereading completed pages', async () => {
   let discoveries = 0, secondPage = 0;

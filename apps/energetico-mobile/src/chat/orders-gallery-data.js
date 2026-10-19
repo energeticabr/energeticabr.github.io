@@ -700,7 +700,7 @@ function createSharePointListData({
 
   // Only idempotent snapshot reads may be retried. Mutations and other galleries
   // keep their existing policy; a failed page never restarts completed pages.
-  async function readSnapshot(read, signal) {
+  async function readSnapshot(read, signal, resetDiscovery = false) {
     if (!retrySnapshotReads) return read();
     for (let attempt = 0; ; attempt += 1) {
       if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
@@ -718,12 +718,15 @@ function createSharePointListData({
           : ['request_timeout', 'network_error'].includes(error?.code);
         if (attempt !== 0 || !transient || error?.name === 'AbortError'
           || Number(error?.retryAfter) > 0) throw error;
+        // Site discovery caches inaccessible sites; retry must reach Graph again.
+        // Page retries never clear metadata or replay already completed pages.
+        if (resetDiscovery) repository.clearCache?.();
       }
     }
   }
 
   async function loadSnapshot({ signal } = {}) {
-    const list = await readSnapshot(() => resolveList(signal), signal);
+    const list = await readSnapshot(() => resolveList(signal), signal, true);
     const rows = [];
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
