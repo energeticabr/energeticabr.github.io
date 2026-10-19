@@ -198,14 +198,17 @@ test('check usa o serviço real sem aguardar anexos que o popup de conclusão n�
   assert.equal(writes, 0);
 });
 
-test('serviço real reconcilia escrita confirmada cuja leitura posterior falhou sem novo PATCH', async t => {
+test('serviço real reconcilia escrita confirmada sem novo PATCH nem espera por anexos pendentes', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const { createTasksGalleryData } = await import('../src/chat/orders-gallery-data.js');
+  const attachments = deferred();
+  t.after(() => attachments.resolve([]));
   let writes = 0, reads = 0, fields = { field_8: '', field_12: 'EM ATENDIMENTO', field_11: 'Descrição original', STATUS: 'EM ATENDIMENTO' };
   const data = createTasksGalleryData({ repository: {
     async resolveList() { return { status: 'resolved', id: 'tasks' }; },
     async getItemsPage() { return { items: [{ id: '176', fields }], hasMore: false }; },
     async getItem(_site, _list, id) { reads++; return { id, fields, eTag: writes ? '"v2"' : '"v1"' }; },
+    async listAttachments() { return attachments.promise; },
     async getColumns() { return [
       { name: 'field_8', displayName: 'DATA CONCLUSÃO', dateTime: { format: 'dateOnly' } },
       { name: 'field_12', displayName: 'CONCLUÍDO', text: {} },
