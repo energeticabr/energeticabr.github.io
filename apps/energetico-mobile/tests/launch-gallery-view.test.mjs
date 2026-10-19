@@ -705,7 +705,7 @@ test('launch card presents AGRUPAR and supplier as cluster actions while preserv
   assert.equal(card.querySelector('.lg-record-dates .lg-record-label')?.textContent, 'DATA DE COMPRA');
 });
 
-test('launch mascot opens all items of its own order and restores focus without editing the record', async t => {
+test('compact order tile opens all linked items and restores focus without a redundant mascot', async t => {
   const first = row(3505), second = row(3504), unrelated = row(3503);
   first.fields.AGRUPAR = second.fields.AGRUPAR = 362;
   unrelated.fields.AGRUPAR = 361;
@@ -717,11 +717,12 @@ test('launch mascot opens all items of its own order and restores focus without 
   });
   await ctx.gallery.open();
   const card = ctx.root().querySelector('[data-item-id="3505"]');
-  const mascot = card.querySelector('.report-mascot-button');
-  assert.ok(mascot, 'the mascot is visible on the launch card');
-  assert.equal(mascot.getAttribute('aria-label'), 'Ver itens vinculados ao pedido 362');
-  assert.match(mascot.querySelector('img').src, /mascote\.png$/);
-  mascot.focus(); mascot.click(); await settle(); await settle();
+  const tile = card.querySelector('.lg-record-order');
+  const trigger = tile.querySelector('[data-cluster-kind="order"]');
+  assert.equal(tile.querySelectorAll('button').length, 1, 'one accessible detail action, no duplicate mascot');
+  assert.equal(tile.querySelector('img'), null, 'order tile does not reserve space for a mascot image');
+  assert.equal(trigger.getAttribute('aria-label'), 'Ver pedido agrupado: 362');
+  tile.click(); await settle(); await settle();
   const modal = ctx.root().querySelector('.lg-cluster-modal');
   assert.equal(modal.hidden, false);
   assert.deepEqual(orderIds, ['362']);
@@ -729,7 +730,7 @@ test('launch mascot opens all items of its own order and restores focus without 
   assert.deepEqual([...modal.querySelectorAll('[data-launch-id]')].map(node => node.dataset.launchId), ['3505', '3504']);
   assert.equal(ctx.root().querySelector('.lg-detail').hidden, true);
   button(modal, 'Fechar').click();
-  assert.equal(ctx.document.activeElement, mascot);
+  assert.equal(ctx.document.activeElement, trigger);
 });
 
 test('launch without a linked order does not show an unusable mascot', async t => {
