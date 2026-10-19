@@ -1,7 +1,7 @@
 import { SHAREPOINT_SITES } from '../../../../portal/config.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
-import { provisionDayOffset } from './pending-provision-dates.js';
+import { provisionDateKey } from './pending-provision-dates.js';
 import { diarySuggestionKey, recentDiaryActivities } from './construction-diary-activity-suggestions.js';
 
 const MAX_PAGES = 100;
@@ -9,13 +9,10 @@ const MAX_PAGES = 100;
 export function createRecentConstructionDiaryActivitiesData({ tokenProvider, repository: suppliedRepository, fetchImpl = globalThis.fetch, siteConfig = SHAREPOINT_SITES } = {}) {
   if (!suppliedRepository && typeof tokenProvider !== 'function') throw new TypeError('A consulta dos diários requer a sessão Microsoft ativa.');
   const repository = suppliedRepository || createSharePointRepository(createGraphClient(tokenProvider, { fetch: fetchImpl }), siteConfig);
-  async function load({ today = new Date(), signal } = {}) {
+  async function load({ diaryDate, branch, signal } = {}) {
     const check = () => { if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError'); };
-    const start = provisionDayOffset(today, -4);
-    // Leave a one-day UTC margin at the end: a diary dated today at night in
-    // São Paulo can be stored by SharePoint with tomorrow's UTC timestamp.
-    const after = provisionDayOffset(today, 2);
-    if (!start || !after) return [];
+    if (diaryDate == null || !String(diaryDate).trim() || !provisionDateKey(diaryDate) || !diarySuggestionKey(branch))
+      throw new Error('A referência de data e filial do diário não está disponível.');
     const options = signal ? { signal } : {};
     check();
     const list = await repository.resolveList('personal', ['DIÁRIO DE OBRAS', 'DIARIO DE OBRAS'], options);
@@ -30,8 +27,12 @@ export function createRecentConstructionDiaryActivitiesData({ tokenProvider, rep
     };
     const dateField = column(['DATA']);
     const activityField = column(['ATIVIDADEEXECUTADA', 'ATIVIDADES EXECUTADAS']);
-    const query = `$expand=fields&$top=100&$filter=fields/${dateField} ge '${start}T00:00:00Z' and fields/${dateField} lt '${after}T00:00:00Z'`;
-    const rows = [];
+    const statusField = column(['STATUS']), branchField = column(['FILIAL']);
+    const dateColumn = columns.find(item => item.name === dateField);
+    // No calendar lower bound: gaps between completed diaries must not hide history.
+    // Filter one SharePoint column server-side and enforce date/branch locally.
+    const query = `$expand=fields($select=${[dateField, activityField, statusField, branchField].join(',')})&$top=100&$filter=fields/${statusField} eq 'CONCLUÍDO'`;
+    const rows = new Map(), cursors = new Set();
     let cursor = '';
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
       check();
@@ -41,10 +42,21 @@ export function createRecentConstructionDiaryActivitiesData({ tokenProvider, rep
         ...(cursor ? { cursor } : {}),
       });
       check();
-      if (!page || !Array.isArray(page.items)) throw new Error('A consulta de atividades retornou uma página inválida.');
-      rows.push(...page.items);
-      if (page.hasMore !== true) return recentDiaryActivities(rows, { today, dateField, activityField });
-      if (!page.nextLink) throw new Error('A paginação dos diários não retornou o próximo cursor.');
+      if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean' || page.complete === false
+        || page.partial || page.incomplete || page.truncated || page.aborted || page.error
+        || page.hasMore !== Boolean(page.nextLink) || page.hasMore && typeof page.nextLink !== 'string')
+        throw new Error('A consulta de atividades retornou uma página inválida ou incompleta.');
+      for (const row of page.items) {
+        if (!/^[1-9]\d*$/.test(String(row?.id || '')) || !row.fields
+          || [dateField, statusField, branchField].some(name => !Object.hasOwn(row.fields, name)))
+          throw new Error('A consulta de atividades retornou um diário incompleto.');
+        rows.set(String(row.id), row);
+      }
+      if (!page.hasMore) return recentDiaryActivities([...rows.values()], {
+        diaryDate, branch, dateColumn, dateField, activityField, statusField, branchField,
+      });
+      if (cursors.has(page.nextLink)) throw new Error('Cursor de diários repetido.');
+      cursors.add(page.nextLink);
       cursor = page.nextLink;
     }
     throw new Error('A consulta dos diários excedeu o limite seguro de páginas.');

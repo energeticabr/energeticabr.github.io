@@ -1402,6 +1402,7 @@ export function createAppController({
   let pendingConstructionDiaryData = null;
   let recentDiaryPoll = null;
   let recentDiaryAccount = null;
+  let recentDiaryContext = '';
   let recentDiaryActivities = [];
   let recentDiaryActivitiesLoading = false;
   let recentDiaryActivitiesError = false;
@@ -4471,12 +4472,19 @@ export function createAppController({
     const diaryActivityPrompt = /^construction_diary_(?:create|fill)$/.test(String(state.activeFlow?.id || ""))
       && /atividades\s+executadas/i.test(String(currentDiaryPoll?.question || currentDiaryPoll?.prompt || ""));
     const activeDiaryPoll = diaryActivityPrompt && account && !stopped ? currentDiaryPoll : null;
-    if (activeDiaryPoll !== recentDiaryPoll || (activeDiaryPoll && account !== recentDiaryAccount)) {
+    const diaryReferenceValue = label => {
+      const matches = (state.activeFlow?.rows || []).filter(row => normalizedSettlementText(row?.label) === label);
+      return matches.length === 1 ? String(matches[0].value || '').trim() : '';
+    };
+    const diaryReference = { diaryDate: diaryReferenceValue('DATA'), branch: diaryReferenceValue('FILIAL') };
+    const diaryContext = activeDiaryPoll ? JSON.stringify([sessionRevision, state.activeFlow?.contextId, diaryReferenceValue('ID'), diaryReference]) : '';
+    if (activeDiaryPoll !== recentDiaryPoll || diaryContext !== recentDiaryContext || (activeDiaryPoll && account !== recentDiaryAccount)) {
       recentDiaryActivitiesAbort?.abort();
       recentDiaryActivitiesAbort = null;
       recentDiaryActivitiesRequest = null;
       recentDiaryPoll = activeDiaryPoll;
       recentDiaryAccount = activeDiaryPoll ? account : null;
+      recentDiaryContext = diaryContext;
       recentDiaryActivities = [];
       recentDiaryActivitiesLoading = Boolean(activeDiaryPoll);
       recentDiaryActivitiesError = false;
@@ -4567,9 +4575,10 @@ export function createAppController({
       const requestAccount = account;
       const requestRevision = sessionRevision;
       const requestPoll = activeDiaryPoll;
+      const requestContext = diaryContext;
       recentDiaryActivitiesAbort = controller;
       const current = () => !stopped && account === requestAccount && sessionRevision === requestRevision
-        && recentDiaryPoll === requestPoll && !controller.signal.aborted;
+        && recentDiaryPoll === requestPoll && recentDiaryContext === requestContext && !controller.signal.aborted;
       const request = (async () => {
         try {
           const data = await recentDiaryActivitiesDataFactory({ tokenProvider: async scopes => {
@@ -4582,7 +4591,7 @@ export function createAppController({
             }
           } });
           if (!current()) return;
-          const activities = await data.load({ signal: controller.signal });
+          const activities = await data.load({ ...diaryReference, signal: controller.signal });
           if (!current()) return;
           recentDiaryActivities = Array.isArray(activities) ? activities : [];
           recentDiaryActivitiesError = false;

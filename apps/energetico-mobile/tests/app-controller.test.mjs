@@ -82,22 +82,53 @@ const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRE
 
 test('carrega atividades recentes somente na pergunta de atividades do diário', async t => {
   let loads = 0;
+  let reference;
   const h = makeHarness({ recentDiaryActivitiesDataFactory: async () => ({
-    async load() { loads++; return ['Impermeabilização arrimo', 'Escoramento laje']; },
+    async load(options) { loads++; reference = options; return ['Impermeabilização arrimo', 'Escoramento laje']; },
   }) });
   t.after(() => h.controller.stop());
   await h.controller.start();
   const sentBeforeSuggestions = h.chatCalls.filter(call => call[0] === 'text').length;
   h.store.ingestRemoteMessages([{ type: 'poll', question: 'DIGITE AS ATIVIDADES EXECUTADAS:',
     options: [{ id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' }],
-  }], { activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' } });
+  }], { activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS',
+    contextId: 'diary-217', rows: [{ label: 'DATA', value: '14/10/2026' }, { label: 'FILIAL', value: 'Obra A' }] } });
   assert.equal(h.store.getState().activeFlow?.id, 'construction_diary_fill');
   assert.equal(h.store.getState().messages.at(-1)?.type, 'poll');
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(loads, 1);
+  assert.equal(reference.diaryDate, '14/10/2026');
+  assert.equal(reference.branch, 'Obra A');
   assert.deepEqual(h.view.renders.at(-1).messages.at(-1).recentDiaryActivities,
     ['Impermeabilização arrimo', 'Escoramento laje']);
   assert.equal(h.chatCalls.filter(call => call[0] === 'text').length, sentBeforeSuggestions);
+});
+
+test('trocar diário descarta sugestões atrasadas e consulta a nova data e filial', async t => {
+  const requests = [];
+  const h = makeHarness({ recentDiaryActivitiesDataFactory: async () => ({
+    load(options) { return new Promise(resolve => requests.push({ ...options, resolve })); },
+  }) });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const show = (day, branch) => h.store.ingestRemoteMessages([{
+    type: 'poll', question: 'DIGITE AS ATIVIDADES EXECUTADAS:',
+    options: [{ id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO DE OBRAS' }],
+  }], { activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS', contextId: `diary-${day}`,
+    rows: [{ label: 'DATA', value: day }, { label: 'FILIAL', value: branch }] } });
+  show('14/10/2026', 'Obra A');
+  await new Promise(resolve => setImmediate(resolve));
+  show('10/10/2026', 'Obra B');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].signal.aborted, true);
+  assert.equal(requests[1].diaryDate, '10/10/2026');
+  assert.equal(requests[1].branch, 'Obra B');
+  requests[1].resolve(['Nova obra']);
+  await new Promise(resolve => setImmediate(resolve));
+  requests[0].resolve(['Resultado antigo']);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.view.renders.at(-1).messages.at(-1).recentDiaryActivities, ['Nova obra']);
 });
 
 function groupedPendingProvisionSnapshot() {
