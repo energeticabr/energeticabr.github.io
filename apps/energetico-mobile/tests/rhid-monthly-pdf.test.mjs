@@ -201,7 +201,8 @@ test('monthly PDF keeps unclassified punches visible in their day row without re
   month:'2026-10',presentDates:[],rows:[{ID_PESSOA_RHID:'101',NOME_COLABORADOR:name,
    DATA_REFERENCIA:'2026-10-01',BATIDAS_RHID:'07:00;07:15;12:00;13:00;17:00'}],
  }});
- assert.deepEqual(input.days[0].unclassifiedPunches,['07:00','07:15']);
+ assert.equal(input.days[0].slots[0],'07:15');
+ assert.deepEqual(input.days[0].unclassifiedPunches,['07:00']);
  const {pages,text}=await inspect(t,await build(input));
  assert.equal(pages.length,1);
  assert.match(text,/07:00/);

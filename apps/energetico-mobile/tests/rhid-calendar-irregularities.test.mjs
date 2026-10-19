@@ -16,7 +16,7 @@ test("monthly irregularities count effective incomplete people once, not absence
     row(10, "2026-09-30", "07:00", { NOME_COLABORADOR: "PIS NÃO LOCALIZADO" }),
     row(11, "2026-09-30", "07:00; 07:10; 12:00; 13:00; 17:00"),
   ];
-  assert.deepEqual(rhid.rhidIrregularCountsByDate(rows, "2026-09"), { "2026-09-28": 1, "2026-09-29": 2, "2026-09-30": 1 });
+  assert.deepEqual(rhid.rhidIrregularCountsByDate(rows, "2026-09"), { "2026-09-28": 1, "2026-09-29": 2 });
 });
 
 test("calendar places a small irregular label under the day and clears stale markers", () => {

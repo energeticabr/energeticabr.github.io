@@ -161,8 +161,9 @@ for (const [date, punches, status, label, minutes] of [
   ["2026-10-07", "07:00;12:00;13:00;16:31", "present", "08h31", 511],
   ["2026-10-08", "07:00;15:30", "present", "08h30", 510],
   ["2026-10-09", "07:00;11:00", "present", "04h00", 240],
-  ["2026-10-10", "07:00;08:00", "present", "01h00", 60],
-  ["2026-10-11", "07:00;08:00", "present", "01h00", 60],
+  ["2026-10-10", "07:00;08:00", "inconsistent", "INCONSISTENTE", undefined],
+  ["2026-10-11", "07:00;08:00", "inconsistent", "INCONSISTENTE", undefined],
+  ["2026-10-05", "07:00;12:00;13:00;16:30;18:00", "present", "08h30", 510],
   ["2026-10-05", "07:00;12:00;13:00;16:30;18:00;19:00", "present", "09h30", 570],
   ["2026-10-05", "05:00;07:00;08:00;12:00;13:00;15:30;18:00;19:00", "present", "09h30", 570],
 ]) {
@@ -175,7 +176,7 @@ for (const [date, punches, status, label, minutes] of [
     assert.match(badge.description, /RHID/);
   });
 }
-for (const punches of ["07:00", "07:00;12:00;13:00", "07:00;12:00;13:00;16:30;18:00", "07:00;07:00;12:00;13:00;16:30", "07:00;12:00;13:00;24:99", "garbage", "07:00;12:00;13:00;16:30;garbage", '["07:00",', { unexpected: "07:00" }, ["07:00", "12:00", "13:00", "16:30", null], "07:00;12:00;13:00;16:30:99"]) {
+for (const punches of ["07:00", "07:00;12:00;13:00", "07:00;07:00;12:00;13:00;16:30", "07:00;12:00;13:00;24:99", "garbage", "07:00;12:00;13:00;16:30;garbage", '["07:00",', { unexpected: "07:00" }, ["07:00", "12:00", "13:00", "16:30", null], "07:00;12:00;13:00;16:30:99"]) {
   test(`invalid/incomplete punches ${JSON.stringify(punches)} require review`, () => {
     const badge = badgeFor(context(), report([row({ BATIDAS_RHID: punches })]));
     assert.equal(badge.status, "inconsistent");

@@ -208,10 +208,10 @@ test("batidas fora das faixas preenchem lacunas cronológicas de entrada e saíd
   }
 });
 
-test("batida extra fora da faixa não substitui horário normal nem resolve duplicatas ou lacuna incompatível", () => {
+test("batida extra fora da faixa não substitui horário da faixa nem preenche lacuna incompatível", () => {
   for (const punches of ["07:00; 08:35; 12:00; 13:00; 17:00", "07:00; 08:35; 12:00; 17:00", "07:00; 07:10; 08:35; 12:00; 13:00; 17:00"]) {
     const table = buildRhidAttendanceTable([{ Id: 1, NOME_COLABORADOR: "ANA", BATIDAS_RHID: punches }]);
-    assert.equal(table.people[0].slots.entry1.effective, punches.includes("07:10") ? null : "07:00");
+    assert.equal(table.people[0].slots.entry1.effective, punches.includes("07:10") ? "07:10" : "07:00");
     assert.equal(table.people[0].slots.entry2.effective, punches.includes("13:00") ? "13:00" : null);
     assert.deepEqual(table.people[0].slots.entry1.rhidCandidates, punches.includes("07:10") ? ["07:00", "07:10"] : ["07:00"]);
     assert.ok(table.people[0].issues.includes("Batida fora das faixas: 08:35"));
@@ -249,35 +249,35 @@ test("não desloca a última saída para o horário de almoço quando falta uma 
   assert.deepEqual(table.people[0].rawPunches, ["06:57", "11:58", "17:03"]);
 });
 
-test("marca batidas fora das faixas e duplicadas sem ocultar o dado bruto", () => {
+test("resolve o par da faixa sem ocultar a batida extra fora da faixa", () => {
   const table = buildRhidAttendanceTable([{
     Id: 72, ID_PESSOA_RHID: "r-72", NOME_COLABORADOR: "BIA",
     BATIDAS_RHID: "06:58; 07:04; 12:01; 13:00; 14:00; 16:55",
   }]);
-  assert.deepEqual(table.rows[0].slice(1, 5), ["—", "12:01", "13:00", "16:55"]);
+  assert.deepEqual(table.rows[0].slice(1, 5), ["07:04", "12:01", "13:00", "16:55"]);
   assert.deepEqual(table.people[0].slots.entry1.rhidCandidates, ["06:58", "07:04"]);
-  assert.deepEqual(table.people[0].issues, ["Batidas duplicadas em Entrada 1: 06:58, 07:04", "Batida fora das faixas: 14:00"]);
+  assert.deepEqual(table.people[0].issues, ["Batida fora das faixas: 14:00"]);
 });
 
-test("duas batidas na mesma faixa com menos de cinco minutos usam a segunda sem incongruência", () => {
+test("pares próximos usam entradas mais tarde e saídas mais cedo sem incongruência", () => {
   const table = buildRhidAttendanceTable([{
     Id: 73, ID_PESSOA_RHID: "r-73", NOME_COLABORADOR: "ANA",
     BATIDAS_RHID: "06:58; 07:02; 11:57; 12:00; 12:58; 13:01; 16:06; 16:08",
   }]);
-  assert.deepEqual(table.rows[0], ["ANA", "07:02", "12:00", "13:01", "16:08", "08:05"]);
+  assert.deepEqual(table.rows[0], ["ANA", "07:02", "11:57", "13:01", "16:06", "08:00"]);
   assert.deepEqual(table.people[0].slots.exit2.rhidCandidates, ["16:06", "16:08"]);
-  assert.equal(table.people[0].slots.exit2.rhid, "16:08");
+  assert.equal(table.people[0].slots.exit2.rhid, "16:06");
   assert.deepEqual(table.people[0].rawPunches, ["06:58", "07:02", "11:57", "12:00", "12:58", "13:01", "16:06", "16:08"]);
   assert.deepEqual(table.people[0].issues, []);
 });
 
-test("cinco minutos exatos ou três candidatas ainda exigem revisão", () => {
+test("cinco minutos exatos resolvem o par mas três candidatas ainda exigem revisão", () => {
   const table = buildRhidAttendanceTable([
     { Id: 74, NOME_COLABORADOR: "ANA", BATIDAS_RHID: "07:00; 07:05; 12:00; 13:00; 17:00" },
     { Id: 75, NOME_COLABORADOR: "BIA", BATIDAS_RHID: "07:00; 12:00; 13:00; 16:06; 16:08; 16:09" },
   ]);
-  assert.equal(table.people[0].slots.entry1.rhid, null);
-  assert.match(table.people[0].issues.join(" "), /Batidas duplicadas em Entrada 1/);
+  assert.equal(table.people[0].slots.entry1.rhid, "07:05");
+  assert.deepEqual(table.people[0].issues, []);
   assert.equal(table.people[1].slots.exit2.rhid, null);
   assert.match(table.people[1].issues.join(" "), /Batidas duplicadas em Saída 2/);
 });
