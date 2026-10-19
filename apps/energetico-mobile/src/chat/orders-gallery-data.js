@@ -211,6 +211,7 @@ export function createOrdersGalleryData(options = {}) {
     siteKey: options.siteKey || SITE_KEY,
     listAliases: options.listAliases || LIST_ALIASES,
     listName: options.listName || "NOTASPENDENTES",
+    retrySnapshotReads: fieldKey(options.listName || 'NOTASPENDENTES') === 'NOTASPENDENTES',
   });
   const launchGroups = createLaunchClusterData(sharedOptions);
   const linkedReport = createOrdersLinkedReportData(sharedOptions);
@@ -651,6 +652,7 @@ function createSharePointListData({
   listName = "NOTASPENDENTES",
   listMissingCode = "orders_list_missing",
   preserveSourceOrder = false,
+  retrySnapshotReads = false,
   filterKind,
   provisionPaymentSync = false,
   readOnlyEditFields = [],
@@ -685,6 +687,7 @@ function createSharePointListData({
 
   let resolvedList;
   const attachmentCache = new Map();
+  let retryBlockedUntil = 0, retryBlockedError;
   async function resolveList(signal) {
     if (resolvedList) return resolvedList;
     const list = await repository.resolveList(siteKey, listAliases, signal ? { signal } : {});
@@ -696,24 +699,66 @@ function createSharePointListData({
     return list;
   }
 
-  async function loadSnapshot({ signal } = {}) {
-    const list = await resolveList(signal);
+  // Only idempotent snapshot reads may be retried. Mutations and other galleries
+  // keep their existing policy; a failed page never restarts completed pages.
+  async function readSnapshot(read, signal, resetDiscovery = false) {
+    if (!retrySnapshotReads) return read();
+    for (let attempt = 0; ; attempt += 1) {
+      if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+      assertSession();
+      try {
+        const result = await read();
+        if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+        assertSession();
+        return result;
+      }
+      catch (error) {
+        if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+        const status = Number(error?.status) || 0;
+        const transient = status ? [408, 502, 503, 504].includes(status)
+          : ['request_timeout', 'network_error'].includes(error?.code);
+        const retryAfter = Number(error?.retryAfter);
+        if (Number.isFinite(retryAfter) && retryAfter > 0 && error !== retryBlockedError) {
+          retryBlockedError = error;
+          retryBlockedUntil = Date.now() + retryAfter * 1000;
+        }
+        if (attempt !== 0 || !transient || error?.name === 'AbortError'
+          || Number(error?.retryAfter) > 0) throw error;
+        // Site discovery caches inaccessible sites; retry must reach Graph again.
+        // Page retries never clear metadata or replay already completed pages.
+        if (resetDiscovery) repository.clearCache?.();
+      }
+    }
+  }
+
+  async function loadSnapshot({ signal, refresh = false } = {}) {
+    if (retrySnapshotReads) {
+      if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+      assertSession();
+      if (Date.now() < retryBlockedUntil) throw retryBlockedError;
+      if (refresh) {
+        repository.clearCache?.();
+        resolvedList = undefined;
+      }
+    }
+    const list = await readSnapshot(() => resolveList(signal), signal, true);
     const rows = [];
     let cursor = "";
     for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber += 1) {
       if (signal?.aborted) throw signal.reason || new DOMException("A consulta foi cancelada.", "AbortError");
-      const page = await repository.getItemsPage(
+      const page = await readSnapshot(() => repository.getItemsPage(
         siteKey,
         list.id,
         `$expand=fields&$top=${PAGE_SIZE}`,
         { pageNumber, maxPages: MAX_PAGES, ...(cursor ? { cursor } : {}), ...(signal ? { signal } : {}) },
-      );
+      ), signal);
       for (const item of Array.isArray(page?.items) ? page.items : []) {
         const row = normalizeItem(item);
         if (row) rows.push(row);
       }
       if (!page?.hasMore || !page?.nextLink) {
         if (!preserveSourceOrder) rows.sort((left, right) => Number(right.id) - Number(left.id));
+        retryBlockedUntil = 0; retryBlockedError = undefined;
         return Object.freeze({ listName, rows: Object.freeze(rows) });
       }
       cursor = page.nextLink;

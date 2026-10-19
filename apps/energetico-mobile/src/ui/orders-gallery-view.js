@@ -274,6 +274,7 @@ export function createOrdersGallery({
 
   function updateBusy() {
     loadingScreen.sync(opened && listLoading);
+    sortField.hidden = Boolean(snapshotError);
     const busy = opened && (listLoading || attachmentLoading);
     root.setAttribute("aria-busy", String(Boolean(busy)));
     for (const button of root.querySelectorAll("button")) {
@@ -450,7 +451,7 @@ export function createOrdersGallery({
     } catch (error) {
       if (!opened || destroyed || !root.isConnected || currentSession !== session || controller !== loadController || error?.name === "AbortError") return false;
       snapshotError = error;
-      listStatus.textContent = safeFailure(error, "Não foi possível carregar pedidos");
+      showNotice(safeFailure(error, "Não foi possível carregar pedidos"), true);
       const retryButton = el("button", "og-button og-button--primary", "Tentar novamente");
       retryButton.type = "button";
       retryButton.addEventListener("click", () => { void loadSnapshot({ retry: true }); });
