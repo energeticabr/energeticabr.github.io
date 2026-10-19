@@ -37,10 +37,10 @@ const draft = supplier => ({ supplier, month: '2026-10', lines: [
   { date: '2026-10-31', rubric: 'vacation', quantity: '1', unitValue: '' },
 ] });
 
-test('prepara somente o acesso Graph usado pelas provisões', async () => {
+test('prepara Graph e anexos SharePoint antes de abrir o formulário', async () => {
   const f = fixture(), requests = [];
   const data = createPayrollBreakdownData({ repository: f.repo, tokenProvider: async scopes => { requests.push(scopes); return 'token'; } });
-  await data.prepare(); assert.deepEqual(requests, [['Sites.Read.All','Sites.ReadWrite.All']]); assert.equal(f.writes.length, 0);
+  await data.prepare(); assert.equal(requests.length,2); assert.deepEqual(requests[0], ['Sites.Read.All','Sites.ReadWrite.All']); assert.match(requests[1][0], /AllSites.Read$/); assert.match(requests[1][1], /AllSites.Write$/); assert.equal(f.writes.length, 0);
 });
 
 test('preparação cria IDFOLHA opcional somente quando ausente e confirma o esquema sem registros financeiros', async () => {
@@ -110,6 +110,7 @@ test('consulta fornecedores elegíveis em todas as páginas e cria um descritivo
   }
   assert.equal(children[0].fields.DATAPREVISTOPGTO, '2026-10-02T00:00:00Z');
   assert.equal(children[1].fields.OBS, 'Pagamento de Vale alimentação referente à semana anterior à data 09/10/2026');
+  assert.deepEqual([...new Set(f.writes.map(write=>write.list))].sort(),['DESCRITIVOPROVISAO','FOLHAPGTO','PROVISÃO PGTOS'].sort(), 'desdobrar não cria lançamentos nem pedidos; somente a baixa pode criá-los');
   await f.data.post(draft(suppliers[0]), progress); assert.equal(f.writes.length, 9);
 });
 
@@ -259,4 +260,100 @@ test('lista de provisões sem TIPOPGTO mantém rubrica no pagamento da folha', a
   await f.data.post(draft(supplier),{operationId:'optional-payment-type'});
   assert.deepEqual(f.rows.FOLHAPGTO.map(row=>row.fields.TIPOPGTO),['SALÁRIO','VALE REFEIÇÃO','13 SALÁRIO']);
   assert.ok(f.rows['PROVISÃO PGTOS'].every(row=>row.fields.IDFOLHA==='19'));
+});
+
+test('contexto conserva data, quantidade e valor de cada pagamento sem regravar a folha', async () => {
+  const f=fixture(), supplier=(await f.data.loadSuppliers())[0];
+  f.columns.LANCAMENTOS=['VALORUNITARIO','QUANTIDADE','FRETE','FORNECEDOR','FILIAL'].map(name=>({name,displayName:name,text:{}}));
+  f.rows.LANCAMENTOS=[
+    {id:'91',fields:{VALORUNITARIO:100,QUANTIDADE:2,FRETE:0,FORNECEDOR:'Ana',FILIAL:'OBRA A'}},
+    {id:'92',fields:{VALORUNITARIO:120,QUANTIDADE:1,FRETE:0,FORNECEDOR:'Ana',FILIAL:'OBRA A'}},
+  ];
+  f.rows.FOLHAPGTO=[
+    {id:'31',fields:{Title:'pago-31',IDFOLHA:'19',FORNECEDOR:'Ana',TIPOPGTO:'SALÁRIO',IDLANCAMENTO:'91',DATA:'2026-10-12T00:00:00Z'}},
+    {id:'32',fields:{Title:'pago-32',IDFOLHA:'19',FORNECEDOR:'Ana',TIPOPGTO:'SALÁRIO',IDLANCAMENTO:'92',DATA:'2026-10-18T00:00:00Z'}},
+  ];
+  const context=await f.data.loadPayrollContext(supplier,'2026-10');
+  assert.equal(context.paidTotal,320); assert.equal(context.payments.length,2);
+  assert.deepEqual(context.payments.map(p=>[p.id,p.date,p.rubric,p.quantity,p.unitValue,p.total,p.launchId]),
+    [['31','2026-10-12','salary',2,100,200,'91'],['32','2026-10-18','salary',1,120,120,'92']]);
+  assert.equal(f.writes.length,0);
+});
+
+function legacyFixture(){
+  const f=fixture();
+  f.columns.LANCAMENTOS=['FORNECEDOR','FILIAL','VALORUNITARIO','QUANTIDADE','FRETE','IDFOLHA','TIPOPGTO','IDPGTOAGENDADO','AGRUPAR'].map(name=>({name,displayName:name,text:{}}));
+  f.rows.LANCAMENTOS=[{id:'91',fields:{FORNECEDOR:'Ana',FILIAL:'OBRA A',VALORUNITARIO:100,QUANTIDADE:2,FRETE:0,IDFOLHA:'19',TIPOPGTO:'SALÁRIO',IDPGTOAGENDADO:'',AGRUPAR:''}}];
+  f.rows.FOLHAPGTO=[{id:'31',fields:{Title:'pago-31',IDFOLHA:'19',FORNECEDOR:'Ana',TIPOPGTO:'SALÁRIO',IDLANCAMENTO:'91',DATA:'2026-10-12'}}];
+  return f;
+}
+const legacySupplier={id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'};
+for(const [reason,mutate] of [
+  ['fornecedor alheio',f=>f.rows.LANCAMENTOS[0].fields.FORNECEDOR='Beto'],
+  ['filial alheia',f=>f.rows.LANCAMENTOS[0].fields.FILIAL='OUTRA OBRA'],
+  ['fornecedor ausente',f=>delete f.rows.LANCAMENTOS[0].fields.FORNECEDOR],
+  ['coluna filial ausente',f=>f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FILIAL')],
+  ['coluna fornecedor ambígua',f=>{f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FORNECEDOR');f.columns.LANCAMENTOS.push({name:'OwnerA',displayName:'FORNECEDOR'},{name:'OwnerB',displayName:'FORNECEDOR'});}],
+  ['folha divergente',f=>f.rows.LANCAMENTOS[0].fields.IDFOLHA='20'],
+  ['rubrica divergente',f=>f.rows.LANCAMENTOS[0].fields.TIPOPGTO='VALE REFEIÇÃO'],
+  ['fornecedor selecionado sem filial',()=>{}],
+  ['pedido alheio',f=>{f.rows.LANCAMENTOS[0].fields.AGRUPAR='41';f.rows.NOTASPENDENTES=[{id:'41',fields:{FORNECEDOR:'Beto',FILIAL:'OBRA A'}}];f.columns.NOTASPENDENTES=['FORNECEDOR','FILIAL'].map(name=>({name}));}],
+  ['provisão sem vínculo reverso',f=>{f.rows.LANCAMENTOS[0].fields.IDPGTOAGENDADO='12';f.rows['PROVISÃO PGTOS']=[{id:'12',fields:{FORNECEDOR:'Ana',FILIAL:'OBRA A',IDFOLHA:'19',TIPOPGTO:'SALÁRIO',IDLANCAMENTOS:'92'}}];f.columns['PROVISÃO PGTOS'].push({name:'IDLANCAMENTOS'});}],
+]) test(`histórico direto recusa ${reason} antes de retornar dinheiro`,async()=>{
+  const f=legacyFixture();mutate(f);
+  await assert.rejects(f.data.loadPayrollContext(reason==='fornecedor selecionado sem filial'?{id:'1',label:'Ana'}:legacySupplier,'2026-10'),/fornecedor|filial|campo|vínculo|rubrica|folha/i);
+  assert.equal(f.writes.length,0);
+});
+test('histórico direto mapeia metadados canônicos e revalida propriedade a cada consulta',async()=>{
+  const f=legacyFixture();let clears=0;f.repo.clearCache=()=>{clears++;};
+  const row=f.rows.LANCAMENTOS[0].fields;
+  for(const c of f.columns.LANCAMENTOS){const original=c.name;c.name=`Source_${original}`;row[c.name]=row[original];delete row[original];}
+  assert.equal((await f.data.loadPayrollContext(legacySupplier,'2026-10')).paidTotal,200);
+  row.Source_FORNECEDOR='Beto';
+  await assert.rejects(f.data.loadPayrollContext(legacySupplier,'2026-10'),/fornecedor/i);
+  assert.ok(clears>=2);assert.equal(f.writes.length,0);
+});
+for(const {unit,quantity,freight,total} of [
+  {unit:100,quantity:2,freight:'7,25',total:207.25},
+  {unit:'0,104',quantity:1,freight:'0,004',total:0.11},
+  {unit:'0,10',quantity:1,freight:'0,005',total:0.11},
+]) test(`lançamento e provisão retornam o mesmo total exato ${total} com frete sem alterar preço unitário`,async()=>{
+  const totals=[];
+  for(const provision of [false,true]){
+    const f=legacyFixture();Object.assign(f.rows.LANCAMENTOS[0].fields,{VALORUNITARIO:unit,QUANTIDADE:quantity,FRETE:freight});
+    if(provision){
+      f.rows['PROVISÃO PGTOS']=[{id:'12',fields:{FORNECEDOR:'Ana',FILIAL:'OBRA A',IDFOLHA:'19',TIPOPGTO:'SALÁRIO',QTD:quantity,VALORTOTAL:unit,FRETE:freight,DATAPGTOEFETUADO:'2026-10-12',DATAPREVISTOPGTO:'2026-10-09'}}];
+      Object.assign(f.rows.FOLHAPGTO[0].fields,{Title:'APP-folha-provisao-12',IDPROVISAO:'12',IDLANCAMENTO:''});
+    }
+    const context=await f.data.loadPayrollContext(legacySupplier,'2026-10');
+    assert.equal(context.paidTotal,total);assert.equal(context.paid.salary,total);assert.equal(context.payments[0].total,total);
+    assert.equal(context.payments[0].unitValue,Number(String(unit).replace(',','.')));assert.equal(context.payments[0].quantity,quantity);
+    totals.push(context.paidTotal);assert.equal(f.writes.length,0);
+  }
+  assert.deepEqual(totals,[total,total]);
+});
+for(const invalid of ['ausente','ambíguo','inválido'])test(`frete ${invalid} no lançamento impede apuração financeira silenciosa`,async()=>{
+  const f=legacyFixture();
+  if(invalid==='ausente')f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FRETE');
+  else if(invalid==='ambíguo'){f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FRETE');f.columns.LANCAMENTOS.push({name:'FreightA',displayName:'FRETE'},{name:'FreightB',displayName:'FRETE'});}
+  else f.rows.LANCAMENTOS[0].fields.FRETE='desconhecido';
+  await assert.rejects(f.data.loadPayrollContext(legacySupplier,'2026-10'),/FRETE|valores inválidos/);assert.equal(f.writes.length,0);
+});
+
+test('anexo inválido impede o lote antes de criar qualquer registro financeiro', async()=>{
+  const f=fixture(),supplier=(await f.data.loadSuppliers())[0],raw=draft(supplier);
+  raw.lines[0].files=[{name:'programa.exe',size:2,type:'application/octet-stream',arrayBuffer:async()=>new Uint8Array([1,2]).buffer}];
+  await assert.rejects(f.data.post(raw,{operationId:'bad-file'}),/tipo/i);assert.equal(f.writes.length,0);
+});
+test('arquivos da linha são verificados na provisão e retomada conserva financeiro e manifesto', async()=>{
+  const f=fixture(),supplier=(await f.data.loadSuppliers())[0],raw=draft(supplier),files=new Map();raw.lines=raw.lines.slice(0,1);
+  const bytes=new Uint8Array([1,2,3]).buffer;raw.lines[0].files=[{name:'recibo.pdf',size:3,type:'application/pdf',arrayBuffer:async()=>bytes}];
+  f.repo.listAttachments=async(_s,l,id)=>[...(files.get(`${l}:${id}`)||new Map()).keys()].map(name=>({name}));
+  f.repo.downloadAttachment=async(_s,l,id,name)=>files.get(`${l}:${id}`).get(name);
+  let fail=true;
+  f.repo.uploadAttachment=async(_s,l,id,file,name)=>{if(fail)throw new Error('Falha de anexo');const dest=files.get(`${l}:${id}`)||new Map();files.set(`${l}:${id}`,dest);dest.set(name,await file.arrayBuffer());};
+  const progress={operationId:'files-retry'};await assert.rejects(f.data.post(raw,progress),/Falha de anexo/);assert.equal(f.writes.length,3);
+  const restored=JSON.parse(JSON.stringify(progress)),missing={...raw,lines:raw.lines.map(({files,...line})=>line)};
+  await assert.rejects(f.data.post(missing,restored),/selecione novamente/i);assert.equal(f.writes.length,3);
+  fail=false;await f.data.post(raw,restored);assert.equal(f.writes.length,3);assert.equal(files.get('PROVISÃO PGTOS:1').size,1);
 });

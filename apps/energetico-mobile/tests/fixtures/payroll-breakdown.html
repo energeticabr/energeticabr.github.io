@@ -3,15 +3,17 @@
 import { createPayrollBreakdownView } from '/src/ui/payroll-breakdown-view.js';
 import { validatePayrollBreakdown } from '/src/chat/payroll-breakdown.js';
 const suppliers = [{ id:'1', label:'CLEITON CESAR NONATO', branch:'004 - EDIFÍCIO XAVANTE', profession:'SERVENTE DE PEDREIRO' },{ id:'2', label:'EDGAR NELSON DA SILVA', branch:'004 - EDIFÍCIO XAVANTE', profession:'MESTRE DE OBRAS' }];
-window.view = createPayrollBreakdownView({ documentRef:document, now:()=>new Date('2026-10-16T12:00:00Z'), data:{loadSuppliers:async()=>suppliers,loadPayrollContext:async()=>({sheetId:'19',paid:{salary:1234.56,meal:200},paidTotal:1434.56}),post:async draft=>{const summary=validatePayrollBreakdown(draft);return {...summary,lines:summary.lines.map((line,index)=>({...line,id:String(index+1),parentId:String(index+10)}))};}} });
+const history=[{id:'31',date:'2026-10-12',rubric:'salary',label:'Salário',quantity:5,unitValue:400,total:2000},{id:'32',date:'2026-10-16',rubric:'salary',label:'Salário',quantity:3,unitValue:468.63,total:1405.89},{id:'33',date:'2026-10-18',rubric:'meal',label:'Vale alimentação',quantity:6,unitValue:79.62,total:477.72}];
+window.view = createPayrollBreakdownView({ documentRef:document, now:()=>new Date('2026-10-19T12:00:00Z'), data:{loadSuppliers:async()=>suppliers,loadPayrollContext:async()=>({sheetId:'19',paid:{salary:3405.89,meal:477.72},paidTotal:3883.61,payments:history}),prepareFiles:async()=>[],submitAttachments:async()=>({status:'complete'}),post:async()=>{throw new Error('Prévia isolada: nenhum registro financeiro será criado.');}} });
 await window.view.open();
 if(new URLSearchParams(location.search).has('measure')){
  document.querySelector('[data-breakdown-supplier="1"]').click();document.querySelector('[data-breakdown-next]').click();
  while(!document.querySelector('[data-breakdown-value]'))await new Promise(requestAnimationFrame);
- const input=document.querySelector('[data-breakdown-value="2026-10-02:salary"]');input.value='500';input.dispatchEvent(new Event('input'));
+ const input=document.querySelector('[data-breakdown-value="2026-10-23:salary"]');input.value='500';input.dispatchEvent(new Event('input'));
  const total=document.querySelector('.payroll-breakdown-totals');total.open=true;total.scrollIntoView({block:'end'});
  await new Promise(requestAnimationFrame);
  const table=total.querySelector('table'),body=document.querySelector('.payroll-breakdown-body'),rect=table.getBoundingClientRect();
- document.documentElement.dataset.layout=JSON.stringify({width:innerWidth,left:rect.left,right:rect.right,scrollWidth:body.scrollWidth,clientWidth:body.clientWidth,headings:[...table.querySelectorAll('thead th')].map(node=>node.textContent),salary:[...table.querySelector('tbody tr').cells].map(node=>node.textContent),total:[...table.querySelector('tbody tr:last-child').cells].map(node=>node.textContent)});
+ const past=document.querySelector('[data-breakdown-date="2026-10-16"]');
+ document.documentElement.dataset.layout=JSON.stringify({width:innerWidth,left:rect.left,right:rect.right,scrollWidth:body.scrollWidth,clientWidth:body.clientWidth,headings:[...table.querySelectorAll('thead th')].map(node=>node.textContent),salary:[...table.querySelector('tbody tr').cells].map(node=>node.textContent),total:[...table.querySelector('tbody tr:last-child').cells].map(node=>node.textContent),grand:total.querySelector('summary').textContent,pastGray:past.classList.contains('payroll-breakdown-date--past'),paidRows:past.querySelectorAll('[data-breakdown-payment]').length,paidFinancialInputs:past.querySelectorAll('[data-breakdown-value],[data-breakdown-quantity]').length,paidAttachmentInputs:past.querySelectorAll('[type=file]').length});
 }
 </script></body></html>

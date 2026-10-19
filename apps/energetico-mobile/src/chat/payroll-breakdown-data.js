@@ -2,9 +2,11 @@ import { SHAREPOINT_SITES } from '../../../../portal/config.js';
 import Decimal from 'decimal.js';
 import { createGraphClient } from '../../../../portal/data/graph-client.js';
 import { createSharePointRepository } from '../../../../portal/data/sharepoint-repository.js';
+import { createSharePointAttachmentTransport } from '../../../../portal/data/attachments.js';
+import { createPayrollBreakdownAttachments } from './payroll-breakdown-attachments.js';
 import { createSupplierPayrollData } from './supplier-payroll-data.js';
-import { payrollKey, PAYROLL_RUBRICS } from './supplier-payroll.js';
-import { createPayrollSourceReader } from './payroll-editor-policy.js';
+import { payrollKey, PAYROLL_RUBRICS, validPayrollDate } from './supplier-payroll.js';
+import { createPayrollBreakdownSourceReader } from './payroll-breakdown-source.js';
 import { payrollProvisionTitle } from './payroll-provision-source.js';
 import { ensurePayrollProvisionSchema } from './payroll-provision-schema.js';
 import { validatePayrollBreakdown, payrollBreakdownSupplierMatches } from './payroll-breakdown.js';
@@ -20,14 +22,16 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
   if (!repository) {
     if (typeof tokenProvider !== 'function') throw new TypeError('É necessária uma sessão Microsoft ativa.');
     schemaGraph = createGraphClient(tokenProvider, { fetch: fetchImpl });
-    repository = createSharePointRepository(schemaGraph, siteConfig);
+    repository = createSharePointRepository(schemaGraph, siteConfig, { attachmentTransport: createSharePointAttachmentTransport({ tokenProvider, allowedSites: Object.values(siteConfig), fetch: fetchImpl }) });
   }
   // Every read and mutation is scoped to the same active account, including after awaits.
-  const scoped = Object.fromEntries(['resolveList', 'getColumns', 'getItems', 'getItemsPage', 'getItem', 'createItem'].map(method => [method, async (...args) => {
+  const scoped = Object.fromEntries(['resolveList', 'getColumns', 'getItems', 'getItemsPage', 'getItem', 'createItem', 'listAttachments', 'uploadAttachment', 'downloadAttachment'].map(method => [method, async (...args) => {
     assertSession(); const value = await repository[method](...args); assertSession(); return value;
   }]));
   const suppliers = createSupplierPayrollData({ repository: scoped, tokenProvider, siteConfig, assertSession });
-  const readPayrollSource = createPayrollSourceReader(scoped, SITE);
+  const readPayrollSource = createPayrollBreakdownSourceReader(scoped, SITE);
+  scoped.clearCache = () => { assertSession(); repository.clearCache?.(); };
+  const attachments = createPayrollBreakdownAttachments({ repository: scoped, assertSession });
   let posting = false;
   async function prepare() {
     assertSession();
@@ -35,6 +39,8 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       const token = await tokenProvider(['Sites.Read.All', 'Sites.ReadWrite.All']);
       assertSession();
       if (!token) throw new Error('Não foi possível autorizar a criação das provisões.');
+      const attachmentToken = await tokenProvider([`https://${siteConfig[SITE].host}/AllSites.Read`, `https://${siteConfig[SITE].host}/AllSites.Write`]);
+      assertSession(); if (!attachmentToken) throw new Error('Não foi possível autorizar os anexos das provisões.');
     }
     if (schemaGraph) await ensurePayrollProvisionSchema({ repository, graph: schemaGraph, assertSession });
   }
@@ -76,10 +82,11 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
     if (!Array.isArray(result)) throw new Error('A consulta das provisões está incompleta.');
     return result;
   }
-  function readValue(descriptor, row, label) {
+  function readValue(descriptor, row, label, optional = false) {
     const matches = descriptor.columns.filter(c => !c.computed && [c.name,c.displayName].some(name => payrollKey(name) === payrollKey(label)));
     const exact = matches.filter(c => payrollKey(c.name) === payrollKey(label));
     const found = exact.length ? exact : matches;
+    if (!found.length && optional) return undefined;
     if (found.length !== 1) throw new Error(`O campo ${label} de ${descriptor.name} não foi identificado de forma única.`);
     return row.fields?.[found[0].name];
   }
@@ -95,16 +102,17 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
     return String(found[0].id);
   }
   async function loadPayrollContext(supplier, month) {
+    scoped.clearCache();
     const sheetId = await sheetFor(supplier, month), payments = await describe(['FOLHAPGTO']);
-    const paid = Object.fromEntries(PAYROLL_RUBRICS.map(r => [r.id, 0]));
+    const paid = Object.fromEntries(PAYROLL_RUBRICS.map(r => [r.id, 0])), history = [], seen = new Set();
     for (const row of await rows(payments)) {
       if (String(readValue(payments,row,'IDFOLHA') ?? '').trim() !== sheetId) continue;
       if (payrollKey(readValue(payments,row,'FORNECEDOR')) !== payrollKey(supplier.label)) throw new Error('O fornecedor do pagamento diverge da folha.');
       const rubric = PAYROLL_RUBRICS.find(r => payrollKey(r.payrollType) === payrollKey(readValue(payments,row,'TIPOPGTO')));
       if (!rubric) throw new Error('Há uma rubrica de pagamento não reconhecida nesta folha. Confira os pagamentos antes de desdobrar.');
-      const fields = { ...row.fields, IDFOLHA: sheetId, FORNECEDOR: supplier.label, TIPOPGTO: rubric.payrollType,
+      const fields = { Title: readValue(payments,row,'Title'), IDPROVISAO: readValue(payments,row,'IDPROVISAO',true), IDFOLHA: sheetId, FORNECEDOR: supplier.label, TIPOPGTO: rubric.payrollType,
         IDLANCAMENTO: readValue(payments,row,'IDLANCAMENTO') };
-      const source = await readPayrollSource(fields);
+      const source = await readPayrollSource(fields,supplier);
       if (source.PGTOAGENDADO === 'PENDENTE') continue;
       if (source.VALORUNITARIO == null || source.QTD == null) throw new Error(`Não foi possível apurar o pagamento ${row.id} da folha.`);
       const total = source.TOTALCENTAVOS != null ? new Decimal(source.TOTALCENTAVOS).div(100)
@@ -112,10 +120,16 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       const next = new Decimal(paid[rubric.id]).plus(total);
       if (!Number.isSafeInteger(next.times(100).toNumber())) throw new Error('O total pago excede o limite monetário.');
       paid[rubric.id] = next.toNumber();
+      const date = String(source.DATA || readValue(payments,row,'DATA') || '').slice(0,10);
+      if (!validPayrollDate(date) || !id(row.id) || seen.has(String(row.id))) throw new Error(`Confira a data e a identidade do pagamento ${row.id}.`);
+      seen.add(String(row.id));
+      history.push({ id: String(row.id), date, rubric: rubric.id, label: rubric.label,
+        quantity: source.QTD, unitValue: source.VALORUNITARIO, total: total.toNumber(),
+        provisionId: source.IDPROVISAO || '', launchId: String(fields.IDLANCAMENTO || '') });
     }
     const total = Object.values(paid).reduce((sum, value) => sum.plus(value), new Decimal(0));
     if (!Number.isSafeInteger(total.times(100).toNumber())) throw new Error('O total pago excede o limite monetário.');
-    return { sheetId, paid, paidTotal: total.toNumber() };
+    return { sheetId, paid, paidTotal: total.toNumber(), payments: history };
   }
   function verify(descriptor, row, fields) {
     if (!id(row?.id)) throw new Error('O SharePoint não confirmou o registro.');
@@ -178,6 +192,16 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       assertSession(); repository.clearCache?.();
       const draft = validatePayrollBreakdown(rawDraft), signature = JSON.stringify(draft);
       if (progress.signature && progress.signature !== signature) throw new Error('O desdobramento não pode ser alterado depois do início do envio.');
+      const uploads = new Map(), manifests = {};
+      for (const raw of rawDraft.lines || []) {
+        const key = `${raw.date}:${raw.rubric}`, files = raw.files || [], previous = progress.attachments?.[key]?.manifest;
+        if (!files.length && previous?.length) throw new Error('Selecione novamente os mesmos arquivos da linha para retomar o envio.');
+        if (!files.length) continue;
+        if (!draft.lines.some(line => `${line.date}:${line.rubric}` === key)) throw new Error('Preencha quantidade e valor da linha que possui anexos antes de seguir.');
+        const manifest = await attachments.prepareFiles(files);
+        if (previous && JSON.stringify(previous) !== JSON.stringify(manifest)) throw new Error('Selecione novamente os mesmos arquivos, com o mesmo conteúdo, para retomar.');
+        uploads.set(key,files); manifests[key] = manifest;
+      }
       const live = (await suppliers.loadSuppliers()).find(row => row.id === draft.supplier.id);
       if (!live || !payrollBreakdownSupplierMatches(live, draft.supplier)) throw new Error('O fornecedor, sua filial ou profissão mudou. Confira o cadastro antes de submeter.');
       const sheetId = await sheetFor(live, draft.month);
@@ -204,7 +228,9 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
         return { line, parentFields, childFields, payrollFields, key: `${line.date}:${line.rubric}` };
       });
       // All field mappings and amounts are validated before the first financial write.
-      progress.signature = signature; progress.sheetId = sheetId; progress.lines ??= {}; onProgress();
+      progress.signature = signature; progress.sheetId = sheetId; progress.lines ??= {}; progress.attachments ??= {};
+      for (const [key,manifest] of Object.entries(manifests)) progress.attachments[key] ??= { manifest };
+      onProgress();
       const result = [];
       for (const pair of pairs) {
         assertSession();
@@ -216,10 +242,13 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
         state.payroll ??= {};
         const paymentFields = { ...pair.payrollFields, ...payload(payroll, { Title: payrollProvisionTitle(childId), IDPROVISAO: childId }) };
         const paymentId = await ensure(payroll, paymentFields, state.payroll, onProgress);
+        if (uploads.has(pair.key)) await attachments.submit({ supplier: live, sheetId, paymentId,
+          files: uploads.get(pair.key), progress: progress.attachments[pair.key], onProgress });
         result.push({ ...pair.line, parentId, id: childId, paymentId, sheetId });
       }
       return { lines: result, total: draft.total, rubrics: draft.rubrics };
     } finally { posting = false; }
   }
-  return Object.freeze({ prepare, loadSuppliers: suppliers.loadSuppliers, loadPayrollContext, post });
+  return Object.freeze({ prepare, loadSuppliers: suppliers.loadSuppliers, loadPayrollContext, post,
+    prepareFiles: attachments.prepareFiles, submitAttachments: attachments.submit });
 }

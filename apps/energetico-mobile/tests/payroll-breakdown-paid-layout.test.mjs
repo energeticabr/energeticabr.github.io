@@ -18,7 +18,9 @@ test('PREVISTO, PAGO e TOTAL ficam visíveis sem rolagem horizontal no celular e
     assert.deepEqual(layout.headings,['Rubrica','PREVISTO','PAGO','TOTAL']);
     assert.ok(layout.left >= 0 && layout.right <= width + 1, JSON.stringify(layout));
     assert.ok(layout.scrollWidth <= layout.clientWidth + 1, JSON.stringify(layout));
-    assert.match(layout.salary[1], /500,00/); assert.match(layout.salary[2], /1\.234,56/); assert.match(layout.total[2], /1\.434,56/);
-    assert.match(layout.salary[3], /1\.734,56/); assert.match(layout.total[3], /1\.934,56/);
+    assert.match(layout.salary[1], /500,00/); assert.match(layout.salary[2], /3\.405,89/); assert.match(layout.total[2], /3\.883,61/);
+    assert.match(layout.salary[3], /3\.905,89/); assert.match(layout.total[3], /4\.383,61/);
+    assert.match(layout.grand,/4\.383,61/);assert.equal(layout.pastGray,true);assert.equal(layout.paidRows,3);
+    assert.equal(layout.paidFinancialInputs,0);assert.equal(layout.paidAttachmentInputs,3);
   }
 });
