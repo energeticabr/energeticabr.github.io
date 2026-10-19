@@ -1,0 +1,206 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -15,10 +15,12 @@
+     from .payment_provision_group import provision_line_total, _currency, _canonical, _sum
+     from .document_item_lock import document_item_lock
+     from .logic import resolve_option, filter_options
++    from .payroll_row_attachments import propagate as propagate_payroll_row_attachments
+ except ImportError:
+     from payment_provision_group import provision_line_total, _currency, _canonical, _sum
+     from document_item_lock import document_item_lock
+     from logic import resolve_option, filter_options
++    from payroll_row_attachments import propagate as propagate_payroll_row_attachments
+ 
+ SOURCE_KIND = 'provision-description'
+ PARENT_LIST = 'DESCRITIVOPROVISAO'
+@@ -737,6 +739,10 @@
+                         verification = self.sharepoint.verify_item(int(item_id), saved['expected_fields'], [], target_list=CHILD_LIST)
+                         if not _verified(verification):
+                             raise RuntimeError(f'Não foi possível confirmar a provisão {item_id} já baixada.')
++                        saved['attachment_propagation'] = propagate_payroll_row_attachments(
++                            self.sharepoint, int(item_id),
++                            {**entries[item_id]['fields'], **saved['expected_fields']}, saved,
++                            parent=group['parent_id'])
+                         continue
+                     entry = entries[item_id]
+                     live, child_etag = self.sharepoint.get_item_fields_with_etag(int(item_id), CHILD_FIELDS, target_list=CHILD_LIST)
+@@ -752,6 +758,7 @@
+                     child_state['attachments'] = []
+                     child_state['payment_settlement_relink_authorized'] = entry['relink_authorized']
+                     child_state['_description_child_commit'] = True
++                    child_state['_description_parent_id'] = group['parent_id']
+                     child_state['_description_child_etag'] = child_etag
+                     if shared_order:
+                         child_state['_description_shared_order'] = copy.deepcopy(shared_order)
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -17,11 +17,13 @@
+     from .launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from .document_item_lock import document_item_lock
+     from .provision_description_settlement import ProvisionDescriptionSettlement, group_options
++    from .payroll_row_attachments import propagate as propagate_payroll_row_attachments
+ except ImportError:
+     from payment_provision_flow import PaymentProvisionFlow, PROVISION_STAGES, PROVISION_STATE_KEYS
+     from launch_cash_receipt import CashReceiptFlow, CashReceiptError, RECOVERY_STAGE as CASH_RECEIPT_RECOVERY_STAGE, has_cash_checkpoint, cash_checkpoint_pending, persist_cash_checkpoint, load_cash_checkpoint
+     from document_item_lock import document_item_lock
+     from provision_description_settlement import ProvisionDescriptionSettlement, group_options
++    from payroll_row_attachments import propagate as propagate_payroll_row_attachments
+ try:
+     from . import financial_catalog_registration as financial_catalog
+ except ImportError:
+@@ -33292,6 +33294,7 @@
+                     "item_id": pending_id,
+                     "target_list": "NOTASPENDENTES",
+                     "verified": pending_verification,
++                    "expected_fields": copy.deepcopy(pending_fields),
+                 }
+                 if shared_order and not (pending_verification is True or (
+                     isinstance(pending_verification, dict) and pending_verification.get("fields") is True
+@@ -33339,6 +33342,7 @@
+                     "item_id": launch_id,
+                     "target_list": "LANCAMENTOS",
+                     "verified": launch_verification,
++                    "expected_fields": copy.deepcopy(launch_fields),
+                 }
+ 
+                 # O novo vínculo substitui o anterior somente após o pedido e o
+@@ -33362,6 +33366,12 @@
+                 )
+                 attachment_names.append(attachment["sharepoint_name"])
+ 
++            propagation = propagate_payroll_row_attachments(
++                self.sharepoint, provision_id, context,
++                {"launch_item": launch_item, "related_item": pending_item},
++                parent=state.get("_description_parent_id"),
++            )
++
+             # A provisão só muda para PAGO depois de todos os registros opcionais
+             # e anexos terem sido criados. update_item não dispara MERGE se os
+             # três valores já forem iguais, tornando a repetição segura.
+@@ -33370,6 +33380,7 @@
+                     on_prepared(required_update, {
+                         "item_id": provision_id, "related_item": pending_item,
+                         "launch_item": launch_item, "attachment_names": attachment_names,
++                        "attachment_propagation": propagation,
+                     })
+                 self.sharepoint.update_item_with_etag(provision_id, required_update,
+                     state["_description_child_etag"], target_list=flow["target_list"])
+@@ -33391,6 +33402,7 @@
+             "related_item": pending_item,
+             "launch_item": launch_item,
+             "attachment_names": attachment_names,
++            "attachment_propagation": propagation,
+             "verified": verification,
+             "recorded_at": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
+         }
+--- /dev/null
++++ b/worker/payroll_row_attachments.py
+@@ -0,0 +1,108 @@
++"""Settlement-only child -> own launch + shared order attachment propagation.
++
++No financial creation, parent enumeration, scheduler or persistent sync state.
++"""
++try:
++    from .provision_attachment_sync import SharePointStore, copy_name, item_id, sha
++except ImportError:
++    from provision_attachment_sync import SharePointStore, copy_name, item_id, sha
++
++CHILD = 'PROVISÃO PGTOS'
++LAUNCH = 'LANCAMENTOS'
++ORDER = 'NOTASPENDENTES'
++
++
++def _text(value):
++    return '' if value is None else str(value).strip()
++
++
++def _verified(value):
++    return value is True or (isinstance(value, dict) and value.get('fields') is True
++                             and value.get('attachments') is True)
++
++
++def propagate(client, child, expected, record, parent=None):
++    """Use settlement-confirmed IDs, then revalidate live links before copying.
++
++    Before the conditional paid write, expected contains the original child
++    links. On journal recovery it contains the already-paid expected links.
++    """
++    child = item_id(child)
++    launch, order = record.get('launch_item'), record.get('related_item')
++    if not launch and not order:
++        return []
++    if not launch or not order:
++        raise RuntimeError('Vínculos incompletos para os anexos da baixa.')
++    launch_id, order_id = item_id(launch['item_id']), item_id(order['item_id'])
++    if (launch.get('target_list') != LAUNCH or order.get('target_list') != ORDER
++            or not _verified(launch.get('verified')) or not _verified(order.get('verified'))):
++        raise RuntimeError('Destinos da baixa não confirmados para anexos.')
++    source_fields = ['FORNECEDOR', 'FILIAL', 'IDPEDIDO', 'IDLANCAMENTOS', 'DESCRITIVOPROVISAO']
++    source, version = client.get_item_fields_with_etag(child, source_fields, target_list=CHILD)
++    for key in ('FORNECEDOR', 'FILIAL'):
++        if not _text(expected.get(key)):
++            raise RuntimeError('Fornecedor/filial ausente na origem dos anexos.')
++    old_links = tuple(_text(expected.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
++    actual_links = tuple(_text(source.get(key)) for key in ('IDPEDIDO', 'IDLANCAMENTOS'))
++    if actual_links not in {old_links, (str(order_id), str(launch_id))}:
++        raise RuntimeError('Vínculos financeiros da provisão divergentes.')
++    for key in ('FORNECEDOR', 'FILIAL', 'DESCRITIVOPROVISAO'):
++        wanted = parent if key == 'DESCRITIVOPROVISAO' and parent is not None else expected.get(key)
++        if _text(source.get(key)) != _text(wanted):
++            raise RuntimeError('Vínculo da provisão alterado antes da cópia de anexos.')
++
++    launch_fields = {key: source[key] for key in ('FORNECEDOR', 'FILIAL')}
++    launch_fields.update({'IDPGTOAGENDADO': str(child), 'AGRUPAR': str(order_id)})
++    order_fields = {key: source[key] for key in ('FORNECEDOR', 'FILIAL')}
++
++    def guard():
++        current, current_version = client.get_item_fields_with_etag(child, source_fields, target_list=CHILD)
++        if current != source or current_version != version:
++            raise RuntimeError('Provisão alterada durante a cópia de anexos.')
++        for kind, target, fields in ((LAUNCH, launch_id, launch_fields), (ORDER, order_id, order_fields)):
++            if not _verified(client.verify_item(target, fields, [], target_list=kind)):
++                raise RuntimeError('Vínculo financeiro divergente durante a cópia de anexos.')
++
++    guard()
++    store = SharePointStore(client)
++    names = store.names(CHILD, child)
++    # Validate every source file and every destination inventory before writing.
++    sources = []
++    for name in sorted(names):
++        content = store.content(CHILD, child, name)
++        digest = sha(content)
++        sources.append((name, copy_name(child, digest, name), content, digest))
++    plans = []
++    for kind, target in ((LAUNCH, launch_id), (ORDER, order_id)):
++        existing = {name: store.digest(kind, target, name) for name in sorted(store.names(kind, target))}
++        for original, deterministic, content, digest in sources:
++            name = next((name for name, value in existing.items() if value == digest), deterministic)
++            if name in existing and existing[name] != digest:
++                raise RuntimeError('Conflito de conteúdo no destino; nenhum anexo foi substituído.')
++            plans.append((kind, target, original, name, content, digest, name in existing))
++            existing[name] = digest
++    guard()
++    for kind, target, original, name, content, digest, reused in plans:
++        guard()
++        if not reused:
++            try:
++                client._ensure_attachment_local(target, name, content, target_list=kind)
++            except Exception:
++                # A lost POST response is success only when the bytes survived.
++                if name not in store.names(kind, target) or store.digest(kind, target, name) != digest:
++                    raise
++        if store.digest(kind, target, name) != digest:
++            raise RuntimeError('Cópia de anexo não confirmada por SHA-256.')
++    guard()
++    if store.names(CHILD, child) != names:
++        raise RuntimeError('A coleção de anexos da provisão mudou durante a baixa.')
++    for original, deterministic, content, digest in sources:
++        if store.digest(CHILD, child, original) != digest:
++            raise RuntimeError('O conteúdo de origem mudou durante a baixa.')
++    # Confirm all destinations together, including files reused by content.
++    for kind, target, original, name, content, digest, reused in plans:
++        if store.digest(kind, target, name) != digest:
++            raise RuntimeError('O anexo de destino mudou durante a baixa.')
++    guard()
++    return [{'target_list': kind, 'item_id': target, 'source': original,
++             'name': name, 'sha256': digest} for kind, target, original, name, content, digest, reused in plans]
