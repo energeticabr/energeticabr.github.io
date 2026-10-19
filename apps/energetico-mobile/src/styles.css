@@ -216,6 +216,9 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-attendance-irregularity textarea { display: block; box-sizing: border-box; width: 100%; min-height: 120px; margin-bottom: 18px; padding: 12px; border: 1px solid #8cabb5; border-radius: 12px; background: white; color: #14333e; font: inherit; resize: vertical; }
 .chat-attendance-irregularity__error { color: #a5222a !important; margin: 0 0 14px !important; font-weight: 700; }
 .chat-pending-construction-diaries .chat-confirmation__actions { grid-template-columns: minmax(0, 1fr); }
+.chat-diary-visit-date { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.chat-diary-field-visit { display: inline-block; font-size: 1em; line-height: 1; }
+.chat-diary-visits-status { color: var(--muted); font-size: .85rem; }
 .chat-pending-construction-diaries .chat-confirmation__confirm { width: 100%; text-align: center; }
 .chat-rhid-report-page { margin: 0 auto; }
 .chat-rhid-report-loading { min-height: 180px; }

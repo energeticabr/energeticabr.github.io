@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#app'));
+let selected;
+view.on('select-reply', event => { selected = { replyId: event.replyId, label: event.label }; });
+view.render({ sessionStatus:'authenticated',account:{name:'Teste'},draft:'',pendingFiles:[],activeFlow:{id:'construction_diary_fill',title:'PREENCHER DIÁRIO DE OBRAS'},messages:[{
+ id:'diary-picker',role:'assistant',type:'poll',question:'QUAL DIÁRIO DE OBRA PENDENTE DESEJA PREENCHER?',options:[
+ {id:'choice:diario_obra_pendente:219',label:'219 - 004 - EDIFÍCIO XAVANTE - (16/10/2026)',diaryFieldVisit:true},
+ {id:'choice:diario_obra_pendente:218',label:'218 - 004 - EDIFÍCIO XAVANTE - (15/10/2026)'},
+ {id:'abandon_construction_diary',label:'ABANDONAR DIÁRIO DE OBRAS'}
+ ]
+}]});
+await document.fonts.ready; await new Promise(requestAnimationFrame);
+const icon=document.querySelector('.chat-diary-field-visit'), date=icon.parentElement, button=icon.closest('button');
+const range=document.createRange(); range.selectNodeContents(date.firstChild);
+const dateRect=range.getBoundingClientRect(), iconRect=icon.getBoundingClientRect(), buttonRect=button.getBoundingClientRect();
+icon.click();
+document.documentElement.dataset.layout=JSON.stringify({
+ icons:document.querySelectorAll('.chat-diary-field-visit').length, date:{left:dateRect.left,right:dateRect.right,top:dateRect.top,bottom:dateRect.bottom},
+ icon:{left:iconRect.left,right:iconRect.right,top:iconRect.top,bottom:iconRect.bottom},
+ button:{left:buttonRect.left,right:buttonRect.right,height:buttonRect.height,overflow:button.scrollWidth>button.clientWidth+1},
+ pageOverflow:document.documentElement.scrollWidth>innerWidth+1, selected,
+});
+document.documentElement.dataset.ready='true';
+</script></body></html>

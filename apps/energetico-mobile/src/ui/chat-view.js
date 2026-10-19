@@ -5,6 +5,7 @@ import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from '../chat/meal-voucher.js';
+import { diaryFieldVisitOptionId } from '../chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from '../chat/payroll-breakdown.js';
 import { escapeHtml } from "./escape-html.js";
 import { normalizeProvisionSnapshotForFlow } from "../chat/provision-snapshot.js";
@@ -716,7 +717,7 @@ function draftTitle(option) {
     .replace(/^▶️\s*RETOMAR\s*•\s*/i, "");
 }
 
-function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false } = {}) {
+function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-draft-delete", galleryButton = false, launchMenuButton = false, suppliesButton = false, displayLabel = null, displayIcon = "", finishAttachments = false, diaryVisit = false } = {}) {
   const replyId = draftReplyId(option);
   const label = option.label || option.title || option.id;
   const disabled = busy || option?.disabled === true;
@@ -737,9 +738,14 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   const diaryClass = option.menuDisplayLabel ? " chat-choice-button--diary"
     : draftReplyId(option) === "start_today_pending_attendance" ? " chat-choice-button--today-attendance" : "";
   const galleryAttribute = galleryButton ? " data-gallery-button" : "";
-  const content = displayIcon
+  let content = displayIcon
     ? `<span class="chat-supplies-button-icon" aria-hidden="true">${escapeHtml(displayIcon)}</span><span class="chat-supplies-button-text">${escapeHtml(displayLabel || label)}</span>`
     : displayLabel ? escapeHtml(displayLabel) : formatChatText(label);
+  if (diaryVisit && diaryFieldVisitOptionId(option)) {
+    const date = String(label).match(/(\(\d{2}\/\d{2}\/\d{4}\))\s*$/);
+    const icon = '<span class="chat-diary-field-visit" role="img" aria-label="Visita em campo" title="Visita em campo nesta data e filial">🏠</span>';
+    content = date ? `${formatChatText(String(label).slice(0, date.index))}<span class="chat-diary-visit-date">${escapeHtml(date[1])}${icon}</span>` : `${content}${icon}`;
+  }
   if (replyId.trim().toLowerCase() === "action_rhid_attendance_report") {
     return `<button class="chat-choice-button" type="button" data-action="open-rhid-attendance-report" data-reply-id="${escapeHtml(replyId)}" aria-label="Abrir relatório de presenças RHID"${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
@@ -1610,6 +1616,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       return [`<div class="chat-document-option">${pollButton(deleteAction, busy, { deleteButton: true, deleteClass: "chat-document-option__delete" })}${pollButton(option, busy)}</div>`];
     }
     return [pollButton(option, busy, {
+      diaryVisit: currentPoll && activeFlow?.id === 'construction_diary_fill' && option.diaryFieldVisit === true,
       finishAttachments: option === finishOption,
       launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
       displayLabel: option?.recommendedDate === true
@@ -1795,6 +1802,8 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ${compressionMarkup}
     ${isAttendanceMultiSelect ? attendanceMarkup : isLaunchPayrollMultiSelect ? launchPayrollMarkup : isEpiProductSelection ? epiMarkup : choicesMarkup}
     ${recentDiaryActivitiesMarkup}
+    ${currentPoll && activeFlow?.id === 'construction_diary_fill' && message.diaryFieldVisitsError ? '<p class="chat-diary-visits-status" role="status">Não foi possível consultar as visitas em campo.</p>' : ''}
+    ${currentPoll && activeFlow?.id === 'construction_diary_fill' && message.diaryFieldVisitsLoading ? '<p class="chat-diary-visits-status" role="status">Consultando visitas em campo…</p>' : ''}
   </div>`;
 }
 

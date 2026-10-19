@@ -27,6 +27,25 @@ function signedInState(overrides = {}) {
   };
 }
 
+test('casinha de visita fica ao lado da data do diário sem mudar o valor enviado pela opção', t => {
+  const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+  const view = createChatView(root), selected = [];
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.on('select-reply', event => selected.push(event));
+  const label = '219 - 004 - EDIFÍCIO XAVANTE - (16/10/2026)';
+  view.render(signedInState({ activeFlow: { id: 'construction_diary_fill' }, messages: [{ id: 'diary-picker', role: 'assistant', type: 'poll',
+    question: 'QUAL DIÁRIO DE OBRA PENDENTE DESEJA PREENCHER?', options: [
+      { id: 'choice:diario_obra_pendente:219', label, diaryFieldVisit: true },
+      { id: 'choice:diario_obra_pendente:218', label: '218 - OBRA A - (15/10/2026)' },
+      { id: 'abandon_construction_diary', label: 'ABANDONAR DIÁRIO', diaryFieldVisit: true },
+    ] }] }));
+  const icon = root.querySelector('[role="img"][aria-label="Visita em campo"]');
+  assert.ok(icon); assert.equal(root.querySelectorAll('[aria-label="Visita em campo"]').length, 1);
+  assert.match(icon.parentElement.textContent, /^\(16\/10\/2026\).*🏠/);
+  const button = icon.closest('button'); assert.equal(button.dataset.label, label);
+  icon.click(); assert.equal(selected[0].replyId, 'choice:diario_obra_pendente:219'); assert.equal(selected[0].label, label);
+});
+
 test("mascotes comerciais ficam em uma faixa externa antes do cartão e preservam suas ações", t => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
