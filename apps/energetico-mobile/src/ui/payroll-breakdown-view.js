@@ -26,13 +26,15 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).formatToParts(now());
     return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}`;
   };
-  let draft, progress, payrollContext, expandedDates;
+  let draft, progress, payrollContext, expandedDates, contextUnavailable = false, historyAttachments = {};
   const fileSelections = new Map(), fileMessages = new Map();
-  function reset() { draft = { supplier: null, month: currentMonth(), lines: [] }; progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` }; result = null; payrollContext = null; expandedDates = null; fileSelections.clear(); fileMessages.clear(); step = 'supplier'; }
+  function reset() { draft = { supplier: null, month: currentMonth(), lines: [] }; progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` }; result = null; payrollContext = null; contextUnavailable = false; expandedDates = null; fileSelections.clear(); fileMessages.clear(); step = 'supplier'; }
   reset();
   function savePending() {
-    if (storageKey && (progress.signature || Object.values(progress.historyAttachments || {}).some(row => row.manifest?.length)) && step !== 'done')
-      storage.setItem(storageKey, JSON.stringify({ draft: { ...draft, lines: draft.lines.map(({files,...line}) => line) }, progress }));
+    if (!storageKey) return;
+    if (progress.signature || Object.values(historyAttachments).some(row => row.manifest?.length))
+      storage.setItem(storageKey, JSON.stringify({ draft: { ...draft, lines: draft.lines.map(({files,...line}) => line) }, progress, historyAttachments }));
+    else storage.removeItem(storageKey);
   }
   function restorePending() {
     if (!storageKey) return false;
@@ -40,11 +42,23 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     if (!raw) return false;
     try {
       const saved = JSON.parse(raw);
+      const histories = saved.historyAttachments || saved.progress?.historyAttachments || {};
+      for (const [paymentId, journal] of Object.entries(histories)) {
+        journal.context ??= { supplier: saved.draft.supplier, month: saved.draft.month, sheetId: saved.progress.sheetId, paymentId };
+        if (journal.context.paymentId !== paymentId || !journal.context.supplier?.id || !journal.context.sheetId) throw new Error();
+        payrollProvisionDates(journal.context.month);
+      }
       payrollProvisionDates(saved.draft.month);
       if (saved.progress?.signature) validatePayrollBreakdown(saved.draft);
       if (!saved.draft.supplier?.id || !/^[A-Za-z0-9-]{1,80}$/.test(String(saved.progress?.operationId || ''))
-        || !saved.progress.signature && !Object.values(saved.progress.historyAttachments || {}).some(row => row.manifest?.length)) throw new Error();
-      draft = saved.draft; progress = saved.progress; payrollContext = null; expandedDates = null; fileSelections.clear(); fileMessages.clear(); step = progress.signature ? 'review' : 'schedule'; return true;
+        || !saved.progress.signature && !Object.values(histories).some(row => row.manifest?.length)) throw new Error();
+      draft = saved.draft; progress = saved.progress; delete progress.historyAttachments; historyAttachments = histories;
+      if (!progress.signature) {
+        const context = Object.values(histories).find(row => row.manifest?.length).context;
+        const sameDraft = draft.supplier.id === context.supplier.id && draft.month === context.month;
+        draft = { supplier: context.supplier, month: context.month, lines: sameDraft ? draft.lines : [] }; progress.sheetId = context.sheetId; initializeLines();
+      }
+      payrollContext = null; expandedDates = null; fileSelections.clear(); fileMessages.clear(); step = progress.signature ? 'review' : 'schedule'; return true;
     } catch { storage.removeItem(storageKey); return false; }
   }
   function showError(cause) { error.textContent = cause?.message || 'Não foi possível concluir. Tente novamente.'; error.hidden = false; }
@@ -110,7 +124,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     const area = el('div', 'payroll-breakdown-attachments'), input = el('input'), note = el('p', 'payroll-breakdown-file-status');
     input.type = 'file'; input.multiple = true; input.accept = '.pdf,.jpg,.jpeg,.jfif,.png,.webp,.doc,.docx,.xls,.xlsx'; input.dataset.breakdownFiles = key;
     input.setAttribute('aria-label', `Anexos de ${label}`); note.setAttribute('aria-live','polite');
-    const expected = () => paymentId ? progress.historyAttachments?.[paymentId]?.manifest : progress.attachments?.[key.slice(4)]?.manifest;
+    const expected = () => paymentId ? historyAttachments[paymentId]?.manifest : progress.attachments?.[key.slice(4)]?.manifest;
     const update = () => {
       const files = fileSelections.get(key) || [], manifest = expected();
       note.textContent = fileMessages.get(key) || (files.length ? `Selecionados: ${files.map(file=>file.name).join(', ')}`
@@ -127,15 +141,16 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
         await data.prepareFiles(files); active(); fileMessages.set(key,'Anexos prontos: serão enviados ao confirmar a criação da provisão.');
       } else {
         if (!data.submitAttachments) throw new Error('O envio de anexos não está disponível.');
-        progress.historyAttachments ??= {}; const journal = progress.historyAttachments[paymentId] ??= {};
+        const context = { supplier: draft.supplier, month: draft.month, sheetId: payrollContext.sheetId, paymentId };
+        const journal = historyAttachments[paymentId] ??= { context };
+        if (JSON.stringify(journal.context) !== JSON.stringify(context)) throw new Error('O contexto dos anexos mudou. Retome a folha original.');
         const uploaded = await data.submitAttachments({ supplier:draft.supplier, sheetId:payrollContext.sheetId, paymentId, files, progress:journal,
           onProgress: () => { active(); savePending(); } }); active();
         const status = { complete:'Provisão, lançamento e pedido: anexos enviados e conferidos.',
           'pending-settlement':'Anexos na provisão; lançamento e pedido receberão os arquivos quando a baixa for efetuada.',
           'missing-provision':'Anexos no lançamento e pedido. Não há provisão vinculada a este pagamento; nenhuma foi criada.' };
         fileMessages.set(key,status[uploaded.status] || 'Confira os destinos dos anexos antes de prosseguir.');
-        delete progress.historyAttachments[paymentId]; savePending();
-        if (storageKey && !progress.signature && !Object.keys(progress.historyAttachments).length) storage.removeItem(storageKey);
+        delete historyAttachments[paymentId]; savePending();
       }
     },'Enviando e conferindo anexos…',true));
     submit.dataset.breakdownAttachmentsSubmit = key;
@@ -211,7 +226,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       if (settled.length) summary = { ...summary,
         total: settled.reduce((sum,line) => payrollDecimal(sum).minus(line.total).toNumber(),summary.total),
         rubrics: summary.rubrics.map(row => ({ ...row, total: settled.filter(line=>line.rubric === row.rubric).reduce((sum,line)=>payrollDecimal(sum).minus(line.total).toNumber(),row.total) })) };
-      amount.textContent = summary ? `Total geral: ${money(payrollCombinedTotal(summary.total, payrollContext?.paidTotal ?? 0))}` : 'Total geral: confira os valores';
+      amount.textContent = contextUnavailable ? 'Total geral: indisponível' : summary ? `Total geral: ${money(payrollCombinedTotal(summary.total, payrollContext?.paidTotal ?? 0))}` : 'Total geral: confira os valores';
       rows.replaceChildren(summary ? rubricTable(summary) : el('p', '', 'Confira os valores preenchidos para visualizar os totais por rubrica.'));
     };
     if (initial) update(initial);
@@ -229,9 +244,10 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
       result = await data.post(withFiles(), progress, () => { active(); savePending(); }); active();
       if (data.loadPayrollContext) {
         try { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }
-        catch { active(); payrollContext = null; }
+        catch { active(); payrollContext = null; contextUnavailable = true; }
       }
-      if (storageKey) storage.removeItem(storageKey); step = 'done';
+      progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      draft.lines = []; step = 'done'; savePending();
     }, 'Criando provisões e descritivos…', true)));
   }
   function render(message) {
@@ -244,6 +260,13 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     if (step === 'done') {
       content.append(el('h2', '', '✅ Provisões criadas com sucesso'), el('p', '', `${result.lines.length} provisão(ões), cada uma com seu próprio descritivo.`), totalsPanel(result).element);
       const list = el('ul'); for (const line of result.lines) list.append(el('li', '', `${dateText(line.date)} · ${line.label} · Provisão ID ${line.id} · Descritivo ID ${line.parentId}`)); content.append(list);
+      if (contextUnavailable) {
+        const notice = el('p', 'payroll-breakdown-error', 'Não foi possível atualizar os pagamentos. O total geral está indisponível até uma nova consulta.');
+        notice.setAttribute('role', 'status'); content.append(notice);
+        footer.append(button('Atualizar pagamentos', 'data-breakdown-refresh', () => work(async active => {
+          const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; contextUnavailable = false;
+        }, 'Consultando pagamentos da folha…')));
+      }
       footer.append(button('Concluir', 'data-breakdown-done', close));
     }
     if (progress.signature && step !== 'done') back.disabled = true;
@@ -261,7 +284,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     async open() {
       if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset();
       previousFocus = doc.activeElement; opened = true; page.hidden = false; epoch++;
-      if (progress.signature || Object.keys(progress.historyAttachments || {}).length || restorePending()) {
+      if (progress.signature || restorePending() || Object.keys(historyAttachments).length) {
         return work(async active => {
           payrollContext = null;
           if (data.loadPayrollContext) { const loaded = await data.loadPayrollContext(draft.supplier, draft.month); active(); payrollContext = loaded; }

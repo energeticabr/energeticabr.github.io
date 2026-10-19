@@ -5,6 +5,7 @@ import { File } from 'node:buffer';
 import { createPayrollBreakdownView } from '../src/ui/payroll-breakdown-view.js';
 import { validatePayrollBreakdown } from '../src/chat/payroll-breakdown.js';
 import { renderChatMarkup } from '../src/ui/chat-view.js';
+import { createPayrollBreakdownAttachments } from '../src/chat/payroll-breakdown-attachments.js';
 
 function harness(options = {}) {
   const dom = new JSDOM('<main></main>', { url: 'https://example.test' }), documentRef = dom.window.document;
@@ -16,7 +17,11 @@ function harness(options = {}) {
     return { ...summary, lines: summary.lines.map((line, index) => ({ ...line, id: String(index + 10), parentId: String(index + 20) })) };
   } };
   const view = createPayrollBreakdownView({ data, documentRef, root: documentRef.querySelector('main'), sessionKey: 'account', storage: dom.window.localStorage, now: () => new Date('2026-10-01T12:00:00Z'), ...options });
-  const click = async selector => { documentRef.querySelector(selector).click(); await new Promise(resolve => setImmediate(resolve)); };
+  const click = async selector => {
+    documentRef.querySelector(selector).click(); await new Promise(resolve => setImmediate(resolve));
+    const footer=documentRef.querySelector('.payroll-breakdown-footer');
+    if(footer?.hidden) await new Promise(resolve=>{const observer=new dom.window.MutationObserver(()=>{if(!footer.hidden){observer.disconnect();resolve();}});observer.observe(footer,{attributes:true,attributeFilter:['hidden']});});
+  };
   const input = (selector, value) => { const node = documentRef.querySelector(selector); node.value = value; node.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
   return { dom, doc: documentRef, data, view, click, input, get posts() { return posts; }, get posted() { return posted; }, fail: () => { fail = true; }, recover: () => { fail = false; } };
 }
@@ -187,4 +192,58 @@ test('baixa ocorrida durante envio não duplica no total uma provisão que passo
   h.data.post=async raw=>{settled=true;const summary=validatePayrollBreakdown(raw);return {...summary,lines:summary.lines.map(line=>({...line,id:'12',parentId:'20',paymentId:'31'}))};};
   await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');h.input('[data-breakdown-value="2026-10-02:salary"]','100');await h.click('[data-breakdown-next]');await h.click('[data-breakdown-submit]');
   assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent,/100,00/);assert.doesNotMatch(h.doc.querySelector('.payroll-breakdown-total').textContent,/200,00/);
+});
+
+test('sucesso financeiro preserva diários históricos distintos até reselecionar os mesmos bytes após concluir e recriar',async t=>{
+  const h=harness({now:()=>new Date('2026-10-19T12:00:00Z')});let restored;
+  t.after(()=>{h.view.destroy();restored?.destroy();h.dom.window.close();});
+  const paid=[31,32].map(id=>({id:String(id),date:'2026-10-12',rubric:'salary',quantity:1,unitValue:100,total:100}));
+  h.data.loadPayrollContext=async()=>({sheetId:'19',paid:{salary:200},paidTotal:200,payments:paid});
+  const owner={FORNECEDOR:'FORNECEDOR TESTE',FILIAL:'004 - EDIFÍCIO XAVANTE'};
+  const rows={IDFOLHA:{19:owner},FOLHAPGTO:Object.fromEntries([31,32].map(id=>[id,{...owner,Title:`legacy-${id}`,IDFOLHA:'19',TIPOPGTO:'SALÁRIO',IDLANCAMENTO:String(id+60)}])),
+    LANCAMENTOS:Object.fromEntries([91,92].map(id=>[id,{...owner,IDPGTOAGENDADO:'',AGRUPAR:'41'}])),NOTASPENDENTES:{41:owner}};
+  const inventories=new Map();let fail=true,uploads=0;
+  const repository={clearCache(){},resolveList:async(_s,n)=>({id:n[0],status:'resolved'}),getColumns:async(_s,l)=>Object.keys(Object.values(rows[l])[0]).map(name=>({name})),
+    getItem:async(_s,l,id)=>({id,fields:rows[l][id]}),listAttachments:async(_s,l,id)=>[...(inventories.get(`${l}:${id}`)||new Map()).keys()].map(name=>({name})),
+    downloadAttachment:async(_s,l,id,name)=>inventories.get(`${l}:${id}`).get(name),uploadAttachment:async(_s,l,id,f,name)=>{
+      if(fail)throw new Error('Upload indisponível');uploads++;const inventory=inventories.get(`${l}:${id}`)||new Map();inventories.set(`${l}:${id}`,inventory);inventory.set(name,await f.arrayBuffer());}};
+  h.data.submitAttachments=createPayrollBreakdownAttachments({repository}).submit;
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');
+  for(const id of [31,32]){choose(h,`[data-breakdown-files="payment:${id}"]`,[receipt()]);await h.click(`[data-breakdown-attachments-submit="payment:${id}"]`);assert.match(h.doc.querySelector('[role=alert]').textContent,/Upload/);}
+  h.input('[data-breakdown-value="2026-10-23:salary"]','10');h.view.close();await h.view.open();
+  assert.equal(h.doc.querySelector('[data-breakdown-value="2026-10-23:salary"]').value,'10','fechar antes de postar preserva o rascunho financeiro');
+  await h.click('[data-breakdown-next]');await h.click('[data-breakdown-submit]');
+  assert.match(h.doc.body.textContent,/Provisões criadas com sucesso/);assert.equal(h.dom.window.localStorage.length,1,'concluir financeiro não elimina anexos pendentes');
+  const saved=JSON.parse(h.dom.window.localStorage.getItem(h.dom.window.localStorage.key(0)));
+  assert.equal(saved.progress.signature,undefined);assert.equal(JSON.stringify(saved).includes('"files"'),false);
+  await h.click('[data-breakdown-done]');await h.view.open();assert.match(h.doc.body.textContent,/Selecione novamente os mesmos arquivos/);
+  h.view.destroy();fail=false;h.data.submitAttachments=createPayrollBreakdownAttachments({repository}).submit;
+  restored=createPayrollBreakdownView({data:h.data,documentRef:h.doc,sessionKey:'account',storage:h.dom.window.localStorage,now:()=>new Date('2026-10-19T12:00:00Z')});await restored.open();
+  assert.equal(h.doc.querySelector('[data-breakdown-value="2026-10-23:salary"]').value,'','provisões concluídas não voltam ao formulário');
+  choose(h,'[data-breakdown-files="payment:31"]',[new File(['outros'],'salario.pdf',{type:'application/pdf'})]);await h.click('[data-breakdown-attachments-submit="payment:31"]');
+  assert.match(h.doc.querySelector('[role=alert]').textContent,/mesmos arquivos/);assert.equal(uploads,0);
+  choose(h,'[data-breakdown-files="payment:31"]',[receipt()]);await h.click('[data-breakdown-attachments-submit="payment:31"]');
+  assert.equal(h.dom.window.localStorage.length,1,'segundo diário permanece independente');
+  choose(h,'[data-breakdown-files="payment:32"]',[receipt()]);await h.click('[data-breakdown-attachments-submit="payment:32"]');
+  assert.equal(h.dom.window.localStorage.length,0);assert.equal(uploads,3);assert.equal(h.posts,1);
+});
+
+for(const settled of [false,true]) test(`falha de atualização após sucesso torna total indisponível e oferece consulta sem repostar${settled?' com baixa concorrente':''}`,async t=>{
+  const h=harness();t.after(()=>{h.view.destroy();h.dom.window.close();});let reads=0,posts=0;
+  h.data.loadPayrollContext=async()=>{
+    if(++reads===2)throw new Error('Consulta indisponível');
+    const paid=settled&&reads>2?450:350;
+    return {sheetId:'19',paid:{salary:paid},paidTotal:paid,payments:settled&&reads>2?[{id:'31',date:'2026-10-02',rubric:'salary',quantity:1,unitValue:100,total:100}]:[]};
+  };
+  h.data.post=async raw=>{posts++;const summary=validatePayrollBreakdown(raw);return {...summary,lines:summary.lines.map(line=>({...line,id:'12',parentId:'20',paymentId:'31'}))};};
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');h.input('[data-breakdown-value="2026-10-02:salary"]','100');
+  assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent,/450,00/);
+  await h.click('[data-breakdown-next]');await h.click('[data-breakdown-submit]');
+  assert.match(h.doc.body.textContent,/Provisões criadas com sucesso/);
+  assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent,/indisponível/i);
+  assert.match(h.doc.body.textContent,/não foi possível atualizar/i);
+  assert.equal(h.doc.querySelector('.payroll-breakdown-total-row td:last-child').textContent,'—');
+  await h.click('[data-breakdown-refresh]');assert.equal(posts,1);assert.equal(reads,3);
+  assert.match(h.doc.querySelector('.payroll-breakdown-total').textContent,/450,00/);
+  assert.doesNotMatch(h.doc.querySelector('.payroll-breakdown-total').textContent,/550,00/);
 });

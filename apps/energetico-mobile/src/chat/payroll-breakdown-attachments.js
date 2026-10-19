@@ -140,12 +140,12 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
         if (!Array.isArray(files) || files.some(f=>!scalar(f.name))) throw new Error('Não foi possível conferir os anexos do destino.');
         const matches = files.filter(f=>fileKey(f.name)===fileKey(entry.manifest.name));
         if (matches.length > 1) throw new Error('Há nomes de anexos ambíguos no destino.');
-        for (const existing of matches.length ? matches : files) {
+        for (const existing of files) {
           const bytes = await call('downloadAttachment',SITE,target.listId,target.id,existing.name);
           const hash = await digest(bytes); assertSession();
           if (hash === entry.manifest.sha256 && bytes.byteLength === entry.manifest.size) return true;
-          if (matches.length) throw new Error(`O arquivo ${entry.manifest.name} já existe com conteúdo diferente. Renomeie o novo arquivo; nada será sobrescrito.`);
         }
+        if (matches.length) throw new Error(`O arquivo ${entry.manifest.name} já existe com conteúdo diferente. Renomeie o novo arquivo; nada será sobrescrito.`);
         // Settlement may have prefixed the source name. Content, not name alone, identifies a delivered receipt.
         return false;
       }

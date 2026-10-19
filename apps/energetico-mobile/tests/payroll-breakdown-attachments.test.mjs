@@ -52,6 +52,22 @@ test('arquivo já copiado na baixa com nome diferente é reaproveitado por conte
   for(const target of ['PROVISÃO PGTOS:12','LANCAMENTOS:91','NOTASPENDENTES:41']) f.files.set(target,new Map([['provisao-12-hash-recibo.pdf',await file().arrayBuffer()]]));
   await f.submit();assert.equal(f.writes.length,0);
 });
+for (const resumed of [false,true]) test(`homônimo conflitante não impede reutilizar bytes idênticos sob outro nome${resumed?' após retomada serializada pendente→pago':''}`,async()=>{
+  const f=fixture({pending:resumed}),progress={};
+  if(resumed){
+    f.repo.uploadAttachment=async()=>{throw new Error('Falha de rede');};
+    await assert.rejects(f.submit([file()],progress),/Falha/);
+    Object.assign(f.rows['PROVISÃO PGTOS'][12],{DATAPGTOEFETUADO:'2026-10-12',IDLANCAMENTOS:'91',IDPEDIDO:'41'});
+    f.rows.FOLHAPGTO[31].IDLANCAMENTO='91';
+  }
+  const delivered=await file().arrayBuffer(),other=await file('outro filho').arrayBuffer();
+  for(const target of ['PROVISÃO PGTOS:12','LANCAMENTOS:91','NOTASPENDENTES:41'])
+    f.files.set(target,new Map([['salario.pdf',other],['PROV-12-salario.pdf',delivered]]));
+  const service=createPayrollBreakdownAttachments({repository:f.repo});
+  const result=await service.submit({supplier,sheetId:'19',paymentId:'31',files:[file()],progress:JSON.parse(JSON.stringify(progress))});
+  assert.equal(result.status,'complete');assert.equal(f.writes.length,0);
+  for(const inventory of f.files.values()){assert.equal(inventory.size,2);assert.deepEqual(inventory.get('salario.pdf'),other);}
+});
 test('manifesto preservado exige os mesmos bytes após reiniciar sem recriar registros',async()=>{
   const f=fixture(),progress={};await f.submit([file()],progress);
   await assert.rejects(f.submit([],progress),/selecione novamente/i);

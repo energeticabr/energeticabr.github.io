@@ -6,7 +6,7 @@ import { createSharePointAttachmentTransport } from '../../../../portal/data/att
 import { createPayrollBreakdownAttachments } from './payroll-breakdown-attachments.js';
 import { createSupplierPayrollData } from './supplier-payroll-data.js';
 import { payrollKey, PAYROLL_RUBRICS, validPayrollDate } from './supplier-payroll.js';
-import { createPayrollSourceReader } from './payroll-editor-policy.js';
+import { createPayrollBreakdownSourceReader } from './payroll-breakdown-source.js';
 import { payrollProvisionTitle } from './payroll-provision-source.js';
 import { ensurePayrollProvisionSchema } from './payroll-provision-schema.js';
 import { validatePayrollBreakdown, payrollBreakdownSupplierMatches } from './payroll-breakdown.js';
@@ -29,7 +29,7 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
     assertSession(); const value = await repository[method](...args); assertSession(); return value;
   }]));
   const suppliers = createSupplierPayrollData({ repository: scoped, tokenProvider, siteConfig, assertSession });
-  const readPayrollSource = createPayrollSourceReader(scoped, SITE);
+  const readPayrollSource = createPayrollBreakdownSourceReader(scoped, SITE);
   scoped.clearCache = () => { assertSession(); repository.clearCache?.(); };
   const attachments = createPayrollBreakdownAttachments({ repository: scoped, assertSession });
   let posting = false;
@@ -82,10 +82,11 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
     if (!Array.isArray(result)) throw new Error('A consulta das provisões está incompleta.');
     return result;
   }
-  function readValue(descriptor, row, label) {
+  function readValue(descriptor, row, label, optional = false) {
     const matches = descriptor.columns.filter(c => !c.computed && [c.name,c.displayName].some(name => payrollKey(name) === payrollKey(label)));
     const exact = matches.filter(c => payrollKey(c.name) === payrollKey(label));
     const found = exact.length ? exact : matches;
+    if (!found.length && optional) return undefined;
     if (found.length !== 1) throw new Error(`O campo ${label} de ${descriptor.name} não foi identificado de forma única.`);
     return row.fields?.[found[0].name];
   }
@@ -101,6 +102,7 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
     return String(found[0].id);
   }
   async function loadPayrollContext(supplier, month) {
+    scoped.clearCache();
     const sheetId = await sheetFor(supplier, month), payments = await describe(['FOLHAPGTO']);
     const paid = Object.fromEntries(PAYROLL_RUBRICS.map(r => [r.id, 0])), history = [], seen = new Set();
     for (const row of await rows(payments)) {
@@ -108,9 +110,9 @@ export function createPayrollBreakdownData({ repository, tokenProvider, siteConf
       if (payrollKey(readValue(payments,row,'FORNECEDOR')) !== payrollKey(supplier.label)) throw new Error('O fornecedor do pagamento diverge da folha.');
       const rubric = PAYROLL_RUBRICS.find(r => payrollKey(r.payrollType) === payrollKey(readValue(payments,row,'TIPOPGTO')));
       if (!rubric) throw new Error('Há uma rubrica de pagamento não reconhecida nesta folha. Confira os pagamentos antes de desdobrar.');
-      const fields = { ...row.fields, IDFOLHA: sheetId, FORNECEDOR: supplier.label, TIPOPGTO: rubric.payrollType,
+      const fields = { Title: readValue(payments,row,'Title'), IDPROVISAO: readValue(payments,row,'IDPROVISAO',true), IDFOLHA: sheetId, FORNECEDOR: supplier.label, TIPOPGTO: rubric.payrollType,
         IDLANCAMENTO: readValue(payments,row,'IDLANCAMENTO') };
-      const source = await readPayrollSource(fields);
+      const source = await readPayrollSource(fields,supplier);
       if (source.PGTOAGENDADO === 'PENDENTE') continue;
       if (source.VALORUNITARIO == null || source.QTD == null) throw new Error(`Não foi possível apurar o pagamento ${row.id} da folha.`);
       const total = source.TOTALCENTAVOS != null ? new Decimal(source.TOTALCENTAVOS).div(100)
