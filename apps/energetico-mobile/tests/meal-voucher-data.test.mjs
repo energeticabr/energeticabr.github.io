@@ -338,6 +338,41 @@ for (const malformed of [false,true]) test(`retomada não cria itens se ${malfor
   assert.equal(f.writes.length, count);
 });
 
+for (const action of ['confirmar','fechar']) test(`aba antiga não sobrescreve o rascunho corrigido ao ${action}`, async t => {
+  const f = fixture(), create = f.repo.createItem;
+  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:`stale-storage-${action}` };
+  await assert.rejects(data.post(original, progress), /rejeitado/);
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  const storage = dom.window.localStorage, key = 'energetico:meal-voucher:pending:shared-tabs';
+  storage.setItem(key, JSON.stringify({ draft:original, progress, files:[] }));
+  const view = createMealVoucherView({ data, documentRef:doc, storage, sessionKey:'shared-tabs' });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  doc.querySelector('[data-meal-next]').click(); await new Promise(setImmediate);
+  doc.querySelector('[data-meal-next]').click();
+  const corrected = { ...draft([suppliers[1]]), date:'2026-10-17' }, otherProgress = structuredClone(progress);
+  await assert.rejects(createMealVoucherData({ repository:f.repo }).post(corrected, otherProgress, () => {
+    storage.setItem(key, JSON.stringify({ draft:corrected, progress:otherProgress, files:[] }));
+  }), /rejeitado/);
+  const count = f.writes.length;
+  if (action === 'confirmar') { doc.querySelector('[data-meal-confirm]').click(); await waitForSubmission(doc); }
+  else view.close();
+  assert.equal(f.writes.length, count);
+  assert.equal(JSON.parse(storage.getItem(key)).draft.lines[0].supplier.label, 'Beto');
+  view.close(); await view.open();
+  assert.equal(doc.querySelector('[name="meal-date"]').value, '2026-10-17');
+  assert.equal(doc.querySelector('[name="meal-date"]').disabled, false);
+  doc.querySelector('[data-meal-next]').click(); await new Promise(setImmediate);
+  doc.querySelector('[data-meal-next]').click();
+  f.repo.createItem = create;
+  doc.querySelector('[data-meal-confirm]').click(); await waitForSubmission(doc);
+  assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /sucesso/);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 1);
+  assert.equal(f.rows.LANCAMENTOS[0].fields.FORNECEDOR, 'Beto'); assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
 test('pedido existente apenas selecionado não bloqueia correção antes do primeiro lançamento', async () => {
   const f = fixture(), create = f.repo.createItem;
   f.rows.NOTASPENDENTES.push(...['98','99'].map(id => ({ id, fields:{ FILIAL:'OBRA A', FORNECEDOR:'DIVERSOS', STATUS:'PENDENTE', VALORTOTAL:100, OBS:'' }, eTag:'"1"' })));

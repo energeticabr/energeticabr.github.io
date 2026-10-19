@@ -21,16 +21,25 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   let available = { suppliers: [], accounts: [], stages: [] }, orders = [], assignments = {}, result = null;
   let progress = {}, draft = {}, expectedFiles = [];
   const storageKey = sessionKey ? `energetico:meal-voucher:pending:${sessionKey}` : '';
+  let pendingSnapshot = null;
   function savedFiles(files) { return files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })); }
-  function clearPending() { if (storageKey) storage.removeItem(storageKey); }
+  function clearPending() {
+    if (storageKey && storage.getItem(storageKey) === pendingSnapshot) { storage.removeItem(storageKey); pendingSnapshot = null; }
+  }
   function savePending() {
     if (!storageKey) return;
+    if (storage.getItem(storageKey) !== pendingSnapshot) {
+      const conflict = new Error('O lote mudou em outra tela. Revise os dados atualizados antes de confirmar.');
+      conflict.code = 'MEAL_DRAFT_CHANGED'; throw conflict;
+    }
     const files = expectedFiles.length && (locked() || !draft.files.length) ? expectedFiles : savedFiles(draft.files);
-    storage.setItem(storageKey, JSON.stringify({ draft: { ...draft, files: [] }, progress, files }));
+    const next = JSON.stringify({ draft: { ...draft, files: [] }, progress, files });
+    storage.setItem(storageKey, next); pendingSnapshot = next;
   }
   function restorePending() {
     if (!storageKey) return false;
     const raw = storage.getItem(storageKey);
+    pendingSnapshot = raw;
     if (!raw) return false;
     let saved;
     try { saved = JSON.parse(raw); } catch { clearPending(); return false; }
@@ -82,7 +91,17 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     try { assertSession(); await action(); assertSession(); if (!opened || destroyed || epoch !== revision) return false; busy = false; mutating = false; render(); return true; }
     catch (cause) {
       if (opened && !destroyed && epoch === revision) {
-        if (mutation && progress.signature) {
+        if (cause?.code === 'MEAL_DRAFT_CHANGED') {
+          try {
+            if (restorePending()) {
+              const editable = await refreshEditability();
+              if (editable) { step = 'details'; orders = await data.loadOrders(branch()); }
+              else assignments = await data.loadSheetAssignments(draft.referenceMonth, mealVoucherLines(draft.lines).map(line => line.supplier));
+            } else {
+              reset(); draft.lines = available.suppliers.map(supplier => ({ supplier, quantity:'5', unitValue:'' }));
+            }
+          } catch (recoveryError) { cause = recoveryError; }
+        } else if (mutation && progress.signature) {
           try { await refreshEditability(); } catch { progress.editable = false; }
         }
         if (opened && !destroyed && epoch === revision) { busy = false; mutating = false; render(); showError(cause); }
@@ -290,12 +309,14 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   back.addEventListener('click', navigateBack); home.addEventListener('click', () => { if (close()) onHome(); });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
-  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done') savePending(); opened = false; epoch++; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; epoch++; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
   return Object.freeze({
     async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; const inMemory = Boolean(progress.signature); await work(async () => {
       available = await data.loadOptions();
-      const restored = !inMemory && restorePending();
-      if (!inMemory && !restored) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
+      const changedElsewhere = storageKey && storage.getItem(storageKey) !== pendingSnapshot;
+      const restored = (!inMemory || changedElsewhere) && restorePending();
+      if (inMemory && changedElsewhere && !restored) reset();
+      if ((!inMemory || changedElsewhere) && !restored) draft.lines = available.suppliers.map(supplier => ({ supplier, quantity: '5', unitValue: '' }));
       else {
         const editable = await refreshEditability();
         if (editable) {
