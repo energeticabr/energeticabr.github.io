@@ -18,6 +18,31 @@ const menu = { id: 'financial-menu', role: 'assistant', type: 'poll',
 };
 const state = { sessionStatus: 'authenticated', account: { name: 'Bernardo' }, messages: [menu], pendingFiles: [], draft: '' };
 
+test('opening an investment editor does not supersede its gallery institution catalog', async () => {
+  let release, catalogReads = 0;
+  const firstPage = new Promise(resolve => { release = resolve; });
+  const institutions = { items: [{ id: '1', fields: { INSTITUICAOEMISSORA: 'BANCO QA' } }], hasMore: false };
+  const data = createRegistrationGalleryData({ kind: 'investment', repository: {
+    resolveList: async (_site, aliases) => ({ id: aliases[0], status: 'resolved' }),
+    getColumns: async (_site, list) => list === 'INSTITUICAOEMISSORA'
+      ? [{ name: 'INSTITUICAOEMISSORA', text: {} }] : [{ name: 'INSTITUICAO', text: {} }],
+    getItemsPage: async (_site, list) => {
+      assert.equal(list, 'INSTITUICAOEMISSORA');
+      return ++catalogReads === 1 ? firstPage : institutions;
+    },
+    getItem: async () => ({ id: '1', eTag: '"v1"', fields: { INSTITUICAO: 'BANCO QA' } }),
+  } });
+  const galleryCatalog = data.loadFilterOptions('INSTITUICAO').then(value => ({ value }), error => ({ error }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(catalogReads, 1);
+  const editor = await data.loadEditor('1');
+  assert.deepEqual(editor.columns.find(column => column.name === 'INSTITUICAO').choices, ['BANCO QA']);
+  release(institutions);
+  const result = await galleryCatalog;
+  assert.equal(result.error, undefined, 'an editor is a separate catalog consumer, not a newer gallery selection');
+  assert.deepEqual(result.value, [{ value: 'BANCO QA', label: 'BANCO QA' }]);
+});
+
 test('financial menu puts exactly one corresponding gallery to the right of every registration', () => {
   const dom = new JSDOM('<main id="app"></main>');
   const view = createChatView(dom.window.document.querySelector('main'));

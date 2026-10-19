@@ -365,7 +365,11 @@ function createPicker(select, closeOthers, options = {}) {
     if (event.currentTarget === selectAll) onSelectAll();
     else onDismiss();
   }
-  function closeIfHidden() {
+  function closeIfHidden(records) {
+    // A sibling filter finishing its load must not rebuild this open picker
+    // and reset the user's active keyboard option. Only ancestors can change
+    // this picker's visibility or inherited fieldset disabled state.
+    if (!records.some(record => record.target.contains(wrapper))) return;
     if (wrapper.closest('[hidden], [aria-hidden="true"], details:not([open])')) close();
     // Fieldset disabling affects the native select without changing its own attributes.
     sync();

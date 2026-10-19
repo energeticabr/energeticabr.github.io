@@ -350,8 +350,9 @@ export function createTasksGallery({ document: documentRef = globalThis.document
     });
   }
 
-  function filterOptions() {
+  function filterOptions(only) {
     for (const [name, aliases] of [["status", ["STATUS"]], ["supplier", []], ["branch", ["FILIAL"]], ["association", ["ASSOCIAÇÃO", "ASSOCIACAO", "field_10"]]]) {
+      if (only && name !== only) continue;
       const control = controls.get(name); const current = control.value;
       const rowValues = name === "supplier" ? supplierOptions.map(option => option.value)
         : rows.map(row => name === "status" ? status(row.fields, dateKey(now())) : text(field(row.fields, aliases)).trim()).filter(Boolean);
@@ -564,7 +565,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
         throw new Error("A consulta não retornou opções de fornecedores válidas.");
       }
       supplierOptions = options;
-      filterOptions(); control.disabled = false;
+      filterOptions("supplier"); control.disabled = false;
       supplierNotice.hidden = true; supplierNotice.replaceChildren();
     } catch (error) {
       if (!active() || error?.name === "AbortError") return;

@@ -448,6 +448,27 @@ test('falha do catálogo de fornecedores preserva tarefas e permite tentar novam
   assert.deepEqual([...ctx.root().querySelector('select[name="supplier"]').options].map(option => option.value), ['', 'BERNARDO']);
 });
 
+test('chegada do catálogo de fornecedores preserva a escolha por teclado em outro filtro', async t => {
+  const pending = deferred();
+  const ctx = await setup(t, { rows: [
+    { id: '1', fields: { TAREFA: 'Filial A', FILIAL: 'A', STATUS: 'EM ATENDIMENTO' } },
+    { id: '2', fields: { TAREFA: 'Filial B', FILIAL: 'B', STATUS: 'EM ATENDIMENTO' } },
+  ], data: { loadFilterOptions: () => pending.promise } });
+  await ctx.gallery.open(); await settle();
+  ctx.root().querySelector('.tg-filter-toggle').click(); await settle();
+  const branch = ctx.root().querySelector('[name="branch"]');
+  const picker = branch.nextElementSibling.querySelector('[role="combobox"]');
+  picker.focus(); picker.click();
+  picker.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+  const active = picker.getAttribute('aria-activedescendant');
+  assert.equal(ctx.document.getElementById(active)?.textContent, 'A');
+  pending.resolve([{ value: 'QA', label: 'QA' }]); await settle();
+  assert.equal(ctx.document.getElementById(picker.getAttribute('aria-activedescendant'))?.textContent, 'A');
+  picker.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(branch.value, 'A');
+  assert.deepEqual([...ctx.root().querySelectorAll('.tg-card')].map(card => card.dataset.itemId), ['1']);
+});
+
 test('abrir anexos após falha de fornecedores preserva o aviso e o botão de tentar novamente', async t => {
   const ctx = await setup(t, { openMediaCollection: async () => {}, data: {
     async loadFilterOptions() { throw new Error('Catálogo indisponível'); },
