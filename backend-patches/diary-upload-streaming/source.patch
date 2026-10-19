@@ -1,0 +1,82 @@
+--- a/local_app.py
++++ b/local_app.py
+@@ -9,10 +9,12 @@
+ import mimetypes
+ import os
+ import re
++import secrets
+ import sys
+ import threading
+ import time
+ from concurrent.futures import ThreadPoolExecutor
++from contextlib import nullcontext
+ from datetime import datetime, timezone
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
+@@ -151,7 +153,66 @@
+         download.raise_for_status()
+         return download.content, details.get("mime_type")
+ 
++    def _stage_local(self, event, batch_id, state_key):
++        with Path(event["local_path"]).open("rb") as source:
++            expected_size = os.fstat(source.fileno()).st_size
++            if expected_size > self.max_bytes:
++                raise ValueError("Anexo excede o limite configurado")
++            mime_type = event.get("mime_type") or "application/octet-stream"
++            filename = destination_filename(event, mime_type)
++            extension = Path(filename).suffix[:12]
++            media_key = hashlib.sha256(event["message_id"].encode("utf-8")).hexdigest()[:24]
++            relative = Path(state_key[:12]) / batch_id[:12] / f"{media_key}{extension}"
++            target = (self.directory / relative).resolve()
++            if self.directory not in target.parents:
++                raise ValueError("Nome de mídia inválido")
++            target.parent.mkdir(parents=True, exist_ok=True)
++            temporary = None
++            try:
++                destination = nullcontext(None)
++                if not target.exists():
++                    name = target.with_name(f".{target.name}.{secrets.token_hex(16)}.tmp")
++                    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
++                    temporary = name
++                    try:
++                        destination = os.fdopen(descriptor, "wb")
++                    except BaseException:
++                        os.close(descriptor)
++                        raise
++                size = 0
++                digest = hashlib.sha256()
++                with destination as output:
++                    while chunk := source.read(64 * 1024):
++                        size += len(chunk)
++                        if size > self.max_bytes:
++                            raise ValueError("Anexo excede o limite configurado")
++                        digest.update(chunk)
++                        if output is not None:
++                            output.write(chunk)
++                    if size != expected_size:
++                        raise ValueError("Arquivo de mídia local alterado durante a leitura")
++                if temporary is not None:
++                    # Publish complete bytes without replacing an existing target.
++                    try:
++                        os.link(temporary, target)
++                    except FileExistsError:
++                        pass
++            finally:
++                if temporary is not None:
++                    temporary.unlink(missing_ok=True)
++        return {
++            "message_id": event["message_id"],
++            "object_name": relative.as_posix(),
++            "sharepoint_name": filename,
++            "original_name": event.get("original_filename") or filename,
++            "mime_type": mime_type,
++            "size": size,
++            "sha256": digest.hexdigest(),
++        }
++
+     def stage(self, event, batch_id, state_key):
++        if event.get("local_path"):
++            return self._stage_local(event, batch_id, state_key)
+         content, api_mime = self._download(event)
+         if len(content) > self.max_bytes:
+             raise ValueError("Anexo excede o limite configurado")

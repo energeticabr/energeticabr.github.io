@@ -67,8 +67,9 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
       if (String(row?.id) !== itemId) throw new Error(`O vínculo ${names[kind][0]} ${itemId} não foi confirmado.`);
       const canonical = {};
       function value(label, optional = false) {
-        const matches = desc.columns.filter(c=>!c.computed && [c.name,c.displayName].some(n=>payrollKey(n)===payrollKey(label)));
-        const exact = matches.filter(c=>payrollKey(c.name)===payrollKey(label)), found = exact.length ? exact : matches;
+        const matches = desc.columns.filter(c=>!c.computed && !c.hidden && [c.name,c.displayName].some(n=>payrollKey(n)===payrollKey(label)));
+        const exact = matches.filter(c=>payrollKey(c.name)===payrollKey(label)), writable = matches.filter(c=>!c.readOnly);
+        const found = exact.length ? exact : writable.length ? writable : matches;
         if (!found.length && optional) return '';
         if (found.length !== 1) throw new Error(`O vínculo ${label} de ${names[kind][0]} não é único.`);
         return canonical[label] = scalar(row.fields?.[found[0].name]);

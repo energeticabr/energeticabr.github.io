@@ -203,7 +203,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   const doc = documentRef;
   let opened = false, destroyed = false, suspended = false, busy = false;
   let session = 0, listVersion = 0, detailVersion = 0;
-  let listLoading = false, detailLoading = false, returnFocus;
+  let listLoading = false, listBlocking = false, detailLoading = false, returnFocus;
   let current = null, selectedId = null, editor = null, review = null;
   let page = 1, pages = 0, needsDetailRefresh = false, pendingAttachmentName = null;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
@@ -292,7 +292,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return `${context}: ${error?.message || 'não foi possível concluir'}. Tente novamente; se persistir, confira a conexão e atualize os dados.`;
   }
   function updateBusy() {
-    loadingScreen.sync(opened && listLoading);
+    loadingScreen.sync(opened && listLoading && listBlocking);
     root.setAttribute('aria-busy', String(opened && (listLoading || detailLoading || busy)));
     for (const control of root.querySelectorAll('[data-lg-lock]')) {
       control.disabled = busy || control.dataset.lgDisabled === 'true';
@@ -451,23 +451,31 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return { filters: Object.fromEntries([...filterControls].map(([name, control]) =>
       [name, control.type === 'checkbox' ? control.checked : control.value])), sort: sort.value, page: targetPage, pageSize: 20 };
   }
-  function applyFilters({ refresh = false, preservePage = false } = {}) {
+  function applyFilters({ refresh = false, preservePage = false, blocking = false } = {}) {
     const data = query(1);
     if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
-    notify(''); return loadSnapshot(data, { refresh });
+    notify(''); return loadSnapshot(data, { refresh, blocking: refresh || blocking });
   }
-  async function loadSnapshot(data = applied, { refresh = false } = {}) {
+  async function loadSnapshot(data = applied, { refresh = false, blocking = true } = {}) {
     if (!opened || destroyed || !root.isConnected) return;
     attachmentCounts.reset();
     const version = ++listVersion, epoch = session;
     applied = { ...data, filters: { ...data.filters } };
-    listLoading = true; listStatus.textContent = ''; updateBusy();
+    const matchesCurrentFilters = () => {
+      const latest = query(1);
+      return data.sort === latest.sort && JSON.stringify(data.filters) === JSON.stringify(latest.filters);
+    };
+    listBlocking = blocking;
+    listLoading = true;
+    if (blocking) listStatus.textContent = '';
+    updateBusy();
     try {
       const result = await request('snapshot', { ...data, filters: { ...data.filters }, ...(refresh ? { refresh: true } : {}) });
       if (!active(epoch) || version !== listVersion) return;
+      if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       if (!Array.isArray(result?.rows)) throw new Error('Resposta de lançamentos inválida');
       page = result.page ?? data.page; pages = result.pages ?? 1;
       totals.replaceChildren(...TOTALS.map(([totalKey, title]) => {
@@ -492,8 +500,12 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return true;
     } catch (error) {
       if (!active(epoch) || version !== listVersion) return;
+      if (!blocking && !matchesCurrentFilters()) { autoFilters.invalidate(); return; }
       listStatus.replaceChildren(element('p', 'lg-error', failure(error, 'Erro ao carregar lançamentos')),
-        button('Tentar novamente', () => loadSnapshot(data), { locked: false }));
+        button('Tentar novamente', () => {
+          autoFilters.sync();
+          return matchesCurrentFilters() ? loadSnapshot(data, { refresh, blocking }) : applyFilters({ refresh, blocking });
+        }, { locked: false }));
       return false;
     } finally {
       if (active(epoch) && version === listVersion) { listLoading = false; updateBusy(); }
@@ -1673,7 +1685,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     opened = true; ++session; returnFocus = doc.activeElement;
     root.hidden = suspended; focus(back);
     autoFilters.sync();
-    await Promise.all([applyFilters({ preservePage: true }), needsDetailRefresh && selectedId != null && !editor ? loadDetail(selectedId) : Promise.resolve()]);
+    await Promise.all([applyFilters({ preservePage: true, blocking: true }), needsDetailRefresh && selectedId != null && !editor ? loadDetail(selectedId) : Promise.resolve()]);
   }
   function close() {
     if (!opened || destroyed) return;

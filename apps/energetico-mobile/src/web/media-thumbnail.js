@@ -21,10 +21,25 @@ function kind(blob, fileName) {
   return null;
 }
 
-export async function createMediaThumbnail(blob, fileName, { documentRef = globalThis.document, urlApi = globalThis.URL, loadPdf = loadPdfJs } = {}) {
+export async function createMediaThumbnail(blob, fileName, { documentRef = globalThis.document, urlApi = globalThis.URL, loadPdf = loadPdfJs, loadImageBitmap = globalThis.createImageBitmap?.bind(globalThis) } = {}) {
   const type = kind(blob, fileName);
   if (!type) return null;
-  if (type === "image") return urlApi.createObjectURL(blob);
+  if (type === "image") {
+    if (typeof loadImageBitmap !== 'function' || !documentRef?.createElement) return urlApi.createObjectURL(blob);
+    const bitmap = await loadImageBitmap(blob);
+    try {
+      if (!(bitmap.width > 0 && bitmap.height > 0 && Number.isFinite(bitmap.width + bitmap.height))) return null;
+      const scale = Math.min(1, MAX_THUMBNAIL_SIDE / Math.max(bitmap.width, bitmap.height));
+      const canvas = documentRef.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d', { alpha: true });
+      if (!context) return null;
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const thumb = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      return thumb ? urlApi.createObjectURL(thumb) : null;
+    } finally { bitmap.close(); }
+  }
   if (blob.size > MAX_PDF_BYTES) return null;
   const pdfjs = await loadPdf();
   const assetBase = new URL("pdfjs/", new URL(import.meta.env?.BASE_URL || "./", documentRef.baseURI));
