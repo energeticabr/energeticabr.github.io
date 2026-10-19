@@ -37,6 +37,30 @@ test('real repository retries a cached failed site discovery and can recover aft
   assert.deepEqual((await manual.loadSnapshot()).rows.map(row => row.id), ['9']);
 });
 
+test('real discovery honors Retry-After then a manual refresh clears the cached outage', async t => {
+  let now = 10000, siteReads = 0;
+  t.mock.method(Date, 'now', () => now);
+  const sites = { personal: { host: 'tenant.sharepoint.com', path: '/sites/test', readTransport: 'graph' } };
+  const graph = createGraphClient(async () => 'synthetic-token-not-a-credential', { fetch: async (url, options) => {
+    assert.equal(options.method, 'GET');
+    const path = new URL(url).pathname;
+    if (path === '/v1.0/sites/tenant.sharepoint.com:/sites/test') {
+      if (++siteReads === 1) return new Response(JSON.stringify({ error: { code: 'serviceUnavailable', message: 'Synthetic cooldown' } }), { status: 503, headers: { 'Retry-After': '1' } });
+      return Response.json({ id: 'test-site' });
+    }
+    if (path === '/v1.0/sites/test-site/lists') return Response.json({ value: [{ id: 'orders-list', displayName: 'NOTASPENDENTES', list: { template: 'genericList' } }] });
+    if (path === '/v1.0/sites/test-site/lists/orders-list/items') return Response.json({ value: [{ id: '9', fields: {} }] });
+    throw new Error(`Unexpected synthetic path: ${path}`);
+  } });
+  const data = createOrdersGalleryData({ repository: createSharePointRepository(graph, sites), siteConfig: sites });
+  await assert.rejects(data.loadSnapshot(), /Synthetic cooldown/);
+  await assert.rejects(data.loadSnapshot({ refresh: true }), /Synthetic cooldown/);
+  assert.equal(siteReads, 1, 'neither automatic nor early manual retry bypasses the service deadline');
+  now += 1001;
+  assert.deepEqual((await data.loadSnapshot({ refresh: true })).rows.map(row => row.id), ['9']);
+  assert.equal(siteReads, 2, 'manual retry after the deadline reaches Graph instead of the cached error');
+});
+
 test('orders recover a temporary discovery and page failure without rereading completed pages', async () => {
   let discoveries = 0, secondPage = 0;
   const pages = [];

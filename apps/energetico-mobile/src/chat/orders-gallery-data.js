@@ -687,6 +687,7 @@ function createSharePointListData({
 
   let resolvedList;
   const attachmentCache = new Map();
+  let retryBlockedUntil = 0, retryBlockedError;
   async function resolveList(signal) {
     if (resolvedList) return resolvedList;
     const list = await repository.resolveList(siteKey, listAliases, signal ? { signal } : {});
@@ -716,6 +717,11 @@ function createSharePointListData({
         const status = Number(error?.status) || 0;
         const transient = status ? [408, 502, 503, 504].includes(status)
           : ['request_timeout', 'network_error'].includes(error?.code);
+        const retryAfter = Number(error?.retryAfter);
+        if (Number.isFinite(retryAfter) && retryAfter > 0 && error !== retryBlockedError) {
+          retryBlockedError = error;
+          retryBlockedUntil = Date.now() + retryAfter * 1000;
+        }
         if (attempt !== 0 || !transient || error?.name === 'AbortError'
           || Number(error?.retryAfter) > 0) throw error;
         // Site discovery caches inaccessible sites; retry must reach Graph again.
@@ -725,7 +731,16 @@ function createSharePointListData({
     }
   }
 
-  async function loadSnapshot({ signal } = {}) {
+  async function loadSnapshot({ signal, refresh = false } = {}) {
+    if (retrySnapshotReads) {
+      if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+      assertSession();
+      if (Date.now() < retryBlockedUntil) throw retryBlockedError;
+      if (refresh) {
+        repository.clearCache?.();
+        resolvedList = undefined;
+      }
+    }
     const list = await readSnapshot(() => resolveList(signal), signal, true);
     const rows = [];
     let cursor = "";
@@ -743,6 +758,7 @@ function createSharePointListData({
       }
       if (!page?.hasMore || !page?.nextLink) {
         if (!preserveSourceOrder) rows.sort((left, right) => Number(right.id) - Number(left.id));
+        retryBlockedUntil = 0; retryBlockedError = undefined;
         return Object.freeze({ listName, rows: Object.freeze(rows) });
       }
       cursor = page.nextLink;
