@@ -253,18 +253,26 @@
   margin-left: 0;
   align-items: center;
 }
-.lg-record-header-actions .lg-record-total {
-  flex: 1 1 auto;
+.lg-record-payment-summary {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
-  margin: 0;
-  padding: 7px 10px;
-  border: 1px solid #e5b8ba;
+  border: 1px solid #add7b2;
   border-radius: 9px;
-  background: #fff0f0;
-  text-align: right;
+  overflow: hidden;
+  background: #e1f5df;
 }
+.lg-record-payment-summary > .lg-record-field { padding: 8px; border: 0; background: #e1f5df; }
+.lg-record-payment-summary > .lg-record-field > .lg-card-icon { grid-row: 1; }
+.lg-record-payment-summary > .lg-record-field > .lg-record-value { grid-column: 1 / -1; font-weight: 900; }
+.lg-record-payment-summary > .lg-record-total { border-left: 1px solid #add7b2; }
+.lg-record-payment-summary .lg-record-label,
+.lg-record-payment-summary .lg-record-value,
+.lg-record-payment-summary .lg-card-icon { color: #176737; }
+.lg-record-heading-summary { grid-row: 3; }
 .lg-record-header-actions .gallery-record-action { flex: 0 0 44px; }
-.lg-record-total .lg-record-label, .lg-record-total .lg-record-value { color: var(--lg-red); }
 .lg-record-total .lg-record-value { font-size: 1rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) {
   .lg-record-heading .lg-record-header-actions {
@@ -273,8 +281,8 @@
     justify-self: end;
     width: fit-content;
   }
-  .lg-record-header-actions .lg-record-total { flex: 0 1 auto; padding: 5px 8px; }
-  .lg-record-heading-summary { grid-row: 3; }
+  .lg-record-payment-summary { grid-row: 3; }
+  .lg-record-heading-summary { grid-row: 4; }
 }
 .lg-record-main {
   display: block;
@@ -342,8 +350,6 @@
 .lg-record-total-with-freight { grid-template-columns: 22px minmax(0, 1fr); column-gap: 6px; }
 .lg-record-total-with-freight > .lg-card-icon { grid-row: 1; width: 22px; height: 22px; }
 .lg-record-total-with-freight > .lg-record-value { grid-column: 1 / -1; font-size: .85rem; }
-.lg-record-header-actions .lg-record-total { text-align: left; }
-.lg-record-total > .lg-card-icon { color: var(--lg-red); }
 .lg-record-payment-method { padding-block: 12px; }
 .lg-record-meta { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 8px; }
 .lg-record-meta .lg-record-field { padding-inline: 4px; }
@@ -534,6 +540,8 @@
   .lg-pagination .lg-button { flex: 1; }
 }
 @media (max-width: 390px) {
+  .lg-record-payment-summary > .lg-record-field { padding: 6px; }
+  .lg-record-payment-summary > .lg-record-field > .lg-record-value { font-size: .85rem; }
   .lg-record-badges { grid-template-columns: 1fr; }
   .lg-record-dates { grid-template-columns: 1fr; }
   .lg-record-meta { grid-template-columns: 1fr; }

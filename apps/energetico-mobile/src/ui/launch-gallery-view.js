@@ -1016,24 +1016,25 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         ? 'lg-status-final' : normalizedStatus.includes('PENDENTE') ? 'lg-status-pending' : 'lg-status-other';
       headingSummary.append(element('span', `lg-record-status ${statusClass}`, display(status)));
     }
-    const total = summaryField('VALOR TOTAL', moneyFieldValue(totalValue), '', 'money');
+    const total = summaryField('VALOR TOTAL', display(moneyFieldValue(totalValue)).replace(/\u00a0/g, ' '), '', 'money');
+    const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
+    const paymentSummary = element('div', 'lg-record-payment-summary');
+    paymentSummary.append(summaryField('DATA PGTO EFETUADO', paidDate ?? '—', 'lg-record-payment-date', 'calendar'));
+    if (total) { total.classList.add('lg-record-total'); paymentSummary.append(total); }
     const headingActions = recordActions.render(item);
     headingActions.classList.add('lg-record-header-actions');
-    if (total) { total.classList.add('lg-record-total'); headingActions.prepend(total); }
-    identity.append(headingActions, headingSummary);
+    identity.append(headingActions, paymentSummary, headingSummary);
 
     const summary = element('section', 'lg-record-summary');
     const supplier = field(fields, 'FORNECEDOR');
     const group = field(fields, 'AGRUPAR');
-    const paidDate = field(fields, 'DATA PGTO EFETUADO', 'DATA DE PAGAMENTO', 'DATA PAGAMENTO');
     const plannedDate = field(fields, 'DATA PGTO PREVISTO', 'DATA PREVISTO PGTO', 'DATA PREVISTO');
-    const paymentDate = paidDate ?? plannedDate;
-    const paymentLabel = paidDate ? 'PAGAMENTO' : plannedDate ? 'PREVISTO' : 'PAGAMENTO';
     const summaryFields = element('div', 'lg-record-summary-fields');
     summaryFields.append(...[
       clusterAction('FORNECEDOR', supplier, 'supplier'),
       clusterAction('PEDIDO', group, 'order'),
-      summaryField(paymentLabel, paymentDate, 'lg-record-payment-date', 'calendar'),
+      !paidDate ? summaryField('PREVISTO', formatGalleryDate('DATA PGTO PREVISTO', plannedDate) ?? plannedDate,
+        'lg-record-payment-date', 'calendar') : null,
     ].filter(Boolean));
 
     const finance = element('section', 'lg-record-group lg-record-finance lg-record-values');

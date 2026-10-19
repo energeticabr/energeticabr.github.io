@@ -13,7 +13,7 @@ const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\App
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', '/usr/bin/google-chrome',
   '/usr/bin/chromium', '/usr/bin/chromium-browser'].find(path => path && existsSync(path));
 
-test('launch total is highlighted left of pencil, status moves below controls and freight/description remain visible', { timeout: 90_000 }, async t => {
+test('paid date stays left of total in a green band while supplier and order remain selectable on every viewport', { timeout: 90_000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge indisponível');
   const server = await createServer({ root: appRoot, server: { host: '127.0.0.1', port: 0,
     fs: { allow: [resolve(appRoot, '../..')] } }, logLevel: 'silent' });
@@ -56,6 +56,9 @@ test('launch total is highlighted left of pencil, status moves below controls an
       }
       assert.ok(ready, `Galeria não carregou em ${width}px`);
       const layouts = await evaluate(`(() => [...document.querySelectorAll('.lg-record')].map(card => {
+        const band = card.querySelector('.lg-record-payment-summary');
+        if (!band) return { missingBand: true };
+        const date = band.querySelector('.lg-record-payment-date'), dateBox = date.getBoundingClientRect();
         const total = card.querySelector('.lg-record-total');
         if (!total) return { missingTotal: true };
         const box = total.getBoundingClientRect(), heading = card.querySelector('.lg-record-heading').getBoundingClientRect();
@@ -73,13 +76,22 @@ test('launch total is highlighted left of pencil, status moves below controls an
           const range = document.createRange(); range.selectNodeContents(child);
           return range.getBoundingClientRect().width;
         });
+        const valueRange = document.createRange(); valueRange.selectNodeContents(total.querySelector('.lg-record-value'));
+        const numericRange = valueRange.cloneRange(); numericRange.setStart(total.querySelector('.lg-record-value').firstChild, 3);
         return { text: total.textContent.replace(/\u00a0/g, ' '), color: getComputedStyle(total.querySelector('.lg-record-value')).color,
+          valueLines: valueRange.getClientRects().length, numericLines: numericRange.getClientRects().length,
           totalWidth: box.width, contentWidth: Math.max(...contentWidths),
           order: order ? { height: orderBox.height, images: order.querySelectorAll('img').length,
             actions: order.querySelectorAll('button').length } : null,
-          leftOfPencil: box.right <= edit.left && Math.abs(box.top + box.height/2 - edit.top - edit.height/2)<2,
+          date: date.querySelector('.lg-record-value').textContent,
+          green: [date, total].every(node => {
+            const channels = getComputedStyle(node).backgroundColor.match(/[\\d.]+/g)?.map(Number);
+            return channels?.length >= 3 && channels[1] > channels[0] && channels[1] > channels[2];
+          }),
+          dateLeftOfTotal: dateBox.right <= box.left + 1 && Math.abs(dateBox.top - box.top) < 1 && Math.abs(dateBox.bottom - box.bottom) < 1,
+          belowControls: box.top >= actions.bottom,
           aboveDivider: box.bottom <= heading.bottom - 2,
-          statusBelowActions: status.top >= actions.bottom && Math.abs(status.right - heading.right)<2,
+          statusBelowActions: status.top >= box.bottom && Math.abs(status.right - heading.right)<2,
           highlighted: getComputedStyle(total).borderStyle !== 'none' && getComputedStyle(total).backgroundColor !== 'rgba(0, 0, 0, 0)',
           fits: box.left >= heading.left && box.right <= heading.right,
           overflow: card.scrollWidth > card.clientWidth + 1 || total.scrollWidth > total.clientWidth + 1,
@@ -115,9 +127,9 @@ test('launch total is highlighted left of pencil, status moves below controls an
       }))()`);
       assert.equal(layouts.length, 3);
       for (const layout of layouts) {
-        assert.ok(!layout.missingTotal, 'total must move to the heading');
-        assert.equal(layout.color, 'rgb(181, 31, 36)');
-        assert.ok(layout.leftOfPencil && layout.aboveDivider && layout.statusBelowActions && layout.highlighted && layout.fits && !layout.overflow,
+        assert.ok(!layout.missingBand && !layout.missingTotal, 'paid date and total must share a summary band');
+        assert.equal(layout.color, 'rgb(23, 103, 55)');
+        assert.ok(layout.green && layout.dateLeftOfTotal && layout.belowControls && layout.aboveDivider && layout.statusBelowActions && layout.highlighted && layout.fits && !layout.overflow,
           `Layout inválido em ${width}px: ${JSON.stringify(layout)}`);
         assert.deepEqual(layout.labels, ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE', 'TOTAL COM FRETE']);
         for (const tile of layout.details) assert.ok(tile.filled && tile.fits && tile.height >= 44 && tile.selectable && tile.icon && tile.arrow && tile.hint,
@@ -130,11 +142,10 @@ test('launch total is highlighted left of pencil, status moves below controls an
           layout.payment.fullWidth && !layout.payment.overflow,
           `Conta/forma pgto inválida em ${width}px: ${JSON.stringify(layout.payment)}`);
       }
-      if (width < height && width <= 700) {
-        const normalTotal = layouts[2]; // The reported R$ 906,00 card, without a media rail.
-        assert.ok(normalTotal.totalWidth <= normalTotal.contentWidth + 70,
-          `Total must fit its text instead of stretching in portrait ${width}px: ${JSON.stringify(normalTotal)}`);
-      }
+      assert.deepEqual(layouts.map(layout => layout.date), ['03/10/2026', '—', '09/10/2026']);
+      assert.equal(layouts[0].numericLines, 1, `Amount and cents must stay together at ${width}px: ${JSON.stringify(layouts[0])}`);
+      assert.ok(layouts[0].valueLines <= (width < 390 ? 2 : 1), `Normal currency amount should fit at ${width}px`);
+      assert.equal(layouts[2].valueLines, 1, `Normal amount must not break across lines at ${width}px`);
       assert.equal(layouts[0].payment.text, 'ENERGÉTICA - CAIXA / PIX');
       assert.equal(layouts[2].payment.text, 'DINHEIRO');
       assert.equal(layouts[2].text, 'VALOR TOTALR$ 906,00');

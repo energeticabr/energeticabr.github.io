@@ -948,7 +948,7 @@ test('missing or visually empty descriptions do not add an empty row below freig
   assert.equal(ctx.root().querySelectorAll('.lg-record-description').length, 0);
 });
 
-test('launch total precedes edit controls while status stays below and finance shows freight', async t => {
+test('paid date precedes total in the summary band without changing totals or freight', async t => {
   const cases = [
     { id: 3489, total: '13.040,00', freight: 40, wantTotal: 'R$ 13.040,00', wantFreight: 'R$ 40,00' },
     { id: 3488, total: 0, freight: 0, wantTotal: 'R$ 0,00', wantFreight: 'R$ 0,00' },
@@ -964,15 +964,39 @@ test('launch total precedes edit controls while status stays below and finance s
     assert.ok(headingSummary.querySelector('.lg-record-status'), 'status remains below controls');
     assert.equal(headingSummary.querySelector('.lg-record-total'), null);
     const actions = card.querySelector('.lg-record-header-actions');
-    assert.equal(actions.querySelector('.lg-record-total').nextElementSibling,
-      actions.querySelector('.gallery-record-action--edit'));
-    assert.equal(actions.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
-    assert.equal(actions.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
+    assert.equal(actions.querySelector('.lg-record-total'), null);
+    assert.ok(actions.querySelector('.gallery-record-action--edit'));
+    const band = card.querySelector('.lg-record-payment-summary');
+    assert.ok(band);
+    assert.equal(band.firstElementChild.classList.contains('lg-record-payment-date'), true);
+    assert.equal(band.lastElementChild.classList.contains('lg-record-total'), true);
+    assert.equal(band.querySelector('.lg-record-total .lg-record-label').textContent, 'VALOR TOTAL');
+    assert.equal(band.querySelector('.lg-record-total .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantTotal);
     const finance = card.querySelector('.lg-record-finance');
     assert.deepEqual([...finance.querySelectorAll('.lg-record-label')].map(label => label.textContent),
       ['VALOR UNITÁRIO', 'QUANTIDADE', 'FRETE', 'TOTAL COM FRETE']);
     assert.equal(finance.querySelector('.lg-record-freight .lg-record-value').textContent.replace(/\u00a0/g, ' '), sample.wantFreight);
   }
+});
+
+test('the green band shows only the actual paid date and never a planned date as payment', async t => {
+  const cases = [
+    { 'DATA PGTO EFETUADO': '2026-10-19', 'DATA PGTO PREVISTO': '2026-10-11' },
+    { 'DATA DE PAGAMENTO': '2026-10-19T01:00:00Z' },
+    { 'DATA PAGAMENTO': '19/10/2026' },
+    { 'DATA PGTO PREVISTO': '2026-10-22' },
+    {},
+  ];
+  const rows = cases.map((fields, index) => ({ id: index + 1, total: 0, fields }));
+  const ctx = await setup(t, { request: async () => snapshot({ rows }) });
+  await ctx.gallery.open();
+  const bands = [...ctx.root().querySelectorAll('.lg-record-payment-summary')];
+  assert.equal(bands.length, 5);
+  assert.deepEqual(bands.map(band => band.querySelector('.lg-record-payment-date .lg-record-value').textContent),
+    ['19/10/2026', '18/10/2026', '19/10/2026', '—', '—']);
+  for (const band of bands) assert.equal(band.querySelector('.lg-record-payment-date .lg-record-label').textContent, 'DATA PGTO EFETUADO');
+  const planned = ctx.root().querySelector('[data-item-id="4"] .lg-record-summary-fields .lg-record-payment-date');
+  assert.match(planned.textContent, /PREVISTO.*22\/10\/2026/);
 });
 
 test('visual cards identify supplier and order details without changing their cluster actions', async t => {
