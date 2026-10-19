@@ -76,7 +76,10 @@ export function createTaskCompletionDialog({ document: doc, host, data, today, o
     const current = { overlay, dialog, trigger, error: message, busy: false, persisted: false };
     state = current; onBlocked(true); dialog.focus({ preventScroll: true });
     cancel.addEventListener('click', () => { if (active(current) && !current.busy) close(); });
-    overlay.addEventListener('click', event => event.stopPropagation());
+    overlay.addEventListener('click', event => {
+      event.stopPropagation();
+      if (event.target === overlay && active(current) && !current.busy) close();
+    });
     overlay.addEventListener('keydown', event => {
       if (!['Escape', 'Tab', 'Enter'].includes(event.key)) return;
       event.stopPropagation();

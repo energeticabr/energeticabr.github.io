@@ -136,7 +136,10 @@ export function createPayrollSheetCreateView({ document: doc = globalThis.docume
     };
     doc.addEventListener('keydown', state.outsideKeydown, true);
     cancel.addEventListener('click', () => close());
-    overlay.addEventListener('click', event => event.stopPropagation());
+    overlay.addEventListener('click', event => {
+      event.stopPropagation();
+      if (event.target === overlay && active(state)) close();
+    });
     overlay.addEventListener('keydown', event => {
       event.stopPropagation(); if (event.defaultPrevented) return;
       if (event.key === 'Escape') { event.preventDefault(); close(); }

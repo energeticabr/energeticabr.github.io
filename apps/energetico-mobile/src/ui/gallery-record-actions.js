@@ -107,7 +107,10 @@ export function createGalleryRecordActions({ document, host, loadEditor, saveEdi
     (host || document.body).append(overlay);
     const state = { epoch, row, operation, overlay, dialog, error, body, focus: trigger || document.activeElement, busy: false, controller: null, loadEpoch: 0, mutationAbort: new AbortController() };
     session = state;
-    overlay.addEventListener("click", event => event.stopPropagation());
+    overlay.addEventListener("click", event => {
+      event.stopPropagation();
+      if (event.target === overlay && active(state) && !state.busy) close();
+    });
     overlay.addEventListener("keydown", event => {
       if (!["Escape", "Tab", "Enter"].includes(event.key)) return;
       event.stopPropagation();

@@ -49,6 +49,16 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
       for (let attempt = 0; attempt < 120; attempt++) { if (await evaluate(expression)) return; await delay(100); }
       assert.fail(`Não carregou: ${expression}`);
     };
+    const clickBackdrop = async touch => {
+      assert.equal(await evaluate(`document.elementFromPoint(2, 2)?.classList.contains('tg-completion-overlay')`), true);
+      if (touch) {
+        await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 2, y: 2 }] }, sessionId);
+        await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }, sessionId);
+      } else {
+        await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 2, y: 2, button: 'left', clickCount: 1 }, sessionId);
+        await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 2, y: 2, button: 'left', clickCount: 1 }, sessionId);
+      }
+    };
     for (const [width, height] of [[320, 740], [390, 844], [1365, 768], [844, 390]]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send('Page.navigate', { url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/tasks-gallery-responsive.html?w=${width}` }, sessionId);
@@ -100,7 +110,15 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
         const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
         writeFileSync(process.env.TASK_COMPLETION_LOADING_SCREENSHOT, Buffer.from(shot.data, 'base64'));
       }
+      await evaluate(`document.querySelector('.tg-completion-dialog h2').click()`);
+      assert.equal(await evaluate(`Boolean(document.querySelector('.tg-completion-dialog'))`), true);
+      await clickBackdrop(width < 500);
+      await waitFor(`!document.querySelector('.tg-completion-dialog')`);
+      assert.equal(await evaluate(`document.activeElement.getAttribute('aria-label')`), 'Concluir tarefa 176');
+      assert.equal(await evaluate(`document.querySelector('.og-content').inert`), false);
       await evaluate(`window.holdCompletion = false; window.releaseCompletion()`);
+      assert.equal(await evaluate(`Boolean(document.querySelector('.tg-completion-dialog'))`), false, 'leitura tardia não reabre');
+      await evaluate(`document.querySelector('.tg-card[data-item-id="176"] [data-action="complete"]').click()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);
       const modal = await evaluate(`(() => {
         const dialog = document.querySelector('.tg-completion-dialog'), rect = dialog.getBoundingClientRect();
@@ -117,7 +135,11 @@ test('check fica acima da seta; popup de conclusão funciona em telas pequenas e
         const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
         writeFileSync(process.env.TASK_COMPLETION_SCREENSHOT, Buffer.from(shot.data, 'base64'));
       }
-      await evaluate(`document.querySelector('[data-task-completion-cancel]').click()`);
+      await evaluate(`document.querySelector('[name="completionDate"]').click()`);
+      assert.equal(await evaluate(`Boolean(document.querySelector('.tg-completion-dialog'))`), true);
+      await clickBackdrop(width < 500);
+      await waitFor(`!document.querySelector('.tg-completion-dialog')`);
+      assert.equal(await evaluate(`document.activeElement.getAttribute('aria-label')`), 'Concluir tarefa 176');
       assert.equal(await evaluate('window.writes.length'), 0);
       await evaluate(`document.querySelector('.tg-card[data-item-id="176"] [data-action="complete"]').click()`);
       await waitFor(`Boolean(document.querySelector('[data-task-completion-form]'))`);

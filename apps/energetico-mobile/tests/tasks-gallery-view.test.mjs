@@ -65,6 +65,30 @@ async function openCompletion(ctx) {
   return ctx.root().querySelector('.tg-completion-dialog');
 }
 
+test('fundo da conclusão fecha no carregamento e pronto, sem gravar nem reabrir com resposta tardia', async t => {
+  const loading = deferred(); let writes = 0;
+  const ctx = await setup(t, { data: { loadEditor: () => loading.promise, saveEditor: async () => { writes++; } } });
+  await ctx.gallery.open();
+  const trigger = ctx.root().querySelector('[data-action="complete"]');
+  trigger.focus(); trigger.click();
+  const overlay = ctx.root().querySelector('.tg-completion-overlay');
+  overlay.querySelector('h2').click();
+  assert.equal(overlay.isConnected, true, 'clique dentro não fecha');
+  overlay.click();
+  assert.equal(overlay.isConnected, false);
+  assert.equal(ctx.root().hidden, false);
+  assert.equal(ctx.root().querySelector('.og-content').inert, false);
+  assert.equal(ctx.document.activeElement, trigger);
+  loading.resolve(completionContext('176')); await settle();
+  assert.equal(ctx.root().querySelector('.tg-completion-dialog'), null);
+  const dialog = await openCompletion(ctx);
+  dialog.querySelector('input').click();
+  assert.equal(dialog.isConnected, true);
+  dialog.parentElement.click();
+  assert.equal(dialog.isConnected, false);
+  assert.equal(writes, 0);
+});
+
 test('check verde abre apenas data conclusão e concluído; cancelar não grava e restaura foco', async t => {
   let writes = 0;
   const ctx = await setup(t, { now: () => new Date('2026-10-04T01:30:00Z'), data: {
@@ -108,9 +132,13 @@ test('submeter conclusão confirma ID e data no novo layout por 2 segundos e ret
   assert.equal(submit.disabled, true);
   assert.equal(dialog.querySelector('[data-task-completion-cancel]').disabled, true);
   assert.equal(dialog.querySelector('.launch-completion'), null, 'não anuncia sucesso antes de confirmar a escrita');
+  dialog.parentElement.click();
+  assert.equal(dialog.isConnected, true, 'fundo não interrompe gravação');
   saving.resolve(); await settle(); await settle();
   const receipt = dialog.querySelector('.launch-completion');
   assert.ok(receipt, 'confirmação usa o cartão compartilhado de sucesso');
+  dialog.parentElement.click();
+  assert.equal(dialog.isConnected, true, 'preserva recibo de dois segundos');
   assert.equal(receipt.querySelector('h2').textContent, 'ATIVIDADE CONCLUÍDA!');
   assert.deepEqual([...receipt.querySelectorAll('.launch-completion__row')].map(row =>
     [row.querySelector('dt').textContent, row.querySelector('dd').textContent]), [

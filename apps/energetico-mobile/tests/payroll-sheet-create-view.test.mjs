@@ -29,6 +29,26 @@ function submit(f, supplierId = '7', month = '2026-10') {
   form.dispatchEvent(new f.dom.window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+test('sheet backdrop cancels loading, aborts the read and ignores late data without closing inside clicks', async t => {
+  let release;
+  const f = fixture(t, { loadOptions: ({ signal }) => { f.signals.push(signal); return new Promise(resolve => { release = resolve; }); } });
+  const opening = f.view.open(), overlay = f.doc.querySelector('.gallery-record-overlay');
+  overlay.querySelector('h2').click(); assert.equal(f.view.isOpen(), true);
+  overlay.click(); assert.equal(f.view.isOpen(), false);
+  assert.equal(f.signals[0].aborted, true); assert.equal(f.closed(), 1);
+  assert.equal(f.doc.activeElement.id, 'trigger');
+  release(options); await opening;
+  assert.equal(f.doc.querySelector('[data-payroll-sheet-create]'), null);
+  assert.equal(f.saves.length, 0);
+});
+
+test('sheet backdrop cancels the ready form without a write', async t => {
+  const f = fixture(t); await f.view.open();
+  const overlay = f.doc.querySelector('.gallery-record-overlay');
+  overlay.querySelector('[name=month]').click(); assert.equal(f.view.isOpen(), true);
+  overlay.click(); assert.equal(f.view.isOpen(), false); assert.equal(f.saves.length, 0);
+});
+
 test('real view uses globalThis.document when the controller factory omits document', async t => {
   const dom = new JSDOM('<button>+</button>'), doc = dom.window.document;
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -127,6 +147,7 @@ test('double submit and user cancel while saving cannot start another write or d
   await f.view.open(); submit(f); submit(f);
   f.doc.querySelector('[data-sheet-create-cancel]').click();
   f.doc.querySelector('[role=dialog]').dispatchEvent(new f.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  f.doc.querySelector('.gallery-record-overlay').click();
   assert.equal(attempts, 1); assert.equal(f.view.isOpen(), true);
   assert.equal(f.doc.querySelector('[role=dialog]').getAttribute('aria-busy'), 'true');
   assert.equal(f.doc.querySelector('[name=month]').disabled, true);

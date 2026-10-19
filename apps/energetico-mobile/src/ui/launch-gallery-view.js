@@ -1159,6 +1159,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function clearReview() { review = null; reviewHost.hidden = true; reviewHost.replaceChildren(); }
   function dismissReview() { clearReview(); focus(editor?.form?.querySelector('.lg-editor-review') ?? panel); }
+  reviewHost.addEventListener('click', event => {
+    event.stopPropagation();
+    if (event.target === reviewHost && !reviewHost.hidden && !busy) dismissReview();
+  });
   function renderDetail() {
     clearReview(); clearEditor();
     const item = current.item;
