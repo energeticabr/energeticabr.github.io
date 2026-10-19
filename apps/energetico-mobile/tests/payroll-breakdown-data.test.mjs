@@ -110,6 +110,7 @@ test('consulta fornecedores elegíveis em todas as páginas e cria um descritivo
   }
   assert.equal(children[0].fields.DATAPREVISTOPGTO, '2026-10-02T00:00:00Z');
   assert.equal(children[1].fields.OBS, 'Pagamento de Vale alimentação referente à semana anterior à data 09/10/2026');
+  assert.deepEqual([...new Set(f.writes.map(write=>write.list))].sort(),['DESCRITIVOPROVISAO','FOLHAPGTO','PROVISÃO PGTOS'].sort(), 'desdobrar não cria lançamentos nem pedidos; somente a baixa pode criá-los');
   await f.data.post(draft(suppliers[0]), progress); assert.equal(f.writes.length, 9);
 });
 

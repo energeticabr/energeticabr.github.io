@@ -47,6 +47,11 @@ test('resposta perdida é recuperada pelo hash e retomada não duplica anexos',a
   const f=fixture(),progress={};f.lose();await f.submit([file()],progress);await f.submit([file()],JSON.parse(JSON.stringify(progress)));
   assert.equal(f.writes.length,3);assert.ok(progress.manifest[0].sha256.match(/^[a-f0-9]{64}$/));
 });
+test('arquivo já copiado na baixa com nome diferente é reaproveitado por conteúdo nos três destinos',async()=>{
+  const f=fixture();
+  for(const target of ['PROVISÃO PGTOS:12','LANCAMENTOS:91','NOTASPENDENTES:41']) f.files.set(target,new Map([['provisao-12-hash-recibo.pdf',await file().arrayBuffer()]]));
+  await f.submit();assert.equal(f.writes.length,0);
+});
 test('manifesto preservado exige os mesmos bytes após reiniciar sem recriar registros',async()=>{
   const f=fixture(),progress={};await f.submit([file()],progress);
   await assert.rejects(f.submit([],progress),/selecione novamente/i);
