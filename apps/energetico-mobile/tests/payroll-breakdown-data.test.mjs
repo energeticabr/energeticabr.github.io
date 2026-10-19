@@ -289,6 +289,34 @@ function legacyFixture(){
 }
 const legacySupplier={id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'};
 
+function legacyMealFixture() {
+  const f=legacyFixture();
+  f.rows.FOLHAPGTO[0].fields.TIPOPGTO='VALE REFEIÇÃO';
+  Object.assign(f.rows.LANCAMENTOS[0].fields,{TIPOPGTO:'VALE REFEIÇÃO',AGRUPAR:'41'});
+  f.rows.NOTASPENDENTES=[{id:'41',fields:{FORNECEDOR:'OPERADORA ALIMENTAÇÃO',FILIAL:'OBRA A'}}];
+  f.columns.NOTASPENDENTES=['FORNECEDOR','FILIAL'].map(name=>({name}));
+  return f;
+}
+
+for(const provider of ['OPERADORA ALIMENTAÇÃO','DIVERSOS'])test(`histórico de alimentação legado lê lançamento do funcionário com pedido da operadora ${provider}`,async()=>{
+  const f=legacyMealFixture();f.rows.NOTASPENDENTES[0].fields.FORNECEDOR=provider;
+  const context=await f.data.loadPayrollContext(legacySupplier,'2026-10');
+  assert.equal(context.paid.meal,200);assert.equal(context.paidTotal,200);
+  assert.equal(context.payments[0].launchId,'91');assert.equal(f.writes.length,0);
+});
+
+for(const [reason,mutate] of [
+  ['funcionário do pagamento',f=>f.rows.FOLHAPGTO[0].fields.FORNECEDOR='Beto'],
+  ['funcionário do lançamento',f=>f.rows.LANCAMENTOS[0].fields.FORNECEDOR='Beto'],
+  ['filial do lançamento',f=>f.rows.LANCAMENTOS[0].fields.FILIAL='OUTRA'],
+  ['filial do pedido',f=>f.rows.NOTASPENDENTES[0].fields.FILIAL='OUTRA'],
+  ['operadora ausente',f=>f.rows.NOTASPENDENTES[0].fields.FORNECEDOR=''],
+  ['rubrica não alimentar',f=>{f.rows.FOLHAPGTO[0].fields.TIPOPGTO='SALÁRIO';f.rows.LANCAMENTOS[0].fields.TIPOPGTO='SALÁRIO';}],
+])test(`pedido de operadora não dispensa conferência de ${reason}`,async()=>{
+  const f=legacyMealFixture();mutate(f);
+  await assert.rejects(f.data.loadPayrollContext(legacySupplier,'2026-10'),/fornecedor|filial/i);assert.equal(f.writes.length,0);
+});
+
 test('histórico usa Title renomeado FILIAL e ignora espelhos Graph somente leitura sem facet computed',async()=>{
   const f=legacyFixture();
   f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='FILIAL');

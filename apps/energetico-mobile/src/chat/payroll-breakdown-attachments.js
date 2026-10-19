@@ -1,6 +1,7 @@
 import { validateAttachment } from '../../../../portal/data/attachments.js';
 import { payrollKey, validPayrollDate } from './supplier-payroll.js';
 import { payrollProvisionId } from './payroll-provision-source.js';
+import { payrollOrderSupplierMatches } from './payroll-order-ownership.js';
 
 const SITE = 'personal';
 const scalar = value => String(value?.LookupValue ?? value?.Value ?? value?.value ?? value ?? '').trim();
@@ -115,7 +116,13 @@ export function createPayrollBreakdownAttachments({ repository, assertSession = 
       if (provision && launch.value('IDPGTOAGENDADO') !== provision.id) throw new Error('O vínculo reverso do lançamento mudou.');
       const orderId = identity(launch.value('AGRUPAR'));
       if (provision && identity(provision.value('IDPEDIDO')) !== orderId) throw new Error('O pedido vinculado à provisão mudou.');
-      if (!orders.some(row=>row.id===orderId)) { const order = await read('order',orderId); owned(order); orders.push(order); }
+      if (!orders.some(row=>row.id===orderId)) {
+        const order = await read('order',orderId);
+        if (!payrollOrderSupplierMatches({supplier:supplier.label,orderSupplier:order.value('FORNECEDOR'),paymentType:type,hasProvision:!!provision}))
+          throw new Error('O fornecedor do vínculo mudou.');
+        if (payrollKey(order.value('FILIAL')) !== payrollKey(supplier.branch)) throw new Error('A filial do vínculo mudou.');
+        orders.push(order);
+      }
     }
     targets.push(...launches,...orders);
     if (new Set([...descriptions.values()].map(d=>d.listId)).size !== descriptions.size) throw new Error('As listas dos vínculos financeiros estão conflitantes.');
