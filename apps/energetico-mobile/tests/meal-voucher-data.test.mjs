@@ -373,6 +373,39 @@ for (const action of ['confirmar','fechar']) test(`aba antiga não sobrescreve o
   assert.equal(f.rows.LANCAMENTOS[0].fields.FORNECEDOR, 'Beto'); assert.equal(f.rows.FOLHAPGTO.length, 1);
 });
 
+test('pedido vazio da versão original com token no Title recupera edição e corrige filial sem duplicar', async t => {
+  const f = fixture();
+  f.columns.NOTASPENDENTES = f.columns.NOTASPENDENTES.filter(c => c.name !== 'FILIAL');
+  f.columns.NOTASPENDENTES.find(c => c.name === 'Title').displayName = 'FILIAL';
+  f.rows.NOTASPENDENTES.push({ id:'21', fields:{ Title:'APP-vale-alimentacao-edit-legacy', FORNECEDOR:'Ana', VALORTOTAL:10,
+    OBS:'outubro\nConferido pela auditoria', STATUS:'PENDENTE AUDITORIA' }, eTag:'"1"' });
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'edit-legacy', orderId:'21', signature:JSON.stringify(original) };
+  assert.equal(await data.canEditPending(original, progress), true);
+  const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
+  dom.window.localStorage.setItem('energetico:meal-voucher:pending:legacy', JSON.stringify({ draft:original, progress, files:[] }));
+  const view = createMealVoucherView({ data, documentRef:doc, storage:dom.window.localStorage, sessionKey:'legacy' });
+  t.after(() => { view.destroy(); dom.window.close(); });
+  await view.open();
+  assert.equal(doc.querySelector('[name="meal-date"]').disabled, false);
+  const corrected = { ...original, date:'2026-10-16', paymentDate:'2026-10-16', lines:[{ supplier:suppliers[0], quantity:4, unitValue:45 }] };
+  await data.post(corrected, progress); await data.post(corrected, progress);
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].id, '21');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.Title, 'OBRA A'); assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 180);
+  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /VALE ALIMENTAÇÃO edit-legacy/);
+  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /Conferido pela auditoria$/);
+  assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.LANCAMENTOS[0].fields.AGRUPAR, '21');
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
+test('compatibilidade legada não autoriza sobrescrever filial alterada para outra obra', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const original = draft([suppliers[0]]), progress = { operationId:'legacy-other-branch', signature:JSON.stringify(original) };
+  f.rows.NOTASPENDENTES.push({ id:'21', fields:{ Title:'APP-vale-alimentacao-legacy-other-branch', FILIAL:'OUTRA OBRA',
+    FORNECEDOR:'Ana', VALORTOTAL:10, OBS:'outubro', STATUS:'PENDENTE AUDITORIA' }, eTag:'"1"' });
+  assert.equal(await data.canEditPending(original, progress), false); assert.equal(f.writes.length, 0);
+});
+
 test('pedido existente apenas selecionado não bloqueia correção antes do primeiro lançamento', async () => {
   const f = fixture(), create = f.repo.createItem;
   f.rows.NOTASPENDENTES.push(...['98','99'].map(id => ({ id, fields:{ FILIAL:'OBRA A', FORNECEDOR:'DIVERSOS', STATUS:'PENDENTE', VALORTOTAL:100, OBS:'' }, eTag:'"1"' })));

@@ -37,6 +37,10 @@ async function revisionMarker(draft, operationId) {
   return `[VALE REVISÃO ${operationId} ${hash}]`;
 }
 function revisions(obs, operationId) { return scalar(obs).split('\n').filter(line => line.startsWith(`[VALE REVISÃO ${operationId} `)); }
+function appendedNotes(actual, expected) {
+  const suffix = scalar(actual).slice(expected.length);
+  return suffix && !suffix.startsWith('\n') ? `\n${suffix}` : suffix;
+}
 function monthKey(raw) {
   const text = scalar(raw), brazil = text.match(/^(0?[1-9]|1[0-2])[/-](\d{4})$/), iso = text.match(/^(\d{4})[-/](0?[1-9]|1[0-2])(?:$|[-/T])/);
   return brazil ? `${brazil[2]}-${brazil[1].padStart(2, '0')}` : iso ? `${iso[1]}-${iso[2].padStart(2, '0')}` : '';
@@ -226,13 +230,13 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     if (!tokenCache.has(descriptor.id)) tokenCache.set(descriptor.id, await all(descriptor));
     const matches = tokenCache.get(descriptor.id).filter(row => scalar(row.fields?.[obsName]).includes(marker));
     if (matches.length > 1) throw new Error('Foram encontrados pedidos duplicados da operação. Confira os registros antes de retomar.');
-    let row = matches[0];
+    let row = matches[0] || edit?.row;
     if (edit) {
       if (String(row?.id) !== String(edit.row.id)) throw new Error('O pedido da tentativa anterior mudou; confira antes de retomar.');
       const current = await get(descriptor, row.id);
       if (!matchesFields(descriptor, current, edit.fields)) throw new Error('O pedido foi alterado por outra operação. Reabra a tela para conferir.');
       // Preserve notes appended by an auditor/automation after our marker.
-      const suffix = scalar(current.fields[obsName]).slice(edit.expectedObs.length);
+      const suffix = appendedNotes(current.fields[obsName], edit.expectedObs);
       const nextObs = fields[obsName];
       fields = { ...fields, [obsName]:fields[obsName] + suffix };
       if (!matchesFields(descriptor, current, fields)) {
@@ -298,6 +302,21 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     if (!revisions(row.fields[obs], progress.operationId).length) {
       const legacy = await orderFields(orders, verified, progress.operationId, false);
       candidates.push({ fields:legacy, expectedObs:legacy[obs] });
+      // The first app version stored the operation token in Title, which can
+      // also be FILIAL's internal column, before OBS carried our marker.
+      if (title && scalar(row.fields[title]).toUpperCase() === prefix) {
+        const branchColumn = column(orders, ['FILIAL']).name;
+        const required = ['FORNECEDOR','VALORTOTAL','STATUS'].map(name => column(orders, [name]).name);
+        const known = Object.fromEntries(Object.entries(legacy).filter(([name]) => name !== obs && name !== branchColumn
+          && (required.includes(name) || scalar(row.fields[name]))));
+        const actualObs = scalar(row.fields[obs]);
+        const previousObs = actualObs === legacy[obs] || actualObs.startsWith(`${legacy[obs]}\n`) ? legacy[obs] : verified.obs;
+        const sameBranch = branchColumn === title || !scalar(row.fields[branchColumn]) || key(row.fields[branchColumn]) === key(verified.branch);
+        if (sameBranch && matchesFields(orders, row, known) && (!previousObs || actualObs === previousObs || actualObs.startsWith(`${previousObs}\n`))) {
+          const actual = Object.fromEntries(Object.keys(legacy).map(name => [name, row.fields[name] ?? '']));
+          candidates.push({ fields:actual, expectedObs:previousObs });
+        }
+      }
     }
     // Both outcomes of a lost PATCH response remain recognizable after reopening.
     if (String(progress.orderEdit?.id) === String(row.id)) candidates.push(
@@ -375,7 +394,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         const fields = await orderFields(orders, draft, progress.operationId);
         if (edit?.order) {
           const obsName = column(orders, ['OBS']).name;
-          const suffix = scalar(edit.order.row.fields[obsName]).slice(edit.order.expectedObs.length);
+          const suffix = appendedNotes(edit.order.row.fields[obsName], edit.order.expectedObs);
           // Persist both recognizable outcomes BEFORE advancing the signature or
           // performing another read: even a failed lookup must remain resumable.
           progress.orderEdit = { id:String(edit.order.row.id), before:edit.order.fields,
