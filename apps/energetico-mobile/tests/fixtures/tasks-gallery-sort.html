@@ -24,11 +24,19 @@
     ] }; },
   } });
   await gallery.open(); await document.fonts.ready;
+  // Reinsert the real shared rules as a late-loaded gallery does.
+  const sharedResponse = await fetch('../../src/ui/gallery-create-shortcut.css?direct');
+  const shared = document.createElement('style');
+  shared.textContent = (await sharedResponse.text()).replace(/^@import[^;]+;/m, '');
+  document.head.append(shared);
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const root = document.querySelector('.tg-overlay'), toolbar = root.querySelector('.tg-toolbar');
   const search = toolbar.querySelector('[data-gallery-quick-search]'), sort = toolbar.querySelector('.tg-sort-toggle');
   const filter = toolbar.querySelector('.tg-filter-toggle'), add = toolbar.querySelector('[data-action="create-task"]');
-  if (new URLSearchParams(location.search).has('wide')) filter.style.fontFamily = 'monospace';
+  if (new URLSearchParams(location.search).has('wide')) {
+    filter.style.fontFamily = 'monospace';
+    filter.style.lineHeight = '1.7';
+  }
   const rect = element => {
     const { x, y, width, height, right, bottom } = element.getBoundingClientRect();
     return { x, y, width, height, right, bottom };
