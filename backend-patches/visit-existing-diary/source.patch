@@ -1,0 +1,268 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -26,8 +26,10 @@
+     from payroll_row_attachments import propagate as propagate_payroll_row_attachments
+ try:
+     from . import financial_catalog_registration as financial_catalog
++    from . import construction_visit_diary as visit_diary
+ except ImportError:
+     import financial_catalog_registration as financial_catalog
++    import construction_visit_diary as visit_diary
+ from calendar import monthrange
+ from pathlib import Path
+ from datetime import date, datetime, timedelta, timezone
+@@ -18871,6 +18873,12 @@
+                     return None
+                 state["step_index"] = remaining[0]
+             step = financial_catalog.step_with_create(self, state, steps[state["step_index"]])
++            if (state.get("flow") == "construction_visit"
++                    and step.get("key") == "criar_diario_obra"
++                    and visit_diary.skip_if_existing(
++                        self, state, datetime.now(ZoneInfo("America/Sao_Paulo")).date())):
++                state["step_index"] += 1
++                continue
+             if self._provision_multiple(state) and step.get("key") == "produto_pagamento":
+                 step = {**step,"allow_blank":False}
+             if step.get("edit_only") and edit_step_indices is None:
+@@ -31844,6 +31852,11 @@
+             today = datetime.now(sao_paulo).date()
+             today_iso = today.isoformat()
+             stored_value = _decimal_storage(visit_value)
++            create_diary = normalize_text(str(context.get("criar_diario_obra") or "")) == "sim"
++            # Check before any financial write, including sessions opened before
++            # this release or a diary created after the original question.
++            if create_diary and visit_diary.skip_if_existing(self, state, today):
++                create_diary = False
+             pending_fields = {
+                 "FILIAL": filial,
+                 "FORNECEDOR": "BERNARDO",
+@@ -31880,38 +31893,8 @@
+             }
+ 
+             diary_item = None
+-            create_diary = normalize_text(
+-                str(context.get("criar_diario_obra") or "")
+-            ) == normalize_text("SIM")
+             if create_diary:
+-                diary_fields = {
+-                    "DATA": today_iso,
+-                    "FILIAL": filial,
+-                    "RESPONSAVELTECNICO": "BERNARDO NOTINI MOREIRA BAHIA",
+-                    "STATUS": "PENDENTE",
+-                }
+-                diary_id = self.sharepoint.ensure_item(
+-                    f"WA-VISITA-DIARIO-{state['batch_id']}",
+-                    diary_fields,
+-                    target_list="DIÁRIO DE OBRAS",
+-                    idempotency_field="Title",
+-                    merge_existing=False,
+-                )
+-                self._remember_submission_item(
+-                    state, diary_id, "DIÁRIO DE OBRAS"
+-                )
+-                etag = self._save(state, etag)
+-                diary_verification = self.sharepoint.verify_item(
+-                    diary_id,
+-                    diary_fields,
+-                    [],
+-                    target_list="DIÁRIO DE OBRAS",
+-                )
+-                diary_item = {
+-                    "item_id": diary_id,
+-                    "target_list": "DIÁRIO DE OBRAS",
+-                    "verified": diary_verification,
+-                }
++                diary_item, etag = visit_diary.ensure_for_visit(self, state, today, etag)
+ 
+             launch_fields = {
+                 "VALOR UNITÁRIO": stored_value,
+--- /dev/null
++++ b/worker/construction_visit_diary.py
+@@ -0,0 +1,187 @@
++"""Do not offer or create a second diary for the same visit branch/day."""
++from contextlib import contextmanager
++import hashlib
++import os
++from pathlib import Path
++import stat
++import tempfile
++import time
++
++try:
++    from .logic import normalize_text
++except ImportError:
++    from logic import normalize_text
++
++
++def existing(engine, state, on_date):
++    filial = str(state.get('fields', {}).get('FILIAL') or '').strip()
++    if not filial:
++        raise RuntimeError('A filial da visita não foi preenchida')
++    options = engine.sharepoint.get_options({
++        'key': 'diario_existente_visita_obra',
++        'source': {
++            'type': 'sharepoint_list', 'list': 'DIÁRIO DE OBRAS',
++            'id_field': 'Id', 'label_field': 'Id', 'value_field': 'Id',
++            'filters': [
++                {'field': 'FILIAL', 'equals': filial},
++                {'field': 'DATA', 'equals': on_date.isoformat(), 'kind': 'date_day'},
++            ],
++            'top': 1,
++        },
++    }, {})
++    return options[0] if options else None
++
++
++def _mark_existing(state, found, on_date):
++    state['visit_existing_diary'] = {
++        'item_id': found['id'], 'filial': state['fields']['FILIAL'],
++        'date': on_date.isoformat(),
++    }
++    state.setdefault('answers', {})['criar_diario_obra'] = 'NÃO'
++    state.setdefault('selections', {})['criar_diario_obra'] = {
++        'id': 'visit_diary_already_exists', 'title': 'NÃO — DIÁRIO JÁ CADASTRADO', 'value': 'NÃO',
++    }
++    state['options'] = []
++    state.pop('option_pagination', None)
++
++
++def identity(filial, on_date):
++    key = f'{on_date.isoformat()}|{normalize_text(str(filial))}'
++    return hashlib.sha256(key.encode('utf-8')).hexdigest()
++
++
++def _outcome(engine, filial, on_date):
++    digest = identity(filial, on_date)
++    key = 'visit-diary-outcome-' + digest
++    record, etag = engine.state_store.load(key)
++    outcome = (record or {}).get('visit_diary_outcome')
++    if record is not None and (
++        not isinstance(outcome, dict) or outcome.get('identity') != digest
++        or outcome.get('create_attempted') is not True
++        or (outcome.get('item_id') is not None and
++            (type(outcome['item_id']) is not int or outcome['item_id'] <= 0))
++    ):
++        raise RuntimeError('Confirmação do diário indisponível; não é seguro criar outro')
++    return key, outcome, etag
++
++
++def _save_outcome(engine, key, filial, on_date, item_id, etag):
++    # Like cash checkpoints, this record has no conversation stage and is not
++    # included in ordinary conversation scans or scheduled notifications.
++    return engine.state_store.save(key, {'visit_diary_outcome': {
++        'identity': identity(filial, on_date), 'create_attempted': True, 'item_id': item_id,
++    }}, etag)
++
++
++def _resolved_existing(engine, state, on_date):
++    found = existing(engine, state, on_date)
++    filial = state['fields']['FILIAL']
++    key, outcome, etag = _outcome(engine, filial, on_date)
++    if found:
++        if outcome and not outcome.get('item_id'):
++            _save_outcome(engine, key, filial, on_date, int(found['id']), etag)
++        return found
++    if not outcome:
++        return None
++    item_id = outcome.get('item_id')
++    if item_id is None:
++        raise RuntimeError('A criação anterior do diário ainda não foi confirmada. '
++                           'Consulte novamente antes de tentar criar outro diário.')
++    # A confirmed create may not yet appear in the list query. A direct lookup
++    # also permits a new diary after an explicitly deleted previous record.
++    if engine.sharepoint.item_exists(item_id, target_list='DIÁRIO DE OBRAS'):
++        return {'id': item_id}
++    return None
++
++
++def skip_if_existing(engine, state, on_date):
++    filial = str(state.get('fields', {}).get('FILIAL') or '').strip()
++    with creation_lock(filial, on_date, directory=_lock_directory(engine)):
++        found = _resolved_existing(engine, state, on_date)
++        if found:
++            _mark_existing(state, found, on_date)
++            return True
++        previous = state.pop('visit_existing_diary', None)
++        if previous:
++            state.get('answers', {}).pop('criar_diario_obra', None)
++            state.get('selections', {}).pop('criar_diario_obra', None)
++        return False
++
++
++def _lock_directory(engine):
++    # systemd gives each service its own PrivateTmp. Put production locks next
++    # to the shared durable state, not in either service's private /tmp mount.
++    state_directory = getattr(engine.state_store, 'directory', None)
++    return Path(state_directory).resolve() / '.visit-diary-locks' if state_directory else None
++
++
++@contextmanager
++def creation_lock(filial, on_date, *, directory=None, timeout=30):
++    """Coordinate visit workers on this VM; never claim a remote SharePoint CAS."""
++    directory = directory or Path(tempfile.gettempdir()) / 'energetica-visit-diary-locks'
++    directory.mkdir(mode=0o700, exist_ok=True)
++    if directory.is_symlink() or not directory.is_dir():
++        raise RuntimeError('Invalid visit diary lock directory')
++    if os.name != 'nt' and directory.stat().st_uid != os.getuid():
++        raise RuntimeError('Visit diary locks require the same service user')
++    filename = directory / (identity(filial, on_date) + '.lock')
++    if filename.is_symlink():
++        raise RuntimeError('Invalid visit diary lock file')
++    descriptor = os.open(filename, os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
++    acquired = False
++    try:
++        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
++            raise RuntimeError('Invalid visit diary lock file')
++        if os.fstat(descriptor).st_size == 0:
++            os.write(descriptor, b'0')
++        deadline = time.monotonic() + timeout
++        while not acquired:
++            try:
++                if os.name == 'nt':
++                    import msvcrt
++                    os.lseek(descriptor, 0, os.SEEK_SET)
++                    msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
++                else:
++                    import fcntl
++                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
++                acquired = True
++            except (BlockingIOError, OSError):
++                if time.monotonic() >= deadline:
++                    raise TimeoutError('Visit diary coordination unavailable') from None
++                time.sleep(0.05)
++        yield
++    finally:
++        if acquired:
++            if os.name == 'nt':
++                import msvcrt
++                os.lseek(descriptor, 0, os.SEEK_SET)
++                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
++            else:
++                import fcntl
++                fcntl.flock(descriptor, fcntl.LOCK_UN)
++        os.close(descriptor)
++        # Keep the inode: another process may already be waiting on this lock.
++
++
++def ensure_for_visit(engine, state, on_date, etag):
++    filial = str(state.get('fields', {}).get('FILIAL') or '').strip()
++    with creation_lock(filial, on_date, directory=_lock_directory(engine)):
++        found = _resolved_existing(engine, state, on_date)
++        if found:
++            _mark_existing(state, found, on_date)
++            return None, etag
++        fields = {'DATA': on_date.isoformat(), 'FILIAL': filial,
++                  'RESPONSAVELTECNICO': 'BERNARDO NOTINI MOREIRA BAHIA', 'STATUS': 'PENDENTE'}
++        # A retry or another visit for this branch/day reuses the same identity.
++        token = f'WA-VISITA-DIARIO-{on_date.isoformat()}-{identity(filial, on_date)}'
++        key, outcome, outcome_etag = _outcome(engine, filial, on_date)
++        # Persist BEFORE the create: after a timeout/crash, reconcile by GET;
++        # an empty list is not permission to repeat an indeterminate POST.
++        outcome_etag = _save_outcome(engine, key, filial, on_date, None, outcome_etag)
++        item_id = engine.sharepoint.ensure_item(token, fields, target_list='DIÁRIO DE OBRAS',
++                                               idempotency_field='Title', merge_existing=False)
++        _save_outcome(engine, key, filial, on_date, int(item_id), outcome_etag)
++        engine._remember_submission_item(state, item_id, 'DIÁRIO DE OBRAS')
++        etag = engine._save(state, etag)
++        verified = engine.sharepoint.verify_item(item_id, fields, [], target_list='DIÁRIO DE OBRAS')
++        return {'item_id': item_id, 'target_list': 'DIÁRIO DE OBRAS', 'verified': verified}, etag
