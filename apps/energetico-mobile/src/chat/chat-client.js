@@ -504,6 +504,23 @@ export function createChatClient({
     return result.attendanceAdjustment;
   }
 
+  async function deleteRhidAttendanceAdjustment({ date, personKey, slot, revisionId } = {}) {
+    if (!validIsoDate(date)) throw new Error('Selecione uma data válida para o ajuste RHID.');
+    if (!/^(?:rhid|id):[^\s:]+$/.test(String(personKey || ''))) throw new Error('Colaborador RHID inválido.');
+    if (!['entry1', 'exit1', 'entry2', 'exit2'].includes(slot)) throw new Error('Campo de ponto inválido.');
+    if (!/^[1-9]\d*$/.test(String(revisionId || ''))) throw new Error('Registro de ajuste inválido.');
+    const token = await acquireToken(tokenProvider);
+    const result = await request(chatUrl.href, {
+      method: 'POST',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'rhid_attendance_adjust_delete', date, personKey, slot, revisionId: String(revisionId) }),
+      cache: 'no-store', credentials: 'omit',
+    }, response => parsePortalResponse(response, 'A exclusão do ajuste de ponto RHID'));
+    const deletion = result?.attendanceAdjustmentDeletion;
+    if (deletion?.deleted !== true || String(deletion.revisionId) !== String(revisionId)) throw new Error('A VM não confirmou a exclusão do registro.');
+    return deletion;
+  }
+
   async function refreshRhidAttendance() {
     const token = await acquireToken(tokenProvider);
     const result = await request(chatUrl.href, {
@@ -650,5 +667,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

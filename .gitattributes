@@ -7,3 +7,5 @@ backend-patches/financial-movements/* text eol=lf
 backend-patches/document-signing-product-catalog/* text eol=lf
 backend-patches/provision-parent-attachments/** text eol=lf
 backend-patches/provision-parent-attachments/source.patch whitespace=-blank-at-eol
+backend-patches/rhid-manual-punch-delete/** text eol=lf
+backend-patches/rhid-manual-punch-delete/source.patch whitespace=-blank-at-eol
