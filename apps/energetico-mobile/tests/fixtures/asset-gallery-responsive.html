@@ -1,0 +1,43 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Galeria de imobilizado</title></head><body><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+const base = { NÚMEROIMOBILIZADO: '2', FORNECEDOR: 'LOJA DO MECÂNICO', FILIAL: '004 - EDIFÍCIO XAVANTE', QTD: 1,
+  'VALOR ESTIMADO': '4338.02', 'VALOR RESIDUAL': '3077.05', 'DATA DEPRECIAÇÃO': '2026-11-01', 'DATA CADASTRO': '2025-05-27',
+  'DATA COMPRA': '2025-05-26', Created: '2025-05-27', Modified: '2026-10-01' };
+const rows = [
+  { id: '2', hasAttachments: true, attachmentCount: 2, createdBy: { user: { displayName: 'Bernardo notini' } }, lastModifiedBy: { user: { displayName: 'Bernardo notini' } },
+    fields: { ...base, IMOBILIZADO: 'BETONEIRA 400L CSM', DEPRECIAR: 'SIM', STATUS: 'ATIVO' } },
+  { id: '94', hasAttachments: false, fields: { ...base, NÚMEROIMOBILIZADO: '70', IMOBILIZADO: 'MANGOTE 3,5M COM NOME EXTENSO PARA TESTAR A QUEBRA DO TÍTULO',
+    'VALOR ESTIMADO': '1000', 'VALOR RESIDUAL': '470', DEPRECIAR: 'NÃO', STATUS: 'INATIVO',
+    FORNECEDOR: 'FORNECEDOR COM NOME EXTENSO PARA TESTAR QUEBRA DE LINHA', FILIAL: 'FILIAL LONGA EM UM IMÓVEL COM IDENTIFICAÇÃO EXTENSA' } },
+  { id: '9999', hasAttachments: false, fields: { ...base, IMOBILIZADO: 'VALOR ZERO E ESTADO NÃO INFORMADO', 'VALOR ESTIMADO': 0, 'VALOR RESIDUAL': 0, QTD: 0, DEPRECIAR: '', STATUS: 'PENDENTE' } },
+];
+await createRegistrationGallery({ document, kind: 'asset', onHome() {}, onCreate() {}, data: { async loadSnapshot() { return { rows }; } } }).open();
+if (new URLSearchParams(location.search).has('pwa')) {
+  document.querySelectorAll('style,link[rel=stylesheet]').forEach(node => node.remove());
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/__asset-built.css';
+  await new Promise((resolve, reject) => { css.onload = resolve; css.onerror = reject; document.head.append(css); });
+}
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+if (new URLSearchParams(location.search).has('tall-controls')) document.documentElement.style.setProperty('--compact-control-height', '64px');
+const rect = node => node.getBoundingClientRect();
+const cards = [...document.querySelectorAll('[data-registration-row]')].map(card => {
+  const values = card.querySelector('.rg-asset-values'), flags = card.querySelector('.rg-asset-flags'), dates = card.querySelector('.rg-asset-dates'), details = card.querySelector('.rg-asset-details');
+  const actions = card.querySelector('.gallery-record-actions'), heading = card.querySelector('.rg-asset-heading');
+  return { id: card.dataset.registrationRow,
+    ordered: rect(values).bottom <= rect(flags).top && rect(flags).bottom <= rect(dates).top && rect(dates).bottom <= rect(details).top,
+    actionsClear: rect(heading).right <= rect(actions).left + 1 && rect(values).top >= rect(actions).bottom,
+    geometry: { heading: rect(heading).toJSON(), actions: rect(actions).toJSON(), values: rect(values).toJSON() },
+    railClear: rect(card.querySelector('.rg-row-file')).right <= rect(card.querySelector('.rg-row-main')).left,
+    overflow: [card, ...card.querySelectorAll('*')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.className.baseVal ?? node.className),
+    flags: [...flags.children].map(node => ({ text: node.querySelector('dd').textContent, fill: getComputedStyle(node).backgroundColor })),
+    moneySingleLine: [...values.querySelectorAll('dd')].every(node => rect(node).height <= parseFloat(getComputedStyle(node).lineHeight) + 1),
+    actions: [...actions.querySelectorAll('button')].map(button => ({ action: button.dataset.galleryAction, width: rect(button).width, height: rect(button).height })),
+    main: { width: rect(card.querySelector('.rg-row-main')).width, values: rect(values).width },
+  };
+});
+document.documentElement.dataset.layout = JSON.stringify({ cards, overflow: document.documentElement.scrollWidth > innerWidth + 1 });
+</script></body></html>

@@ -9,6 +9,7 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { REGISTRATION_GALLERY_MODELS, registrationFieldKey, registrationRawField, registrationNumber, registrationDateKey, sortRegistrationRows } from "../chat/registration-gallery-data.js";
 import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
+import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 
 const PAGE_SIZE = 20;
@@ -639,6 +640,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const card = el("article", model.nativeCard ? "rg-row rg-row--native" : model.showAttachments ? "rg-row rg-row--documents rg-row--document" : "rg-row");
       card.dataset.registrationRow = row.id;
       if (kind === 'workDiary') card.classList.add('rg-row--work-diary');
+      if (kind === 'asset') card.classList.add('rg-row--asset');
       if (kind === 'provisionDescription') card.classList.add('rg-row--provision-description');
       card.setAttribute("role", "listitem");
       const primary = fieldValue(row.fields, model.fields[0], model) || `ID ${row.id}`;
@@ -673,6 +675,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         );
         const main = el("div", "rg-row-main");
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
+        else if (kind === 'asset') renderAssetGalleryCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'provisionDescription') renderProvisionDescriptionCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (model.nativeCard) renderNativeDetails(main, row, primary);
         else renderDocumentDetails(main, row, primary);

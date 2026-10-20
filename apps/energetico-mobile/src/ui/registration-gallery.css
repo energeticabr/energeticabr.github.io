@@ -108,6 +108,41 @@
 @media (max-width: 600px) { .rg-toolbar { grid-template-columns: minmax(0, 1fr) minmax(110px, .6fr); } .rg-toolbar > .rg-button { grid-column: 1 / -1; } .rg-toolbar--documents { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rg-toolbar--documents > .rg-field:first-child { grid-column: 1 / -1; } .rg-row-layout { grid-template-columns: minmax(52px, 68px) minmax(0, 1fr); } .rg-document-table .rg-detail { grid-template-columns: 25px minmax(0, 1fr); gap: 4px; padding: 6px; } .rg-document-table .rg-detail__icon { width: 24px; height: 24px; font-size: 1rem; } }
 @media (max-width: 350px) { .rg-document-table, .rg-document-date-grid { grid-template-columns: minmax(0, 1fr); } .rg-document-table .rg-detail--wide, .rg-document-dates, .rg-document-table .rg-detail--observation { grid-column: 1; } }
 
+/* Asset cards: values, depreciation/status, dates, then the remaining metadata. */
+.gallery-record-card.rg-row.rg-row--asset { position: relative; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 10px; border-radius: 14px; }
+.gallery-record-card.rg-row--asset > .gallery-record-actions { position: absolute; top: 10px; right: 10px; flex-direction: row; }
+.rg-row--asset .rg-row-layout { grid-template-columns: 60px minmax(0, 1fr); gap: 12px; }
+.rg-row--asset .rg-row-main { padding: 0; }
+.rg-asset-heading { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; width: calc(100% - 106px); min-height: max(44px, var(--compact-control-height, 44px)); margin-bottom: 10px; }
+.rg-asset-heading .rg-row-title { flex: 1 1 100%; margin: 0; color: #123b77; font-size: 1rem; line-height: 1.3; font-weight: 800; text-transform: uppercase; }
+.rg-asset-heading .rg-document-id { white-space: nowrap; }
+.rg-asset-values, .rg-asset-flags, .rg-asset-dates, .rg-asset-details { display: grid; min-width: 0; margin: 0; gap: 8px; }
+.rg-asset-values { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rg-asset-flags, .rg-asset-dates, .rg-asset-details { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 9px; }
+.rg-asset-detail { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; column-gap: 6px; row-gap: 2px; padding: 7px 0; }
+.rg-asset-icon { width: 22px; height: 22px; grid-row: 1 / span 2; align-self: center; color: #607583; }
+.rg-asset-detail dt, .rg-asset-detail dd { grid-column: 2; min-width: 0; line-height: 1.3; }
+.rg-asset-detail dt { font-size: .7rem; font-weight: 700; }
+.rg-asset-detail dd { color: #173a63; font-size: .85rem; font-weight: 650; white-space: pre-wrap; }
+.rg-asset-values .rg-asset-detail { grid-template-columns: minmax(0, 1fr); padding: 9px 7px; border-radius: 8px; background: #f0f2f3; }
+.rg-asset-values dt, .rg-asset-values dd { grid-column: 1; }
+.rg-asset-values dt { color: #263c4a; font-size: .66rem; text-transform: uppercase; }
+.rg-asset-values dd { color: #173042; font-size: clamp(.72rem, 1.5vw, 1rem); font-weight: 800; }
+.rg-asset-values .rg-asset-value--depreciated { background: #fdebed; }
+.rg-asset-values .rg-asset-value--depreciated dt, .rg-asset-values .rg-asset-value--depreciated dd { color: #ad202c; }
+.rg-asset-values .rg-asset-value--residual { background: #e5f5e9; }
+.rg-asset-values .rg-asset-value--residual dt, .rg-asset-values .rg-asset-value--residual dd { color: #176347; }
+.rg-asset-flags .rg-asset-detail { padding: 8px; border: 1px solid #d5e1e8; border-radius: 8px; background: #f0f4f6; }
+.rg-asset-flags [data-tone="success"] { background: #e5f5e9; border-color: #baddc3; }
+.rg-asset-flags [data-tone="danger"] { background: #fdebed; border-color: #f1bec5; }
+.rg-asset-flags [data-tone="success"] dt, .rg-asset-flags [data-tone="success"] dd, .rg-asset-flags [data-tone="success"] .rg-asset-icon { color: #176347; }
+.rg-asset-flags [data-tone="danger"] dt, .rg-asset-flags [data-tone="danger"] dd, .rg-asset-flags [data-tone="danger"] .rg-asset-icon { color: #ad202c; }
+.rg-asset-dates, .rg-asset-details { padding-top: 9px; border-top: 1px solid #dce6ec; }
+.rg-asset-dates .rg-asset-detail:nth-child(even), .rg-asset-details .rg-asset-detail:nth-child(even) { padding-left: 8px; border-left: 1px solid #dce6ec; }
+@media (min-width: 1000px) { .rg-overlay[data-gallery-kind="asset"] .rg-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+@media (max-width: 500px) { .rg-row--asset .rg-row-layout { grid-template-columns: 48px minmax(0, 1fr); gap: 9px; } .rg-asset-detail { grid-template-columns: 18px minmax(0, 1fr); column-gap: 5px; } .rg-asset-icon { width: 18px; height: 18px; } .rg-asset-values { gap: 5px; } .rg-asset-values .rg-asset-detail { padding: 8px 5px; } .rg-asset-flags .rg-asset-detail { padding: 7px 5px; } .rg-asset-detail dd { font-size: .78rem; } }
+@media (max-width: 360px) { .rg-asset-values { grid-template-columns: minmax(0, 1fr); } .rg-asset-values .rg-asset-detail { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; } .rg-asset-values dd { grid-column: 2; } .rg-asset-dates .rg-asset-detail dd { grid-column: 1 / -1; } .rg-asset-details { grid-template-columns: minmax(0, 1fr); } .rg-asset-details .rg-asset-detail:nth-child(even) { padding-left: 0; border-left: 0; } }
+
 /* Parent payment gallery: full-width cards and separate financial/audit clusters. */
 .rg-overlay[data-gallery-kind="provisionDescription"] { gap: 14px; background-color: #f4fafc; background-image: linear-gradient(135deg, #f4fafc, #edf7fa); }
 .rg-overlay[data-gallery-kind="provisionDescription"] .rg-header { background: #f4fafc; }
