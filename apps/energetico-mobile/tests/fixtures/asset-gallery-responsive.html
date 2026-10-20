@@ -22,6 +22,7 @@ if (new URLSearchParams(location.search).has('pwa')) {
   await new Promise((resolve, reject) => { css.onload = resolve; css.onerror = reject; document.head.append(css); });
 }
 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+if (new URLSearchParams(location.search).has('tall-controls')) document.documentElement.style.setProperty('--compact-control-height', '64px');
 const rect = node => node.getBoundingClientRect();
 const cards = [...document.querySelectorAll('[data-registration-row]')].map(card => {
   const values = card.querySelector('.rg-asset-values'), flags = card.querySelector('.rg-asset-flags'), dates = card.querySelector('.rg-asset-dates'), details = card.querySelector('.rg-asset-details');
@@ -29,6 +30,7 @@ const cards = [...document.querySelectorAll('[data-registration-row]')].map(card
   return { id: card.dataset.registrationRow,
     ordered: rect(values).bottom <= rect(flags).top && rect(flags).bottom <= rect(dates).top && rect(dates).bottom <= rect(details).top,
     actionsClear: rect(heading).right <= rect(actions).left + 1 && rect(values).top >= rect(actions).bottom,
+    geometry: { heading: rect(heading).toJSON(), actions: rect(actions).toJSON(), values: rect(values).toJSON() },
     railClear: rect(card.querySelector('.rg-row-file')).right <= rect(card.querySelector('.rg-row-main')).left,
     overflow: [card, ...card.querySelectorAll('*')].filter(node => node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.className.baseVal ?? node.className),
     flags: [...flags.children].map(node => ({ text: node.querySelector('dd').textContent, fill: getComputedStyle(node).backgroundColor })),

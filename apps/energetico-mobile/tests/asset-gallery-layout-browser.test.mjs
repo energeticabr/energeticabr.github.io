@@ -19,9 +19,9 @@ test('asset gallery clusters fit phones, tablet, Windows and delivered PWA CSS w
       devServer.middlewares.use('/__asset-built.css', (_req, res) => { res.setHeader('Content-Type', 'text/css'); res.end(css); });
     } }], server: { host: '127.0.0.1', port: 0, fs: { allow: [resolve(root, '../..')] } } });
   await server.listen(); t.after(() => server.close());
-  for (const [width, pwa] of [[320, false], [390, false], [768, false], [1365, false], [390, true]]) {
+  for (const [width, pwa, tallControls] of [[320, false], [390, false], [768, false], [1365, false], [390, true], [1365, true], [1365, false, true]]) {
     const { stdout, screenshot } = await runBrowserLayout(browser, { width, height: 950, mobile: width < 700,
-      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/asset-gallery-responsive.html${pwa ? '?pwa' : ''}`,
+      url: `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/asset-gallery-responsive.html?${pwa ? 'pwa' : ''}${tallControls ? 'tall-controls' : ''}`,
       captureScreenshot: width === 390 && !pwa && Boolean(process.env.ASSET_GALLERY_SCREENSHOT) });
     const dom = new JSDOM(stdout), layout = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
     assert.equal(layout.overflow, false); assert.equal(layout.cards.length, 3);
