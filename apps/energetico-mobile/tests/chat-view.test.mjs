@@ -27,6 +27,26 @@ function signedInState(overrides = {}) {
   };
 }
 
+test('overdue provisions button displays one red circle and keeps its original reply payload', t => {
+  const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+  const view = createChatView(root), selected = [];
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.on('select-reply', event => selected.push(event));
+  for (const label of ['PROVISÕES VENCIDAS / VENCEM HOJE', '🔴 PROVISÕES VENCIDAS / VENCEM HOJE']) {
+    view.render(signedInState({ messages: [{ id: 'groups', role: 'assistant', type: 'poll',
+      question: 'PROVISÕES PGTO PENDENTES', options: [
+        { id: 'pending_payment_provisions_due', label },
+        { id: 'pending_payment_provisions_future', label: '🟢 PROVISÕES A VENCER' },
+      ] }] }));
+    const button = root.querySelector('[data-reply-id="pending_payment_provisions_due"]');
+    assert.equal(button.textContent, '🔴 PROVISÕES VENCIDAS / VENCEM HOJE');
+    button.click();
+    assert.equal(selected.at(-1).replyId, 'pending_payment_provisions_due');
+    assert.equal(selected.at(-1).label, label);
+    assert.equal(root.querySelector('[data-reply-id="pending_payment_provisions_future"]').textContent, '🟢 PROVISÕES A VENCER');
+  }
+});
+
 test('casinha de visita fica ao lado da data do diário sem mudar o valor enviado pela opção', t => {
   const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
   const view = createChatView(root), selected = [];

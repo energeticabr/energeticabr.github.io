@@ -80,6 +80,111 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
 
 const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
 
+function provisionPdfResult(category = 'A VENCER') {
+  return { status: 'processed', results: [{ status: 'pending_provisions_report', category, count: 1 }],
+    messages: [{ id: 'generated-report', type: 'document', mimeType: 'application/pdf',
+      fileName: 'provisoes.pdf', caption: `PROVISÕES PGTO — ${category}`, mediaUrl: '/api/portal-media/provisions' },
+    { type: 'poll', question: 'PROVISÕES PGTO PENDENTES', options: [
+      { id: 'pending_payment_provisions_due', label: 'PROVISÕES VENCIDAS / VENCEM HOJE' },
+      { id: 'pending_payment_provisions_future', label: '🟢 PROVISÕES A VENCER' },
+    ] }] };
+}
+
+for (const [replyId, category] of [
+  ['pending_payment_provisions_due', 'VENCIDAS / VENCEM HOJE'],
+  ['pending_payment_provisions_future', 'A VENCER'],
+]) {
+  test(`provision PDF auto-open: ${replyId} opens the generated PDF without a media click`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const previews = [];
+    h.native.previewMedia = async (blob, name, options) => { previews.push({ blob: await blob, name, options }); };
+    h.client.sendText = async () => provisionPdfResult(category);
+    assert.equal(await h.view.emit('select-reply', { replyId, label: category }), true);
+    assert.equal(previews.length, 1);
+    assert.equal(previews[0].name, 'provisoes.pdf');
+    assert.equal(previews[0].blob.type, 'application/pdf');
+    assert.equal(previews[0].options.layout, 'report-pdf');
+    assert.ok(h.store.getState().messages.some(message => message.mediaUrl === '/api/portal-media/provisions'));
+    h.store.setDraft('outra consulta');
+    assert.equal(previews.length, 1, 'rerender must not reopen the PDF');
+  });
+}
+
+test('provision PDF auto-open: unrelated replies, empty reports and mismatched media never open a PDF', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const previews = [];
+  h.native.previewMedia = async (...args) => { previews.push(args); };
+  const unrelated = provisionPdfResult();
+  const wrongCategory = provisionPdfResult('VENCIDAS / VENCEM HOJE');
+  const empty = { status: 'processed', results: [{ status: 'pending_provisions_empty' }], messages: [{ type: 'text', text: 'NÃO HÁ PROVISÕES A VENCER.' }] };
+  const image = provisionPdfResult(); image.messages[0] = { ...image.messages[0], type: 'image', mimeType: 'image/png', fileName: 'provisoes.png' };
+  for (const [replyId, response] of [['input_continue', unrelated], ['pending_payment_provisions_future', empty],
+    ['pending_payment_provisions_future', wrongCategory], ['pending_payment_provisions_future', image]]) {
+    h.client.sendText = async () => response;
+    assert.equal(await h.view.emit('select-reply', { replyId, label: 'Consultar' }), true);
+  }
+  assert.equal(previews.length, 0);
+});
+
+test('provision PDF auto-open: slow media cannot open over a newer conversation', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  let release;
+  const previews = [];
+  h.native.previewMedia = async (...args) => { previews.push(args); };
+  h.client.fetchMedia = () => new Promise(resolve => { release = resolve; });
+  h.client.sendText = async ({ replyId }) => replyId === 'pending_payment_provisions_future'
+    ? provisionPdfResult() : { status: 'processed', messages: [{ type: 'text', text: 'Outra tela' }] };
+  const request = h.view.emit('select-reply', { replyId: 'pending_payment_provisions_future', label: 'A VENCER' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof release, 'function');
+  await h.view.emit('select-reply', { replyId: 'group_pending', label: 'Pendências' });
+  release(new Blob(['pdf'], { type: 'application/pdf' }));
+  assert.equal(await request, true);
+  assert.equal(previews.length, 0);
+});
+
+test('provision PDF auto-open: download failure preserves the report and manual retry', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.client.sendText = async () => provisionPdfResult();
+  h.client.fetchMedia = async () => { throw new Error('Arquivo indisponível'); };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'pending_payment_provisions_future', label: 'A VENCER' }), true);
+  assert.match(h.view.renders.at(-1).error || '', /abrir.*PDF|Arquivo indisponível/i);
+  const message = h.store.getState().messages.find(item => item.mediaUrl);
+  assert.ok(message);
+  h.client.fetchMedia = async () => new Blob(['pdf'], { type: 'application/pdf' });
+  assert.equal(await h.view.emit('open-media', { messageId: message.id }), true);
+  assert.equal(h.exported.length, 1);
+});
+
+for (const action of ['stop', 'sign-out']) {
+  test(`provision PDF auto-open: ${action} invalidates an in-flight download`, async t => {
+    const h = makeHarness();
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    let release;
+    const previews = [];
+    h.native.previewMedia = async (...args) => { previews.push(args); };
+    h.client.fetchMedia = () => new Promise(resolve => { release = resolve; });
+    h.client.sendText = async () => provisionPdfResult();
+    const pending = h.view.emit('select-reply', { replyId: 'pending_payment_provisions_future', label: 'A VENCER' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(typeof release, 'function');
+    if (action === 'stop') h.controller.stop();
+    else await h.view.emit('sign-out');
+    release(new Blob(['pdf'], { type: 'application/pdf' }));
+    await pending;
+    assert.equal(previews.length, 0);
+  });
+}
+
 test('carrega atividades recentes somente na pergunta de atividades do diário', async t => {
   let loads = 0;
   let reference;

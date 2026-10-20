@@ -9132,6 +9132,29 @@ export function createAppController({
     return opening;
   }
 
+  async function openRequestedProvisionPdf(result, replyId, isCurrent) {
+    const category = ({
+      pending_payment_provisions_due: 'VENCIDAS / VENCEM HOJE',
+      pending_payment_provisions_future: 'A VENCER',
+    })[replyId];
+    if (!category) return;
+    // Only this response's generated report can open automatically. Restored
+    // history, attachment snapshots and unrelated PDFs remain opt-in.
+    const report = result.messages?.find(message => message?.type === 'document'
+      && message.mediaUrl
+      && (message.mimeType === 'application/pdf' || /\.pdf$/i.test(message.fileName || ''))
+      && message.caption === `PROVISÕES PGTO — ${category}`);
+    if (!report || !isCurrent()) return;
+    try {
+      const blob = await client.fetchMedia(report);
+      // Download first: a delayed file must not open over a newer conversation,
+      // after sign-out, or after the app controller has been stopped.
+      if (isCurrent()) await showMedia(blob, report.fileName || 'provisoes.pdf', { layout: 'report-pdf' });
+    } catch (error) {
+      if (isCurrent()) setSessionError(error, 'Não foi possível abrir o PDF. Toque no cartão do relatório para tentar novamente.');
+    }
+  }
+
   async function sendText(text = store.getState().draft, replyId, behavior = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     const sendingAccount = account;
@@ -9505,6 +9528,10 @@ export function createAppController({
         render();
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(effectiveResult);
+        const previewTransition = responseTransitionRevision;
+        await openRequestedProvisionPdf(effectiveResult, replyId, () =>
+          !stopped && account === sendingAccount && sessionRevision === sendingRevision
+          && responseTransitionRevision === previewTransition);
         if (resumeEpiFinalize) await finalizeEpiProductSelection();
       }
       if (confirmed && (behavior.requireMenuResult === true || automaticExitDiscarded) && !menuResult) {
