@@ -5357,6 +5357,38 @@ test("filtro mantém CADASTRAR NOVO com emoji mesmo quando nenhum registro corre
   assert.doesNotMatch(markup, /WILLIAM SILVA/);
 });
 
+test("agrupamento remoto mantém resultados por nome completo, ID e texto normalizado sem refiltrar", t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const selected = [];
+  view.on('select-reply', command => selected.push(command));
+  const supplier = Object.freeze({
+    id: 'choice:fornecedor_agrupador_lancamento:804', reply: '804',
+    label: '804 - JOSÉ GERALDO DOS SANTOS', source_values: { ID: '000804' },
+  });
+  const registration = Object.freeze({ id: 'register_supplier', reply: 'register_supplier', label: '➕ CADASTRAR FORNECEDOR' });
+  for (const question of [
+    'QUAL FORNECEDOR DEVE AGRUPAR O NOVO PEDIDO?',
+    'HÁ MAIS DE UM FORNECEDOR NAS LINHAS. QUAL FORNECEDOR DEVE SER USADO PARA AGRUPAR O NOVO PEDIDO?',
+  ]) {
+    for (const draft of ['Jose Geraldo dos Santos', '000804', 'J.G. Santos', '']) {
+      view.render(signedInState({ draft, messages: [{
+        id: 'remote-grouping', role: 'assistant', type: 'poll', question,
+        databaseFilter: true, databaseFilterKey: 'fornecedor_agrupador_lancamento',
+        options: [supplier, registration],
+      }] }));
+      assert.equal(root.querySelector('[data-role="draft"]').dataset.databaseFilterKey, 'fornecedor_agrupador_lancamento');
+      const buttons = [...root.querySelectorAll('.chat-choice-button[data-reply-id]')];
+      assert.deepEqual(buttons.map(button => button.dataset.replyId), [supplier.id, 'register_supplier'], draft);
+      buttons[0].click();
+      assert.equal(selected.at(-1).replyId, supplier.id);
+      assert.equal(selected.at(-1).label, '804 - JOSÉ GERALDO DOS SANTOS');
+    }
+  }
+});
+
 test("filtra fornecedores do agrupamento de lançamento múltiplo enquanto digita sem metadados da VM", () => {
   const dom = new JSDOM('<div id="app"></div>');
   const root = dom.window.document.querySelector("#app");

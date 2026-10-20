@@ -3131,6 +3131,129 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
   assert.deepEqual(h.store.getState().messages.at(-1).options, []);
 });
 
+async function waitForSupplierGrouping(predicate) {
+  for (let attempt = 0; attempt < 50 && !predicate(); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.ok(predicate(), 'o agrupamento deve concluir a atualização esperada');
+}
+
+async function supplierGroupingHarness(t) {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ view: createChatView(root), historyMode: 'current-step', databaseFilterDebounceMs: 1 });
+  t.after(() => { h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  const activeFlow = { id: 'launch', title: 'LANÇAMENTOS MÚLTIPLOS' };
+  const registration = { id: 'register_supplier', reply: 'register_supplier', label: '➕ CADASTRAR FORNECEDOR', registrationAction: true };
+  const initialSupplier = { id: '1', reply: '1', label: '1 - FORNECEDOR DAS LINHAS' };
+  const poll = options => ({
+    type: 'poll', question: 'QUAL FORNECEDOR DEVE AGRUPAR O NOVO PEDIDO?',
+    databaseFilter: true, databaseFilterKey: 'fornecedor_agrupador_lancamento', options,
+  });
+  const response = options => ({ status: 'processed', activeFlow, messages: [poll(options)] });
+  h.store.ingestRemoteMessages([poll([initialSupplier, registration])], { activeFlow });
+  const input = value => {
+    const draft = root.querySelector('[data-role="draft"]');
+    draft.value = value;
+    draft.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+  return { ...h, root, input, response, registration, initialSupplier, activeFlow };
+}
+
+test('agrupamento remoto pesquisa nome completo fora das linhas e seleciona o fornecedor sem alterar a resposta', async t => {
+  const h = await supplierGroupingHarness(t);
+  const supplier = { id: 'choice:fornecedor_agrupador_lancamento:804', reply: '804', label: '804 - JOSÉ GERALDO DOS SANTOS' };
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === 'filter_query') return h.response([supplier]);
+    return { status: 'processed', activeFlow: h.activeFlow, messages: [{ type: 'poll', question: 'QUAL A DATA?', options: [] }] };
+  };
+  h.input('Jose Geraldo dos Santos');
+  await waitForSupplierGrouping(() => payloads.length === 1 && !h.store.getState().activeText);
+  assert.deepEqual(payloads, [{ text: 'Jose Geraldo dos Santos', replyId: 'filter_query' }]);
+  assert.equal(h.store.getState().draft, 'Jose Geraldo dos Santos');
+  assert.equal(h.store.getState().messages.some(message => message.role === 'user'), false);
+  assert.deepEqual(h.store.getState().messages.at(-1).options, [supplier, h.registration]);
+  const button = h.root.querySelector(`[data-reply-id="${supplier.id}"]`);
+  assert.ok(button, 'o fornecedor retornado pelo backend deve estar visível');
+  h.input('Outra empresa de materiais');
+  h.root.querySelector(`[data-reply-id="${supplier.id}"]`).click();
+  await waitForSupplierGrouping(() => payloads.length === 2 && !h.store.getState().activeText);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(payloads, [
+    { text: 'Jose Geraldo dos Santos', replyId: 'filter_query' },
+    { text: '804 - JOSÉ GERALDO DOS SANTOS', replyId: 'choice:fornecedor_agrupador_lancamento:804' },
+  ]);
+  assert.equal(h.store.getState().draft, '');
+  assert.equal(h.root.querySelector('[data-role="draft"]').dataset.databaseFilterKey, undefined);
+});
+
+test('agrupamento remoto preserva cadastro com zero resultados e abre a pergunta existente do wizard', async t => {
+  const h = await supplierGroupingHarness(t);
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === 'filter_query') return h.response(payloads.length === 1 ? [] : [{ ...h.registration }]);
+    return { status: 'processed', activeFlow: { id: 'supply_supplier_registration' },
+      messages: [{ type: 'poll', question: 'QUAL É A RAZÃO SOCIAL DO FORNECEDOR?', options: [] }] };
+  };
+  for (const value of ['Empresa nova sem cadastro', 'Outra empresa sem cadastro']) {
+    h.input(value);
+    await waitForSupplierGrouping(() => payloads.at(-1)?.text === value && !h.store.getState().activeText);
+    assert.deepEqual(h.store.getState().messages.at(-1).options, [h.registration]);
+    assert.equal(h.root.querySelectorAll('[data-reply-id="register_supplier"]').length, 1);
+  }
+  h.root.querySelector('[data-reply-id="register_supplier"]').click();
+  await waitForSupplierGrouping(() => h.store.getState().messages.at(-1)?.question === 'QUAL É A RAZÃO SOCIAL DO FORNECEDOR?');
+  assert.deepEqual(payloads, [
+    { text: 'Empresa nova sem cadastro', replyId: 'filter_query' },
+    { text: 'Outra empresa sem cadastro', replyId: 'filter_query' },
+    { text: '➕ CADASTRAR FORNECEDOR', replyId: 'register_supplier' },
+  ]);
+  assert.deepEqual(h.store.getState().messages.at(-1).options, []);
+  assert.equal(h.store.getState().draft, '');
+  assert.equal(h.root.querySelector('[data-role="draft"]').dataset.databaseFilterKey, undefined);
+});
+
+test('agrupamento remoto aplica a última revisão do nome e limpa a busca durante respostas pendentes', async t => {
+  const h = await supplierGroupingHarness(t);
+  const first = deferred(), second = deferred();
+  t.after(() => { first.resolve(h.response([])); second.resolve(h.response([])); });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === 'filter_clear') return h.response([h.initialSupplier]);
+    return payloads.length === 1 ? first.promise : second.promise;
+  };
+  h.input('Jose Geraldo dos Santos');
+  await waitForSupplierGrouping(() => payloads.length === 1);
+  h.input('Maria Silva');
+  h.input('Maria Silva de Souza');
+  first.resolve(h.response([{ id: '804', reply: '804', label: '804 - JOSÉ GERALDO DOS SANTOS' }]));
+  await waitForSupplierGrouping(() => payloads.length === 2);
+  assert.deepEqual(payloads, [
+    { text: 'Jose Geraldo dos Santos', replyId: 'filter_query' },
+    { text: 'Maria Silva de Souza', replyId: 'filter_query' },
+  ]);
+  assert.equal(h.store.getState().draft, 'Maria Silva de Souza');
+  h.input('');
+  second.resolve(h.response([{ id: '805', reply: '805', label: '805 - MARIA SILVA DE SOUZA' }]));
+  await waitForSupplierGrouping(() => payloads.length === 3 && !h.store.getState().activeText);
+  assert.deepEqual(payloads.at(-1), { text: 'Limpar filtro', replyId: 'filter_clear' });
+  assert.equal(h.store.getState().draft, '');
+  assert.deepEqual(h.store.getState().messages.at(-1).options, [h.initialSupplier, h.registration]);
+  assert.ok(h.root.querySelector('[data-reply-id="1"]'));
+  assert.equal(h.root.querySelector('[data-reply-id="805"]'), null);
+  h.input('Maria Silva de Souza');
+  await waitForSupplierGrouping(() => payloads.length === 4 && !h.store.getState().activeText);
+  assert.deepEqual(payloads.at(-1), { text: 'Maria Silva de Souza', replyId: 'filter_query' });
+  h.input('Maria Silva de Souza');
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(payloads.length, 4, 'a mesma consulta concluída não deve ser enviada outra vez');
+});
+
 test("texto digitado em pesquisa numérica nunca escolhe ID; somente o botão seleciona", async t => {
   const h = makeHarness({ databaseFilterDebounceMs: 1 });
   t.after(() => h.controller.stop());

@@ -1,3 +1,8 @@
+export function isSupplierGroupingDatabaseFilter(message) {
+  return message?.databaseFilter === true
+    && String(message.databaseFilterKey || "").trim() === "fornecedor_agrupador_lancamento";
+}
+
 export function latestDatabaseFilter(messages = []) {
   const poll = [...messages]
     .reverse()
