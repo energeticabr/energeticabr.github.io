@@ -55,7 +55,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
       return response.result.value;
     };
     const port = server.httpServer.address().port;
-    for (const [width, height] of [[390, 844], [320, 740], [430, 932], [700, 1000], [1024, 768], [1365, 768], [844, 390]]) {
+    for (const [width, height] of [[390, 844], [320, 740], [430, 932], [589, 1280], [700, 1000], [1024, 768], [1365, 768], [844, 390]]) {
       await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
       await send("Page.navigate", { url: `http://127.0.0.1:${port}/tests/fixtures/payment-programming-gallery-responsive.html?width=${width}` }, sessionId);
       let ready = false;
@@ -65,8 +65,8 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
       }
       assert.ok(ready, `Galeria G28 não carregou em ${width}px: ${JSON.stringify(diagnostics)}`);
       const layout = await evaluate(`(() => {
-        const card = document.querySelector('.pg-card[data-item-id="300"]');
-        const attached = document.querySelector('.pg-card[data-item-id="301"]');
+        const card = document.querySelector('.pg-card[data-item-id="316"]');
+        const attached = document.querySelector('.pg-card[data-item-id="350"]');
         const fields = [...card.querySelectorAll('.pg-card-grid .pg-card-field')];
         const actions = [...card.querySelectorAll('.gallery-record-actions > button')].map(button => button.getBoundingClientRect());
         const titleRect = card.querySelector('.pg-card-heading h2').getBoundingClientRect();
@@ -87,6 +87,16 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
           return rect.width && (rect.left < attachedRect.left - 1 || rect.right > attachedRect.right + 1);
         }).map(node => node.className || node.tagName).slice(0, 5);
         return {
+          identifiers: [...document.querySelectorAll('.pg-card')].map(item => {
+            const id = item.querySelector('.pg-id-badge .og-card-id');
+            const range = document.createRange(); range.selectNodeContents(id);
+            const lines = [...range.getClientRects()].filter(rect => rect.width > 0);
+            const badge = item.querySelector('.pg-id-badge').getBoundingClientRect();
+            const supplier = item.querySelector('.pg-heading-copy').getBoundingClientRect();
+            return { text: id.textContent, lines: lines.length, badgeWidth: badge.width,
+              fits: lines.every(rect => rect.left >= badge.left && rect.right <= badge.right),
+              separateFromSupplier: badge.right <= supplier.left && supplier.width > 0 };
+          }),
           viewport: innerWidth,
           documentWidth: document.documentElement.scrollWidth,
           contentOverflow: document.querySelector('.og-content').scrollWidth > document.querySelector('.og-content').clientWidth + 1,
@@ -117,6 +127,11 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
         `G28 extrapola a tela ${width}px: ${JSON.stringify(layout)}`);
       assert.ok(layout.metricsTogether && layout.pairsTogether, `grade financeira e pares de ${width}px: ${JSON.stringify(layout)}`);
       assert.equal(layout.fieldCount, 7);
+      assert.deepEqual(layout.identifiers.map(id => id.text), ['316', '350', '1234']);
+      assert.ok(layout.identifiers.every(id => id.lines === 1 && id.fits && id.separateFromSupplier),
+        `IDs inteiros em uma linha, sem invadir o fornecedor em ${width}px: ${JSON.stringify(layout.identifiers)}`);
+      assert.ok(layout.identifiers.slice(0, 2).every(id => id.badgeWidth >= 64 && id.badgeWidth <= 66),
+        `o prazo deve quebrar dentro do selo sem roubar espaço do fornecedor: ${JSON.stringify(layout.identifiers)}`);
       assert.equal(layout.total, "R$ 89,99");
       assert.equal(layout.attachedTotal, "R$ 1.250,00");
       assert.equal(layout.unit, "R$ 120,00");

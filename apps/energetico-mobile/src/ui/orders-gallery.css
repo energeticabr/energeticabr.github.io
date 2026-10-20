@@ -139,10 +139,10 @@
 .pg-overlay .pg-card.gallery-record-card:nth-child(even) { background: #fff; }
 .pg-overlay .pg-card.gallery-record-card.og-card--with-attachments { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; align-items: stretch; }
 .pg-card-main { min-width: 0; padding: 0; }
-.pg-card-heading { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: stretch; gap: 4px; min-height: 56px; padding: 0; border-bottom: 0; }
+.pg-card-heading { display: grid; grid-template-columns: minmax(64px, min-content) minmax(0, 1fr) auto; align-items: stretch; gap: 4px; min-height: 56px; padding: 0; border-bottom: 0; }
 .pg-card-heading h2 { grid-column: 2; margin: 0; color: #0d3767; font-size: .86rem; font-weight: 850; line-height: 1.15; overflow-wrap: anywhere; }
 .pg-id-badge { display: flex; min-width: 0; flex-direction: column; align-items: stretch; justify-content: center; gap: 3px; padding: 4px; border-radius: 7px; color: #fff; background: #c51c25; text-align: center; }
-.pg-card-heading .og-card-id { display: block; width: auto; min-width: 0; min-height: 0; padding: 0; background: transparent; font-size: 1.35rem; line-height: 1.05; overflow-wrap: anywhere; }
+.pg-card-heading .og-card-id { display: block; width: auto; min-width: 0; min-height: 0; padding: 0; background: transparent; font-size: 1.35rem; line-height: 1.05; white-space: nowrap; overflow-wrap: normal; }
 .pg-heading-copy { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 4px; row-gap: 2px; align-content: center; min-width: 0; padding: 5px; border-radius: 7px; background: #e7f2fc; }
 .pg-heading-copy > .pg-card-icon { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
 .pg-supplier-label { grid-column: 2; min-width: 0; color: #60778b; font-size: .6rem; font-weight: 800; text-transform: uppercase; overflow-wrap: anywhere; }
@@ -295,7 +295,7 @@
 }
 @media (max-width: 360px) {
   .og-card-field { grid-template-columns: 1fr; gap: 0; }
-  .pg-card-heading { grid-template-columns: 48px minmax(0, 1fr); padding-right: 0; }
+  .pg-card-heading { grid-template-columns: minmax(64px, min-content) minmax(0, 1fr); padding-right: 0; }
   .pg-card-toolbar { grid-column: 2; justify-self: end; }
   .pg-id-badge { grid-row: 1 / span 2; }
   .pg-card-grid [data-field="VALOR UNITÁRIO"], .pg-card-grid [data-field="QTD"], .pg-card-grid [data-field="FRETE"] { grid-template-columns: minmax(0, 1fr); }

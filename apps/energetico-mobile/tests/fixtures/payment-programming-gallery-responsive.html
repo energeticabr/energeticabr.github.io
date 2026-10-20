@@ -14,20 +14,20 @@
     import { createPaymentProgrammingGallery } from "../../src/ui/payment-programming-gallery-view.js";
 
     const rows = [
-      { id: "300", hasAttachments: false, fields: {
-        ID: 300, FORNECEDOR: "VIVO", STATUS: "PAGAMENTO PREVISTO",
+      { id: "316", hasAttachments: false, fields: {
+        ID: 316, FORNECEDOR: "LOCAMÁQUINAS", STATUS: "PAGAMENTO PREVISTO",
         DESCRICAOPGTO: "SEGURO PARA 7 TRABALHADORES CONFORME CCT",
         "DATA PREVISTO PGTO": "2026-10-01", "VALOR TOTAL": 89.99, QTD: 1, OBS: "Benefício referente ao mês de outubro.",
         FILIAL: "000 - ESCRITÓRIO CENTRAL", IMOVEL: "ESCRITÓRIO VILA DA SERRA", PGTOAGENDADO: "PENDENTE",
       } },
-      { id: "301", hasAttachments: true, fields: {
-        ID: 301, FORNECEDOR: "ARCELOR MITTAL COMÉRCIO E DISTRIBUIÇÃO", STATUS: "PAGAMENTO PREVISTO",
+      { id: "350", hasAttachments: true, fields: {
+        ID: 350, FORNECEDOR: "GOVERNO FEDERAL", STATUS: "PAGAMENTO PREVISTO",
         DESCRICAOPGTO: "CONTA DE ENERGIA ELÉTRICA",
         "DATA PREVISTO PGTO": "2026-10-08", "VALOR TOTAL": 120, QTD: 10, FRETE: 50,
         FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS", PGTOAGENDADO: "PENDENTE", OBS: "Observação da conta, independente da descrição.",
       } },
-      { id: "302", hasAttachments: false, fields: {
-        ID: 302, FORNECEDOR: "COPASA", STATUS: "PAGAMENTO PREVISTO",
+      { id: "1234", hasAttachments: false, fields: {
+        ID: 1234, FORNECEDOR: "ARCELOR MITTAL COMÉRCIO E DISTRIBUIÇÃO", STATUS: "PAGAMENTO PREVISTO",
         DESCRICAOPGTO: "CONTA DE ÁGUA E ESGOTO",
         "DATA PREVISTO PGTO": "2026-10-10", "VALOR TOTAL": 1234567.89, QTD: 3, FRETE: 123456.78,
         FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS", PGTOAGENDADO: "PENDENTE",
@@ -41,7 +41,7 @@
           if (window.holdPaymentLoad) await new Promise(resolve => { window.finishPaymentLoad = resolve; });
           return { rows };
         },
-        async listAttachments(id) { return id === "301" ? [{ fileName: "conta.pdf" }] : []; },
+        async listAttachments(id) { return id === "350" ? [{ fileName: "conta.pdf" }] : []; },
       },
     });
     await gallery.open();
