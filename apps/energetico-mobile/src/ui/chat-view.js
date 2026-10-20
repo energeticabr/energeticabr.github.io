@@ -626,6 +626,20 @@ function orderMeasurementUnitOptions(message, options) {
     .map(row => row.option);
 }
 
+function orderWorksiteVisitBranchOptions(message, options) {
+  const question = normalizedDateText(message?.question || message?.prompt || message?.text);
+  if (!/\bqual\s+(?:e\s+)?a\s+filial\s+da\s+visita\s+em\s+obra\b/u.test(question)) return options;
+  const preferred = [], others = [];
+  for (const option of options) {
+    const label = String(option?.label || option?.title || '').trim().replace(/^(?:⭐\s*)+/u, '');
+    const code = label.match(/^\d+\s*[-–—]\s*(\d+)\s*[-–—]/u)?.[1]
+      ?? label.match(/^(\d{3})\s*[-–—]/u)?.[1];
+    if (code === '004') preferred.push({ ...option, worksiteVisitBranchLabel: `⭐ ${label}` });
+    else others.push(option);
+  }
+  return [...preferred, ...others];
+}
+
 function orderProvisionPaymentMethodOptions(message, options, activeFlow) {
   if (activeFlow?.id !== "payment_settlement") return options;
   const question = normalizedDateText(message?.question || message?.prompt || message?.text);
@@ -1507,7 +1521,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     databaseFilterMessage === message,
   );
   let allOptions = orderProvisionPaymentMethodOptions(
-    message, orderMeasurementUnitOptions(message, filteredOptions), activeFlow,
+    message, orderMeasurementUnitOptions(message, orderWorksiteVisitBranchOptions(message, filteredOptions)), activeFlow,
   );
   if (isDiaryActivitiesQuestion(message, activeFlow)) {
     allOptions = allOptions.filter(option => draftReplyId(option) !== "abandon_construction_diary");
@@ -1627,9 +1641,9 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       diaryVisit: currentPoll && activeFlow?.id === 'construction_diary_fill' && option.diaryFieldVisit === true,
       finishAttachments: option === finishOption,
       launchMenuButton: isLaunchMenu && isLaunchFlowOption(option),
-      displayLabel: option?.recommendedDate === true
+      displayLabel: option.worksiteVisitBranchLabel || (option?.recommendedDate === true
         ? `⭐ ${String(option.label || option.title || option.id || "")}`
-        : option.menuDisplayLabel || null,
+        : option.menuDisplayLabel || null),
     })];
   }).join("");
   const rawChangeTable = message.change_table || message.changeTable;
