@@ -1,0 +1,21 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "835782b0b09664d3c5c5b77323d10ff664ed965d0c620f05632a55edbb5bd488",
+      "mirrorBefore": "835782b0b09664d3c5c5b77323d10ff664ed965d0c620f05632a55edbb5bd488",
+      "after": "b7b7c726789c08cebde29d1be111e0392ffc462f48c1fc30691f541df150739d"
+    },
+    "worker/workflow_config.json": {
+      "before": "0fa08b80802d5a412f8d5ce08fc6dfe317ba074f50f13dc83fe482454175315a",
+      "mirrorBefore": "0fa08b80802d5a412f8d5ce08fc6dfe317ba074f50f13dc83fe482454175315a",
+      "after": "80fa8588dc246b6273512b1dd173537a204c4301b12da498a3e2c7d79f1ab37d"
+    },
+    "worker/clients.py": {
+      "before": "9027dde471ec6750342be18206f54a9a21719053e9a78c93997b95b46c135af5",
+      "mirrorBefore": "9027dde471ec6750342be18206f54a9a21719053e9a78c93997b95b46c135af5",
+      "after": "7be2fafc4abbca121157614e68f7f50d526d1aa2d279ffec11fe1004ac178dff"
+    }
+  },
+  "patch": "9ba14c5ff737b0463e46237b8575f988a8d88617513514d31af13a2b7ee292d7",
+  "archive": "b53d49c8b94dfe43077de0748ddc2ebd398b8fa5d2bf7ece51f4933b39ad38d6"
+}

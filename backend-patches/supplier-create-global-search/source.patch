@@ -1,0 +1,266 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -838,6 +838,20 @@
+                 and self._is_option_next(event["reply_id"]) and not state.get("option_pagination")):
+             self._mark_processed(state, event.get("message_id"))
+             return self._resend_current_prompt(state, etag)
++        supplier_return = ((state or {}).get("embedded_return") or {}).get("type")
++        if supplier_return in {"recurring_expense_supplier_registration",
++                               "multi_launch_grouping_supplier_registration"}:
++            stale_reply = str(event.get("reply_id") or "")
++            parent_choice = stale_reply.startswith((
++                "choice:fornecedor_agrupador_lancamento:",
++                "choice:fornecedor_despesa_recorrente:",
++            )) or stale_reply == "NOVO_FORNECEDOR"
++            stale_page = self._is_option_next(stale_reply) and not state.get("option_pagination")
++            stale_filter = (stale_reply in {"filter_query", "filter_clear", "refresh_options"}
++                            and (self._current_step(state) or {}).get("kind") != "selection")
++            if parent_choice or stale_page or stale_filter:
++                self._mark_processed(state, event.get("message_id"))
++                return self._resend_current_prompt(state, etag)
+         provision_lock = self._handle_frozen_provision(event,state,etag)
+         if provision_lock is not None:
+             return provision_lock
+@@ -24328,6 +24342,10 @@
+             return_type = "new_quotation_supplier_registration"
+         elif parent_flow == "payment":
+             return_type = "payment_supplier_registration"
++        elif parent_flow == "recurring_expense":
++            return_type = "recurring_expense_supplier_registration"
++        elif state.get("stage") == "choosing_multi_launch_grouping_supplier":
++            return_type = "multi_launch_grouping_supplier_registration"
+         else:
+             return_type = "launch_supplier_registration"
+         return self._start_embedded_launch_registration(
+@@ -24619,6 +24637,7 @@
+         if state.get("flow") not in {
+             "launch",
+             "payment",
++            "recurring_expense",
+             "new_quotation",
+             "commercial_appointment_create",
+             "commercial_pathology_create",
+@@ -24688,6 +24707,9 @@
+             "type": return_type,
+             "state": parent_state,
+         }
++        if return_type in {"recurring_expense_supplier_registration",
++                           "multi_launch_grouping_supplier_registration"}:
++            state.pop("option_pagination", None)
+         state.update(
+             {
+                 "flow": flow,
+@@ -24815,6 +24837,48 @@
+             "embedded_product_registered": True,
+             "registered_product_item_id": item_id,
+         }
++
++    def _resume_origin_with_registered_supplier(
++        self, state: dict, etag: str | None, item_id
++    ) -> dict:
++        """Retoma a despesa ou o agrupamento, sem modificar as linhas do lote."""
++        embedded = state.get("embedded_return") or {}
++        return_type = embedded.get("type")
++        if return_type not in {
++            "recurring_expense_supplier_registration",
++            "multi_launch_grouping_supplier_registration",
++        }:
++            raise RuntimeError("Retorno do cadastro de fornecedor não encontrado")
++        supplier = state.get("fields", {}).get("CADASTRO")
++        if not str(supplier or "").strip():
++            raise RuntimeError("O fornecedor cadastrado não possui CADASTRO")
++        parent = copy.deepcopy(embedded["state"])
++        processed = list(state.get("processed_message_ids", []))
++        state.update(parent)
++        state["processed_message_ids"] = processed
++        if "embedded_return" not in parent:
++            state.pop("embedded_return", None)
++        for transient in ("idempotency_token", "completion_trigger_message_id",
++                          "submission_failure", "summary_card", "option_pagination"):
++            state.pop(transient, None)
++        state["registered_supplier"] = {"item_id": item_id, "supplier": supplier}
++        state["stage"] = "selecting_fields"
++        state["options"] = []
++        if return_type == "multi_launch_grouping_supplier_registration":
++            state["multi_launch_grouping_supplier"] = supplier
++            state.setdefault("answers", {})["fornecedor_agrupador_lancamento"] = supplier
++            state.setdefault("display_values", {})["FORNECEDOR AGRUPADOR DO PEDIDO"] = str(supplier)
++        else:
++            steps = self._flow_config(state)["steps"]
++            index, step = next((i, step) for i, step in enumerate(steps)
++                               if step["key"] == "fornecedor_despesa_recorrente")
++            state["step_index"] = index
++            self._apply_selected_option(state, step, {
++                "id": item_id, "title": str(supplier), "value": supplier,
++            })
++        result = self._prompt_next_or_summary(state, etag)
++        return {**result, "embedded_supplier_registered": True,
++                "registered_supplier_item_id": item_id}
+ 
+     def _resume_launch_with_registered_supplier(
+         self, state: dict, etag: str | None, item_id
+@@ -29433,6 +29497,20 @@
+                 "DEVE SER USADO PARA AGRUPAR O NOVO PEDIDO?"
+             ),
+             "button_label": "ESCOLHER FORNECEDOR",
++            "kind": "selection",
++            "terminal_options_first": True,
++            "terminal_option": {
++                "id": "NOVO_FORNECEDOR",
++                "title": "➕ CADASTRAR NOVO FORNECEDOR",
++                "value": "__CADASTRAR_NOVO_FORNECEDOR__",
++                "action": "start_embedded_supplier_registration",
++            },
++            "source": {
++                "type": "sharepoint_list", "list": "FORNECEDORES",
++                "id_field": "Id", "label_field": "CADASTRO",
++                "value_field": "CADASTRO", "distinct": True,
++                "fetch_all_pages": True,
++            },
+         }
+ 
+     @staticmethod
+@@ -29463,11 +29541,7 @@
+         """Prioriza fornecedores das linhas e acrescenta o cadastro completo."""
+ 
+         line_options = self._multi_launch_distinct_suppliers(state)
+-        supplier_step = next(
+-            step
+-            for step in self._flow_config(state)["steps"]
+-            if step.get("key") == "fornecedor_lancamento"
+-        )
++        supplier_step = self._multi_launch_grouping_supplier_step()
+         registered_options = self.sharepoint.get_options(
+             supplier_step,
+             self._context(state),
+@@ -29490,7 +29564,7 @@
+             item["title"] = str(item.get("title") or value)
+             item["value"] = str(value)
+             combined.append(item)
+-        return combined
++        return self._include_terminal_option(supplier_step, combined)
+ 
+     def _needs_multi_launch_grouping_supplier(self, state: dict) -> bool:
+         if (
+@@ -29512,7 +29586,8 @@
+         if not selected:
+             return True
+         options = self._multi_launch_grouping_supplier_options(state)
+-        valid = {normalize_text(str(option["value"])) for option in options}
++        valid = {normalize_text(str(option["value"])) for option in options
++                 if not option.get("terminal_option")}
+         if selected in valid:
+             return False
+         state.pop("multi_launch_grouping_supplier", None)
+@@ -29546,18 +29621,47 @@
+     ) -> dict:
+         raw_reply = event.get("reply_id") or event.get("text") or ""
+         self._mark_processed(state, event["message_id"])
++        step = self._multi_launch_grouping_supplier_step()
++        # Older sessions may contain only the suppliers shown before this release.
++        # Merge the full catalog without changing IDs of options already displayed.
++        options = state.setdefault("options", [])
++        seen = {normalize_text(str(item.get("value", ""))) for item in options
++                if not item.get("terminal_option")}
++        next_id = max((int(item["id"]) for item in options
++                       if str(item.get("id", "")).isdigit()), default=0)
++        for option in self._multi_launch_grouping_supplier_options(state):
++            if option.get("terminal_option"):
++                continue
++            key = normalize_text(str(option["value"]))
++            if key not in seen:
++                next_id += 1
++                options.append({**option, "id": next_id})
++                seen.add(key)
++        state["options"] = self._include_terminal_option(step, options)
++        control = normalize_text(str(raw_reply))
++        if control in {"filter_clear", "limpar filtro", "refresh_options"}:
++            self._send_options(state, step, state["options"])
++            self._save(state, etag)
++            return {"status": "filter_cleared", "batch_id": state["batch_id"]}
++        explicit_filter = event.get("reply_id") == "filter_query"
+         selected = resolve_option(
+             raw_reply,
+             state.get("options", []),
+             "fornecedor_agrupador_lancamento",
+-        )
++        ) if not explicit_filter else None
+         if not selected:
+-            matches = filter_options(raw_reply, state.get("options", []))
+-            if matches:
++            query = str(event.get("text") or "") if explicit_filter else str(raw_reply)
++            matches = filter_options(query, [item for item in state["options"]
++                                            if not item.get("terminal_option")])
++            if matches or explicit_filter:
++                displayed = step if matches else {**step, "prompt": (
++                    "NENHUM FORNECEDOR ENCONTRADO. DIGITE OUTRO TEXTO PARA FILTRAR "
++                    "OU CADASTRE UM NOVO FORNECEDOR."
++                )}
+                 self._send_filtered_options(
+                     state,
+-                    self._multi_launch_grouping_supplier_step(),
+-                    list(matches),
++                    displayed,
++                    self._include_terminal_option(step, list(matches)),
+                 )
+                 self._save(state, etag)
+                 return {
+@@ -29575,6 +29679,8 @@
+                 "status": "invalid_multi_launch_grouping_supplier",
+                 "batch_id": state["batch_id"],
+             }
++        if selected.get("action") == "start_embedded_supplier_registration":
++            return self._start_embedded_supplier_registration(state, etag)
+         value = str(selected["value"])
+         display = str(selected.get("title") or value)
+         state["multi_launch_grouping_supplier"] = value
+@@ -33746,6 +33852,9 @@
+             return self._resume_supply_family_with_registered_group(
+                 state, etag, item_id
+             )
++        if embedded_type in {"recurring_expense_supplier_registration",
++                             "multi_launch_grouping_supplier_registration"}:
++            return self._resume_origin_with_registered_supplier(state, etag, item_id)
+         if embedded_type == "launch_supplier_registration":
+             return self._resume_launch_with_registered_supplier(
+                 state, etag, item_id
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -15560,6 +15560,13 @@
+           "prompt": "QUAL É O FORNECEDOR?",
+           "button_label": "ESCOLHER FORNECEDOR",
+           "allow_blank": true,
++          "terminal_options_first": true,
++          "terminal_option": {
++            "id": "NOVO_FORNECEDOR",
++            "title": "➕ CADASTRAR NOVO FORNECEDOR",
++            "value": "__CADASTRAR_NOVO_FORNECEDOR__",
++            "action": "start_embedded_supplier_registration"
++          },
+           "source": {
+             "type": "sharepoint_list",
+             "list": "FORNECEDORES",
+--- a/worker/clients.py
++++ b/worker/clients.py
+@@ -1650,7 +1650,20 @@
+             title_includes_id = bool(source.get("title_includes_id")) or (
+                 source.get("id_field", "Id") in title_template_fields
+             )
+-            for row in self._values(payload):
++            rows = list(self._values(payload))
++            if source.get("fetch_all_pages"):
++                visited = set()
++                while True:
++                    endpoint = (payload.get("odata.nextLink") or payload.get("@odata.nextLink")
++                                or payload.get("d", {}).get("__next"))
++                    if not endpoint:
++                        break
++                    if endpoint in visited:
++                        raise RuntimeError("Paginação repetida no catálogo de fornecedores")
++                    visited.add(endpoint)
++                    payload = self._request("GET", endpoint, params=None)
++                    rows.extend(self._values(payload))
++            for row in rows:
+                 display_row = {field: row.get(name) for field, name in internal.items()}
+                 if source.get("require_attachments"):
+                     attachment_value = display_row.get(attachment_field)

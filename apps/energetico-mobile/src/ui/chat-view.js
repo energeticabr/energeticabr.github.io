@@ -15,7 +15,7 @@ import { auditLogRow, renderAuditLogTable } from "./audit-log-table.js";
 import { createSignaturePlacement } from "../web/signature-placement.js";
 import { signatureDocumentLayout as documentSignatureLayout } from "../web/signature-document-layout.js";
 import { normalizeSignaturePixels, renderSignatureStrokes, signatureOutputSize } from "../web/signature-image.js";
-import { isDatabaseRegistrationOption, latestDatabaseFilter } from "../chat/database-filter.js";
+import { isDatabaseRegistrationOption, isSupplierGroupingDatabaseFilter, latestDatabaseFilter } from "../chat/database-filter.js";
 import { isActiveDateQuestion, isDateQuestion } from "../chat/date-input.js";
 import { orderEffectivePaymentDateOptions } from "../chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt, withDocumentAttachmentPrompt } from "../chat/attachment-finish.js";
@@ -566,6 +566,8 @@ function expiredTemporaryAttachmentOptions(message, options) {
 
 function databaseFilteredOptions(message, options, draft = "", enabled = true) {
   if (!enabled || (message?.databaseFilter !== true && !isMultipleLaunchSupplierPoll(message))) return options;
+  // The server can match supplier IDs and normalized fields absent from these labels.
+  if (isSupplierGroupingDatabaseFilter(message)) return options;
   const query = String(draft || "").trim();
   if (!query || (query.split(/\s+/u).length > 2 && !isMultipleLaunchSupplierPoll(message))) return options;
   const words = normalizedDateText(query).split(/\s+/u).filter(Boolean);

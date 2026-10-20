@@ -6,7 +6,7 @@ import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payro
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
 import { signatureInkHash, signatureInkImage } from "./web/signature-trace.js";
 import { signatureLayoutGeometry } from './web/signature-document-layout.js';
-import { latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
+import { isSupplierGroupingDatabaseFilter, latestDatabaseFilter, preserveDatabaseFilterRegistrationOptions } from "./chat/database-filter.js";
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
@@ -4141,7 +4141,7 @@ export function createAppController({
     if (databaseFilterTimer !== null) clearTimeout(databaseFilterTimer);
     const revision = ++databaseFilterRevision;
     const query = String(command.value || "").trim();
-    if (query && query.split(/\s+/u).length > 2) {
+    if (query && query.split(/\s+/u).length > 2 && !isSupplierGroupingDatabaseFilter(context.message)) {
       databaseFilterTimer = null;
       return false;
     }
