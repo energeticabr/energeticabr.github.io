@@ -27,6 +27,79 @@ function signedInState(overrides = {}) {
   };
 }
 
+test('visita em obra prioriza a filial 004 com estrela sem alterar a resposta enviada', t => {
+  const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+  const view = createChatView(root), selected = [];
+  t.after(() => { view.destroy(); dom.window.close(); });
+  view.on('select-reply', event => selected.push(event));
+  const options = Object.freeze([
+    Object.freeze({ id: 'choice:filial:9', label: '9 - 999 - DEMANDAS PESSOAIS' }),
+    Object.freeze({ id: 'branch5', reply: 'choice:filial:5', label: '5 - 004 - EDIFÍCIO XAVANTE' }),
+    Object.freeze({ id: 'choice:filial:4', label: '4 - 003 - CONGONHAS' }),
+    Object.freeze({ id: 'choice:filial:1', label: '1 - 000 - ESCRITÓRIO CENTRAL' }),
+  ]);
+  const state = signedInState({ messages: [{ id: 'visit-branch', role: 'assistant', type: 'poll',
+    question: '🏭 QUAL É A FILIAL DA VISITA EM OBRA?\nCASO DESEJE FILTRAR, DIGITE UM TEXTO.', options }] });
+  for (let render = 0; render < 2; render++) {
+    view.render(state);
+    const buttons = [...root.querySelectorAll('.chat-choice-list [data-reply-id]')];
+    assert.deepEqual(buttons.map(button => button.dataset.replyId), ['choice:filial:5', 'choice:filial:9', 'choice:filial:4', 'choice:filial:1']);
+    assert.equal(buttons[0].textContent, '⭐ 5 - 004 - EDIFÍCIO XAVANTE');
+    assert.deepEqual(buttons.slice(1).map(button => button.textContent), ['9 - 999 - DEMANDAS PESSOAIS', '4 - 003 - CONGONHAS', '1 - 000 - ESCRITÓRIO CENTRAL']);
+    buttons[0].click();
+    assert.equal(selected.at(-1).replyId, 'choice:filial:5');
+    assert.equal(selected.at(-1).label, '5 - 004 - EDIFÍCIO XAVANTE');
+    assert.equal(options[1].label, '5 - 004 - EDIFÍCIO XAVANTE');
+  }
+});
+
+test('filial recomendada de visita aceita o código sem ID e não duplica estrela existente', () => {
+  for (const label of ['⭐ 5 - 004 - EDIFÍCIO XAVANTE', '004 – EDIFÍCIO XAVANTE', '5 — 004 — EDIFÍCIO XAVANTE']) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{ id: 'visit-branch', role: 'assistant', type: 'poll',
+      prompt: 'QUAL A FILIAL DA VISITA EM OBRA?', options: [
+        { id: 'other', label: '9 - 999 - DEMANDAS PESSOAIS' }, { id: 'preferred', label },
+      ] }] })));
+    const buttons = [...dom.window.document.querySelectorAll('.chat-choice-list [data-reply-id]')];
+    assert.equal(buttons[0].dataset.replyId, 'preferred');
+    assert.equal(buttons[0].textContent, `⭐ ${label.replace(/^⭐\s*/, '')}`);
+    assert.equal(buttons[0].dataset.label, label);
+    dom.window.close();
+  }
+});
+
+test('preferência de filial da visita não altera outras perguntas nem confunde ID ou parte do nome com código 004', () => {
+  const options = [
+    { id: '9', label: '9 - 999 - DEMANDAS PESSOAIS' },
+    { id: '004', label: '004 - 003 - CONGONHAS' },
+    { id: '6', label: '6 - 040 - OBRA 004' },
+    { id: '7', label: '7 - 0040 - OUTRA OBRA' },
+  ];
+  for (const question of ['QUAL É A FILIAL DA VISITA EM OBRA?', 'QUAL É A FILIAL DO LANÇAMENTO?', 'QUAL É A ETAPA DA VISITA EM OBRA?']) {
+    const choices = question.includes('FILIAL DO LANÇAMENTO') ? [...options, { id: '5', label: '5 - 004 - EDIFÍCIO XAVANTE' }] : options;
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{ id: 'other', role: 'assistant', type: 'poll', question, options: choices }] })));
+    const buttons = [...dom.window.document.querySelectorAll('.chat-choice-list [data-reply-id]')];
+    assert.deepEqual(buttons.map(button => button.textContent), choices.map(option => option.label));
+    dom.window.close();
+  }
+});
+
+test('filtro de filial da visita mantém a busca original e restaura a preferência ao limpar', () => {
+  const message = { id: 'visit-filter', role: 'assistant', type: 'poll', databaseFilter: true, databaseFilterKey: 'construction_visit_branch',
+    question: 'QUAL É A FILIAL DA VISITA EM OBRA?', options: [
+      { id: '9', label: '9 - 999 - DEMANDAS PESSOAIS' },
+      { id: '5', label: '5 - 004 - EDIFÍCIO XAVANTE' },
+      { id: '4', label: '4 - 003 - CONGONHAS' },
+    ] };
+  for (const [draft, expected] of [['CONGONHAS', ['4']], ['XAVANTE', ['5']], ['', ['5', '9', '4']]]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [message], draft })));
+    const buttons = [...dom.window.document.querySelectorAll('.chat-choice-list [data-reply-id]')];
+    assert.deepEqual(buttons.map(button => button.dataset.replyId), expected);
+    const preferred = buttons.find(button => button.dataset.replyId === '5');
+    if (preferred) assert.equal(preferred.textContent, '⭐ 5 - 004 - EDIFÍCIO XAVANTE');
+    dom.window.close();
+  }
+});
+
 test('overdue provisions button displays one red circle and keeps its original reply payload', t => {
   const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
   const view = createChatView(root), selected = [];
