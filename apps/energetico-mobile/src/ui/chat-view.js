@@ -1,4 +1,5 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
+import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
 import { postingCompletion } from "../chat/posting-completion.js";
 import { postingCompletionMarkup } from "./posting-completion.js";
 import { reportNavigationMarkup } from "./report-navigation.js";
@@ -1179,6 +1180,10 @@ function rhidAttendanceTableMarkup(table, messageId, rhidRefresh = null, activeF
       <button class="chat-rhid-date-navigation__button" type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="1" aria-label="Próximo dia" title="Próximo dia"${table.navigationBusy === true ? " disabled" : ""}>→</button>
     </nav>${table.navigationBusy === true ? loadingIndicatorMarkup("Atualizando dados do RHID…", { compact: true }) : ""}${table.navigationError ? `<p class="chat-rhid-attendance-table__error" role="alert">${escapeHtml(table.navigationError)}</p>` : ""}`
     : "";
+  if (table.adjustmentRefreshRequired === true) return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
+    ${navigation}<p role="status">Registro excluído. Consulte novamente os horários atualizados antes de compartilhar o relatório.</p>
+    <button type="button" data-action="rhid-attendance-report-navigate" data-message-id="${escapeHtml(messageId)}" data-value="reload"${table.navigationBusy === true ? ' disabled' : ''}>Consultar novamente</button>
+  </section>`;
   return `<section class="chat-rhid-attendance-table chat-rhid-attendance-report" aria-label="Relatório de presenças RHID">
     ${navigation}
     <header class="chat-rhid-attendance-report__header">
@@ -2387,7 +2392,7 @@ function rhidAttendanceReportLoadingMarkup(date = "") {
 
 function rhidAttendanceAdjustmentMarkup(adjustment) {
   if (!adjustment) return "";
-  const { personName, label, rhid, effective, currentEffective, previous, reason, busy, error } = adjustment;
+  const { personName, label, rhid, effective, currentEffective, previous, reason, busy, deleting, canDelete, error } = adjustment;
   return `<div class="chat-confirmation-backdrop" data-popup-backdrop="true" data-popup-close-action="rhid-attendance-adjust-cancel" data-rhid-adjustment-dialog>
     <div class="chat-confirmation chat-rhid-adjustment" role="dialog" aria-modal="true" aria-labelledby="rhid-adjustment-title">
       <h2 id="rhid-adjustment-title">Corrigir ${escapeHtml(label)} — ${escapeHtml(personName)}</h2>
@@ -2396,7 +2401,7 @@ function rhidAttendanceAdjustmentMarkup(adjustment) {
       <label for="rhid-adjustment-time">Horário corrigido</label><input id="rhid-adjustment-time" type="time" data-role="rhid-adjustment-time" value="${escapeHtml(effective || "")}"${busy ? " disabled" : ""}>
       <label for="rhid-adjustment-reason">Justificativa obrigatória</label><textarea id="rhid-adjustment-reason" data-role="rhid-adjustment-reason" rows="3" maxlength="500" placeholder="Explique por que este horário foi incluído ou alterado"${busy ? " disabled" : ""}>${escapeHtml(reason || "")}</textarea>
       ${error ? `<p class="error-banner" role="alert">${escapeHtml(error)}</p>` : ""}
-      <div class="chat-confirmation__actions"><button class="chat-confirmation__cancel" type="button" data-action="rhid-attendance-adjust-cancel"${busy ? " disabled" : ""}>Cancelar</button><button class="chat-confirmation__confirm" type="button" data-action="rhid-attendance-adjust-save"${busy ? " disabled" : ""}>${busy ? "Salvando…" : "Salvar horário"}</button></div>
+      <div class="chat-confirmation__actions${canDelete ? ' chat-rhid-adjustment__actions--editing' : ''}"><button class="chat-confirmation__cancel" type="button" data-action="rhid-attendance-adjust-cancel"${busy ? " disabled" : ""}>Cancelar</button>${canDelete ? `<button class="chat-rhid-adjustment__delete" type="button" data-action="rhid-attendance-adjust-delete"${busy ? ' disabled' : ''}>${busy && deleting ? 'Deletando…' : 'Deletar registro'}</button>` : ''}<button class="chat-confirmation__confirm" type="button" data-action="rhid-attendance-adjust-save"${busy ? " disabled" : ""}>${busy && !deleting ? "Salvando…" : previous?.time ? "Salvar edição" : "Salvar horário"}</button></div>
     </div>
   </div>`;
 }
@@ -4526,6 +4531,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         personName: person.name, label, rhid: slot.rhidCandidates?.join(", ") || slot.rhid || "",
         effective: slot.effective || suggestedRhidAdjustmentTime(command.slot, table.reportDate), currentEffective: slot.adjustment?.time || "", previous: slot.adjustment || null,
         reason: !slot.rhid && !slot.rhidCandidates?.length ? "NÃO APONTADO" : "", busy: false, error: "",
+        canDelete: canDeleteRhidAdjustment(slot.adjustment, lastState?.account),
       };
       if (lastState) { const state = lastState; lastState = null; render(state); }
       return;
@@ -4534,6 +4540,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       if (rhidAttendanceAdjustment?.busy) return;
       rhidAttendanceAdjustment = null;
       if (lastState) { const state = lastState; lastState = null; render(state); }
+      return;
+    }
+    if (command.type === 'rhid-attendance-adjust-delete') {
+      if (!rhidAttendanceAdjustment || rhidAttendanceAdjustment.busy || !rhidAttendanceAdjustment.canDelete) return;
+      const time = root.querySelector('[data-role="rhid-adjustment-time"]')?.value || '';
+      const reason = root.querySelector('[data-role="rhid-adjustment-reason"]')?.value || '';
+      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, effective: time, reason, busy: true, deleting: true, error: '' };
+      const { messageId, personKey, slot, previous } = rhidAttendanceAdjustment;
+      if (lastState) { const state = lastState; lastState = null; render(state); }
+      emit({ type: 'rhid-attendance-adjust-delete', messageId, personKey, slot, revisionId: String(previous.id) });
       return;
     }
     if (command.type === "rhid-attendance-adjust-save") {
@@ -4554,7 +4570,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         if (banner) banner.textContent = error;
         return;
       }
-      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, effective: time, reason, busy: true, error: "" };
+      rhidAttendanceAdjustment = { ...rhidAttendanceAdjustment, effective: time, reason, busy: true, deleting: false, error: "" };
       const { messageId, presenceId, personKey, slot, adjustmentId } = rhidAttendanceAdjustment;
       if (lastState) { const state = lastState; lastState = null; render(state); }
       emit({ type: "rhid-attendance-adjust-save", messageId, personKey, slot, time, reason,

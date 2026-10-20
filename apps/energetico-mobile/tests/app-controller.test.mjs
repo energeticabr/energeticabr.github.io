@@ -920,6 +920,67 @@ test("ajuste RHID salva justificativa e atualiza somente o relatório selecionad
   assert.equal(current.detail_table.people[0].slots.exit2.effective, "17:00");
 });
 
+test('own manual RHID deletion refreshes the same report and retains original punches', async t => {
+  const h = makeHarness({ account: { homeAccountId: 'a1', name: 'Bernardo', username: 'bernardo@example.test' } });
+  const adjustment = { id: 47, time: '12:00', actorEmail: 'bernardo@example.test' };
+  let removed = false;
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [{ Id: 10, ID_PESSOA_RHID: '23', NOME_COLABORADOR: 'EDGAR',
+    BATIDAS_RHID: '06:55;13:00;17:06', ...(removed ? {} : { ADMIN_AJUSTES: { exit1: adjustment } }) }] });
+  const deletions = [];
+  h.client.deleteRhidAttendanceAdjustment = async payload => { deletions.push(payload); removed = true; return { deleted: true, revisionId: '47' }; };
+  let closed = 0; h.view.closeRhidAttendanceAdjustment = () => closed++;
+  t.after(() => h.controller.stop()); await h.controller.start();
+  await h.view.emit('rhid-attendance-report-generate', { value: '2020-10-15' });
+  const id = h.store.getState().messages.at(-1).id;
+  assert.equal(await h.view.emit('rhid-attendance-adjust-delete', { messageId: id, personKey: 'rhid:23', slot: 'exit1', revisionId: '47' }), true);
+  assert.deepEqual(deletions, [{ date: '2020-10-15', personKey: 'rhid:23', slot: 'exit1', revisionId: '47' }]);
+  const current = h.store.getState().messages.at(-1);
+  assert.equal(current.id, id);
+  assert.equal(current.detail_table.people[0].slots.exit1.effective, null);
+  assert.equal(current.detail_table.people[0].slots.entry1.rhid, '06:55');
+  assert.equal(closed, 1);
+});
+test('forged, stale or non-owned manual RHID deletion cannot reach the client', async t => {
+  const h = makeHarness({ account: { homeAccountId: 'a1', username: 'bernardo@example.test' } });
+  h.client.getRhidAttendanceReport = async date => ({ date, rows: [{ Id: 10, ID_PESSOA_RHID: '23', BATIDAS_RHID: '06:55',
+    ADMIN_AJUSTES: { exit1: { id: 47, time: '12:00', actorEmail: 'other@example.test' } } }] });
+  const calls = []; h.client.deleteRhidAttendanceAdjustment = async p => calls.push(p);
+  t.after(() => h.controller.stop()); await h.controller.start();
+  await h.view.emit('rhid-attendance-report-generate', { value: '2020-10-15' });
+  const id = h.store.getState().messages.at(-1).id;
+  for (const slot of ['exit1', 'entry2']) assert.equal(await h.view.emit('rhid-attendance-adjust-delete',
+    { messageId: id, personKey: 'rhid:23', slot, revisionId: '47' }), false);
+  assert.equal(calls.length, 0);
+});
+
+test('confirmed deletion with failed refresh cannot export stale hours and can retry the same day', async t => {
+  const h = makeHarness({ account: { homeAccountId: 'a1', username: 'bernardo@example.test' } });
+  let removed = false, failRefresh = true;
+  const adjustment = { id: 47, time: '12:00', actorEmail: 'bernardo@example.test' };
+  h.client.getRhidAttendanceReport = async date => {
+    if (removed && failRefresh) throw new Error('offline');
+    return { date, rows: [{ Id: 10, ID_PESSOA_RHID: '23', NOME_COLABORADOR: 'EDGAR', BATIDAS_RHID: '06:55;13:00;17:06',
+      ...(removed ? {} : { ADMIN_AJUSTES: { exit1: adjustment } }) }] };
+  };
+  h.client.deleteRhidAttendanceAdjustment = async () => { removed = true; return { deleted: true, revisionId: '47' }; };
+  let exports = 0; h.native.exportMedia = async () => { exports++; };
+  t.after(() => h.controller.stop()); await h.controller.start();
+  await h.view.emit('rhid-attendance-report-generate', { value: '2020-10-15' });
+  const id = h.store.getState().messages.at(-1).id;
+  assert.equal(await h.view.emit('rhid-attendance-adjust-delete', { messageId: id, personKey: 'rhid:23', slot: 'exit1', revisionId: '47' }), true);
+  assert.equal(await h.view.emit('share-rhid-attendance-report', { messageId: id }), false);
+  assert.equal(exports, 0);
+  assert.deepEqual(h.store.getState().messages.at(-1).detail_table.rows, []);
+  failRefresh = false;
+  assert.equal(await h.view.emit('rhid-attendance-report-navigate', { messageId: id, value: 'reload' }), true);
+  const fresh = h.store.getState().messages.at(-1);
+  assert.equal(fresh.id, id);
+  assert.equal(fresh.detail_table.reportDate, '2020-10-15');
+  assert.equal(fresh.detail_table.people[0].slots.exit1.effective, null);
+  assert.equal(await h.view.emit('share-rhid-attendance-report', { messageId: id }), true);
+  assert.equal(exports, 1);
+});
+
 test("seta de retorno no relatório RHID restaura a tela anterior sem voltar ao menu principal", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   const previousScreen = {

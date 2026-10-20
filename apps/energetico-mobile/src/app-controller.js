@@ -1,5 +1,6 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
+import { canDeleteRhidAdjustment } from './chat/rhid-adjustment-ownership.js';
 import { diaryFieldVisitOptionId } from './chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payroll-breakdown.js';
 import { createMediaThumbnail } from "./web/media-thumbnail.js";
@@ -2594,7 +2595,8 @@ export function createAppController({
     const message = store.getState().messages.find(item => String(item?.id || "") === id);
     const table = message?.detail_table || message?.detailTable;
     if (!id || message?.type !== "poll" || table?.kind !== "rhid_attendance" || table.navigationBusy === true) return false;
-    const day = shiftRhidReportDate(table.reportDate, Number(value));
+    const day = value === 'reload' && table.adjustmentRefreshRequired === true
+      ? table.reportDate : shiftRhidReportDate(table.reportDate, Number(value));
     return day ? generateRhidAttendanceReport(day, { replaceMessageId: id }) : false;
   }
 
@@ -2765,27 +2767,45 @@ export function createAppController({
     }
   }
 
-  async function saveRhidAttendanceAdjustment({ messageId, presenceId, personKey, slot, time, reason, adjustmentId } = {}) {
+  async function saveRhidAttendanceAdjustment({ messageId, presenceId, personKey, slot, time, reason, adjustmentId, revisionId, remove = false } = {}) {
+    if (remove && presenceId !== undefined) return false;
     if (presenceId !== undefined) return saveAttendanceMissingPunch({ messageId, presenceId, personKey, slot, time, reason, adjustmentId });
     const id = String(messageId || "").trim();
     const message = store.getState().messages.find(item => String(item?.id || "") === id);
     const table = message?.detail_table || message?.detailTable;
     const day = String(table?.reportDate || "");
     const key = `${id}:${personKey}:${slot}`;
+    const currentAdjustment = table?.people?.find(person => person.personKey === personKey)?.slots?.[slot]?.adjustment;
+    const validOperation = remove
+      ? canDeleteRhidAdjustment(currentAdjustment, account) && String(currentAdjustment.id) === String(revisionId)
+        && typeof client.deleteRhidAttendanceAdjustment === 'function'
+      : /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || '')) && Boolean(String(reason || '').trim())
+        && typeof client.saveRhidAttendanceAdjustment === 'function';
     if (!account || stopped || message?.type !== "poll" || table?.kind !== "rhid_attendance"
       || !isRhidAttendanceDayFinalized(day) || !table.people?.some(person => person.personKey === personKey)
       || !["entry1", "exit1", "entry2", "exit2"].includes(slot)
-      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(time || "")) || !String(reason || "").trim()
-      || typeof client.saveRhidAttendanceAdjustment !== "function" || rhidAttendanceAdjustmentRequests.has(key)) {
+      || !validOperation || rhidAttendanceAdjustmentRequests.has(key)) {
       view.setRhidAttendanceAdjustmentStatus?.({ busy: false, error: "Não foi possível validar o ajuste. Atualize o relatório e tente novamente." });
       return false;
     }
     const currentAccount = account, currentRevision = sessionRevision;
     rhidAttendanceAdjustmentRequests.add(key);
     try {
-      await client.saveRhidAttendanceAdjustment({ date: day, personKey, slot, time, reason: String(reason).trim() });
+      if (remove) {
+        const result = await client.deleteRhidAttendanceAdjustment({ date: day, personKey, slot, revisionId: String(revisionId) });
+        if (result?.deleted !== true || String(result.revisionId) !== String(revisionId)) throw new Error('A VM não confirmou a exclusão do registro.');
+      } else await client.saveRhidAttendanceAdjustment({ date: day, personKey, slot, time, reason: String(reason).trim() });
       if (stopped || account !== currentAccount || sessionRevision !== currentRevision) return false;
+      if (remove) attendanceRhidConfirmedAdjustments.delete(JSON.stringify([day, personKey, slot]));
       clearAttendanceRhidBadges(day);
+      if (remove) {
+        const current = store.getState().messages.find(item => String(item?.id || '') === id);
+        const currentTable = current?.detail_table || current?.detailTable;
+        if (current?.type === 'poll' && currentTable?.kind === 'rhid_attendance' && currentTable.reportDate === day) {
+          store.replaceMessage(id, { ...current, detail_table: { ...currentTable, rows: [], people: [],
+            adjustmentRefreshRequired: true, navigationBusy: true, navigationError: '' } });
+        }
+      }
       view.closeRhidAttendanceAdjustment?.();
       try {
         const report = await client.getRhidAttendanceReport(day);
@@ -2796,20 +2816,22 @@ export function createAppController({
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         store.replaceMessage(id, {
           ...currentMessage,
-          detail_table: { ...currentTable, ...buildRhidAttendanceTable(rows), updateLabel: rhidUpdateLabel(report), navigationError: "" },
+          detail_table: { ...currentTable, ...buildRhidAttendanceTable(rows), updateLabel: rhidUpdateLabel(report),
+            adjustmentRefreshRequired: false, navigationBusy: false, navigationError: "" },
         });
       } catch {
         const currentMessage = store.getState().messages.find(item => String(item?.id || "") === id);
         const currentTable = currentMessage?.detail_table || currentMessage?.detailTable;
-        if (currentMessage?.type === "poll" && currentTable?.kind === "rhid_attendance") {
+        if (currentMessage?.type === "poll" && currentTable?.kind === "rhid_attendance" && currentTable.reportDate === day) {
           store.replaceMessage(id, { ...currentMessage, detail_table: { ...currentTable,
-            navigationError: "Horário salvo. Não foi possível atualizar a tela; consulte esta data novamente." } });
+            navigationBusy: false,
+            navigationError: `${remove ? 'Registro excluído.' : 'Horário salvo.'} Não foi possível atualizar a tela; consulte esta data novamente.` } });
         }
       }
       return true;
     } catch (error) {
       if (!stopped && account === currentAccount && sessionRevision === currentRevision) {
-        view.setRhidAttendanceAdjustmentStatus?.({ busy: false, error: error?.message || "Não foi possível salvar o horário." });
+        view.setRhidAttendanceAdjustmentStatus?.({ busy: false, error: error?.message || (remove ? 'Não foi possível excluir o registro.' : 'Não foi possível salvar o horário.') });
       }
       return false;
     } finally {
@@ -2824,14 +2846,15 @@ export function createAppController({
     const message = store.getState().messages.find(item => String(item?.id || "") === id);
     const table = message?.detail_table || message?.detailTable;
     const day = String(table?.reportDate || "");
-    if (message?.type !== "poll" || table?.kind !== "rhid_attendance"
+    if (message?.type !== "poll" || table?.kind !== "rhid_attendance" || table.adjustmentRefreshRequired === true
       || !/^\d{4}-\d{2}-\d{2}$/.test(day)
       || !Array.isArray(table.headers) || !Array.isArray(table.rows) || !table.rows.length) return false;
 
     const shareAccount = account;
     const shareRevision = sessionRevision;
     const isCurrent = () => !stopped && account === shareAccount && sessionRevision === shareRevision
-      && store.getState().messages.some(item => String(item?.id || "") === id);
+      && store.getState().messages.some(item => String(item?.id || "") === id
+        && (item.detail_table || item.detailTable) === table && table.adjustmentRefreshRequired !== true);
     rhidAttendanceShareBusy = true;
     try {
       const { buildRhidAttendancePdf } = await import("./chat/rhid-attendance-pdf.js");
@@ -11115,6 +11138,7 @@ export function createAppController({
     bind("rhid-day-validation-open", startRhidDayValidation);
     bind("rhid-attendance-month-load", loadRhidAttendanceMonth);
     bind("rhid-attendance-adjust-save", saveRhidAttendanceAdjustment);
+    bind('rhid-attendance-adjust-delete', payload => saveRhidAttendanceAdjustment({ ...payload, remove: true }));
     bind("share-rhid-attendance-report", command => shareRhidAttendanceReport(command.messageId));
     bind("sign-in", signIn);
     bind("sign-out", signOut);

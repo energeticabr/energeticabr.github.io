@@ -1,0 +1,163 @@
+--- a/channel_bridge.py
++++ b/channel_bridge.py
+@@ -46,6 +46,7 @@
+ from signature_public import process_public, process_capture
+ from rhid_attendance_adjustments import SharePointRhidAttendanceAdjustmentStore, validate_adjustment_against_rhid
+ from rhid_badge_source import get_rhid_badge_report, attendance_rhid_option_context
++from rhid_manual_punch_removal import delete_for_bridge
+ 
+ 
+ def _first(payload: dict, *names, default=None):
+@@ -3409,6 +3410,12 @@
+                         body.get("slot"), body.get("time"), body.get("reason"),
+                         allowed_emails=self.portal_authenticator.allowed_emails,
+                     )
++                elif action == "rhid_attendance_adjust_delete":
++                    result = delete_for_bridge(
++                        self.bridge, identity, body.get("date"), body.get("personKey"),
++                        body.get("slot"), body.get("revisionId"),
++                        allowed_emails=self.portal_authenticator.allowed_emails,
++                    )
+                 elif action == "rhid_refresh":
+                     result = self.bridge.portal_rhid_refresh(
+                         identity, allowed_emails=self.portal_authenticator.allowed_emails,
+--- a/rhid_attendance_adjustments.py
++++ b/rhid_attendance_adjustments.py
+@@ -6,6 +6,7 @@
+ import re
+ import sqlite3
+ from uuid import uuid4
++from rhid_manual_punch_removal import latest_active_rows
+ from datetime import date, datetime, timezone
+ from pathlib import Path
+ 
+@@ -245,7 +246,7 @@
+             raise ValueError("Data RHID inválida.")
+         rows = self._items(f"DATA_REFERENCIA eq '{on_date.isoformat()}'")
+         result = {}
+-        for row in sorted(rows, key=lambda item: int(item.get("Id") or 0)):
++        for row in latest_active_rows(rows):
+             person_key = str(row.get("ID_PESSOA_RHID") or "")
+             slot = str(row.get("CAMPO") or "")
+             if person_key and slot in SLOTS and TIME_PATTERN.fullmatch(str(row.get("HORARIO_CORRIGIDO") or "")):
+@@ -254,5 +255,5 @@
+ 
+     def dates_with_adjustments(self, first_day: date, next_month: date) -> set[str]:
+         rows = self._items(f"DATA_REFERENCIA ge '{first_day.isoformat()}' and DATA_REFERENCIA lt '{next_month.isoformat()}'")
+-        return {str(row.get("DATA_REFERENCIA")) for row in rows
++        return {str(row.get("DATA_REFERENCIA")) for row in latest_active_rows(rows)
+                 if first_day.isoformat() <= str(row.get("DATA_REFERENCIA")) < next_month.isoformat()}
+--- a/rhid_calendar_snapshot.py
++++ b/rhid_calendar_snapshot.py
+@@ -1,5 +1,6 @@
+ """Slim, read-only monthly RHID rows using authoritative SharePoint revisions."""
+ import re
++from rhid_manual_punch_removal import latest_active_rows
+ 
+ FIELDS = ("Id", "ID_PESSOA_RHID", "NOME_COLABORADOR", "DATA_REFERENCIA", "BATIDAS_RHID", "STATUS_RHID")
+ SLOTS = {"entry1", "exit1", "entry2", "exit2"}
+@@ -11,7 +12,7 @@
+     adjustments = {}
+     if store is not None:
+         revisions = store._items(f"DATA_REFERENCIA ge '{start}' and DATA_REFERENCIA lt '{end}'")
+-        for revision in sorted(revisions, key=lambda row: int(row.get("Id") or 0)):
++        for revision in latest_active_rows(revisions):
+             day = str(revision.get("DATA_REFERENCIA") or "")[:10]
+             key = str(revision.get("ID_PESSOA_RHID") or "").strip()
+             slot = str(revision.get("CAMPO") or "")
+--- a/rhid_manual_punch_removal.py
++++ b/rhid_manual_punch_removal.py
+@@ -0,0 +1,93 @@
++"""Withdraw a user's manual revision without destroying RHID or its audit trail."""
++from datetime import date, datetime
++import re
++from zoneinfo import ZoneInfo
++
++SLOTS = frozenset(('entry1', 'exit1', 'entry2', 'exit2'))
++TIME = re.compile(r'(?:[01]\d|2[0-3]):[0-5]\d')
++REMOVAL = re.compile(r'EXCLUSAO-AJUSTE-([1-9]\d*)')
++
++
++def latest_active_rows(rows):
++    """A withdrawal clears the current revision, never revives its predecessor."""
++    active = {}
++    for row in sorted(rows, key=lambda item: int(item.get('Id') or 0)):
++        key = (str(row.get('DATA_REFERENCIA') or '')[:10],
++               str(row.get('ID_PESSOA_RHID') or ''), str(row.get('CAMPO') or ''))
++        if key[2] not in SLOTS:
++            continue
++        time = str(row.get('HORARIO_CORRIGIDO') or '')
++        marker = REMOVAL.fullmatch(str(row.get('Title') or '')) if not time else None
++        if marker:
++            if str(active.get(key, {}).get('Id')) == marker[1]:
++                active.pop(key, None)
++        elif TIME.fullmatch(time):
++            active[key] = row
++    return sorted(active.values(), key=lambda item: int(item['Id']))
++
++
++def _is_owner(row, actor):
++    parts = str(row.get('RESPONSAVEL') or '').split(' | ')
++    oid = str(actor.get('oid') or '').strip()
++    return bool(oid) and len(parts) == 3 and parts[2].strip().casefold() == oid.casefold()
++
++
++def remove_manual_adjustment(store, on_date, person_key, slot, revision_id, actor):
++    if (not isinstance(on_date, date) or isinstance(on_date, datetime)
++            or not re.fullmatch(r'(?:rhid|id):[^\s:]+', str(person_key or ''))
++            or slot not in SLOTS or not re.fullmatch(r'[1-9]\d*', str(revision_id or ''))):
++        raise ValueError('Registro de ajuste inválido.')
++    if not isinstance(actor, dict) or not str(actor.get('oid') or '').strip():
++        raise PermissionError('Responsável pelo ajuste não identificado.')
++    revision_id = str(revision_id)
++    rows = [row for row in store._items(f"DATA_REFERENCIA eq '{on_date.isoformat()}'")
++            if str(row.get('DATA_REFERENCIA') or '')[:10] == on_date.isoformat()
++            and row.get('ID_PESSOA_RHID') == person_key and row.get('CAMPO') == slot]
++    originals = [row for row in rows if str(row.get('Id')) == revision_id and TIME.fullmatch(str(row.get('HORARIO_CORRIGIDO') or ''))]
++    if len(originals) != 1:
++        raise ValueError('Atualize o relatório; o ajuste não está mais disponível.')
++    original = originals[0]
++    if not _is_owner(original, actor):
++        raise PermissionError('Você só pode excluir um ajuste criado por você.')
++    title = f'EXCLUSAO-AJUSTE-{revision_id}'
++    markers = [row for row in rows if row.get('Title') == title and not row.get('HORARIO_CORRIGIDO')]
++    if markers:
++        if len(markers) != 1 or not _is_owner(markers[0], actor):
++            raise PermissionError('A exclusão não pertence ao responsável informado.')
++        return {'deleted': True, 'revisionId': revision_id}
++    current = latest_active_rows(rows)
++    if len(current) != 1 or str(current[0].get('Id')) != revision_id:
++        raise ValueError('Atualize o relatório; há uma revisão mais recente desse horário.')
++    # A deterministic title makes a response-lost retry recover the same event.
++    fields = {name: original.get(name) or '' for name in (
++        'DATA_REFERENCIA', 'ID_PESSOA_RHID', 'NOME_COLABORADOR', 'CAMPO',
++        'RESPONSAVEL', 'RHID_ORIGINAL', 'RHID_BRUTO_JSON')}
++    fields.update(HORARIO_CORRIGIDO='', JUSTIFICATIVA=f'EXCLUSÃO DO AJUSTE {revision_id} PELO PRÓPRIO RESPONSÁVEL')
++    marker_id = store.sharepoint.ensure_item(title, fields, store.LIST_TITLE, 'Title', False)
++    if not re.fullmatch(r'[1-9]\d*', str(marker_id or '')):
++        raise RuntimeError('O SharePoint não confirmou a exclusão do ajuste.')
++    return {'deleted': True, 'revisionId': revision_id}
++
++
++def delete_for_bridge(bridge, identity, selected_date, person_key, slot, revision_id, *, allowed_emails):
++    raw_date = str(selected_date or '').strip()
++    try:
++        on_date = date.fromisoformat(raw_date)
++    except (TypeError, ValueError) as error:
++        raise ValueError('Data inválida para excluir o ajuste RHID.') from error
++    if on_date.isoformat() != raw_date:
++        raise ValueError('Data inválida para excluir o ajuste RHID.')
++    now = datetime.now(ZoneInfo('America/Sao_Paulo'))
++    if on_date > now.date() or (on_date == now.date() and (now.hour, now.minute) < (17, 15)):
++        raise ValueError('O dia do relatório ainda não foi encerrado.')
++    # Existing report path authorizes the account and its conversation first.
++    report = bridge.portal_rhid_attendance_report(identity, raw_date, allowed_emails=allowed_emails)
++    rows = report.get('attendanceReport', {}).get('rows', [])
++    def key(row):
++        rhid_id = str(row.get('ID_PESSOA_RHID') or '').strip()
++        return f'rhid:{rhid_id}' if rhid_id else f"id:{row.get('Id', row.get('ID'))}"
++    if not any(isinstance(row, dict) and key(row) == person_key for row in rows):
++        raise ValueError('O colaborador não pertence ao relatório RHID dessa data.')
++    with bridge.lock:
++        deletion = remove_manual_adjustment(bridge.rhid_attendance_adjustments, on_date, person_key, slot, revision_id, identity)
++    return {'status': 'processed', 'messages': [], 'attendanceAdjustmentDeletion': deletion}

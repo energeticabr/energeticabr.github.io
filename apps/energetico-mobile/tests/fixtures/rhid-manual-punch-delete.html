@@ -1,0 +1,31 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { buildRhidAttendanceTable } from '/src/chat/rhid-attendance-table.js';
+const root = document.querySelector('#app'), view = createChatView(root);
+const mode = new URLSearchParams(location.search).get('mode') || 'edit';
+const date = '2020-10-15', account = { name: 'Bernardo', username: 'bernardo@example.test', homeAccountId: 'test' };
+const row = { Id: 10, ID_PESSOA_RHID: '23', NOME_COLABORADOR: 'EDGAR NELSON DA SILVA', DATA_REFERENCIA: date, BATIDAS_RHID: '06:55;13:00;17:06' };
+if (mode !== 'new') row.ADMIN_AJUSTES = { exit1: { id: 47, time: '12:00', actorEmail: account.username, reason: 'NÃO APONTADO', actorName: 'Bernardo' } };
+view.render({ sessionStatus: 'authenticated', account, messages: [{ id: 'edit', type: 'poll', role: 'assistant', question: 'RELATÓRIO RHID', options: [],
+  detail_table: { ...buildRhidAttendanceTable([row]), reportDate: date } }] });
+root.querySelector('[data-action="rhid-attendance-adjust-open"][data-slot="exit1"]').click();
+await document.fonts.ready;
+await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const dialog = root.querySelector('[data-rhid-adjustment-dialog] [role="dialog"]');
+const buttons = [...dialog.querySelectorAll('.chat-confirmation__actions button')];
+const boxes = buttons.map(button => button.getBoundingClientRect());
+const box = dialog.getBoundingClientRect();
+document.documentElement.dataset.layout = JSON.stringify({
+  labels: buttons.map(button => button.textContent),
+  sameRow: boxes.every(r => Math.abs(r.top - boxes[0].top) < 1),
+  usable: boxes.every(r => r.width >= 44 && r.height >= 44),
+  ordered: boxes.every((r, n) => !n || boxes[n - 1].right <= r.left),
+  fits: box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight,
+  noOverflow: dialog.scrollWidth <= dialog.clientWidth + 1,
+  textFits: buttons.every(button => { const r = button.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(button);
+    return [...range.getClientRects()].every(t => t.left >= r.left && t.right <= r.right && t.top >= r.top && t.bottom <= r.bottom); }),
+  deleteBackground: mode === 'new' ? null : getComputedStyle(buttons[1]).backgroundColor,
+});
+document.documentElement.dataset.ready = 'true';
+</script></body></html>

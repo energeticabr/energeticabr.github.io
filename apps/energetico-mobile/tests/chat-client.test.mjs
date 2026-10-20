@@ -284,6 +284,20 @@ test("salva ajuste RHID autenticado com horário e justificativa e recusa justif
   assert.equal(requests.length, 1);
 });
 
+test('deletes only the identified manual RHID revision through the authenticated VM action', async () => {
+  const requests = [];
+  const client = clientWith(async (url, options) => {
+    requests.push(options);
+    return jsonResponse({ status: 'processed', messages: [], attendanceAdjustmentDeletion: { deleted: true, revisionId: '47' } });
+  });
+  const payload = { date: '2020-10-15', personKey: 'rhid:23', slot: 'exit1', revisionId: '47' };
+  assert.deepEqual(await client.deleteRhidAttendanceAdjustment(payload), { deleted: true, revisionId: '47' });
+  assert.equal(requests[0].headers.Authorization, 'Bearer graph-token');
+  assert.deepEqual(JSON.parse(requests[0].body), { action: 'rhid_attendance_adjust_delete', ...payload });
+  await assert.rejects(client.deleteRhidAttendanceAdjustment({ ...payload, revisionId: '*' }), /registro/i);
+  assert.equal(requests.length, 1);
+});
+
 test("atualização RHID usa a sessão Microsoft e exige conclusão do fluxo", async () => {
   const requests = [];
   const client = clientWith(async (url, options) => {
