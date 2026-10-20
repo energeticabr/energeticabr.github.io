@@ -632,7 +632,8 @@ function orderWorksiteVisitBranchOptions(message, options) {
   const preferred = [], others = [];
   for (const option of options) {
     const label = String(option?.label || option?.title || '').trim().replace(/^(?:⭐\s*)+/u, '');
-    const code = label.match(/^(?:\d+\s*[-–—]\s*)?(\d{3})(?=\s*[-–—])/u)?.[1];
+    const code = label.match(/^\d+\s*[-–—]\s*(\d+)\s*[-–—]/u)?.[1]
+      ?? label.match(/^(\d{3})\s*[-–—]/u)?.[1];
     if (code === '004') preferred.push({ ...option, worksiteVisitBranchLabel: `⭐ ${label}` });
     else others.push(option);
   }

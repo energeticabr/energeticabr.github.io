@@ -73,6 +73,8 @@ test('preferência de filial da visita não altera outras perguntas nem confunde
     { id: '004', label: '004 - 003 - CONGONHAS' },
     { id: '6', label: '6 - 040 - OBRA 004' },
     { id: '7', label: '7 - 0040 - OUTRA OBRA' },
+    { id: '004-long-code', label: '004 - 0040 - OUTRA OBRA' },
+    { id: '004-short-code', label: '004 - 40 - OUTRA OBRA' },
   ];
   for (const question of ['QUAL É A FILIAL DA VISITA EM OBRA?', 'QUAL É A FILIAL DO LANÇAMENTO?', 'QUAL É A ETAPA DA VISITA EM OBRA?']) {
     const choices = question.includes('FILIAL DO LANÇAMENTO') ? [...options, { id: '5', label: '5 - 004 - EDIFÍCIO XAVANTE' }] : options;
