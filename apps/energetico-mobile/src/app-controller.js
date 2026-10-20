@@ -9140,16 +9140,33 @@ export function createAppController({
     if (!category) return;
     // Only this response's generated report can open automatically. Restored
     // history, attachment snapshots and unrelated PDFs remain opt-in.
-    const report = result.messages?.find(message => message?.type === 'document'
-      && message.mediaUrl
-      && (message.mimeType === 'application/pdf' || /\.pdf$/i.test(message.fileName || ''))
+    const reports = (result.messages || []).filter(message => message?.mediaUrl
       && message.caption === `PROVISÕES PGTO — ${category}`);
-    if (!report || !isCurrent()) return;
+    const report = reports.find(message => message.type === 'document'
+      && (message.mimeType === 'application/pdf' || /\.pdf$/i.test(message.fileName || '')));
+    // Do not drop pages based on MIME headers. The renderer checks the bytes;
+    // an unsupported/corrupt page fails the whole PDF instead of truncating it.
+    const imagePages = reports.filter(message => message.type === 'image');
+    if ((!report && !imagePages.length) || !isCurrent()) return;
     try {
-      const blob = await client.fetchMedia(report);
+      let blob, fileName;
+      if (report) {
+        blob = await client.fetchMedia(report);
+        fileName = report.fileName || 'provisoes.pdf';
+      } else {
+        const pages = [];
+        for (const page of imagePages) {
+          if (!isCurrent()) return;
+          pages.push(await client.fetchMedia(page));
+        }
+        if (!isCurrent()) return;
+        const { buildProvisionImageReportPdf } = await import('./chat/provision-report-pdf.js');
+        blob = await buildProvisionImageReportPdf(pages);
+        fileName = replyId === 'pending_payment_provisions_due' ? 'provisoes-vencidas-vencem-hoje.pdf' : 'provisoes-a-vencer.pdf';
+      }
       // Download first: a delayed file must not open over a newer conversation,
       // after sign-out, or after the app controller has been stopped.
-      if (isCurrent()) await showMedia(blob, report.fileName || 'provisoes.pdf', { layout: 'report-pdf' });
+      if (isCurrent()) await showMedia(blob, fileName, { layout: 'report-pdf' });
     } catch (error) {
       if (isCurrent()) setSessionError(error, 'Não foi possível abrir o PDF. Toque no cartão do relatório para tentar novamente.');
     }
