@@ -742,6 +742,9 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   let content = displayIcon
     ? `<span class="chat-supplies-button-icon" aria-hidden="true">${escapeHtml(displayIcon)}</span><span class="chat-supplies-button-text">${escapeHtml(displayLabel || label)}</span>`
     : displayLabel ? escapeHtml(displayLabel) : formatChatText(label);
+  if (replyId === 'pending_payment_provisions_due' && !String(label).trimStart().startsWith('🔴')) {
+    content = `🔴 ${content}`;
+  }
   if (diaryVisit && diaryFieldVisitOptionId(option)) {
     const date = String(label).match(/(\(\d{2}\/\d{2}\/\d{4}\))\s*$/);
     const icon = '<span class="chat-diary-field-visit" role="img" aria-label="Visita em campo" title="Visita em campo nesta data e filial">🏠</span>';
