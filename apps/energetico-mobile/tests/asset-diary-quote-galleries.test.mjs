@@ -32,6 +32,66 @@ function choose(dom, doc, field, value) {
 
 function ids(doc) { return [...doc.querySelectorAll("[data-registration-row]")].map(node => node.dataset.registrationRow); }
 
+test('asset card places purchase/depreciated/residual values, flags, dates and remaining details in that order', async t => {
+  const { doc, gallery } = openGallery(t, 'asset', [{ id: '2', hasAttachments: true, attachmentCount: 2,
+    createdBy: { user: { displayName: 'Bernardo' } }, lastModifiedBy: { user: { displayName: 'Maria' } },
+    fields: { IMOBILIZADO: 'BETONEIRA 400L CSM', NÚMEROIMOBILIZADO: '2', FORNECEDOR: 'LOJA DO MECÂNICO', FILIAL: 'XAVANTE', QTD: 1,
+      'VALOR ESTIMADO': '4338.02', 'VALOR RESIDUAL': '3077.05', DEPRECIAR: 'SIM', STATUS: 'ATIVO',
+      'DATA DEPRECIAÇÃO': '2026-11-01', 'DATA CADASTRO': '2025-05-27', 'DATA COMPRA': '2025-05-26', Created: '2025-05-27', Modified: '2026-10-01' } }]);
+  await gallery.open();
+  const card = doc.querySelector('[data-registration-row="2"]');
+  assert.ok(card.classList.contains('rg-row--asset'));
+  const fields = selector => [...card.querySelectorAll(`${selector} [data-field]`)].map(el => el.dataset.field);
+  assert.deepEqual(fields('.rg-asset-values'), ['VALOR ESTIMADO', 'VALOR DEPRECIADO', 'VALOR RESIDUAL']);
+  assert.deepEqual(fields('.rg-asset-flags'), ['DEPRECIAR', 'STATUS']);
+  assert.deepEqual(fields('.rg-asset-dates'), ['DATA DEPRECIAÇÃO', 'DATA CADASTRO', 'DATA COMPRA', 'Criado', 'Modificado']);
+  assert.deepEqual(fields('.rg-asset-details'), ['NÚMEROIMOBILIZADO', 'FORNECEDOR', 'FILIAL', 'QTD', 'Criado por', 'Modificado por']);
+  assert.deepEqual([...card.querySelector('.rg-row-main').children].map(el => el.className),
+    ['rg-asset-heading', 'rg-asset-values', 'rg-asset-flags', 'rg-asset-dates', 'rg-asset-details']);
+  const text = field => card.querySelector(`[data-field="${field}"] dd`).textContent.replace(/\s+/g, ' ');
+  assert.equal(text('VALOR ESTIMADO'), 'R$ 4.338,02');
+  assert.equal(text('VALOR DEPRECIADO'), 'R$ 1.260,97');
+  assert.equal(text('VALOR RESIDUAL'), 'R$ 3.077,05');
+  assert.equal(text('DATA DEPRECIAÇÃO'), '01/11/2026');
+  assert.equal(text('Criado por'), 'Bernardo');
+  assert.equal(text('Modificado por'), 'Maria');
+  assert.equal(card.querySelector('[data-action="registration-attachments"]').textContent.includes('2 anexos'), true);
+  assert.ok(card.querySelector('[data-gallery-action="edit"]'));
+  assert.ok(card.querySelector('[data-gallery-action="delete"]'));
+  for (const field of ['DEPRECIAR', 'STATUS']) assert.equal(card.querySelector(`[data-field="${field}"]`).dataset.tone, 'success');
+});
+
+test('asset flags normalize yes/no and active/inactive without treating unknown values as negative', async t => {
+  const examples = [
+    ['SIM', 'ATIVO', 'success', 'success'], ['Não', 'INATIVO', 'danger', 'danger'],
+    [' nao ', ' ativo ', 'danger', 'success'], [true, 'inativo', 'success', 'danger'],
+    [false, '', 'danger', 'neutral'], ['', 'PENDENTE', 'neutral', 'neutral'],
+  ];
+  const { doc, gallery } = openGallery(t, 'asset', examples.map(([depreciate, status], i) => ({ id: String(i + 1),
+    fields: { IMOBILIZADO: `Item ${i + 1}`, DEPRECIAR: depreciate, STATUS: status } })));
+  await gallery.open();
+  for (const [i, [, , depreciateTone, statusTone]] of examples.entries()) {
+    const card = doc.querySelector(`[data-registration-row="${i + 1}"]`);
+    assert.equal(card.querySelector('[data-field="DEPRECIAR"]').dataset.tone, depreciateTone);
+    assert.equal(card.querySelector('[data-field="STATUS"]').dataset.tone, statusTone);
+  }
+});
+
+test('asset card preserves zero money and quantity, and renders source labels only as text', async t => {
+  const { doc, gallery } = openGallery(t, 'asset', [{ id: '91', fields: {
+    IMOBILIZADO: '<img src=x onerror=alert(1)>', FORNECEDOR: '<b>Fornecedor</b>',
+    'VALOR ESTIMADO': 0, 'VALOR RESIDUAL': 0, QTD: 0, DEPRECIAR: '<script>SIM</script>', STATUS: 'INATIVO',
+  } }]);
+  await gallery.open();
+  const card = doc.querySelector('[data-registration-row="91"]');
+  assert.equal(card.querySelector('img,script,b'), null);
+  assert.equal(card.querySelector('.rg-row-title').textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(card.querySelector('[data-field="DEPRECIAR"]').dataset.tone, 'neutral');
+  assert.equal(card.querySelector('[data-field="QTD"] dd').textContent, '0');
+  for (const field of ['VALOR ESTIMADO', 'VALOR DEPRECIADO', 'VALOR RESIDUAL'])
+    assert.equal(card.querySelector(`[data-field="${field}"] dd`).textContent.replace(/\s+/g, ' '), 'R$ 0,00');
+});
+
 for (const [kind, list, title, screen, primary] of models) {
   test(`${kind} opens the requested gallery and resolves its PowerApps list`, async t => {
     const resolved = [];
