@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { PDFDocument } from 'pdf-lib';
 
 import { createAppController, shouldRemoveSignedSource } from "../src/app-controller.js";
 import { createConversationStore } from "../src/chat/conversation-store.js";
@@ -121,13 +122,102 @@ test('provision PDF auto-open: unrelated replies, empty reports and mismatched m
   const unrelated = provisionPdfResult();
   const wrongCategory = provisionPdfResult('VENCIDAS / VENCEM HOJE');
   const empty = { status: 'processed', results: [{ status: 'pending_provisions_empty' }], messages: [{ type: 'text', text: 'NÃO HÁ PROVISÕES A VENCER.' }] };
-  const image = provisionPdfResult(); image.messages[0] = { ...image.messages[0], type: 'image', mimeType: 'image/png', fileName: 'provisoes.png' };
+  const image = provisionPdfResult(); image.messages[0] = { ...image.messages[0], type: 'image', mimeType: 'image/png', fileName: 'outro.png', caption: 'Outro relatório' };
   for (const [replyId, response] of [['input_continue', unrelated], ['pending_payment_provisions_future', empty],
     ['pending_payment_provisions_future', wrongCategory], ['pending_payment_provisions_future', image]]) {
     h.client.sendText = async () => response;
     assert.equal(await h.view.emit('select-reply', { replyId, label: 'Consultar' }), true);
   }
   assert.equal(previews.length, 0);
+});
+
+for (const [replyId, category] of [
+  ['pending_payment_provisions_due', 'VENCIDAS / VENCEM HOJE'],
+  ['pending_payment_provisions_future', 'A VENCER'],
+]) test(`provision image report: ${replyId} opens every generated image page as one PDF`, async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const result = provisionPdfResult(category), first = result.messages[0];
+  result.messages = [
+    { ...first, id: 'page-1', type: 'image', mimeType: 'image/png', fileName: 'provisoes-1.png' },
+    { ...first, id: 'page-2', type: 'image', mimeType: 'application/octet-stream', fileName: 'provisoes-2.jpg', mediaUrl: '/api/portal-media/provisions-2' },
+    result.messages[1],
+  ];
+  h.client.sendText = async () => result;
+  const png = readFileSync(new URL('../../../assets/logo-energetica-oficial.png', import.meta.url));
+  h.client.fetchMedia = async message => {
+    assert.ok(['page-1', 'page-2'].includes(message.id));
+    // Some media responses omit Content-Type: the encoded bytes still identify JPEG.
+    return message.id === 'page-1' ? new Blob([png], { type: 'image/png' })
+      : new Blob([readFileSync(new URL('../../../assets/projeto-bandeirante/bandeirante-sala-cozinha-render.jpg', import.meta.url))]);
+  };
+  const previews = [];
+  h.native.previewMedia = async (blob, name, options) => { previews.push({ blob: await blob, name, options }); };
+  assert.equal(await h.view.emit('select-reply', { replyId, label: category }), true);
+  assert.equal(previews.length, 1, 'one popup for the whole report, not one per image');
+  assert.equal(previews[0].blob.type, 'application/pdf');
+  assert.match(previews[0].name, /\.pdf$/i);
+  assert.equal(previews[0].options.layout, 'report-pdf');
+  const pdf = await PDFDocument.load(await previews[0].blob.arrayBuffer());
+  assert.equal(pdf.getPageCount(), 2, 'the generated PDF must contain both report pages');
+  assert.ok(Math.abs(pdf.getPage(0).getHeight() - 287.14) < 0.01, '431x147 PNG stays first with its aspect ratio');
+  assert.ok(Math.abs(pdf.getPage(1).getHeight() - 631.4175) < 0.01, '1448x1086 JPEG stays second with its aspect ratio');
+  assert.equal(h.store.getState().messages.filter(message => message.type === 'image').length, 2);
+});
+
+test('provision image report: a failed page never opens a misleading partial PDF', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const result = provisionPdfResult(), page = { ...result.messages[0], type: 'image', mimeType: 'image/png', fileName: 'pagina.png' };
+  result.messages = [page, { ...page, id: 'second', mediaUrl: '/api/portal-media/second' }, result.messages[1]];
+  h.client.sendText = async () => result;
+  h.client.fetchMedia = async message => {
+    if (message.id === 'second') throw new Error('Segunda página indisponível');
+    return new Blob([readFileSync(new URL('../../../assets/logo-energetica-oficial.png', import.meta.url))], { type: 'image/png' });
+  };
+  const previews = [];
+  h.native.previewMedia = async (...args) => { previews.push(args); };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'pending_payment_provisions_future', label: 'A VENCER' }), true);
+  assert.equal(previews.length, 0);
+  assert.match(h.view.renders.at(-1).error, /Segunda página indisponível/);
+  assert.equal(h.store.getState().messages.filter(message => message.type === 'image').length, 2);
+});
+
+test('provision image report: an unsupported matching image rejects the entire PDF instead of omitting a page', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const result = provisionPdfResult(), page = { ...result.messages[0], type: 'image', mimeType: 'image/png', fileName: 'pagina.png' };
+  result.messages = [page, { ...page, id: 'second', mimeType: 'image/webp', fileName: 'pagina2.webp', mediaUrl: '/api/portal-media/second' }, result.messages[1]];
+  h.client.sendText = async () => result;
+  h.client.fetchMedia = async message => message.id === 'second'
+    ? new Blob(['invalid image'], { type: 'image/webp' })
+    : new Blob([readFileSync(new URL('../../../assets/logo-energetica-oficial.png', import.meta.url))], { type: 'image/png' });
+  const previews = [];
+  h.native.previewMedia = async (...args) => { previews.push(args); };
+  assert.equal(await h.view.emit('select-reply', { replyId: 'pending_payment_provisions_future', label: 'A VENCER' }), true);
+  assert.equal(previews.length, 0);
+  assert.ok(h.view.renders.at(-1).error);
+});
+
+test('provision image report: leaving during the first download skips remaining pages', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const result = provisionPdfResult(), page = { ...result.messages[0], type: 'image', mimeType: 'image/png', fileName: 'pagina.png' };
+  result.messages = [page, { ...page, id: 'second', mediaUrl: '/api/portal-media/second' }, result.messages[1]];
+  h.client.sendText = async () => result;
+  let release, downloads = 0;
+  h.client.fetchMedia = () => { downloads++; return new Promise(resolve => { release = resolve; }); };
+  const pending = h.view.emit('select-reply', { replyId: 'pending_payment_provisions_future', label: 'A VENCER' });
+  await new Promise(resolve => setImmediate(resolve));
+  h.controller.stop();
+  release(new Blob(['png'], { type: 'image/png' }));
+  await pending;
+  assert.equal(downloads, 1);
+  assert.equal(h.exported.length, 0);
 });
 
 test('provision PDF auto-open: slow media cannot open over a newer conversation', async t => {
