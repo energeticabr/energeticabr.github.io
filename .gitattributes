@@ -11,3 +11,5 @@ backend-patches/rhid-manual-punch-delete/** text eol=lf
 backend-patches/rhid-manual-punch-delete/source.patch whitespace=-blank-at-eol
 backend-patches/supplier-create-global-search/** text eol=lf
 backend-patches/supplier-create-global-search/source.patch whitespace=-blank-at-eol
+backend-patches/visit-existing-diary/** text eol=lf
+backend-patches/visit-existing-diary/source.patch whitespace=-blank-at-eol
