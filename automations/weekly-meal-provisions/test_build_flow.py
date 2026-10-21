@@ -203,6 +203,13 @@ class WeeklyFlowTests(unittest.TestCase):
                     for ref in resource['dependsOn']:
                         self.assertIn(ref, resources)
 
+    def test_import_connections_have_distinct_source_names_per_api(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with zipfile.ZipFile(flow.build_package(Path(folder))) as archive:
+                names = [name for name in archive.namelist() if name.endswith('/definition.json')]
+                refs = json.loads(archive.read(names[0]))['properties']['connectionReferences']
+                self.assertEqual(len({ref['connectionName'] for ref in refs.values()}), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

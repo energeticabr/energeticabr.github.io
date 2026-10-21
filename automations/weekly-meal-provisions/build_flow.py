@@ -294,7 +294,7 @@ def build_package(output_dir):
     fid = guid('flow')
     display = 'VALE ALIMENTAÇÃO — domingo — provisão semanal'
     manifest = {'schema': '1.0', 'details': {'displayName': display, 'description': 'Domingo 06h Brasília. Um descritivo, uma provisão por empreiteiro ativo com cargo. Sexta-feira, 5 x R$45. PDF detalhado. Testes fora de domingo geram somente prévia.', 'createdTime': datetime.now(timezone.utc).isoformat(), 'packageTelemetryId': guid('telemetry'), 'creator': 'N/A', 'sourceEnvironment': ''}, 'resources': {}}
-    refs = {conn: {'connectionName': '__VINCULAR_CONEXAO__', 'source': 'Embedded', 'id': '/providers/Microsoft.PowerApps/apis/' + conn, 'tier': 'NotSpecified'} for conn in APIS}
+    refs = {conn: {'connectionName': '__VINCULAR_CONEXAO_' + conn + '__', 'source': 'Embedded', 'id': '/providers/Microsoft.PowerApps/apis/' + conn, 'tier': 'NotSpecified'} for conn in APIS}
     wrapper = {'name': fid, 'id': '/providers/Microsoft.Flow/flows/' + fid, 'type': 'Microsoft.Flow/flows', 'properties': {'apiId': '/providers/Microsoft.PowerApps/apis/shared_logicflows', 'displayName': display, 'definition': build_definition(), 'connectionReferences': refs, 'flowFailureAlertSubscribed': False}}
     files = {f'Microsoft.Flow/flows/{fid}/definition.json': wrapper, f'Microsoft.Flow/flows/{fid}/apisMap.json': {conn: guid('api/' + conn) for conn in APIS},
              f'Microsoft.Flow/flows/{fid}/connectionsMap.json': {conn: guid('conn/' + conn) for conn in APIS}, 'Microsoft.Flow/flows/manifest.json': {'packageSchemaVersion': '1.0', 'flowAssets': {'assetPaths': [fid]}}}
