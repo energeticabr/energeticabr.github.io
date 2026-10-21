@@ -22,6 +22,7 @@
 		E20000000000000000000003 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000002 /* MSAL */; };
 		E30000000000000000000008 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30000000000000000000004 /* ShareViewController.swift */; };
 		E30000000000000000000009 /* SharedInboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30000000000000000000005 /* SharedInboxStore.swift */; };
+		E50000000000000000000002 /* SharedUploadProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50000000000000000000001 /* SharedUploadProgress.swift */; };
 		E3000000000000000000000A /* SharedInboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30000000000000000000005 /* SharedInboxStore.swift */; };
 		E3000000000000000000000C /* ShareInboxPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3000000000000000000000B /* ShareInboxPlugin.swift */; };
 		E30000000000000000000010 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = E20000000000000000000002 /* MSAL */; };
@@ -74,6 +75,7 @@
 		E30000000000000000000002 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E30000000000000000000004 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		E30000000000000000000005 /* SharedInboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedInboxStore.swift; sourceTree = "<group>"; };
+		E50000000000000000000001 /* SharedUploadProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedUploadProgress.swift; sourceTree = "<group>"; };
 		E30000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E30000000000000000000007 /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		E3000000000000000000000B /* ShareInboxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInboxPlugin.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				E40000000000000000000003 /* PrivacyInfo.xcprivacy */,
 				E30000000000000000000004 /* ShareViewController.swift */,
 				E30000000000000000000005 /* SharedInboxStore.swift */,
+				E50000000000000000000001 /* SharedUploadProgress.swift */,
 				E30000000000000000000006 /* Info.plist */,
 				E30000000000000000000007 /* ShareExtension.entitlements */,
 			);
@@ -292,6 +295,7 @@
 			files = (
 				E30000000000000000000008 /* ShareViewController.swift in Sources */,
 				E30000000000000000000009 /* SharedInboxStore.swift in Sources */,
+				E50000000000000000000002 /* SharedUploadProgress.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

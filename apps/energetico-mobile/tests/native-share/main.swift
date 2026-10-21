@@ -4,6 +4,8 @@ import Darwin
 
 setbuf(stdout, nil)
 
+checkProgressModel()
+
 // Executed on macOS with the real Foundation file store. Never uses the App Group.
 let testRoot = FileManager.default.temporaryDirectory.appendingPathComponent("energetico-share-tests-\(UUID().uuidString)", isDirectory: true)
 try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
@@ -136,7 +138,10 @@ func checkProviderReception() async throws {
 
 let completed = DispatchSemaphore(value: 0)
 Task.detached {
-    do { try await checkProviderReception() }
+    do {
+        try await checkRealUploadProgress(testRoot: testRoot)
+        try await checkProviderReception()
+    }
     catch { fatalError("Native share test failed: \(error)") }
     completed.signal()
 }

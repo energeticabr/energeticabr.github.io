@@ -8,6 +8,7 @@ final class ShareViewController: UIViewController {
     private static let redirectURI = "msauth.br.com.energetica.energetico://auth"
     private let confirmationFileName = "confirmed-response.json"
 
+    private let progressHeader = SharedUploadProgressHeader()
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
     private let statusLabel = UILabel()
@@ -18,6 +19,7 @@ final class ShareViewController: UIViewController {
     private var stagingFailures: [String] = []
     private var isCancelled = false
     private var extensionCompleted = false
+    private var uploadProgress: SharedUploadProgress?
     private let audioExtensions: Set<String> = ["aac", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "webm"]
 
     override func viewDidLoad() {
@@ -28,14 +30,6 @@ final class ShareViewController: UIViewController {
 
     private func configureInterface() {
         view.backgroundColor = UIColor.systemBackground
-
-        let icon = UIImageView(image: UIImage(named: "Mascote"))
-        icon.contentMode = .scaleAspectFit
-        icon.layer.cornerRadius = 24
-        icon.clipsToBounds = true
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.widthAnchor.constraint(equalToConstant: 72).isActive = true
-        icon.heightAnchor.constraint(equalToConstant: 72).isActive = true
 
         titleLabel.text = "📤 Adicionando ao Energético"
         titleLabel.font = .preferredFont(forTextStyle: .title2)
@@ -60,7 +54,7 @@ final class ShareViewController: UIViewController {
         failuresButton.addTarget(self, action: #selector(showStagingFailures), for: .touchUpInside)
 
         let stack = UIStackView(arrangedSubviews: [
-            icon, titleLabel, detailLabel, statusLabel, failuresButton, cancelButton
+            progressHeader, titleLabel, detailLabel, statusLabel, failuresButton, cancelButton
         ])
         stack.axis = .vertical
         stack.spacing = 16
@@ -133,6 +127,11 @@ final class ShareViewController: UIViewController {
         cancelButton.isEnabled = false
         failuresButton.isEnabled = false
         statusLabel.text = "Adicionando ao Energético…"
+        uploadProgress = SharedUploadProgress(
+            items: stagedItems.map { (id: $0.id, size: $0.size) },
+            hasPreparationFailures: !stagingFailures.isEmpty
+        )
+        updateProgress()
         let audioItems = stagedItems.filter { item in
             item.type.lowercased().hasPrefix("audio/")
                 || audioExtensions.contains(URL(fileURLWithPath: item.name).pathExtension.lowercased())
@@ -164,12 +163,17 @@ final class ShareViewController: UIViewController {
         var uploaded = 0
         for item in uploadItems {
             do {
-                try inboxStore?.updateState(id: item.id, state: "uploading")
+                guard let store = inboxStore else { throw SharedInboxStoreError.missingItem }
+                uploadProgress?.begin(id: item.id)
+                try store.updateState(id: item.id, state: "uploading")
                 let response = try await upload(item: item, token: token)
-                try inboxStore?.saveConfirmedResponse(id: item.id, data: response)
-                try inboxStore?.updateState(id: item.id, state: "uploaded")
+                try store.saveConfirmedResponse(id: item.id, data: response)
+                try store.updateState(id: item.id, state: "uploaded")
+                uploadProgress?.confirm(id: item.id)
+                updateProgress()
                 uploaded += 1
             } catch {
+                uploadProgress?.end(id: item.id)
                 try? inboxStore?.updateState(
                     id: item.id,
                     state: "failed",
@@ -195,6 +199,7 @@ final class ShareViewController: UIViewController {
 
     @objc private func cancel() {
         isCancelled = true
+        uploadProgress?.stop()
         for item in stagedItems {
             try? inboxStore?.remove(id: item.id)
         }
@@ -204,6 +209,7 @@ final class ShareViewController: UIViewController {
     private func completeExtension() {
         guard !extensionCompleted else { return }
         extensionCompleted = true
+        uploadProgress?.stop()
         extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 
@@ -252,7 +258,15 @@ final class ShareViewController: UIViewController {
             throw SharedInboxStoreError.missingItem
         }
         let request = SharedUploadRequest.make(item: item, token: token)
-        let (data, urlResponse) = try await URLSession.shared.upload(for: request, fromFile: fileURL)
+        let delegate = SharedUploadProgressDelegate { [weak self] totalBytesSent in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard !self.isCancelled, !self.extensionCompleted else { return }
+                self.uploadProgress?.recordSentBytes(id: item.id, totalBytesSent: totalBytesSent)
+                self.updateProgress()
+            }
+        }
+        let (data, urlResponse) = try await URLSession.shared.upload(for: request, fromFile: fileURL, delegate: delegate)
         guard let response = urlResponse as? HTTPURLResponse, (200..<300).contains(response.statusCode),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               json["status"] as? String == "processed",
@@ -260,6 +274,10 @@ final class ShareViewController: UIViewController {
             throw URLError(.badServerResponse)
         }
         return data
+    }
+
+    private func updateProgress() {
+        progressHeader.update(percent: uploadProgress?.percent ?? 0)
     }
 
     private func format(bytes: Int64) -> String {
@@ -271,16 +289,22 @@ final class ShareViewController: UIViewController {
     @MainActor
     private func finish(message: String?, closeImmediately: Bool = false) async {
         if closeImmediately {
+            // Give UIKit one brief paint opportunity for the confirmed 100%.
+            // This does not advance the percentage or delay pending/error results.
+            if uploadProgress?.percent == 100 {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
             completeExtension()
             return
         }
         guard let message else { return }
+        uploadProgress?.stop()
         statusLabel.text = message
         // Do not hide a failed/pending upload after a fraction of a second.
         // Closing acknowledges the result, never discards the durable inbox.
         let alert = UIAlertController(title: "Envio ao Energético", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Fechar", style: .default) { [weak self] _ in
-            self?.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+            self?.completeExtension()
         })
         present(alert, animated: true)
     }
