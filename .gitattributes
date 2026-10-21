@@ -13,3 +13,5 @@ backend-patches/supplier-create-global-search/** text eol=lf
 backend-patches/supplier-create-global-search/source.patch whitespace=-blank-at-eol
 backend-patches/visit-existing-diary/** text eol=lf
 backend-patches/visit-existing-diary/source.patch whitespace=-blank-at-eol
+backend-patches/contractor-employment-register/** text eol=lf
+backend-patches/contractor-employment-register/source.patch whitespace=-blank-at-eol

@@ -26,7 +26,7 @@ const menu = {
   ],
 };
 
-test('HR galleries occupy the first three rows without changing or duplicating navigation', () => {
+test('HR galleries occupy the first four rows with employees below attendance, without duplicate navigation', () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app');
   const view = createChatView(root), events = [];
@@ -40,7 +40,7 @@ test('HR galleries occupy the first three rows without changing or duplicating n
       ['action_create_supplier_attendance', 'action_hr_gallery_idfolha'],
       ['action_register_hr_activity', 'action_hr_gallery_folhapgto'],
       ['action_hr_registrations', 'action_hr_gallery_presencas'],
-      ['action_validate_attendance'], ['action_link_attendance_payment'], ['action_hr_reports'],
+      ['action_validate_attendance', 'action_hr_gallery_funcionarios'], ['action_link_attendance_payment'], ['action_hr_reports'],
       ['action_contract'], ['action_rhid_attendance_report'],
     ]);
     for (const button of root.querySelectorAll('.chat-hr-menu-row button')) button.click();
@@ -48,7 +48,7 @@ test('HR galleries occupy the first three rows without changing or duplicating n
       'action_create_supplier_attendance', 'action_hr_gallery_idfolha',
       'action_register_hr_activity', 'action_hr_gallery_folhapgto',
       'action_hr_registrations', 'action_hr_gallery_presencas',
-      'action_validate_attendance', 'action_link_attendance_payment', 'action_hr_reports', 'action_contract',
+      'action_validate_attendance', 'action_hr_gallery_funcionarios', 'action_link_attendance_payment', 'action_hr_reports', 'action_contract',
     ]);
     assert.ok(root.querySelector('[data-rhid-attendance-report-dialog]'), 'report keeps its calendar popup');
     view.render({ ...state, activeText: 'sending' });
@@ -56,14 +56,14 @@ test('HR galleries occupy the first three rows without changing or duplicating n
   } finally { view.destroy(); dom.window.close(); }
 });
 
-test('short legacy HR menus retain all three gallery shortcuts', () => {
+test('short legacy HR menus retain all four gallery shortcuts', () => {
   const dom = new JSDOM('<main id="app"></main>');
   const root = dom.window.document.querySelector('#app'), view = createChatView(root);
   try {
     view.render({ sessionStatus: 'authenticated', account: { name: 'Teste' }, draft: '', pendingFiles: [],
       messages: [{ ...menu, options: [menu.options[0], menu.options[3]] }] });
     assert.deepEqual([...root.querySelectorAll('.chat-hr-menu-row [data-gallery-button]')].map(button => button.dataset.replyId),
-      ['action_hr_gallery_idfolha', 'action_hr_gallery_folhapgto', 'action_hr_gallery_presencas']);
+      ['action_hr_gallery_idfolha', 'action_hr_gallery_folhapgto', 'action_hr_gallery_presencas', 'action_hr_gallery_funcionarios']);
   } finally { view.destroy(); dom.window.close(); }
 });
 
