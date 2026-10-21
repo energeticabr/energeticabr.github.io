@@ -10,6 +10,7 @@ from unittest.mock import patch
 ROOT = Path(os.environ['ENERGETICA_BACKEND_TEST_ROOT'])
 sys.path[:0] = [str(ROOT / 'worker'), str(ROOT)]
 from workflow import WorkflowEngine
+from logic import conversation_key
 
 
 class Store:
@@ -67,6 +68,7 @@ class Catalog:
         self.fail_verify = False
         self.unknown_create = False
         self.hide_rows = False
+        self.ensure_calls = 0
 
     def get_options(self, step, context):
         source = step.get('source', {})
@@ -84,7 +86,8 @@ class Catalog:
     def ensure_item(self, token, fields, *, target_list, **kwargs):
         if target_list != 'DOCUMENTOS':
             raise AssertionError('Unexpected real business target')
-        if token in self.rows:
+        self.ensure_calls += 1
+        if token in self.rows and not self.hide_rows:
             return self.rows[token]['Id']
         item_id = 100 + len(self.rows)
         self.rows[token] = {'Id': item_id, 'fields': copy.deepcopy(fields)}
@@ -131,8 +134,10 @@ class DocumentBatchTests(unittest.TestCase):
 
     def reply(self, reply_id='', text=''):
         self.event_counter += 1
-        return self.engine._handle_text({'kind': 'text', 'message_id': f'qa-{self.event_counter}',
-            'reply_id': reply_id, 'text': text}, self.state, self.etag())
+        event = {'kind': 'text', 'message_id': f'qa-{self.event_counter}', 'reply_id': reply_id, 'text': text}
+        if self.state['stage'] == 'submission_failed':
+            return self.engine._handle_submission_failed_reply(event, self.state, self.etag())
+        return self.engine._handle_text(event, self.state, self.etag())
 
     def ready(self):
         self.begin()
@@ -253,6 +258,295 @@ class DocumentBatchTests(unittest.TestCase):
         self.reply('document_add_another')
         self.engine._resend_current_prompt(self.state, self.etag())
         self.assertEqual(self.state['stage'], 'document_batch_defaults')
+        self.assertEqual(len(self.catalog.creates), 1)
+
+    def test_unknown_creation_not_visible_never_reposts_on_retry(self):
+        self.ready()
+        self.catalog.unknown_create = self.catalog.hide_rows = True
+        self.assertEqual(self.reply('document_add_another')['status'], 'submission_failed')
+        self.assertEqual(self.reply('retry_submission')['status'], 'submission_failed')
+        self.assertEqual(len(self.catalog.creates), 1)
+        self.assertEqual(self.catalog.ensure_calls, 1)
+        self.catalog.hide_rows = False
+        self.assertEqual(self.reply('retry_submission')['status'], 'awaiting_document_defaults')
+        self.assertEqual(self.catalog.ensure_calls, 1)
+        self.assertEqual(set(self.catalog.attachments[100]), {'first-qa.pdf'})
+
+    def test_attachment_failure_retries_known_row_without_create_call(self):
+        self.ready()
+        self.catalog.fail_attachment = True
+        self.assertEqual(self.reply('document_add_another')['status'], 'submission_failed')
+        self.catalog.fail_attachment = False
+        self.assertEqual(self.reply('retry_submission')['status'], 'awaiting_document_defaults')
+        self.assertEqual(self.catalog.ensure_calls, 1)
+        self.assertEqual(len(self.catalog.creates), 1)
+
+    def test_frozen_fields_and_attachments_survive_stale_state_and_retry(self):
+        self.ready()
+        before = copy.deepcopy(self.state['fields'])
+        self.catalog.fail_verify = True
+        self.reply('document_add_another')
+        self.catalog.fail_verify = False
+        self.state['fields']['PESSOARELACIONADA'] = 'UNRELATED STALE PERSON'
+        self.attach('wrong-stale-attachment.pdf')
+        result = self.reply('retry_submission')
+        self.assertEqual(result['status'], 'awaiting_document_defaults')
+        self.assertEqual(self.state['fields']['PESSOARELACIONADA'], before['PESSOARELACIONADA'])
+        self.assertEqual(set(self.catalog.attachments[100]), {'first-qa.pdf'})
+        self.assertEqual(self.catalog.ensure_calls, 1)
+
+    def test_checkpoint_is_independent_of_restored_precommit_draft(self):
+        self.ready()
+        stale = copy.deepcopy(self.state)
+        self.reply('document_add_another')
+        self.state = stale
+        self.state['fields']['PESSOARELACIONADA'] = 'UNRELATED STALE PERSON'
+        result = self.reply('document_add_another')
+        self.assertEqual(result['status'], 'awaiting_document_defaults')
+        self.assertEqual(self.catalog.ensure_calls, 1)
+        self.assertEqual(self.state['fields']['PESSOARELACIONADA'], 'PESSOA A QA')
+        self.assertEqual(self.state['document_batch']['submitted'], [100])
+
+    def test_checkpoint_storage_failure_precedes_any_sharepoint_write(self):
+        self.ready()
+        original_save = self.store.save
+
+        def fail_checkpoint(key, value, etag):
+            if key != self.state['key']:
+                raise RuntimeError('Synthetic durable storage failure')
+            return original_save(key, value, etag)
+
+        with patch.object(self.store, 'save', side_effect=fail_checkpoint):
+            result = self.reply('document_add_another')
+        self.assertEqual(result['status'], 'submission_failed')
+        self.assertFalse(self.catalog.creates)
+
+    def test_pending_row_cannot_be_edited_from_old_confirmation(self):
+        self.ready()
+        self.catalog.fail_attachment = True
+        self.reply('document_add_another')
+        self.state['stage'] = 'awaiting_confirmation'
+        result = self.reply('confirm_edit')
+        self.assertEqual(result['status'], 'document_submission_locked')
+        self.assertNotEqual(self.state['stage'], 'editing_field_choice')
+        self.assertEqual(self.catalog.ensure_calls, 1)
+
+    def test_changing_homologation_does_not_ask_type_until_proceed(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('2')  # homologation, index 1
+        result = self.reply('2')  # HOMOLOGAÇÃO FILIAL
+        self.assertNotEqual(result.get('field'), 'tipo_documento')
+        self.assertEqual(self.state['fields']['TIPOHOMOLOGACAO'], 'HOMOLOGAÇÃO FILIAL')
+
+    def test_validity_can_be_added_and_removed_for_next_document(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('6')  # tem_data_validade
+        result = self.reply('1')
+        self.assertEqual(result.get('field'), 'data_validade')
+        self.reply(text='21/10/2027')
+        self.assertEqual(self.state['fields']['DATAVALIDADE'], '2027-10-21')
+        self.reply('6')
+        result = self.reply('2')
+        self.assertEqual(result['status'], 'awaiting_document_defaults')
+        self.assertNotIn('DATAVALIDADE', self.state['fields'])
+
+    def test_final_without_new_attachment_cannot_post_previous_file_again(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('document_defaults_proceed')
+        self.reply('2')
+        self.state['stage'] = 'awaiting_confirmation'
+        self.reply('document_submit_final')
+        self.assertEqual(len(self.catalog.creates), 1)
+        self.assertNotEqual(self.state['stage'], 'completed')
+
+    def test_three_documents_receive_distinct_identities_and_do_not_reuse_files(self):
+        self.ready()
+        self.reply('document_add_another')
+        for name in ('second-qa.pdf', 'third-qa.pdf'):
+            self.reply('document_defaults_proceed')
+            self.reply('2')
+            self.attach(name)
+            self.state['attachments_phase_completed'] = True
+            self.engine._summarize_and_confirm(self.state, self.etag())
+            self.reply('document_add_another' if name == 'second-qa.pdf' else 'document_submit_final')
+        self.assertEqual(len(set(self.catalog.creates)), 3)
+        self.assertEqual(set(self.catalog.attachments[100]), {'first-qa.pdf'})
+        self.assertEqual(set(self.catalog.attachments[101]), {'second-qa.pdf'})
+        self.assertEqual(set(self.catalog.attachments[102]), {'third-qa.pdf'})
+        self.assertEqual(self.state['stage'], 'completed')
+
+    def test_cancel_next_keeps_already_submitted_document(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('document_defaults_proceed')
+        self.reply('2')
+        self.attach('second-qa.pdf')
+        self.engine._summarize_and_confirm(self.state, self.etag())
+        self.reply('confirm_cancel')
+        self.assertEqual(self.state['stage'], 'cancelled_confirmation')
+        self.assertEqual(len(self.catalog.creates), 1)
+        self.assertEqual(set(self.catalog.attachments[100]), {'first-qa.pdf'})
+
+    def test_embedded_type_registration_preserves_batch_and_returns_to_attachment(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('document_defaults_proceed')
+        expected = copy.deepcopy(self.state['document_batch'])
+        self.reply('register_new_document_type')
+        self.assertEqual(self.state['flow'], 'document_type_registration')
+        self.state['fields']['TIPODOCUMENTO'] = 'TIPO NOVO QA'
+        result = self.engine._resume_document_with_registered_document_type(self.state, self.etag(), 900)
+        self.assertEqual(self.state['flow'], 'document')
+        self.assertEqual(self.state['document_batch'], expected)
+        self.assertEqual(self.state['fields']['TIPODOCUMENTO'], 'TIPO NOVO QA')
+        self.assertEqual(result['status'], 'waiting_for_attachments')
+        self.assertEqual(len(self.catalog.creates), 1)
+
+    def test_single_document_submission_still_uses_original_token_and_completion(self):
+        self.ready()
+        self.state['document_batch']['mode'] = 'single'
+        result = self.reply('confirm_yes')
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(self.catalog.creates, ['WA-document-' + self.state['batch_id']])
+
+    def test_begin_another_flow_does_not_inherit_document_mode(self):
+        self.begin()
+        self.reply('document_mode_multiple')
+        self.engine._begin_action(self.state, self.etag(), {'flow': 'task', 'title': 'TAREFA'})
+        self.assertNotIn('document_batch', self.state)
+
+    def test_edit_noncommercial_person_keeps_unrelated_property_and_date(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('4')  # pessoa_relacionada
+        result = self.reply('2')
+        self.assertEqual(result['status'], 'awaiting_document_defaults')
+        self.assertEqual(self.state['fields']['PESSOARELACIONADA'], 'PESSOA B QA')
+        self.assertEqual(self.state['fields']['IMOVEL'], 'TODOS')
+        self.assertEqual(self.state['fields']['DATA'], '2026-10-21')
+
+    def test_defaults_issue_date_is_identifiable_without_confusing_validity_date(self):
+        self.ready()
+        self.reply('document_add_another')
+        option = next((x for x in self.state['options'] if x.get('title') == 'DATA DE EMISSÃO'), None)
+        self.assertIsNotNone(option)
+        result = self.reply(str(option['id']))
+        self.assertEqual(result.get('field'), 'data_emissao')
+
+    def test_finalizing_new_attachment_after_type_does_not_repeat_other_fields(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('document_defaults_proceed')
+        self.reply('2')
+        self.attach('second-qa.pdf')
+        result = self.reply('finish_attachments')
+        self.assertEqual(result['status'], 'awaiting_confirmation')
+        self.assertEqual(self.state['stage'], 'awaiting_confirmation')
+        self.assertIn('document_submit_final', self.action_ids())
+        result = self.reply('document_submit_final')
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(len(self.catalog.creates), 2)
+
+    def test_full_initial_form_requires_attachment_and_finishes_in_multiple_menu(self):
+        self.begin()
+        self.reply('document_mode_multiple')
+        for reply_id, text in [('1', ''), ('1', ''), ('1', ''), ('1', ''),
+                               ('', '21/10/2026'), ('2', ''), ('1', ''), ('2', ''), ('1', '')]:
+            self.reply(reply_id, text)
+        self.assertEqual(self.state['stage'], 'collecting_attachments')
+        self.assertEqual(self.state['fields']['ETAPA'], 'ETAPA A QA')
+        self.attach('initial-flow-qa.pdf')
+        result = self.reply('finish_attachments')
+        self.assertEqual(result['status'], 'awaiting_confirmation')
+        self.assertIn('document_add_another', self.action_ids())
+        self.assertFalse(self.catalog.creates)
+
+    def test_public_handle_deduplicates_repeated_add_event(self):
+        self.ready()
+        event = {'kind': 'text', 'message_id': 'public-qa-add', 'reply_id': 'document_add_another',
+                 'text': '', 'sender': 'qa', 'conversation_id': 'qa', 'phone_number_id': 'portal-admin',
+                 'trusted_portal': True}
+        self.config['whatsapp']['accept_private_chats'] = True
+        self.state['key'] = conversation_key(event)
+        self.store.save(self.state['key'], self.state, None)
+        result = self.engine.handle(event)
+        self.assertEqual(result['status'], 'awaiting_document_defaults')
+        self.engine.handle(event)
+        self.assertEqual(len(self.catalog.creates), 1)
+        saved, _ = self.store.load(self.state['key'])
+        self.assertEqual(saved['document_batch']['index'], 1)
+        self.assertEqual(saved['attachments'], [])
+
+    def test_new_document_after_cancelled_sequence_uses_new_batch_identity(self):
+        self.ready()
+        self.reply('document_add_another')
+        old_batch = self.state['batch_id']
+        self.begin()
+        self.reply('document_mode_multiple')
+        self.assertNotEqual(self.state['batch_id'], old_batch)
+
+    def test_public_attachment_event_cannot_modify_pending_frozen_row(self):
+        self.ready()
+        self.catalog.fail_attachment = True
+        self.reply('document_add_another')
+        event = {'kind': 'attachment', 'message_id': 'unsafe-attachment', 'sender': 'qa',
+                 'conversation_id': 'qa', 'phone_number_id': 'portal-admin', 'trusted_portal': True}
+        self.config['whatsapp']['accept_private_chats'] = True
+        self.state['key'] = conversation_key(event)
+        self.store.save(self.state['key'], self.state, None)
+        # Move the checkpoint key consistently for this public-conversation fixture.
+        self.state['stage'] = 'awaiting_confirmation'
+        self.engine._commit(self.state, self.etag())
+        result = self.engine.handle(event)
+        self.assertEqual(result['status'], 'document_submission_locked')
+        self.assertEqual(len(self.catalog.creates), 1)
+
+    def public_event(self, reply_id, text=''):
+        self.event_counter += 1
+        event = {'kind': 'text', 'message_id': f'public-{self.event_counter}', 'reply_id': reply_id,
+                 'text': text, 'sender': 'qa', 'conversation_id': 'qa', 'phone_number_id': 'portal-admin',
+                 'trusted_portal': True}
+        self.config['whatsapp']['accept_private_chats'] = True
+        self.state['key'] = conversation_key(event)
+        current = self.store.load(self.state['key'])[1]
+        self.store.save(self.state['key'], self.state, current)
+        result = self.engine.handle(event)
+        self.state, _ = self.store.load(self.state['key'])
+        return result
+
+    def test_completed_sequence_allows_public_main_menu_and_next_operation(self):
+        self.ready()
+        result = self.public_event('document_submit_final')
+        self.assertEqual(result['status'], 'completed')
+        result = self.public_event('navigation_main_menu')
+        self.assertNotEqual(result['status'], 'completed')
+        self.assertEqual(self.state['stage'], 'choosing_group')
+        self.assertEqual(len(self.catalog.creates), 1)
+        self.begin()
+        self.reply('document_mode_multiple')
+        self.assertEqual(self.state['stage'], 'selecting_fields')
+
+    def test_prefixed_whatsapp_proceed_reaches_type_through_public_handle(self):
+        self.ready()
+        self.public_event('document_add_another')
+        result = self.public_event('choice:edit_field:document_defaults_proceed')
+        self.assertEqual(result.get('field'), 'tipo_documento')
+        self.assertEqual(self.state['stage'], 'selecting_fields')
+        self.assertEqual(len(self.catalog.creates), 1)
+
+    def test_return_from_cancelled_embedded_type_keeps_multi_document_identity(self):
+        self.ready()
+        self.reply('document_add_another')
+        self.reply('document_defaults_proceed')
+        expected = copy.deepcopy(self.state['document_batch'])
+        self.reply('register_new_document_type')
+        self.assertEqual(self.state['flow'], 'document_type_registration')
+        self.engine._navigate_back(self.state, self.etag())
+        self.assertEqual(self.state['flow'], 'document')
+        self.assertEqual(self.state.get('document_batch'), expected)
         self.assertEqual(len(self.catalog.creates), 1)
 
 

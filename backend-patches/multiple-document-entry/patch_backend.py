@@ -16,6 +16,12 @@ def apply(source, candidate):
         'from diary_progress import emit_progress\n\ntry:\n    from . import document_batch\nexcept ImportError:\n    import document_batch')
     workflow = replace_once(workflow, 'ACTIVE_STAGES = {',
         'ACTIVE_STAGES = {\n    *document_batch.STAGES,')
+    workflow = replace_once(workflow,
+        '        key = conversation_key(event)\n        state, etag = self.state_store.load(key)\n',
+        '        key = conversation_key(event)\n        state, etag = self.state_store.load(key)\n        document_result = document_batch.guard_event(self, event, state, etag)\n        if document_result is not None:\n            return document_result\n')
+    workflow = replace_once(workflow,
+        '        if state.get("sharepoint"):\n            self._new_submission_identity(state)\n            state["navigation_history"] = []\n        state["flow"] = selected["flow"]',
+        '        if state.get("sharepoint") or (state.get("document_batch") or {}).get("submitted"):\n            self._new_submission_identity(state)\n            state["navigation_history"] = []\n        state["flow"] = selected["flow"]')
     workflow = replace_once(workflow, '        state["flow"] = selected["flow"]\n',
         '        state["flow"] = selected["flow"]\n        state.pop("document_batch", None)\n')
     workflow = replace_once(workflow,
@@ -33,6 +39,16 @@ def apply(source, candidate):
     workflow = replace_once(workflow,
         '    def _send_confirmation_actions(self, state: dict) -> None:\n',
         '    def _send_confirmation_actions(self, state: dict) -> None:\n        if document_batch.send_confirmation(self, state):\n            return\n')
+    workflow = replace_once(workflow,
+        '        parent_keys = (*parent_keys, *PROVISION_STATE_KEYS)\n',
+        '        parent_keys = (*parent_keys, *PROVISION_STATE_KEYS, "document_batch")\n')
+    edit_start = workflow.index('    def _handle_edit_field_reply(')
+    workflow = workflow[:edit_start] + replace_once(workflow[edit_start:],
+        '        edited_step = steps[target_index]\n',
+        '        steps = document_batch.edit_steps(self, state, steps)\n        edited_step = steps[target_index]\n')
+    workflow = workflow[:edit_start] + replace_once(workflow[edit_start:],
+        '        for index in edit_step_indices:\n            self._clear_step_value(state, steps[index])\n        state["edit_step_indices"] = edit_step_indices\n',
+        '        if document_batch.active(state) and state["document_batch"].get("editing_defaults"):\n            edit_step_indices = [index for index in edit_step_indices\n                                 if steps[index]["key"] != "tipo_documento"]\n        for index in edit_step_indices:\n            self._clear_step_value(state, steps[index])\n        state["edit_step_indices"] = edit_step_indices\n')
     workflow = replace_once(workflow,
         '            target_list = flow["target_list"]\n            idempotency_field = flow.get("idempotency_field", "Title")\n            related_item = self._ensure_related_item(state, flow)\n',
         '            if document_batch.active(state):\n                return document_batch.commit(self, state, etag, flow)\n            target_list = flow["target_list"]\n            idempotency_field = flow.get("idempotency_field", "Title")\n            related_item = self._ensure_related_item(state, flow)\n')
