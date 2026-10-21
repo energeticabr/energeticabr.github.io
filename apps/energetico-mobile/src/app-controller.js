@@ -9990,6 +9990,20 @@ export function createAppController({
     return uploadQueue;
   }
 
+  let cameraSelectionBusy = false;
+  async function capturePhotoOrScan() {
+    if (cameraSelectionBusy || stopped || !account) return false;
+    cameraSelectionBusy = true;
+    const captureAccount = account;
+    try {
+      return await queueSelectedFiles(async () => {
+        const mode = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
+        if (stopped || account !== captureAccount || !['photo','scan'].includes(mode)) return [];
+        return mode === 'scan' ? native.scanDocument() : native.capturePhoto();
+      });
+    } finally { cameraSelectionBusy = false; }
+  }
+
   async function queueSelectedFiles(selector, options = {}) {
     if (recoveryAccountId && !recoveryVerified) return false;
     cancelAttachmentReminder();
@@ -11049,7 +11063,7 @@ export function createAppController({
       }
       return sent;
     });
-    bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
+    bind("capture-photo", capturePhotoOrScan);
     bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
     bind("pick-document-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("files-dropped", command => queueSelectedFiles(() => command.files));
