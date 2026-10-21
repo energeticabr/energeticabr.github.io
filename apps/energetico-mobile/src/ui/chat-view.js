@@ -3975,7 +3975,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.homeAccountId === state.account?.homeAccountId
        && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
        && [
-         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming",
+         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
          "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createChatClient } from '../src/chat/chat-client.js';
 import { loadingIndicatorMarkup } from '../src/ui/loading-indicator.js';
-import { renderChatMarkup } from '../src/ui/chat-view.js';
+import { renderChatMarkup, createChatView } from '../src/ui/chat-view.js';
 import { createAppController } from '../src/app-controller.js';
 import { createConversationStore } from '../src/chat/conversation-store.js';
 
@@ -121,6 +121,20 @@ test('chat loading card receives diary progress instead of rendering it elsewher
   const dom = new JSDOM(html);
   assert.equal(dom.window.document.querySelector('.chat-progress [role="progressbar"]')?.textContent, '37%');
   dom.window.close();
+});
+
+test('the live view updates the badge when only measured progress changes', t => {
+  const dom = new JSDOM('<main id="app"></main>', { url: 'https://example.com' });
+  const root = dom.window.document.querySelector('#app'), view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const state = { account: { name: 'QA' }, sessionStatus: 'authenticated', messages: [],
+    activeText: { id: 'op' }, draft: '', pendingFiles: [], attachments: [], diaryAttachmentProgress: { percent: 0 } };
+  view.render(state);
+  assert.equal(root.querySelector('[role="progressbar"]').textContent, '0%');
+  view.render({ ...state, diaryAttachmentProgress: { percent: 37 } });
+  assert.equal(root.querySelector('[role="progressbar"]').textContent, '37%');
+  view.render({ ...state, diaryAttachmentProgress: { percent: 100 } });
+  assert.equal(root.querySelector('[role="progressbar"]').textContent, '100%');
 });
 
 function controllerHarness(t, flowId = 'construction_diary_fill') {
