@@ -1,0 +1,24 @@
+name: Energético UIKit ARM runner verification
+on:
+  push:
+    branches: [chore/scanner-ios-simulator-runner-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  same-uikit-guard-on-arm:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Execute unchanged real UIKit guard
+        working-directory: apps/energetico-mobile
+        run: node scripts/verify-native-share-preview.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: energetico-uikit-arm-evidence
+          path: apps/energetico-mobile/build/native-share-preview
+          if-no-files-found: error
+          retention-days: 7
