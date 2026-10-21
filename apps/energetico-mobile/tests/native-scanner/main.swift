@@ -30,3 +30,17 @@ assert(partialFailed)
 let remaining = try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("owned").path)
 assert(remaining.isEmpty)
 print("PASS: native scanner ordered pages, byte/page limits, atomic rollback and scoped cleanup")
+let restartRoot = root.appendingPathComponent("restart")
+let oldOwner = "11111111-1111-4111-8111-111111111111"
+let newOwner = "22222222-2222-4222-8222-222222222222"
+let interrupted = ScanCache(root: restartRoot, owner: oldOwner)
+let abandoned = try interrupted.write(pageCount: 1) { _ in jpeg }
+let sameProcess = ScanCache(root: restartRoot, owner: oldOwner)
+assert(FileManager.default.fileExists(atPath: abandoned.pages[0].url.path), "live owner must survive another cache instance")
+let foreign = restartRoot.appendingPathComponent(UUID().uuidString)
+try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+try jpeg.write(to: foreign.appendingPathComponent("keep.jpg"))
+let restarted = ScanCache(root: restartRoot, owner: newOwner)
+assert(!FileManager.default.fileExists(atPath: abandoned.pages[0].url.path), "restart must reclaim abandoned scanner pages")
+assert(FileManager.default.fileExists(atPath: foreign.appendingPathComponent("keep.jpg").path), "unowned UUID folder must survive")
+print("PASS: scanner restart cleanup preserves live-owner sessions and unrelated directories")

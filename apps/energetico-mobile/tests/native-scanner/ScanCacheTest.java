@@ -20,5 +20,17 @@ public final class ScanCacheTest {
     if(!failed||root.resolve("owned").toFile().list().length!=0)throw new AssertionError("atomic rollback");
     Files.delete(root.resolve("owned"));Files.delete(sentinel);Files.delete(root);
     System.out.println("PASS: native scanner ordered pages, byte/page limits, atomic rollback and scoped cleanup");
+    Path restartRoot=Files.createTempDirectory("scanner-restart-");
+    String oldOwner="11111111-1111-4111-8111-111111111111",newOwner="22222222-2222-4222-8222-222222222222";
+    ScanCache interrupted=new ScanCache(restartRoot.toFile(),60_000_000,oldOwner);
+    ScanCache.Session abandoned=interrupted.write(1,index->new ByteArrayInputStream(jpeg));
+    new ScanCache(restartRoot.toFile(),60_000_000,oldOwner);
+    if(!abandoned.pages.get(0).file.exists())throw new AssertionError("live owner deleted");
+    Path foreign=Files.createDirectory(restartRoot.resolve(java.util.UUID.randomUUID().toString()));Files.write(foreign.resolve("keep.jpg"),jpeg);
+    new ScanCache(restartRoot.toFile(),60_000_000,newOwner);
+    if(abandoned.pages.get(0).file.exists())throw new AssertionError("restart leaked pages");
+    if(!Files.exists(foreign.resolve("keep.jpg")))throw new AssertionError("unowned UUID folder deleted");
+    Files.delete(foreign.resolve("keep.jpg"));Files.delete(foreign);Files.delete(restartRoot);
+    System.out.println("PASS: scanner restart cleanup preserves live-owner sessions and unrelated directories");
   }
 }
