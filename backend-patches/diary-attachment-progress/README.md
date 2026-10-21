@@ -12,6 +12,7 @@ oid verificado pelo autenticador Graph; tid também separa a chave quando
 fornecido. Não há nomes, caminhos ou arquivos na telemetria.
 
 Percentual por etapas concluídas: fotos até 75, PDF 80, consolidação/união 90,
+páginas unidas/comprimidas até 98,
 próxima pergunta pronta 99. Tentativas adicionais não fazem regredir.
 100 é emitido apenas depois da finalização e preparação da resposta pública.
 Não é uma estimativa de tempo restante ou de bytes transmitidos.

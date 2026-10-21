@@ -19,7 +19,8 @@ Uma ContextVar conecta o pedido HTTP ao processamento das imagens, sem estado
 compartilhado no builder. Expirar registros e limitar sua quantidade.
 
 O percentual representa etapas concluídas, não tempo decorrido: 0 ao iniciar,
-até 75 durante renderização das fotos, 80 ao gerar o PDF, 90 ao consolidar e
+até 75 durante renderização das fotos, 80 ao gerar o PDF, 90 ao consolidar,
+até 98 conforme páginas anteriores e novas são unidas/comprimidas e
 até 99 na conclusão. Recompressões/mesclagens não fazem o indicador regredir.
 100 somente após resposta válida que confirme sucesso da finalização.
 Arquivos indisponíveis, falhas e resposta incerta nunca confirmam 100.

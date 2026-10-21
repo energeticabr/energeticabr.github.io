@@ -73,6 +73,16 @@ def patch_sources(source, target):
     builder = replace_once(builder, '''        new_content = self.media_repository.read(generated_attachment)''',
         '''        emit_progress(90, "merging")
         new_content = self.media_repository.read(generated_attachment)''')
+    builder = replace_once(builder, '''        rendered_pages = 0
+        try:
+            for source_path in source_paths:''',
+        '''        rendered_pages = 0
+        total_pages = sum(ConstructionDiaryEvidenceBuilder._pdf_page_count(path) for path in source_paths)
+        try:
+            for source_path in source_paths:''')
+    builder = replace_once(builder, '''                            rendered_pages += 1''',
+        '''                            rendered_pages += 1
+                            emit_progress(90 + 8 * rendered_pages / max(1, total_pages), "merging")''')
     # Scope the completion hook to this method, not other evidence workflows.
     parsed = ast.parse(workflow)
     method = next(node for node in ast.walk(parsed)

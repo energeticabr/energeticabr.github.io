@@ -145,6 +145,20 @@ class PatchedBuilderTests(unittest.TestCase):
             self.assertEqual([p["percent"] for p in updates if p["stage"] == "photos"], [18, 37, 56, 75])
             self.assertFalse(any(p["percent"] == 100 for p in updates))
 
+            # Joining/compressing an existing diary reports completed pages too.
+            from reportlab.pdfgen import canvas
+            source_pdf = target / "three-pages.pdf"
+            output_pdf = canvas.Canvas(str(source_pdf))
+            for _ in range(3):
+                output_pdf.drawString(10, 20, "Synthetic evidence")
+                output_pdf.showPage()
+            output_pdf.save()
+            merging = []
+            with registry.scope(OWNER, REQUEST, observer=lambda p: merging.append(p)):
+                pages = builder._render_combined_pdf([source_pdf], target / "merged.pdf", dpi=36, quality=24)
+            self.assertEqual(pages, 3)
+            self.assertEqual([p["percent"] for p in merging if p["stage"] == "merging"], [92, 95, 98])
+
     def test_http_status_route_authenticates_and_bypasses_all_conversation_methods(self):
         base = os.environ.get("DIARY_PROGRESS_BASE")
         if not base:
