@@ -19,6 +19,9 @@
 - Verificação final do cliente após os ajustes de concorrência: 526 testes direcionados
   aprovados, zero falhas, incluindo controlador, autenticação, galeria e inativação.
 - Root/portal: 1.124 aprovados, seis skips, zero falhas. Builds web/PWA passaram.
+- Após integrar o ajuste de teste da PR #555, a matriz executou os 19 testes de
+  vencimento em UTC e America/Sao_Paulo, todos aprovados. Os subdiretórios de código
+  de produção do cliente e portal permaneceram idênticos aos da suíte completa final.
 - Prova visual com fixture sintética: galeria, dados pendentes de regularização e
   bloqueio de inativação sem desligamento. Nenhum funcionário real fictício foi criado.
 - A execução indiscriminada de pytest na raiz encontrou 40 erros de coleta em pacotes

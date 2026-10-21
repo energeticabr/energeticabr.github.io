@@ -54,10 +54,10 @@
 
 **Files:** pacote backend reproduzível, documentação/recibos sem dados pessoais.
 
-- [ ] Rodar suíte do projeto, contratos backend e provisionamento dry-run; revisão independente e corrigir achados com RED/GREEN.
+- [x] Rodar suíte do projeto, contratos backend e provisionamento dry-run; revisão independente e corrigir achados com RED/GREEN.
 - [ ] Provisionar esquema aditivo e sincronizar ativos reais autorizados; conferir contagens/identidades, nunca mostrar dados pessoais em logs públicos.
 - [ ] Instalar backend com hash/backup/saúde, confirmar a galeria publicada, PR/merge e acompanhar as três plataformas.
-- [ ] Registrar testes, limitações e recibos; entregar apenas estados efetivamente verificados.
+- [x] Registrar testes, limitações e recibos; entregar apenas estados efetivamente verificados.
 
 ## Estado de execução em 20/10/2026
 
