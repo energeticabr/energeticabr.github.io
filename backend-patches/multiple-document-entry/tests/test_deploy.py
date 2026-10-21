@@ -167,4 +167,3 @@ def test_package_carries_unchanged_runtime_dependency_to_an_older_mirror(tmp_pat
         {relative: deploy.digest(roots[1] / relative) for relative in deploy.FILES})
     assert manifest['diary_progress.py']['before'] == manifest['diary_progress.py']['after']
     assert manifest['diary_progress.py']['mirrorBefore'] is None
-

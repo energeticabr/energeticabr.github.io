@@ -16,6 +16,7 @@
   plataforma, zero falhas (847,6 segundos). Nenhum arquivo de produção JS foi editado.
 - VM: 33 testes do motor real aprovados com fronteiras externas sintéticas; quatro
   testes Linux do gate aprovados depois de normalizar finais de linha da cópia de estágio.
+- Suíte PDF disponível na VM: dois testes aprovados no ambiente virtual real.
 - `ios:verify`, `secrets:verify` e build PWA aprovados; avisos de bundle já existentes.
 
 ## Limites da evidência

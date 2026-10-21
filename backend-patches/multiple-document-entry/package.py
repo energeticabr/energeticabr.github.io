@@ -55,4 +55,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(json.dumps(package(args.baseline, args.candidate, args.output,
                              json.loads(args.mirror_hashes.read_text(encoding='utf-8')), args.archive_output), indent=2))
-
