@@ -89,6 +89,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .app-loading[data-loading-variant="1"] .app-loading__mascot { animation-name: loading-mascot-sway; }
 .app-loading[data-loading-variant="2"] .app-loading__mascot { animation-duration: 2.8s; }
 .app-loading__spinner { display: block; flex: none; width: 30px; height: 30px; border: 3px solid #c8e2e9; border-top-color: var(--brand); border-right-color: var(--accent); border-radius: 50%; animation: loading-spinner-turn .85s linear infinite; }
+.app-loading__progress-row { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.app-loading__percentage { display: inline-flex; align-items: center; justify-content: center; min-width: 58px; padding: 5px 10px; border: 1px solid currentColor; border-radius: 10px; background: var(--loading-card-background); color: var(--loading-card-text); font-size: .95rem; font-weight: 750; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .app-loading__text { display: block; max-width: 320px; font-size: .92rem; font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
 .app-loading--compact { min-height: 0; padding: 12px; gap: 8px; }
 .app-loading--compact .app-loading__mascot { width: 58px; height: 78px; }

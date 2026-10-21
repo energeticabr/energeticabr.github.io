@@ -14,9 +14,20 @@ function loadingVariant(label) {
   return [...String(label)].reduce((sum, character) => sum + character.codePointAt(0), 0) % 3;
 }
 
-export function loadingIndicatorMarkup(label, { compact = false } = {}) {
+function progressValue(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100
+    ? Math.floor(value) : null;
+}
+
+function spinnerMarkup(progress) {
+  const spinner = '<span class="app-loading__spinner" aria-hidden="true"></span>';
+  const percent = progressValue(progress);
+  return percent === null ? spinner : `<span class="app-loading__progress-row">${spinner}<span class="app-loading__percentage" role="progressbar" aria-label="Finalização dos anexos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">${percent}%</span></span>`;
+}
+
+export function loadingIndicatorMarkup(label, { compact = false, progress } = {}) {
   const variant = loadingVariant(label);
-  return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite"><img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false"><span class="app-loading__spinner" aria-hidden="true"></span><span class="app-loading__text">${escapeHtml(label)}</span></span>`;
+  return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite"><img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false">${spinnerMarkup(progress)}<span class="app-loading__text">${escapeHtml(label)}</span></span>`;
 }
 
 export function createLoadingIndicator(documentRef, label, { compact = false } = {}) {
