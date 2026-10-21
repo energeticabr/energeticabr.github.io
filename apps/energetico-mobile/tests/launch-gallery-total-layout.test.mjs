@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
+import {waitForDevToolsEndpoint} from './helpers/devtools-endpoint.mjs';
 
 const appRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const browser = [process.env.CHROME_BIN, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -24,10 +25,8 @@ test('paid date stays left of total in a green band while supplier and order rem
     child = spawn(browser, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-sandbox',
       '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
     const portFile = join(profile, 'DevToolsActivePort');
-    for (let attempt = 0; attempt < 200 && !existsSync(portFile); attempt++) await delay(100);
-    assert.ok(existsSync(portFile), 'Chrome não iniciou');
-    const [port, path] = readFileSync(portFile, 'utf8').trim().split(/\r?\n/);
-    socket = new WebSocket(`ws://127.0.0.1:${port}${path}`);
+    const endpoint = await waitForDevToolsEndpoint({read:()=>readFileSync(portFile,'utf8'),isExited:()=>child.exitCode!==null});
+    socket = new WebSocket(endpoint);
     await new Promise((done, fail) => { socket.addEventListener('open', done, { once: true }); socket.addEventListener('error', fail, { once: true }); });
     let sequence = 0;
     socket.addEventListener('message', event => {

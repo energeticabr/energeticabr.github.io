@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname, basename } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import {parseDevToolsEndpoint} from './devtools-endpoint.mjs';
 
 // Use an isolated test browser, an exact viewport, and the fixture's readiness
 // marker. A fixed virtual-time budget can capture an unfinished module/image load.
@@ -26,11 +27,10 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       if (spawnError) throw spawnError;
       try {
         lastEndpointContents = await readFile(join(profile, "DevToolsActivePort"), "utf8");
-        const [port, path] = lastEndpointContents.trim().split(/\r?\n/);
         // File creation precedes completion of Chrome's two-line endpoint.
-        if (/^\d+$/.test(port || "") && Number(port) >= 1 && Number(port) <= 65535
-          && /^\/devtools\/browser\/[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(path || "")) {
-          endpoint = `ws://127.0.0.1:${port}${path}`;
+        const parsedEndpoint = parseDevToolsEndpoint(lastEndpointContents);
+        if (parsedEndpoint) {
+          endpoint = parsedEndpoint;
           break;
         }
       } catch (error) {
