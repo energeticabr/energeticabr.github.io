@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const percent = Number(new URL(location.href).searchParams.get('percent') || 37);
+const view = createChatView(document.querySelector('#app'));
+view.render({
+  sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [],
+  activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' },
+  activeText: { id: 'finalize-test', text: 'FINALIZAR ANEXOS' },
+  diaryAttachmentProgress: { percent, status: percent === 100 ? 'complete' : 'running' },
+  attachments: Array.from({ length: 9 }, (_, i) => ({ id: 'photo-' + i, fileName: 'foto-' + i + '.jpg', mimeType: 'image/jpeg', size: 1000 })),
+  messages: [{ id: 'evidence-actions', role: 'assistant', type: 'poll', question: '👉 📄 COMO DESEJA PROSSEGUIR COM AS EVIDÊNCIAS?',
+    options: [{ id: 'diary_finish', label: '✅ FINALIZAR ANEXOS' }, { id: 'diary_abandon', label: '🗑️ ABANDONAR DIÁRIO DE OBRAS' }] }],
+});
+await document.fonts.ready; await new Promise(requestAnimationFrame);
+const badge = document.querySelector('.app-loading__percentage').getBoundingClientRect();
+const spinner = document.querySelector('.chat-progress .app-loading__spinner').getBoundingClientRect();
+const card = document.querySelector('.chat-progress .app-loading').getBoundingClientRect();
+document.documentElement.dataset.layout = JSON.stringify({
+  percent: document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'),
+  adjacent: badge.left > spinner.right && badge.left - spinner.right <= 12,
+  aligned: Math.abs((badge.top + badge.bottom) / 2 - (spinner.top + spinner.bottom) / 2) <= 1,
+  contained: badge.left >= card.left && badge.right <= card.right && badge.top >= card.top && badge.bottom <= card.bottom,
+  overflow: document.documentElement.scrollWidth > innerWidth + 1,
+});
+document.documentElement.dataset.ready = 'true';
+</script></body></html>

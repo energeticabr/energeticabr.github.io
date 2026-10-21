@@ -10,6 +10,7 @@ import { isSupplierGroupingDatabaseFilter, latestDatabaseFilter, preserveDatabas
 import { normalizePartialDateSubmission } from "./chat/date-input.js";
 import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-options.js";
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
+import { isDiaryAttachmentFinalization, paintDiaryCompletion } from "./chat/diary-attachment-progress.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
 import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import { attendanceMissingPunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge } from "./chat/attendance-rhid-badges.js";
@@ -1321,6 +1322,13 @@ export function createAppController({
   }
   let starting = false;
   let sessionRevision = 0;
+  let diaryAttachmentProgress = null;
+  let diaryProgressAbort = null;
+  function clearDiaryAttachmentProgress() {
+    diaryProgressAbort?.abort();
+    diaryProgressAbort = null;
+    diaryAttachmentProgress = null;
+  }
   let attendanceIrregularitySource = null;
   function getAttendanceIrregularitySource() {
     const owner = account, revision = sessionRevision;
@@ -4574,6 +4582,7 @@ export function createAppController({
     const signaturePlacement = syncSignaturePlacement();
     view.render({
       ...state,
+      diaryAttachmentProgress,
       ...(renderMessages !== state.messages ? { messages: renderMessages } : {}),
       epiSelectedProductIds: epiSelectionIds,
       account,
@@ -9263,6 +9272,14 @@ export function createAppController({
     let paymentProvisionAutoReplyError = null;
     let remoteResponseReceived = false;
     let automaticExitDiscarded = false;
+    const trackingDiary = isDiaryAttachmentFinalization(previousState.activeFlow,
+      latestAssistantPoll(previousState.messages), submissionText, replyId);
+    const progressAbort = trackingDiary ? new AbortController() : null;
+    if (trackingDiary) {
+      clearDiaryAttachmentProgress();
+      diaryProgressAbort = progressAbort;
+      diaryAttachmentProgress = { percent: 0, status: "running", stage: "starting" };
+    }
     try {
       if (editingSignature) {
         signaturePlacementEditPending = true;
@@ -9290,6 +9307,20 @@ export function createAppController({
       behavior.onRequest?.();
       let result = preparePresenceResult(await client.sendText({
         text: operation.text,
+        ...(trackingDiary ? {
+          progressSignal: progressAbort.signal,
+          onProgress: value => {
+            if (progressAbort.signal.aborted || stopped || account !== sendingAccount
+                || sessionRevision !== sendingRevision || store.getState().activeText?.id !== operation.id
+                || typeof value?.percent !== "number" || !Number.isFinite(value.percent)
+                || value.percent < 0 || value.percent > 100) return;
+            const percent = Math.max(diaryAttachmentProgress?.percent || 0, Math.floor(value.percent));
+            if (diaryAttachmentProgress?.percent !== percent) {
+              diaryAttachmentProgress = { percent, status: value.status, stage: value.stage };
+              render();
+            }
+          },
+        } : {}),
         ...(replyId ? { replyId } : {}),
         ...(!retryingAutomaticExit && behavior.homeAttachmentIds ? {
           homeAttachmentIds: behavior.homeAttachmentIds, expectedContextId: behavior.expectedContextId,
@@ -9298,6 +9329,10 @@ export function createAppController({
       }));
       remoteResponseReceived = true;
       if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
+      if (trackingDiary && diaryAttachmentProgress?.percent === 100) {
+        await paintDiaryCompletion();
+        if (stopped || account !== sendingAccount || sessionRevision !== sendingRevision) return false;
+      }
       if (behavior.autoDiscardExit === true && isDraftExitConfirmation(latestAssistantPoll(result.messages))) {
         const discardReplyId = behavior.preserveHomeAttachments === true && homeAttachmentTransferPending
           ? "portal_transfer_draft_discard" : "portal_draft_exit_discard";
@@ -9578,6 +9613,10 @@ export function createAppController({
       else setSessionError(error, "Não foi possível enviar a mensagem.");
       return false;
     } finally {
+      if (trackingDiary && diaryProgressAbort === progressAbort) {
+        clearDiaryAttachmentProgress();
+        if (!stopped) render();
+      }
       if (editingSignature) {
         signaturePlacementEditPending = false;
         if (!stopped) render();
@@ -10073,6 +10112,7 @@ export function createAppController({
   }
 
   async function signOut() {
+    clearDiaryAttachmentProgress();
     clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
     disposeRhidMonthlyReport();
@@ -11348,6 +11388,7 @@ export function createAppController({
   }
 
   function stop() {
+    clearDiaryAttachmentProgress();
     clearDiaryFieldVisits();
     attendanceIrregularitySource = null;
     recentDiaryActivitiesAbort?.abort();

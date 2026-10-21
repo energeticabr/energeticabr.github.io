@@ -1,5 +1,6 @@
 import { validateAttachment } from "./file-policy.js";
 import { audioTranscriptionText } from "./audio-transcription.js";
+import { startDiaryProgress } from "./diary-attachment-progress.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -243,11 +244,12 @@ export function createChatClient({
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`
   );
 
-  async function sendText({ text = "", replyId, omitText = false, homeAttachmentIds, expectedContextId, homeTransferReceipt } = {}) {
+  async function sendText({ text = "", replyId, omitText = false, homeAttachmentIds, expectedContextId, homeTransferReceipt, onProgress, progressSignal } = {}) {
     const token = await acquireToken(tokenProvider);
     const blankEpiReply = EMPTY_EPI_REPLY_IDS.has(String(replyId || ""));
     const payload = {
       messageId: newMessageId(),
+      ...(typeof onProgress === "function" ? { trackDiaryEvidence: true } : {}),
       ...(!(blankEpiReply || omitText) ? { text: String(text || "").trim() } : {}),
       ...(replyId ? { replyId: String(replyId) } : {}),
       ...(Array.isArray(homeAttachmentIds) ? {
@@ -261,7 +263,12 @@ export function createChatClient({
           contextId: homeTransferReceipt.contextId, attachmentIds: [...homeTransferReceipt.attachmentIds] },
       } : {}),
     };
-    return request(chatUrl.href, {
+    const progress = typeof onProgress === "function" ? startDiaryProgress({
+      onProgress, signal: progressSignal,
+      read: signal => getDiaryAttachmentProgress(payload.messageId, { signal }),
+    }) : null;
+    try {
+      const result = await request(chatUrl.href, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -271,7 +278,29 @@ export function createChatClient({
       body: JSON.stringify(payload),
       cache: "no-store",
       credentials: "omit",
-    }, response => parsePortalResponse(response, "O canal do Energético", { allowRecovery: true }));
+      }, response => parsePortalResponse(response, "O canal do Energético", { allowRecovery: true }));
+      if (result.status === "processed" && !result.error
+          && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))
+          && result.diaryEvidenceProgress?.requestId === payload.messageId) progress?.complete(result.diaryEvidenceProgress);
+      return result;
+    } finally { progress?.stop(); }
+  }
+
+  async function getDiaryAttachmentProgress(requestId, { signal } = {}) {
+    const token = await cancellableToken(tokenProvider, signal);
+    return request(chatUrl.href, {
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "diary_evidence_progress", requestId }),
+      cache: "no-store", credentials: "omit", signal,
+    }, async response => {
+      if (!response.ok) throw new Error("Progresso indisponível");
+      const value = await readJson(response);
+      if (value?.requestId !== requestId || !["running", "complete", "failed", "unavailable"].includes(value.status)) {
+        throw new Error("Progresso inválido");
+      }
+      return value;
+    }, true);
   }
 
   async function sendFile(file) {
