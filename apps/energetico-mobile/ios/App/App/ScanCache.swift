@@ -12,13 +12,18 @@ struct ScanCacheSession {
 
 // Resolves opaque, in-memory owned tokens only. No bridge-supplied file paths.
 final class ScanCache {
+    static let processOwner = UUID().uuidString
+    private static let markerPrefix = "ENERGETICO_SCAN_V1\n"
     private let root: URL
     private let maxBytes: Int
+    private let owner: String
     private let lock = NSLock()
     private var sessions: [String: URL] = [:]
-    init(root: URL = FileManager.default.temporaryDirectory.appendingPathComponent("energetico-scanner"), maxBytes: Int = 60_000_000) {
-        self.root = root
+    init(root: URL = FileManager.default.temporaryDirectory.appendingPathComponent("energetico-scanner"), maxBytes: Int = 60_000_000, owner: String = ScanCache.processOwner) {
+        self.root = root.resolvingSymlinksInPath()
         self.maxBytes = maxBytes
+        self.owner = owner
+        reclaimAbandonedSessions()
     }
     func write(pageCount: Int, pageData: (Int) throws -> Data) throws -> ScanCacheSession {
         lock.lock(); defer { lock.unlock() }
@@ -28,6 +33,7 @@ final class ScanCache {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var committed = false
         defer { if !committed { try? FileManager.default.removeItem(at: directory) } }
+        try Data((Self.markerPrefix + owner).utf8).write(to: directory.appendingPathComponent(".scanner-owner"), options: .atomic)
         var pages: [ScanCachePage] = []
         var total = 0
         for index in 0..<pageCount {
@@ -52,6 +58,22 @@ final class ScanCache {
         lock.lock(); defer { lock.unlock() }
         for directory in sessions.values { try? FileManager.default.removeItem(at: directory) }
         sessions.removeAll()
+    }
+    private func reclaimAbandonedSessions() {
+        let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])) ?? []
+        for entry in entries {
+            guard UUID(uuidString: entry.lastPathComponent) != nil,
+                  let info = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  info.isDirectory == true, info.isSymbolicLink != true else { continue }
+            let marker = entry.appendingPathComponent(".scanner-owner")
+            guard let markerInfo = try? marker.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+                  markerInfo.isRegularFile == true, markerInfo.isSymbolicLink != true, (markerInfo.fileSize ?? 1000) < 128,
+                  let data = try? Data(contentsOf: marker), let value = String(data: data, encoding: .utf8),
+                  value.hasPrefix(Self.markerPrefix) else { continue }
+            let previousOwner = String(value.dropFirst(Self.markerPrefix.count))
+            guard UUID(uuidString: previousOwner) != nil, previousOwner != owner else { continue }
+            try? FileManager.default.removeItem(at: entry)
+        }
     }
     private func failure(_ message: String) -> NSError {
         NSError(domain: "EnergeticoScanner", code: 1, userInfo: [NSLocalizedDescriptionKey: message])

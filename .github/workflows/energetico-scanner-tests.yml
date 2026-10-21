@@ -1,7 +1,7 @@
 name: Energético scanner native cache
 on:
   push:
-    branches: [feat/document-scanner-20261021]
+    branches: [main]
     paths: ['apps/energetico-mobile/**', '.github/workflows/energetico-scanner-tests.yml']
   pull_request:
     paths: ['apps/energetico-mobile/**', '.github/workflows/energetico-scanner-tests.yml']

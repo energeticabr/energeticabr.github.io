@@ -9995,10 +9995,11 @@ export function createAppController({
     if (cameraSelectionBusy || stopped || !account) return false;
     cameraSelectionBusy = true;
     const captureAccount = account;
+    const captureRevision = sessionRevision;
     try {
       return await queueSelectedFiles(async () => {
         const mode = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
-        if (stopped || account !== captureAccount || !['photo','scan'].includes(mode)) return [];
+        if (stopped || account !== captureAccount || sessionRevision !== captureRevision || !['photo','scan'].includes(mode)) return [];
         return mode === 'scan' ? native.scanDocument() : native.capturePhoto();
       });
     } finally { cameraSelectionBusy = false; }
@@ -10009,19 +10010,21 @@ export function createAppController({
     cancelAttachmentReminder();
     cancelCompletionMenu();
     const selectionAccount = account;
+    const selectionRevision = sessionRevision;
+    const currentSelection = () => !stopped && account && account === selectionAccount && sessionRevision === selectionRevision;
     sessionError = null;
     render();
     try {
       const knownIds = new Set(store.getState().pendingFiles.map(item => item.id));
       const files = await selector();
-      if (stopped || !account || account !== selectionAccount) return false;
+      if (!currentSelection()) return false;
       store.queueFiles(files, options);
       const newIds = store.getState().pendingFiles
         .filter(item => !knownIds.has(item.id))
         .map(item => item.id);
       return processFiles(newIds);
     } catch (error) {
-      setSessionError(error, "Não foi possível adicionar o anexo.");
+      if (currentSelection()) setSessionError(error, "Não foi possível adicionar o anexo.");
       return false;
     }
   }

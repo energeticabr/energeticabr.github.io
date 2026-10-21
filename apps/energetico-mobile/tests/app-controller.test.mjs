@@ -100,6 +100,29 @@ test('camera selection is single-flight and never uploads after the session ends
   assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
 });
 
+for(const phase of ['chooser','scanner']) test(`old ${phase} cannot send a scan after reentry with the same account object`,async t=>{
+  const sameAccount={homeAccountId:'same',name:'Test'};
+  const h=makeHarness({account:sameAccount});t.after(()=>h.controller.stop());await h.controller.start();
+  let complete,finishLogout,scans=0;
+  h.auth.signOut=()=>new Promise(r=>finishLogout=r);h.auth.signIn=async()=>sameAccount;
+  h.view.chooseCaptureMode=()=>phase==='chooser'?new Promise(r=>complete=r):Promise.resolve('scan');
+  h.native.scanDocument=()=>{scans++;return phase==='scanner'?new Promise(r=>complete=r):Promise.resolve([new File(['late'],'late-scan.jpg',{type:'image/jpeg'})]);};
+  const pending=h.view.emit('capture-photo');await new Promise(r=>setImmediate(r));
+  const logout=h.view.emit('sign-out');await h.view.emit('sign-in');
+  complete(phase==='chooser'?'scan':[new File(['late'],'late-scan.jpg',{type:'image/jpeg'})]);await pending;
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
+  if(phase==='chooser')assert.equal(scans,0);
+  finishLogout();await logout;
+});
+
+test('old scanner rejection cannot show an error after sign-out',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();let fail;
+  h.view.chooseCaptureMode=async()=>'scan';h.native.scanDocument=()=>new Promise((_,reject)=>fail=reject);
+  const pending=h.view.emit('capture-photo');await new Promise(r=>setImmediate(r));await h.view.emit('sign-out');
+  fail(new Error('stale-scanner-error'));await pending;
+  assert.ok(!h.view.renders.some(state=>String(state.error||state.sessionError).includes('stale-scanner-error')));
+});
+
 test('camera scanner failures show a retryable error without an attachment',async t=>{
   const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
   h.view.chooseCaptureMode=async()=>'scan';h.native.scanDocument=async()=>{throw new Error('Scanner indisponível agora');};

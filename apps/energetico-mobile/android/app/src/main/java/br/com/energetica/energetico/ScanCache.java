@@ -2,8 +2,11 @@ package br.com.energetica.energetico;
 
 import java.io.*;
 import java.util.*;
+import java.nio.charset.StandardCharsets;
 
 final class ScanCache {
+    private static final String PROCESS_OWNER=UUID.randomUUID().toString();
+    private static final String MARKER_PREFIX="ENERGETICO_SCAN_V1\n";
     interface PageInput { InputStream open(int index) throws IOException; }
     static final class Page {
         final File file; final String name; final long size;
@@ -15,8 +18,13 @@ final class ScanCache {
     }
     private final File root;
     private final long maxBytes;
+    private final String owner;
     private final Map<String,File> sessions=new HashMap<>();
-    ScanCache(File root, long maxBytes) { this.root=root; this.maxBytes=maxBytes; }
+    ScanCache(File root, long maxBytes) { this(root,maxBytes,PROCESS_OWNER); }
+    ScanCache(File root, long maxBytes, String owner) {
+        File resolved=root.getAbsoluteFile();try{resolved=root.getCanonicalFile();}catch(IOException ignored){}
+        this.root=resolved;this.maxBytes=maxBytes;this.owner=owner;reclaimAbandonedSessions();
+    }
     synchronized Session write(int count, PageInput input) throws IOException {
         if(count<1||count>20)throw new IOException("Escaneie de 1 a 20 páginas por vez.");
         String id=UUID.randomUUID().toString();
@@ -24,6 +32,7 @@ final class ScanCache {
         if(!directory.mkdirs())throw new IOException("Não foi possível preparar o scanner.");
         boolean committed=false;
         try {
+            try(OutputStream marker=new FileOutputStream(new File(directory,".scanner-owner"))){marker.write((MARKER_PREFIX+owner).getBytes(StandardCharsets.UTF_8));}
             List<Page> pages=new ArrayList<>();long total=0;byte[] buffer=new byte[64*1024];
             for(int index=0;index<count;index++) {
                 String name="documento-"+(index+1)+".jpg";File file=new File(directory,name);long size=0;
@@ -47,6 +56,23 @@ final class ScanCache {
     }
     synchronized void releaseAll() {
         for(File directory:sessions.values())deleteOwnedDirectory(directory);sessions.clear();
+    }
+    private void reclaimAbandonedSessions() {
+        File[] entries=root.listFiles();if(entries==null)return;
+        for(File entry:entries)try{
+            if(!entry.isDirectory()||!canonicalUUID(entry.getName())||!entry.getCanonicalFile().equals(entry.getAbsoluteFile()))continue;
+            File marker=new File(entry,".scanner-owner");
+            if(!marker.isFile()||marker.length()>=128||!marker.getCanonicalFile().equals(marker.getAbsoluteFile()))continue;
+            byte[] bytes=new byte[128];int length;
+            try(InputStream input=new FileInputStream(marker)){length=input.read(bytes);}
+            if(length<=0)continue;String value=new String(bytes,0,length,StandardCharsets.UTF_8);
+            if(!value.startsWith(MARKER_PREFIX))continue;
+            String previousOwner=value.substring(MARKER_PREFIX.length());
+            if(canonicalUUID(previousOwner)&&!previousOwner.equals(owner))deleteOwnedDirectory(entry);
+        }catch(IOException ignored){/* Cache reclamation is best effort, never delete unverified paths. */}
+    }
+    private static boolean canonicalUUID(String value) {
+        try{return UUID.fromString(value).toString().equalsIgnoreCase(value);}catch(IllegalArgumentException error){return false;}
     }
     private void deleteOwnedDirectory(File directory) {
         // Only directories constructed internally or retrieved from the owned-token map reach here.
