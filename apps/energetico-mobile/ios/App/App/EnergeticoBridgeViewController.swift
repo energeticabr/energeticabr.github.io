@@ -18,6 +18,7 @@ final class EnergeticoBridgeViewController: CAPBridgeViewController {
         }
 
         bridge?.registerPluginInstance(DocumentPickerPlugin())
+        bridge?.registerPluginInstance(DocumentScannerPlugin())
         bridge?.registerPluginInstance(MicrosoftAuthPlugin())
         bridge?.registerPluginInstance(ShareInboxPlugin())
         bridge?.registerPluginInstance(PowerBiZoomPlugin())

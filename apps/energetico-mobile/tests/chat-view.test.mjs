@@ -27,6 +27,17 @@ function signedInState(overrides = {}) {
   };
 }
 
+test('camera mode chooser survives conversation render and closes on view destruction',async t=>{
+  const dom=new JSDOM('<main id="app"></main>'),root=dom.window.document.querySelector('#app');
+  dom.window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+  const view=createChatView(root);t.after(()=>{view.destroy();dom.window.close();});
+  view.render(signedInState());
+  assert.equal(typeof view.chooseCaptureMode,'function');
+  const choice=view.chooseCaptureMode();view.render(signedInState({draft:'preservado'}));
+  root.ownerDocument.querySelector('[data-camera-mode="scan"]').click();assert.equal(await choice,'scan');
+  const pending=view.chooseCaptureMode();view.destroy();assert.equal(await pending,null);
+});
+
 test('visita em obra prioriza a filial 004 com estrela sem alterar a resposta enviada', t => {
   const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
   const view = createChatView(root), selected = [];

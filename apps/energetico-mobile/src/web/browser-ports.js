@@ -1,4 +1,5 @@
 import { validateAttachment } from "../chat/file-policy.js";
+import { editDocumentScan } from '../ui/document-scanner.js';
 
 function safeFileName(value) {
   return String(value || "arquivo")
@@ -33,6 +34,7 @@ export function createBrowserPorts({
   navigatorRef = globalThis.navigator,
   urlApi = globalThis.URL,
   FileCtor = globalThis.File,
+  editScan = file => editDocumentScan(file, { documentRef, urlApi, FileCtor }),
   selectFiles = options => selectBrowserFiles({ documentRef, ...options }),
   notificationApi = globalThis.Notification,
   setTimeoutImpl = globalThis.setTimeout,
@@ -93,6 +95,14 @@ export function createBrowserPorts({
     return validatedSelection({ accept: "image/*", capture: "environment", multiple: false });
   }
 
+  async function scanDocument() {
+    const [photo] = await capturePhoto();
+    if (!photo) return [];
+    const edited = await editScan(photo);
+    if (edited) validateAttachment(edited);
+    return edited ? [edited] : [];
+  }
+
   async function requestMicrophonePermission() {
     const getUserMedia = navigatorRef?.mediaDevices?.getUserMedia;
     if (typeof getUserMedia !== "function") return true;
@@ -138,6 +148,7 @@ export function createBrowserPorts({
 
   return Object.freeze({
     capturePhoto,
+    scanDocument,
     requestMicrophonePermission,
     pickPhotos,
     pickDocuments,

@@ -81,6 +81,56 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
 
 const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
 
+for (const mode of ['scan','photo',null]) test(`camera mode ${mode} uses only the chosen confirmed files`, async t => {
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  h.view.chooseCaptureMode=async()=>mode;
+  h.native.scanDocument=async()=>[new File(['scan'],'scan.jpg',{type:'image/jpeg'})];
+  h.native.capturePhoto=async()=>[new File(['photo'],'photo.jpg',{type:'image/jpeg'})];
+  await h.view.emit('capture-photo');
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),mode?[["file",`${mode}.jpg`]]:[]);
+});
+
+test('camera selection is single-flight and never uploads after the session ends',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  let choose,opens=0;
+  h.view.chooseCaptureMode=()=>{opens++;return new Promise(r=>choose=r);};
+  h.native.scanDocument=async()=>[new File(['scan'],'scan.jpg',{type:'image/jpeg'})];
+  const first=h.view.emit('capture-photo');const second=h.view.emit('capture-photo');
+  assert.equal(opens,1);await h.controller.stop();choose('scan');await Promise.all([first,second]);
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
+});
+
+for(const phase of ['chooser','scanner']) test(`old ${phase} cannot send a scan after reentry with the same account object`,async t=>{
+  const sameAccount={homeAccountId:'same',name:'Test'};
+  const h=makeHarness({account:sameAccount});t.after(()=>h.controller.stop());await h.controller.start();
+  let complete,finishLogout,scans=0;
+  h.auth.signOut=()=>new Promise(r=>finishLogout=r);h.auth.signIn=async()=>sameAccount;
+  h.view.chooseCaptureMode=()=>phase==='chooser'?new Promise(r=>complete=r):Promise.resolve('scan');
+  h.native.scanDocument=()=>{scans++;return phase==='scanner'?new Promise(r=>complete=r):Promise.resolve([new File(['late'],'late-scan.jpg',{type:'image/jpeg'})]);};
+  const pending=h.view.emit('capture-photo');await new Promise(r=>setImmediate(r));
+  const logout=h.view.emit('sign-out');await h.view.emit('sign-in');
+  complete(phase==='chooser'?'scan':[new File(['late'],'late-scan.jpg',{type:'image/jpeg'})]);await pending;
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
+  if(phase==='chooser')assert.equal(scans,0);
+  finishLogout();await logout;
+});
+
+test('old scanner rejection cannot show an error after sign-out',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();let fail;
+  h.view.chooseCaptureMode=async()=>'scan';h.native.scanDocument=()=>new Promise((_,reject)=>fail=reject);
+  const pending=h.view.emit('capture-photo');await new Promise(r=>setImmediate(r));await h.view.emit('sign-out');
+  fail(new Error('stale-scanner-error'));await pending;
+  assert.ok(!h.view.renders.some(state=>String(state.error||state.sessionError).includes('stale-scanner-error')));
+});
+
+test('camera scanner failures show a retryable error without an attachment',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  h.view.chooseCaptureMode=async()=>'scan';h.native.scanDocument=async()=>{throw new Error('Scanner indisponível agora');};
+  assert.equal(await h.view.emit('capture-photo'),false);
+  assert.ok(h.view.renders.some(state=>String(state.error||state.sessionError).includes('Scanner indisponível agora')));
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
+});
+
 function provisionPdfResult(category = 'A VENCER') {
   return { status: 'processed', results: [{ status: 'pending_provisions_report', category, count: 1 }],
     messages: [{ id: 'generated-report', type: 'document', mimeType: 'application/pdf',

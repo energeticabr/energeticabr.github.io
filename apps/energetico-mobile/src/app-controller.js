@@ -9990,24 +9990,41 @@ export function createAppController({
     return uploadQueue;
   }
 
+  let cameraSelectionBusy = false;
+  async function capturePhotoOrScan() {
+    if (cameraSelectionBusy || stopped || !account) return false;
+    cameraSelectionBusy = true;
+    const captureAccount = account;
+    const captureRevision = sessionRevision;
+    try {
+      return await queueSelectedFiles(async () => {
+        const mode = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
+        if (stopped || account !== captureAccount || sessionRevision !== captureRevision || !['photo','scan'].includes(mode)) return [];
+        return mode === 'scan' ? native.scanDocument() : native.capturePhoto();
+      });
+    } finally { cameraSelectionBusy = false; }
+  }
+
   async function queueSelectedFiles(selector, options = {}) {
     if (recoveryAccountId && !recoveryVerified) return false;
     cancelAttachmentReminder();
     cancelCompletionMenu();
     const selectionAccount = account;
+    const selectionRevision = sessionRevision;
+    const currentSelection = () => !stopped && account && account === selectionAccount && sessionRevision === selectionRevision;
     sessionError = null;
     render();
     try {
       const knownIds = new Set(store.getState().pendingFiles.map(item => item.id));
       const files = await selector();
-      if (stopped || !account || account !== selectionAccount) return false;
+      if (!currentSelection()) return false;
       store.queueFiles(files, options);
       const newIds = store.getState().pendingFiles
         .filter(item => !knownIds.has(item.id))
         .map(item => item.id);
       return processFiles(newIds);
     } catch (error) {
-      setSessionError(error, "Não foi possível adicionar o anexo.");
+      if (currentSelection()) setSessionError(error, "Não foi possível adicionar o anexo.");
       return false;
     }
   }
@@ -11049,7 +11066,7 @@ export function createAppController({
       }
       return sent;
     });
-    bind("capture-photo", () => queueSelectedFiles(() => native.capturePhoto()));
+    bind("capture-photo", capturePhotoOrScan);
     bind("pick-photos", () => queueSelectedFiles(() => native.pickPhotos()));
     bind("pick-document-files", () => queueSelectedFiles(() => native.pickDocuments()));
     bind("files-dropped", command => queueSelectedFiles(() => command.files));

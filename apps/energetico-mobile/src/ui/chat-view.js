@@ -1,4 +1,5 @@
 import { loadingIndicatorMarkup } from "./loading-indicator.js";
+import { createCameraChooser } from './document-scanner.js';
 import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
 import { postingCompletion } from "../chat/posting-completion.js";
 import { postingCompletionMarkup } from "./posting-completion.js";
@@ -2832,6 +2833,7 @@ export function commandFromTarget(target) {
 export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, ensureMicrophonePermission, transcribeAudio, demo = false } = {}) {
   const signatureTrace = observeSignatureTrace(root);
   if (!root?.addEventListener) throw new TypeError("A tela do Energético requer um elemento raiz.");
+  const cameraChooser = createCameraChooser(root.ownerDocument);
   const handlers = new Map();
   let messageKey = "";
   let lastState = null;
@@ -5749,6 +5751,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
 
   return Object.freeze({
     render,
+    chooseCaptureMode: () => cameraChooser.choose(),
     openPowerBiDashboard,
     openRhidAttendanceToday,
     setRhidAttendanceReportStatus,
@@ -5763,6 +5766,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       return () => handlers.get(type)?.delete(handler);
     },
     destroy() {
+      cameraChooser.destroy();
       signatureTrace.destroy();
       root.removeEventListener("click", click);
       root.removeEventListener("change", change);
