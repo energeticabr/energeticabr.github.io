@@ -28,6 +28,61 @@ function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
 const draft={launchId:'10',sheetId:'21',paymentType:'SALÁRIO'};
 const operation={operationId:'payment-test-1'};
 
+function enableTaxes(f) {
+  const get=f.repository.getColumns;
+  f.repository.getColumns=async(...args)=>(await get(...args)).map(c=>c.name==='TIPOPGTO'?{...c,choice:{choices:['SALÁRIO','INSS','FGTS']}}:c);
+}
+
+test('tax duplicate lookup must fail closed on a malformed payroll page before POST',async()=>{
+  const f=fixture();enableTaxes(f);const pages=f.repository.getItemsPage;
+  f.repository.getItemsPage=async(...args)=>args[1]==='FOLHAPGTO'?{hasMore:false}:pages(...args);
+  await assert.rejects(f.data.save({...draft,paymentType:'INSS',sheetId:'20',competence:'2026-09'},operation),/consulta|página|confirm/i);
+  assert.equal(f.writes.length,0);
+});
+
+test('existing tax payment with another Title is reused, never copied into a different sheet',async()=>{
+  const f=fixture();enableTaxes(f);
+  f.rows.FOLHAPGTO.push({id:'88',fields:{Title:'legacy-tax',TIPOPGTO:'FGTS',IDLANCAMENTO:'10',IDFOLHA:'20',FORNECEDOR:'CLEITON',QTD:'3',VALORUNITARIO:'168.8',DATA:'2026-10-04'}});
+  const tax={...draft,paymentType:'FGTS',sheetId:'20',competence:'2026-09'};
+  assert.equal((await f.data.save(tax,operation)).id,'88');
+  await assert.rejects(f.data.save({...tax,sheetId:'23',competence:'2026-08'},{operationId:'move-tax'}),/confirm/i);
+  assert.equal(f.writes.length,0);
+});
+
+test('tax options include historical sheets without expanding the ordinary month window',async()=>{
+  const f=fixture();enableTaxes(f);
+  const options=await f.data.loadOptions();
+  assert.equal(options.sheets.some(s=>s.id==='23'),false);
+  assert.equal(options.allSheets.some(s=>s.id==='23'),true);
+});
+
+test('INSS paid in October links the confirmed September competence, not payment month',async()=>{
+  const f=fixture();enableTaxes(f);
+  f.rows.LANCAMENTOS[0].fields['DATA PGTO EFETUADO']='2026-10-20';
+  const saved=await f.data.save({...draft,paymentType:'INSS',sheetId:'20',competence:'2026-09'},operation);
+  assert.equal(saved.fields.IDFOLHA,20);
+  assert.equal(saved.fields.DATA,'2026-10-04');
+  assert.equal(f.writes.length,1);
+});
+
+test('explicit tax competence accepts historical sheets and rejects wrong month or supplier with zero writes',async()=>{
+  const f=fixture();enableTaxes(f);
+  for(const patch of [{competence:''},{sheetId:'21'},{sheetId:'24'}])
+    await assert.rejects(f.data.save({...draft,paymentType:'FGTS',sheetId:'20',competence:'2026-09',...patch},operation),/competência|IDFOLHA|fornecedor/i);
+  assert.equal(f.writes.length,0);
+  const saved=await f.data.save({...draft,paymentType:'FGTS',sheetId:'23',competence:'2026-08'},operation);
+  assert.equal(saved.fields.IDFOLHA,23);
+});
+
+test('reopening a tax source already linked must not duplicate payroll under a new operation id',async()=>{
+  const f=fixture();enableTaxes(f);
+  const selected={...draft,paymentType:'FGTS',sheetId:'20',competence:'2026-09'};
+  const first=await f.data.save(selected,operation);
+  const reopened=createPayrollPaymentData({repository:f.repository,now:()=>new Date('2027-03-01T12:00:00Z')});
+  assert.equal((await reopened.save(selected,{operationId:'reopened-tax'})).id,first.id);
+  assert.equal(f.writes.length,1);
+});
+
 test('launch options expose profession, exact unit times quantity plus freight and paid date without writes',async()=>{
   const f=fixture();
   f.rows.FORNECEDORES[0].fields['PROFISSÃO']='PEDREIRO';

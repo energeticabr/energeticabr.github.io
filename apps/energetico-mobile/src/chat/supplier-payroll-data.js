@@ -6,6 +6,7 @@ import {
   validateAttachment,
 } from "../../../../portal/data/attachments.js";
 import { payrollKey as key, validatePayrollDraft } from "./supplier-payroll.js";
+import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
 const SITE = "personal";
 const scalar = (value) =>
   value && typeof value === "object"
@@ -143,7 +144,9 @@ export function createSupplierPayrollData({
         },
       );
       assertSession();
-      items.push(...(response.items || []));
+      if (!Array.isArray(response?.items) || typeof response.hasMore !== 'boolean')
+        throw new Error('A consulta da folha não pôde ser confirmada.');
+      items.push(...response.items);
       if (!response.hasMore) return items;
       if (!response.nextLink || seen.has(response.nextLink))
         throw new Error("A consulta da folha não pôde ser concluída.");
@@ -204,7 +207,12 @@ export function createSupplierPayrollData({
     (await source("IDFOLHA")).filter(
       (s) => key(s.supplier) === key(supplier.label),
     );
-  async function loadSheets(supplier) {
+  async function loadSheets(supplier, {competence} = {}) {
+    if (competence !== undefined) {
+      const month = payrollCompetenceMonth(competence);
+      if (!month) throw new Error('Informe uma competência válida.');
+      return (await registeredSheets(supplier)).filter(s => payrollCompetenceMonth(s.label) === month);
+    }
     const current = currentMonth(now());
     const order = [current, shiftMonth(current, 1), shiftMonth(current, -1)];
     return (await registeredSheets(supplier))
@@ -241,7 +249,7 @@ export function createSupplierPayrollData({
         ? value === true || ["SIM", "TRUE", "1"].includes(key(value))
         : c.dateTime && /^\d{4}-\d{2}-\d{2}$/.test(String(value))
           ? `${value}T12:00:00Z`
-          : value;
+          : c.text ? String(value) : value;
     }
     return result;
   }
@@ -263,11 +271,14 @@ export function createSupplierPayrollData({
       );
     return matches[0];
   }
-  async function ensure(descriptor, fields, tokenLabel, token) {
+  async function ensure(descriptor, fields, tokenLabel, token, checkpoint) {
     const c = column(descriptor.columns, [tokenLabel]);
     let item = await findToken(descriptor, c, token);
     if (!item) {
+      if (checkpoint?.attempted?.[tokenLabel])
+        throw new Error('O envio anterior ainda não foi confirmado. Confira a galeria antes de iniciar outro cadastro.');
       assertSession();
+      if (checkpoint) (checkpoint.attempted ??= {})[tokenLabel] = true;
       item = await repository.createItem(SITE, descriptor.id, {
         ...fields,
         [c.name]: token,
@@ -346,14 +357,17 @@ export function createSupplierPayrollData({
         throw new Error(
           "O fornecedor ou sua filial foi alterado; revise o cadastro.",
         );
-      const [products, accounts, stages, sheets] = await Promise.all([
+      const hasNormal = draft.lines.some(line => !payrollTaxType(line.payrollType));
+      const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
+      const [products, accounts, stages, sheets, taxSheets] = await Promise.all([
         loadProducts(supplier),
         loadAccounts(),
         loadStages(supplier),
         // Once posting starts, keep its validated sheet across month rollover.
-        progress.fingerprint
+        !hasNormal ? [] : progress.fingerprint
           ? registeredSheets(supplier)
           : loadSheets(supplier),
+        hasTax ? loadSheets(supplier, {competence:draft.taxCompetence}) : [],
       ]);
       const product = products.find((p) => p.id === draft.product.id),
         stage = stages.find((s) => s.id === draft.stage.id);
@@ -361,16 +375,20 @@ export function createSupplierPayrollData({
         throw new Error("O produto selecionado não está ativo.");
       if (!stage || key(stage.label) !== key(draft.stage.label))
         throw new Error("A etapa não pertence à filial do fornecedor.");
-      const sheet = sheets.find((s) => s.id === draft.sheet.id);
-      if (!sheet || key(sheet.label) !== key(draft.sheet.label))
+      const normalSheet = hasNormal ? sheets.find((s) => s.id === draft.sheet.id) : null;
+      if (hasNormal && (!normalSheet || key(normalSheet.label) !== key(draft.sheet.label)))
         throw new Error("Selecione um IDFOLHA válido desse fornecedor.");
+      const taxSheet = hasTax ? taxSheets.find(s => s.id === draft.taxSheet.id) : null;
+      if (hasTax && (taxSheets.length !== 1 || !taxSheet || payrollCompetenceMonth(taxSheet.label) !== payrollCompetenceMonth(draft.taxCompetence)))
+        throw new Error('Selecione um IDFOLHA único desse fornecedor para a competência de INSS/FGTS.');
+      const sheet = normalSheet || taxSheet;
       const payrollDescriptor = await describe("FOLHAPGTO");
       writableColumn(payrollDescriptor, "Title");
       writableColumn(payrollDescriptor, "IDLANCAMENTO");
       for (const line of draft.lines)
         fieldsFor(
           payrollDescriptor,
-          payrollValues({ ...draft, supplier }, sheet, line),
+          payrollValues({ ...draft, supplier }, payrollTaxType(line.payrollType) ? taxSheet : sheet, line),
         );
       const descriptor = await describe("LANCAMENTOS");
       const values = draft.lines.map((line) => {
@@ -421,6 +439,7 @@ export function createSupplierPayrollData({
           values[index],
           "__PowerAppsId__",
           `APP-folha-${progress.operationId}-${line.rubric}`,
+          saved,
         );
         saved.id = id;
         if (line.files.length) {
@@ -446,7 +465,7 @@ export function createSupplierPayrollData({
         }
         lines.push({ ...line, id });
       }
-      const result = { ...draft, supplier, product, stage, sheet, lines };
+      const result = { ...draft, supplier, product, stage, sheet, ...(hasTax ? {taxSheet} : {}), lines };
       const linked = await linkPayroll(result, sheet.id, progress);
       return { ...result, sheet: linked.sheet };
     } finally {
@@ -465,15 +484,20 @@ export function createSupplierPayrollData({
         throw new Error("Os lançamentos da folha não foram confirmados.");
       if (String(sheetId) !== result.sheet?.id)
         throw new Error("O IDFOLHA deve ser o selecionado antes da postagem.");
-      const sheet = (await registeredSheets(result.supplier)).find(
+      const sheets = await registeredSheets(result.supplier);
+      const sheet = sheets.find(
         (s) =>
           s.id === String(sheetId) && key(s.label) === key(result.sheet.label),
       );
       if (!sheet) throw new Error("Escolha uma folha válida desse fornecedor.");
+      const taxLines = result.lines.filter(line => payrollTaxType(line.payrollType));
+      const taxSheets = sheets.filter(s => payrollCompetenceMonth(s.label) === payrollCompetenceMonth(result.taxCompetence));
+      const taxSheet = taxSheets.find(s => s.id === result.taxSheet?.id);
+      if (taxLines.length && (taxSheets.length !== 1 || !taxSheet)) throw new Error('O IDFOLHA da competência de INSS/FGTS foi alterado; revise a seleção.');
       const descriptor = await describe("FOLHAPGTO");
       const payloads = result.lines.map((line) =>
         fieldsFor(descriptor, {
-          ...payrollValues(result, sheet, line),
+          ...payrollValues(result, payrollTaxType(line.payrollType) ? taxSheet : sheet, line),
           IDLANCAMENTO: Number(line.id),
         }),
       );
@@ -487,6 +511,7 @@ export function createSupplierPayrollData({
           payloads[i],
           "Title",
           `APP-folha-${progress.operationId}-${line.id}`,
+          progress.lines[line.rubric],
         );
       }
       return { sheet, lines: result.lines };

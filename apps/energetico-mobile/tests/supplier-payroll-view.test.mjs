@@ -208,7 +208,7 @@ async function fillToSheet(h) {
   await h.click('[data-payroll-option="2"]');
   assert.equal(
     h.dom.window.document.querySelectorAll("[data-payroll-rubric]").length,
-    7,
+    9,
   );
   h.input('[name="salary-quantity"]', "2");
   h.input('[name="salary-value"]', "100,50");

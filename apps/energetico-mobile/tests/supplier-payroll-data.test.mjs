@@ -363,8 +363,8 @@ test("posta uma linha por rubrica com os campos pedidos e vincula tipos existent
     FORNECEDOR: "EDGAR",
     PRODUTO: "PEDREIRO",
     ETAPA: "FUNDAÇÃO",
-    QUANTIDADE: 2,
-    "VALOR UNITÁRIO": 100.5,
+    QUANTIDADE: "2",
+    "VALOR UNITÁRIO": "100.5",
     CONTA: "PIX",
   }))
     assert.equal(fields[key], v);
@@ -374,8 +374,8 @@ test("posta uma linha por rubrica com os campos pedidos e vincula tipos existent
   assert.equal(f.rows.FOLHAPGTO.length, 2);
   const linked = f.decode("FOLHAPGTO", f.rows.FOLHAPGTO[1].fields);
   assert.equal(linked.TIPOPGTO, "VALE REFEIÇÃO");
-  assert.equal(linked.IDFOLHA, 9);
-  assert.equal(linked.IDLANCAMENTO, 101);
+  assert.equal(linked.IDFOLHA, "9");
+  assert.equal(linked.IDLANCAMENTO, "101");
 });
 test("retenta gravação com resposta perdida sem duplicar e não aceita editar após gravação parcial", async () => {
   const f = fixture();
@@ -615,4 +615,58 @@ test("retomada após virada do mês preserva IDFOLHA validado sem aceitar nova f
     /IDFOLHA/,
   );
   assert.equal(f.writes.length, writes);
+});
+test('exact tax competence loads historical sheets outside the normal window', async()=>{
+  const f=fixture();
+  assert.deepEqual((await f.data.loadSheets(f.draft.supplier,{competence:'2026-08'})).map(s=>s.id),['10']);
+});
+
+test('uncertain tax launch POST without a visible row is never blindly repeated',async()=>{
+  const f=fixture(),taxSheet=taxSheetFixture(f),progress={operationId:'unknown-tax-post'};
+  const draft={...f.draft,sheet:null,taxCompetence:'2026-09',taxSheet,lines:[{...f.draft.lines[0],rubric:'inss'}]};
+  let attempts=0;f.repository.createItem=async()=>{attempts++;throw new Error('response lost');};
+  await assert.rejects(f.data.post(draft,progress),/response lost/);
+  await assert.rejects(f.data.post(draft,progress),/confirm|incert/i);
+  assert.equal(attempts,1);
+});
+
+test('two sheets for the same tax competence fail before creating launches',async()=>{
+  const f=fixture(),taxSheet=taxSheetFixture(f);
+  f.rows.IDFOLHA.push({...f.rows.IDFOLHA.at(-1),id:'13'});
+  await assert.rejects(f.data.post({...f.draft,taxCompetence:'2026-09',taxSheet,lines:[{...f.draft.lines[0],rubric:'inss'}]}, {operationId:'ambiguous-tax'}),/único|competência/i);
+  assert.equal(f.writes.length,0);
+});
+
+function taxSheetFixture(f) {
+  const month=f.columns.IDFOLHA.find(c=>c.displayName==='MESREFERENCIA').name;
+  f.rows.IDFOLHA.push({id:'12',fields:{...f.rows.IDFOLHA[0].fields,[month]:'09/2026'}});
+  return {id:'12',label:'09/2026'};
+}
+
+test('mixed payroll keeps salary in October and posts tax only to the September sheet',async()=>{
+  const f=fixture(),taxSheet=taxSheetFixture(f);
+  const result=await f.data.post({...f.draft,taxCompetence:'2026-09',taxSheet,
+    lines:[f.draft.lines[0],{...f.draft.lines[0],rubric:'inss',quantity:'1',unitValue:'10'}]}, {operationId:'mixed-tax-test'});
+  const payments=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields));
+  assert.deepEqual(payments.map(p=>[p.TIPOPGTO,Number(p.IDFOLHA)]),[['SALÁRIO',9],['INSS',12]]);
+  assert.equal(result.taxSheet.id,'12');
+  assert.equal(result.sheet.id,'9');
+});
+
+test('tax-only payroll posts to historical competence without requiring a normal sheet',async()=>{
+  const f=fixture();
+  await f.data.post({...f.draft,sheet:null,taxCompetence:'2026-08',taxSheet:{id:'10',label:'08/2026'},
+    lines:[{...f.draft.lines[0],rubric:'fgts'}]}, {operationId:'tax-only-test'});
+  const payment=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields))[0];
+  assert.equal(Number(payment.IDFOLHA),10);
+  assert.equal(payment.TIPOPGTO,'FGTS');
+});
+
+test('tax sheets from another supplier or wrong competence fail before any financial write',async()=>{
+  for(const taxSheet of [{id:'11',label:'10/2026'},{id:'9',label:'09/2026'}]) {
+    const f=fixture();
+    await assert.rejects(f.data.post({...f.draft,taxCompetence:'2026-09',taxSheet,
+      lines:[{...f.draft.lines[0],rubric:'inss'}]}, {operationId:'bad-tax-sheet'}), /IDFOLHA|competência/i);
+    assert.equal(f.writes.length,0);
+  }
 });
