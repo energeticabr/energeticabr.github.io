@@ -1,0 +1,39 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scanner — documento sintético</title><link rel="stylesheet" href="../../src/styles.css"></head><body>
+<button id="start">📷 Tirar foto / Escanear</button>
+<script type="module">
+import * as scanner from '../../src/ui/document-scanner.js';
+let networkWrites=0;const realFetch=window.fetch;
+window.fetch=(input,options)=>{if(options?.method&&!['GET','HEAD'].includes(options.method))networkWrites++;return realFetch(input,options);};
+const wait=async selector=>{for(let i=0;i<200;i++){const found=document.querySelector(selector);if(found)return found;await new Promise(r=>setTimeout(r,10));}throw new Error('Missing '+selector);};
+async function run(){
+  const canvas=document.createElement('canvas');canvas.width=600;canvas.height=800;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#173b53';ctx.fillRect(0,0,600,800);
+  ctx.fillStyle='#fff';ctx.fillRect(100,80,400,640);
+  ctx.fillStyle='#123849';ctx.font='bold 20px sans-serif';ctx.fillText('DOCUMENTO DE TESTE',125,130);
+  ctx.font='15px sans-serif';ctx.fillText('Dados sintéticos — sem envio',125,170);
+  for(let i=0;i<10;i++){ctx.fillRect(125,210+i*35,340,2);}
+  const file=new File([await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.95))],'sintetico.jpg',{type:'image/jpeg'});
+  const chooser=scanner.createCameraChooser(document);const choice=chooser.choose();
+  if(new URLSearchParams(location.search).get('shot')==='chooser')return;
+  document.querySelector('[data-camera-mode="scan"]').click();await choice;chooser.destroy();
+  const pending=scanner.editDocumentScan(file);const corner=await wait('[data-scan-corner="0"]');
+  if(new URLSearchParams(location.search).get('shot')==='edit')return;
+  const before=corner.style.left;corner.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+  const adjusted=corner.style.left!==before;
+  const dialog=document.querySelector('.document-scanner--editor'),rect=dialog.getBoundingClientRect();
+  const fits=rect.x>=0&&rect.y>=0&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1&&dialog.scrollWidth<=dialog.clientWidth+1;
+  document.querySelector('[data-scan-action="preview"]').click();await wait('[data-scan-action="back"]');
+  document.querySelector('[data-scan-action="back"]').click();await wait('[data-scan-corner="0"]');
+  const returned=!!document.querySelector('[data-scan-action="preview"]');
+  document.querySelector('[data-scan-action="preview"]').click();await wait('[data-scan-action="confirm"]');
+  if(new URLSearchParams(location.search).get('shot')==='preview')return;
+  document.querySelector('[data-scan-action="confirm"]').click();const output=await pending;
+  const image=await createImageBitmap(output);
+  const result={type:output.type,size:output.size,width:image.width,height:image.height,adjusted,fits,returned};image.close();
+  const cancelled=scanner.editDocumentScan(file);await wait('[data-scan-action="cancel"]');
+  document.querySelector('[data-scan-action="cancel"]').click();result.cancelled=await cancelled===null;
+  result.networkWrites=networkWrites;document.documentElement.dataset.layout=JSON.stringify(result);
+}
+document.querySelector('#start').onclick=()=>run().catch(e=>document.documentElement.dataset.layout=JSON.stringify({error:String(e.stack||e)}));
+run().catch(e=>document.documentElement.dataset.layout=JSON.stringify({error:String(e.stack||e)}));
+</script></body></html>

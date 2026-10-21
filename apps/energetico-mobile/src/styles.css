@@ -5,6 +5,7 @@
 @import './ui/rhid-monthly-report.css';
 @import './web/app-zoom-guard.css';
 @import './ui/native-date-input.css';
+@import './ui/document-scanner.css';
 
 :root {
   color: #102f3c;
