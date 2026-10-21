@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Energetico — validação de edição de documentos</title>
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+  <link rel="stylesheet" href="../../apps/energetico-mobile/src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <main style="padding:24px;max-width:900px;margin:auto">
+    <h1>Galeria de documentos</h1>
+    <p>Validação local — nenhum dado é enviado ao SharePoint.</p>
+    <section id="gallery"></section>
+    <output id="requests" aria-live="polite"></output>
+  </main>
+  <script type="module">
+    import { createGalleryRecordActions } from '../../apps/energetico-mobile/src/ui/gallery-record-actions.js';
+    import ENTITIES from '../../portal/catalog/entities.js';
+    import { resolvePowerAppsUiContract } from '../../portal/catalog/powerapps-ui-contract.js';
+
+    const entity = ENTITIES.find(entity => entity.id === 'documentos-operacionais');
+    const names = ['FILIAL','TIPOHOMOLOGACAO','PESSOARELACIONADA','ETAPA','TIPODOCUMENTO','TIPOMARCO','STATUS','IMOVEL'];
+    const contract = resolvePowerAppsUiContract(entity, names.map(name => ({ name, label:name, control:'text', editable:true })), { mode:'edit' });
+    const values = {
+      FILIAL:'004 - EDIFÍCIO XAVANTE', TIPOHOMOLOGACAO:'HOMOLOGAÇÃO MÃO DE OBRA',
+      PESSOARELACIONADA:'PESSOA DE TESTE', ETAPA:'', TIPODOCUMENTO:'POLÍTICA VALE ALIMENTAÇÃO',
+      TIPOMARCO:'', STATUS:'SUBMETIDO', IMOVEL:'TODOS',
+    };
+    const options = {
+      FILIAL:['004 - EDIFÍCIO XAVANTE','000 - ESCRITÓRIO CENTRAL'],
+      PESSOARELACIONADA:['PESSOA DE TESTE','OUTRA PESSOA'], ETAPA:['FUNDAÇÃO','ALVENARIA'],
+      TIPODOCUMENTO:['POLÍTICA VALE ALIMENTAÇÃO','CONTRATO DE TRABALHO','CERTIDÃO ATUALIZADA','RECIBO'],
+      TIPOMARCO:['CONTRATO','ENTREGA'], IMOVEL:['TODOS','UNIDADE 101'],
+    };
+    const normalize = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const actions = createGalleryRecordActions({
+      document, host:document.querySelector('#gallery'), actions:['edit'],
+      loadEditor:async id => ({entity,contract,columns:contract.formColumns,item:{id,fields:{...values}},
+        powerAppsOptionSearch:async(column,source,term,dependencies) => {
+          document.querySelector('#requests').textContent = `${column.name}: ${term || 'todas as opções'} · ${JSON.stringify(dependencies)}`;
+          await new Promise(resolve => setTimeout(resolve,200));
+          return (options[column.name] || []).filter(value=>normalize(value).includes(normalize(term)))
+            .map(value=>({value,label:value}));
+        },
+      }),
+      saveEditor:async (_context,fields) => {
+        document.querySelector('#requests').textContent = `Prévia local: ${JSON.stringify(fields)}`;
+      },
+    });
+    document.querySelector('#gallery').append(actions.render({id:'42',fields:values}));
+  </script>
+</body>
+</html>

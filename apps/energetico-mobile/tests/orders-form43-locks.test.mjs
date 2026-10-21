@@ -208,7 +208,7 @@ test('a rejected STATUS save restores the effective native lock after the form r
   const form = dom.window.document.querySelector('[data-dynamic-form]');
   const status = form.querySelector('[name="STATUS"]');
   const selector = status.closest('label').querySelector('input[role="combobox"]');
-  assert.equal(selector.readOnly, true); selector.click();
+  assert.equal(selector.readOnly, false); selector.click();
   [...status.closest('label').querySelectorAll('[role=option]')].find(option=>option.textContent==='APROVADO').click();
   assert.equal(status.value, 'APROVADO');
   f.setActive([]);

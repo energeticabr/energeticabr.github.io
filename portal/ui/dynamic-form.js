@@ -212,7 +212,8 @@ function displayChoiceValue(value, column) {
 
 function serializeChoiceValue(value, column) {
   const transform = column?.powerApps?.valueTransform;
-  if (transform?.kind !== "scale" || value === "" || value === null || value === undefined) return value;
+  if (transform?.kind !== "scale") return value;
+  if (value === "" || value === null || value === undefined) return null;
   const number = Number(value);
   const divisor = Number(transform.submitDivisor);
   return Number.isFinite(number) && Number.isFinite(divisor) && divisor !== 0 ? number / divisor : value;
@@ -472,7 +473,6 @@ export function createRelationshipSearchController(options = {}) {
   const minLength = Math.max(1, Math.min(10, Number(options.minLength ?? RELATIONSHIP_MIN_LENGTH) || RELATIONSHIP_MIN_LENGTH));
   const allowEmpty = options.allowEmpty === true;
   const limit = Math.max(1, Math.min(RELATIONSHIP_LIMIT, Number(options.limit ?? RELATIONSHIP_LIMIT) || RELATIONSHIP_LIMIT));
-  const resultLimit = options.browse === true ? SELECT_ONLY_OPTION_LIMIT : limit;
   let timer;
   let activeController;
   let generation = 0;
@@ -488,10 +488,12 @@ export function createRelationshipSearchController(options = {}) {
     activeController = undefined;
   };
 
-  function input(value) {
+  function input(value, request = {}) {
     if (disposed) return;
     const term = String(value || "").trim();
     const token = ++generation;
+    const browse = request.browse ?? options.browse;
+    const resultLimit = browse === true ? SELECT_ONLY_OPTION_LIMIT : limit;
     cancel("Pesquisa substituída.");
     if (!term && !allowEmpty) {
       emit({ status: "idle", message: "" });
@@ -508,7 +510,7 @@ export function createRelationshipSearchController(options = {}) {
       const controller = new AbortController();
       activeController = controller;
       try {
-        const results = validatedRelationshipOptions(await options.search(term, { signal: controller.signal, limit, ...(options.browse ? {browse:true} : {}) }), resultLimit);
+        const results = validatedRelationshipOptions(await options.search(term, { signal: controller.signal, limit, ...(browse ? {browse:true} : {}) }), resultLimit);
         if (disposed || token !== generation || controller.signal.aborted) return;
         activeController = undefined;
         emit({ status: results.length ? "ready" : "empty", options: results, message: results.length ? `${results.length} opção(ões) encontrada(s).` : "Nenhuma opção encontrada." });
@@ -568,7 +570,6 @@ export function createPowerAppsOptionSearchController(options = {}) {
   const minLength = Math.max(1, Math.min(10, Number(options.minLength ?? POWERAPPS_OPTION_MIN_LENGTH) || POWERAPPS_OPTION_MIN_LENGTH));
   const allowEmpty = options.allowEmpty === true;
   const limit = Math.max(1, Math.min(POWERAPPS_OPTION_LIMIT, Number(options.limit ?? POWERAPPS_OPTION_LIMIT) || POWERAPPS_OPTION_LIMIT));
-  const resultLimit = options.browse === true ? SELECT_ONLY_OPTION_LIMIT : limit;
   let timer;
   let activeController;
   let generation = 0;
@@ -584,10 +585,12 @@ export function createPowerAppsOptionSearchController(options = {}) {
     activeController = undefined;
   };
 
-  function input(value) {
+  function input(value, request = {}) {
     if (disposed) return;
     const term = String(value || "").trim();
     const token = ++generation;
+    const browse = request.browse ?? options.browse;
+    const resultLimit = browse === true ? SELECT_ONLY_OPTION_LIMIT : limit;
     cancel("Pesquisa substituída.");
     if (!term && !allowEmpty) {
       emit({ status: "idle", message: "" });
@@ -604,7 +607,7 @@ export function createPowerAppsOptionSearchController(options = {}) {
       const controller = new AbortController();
       activeController = controller;
       try {
-        const results = validatedPowerAppsOptions(await options.search(term, { signal: controller.signal, limit, ...(options.browse ? {browse:true} : {}) }), resultLimit);
+        const results = validatedPowerAppsOptions(await options.search(term, { signal: controller.signal, limit, ...(browse ? {browse:true} : {}) }), resultLimit);
         if (disposed || token !== generation || controller.signal.aborted) return;
         activeController = undefined;
         emit({
@@ -736,7 +739,7 @@ export function formMarkup({ entity, columns = [], mode = "create", values = {},
     <p class="dynamic-form-errors" data-form-errors role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
     ${conflictMarkup(conflict, visibleColumns, submitting)}
     <div class="dynamic-form-grid">${provisaoPaymentStageMarkup(entity, mode, submitting)}${visibleColumns.map(column => column.control === "lookup" || column.control === "person"
-      ? relationshipControlMarkup(column, displayValues, submitting, relationshipLabels, mode === 'edit')
+      ? relationshipControlMarkup(column, displayValues, submitting, relationshipLabels, column.readOnly === true)
       : controlMarkup(
         column,
         displayValues[column.name],
@@ -867,7 +870,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
     const column = descriptors.get(String(native?.name || ""));
     if (!native || !mount || !column || column.control !== "select") continue;
 
-    const selectionOnly = options.mode === 'edit' && column.filterableInEdit !== true;
+    const selectionOnly = column.readOnly === true;
     const remoteSource = powerAppsRemoteSource(column);
     const multiple = column.allowMultipleValues === true;
     const retrySelection = retryChoiceOptions(options.retryState, column.name, multiple);
@@ -917,6 +920,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
       id: `field-${column.name}`,
       label: column.label,
       selectionOnly,
+      clearable: options.mode === "edit" && !multiple && !column.readOnly,
       options: choices,
       value: multiple ? undefined : selectedOption?.value,
       onChange(value, option) {
@@ -965,7 +969,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
     native.required = false;
     control.input.required = column.required === true && !multiple;
     if (column.required) control.input.setAttribute("aria-required", "true");
-    control.input.disabled = native.disabled === true;
+    control.input.disabled = native.disabled === true || column.readOnly === true;
     if (remoteSource) {
       const status = field?.querySelector?.("[data-powerapps-option-status]");
       if (typeof options.powerAppsOptionSearch !== "function") {
@@ -973,9 +977,10 @@ function bindChoiceSelectors(form, columns, options = {}) {
         native.disabled = true;
         if (status) status.textContent = "A origem Power Apps não está disponível para seleção segura.";
       } else {
+        let sourceChoices = choices;
         const mergedOptions = remoteOptions => {
           const retained = multiple ? selectedOptions : [selectedOption].filter(Boolean);
-          const byValue = new Map(choices.map(option => [option.value, option]));
+          const byValue = new Map(sourceChoices.map(option => [option.value, option]));
           for (const option of retained) byValue.set(option.value, option);
           for (const option of remoteOptions || []) byValue.set(String(option.value), Object.freeze({
             ...option,
@@ -985,7 +990,6 @@ function bindChoiceSelectors(form, columns, options = {}) {
           return [...byValue.values()];
         };
         const searchController = createPowerAppsOptionSearchController({
-          browse: selectionOnly,
           debounceMs: options.powerAppsOptionDebounceMs,
           minLength: POWERAPPS_OPTION_MIN_LENGTH,
           allowEmpty: true,
@@ -1002,20 +1006,23 @@ function bindChoiceSelectors(form, columns, options = {}) {
           onState(state) {
             if (status) status.textContent = state.message || "";
             if (state.status !== "ready" && state.status !== "empty" && state.status !== "error") return;
-            const query = control.input.value;
             const nextOptions = mergedOptions(state.options);
             synchronizeNativeChoiceOptions(native, nextOptions);
             refreshing = true;
-            control.setOptions(nextOptions);
-            control.search(query);
+            control.setOptions(nextOptions, { preserveInput: true, matchingValues: state.options.map(option => String(option.value)) });
             refreshing = false;
           },
         });
         const onRemoteInput = event => {
-          if (!refreshing && !selectionOnly) searchController.input(event?.target?.value);
+          if (!refreshing && !selectionOnly) {
+            const term = event?.target?.value;
+            searchController.input(term, { browse: options.mode === "edit" && !String(term || "").trim() });
+          }
         };
         const onRemoteOpen = () => {
-          if (!refreshing) searchController.input(selectionOnly ? '' : control.input.value);
+          if (refreshing) return;
+          const term = selectionOnly || control.input.value === selectedOption?.label ? "" : control.input.value;
+          searchController.input(term, { browse: options.mode === "edit" && !term });
         };
         control.input.addEventListener("input", onRemoteInput);
         control.input.addEventListener("focus", onRemoteOpen);
@@ -1024,6 +1031,10 @@ function bindChoiceSelectors(form, columns, options = {}) {
           .map(fieldName => form?.elements?.namedItem?.(fieldName))
           .filter(Boolean);
         const onDependencyChange = () => {
+          const hadSelection = multiple ? selectedOptions.length > 0 : Boolean(selectedOption || native.value);
+          // Preserve literal options, not the record's legacy value from a
+          // different parent/category. Only the new source can authorize it.
+          sourceChoices = choices.filter(option => (column.choices || []).map(String).includes(option.value));
           if (multiple) {
             selectedOptions = [];
             native.value = "";
@@ -1036,6 +1047,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
           control.setOptions([]);
           refreshing = false;
           searchController.input("");
+          // Notify descendants too; stop once a field is already empty so a
+          // metadata cycle cannot dispatch changes indefinitely.
+          if (hadSelection) dispatchNativeChange();
         };
         dependencyControls.forEach(dependencyControl => dependencyControl.addEventListener?.("change", onDependencyChange));
         cleanups.push(() => {
@@ -1087,7 +1101,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
     }
     if (Array.isArray(column?.powerApps?.sharedOutputs) && column.powerApps.sharedOutputs.length) {
       sharedFieldReaders.push(() => {
-        if (!selectedOption) return {};
+        if (!selectedOption) return options.mode === "edit"
+          ? Object.fromEntries(column.powerApps.sharedOutputs.map(output => [output.fieldName, null]))
+          : {};
         const selectedSource = resolvePowerAppsRemoteSource(form, remoteSource);
         return Object.fromEntries(column.powerApps.sharedOutputs.flatMap(output => {
           const value = output.sourceField === selectedSource?.valueField
@@ -1164,7 +1180,6 @@ function bindChoiceSelectors(form, columns, options = {}) {
 }
 
 function bindRelationshipSelectors(form, columns, options = {}) {
-  const selectionOnly = options.mode === 'edit';
   const cleanups = [];
   const selectionChecks = [];
   const valueReaders = [];
@@ -1173,6 +1188,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
   for (const container of form?.querySelectorAll?.("[data-relation-field]") || []) {
     const name = String(container?.dataset?.relationField || "");
     const column = descriptors.get(name);
+    const selectionOnly = column?.readOnly === true;
     const input = container?.querySelector?.("[data-relation-search]");
     const hidden = container?.querySelector?.("[data-relation-value]");
     const status = container?.querySelector?.("[data-relation-status]");
@@ -1210,14 +1226,6 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       const originalInputHidden = input.hidden === true;
       const originalInputDisabled = input.disabled === true;
       const originalListboxHidden = listbox.hidden === true;
-      const dispatchInput = target => {
-        if (typeof target?.dispatchEvent === "function") {
-          const EventConstructor = target.ownerDocument?.defaultView?.Event || globalThis.Event;
-          target.dispatchEvent(new EventConstructor("input", { bubbles: true }));
-        } else {
-          target?.dispatch?.("input");
-        }
-      };
       const syncMultipleValue = () => {
         if (!multiple) return;
         hidden.value = JSON.stringify(selectedOptions.map(option => option.value));
@@ -1231,6 +1239,7 @@ function bindRelationshipSelectors(form, columns, options = {}) {
         id: relationshipDomId(name),
         label: column.label,
         selectionOnly,
+        clearable: options.mode === "edit" && !multiple,
         options: multiple ? [] : initialOption ? [initialOption] : [],
         value: multiple ? undefined : initialOption?.value,
         onChange(value, option) {
@@ -1273,7 +1282,6 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       listbox.hidden = true;
 
       const controller = createRelationshipSearchController({
-        browse: selectionOnly,
         debounceMs: options.relationshipDebounceMs,
         minLength: RELATIONSHIP_MIN_LENGTH,
         allowEmpty: true,
@@ -1282,28 +1290,32 @@ function bindRelationshipSelectors(form, columns, options = {}) {
           const searchColumn = multiple
             ? Object.freeze({ ...column, relation: Object.freeze({ ...column.relation, multiple: false, resolvable: true }) })
             : column;
-          return options.relationshipSearch(searchColumn, relationshipSearchSeed(term), requestOptions);
+          return options.relationshipSearch(searchColumn, options.mode === "edit" ? term : relationshipSearchSeed(term), requestOptions);
         },
         onState(state) {
           status.textContent = state.message || "";
-          if (state.status !== "ready") {
-            if (!selectionOnly && (state.status === "empty" || state.status === "error")) control.setOptions([]);
-            return;
-          }
-          const query = control.input.value;
-          const retained = selectionOnly && !multiple && selectedProof ? [{value:selectedProof.id,label:selectedProof.label}] : [];
+          if (!["ready", "empty", "error"].includes(state.status)) return;
+          const retained = !multiple && selectedProof ? [{value:selectedProof.id,label:selectedProof.label}] : [];
           refreshing = true;
-          control.setOptions([...new Map([...retained, ...(state.options || []).map(option => ({ value: option.id, label: option.label }))].map(option => [String(option.value),option])).values()]);
-          if (selectionOnly) control.search('');
-          else { control.input.value = query; dispatchInput(control.input); }
+          control.setOptions([...new Map([...retained, ...(state.options || []).map(option => ({ value: option.id, label: option.label }))].map(option => [String(option.value),option])).values()], {
+            preserveInput: true,
+            // Create mode intentionally searches the first token, then refines
+            // the remaining words locally. Edit mode sends the complete query.
+            matchingValues: options.mode === "edit" ? state.options.map(option => option.id) : [],
+          });
           refreshing = false;
         },
       });
       const onInput = event => {
-        if (!refreshing && !selectionOnly) controller.input(event?.target?.value);
+        if (!refreshing && !selectionOnly) {
+          const term = event?.target?.value;
+          controller.input(term, { browse: options.mode === "edit" && !String(term || "").trim() });
+        }
       };
       const onOpen = () => {
-        if (!refreshing) controller.input(selectionOnly ? '' : control.input.value);
+        if (refreshing) return;
+        const term = control.input.value === selectedProof?.label ? "" : control.input.value;
+        controller.input(term, { browse: options.mode === "edit" && !term });
       };
       const onKeyDown = event => {
         if (!selectionOnly && multiple && event?.key === "Backspace" && !control.input.value && selectedOptions.length) {
@@ -1400,7 +1412,6 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       setExpanded(false);
     };
     const controller = createRelationshipSearchController({
-      browse: selectionOnly,
       debounceMs: options.relationshipDebounceMs,
       minLength: RELATIONSHIP_MIN_LENGTH,
       allowEmpty: true,
@@ -1421,7 +1432,10 @@ function bindRelationshipSelectors(form, columns, options = {}) {
       hidden.value = value.trim() ? RELATIONSHIP_UNRESOLVED : "";
       controller.input(value);
     };
-    const onOpen = () => controller.input(selectionOnly ? '' : input.value);
+    const onOpen = () => {
+      const term = input.value === selectedProof?.label ? "" : input.value;
+      controller.input(term, { browse: options.mode === "edit" && !term });
+    };
     const onListClick = event => {
       const option = event?.target?.closest?.("[data-relation-option]");
       if (option) choose(option.dataset.relationOption);

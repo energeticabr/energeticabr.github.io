@@ -55,11 +55,15 @@ test('payroll editor fills phone and desktop viewports with locked financial val
       assert.equal(await evaluate(`document.querySelector('[data-searchable-root=IDLANCAMENTO] input').value`),'3457 - FORNECEDOR DE TESTE');
       const actions=await evaluate(`(()=>{const f=document.querySelector('[data-edit-form]'),cancel=f.querySelector('[data-form-cancel]'),submit=f.querySelector('[data-form-save]');return {labels:[...f.querySelectorAll('.dynamic-form-actions button')].map(b=>b.textContent),clear:!!f.querySelector('[data-form-clear]'),cancelColor:getComputedStyle(cancel).backgroundColor,submitColor:getComputedStyle(submit).backgroundColor,ordered:cancel.getBoundingClientRect().right<submit.getBoundingClientRect().left};})()`);
       assert.deepEqual(actions,{labels:['CANCELAR','SUBMETER'],clear:false,cancelColor:'rgb(185, 28, 36)',submitColor:'rgb(22, 112, 68)',ordered:true});
+      assert.equal(await evaluate(`document.querySelector('[data-gallery-record-screen] [name=IDFOLHA]').value`),'5');
       await evaluate(`document.querySelector('[data-searchable-root=IDFOLHA] input').focus()`);
       await send('Input.insertText',{text:'Inventado'},sessionId);
       await press('Backspace','Backspace',8); await press('Delete','Delete',46);
-      assert.equal(await evaluate(`document.querySelector('[data-searchable-root=IDFOLHA] input').value`),'5-09/2026 (FORNECEDOR DE TESTE)');
+      assert.match(await evaluate(`document.querySelector('[data-searchable-root=IDFOLHA] input').value`),/Inventad$/);
+      assert.equal(await evaluate(`document.querySelector('[data-gallery-record-screen] [name=IDFOLHA]').value`),'5','typed search is not accepted as the selected ID');
+      assert.equal(await evaluate(`window.savedFields.length`),0);
       await press('Escape','Escape',27);
+      assert.equal(await evaluate(`document.querySelector('[data-searchable-root=IDFOLHA] input').value`),'5-09/2026 (FORNECEDOR DE TESTE)');
       await evaluate(`window.unitValue=250;window.dispatchEvent(new Event('focus'))`);
       for(let n=0;n<50 && !(await evaluate(`document.querySelector('[name=VALORUNITARIO]').value==='250'`));n++) await delay(100);
       assert.equal(await evaluate(`document.querySelector('[name=VALORUNITARIO]').value`),'250');
