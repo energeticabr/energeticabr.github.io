@@ -62,7 +62,13 @@ final class PreviewApp: UIResponder, UIApplicationDelegate {
                         controller.loadViewIfNeeded()
                         controller.overrideUserInterfaceStyle = style
                         controller.view.frame = CGRect(x: 0, y: 0, width: CGFloat(width), height: 844)
+                        // Dynamic UIKit colors resolve when the real view is hosted,
+                        // not when a detached layer is rendered in isolation.
+                        self.window?.overrideUserInterfaceStyle = style
+                        self.window?.frame = controller.view.frame
+                        self.window?.rootViewController = controller
                         controller.header.update(percent: percent)
+                        self.window?.layoutIfNeeded()
                         controller.view.layoutIfNeeded()
                         let header = controller.header
                         let icon = header.arrangedSubviews[0]
@@ -71,6 +77,8 @@ final class PreviewApp: UIResponder, UIApplicationDelegate {
                         let badgeFrame = badge.convert(badge.bounds, to: controller.view)
                         let titleFrame = controller.titleLabel.convert(controller.titleLabel.bounds, to: controller.view)
                         precondition(!header.hasAmbiguousLayout && !badge.hasAmbiguousLayout)
+                        precondition(controller.view.traitCollection.userInterfaceStyle == style)
+                        precondition(badge.traitCollection.userInterfaceStyle == style)
                         precondition(badgeFrame.minY >= iconFrame.maxY + 7, "The percentage must be below the mascot")
                         precondition(titleFrame.minY >= badgeFrame.maxY + 15, "The percentage must precede the title")
                         precondition(abs(badgeFrame.midX - iconFrame.midX) < 1, "Badge and mascot must be centered")
@@ -80,7 +88,7 @@ final class PreviewApp: UIResponder, UIApplicationDelegate {
                         precondition(label.bounds.width >= label.intrinsicContentSize.width - 0.5, "No clipped percentage")
                         let name = "native-share-\(width)-\(style == .dark ? "dark" : "light")-\(percent).png"
                         let image = UIGraphicsImageRenderer(bounds: controller.view.bounds).image { context in
-                            controller.view.layer.render(in: context.cgContext)
+                            precondition(controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true))
                         }
                         try! image.pngData()!.write(to: directory.appendingPathComponent(name))
                         verified.append(name)
@@ -88,6 +96,9 @@ final class PreviewApp: UIResponder, UIApplicationDelegate {
                 }
             }
         }
+        self.window?.overrideUserInterfaceStyle = .light
+        self.window?.frame = UIScreen.main.bounds
+        self.window?.rootViewController = PreviewController()
         let report: [String: Any] = ["cases": verified.count, "images": verified, "component": "SharedUploadProgressHeader"]
         try! JSONSerialization.data(withJSONObject: report, options: .prettyPrinted)
             .write(to: directory.appendingPathComponent("verification.json"))
