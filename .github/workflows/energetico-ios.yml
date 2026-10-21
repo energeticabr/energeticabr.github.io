@@ -152,10 +152,10 @@ jobs:
         working-directory: apps/energetico-mobile
         run: |
           xcrun swiftc ios/ShareExtension/SharedInboxStore.swift ios/ShareExtension/SharedUploadProgress.swift tests/native-share/progress.swift tests/native-share/main.swift -o "$RUNNER_TEMP/energetico-share-tests"
-          node scripts/test-native-share.mjs "$RUNNER_TEMP/energetico-share-tests"
+          node scripts/verify-native-share.mjs "$RUNNER_TEMP/energetico-share-tests"
       - name: Verificar o cluster abaixo do mascote no UIKit
         working-directory: apps/energetico-mobile
-        run: node scripts/test-native-share-preview.mjs
+        run: node scripts/verify-native-share-preview.mjs
       - name: Guardar verificações visuais nativas
         uses: actions/upload-artifact@v4
         with:

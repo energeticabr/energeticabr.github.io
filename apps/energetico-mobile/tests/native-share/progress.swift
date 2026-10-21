@@ -93,7 +93,7 @@ private final class UploadProgressCapture: @unchecked Sendable {
 func checkRealUploadProgress(testRoot: URL) async throws {
     guard let address = ProcessInfo.processInfo.environment["NATIVE_SHARE_TEST_UPLOAD_URL"],
           let url = URL(string: address), url.host == "127.0.0.1" else {
-        fatalError("Run the native binary with scripts/test-native-share.mjs (loopback server only)")
+        fatalError("Run the native binary with scripts/verify-native-share.mjs (loopback server only)")
     }
     let uploadStore = try SharedInboxStore(containerURL: testRoot.appendingPathComponent("progress-inbox"))
     let item = try uploadStore.stage(data: Data(repeating: 65, count: 8 * 1024 * 1024), name: "progress-fixture.pdf", type: "application/pdf")

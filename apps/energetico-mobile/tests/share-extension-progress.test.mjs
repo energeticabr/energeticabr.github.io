@@ -24,3 +24,14 @@ test("compartilhamento nativo só confirma progresso após salvar o recibo e o e
   assert.match(controller, /saveConfirmedResponse\(id: item\.id, data: response\)[\s\S]*updateState\(id: item\.id, state: "uploaded"\)[\s\S]*uploadProgress\?\.confirm\(id: item\.id\)/);
   assert.match(controller, /SharedUploadProgress\([\s\S]*stagedItems\.map[\s\S]*hasPreparationFailures: !stagingFailures\.isEmpty/);
 });
+
+test("os executores nativos do CI não entram na descoberta automática dos testes Node da publicação web", async () => {
+  const workflow = await readFile(new URL("../../../.github/workflows/energetico-ios.yml", import.meta.url), "utf8");
+  const runners = [...workflow.matchAll(/node (scripts\/[^\s]+\.mjs)/g)]
+    .map((match) => match[1]).filter((path) => path.includes("native-share"));
+  assert.equal(runners.length, 2);
+  for (const runner of runners) {
+    assert.doesNotMatch(runner, /(?:^|\/)test-[^/]+\.mjs$/);
+    await readFile(new URL(`../${runner}`, import.meta.url), "utf8");
+  }
+});
