@@ -13,6 +13,13 @@ window.addEventListener('error', event => {
 import { createChatView } from '../../src/ui/chat-view.js';
 const view = createChatView(document.querySelector('#app'));
 const samples = {
+  'provision-attachments': `✅ 🟢 ANEXOS DA PROVISÃO ADICIONADOS NA BASE DE DADOS PROVISÃO PGTOS ÀS 15:09. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• PROVISÃO DE PAGAMENTO: ID 330`,
+  'provision-attachments-multiple': `✅ 🟢 ANEXOS DA PROVISÃO ADICIONADOS NA BASE DE DADOS PROVISAO PGTOS ÀS 15:09. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• PROVISÕES DE PAGAMENTO: IDS 330, 9007199254740993
+📎 Comprovante: provisao-pendente.pdf`,
   'order-attachments': `✅ 🟢 ANEXOS DO PEDIDO ADICIONADOS NA BASE DE DADOS NOTASPENDENTES ÀS 00:13. 🕒
 🆔 REGISTROS CONFIRMADOS:
 • PEDIDO: ID 406`,
@@ -68,7 +75,7 @@ const samples = {
 };
 const sample = new URLSearchParams(location.search).get('sample') || 'multiple';
 view.render({ sessionStatus: 'authenticated', account: { name: 'Bernardo' }, draft: '', pendingFiles: [], attachments: [],
-  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('order-attachments') ? '📎 ADICIONAR UM ANEXO A UM PEDIDO' : sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : sample === 'diary' ? '📔 PREENCHER DIÁRIO DE OBRA' : 'POSTAGEM CONCLUÍDA' },
+  activeFlow: null, completionNavigation: { homeOnly: true, title: sample.startsWith('provision-attachments') ? '📎 ADICIONAR ANEXOS A UMA PROVISÃO DE PAGAMENTO' : sample.startsWith('order-attachments') ? '📎 ADICIONAR UM ANEXO A UM PEDIDO' : sample.startsWith('description-') ? '💰 BAIXAR PAGAMENTO AGENDADO' : sample === 'settlement' ? '💵 APONTAR PAGAMENTO DA PROVISÃO' : sample === 'diary' ? '📔 PREENCHER DIÁRIO DE OBRA' : 'POSTAGEM CONCLUÍDA' },
   messages: [{ id: 'local-receipt', role: 'assistant', type: 'text', text: samples[sample] }],
 });
 await document.fonts.ready;
