@@ -1,0 +1,24 @@
+name: Weekly meal provisions contracts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'automations/weekly-meal-provisions/**'
+      - '.github/workflows/weekly-meal-provisions.yml'
+  pull_request:
+    paths:
+      - 'automations/weekly-meal-provisions/**'
+      - '.github/workflows/weekly-meal-provisions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test the complete automation subproject
+        run: python3 -m unittest discover -s automations/weekly-meal-provisions -v
