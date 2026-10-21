@@ -31,7 +31,7 @@ xcrun("swiftc", "-sdk", sdk, "-target", `${arch}-apple-ios16.0-simulator`,
 execFileSync("codesign", ["--force", "--sign", "-", app], { stdio: "inherit" });
 const inventory = JSON.parse(xcrun("simctl", "list", "--json"));
 const runtime = inventory.runtimes.find((item) => item.isAvailable && /^iOS 26/.test(item.name));
-const phone = inventory.devicetypes.find((item) => item.name === "iPhone 17")
+const phone = inventory.devicetypes.find((item) => item.name === (arch === "arm64" ? "iPhone 17" : "iPhone 16"))
   || inventory.devicetypes.find((item) => item.name.startsWith("iPhone"));
 assert.ok(runtime && phone, "An iOS 26 phone Simulator is required");
 const id = xcrun("simctl", "create", "ENERGETICO-Share-Progress-Test", phone.identifier, runtime.identifier);
