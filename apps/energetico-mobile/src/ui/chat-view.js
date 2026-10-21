@@ -333,7 +333,8 @@ function hrGalleryAction(option) {
   const identifiers = [option?.id, option?.reply, option?.value].map(value => String(value || ""));
   return identifiers.includes("action_hr_gallery_idfolha")
     || identifiers.includes("action_hr_gallery_folhapgto")
-    || identifiers.includes("action_hr_gallery_presencas");
+    || identifiers.includes("action_hr_gallery_presencas")
+    || identifiers.includes("action_hr_gallery_funcionarios");
 }
 
 function isHrPayrollGalleryMenu(message) {
@@ -345,6 +346,7 @@ function hrPayrollGalleryOptions(options) {
     { id: "action_hr_gallery_idfolha", reply: "action_hr_gallery_idfolha", label: "📚 GALERIA IDFOLHA" },
     { id: "action_hr_gallery_folhapgto", reply: "action_hr_gallery_folhapgto", label: "💵 GALERIA FOLHA PGTO" },
     { id: "action_hr_gallery_presencas", reply: "action_hr_gallery_presencas", label: "📋 GALERIA DE PRESENÇAS" },
+    { id: "action_hr_gallery_funcionarios", reply: "action_hr_gallery_funcionarios", label: "👷 GALERIA DE FUNCIONÁRIOS" },
   ];
   return definitions.map(definition => options.find(option => draftReplyId(option).trim().toLowerCase() === definition.id) || definition);
 }

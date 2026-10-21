@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically reconcile contractor employees
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=energetica-contractor-employment-sync.service
+
+[Install]
+WantedBy=timers.target

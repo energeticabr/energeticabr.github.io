@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Funcionários RH — dados sintéticos</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/registration-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/contractor-employment-view.css">
+</head>
+<body>
+<main></main>
+<script type="module">
+  import { createContractorEmploymentView } from '../../src/ui/contractor-employment-view.js';
+  import { createContractorEmploymentData } from '../../src/chat/contractor-employment-data.js';
+  import { requestContractorTerminationDate } from '../../../../portal/forms/contractor-employment.js';
+  const rows = [
+    { id: '4', eTag: '"1"', fields: { Title: 'Funcionário Exemplo A', EMPREITEIRO: 'SIM', CARGO: 'PEDREIRO III', STATUS: 'ATIVO', FILIAL: 'Obra Exemplo', DATAADMISSAO: '2026-01-20T00:00:00Z', IDFORNECEDORORIGEM: '17', ORIGEMAUTORJSON: '{"Title":"Autor Exemplo"}', ORIGEMCRIADOEM: '2026-01-01', field_6: 31 } },
+    { id: '5', eTag: '"1"', fields: { Title: 'Funcionário Exemplo B', CARGO: '', STATUS: 'ATIVO', FILIAL: 'Obra Exemplo', DATAADMISSAO: '', IDFORNECEDORORIGEM: '18' } },
+    { id: '6', eTag: '"1"', fields: { Title: 'Funcionário Exemplo C', CARGO: 'SUPERVISOR DE OBRAS', STATUS: 'INATIVO', FILIAL: 'Obra Exemplo B', DATAADMISSAO: '2026-01-20', DATADESLIGAMENTO: '2026-02-20', IDFORNECEDORORIGEM: '19' } },
+  ];
+  const params = new URLSearchParams(location.search);
+  const sources = rows.map(row => ({ id: row.fields.IDFORNECEDORORIGEM, eTag: '"1"', fields: { ...row.fields, EMPREITEIRO: 'SIM' } }));
+  if (params.has('conflict')) {
+    Object.assign(sources[0].fields, { CARGO: 'SUPERVISOR DE OBRAS', STATUS: 'INATIVO', DATADESLIGAMENTO: '2026-02-20' });
+    sources[0].eTag = '"9"';
+  }
+  // Real data/view code, entirely synthetic transport. No browser session or real writes.
+  const data = createContractorEmploymentData({ repository: {
+    resolveList: async (_site, names) => ({ status: 'resolved', id: names[0] }),
+    getColumns: async () => [{ name: 'field_6', displayName: 'ENDEREÇO' }],
+    getItemsPage: async () => ({ items: structuredClone(rows), hasMore: false }),
+    getItem: async (_site, list, id) => structuredClone((list === 'FORNECEDORES' ? sources : rows).find(row => row.id === id)),
+    updateItem() { throw new Error('Somente prévia sintética: nenhuma gravação permitida.'); },
+  } });
+  const view = createContractorEmploymentView({ onHome() {}, data });
+  await view.open();
+  if (params.has('edit')) document.querySelector('[data-action="inactivate"]').click();
+  if (params.has('portal')) requestContractorTerminationDate({ admission: '2026-01-20' }).catch(() => {});
+  if (params.has('conflict')) {
+    document.querySelector('[data-employment-row="4"] [data-action="review-conflict"]').click();
+    while (!document.querySelector('[data-conflict-source]')) await new Promise(resolve => requestAnimationFrame(resolve));
+  }
+  await document.fonts.ready;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const root = document.querySelector('.ce-overlay');
+  const controls = [...root.querySelectorAll('input, select, button')].filter(node => node.getClientRects().length);
+  document.documentElement.dataset.layout = JSON.stringify({
+    overflow: document.documentElement.scrollWidth > innerWidth + 1 || root.scrollWidth > root.clientWidth + 1,
+    controlsFit: controls.every(node => node.getBoundingClientRect().width <= root.clientWidth && node.getBoundingClientRect().height >= 40),
+    rows: document.querySelectorAll('[data-employment-row]').length,
+    editor: Boolean(document.querySelector('.ce-editor form')),
+    portal: Boolean(document.querySelector('dialog[open] input[type="date"]')),
+    conflict: Boolean(document.querySelector('[data-conflict-source]') && document.querySelector('[data-conflict-target]')),
+  });
+</script>
+</body>
+</html>

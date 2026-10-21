@@ -10827,8 +10827,19 @@ test("cabeçalho Energético abre RHID de hoje em São Paulo com carregamento e 
   assert.equal(previews.length, 0);
 });
 
+test("admissão de empreiteiro envia a data escolhida no formato brasileiro ao fluxo compartilhado", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([{ type: "text", text: "📅 QUAL É A DATA DE ADMISSÃO? INFORME NO FORMATO dd/mm/yyyy." }]);
+  await h.view.emit("date-selected", { value: "2026-01-20" });
+  assert.equal(h.chatCalls.at(-1)[0], "text");
+  assert.equal(h.chatCalls.at(-1)[1].text, "20/01/2026");
+});
+
 test("retorno da autenticação Microsoft reabre as doze novas galerias", async t => {
   for (const [action, expectedKind] of [
+    ["action_hr_gallery_funcionarios", "contractorEmployment"],
     ["action_asset_gallery", "asset"], ["action_asset_function_gallery", "assetFunction"],
     ["action_asset_product_gallery", "assetProduct"], ["action_asset_group_gallery", "assetGroup"],
     ["action_work_diary_gallery", "workDiary"], ["action_quote_gallery", "quotes"],

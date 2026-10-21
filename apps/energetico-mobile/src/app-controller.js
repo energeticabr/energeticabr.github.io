@@ -294,11 +294,19 @@ async function defaultRecurringExpensesGalleryDataFactory(options) {
 }
 
 async function defaultRegistrationGalleryFactory(options) {
+  if (options.kind === "contractorEmployment") {
+    const { createContractorEmploymentView } = await import("./ui/contractor-employment-view.js");
+    return createContractorEmploymentView(options);
+  }
   const { createRegistrationGallery } = await import("./ui/registration-gallery-view.js");
   return createRegistrationGallery(options);
 }
 
 async function defaultRegistrationGalleryDataFactory(options) {
+  if (options.kind === "contractorEmployment") {
+    const { createContractorEmploymentData } = await import("./chat/contractor-employment-data.js");
+    return createContractorEmploymentData(options);
+  }
   const { createRegistrationGalleryData } = await import("./chat/registration-gallery-data.js");
   return createRegistrationGalleryData(options);
 }
@@ -443,6 +451,7 @@ const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_hr_gallery_presencas: "presenceDescriptions",
+  action_hr_gallery_funcionarios: "contractorEmployment",
   action_financial_movement_gallery: 'financial_movement',
   action_investment_gallery: 'investment',
   action_institution_gallery: 'institution',
@@ -1867,7 +1876,7 @@ export function createAppController({
         return token;
       }
     };
-    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, ...(kind ? { sourceKind: kind } : {}) })).then(data => {
+    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, sourceKind: kind })).then(data => {
       if (typeof data?.listAttachments !== "function" || typeof data?.downloadAttachment !== "function") {
         throw new Error("A consulta autenticada dos anexos não está disponível.");
       }
@@ -3507,9 +3516,13 @@ export function createAppController({
 
   async function savePendingProvisionDueDate(paymentId, rawValue) {
     const id = String(paymentId || "").trim();
+    const selectedRow = pendingProvisionSnapshot?.rows?.find(row => String(row?.id ?? "").trim() === id);
     if (!account || stopped || pendingProvisionDeletion || pendingProvisionReminderOpen || pendingProvisionDateEditBusy
       || !id || id !== pendingProvisionDateEditPaymentId
-      || !pendingProvisionSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
+      || !selectedRow) return false;
+    // A mixed/legacy snapshot may only identify the list on the selected row.
+    // Empty string is an explicit legacy child kind, not permission to reuse a parent provider.
+    const sourceKind = selectedRow.sourceKind ?? pendingProvisionSnapshot?.sourceKind ?? "";
     const date = pendingProvisionDateIso(rawValue);
     if (!date) {
       pendingProvisionDateEditValue = String(rawValue || "").slice(0, 10);
@@ -3524,7 +3537,10 @@ export function createAppController({
     pendingProvisionDateEditError = "";
     render();
     try {
-      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+      if (!["", "provision-description"].includes(sourceKind)) {
+        throw Object.assign(new Error("A origem desta provisão não foi identificada. Atualize a lista antes de editar o vencimento."), { code: "PENDING_PROVISION_SOURCE_INVALID" });
+      }
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, sourceKind);
       if (typeof data.updateDueDate !== "function") throw new Error("A edição da data não está disponível para esta provisão.");
       await data.updateDueDate(id, date);
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
@@ -3532,7 +3548,7 @@ export function createAppController({
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
         if (String(row?.id ?? "").trim() !== id) return [row];
         if (date > provisionDayOffset(new Date(), 2)) return [];
-        return [{ ...row, dueDate: pendingProvisionSnapshot?.sourceKind === "provision-description"
+        return [{ ...row, dueDate: sourceKind === "provision-description"
           ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
       });
       pendingProvisionDateEditPaymentId = "";
@@ -3554,7 +3570,7 @@ export function createAppController({
     } catch (error) {
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
       pendingProvisionDateEditBusy = false;
-      pendingProvisionDateEditError = error?.code === 'PROVISION_DESCRIPTION_SYNC_INCOMPLETE'
+      pendingProvisionDateEditError = ['PROVISION_DESCRIPTION_SYNC_INCOMPLETE', 'PENDING_PROVISION_SOURCE_INVALID'].includes(error?.code)
         ? error.message : "Não foi possível atualizar a data no SharePoint. Confira a conexão e tente novamente.";
       render();
       return false;
@@ -9103,7 +9119,7 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
-            onCreate: galleryCreationHandler(replyId, assertSession),
+            ...(kind === "contractorEmployment" ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();

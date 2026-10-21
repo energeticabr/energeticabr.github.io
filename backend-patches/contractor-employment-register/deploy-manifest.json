@@ -1,0 +1,36 @@
+{
+  "files": {
+    "worker/workflow.py": {
+      "before": "ec5a5275a97cff3120d682f1951a319a48ce26b2e42fdc6a000738a878d441d0",
+      "mirrorBefore": "ec5a5275a97cff3120d682f1951a319a48ce26b2e42fdc6a000738a878d441d0",
+      "after": "a6681347465c2a2d3d68bca8539fafaa5be0c6d02294bcfc0acece7b0135fcb3"
+    },
+    "worker/workflow_config.json": {
+      "before": "80fa8588dc246b6273512b1dd173537a204c4301b12da498a3e2c7d79f1ab37d",
+      "mirrorBefore": "80fa8588dc246b6273512b1dd173537a204c4301b12da498a3e2c7d79f1ab37d",
+      "after": "dbe31c5fad7eb1fb5a3c462dcb443ddf21e68fb98232a89bc690edaa7e986616"
+    },
+    "worker/contractor_employment.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "76a8ba7e6ebd08e54ade562945e705c84108c4be688c7962aa418e8bbcb7d702"
+    },
+    "worker/sync_contractors.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "af8e2a506da92afde3240b4371af82ee918e9b8cfe6cb424b37b4ae8376d941e"
+    },
+    "worker/supplier_registration_checkpoint.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "b516022e32c4c4fa84f445f89bc391e884c8d91b2ba80b9b069bdfde7aeada5a"
+    },
+    "worker/contractor_permissions.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "ee28c17dac74e765f9baa8997a214de0464d39343505e412caa103aefd454faf"
+    }
+  },
+  "patch": "fcd651b2aa0b72cd8c6b7869ea8c06f899b1950f41c5f23a964e7169ebf28b19",
+  "archive": "8cfe75743e1fd3c41df92e32250e446b8264c13b3fb74f6d7425ea5bb1ffa9c9"
+}

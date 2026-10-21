@@ -1,0 +1,19 @@
+[Unit]
+Description=Reconcile contractor employee records with FORNECEDORES
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=energetica-whatsapp
+Group=energetica-whatsapp
+WorkingDirectory=/opt/energetica-whatsapp
+EnvironmentFile=/etc/energetica-whatsapp.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/energetica-whatsapp/.venv/bin/python /opt/energetica-whatsapp/worker/sync_contractors.py --state-directory /var/lib/energetica-whatsapp/state
+TimeoutStartSec=300
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/energetica-whatsapp
