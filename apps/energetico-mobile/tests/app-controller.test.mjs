@@ -5190,7 +5190,11 @@ test("finalizar diário usa a opção atual da VM e preserva os quatro anexos at
     }] };
   };
   await h.view.emit("finish-flow");
-  assert.deepEqual(calls, [{ text: "✅ FINALIZAR", replyId: "server-finish" }]);
+  assert.equal(calls.length, 1);
+  const { onProgress, progressSignal, ...reply } = calls[0];
+  assert.deepEqual(reply, { text: "✅ FINALIZAR", replyId: "server-finish" });
+  assert.equal(typeof onProgress, "function");
+  assert.equal(progressSignal.aborted, true, "a consulta opcional termina junto com a resposta");
   assert.equal(h.store.getState().attachments.length, 4);
   assert.equal(h.store.getState().messages.at(-1).question, "COMO DESEJA ORGANIZAR OS ANEXOS?");
 });
