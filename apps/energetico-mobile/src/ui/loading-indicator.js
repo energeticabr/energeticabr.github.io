@@ -19,15 +19,15 @@ function progressValue(value) {
     ? Math.floor(value) : null;
 }
 
-function spinnerMarkup(progress) {
+function spinnerMarkup(progress, progressLabel) {
   const spinner = '<span class="app-loading__spinner" aria-hidden="true"></span>';
   const percent = progressValue(progress);
-  return percent === null ? spinner : `<span class="app-loading__progress-row">${spinner}<span class="app-loading__percentage" role="progressbar" aria-label="Finalização dos anexos" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">${percent}%</span></span>`;
+  return percent === null ? spinner : `<span class="app-loading__progress-row">${spinner}<span class="app-loading__percentage" role="progressbar" aria-label="${escapeHtml(progressLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">${percent}%</span></span>`;
 }
 
-export function loadingIndicatorMarkup(label, { compact = false, progress } = {}) {
+export function loadingIndicatorMarkup(label, { compact = false, progress, progressLabel = 'Finalização dos anexos' } = {}) {
   const variant = loadingVariant(label);
-  return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite"><img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false">${spinnerMarkup(progress)}<span class="app-loading__text">${escapeHtml(label)}</span></span>`;
+  return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite"><img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false">${spinnerMarkup(progress, progressLabel)}<span class="app-loading__text">${escapeHtml(label)}</span></span>`;
 }
 
 export function createLoadingIndicator(documentRef, label, { compact = false } = {}) {
