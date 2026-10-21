@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {parseDevToolsEndpoint} from './helpers/devtools-endpoint.mjs';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
@@ -106,6 +107,7 @@ function fixture(t, { platform = 'win32', stubborn = false, forceFails = false, 
     close() { state.socketsClosed++; }
   }
   const imports = {
+    './devtools-endpoint.mjs': {parseDevToolsEndpoint},
     'node:child_process': {
       spawn(file, args) {
         if (file !== 'simulated-owned-browser' || !args.includes(`--user-data-dir=${profile}`)) return unsafe(`spawn ${file}`);

@@ -140,7 +140,7 @@ jobs:
 
   native-share-tests:
     name: Testes nativos do compartilhamento
-    runs-on: macos-26-intel
+    runs-on: macos-26
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
