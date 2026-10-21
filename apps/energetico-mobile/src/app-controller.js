@@ -802,8 +802,7 @@ function attachCompressionPreview(result, originalAttachment) {
     message?.type === "poll"
       && Array.isArray(message.options)
       && message.options.some(option => [
-        "attachment_compression_use", "attachment_compression_keep",
-        "attachment_compression_use_compressed", "attachment_compression_use_original",
+        "attachment_compression_use", "attachment_compression_use_compressed",
       ].includes(String(option?.reply || option?.id || "").trim().toLowerCase()))
   ));
   if (targetIndex < 0 || messages[targetIndex].attachment_compression_preview
@@ -1461,6 +1460,7 @@ export function createAppController({
   let pendingProvisionUploads = new Map();
   let pendingProvisionUploadsRevision = 0;
   let currentAssistantPollSnapshot = null;
+  let attachmentCompressionReturnPoint = null;
   let pendingProvisionAttachmentGeneration = 0;
   const storageWarning = "Não foi possível salvar a prévia neste aparelho. Os dados já recebidos pela VM continuam preservados, mas copie o rascunho antes de fechar.";
 
@@ -9814,6 +9814,7 @@ export function createAppController({
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     const previousAttachmentCount = store.getState().attachments.length;
+    const compressionReturnPoint = captureAttachmentCompressionReturnPoint();
     cancelCompletionMenu();
     sessionError = null;
     let operation;
@@ -9904,9 +9905,13 @@ export function createAppController({
         render();
         if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
         else cancelAttachmentReminder();
-        await maybeOfferAttachmentCompression(item, effectiveResult, uploadCompleted);
+        const nextCompressionPrompt = staged?.nextMessages.findLast(message => (
+          message?.role !== "user" && ["poll", "text"].includes(message?.type)
+        ));
+        const compressionOffered = await maybeOfferAttachmentCompression(item, effectiveResult, uploadCompleted,
+          nextCompressionPrompt ? { message: nextCompressionPrompt, activeFlow: store.getState().activeFlow } : compressionReturnPoint);
         if (!currentUpload()) return false;
-        if (staged) scheduleResponseTransition(staged.nextMessages);
+        if (staged && !compressionOffered) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(effectiveResult);
       }
       if (confirmed && item.sourceId) {
@@ -10074,6 +10079,7 @@ export function createAppController({
   async function signIn() {
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
+    attachmentCompressionReturnPoint = null;
     const signInRevision = ++sessionRevision;
     clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
@@ -10178,6 +10184,7 @@ export function createAppController({
   async function signOut() {
     clearAttachmentUploadProgress();
     attachmentActionBusy = false;
+    attachmentCompressionReturnPoint = null;
     clearDiaryAttachmentProgress();
     clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
@@ -10755,7 +10762,40 @@ export function createAppController({
     return sameNamedType.length === 1 ? sameNamedType[0] : null;
   }
 
-  async function compressAttachment(fileId) {
+  function captureAttachmentCompressionReturnPoint(fallback = null) {
+    const state = store.getState();
+    const poll = latestAssistantPoll(state.messages) || currentAssistantPoll();
+    if (hasAttachmentCompressionChoice([poll])) return attachmentCompressionReturnPoint;
+    if (poll) return { message: poll, activeFlow: state.activeFlow };
+    if (fallback && Boolean(fallback.activeFlow) === Boolean(state.activeFlow)
+      && !isDifferentActiveFlow(fallback.activeFlow, state.activeFlow)) return fallback;
+    const message = [...state.messages].reverse().find(item => item?.role !== "user" && item?.type === "text");
+    return message ? { message, activeFlow: state.activeFlow } : null;
+  }
+
+  function ingestAttachmentCompressionResult(result) {
+    const messages = Array.isArray(result.messages) ? result.messages : [];
+    const pending = hasAttachmentCompressionChoice(messages);
+    const returnPoint = attachmentCompressionReturnPoint;
+    const currentFlow = store.getState().activeFlow;
+    const nextFlow = Object.hasOwn(result, "activeFlow") ? result.activeFlow : currentFlow;
+    // Compression is a side action: its text-only receipt must not replace
+    // the unanswered form prompt. Never replay input_continue to recover it,
+    // since that could submit the form instead of merely displaying it.
+    const restore = !pending && returnPoint && !isMenuResult(result) && !hasCompletedSubmission(result)
+      && !messages.some(message => message?.role !== "user" && message?.type === "poll")
+      && Boolean(returnPoint.activeFlow) === Boolean(currentFlow)
+      && Boolean(returnPoint.activeFlow) === Boolean(nextFlow)
+      && !isDifferentActiveFlow(returnPoint.activeFlow, currentFlow)
+      && !isDifferentActiveFlow(returnPoint.activeFlow, nextFlow);
+    const responseMessages = restore ? [...messages, returnPoint.message] : messages;
+    store.ingestRemoteMessages(responseMessages, result);
+    rememberCurrentAssistantPoll(result, responseMessages);
+    if (!pending) attachmentCompressionReturnPoint = null;
+    hydrateMediaPreviews();
+  }
+
+  async function compressAttachment(fileId, returnPoint = null) {
     if (!account || stopped || flowBusy() || typeof client.compressAttachment !== "function") return false;
     const actionAccount = account, actionRevision = sessionRevision;
     const currentCompression = () => !stopped && account === actionAccount && sessionRevision === actionRevision;
@@ -10768,12 +10808,11 @@ export function createAppController({
     attachmentRevision += 1;
     render();
     try {
+      attachmentCompressionReturnPoint = captureAttachmentCompressionReturnPoint(returnPoint);
       currentAssistantPollSnapshot = null;
       const result = attachCompressionPreview(await client.compressAttachment(item.id), item);
       if (!currentCompression()) return false;
-      store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
-      rememberCurrentAssistantPoll(result, result.messages);
-      hydrateMediaPreviews();
+      ingestAttachmentCompressionResult(result);
       return true;
     } catch (error) {
       if (currentCompression()) setSessionError(error, "Não foi possível comprimir o anexo.");
@@ -10787,7 +10826,7 @@ export function createAppController({
     }
   }
 
-  async function maybeOfferAttachmentCompression(uploadedItem, result, uploadCompleted) {
+  async function maybeOfferAttachmentCompression(uploadedItem, result, uploadCompleted, returnPoint) {
     if (uploadCompleted || typeof client.compressAttachment !== "function") return false;
     // The diary accepts batches of originals. Per-file compression is an
     // optional tray action, not another blocking VM round-trip for every photo.
@@ -10806,7 +10845,7 @@ export function createAppController({
     ));
     const attachment = candidates.at(-1);
     if (!attachment?.id) return false;
-    return compressAttachment(attachment.id);
+    return compressAttachment(attachment.id, returnPoint);
   }
 
   async function chooseAttachmentCompression(choice) {
@@ -10814,25 +10853,26 @@ export function createAppController({
     cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
-    const actionAccount = account;
+    const actionAccount = account, actionRevision = sessionRevision;
+    const currentChoice = () => !stopped && account === actionAccount && sessionRevision === actionRevision;
     attachmentActionBusy = true;
     attachmentRevision += 1;
     render();
     try {
       currentAssistantPollSnapshot = null;
       const result = await client.chooseAttachmentCompression(choice);
-      if (stopped || account !== actionAccount) return false;
-      store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
-      rememberCurrentAssistantPoll(result, result.messages);
-      hydrateMediaPreviews();
+      if (!currentChoice()) return false;
+      ingestAttachmentCompressionResult(result);
       return true;
     } catch (error) {
-      if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível concluir a escolha do anexo.");
+      if (currentChoice()) setSessionError(error, "Não foi possível concluir a escolha do anexo.");
       return false;
     } finally {
-      attachmentActionBusy = false;
-      attachmentRevision += 1;
-      if (!stopped) render();
+      if (currentChoice()) {
+        attachmentActionBusy = false;
+        attachmentRevision += 1;
+        render();
+      }
     }
   }
 
@@ -11459,6 +11499,7 @@ export function createAppController({
 
   function stop() {
     clearAttachmentUploadProgress();
+    attachmentCompressionReturnPoint = null;
     clearDiaryAttachmentProgress();
     clearDiaryFieldVisits();
     attendanceIrregularitySource = null;

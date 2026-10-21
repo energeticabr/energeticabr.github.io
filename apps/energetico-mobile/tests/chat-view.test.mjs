@@ -5246,6 +5246,21 @@ test("menu de compressão mostra quatro níveis com limites e reduções sem pr�
   }
 });
 
+test("compressão sem prévia comparativa mantém visíveis os botões de escolher a versão", () => {
+  for (const options of [
+    [{ id: "attachment_compression_level_high", label: "ALTA COMPRESSÃO" }, { id: "attachment_compression_use_original", label: "MANTER ORIGINAL" }],
+    [{ id: "attachment_compression_use", label: "USAR COMPRIMIDA" }, { id: "attachment_compression_keep", label: "MANTER ORIGINAL" }],
+  ]) {
+    const dom = new JSDOM(renderChatMarkup(signedInState({ messages: [{ role: "assistant", type: "poll", question: "Escolha o anexo", options }] })));
+    for (const option of options) {
+      const button = dom.window.document.querySelector(`[data-reply-id="${option.id}"]`);
+      assert.equal(button?.textContent, option.label);
+      assert.equal(button?.disabled, false);
+    }
+    dom.window.close();
+  }
+});
+
 test("renderiza enquete como opções grandes e mídia como ação protegida", () => {
   const markup = renderChatMarkup(signedInState({
     messages: [

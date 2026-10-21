@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Retorno da compressão — teste local</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+import { createAppController } from '../../src/app-controller.js';
+
+// Synthetic network boundary only: the real controller, store, view and button
+// handlers run unchanged. This fixture never uploads or posts a real document.
+const root = document.querySelector('#app'), view = createChatView(root);
+const store = createConversationStore({ historyMode: 'current-step' });
+const activeFlow = { id: 'order_attachment', title: '📎 ADICIONAR UM ANEXO A UM PEDIDO', contextId: 'qa-order' };
+const prompt = { type: 'poll', question: 'COMO DESEJA PROSSEGUIR COM OS ANEXOS?', options: [
+  { id: 'input_continue', label: '✅ FINALIZAR ANEXOS' }, { id: 'flow_summary', label: 'VER RESUMO' },
+] };
+const original = { id: 'qa-original', fileName: 'documento-teste.pdf', mimeType: 'application/pdf', size: 6_400_000, mediaUrl: '/api/portal-media/qa-original' };
+const compressed = { ...original, id: 'qa-compressed', size: 800_000, mediaUrl: '/api/portal-media/qa-compressed' };
+let selected = original, initialized = false;
+const requests = [];
+const controller = createAppController({ store, view,
+  auth: { initialize: async () => ({ homeAccountId: 'qa', name: 'QA' }), getToken: async () => 'local-test-only' },
+  native: { importSharedItems: async () => [] },
+  pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
+  client: {
+    async sendText(payload) {
+      if (!initialized) { initialized = true; return { status: 'processed', activeFlow, messages: [prompt], attachments: [original] }; }
+      requests.push(payload);
+      return { status: 'processed', activeFlow, attachments: [selected], messages: [{ type: 'poll', question: 'DESEJA POSTAR OS ANEXOS?', options: [{ id: 'post', label: 'POSTAR' }] }] };
+    },
+    async getAttachments() { return [selected]; },
+    async compressAttachment() { return { status: 'processed', messages: [{ type: 'poll', question: 'ESCOLHA O NÍVEL DE COMPRESSÃO', options: [
+      { id: 'attachment_compression_level_high', label: 'ALTA COMPRESSÃO' }, { id: 'attachment_compression_use_original', label: '📎 MANTER ORIGINAL' },
+    ] }] }; },
+    async chooseAttachmentCompression(choice) {
+      if (choice === 'attachment_compression_level_high') return { status: 'processed', messages: [{ type: 'poll',
+        question: 'CONFIRA A LEGIBILIDADE. QUAL VERSÃO DESEJA USAR?', attachment_compression_preview: { original, compressed }, options: [
+          { id: 'attachment_compression_use_compressed', label: 'USAR COMPRIMIDA' }, { id: 'attachment_compression_use_original', label: 'USAR ORIGINAL' },
+        ] }] };
+      selected = choice === 'attachment_compression_use_compressed' ? compressed : original;
+      return { status: 'processed', attachments: [selected], messages: [{ type: 'text', text: selected === original ? '📎 Anexo original mantido.' : '📎 Anexo comprimido selecionado.' }] };
+    },
+  },
+});
+await controller.start();
+async function click(selector, expected) {
+  const button = root.querySelector(selector);
+  if (!button || button.disabled) throw new Error(`Botão indisponível: ${selector}`);
+  button.click();
+  const deadline = performance.now() + 5000;
+  while (!expected()) {
+    if (performance.now() > deadline) throw new Error(`O clique não retornou à etapa esperada: ${selector}`);
+    await new Promise(requestAnimationFrame);
+  }
+}
+const mode = new URLSearchParams(location.search).get('mode');
+if (mode) {
+  await click('[data-action="compress-attachment"]', () => root.querySelector('[data-reply-id="attachment_compression_level_high"]'));
+  if (mode !== 'original-level') await click('[data-reply-id="attachment_compression_level_high"]', () => root.querySelector('[data-reply-id="attachment_compression_use_compressed"]'));
+  await click(`[data-reply-id="attachment_compression_use_${mode === 'compressed' ? 'compressed' : 'original'}"]`, () => root.querySelector('[data-reply-id="input_continue"]'));
+  if (new URLSearchParams(location.search).has('advance')) await click('[data-reply-id="input_continue"]', () => root.querySelector('[data-reply-id="post"]'));
+}
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+document.documentElement.dataset.layout = JSON.stringify({
+  restored: Boolean(root.querySelector('[data-reply-id="input_continue"]:not(:disabled)')),
+  pendingCompression: Boolean(root.querySelector('[data-reply-id^="attachment_compression_"]')),
+  advanced: Boolean(root.querySelector('[data-reply-id="post"]:not(:disabled)')),
+  requests, attachmentCount: store.getState().attachments.length, size: store.getState().attachments[0]?.size,
+  flow: store.getState().activeFlow?.contextId,
+  overflow: document.documentElement.scrollWidth > innerWidth + 1,
+});
+window.addEventListener('pagehide', () => controller.stop(), { once: true });
+</script></body></html>

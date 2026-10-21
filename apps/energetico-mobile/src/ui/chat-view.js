@@ -1585,6 +1585,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     || (message.detailTable?.kind === "payment_audit" ? message.detailTable : null);
   const displayOptions = options;
   const compressionPreview = compressionPreviewData(message);
+  const hasCompressionPreview = Boolean(compressionPreview?.original && compressionPreview?.compressed);
   const compressionOptionIds = new Set([
     "attachment_compression_use", "attachment_compression_keep",
     "attachment_compression_use_compressed", "attachment_compression_use_original",
@@ -1599,7 +1600,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
   const regularOptions = displayOptions.filter(option => {
     const replyId = draftReplyId(option).trim().toLowerCase();
     const groupedTaskAction = taskCreateOption && option === taskCreateOption;
-    return !compressionOptionIds.has(replyId)
+    return !(hasCompressionPreview && compressionOptionIds.has(replyId))
       && (!isLaunchMenu || (replyId !== "action_launch_gallery" && replyId !== "action_orders_gallery" && replyId !== "action_payment_programming_gallery" && replyId !== "action_recurring_expenses_gallery" && replyId !== "action_provision_description_gallery" && replyId !== "action_quote_gallery"))
       && (!pairedMenu || !pairedMenu.pairs.some(pair => pair.id === replyId))
       && (!isRegistrationMenu || !REGISTRATION_GALLERIES.some(gallery => gallery.id === replyId))
