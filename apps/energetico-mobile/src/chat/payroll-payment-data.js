@@ -2,6 +2,7 @@ import { payrollFieldKey as key } from './payroll-editor-policy.js';
 import { PAYROLL_RUBRICS, payrollDecimal, validPayrollDate } from './supplier-payroll.js';
 import Decimal from 'decimal.js';
 import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
+import { ensurePayrollTaxLink } from './payroll-tax-links.js';
 
 const scalar = value => String(value && typeof value === 'object' ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
 const id = value => { const result = String(value ?? ''); if (!/^[1-9]\d{0,14}$/.test(result) || !Number.isSafeInteger(Number(result))) throw new Error('Selecione um ID cadastrado.'); return result; };
@@ -17,7 +18,7 @@ function monthWindow(now) {
 }
 
 /** Link an existing launch to payroll; this never creates or edits a launch. */
-export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{}}={}) {
+export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{},storage}={}) {
   const descriptors = new Map(), operations = new Map();
   let saving = false;
   async function describe(name) {
@@ -101,6 +102,32 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     saving=true;
     try {
       const [launches,suppliers,sheets,payroll]=await Promise.all(['LANCAMENTOS','FORNECEDORES','IDFOLHA','FOLHAPGTO'].map(describe));
+      if(tax) {
+        let sourceIdentity;
+        async function assertContext({creating=false}={}) {
+          const launch=await get(launches,selection.launchId),name=value(launches,launch,['FORNECEDOR']);
+          const identity=JSON.stringify([key(name),value(launches,launch,['VALOR UNITÁRIO','VALORUNITARIO']),value(launches,launch,['QUANTIDADE','QTD']),value(launches,launch,['DATA'])]);
+          if(sourceIdentity&&sourceIdentity!==identity)throw new Error('O lançamento do encargo foi alterado; revise o fornecedor e os valores.');
+          sourceIdentity=identity;
+          const matches=(await all(suppliers)).filter(row=>key(supplierName(suppliers,row))===key(name));
+          if(matches.length!==1||creating&&!activeSupplier(suppliers,matches[0]))throw new Error('O fornecedor do encargo não foi confirmado como empreiteiro ativo.');
+          const supplier=supplierName(suppliers,matches[0]);
+          const exact=(await all(sheets)).filter(row=>key(value(sheets,row,['FORNECEDOR']))===key(supplier)&&payrollCompetenceMonth(value(sheets,row,['MESREFERENCIA','MES REFERENCIA']))===selection.competence);
+          if(exact.length!==1||String(exact[0].id)!==selection.sheetId)throw new Error('Selecione um IDFOLHA único desse fornecedor na competência confirmada; a folha pode ter sido alterada.');
+          return {launch,supplier};
+        }
+        const {launch,supplier}=await assertContext();
+        const date=value(launches,launch,['DATA']).slice(0,10);
+        if(!validPayrollDate(date))throw new Error('O lançamento não possui uma data válida.');
+        const number=aliases=>payrollDecimal(value(launches,launch,aliases)).toNumber();
+        const fields=Object.fromEntries(Object.entries({Title:`APP-folha-encargo-lancamento-${selection.launchId}-${key(selection.paymentType)}`,
+          FORNECEDOR:supplier,TIPOPGTO:selection.paymentType,VALORUNITARIO:number(['VALOR UNITÁRIO','VALORUNITARIO']),QTD:number(['QUANTIDADE','QTD']),
+          DATA:date,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)}).map(([label,raw])=>[column(payroll,[label]).name,fieldValue(payroll,label,raw)]));
+        if(!types(payroll).includes(selection.paymentType))throw new Error('Selecione um tipo de pagamento cadastrado.');
+        return await ensurePayrollTaxLink({descriptor:payroll,fields,siteKey,storage,assertSession,assertContext,
+          allRows:()=>all(payroll),readItem:rawId=>get(payroll,rawId),
+          createItem:fields=>repository.createItem(siteKey,payroll.id,fields),onAttempt:()=>operations.set(operationId,{fingerprint})});
+      }
       const token=tax?`APP-folha-encargo-lancamento-${selection.launchId}-${key(selection.paymentType)}`:`APP-folha-vinculo-${operationId}`,title=column(payroll,['Title']).name;
       let found;
       try { found=await all(payroll,{filter:`fields/${title} eq '${token}'`}); }
@@ -117,10 +144,6 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
         return verified;
       };
       if(found[0]) {
-        if(tax) {
-          const sheet=await get(sheets,selection.sheetId);
-          if(payrollCompetenceMonth(value(sheets,sheet,['MESREFERENCIA','MES REFERENCIA']))!==selection.competence)throw new Error('O IDFOLHA não corresponde à competência confirmada.');
-        }
         const expected=previous?.fields || Object.fromEntries(Object.entries({Title:token,TIPOPGTO:selection.paymentType,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)}).map(([label,value])=>[column(payroll,[label]).name,fieldValue(payroll,label,value)]));
         return verify(found[0],expected);
       }
@@ -132,16 +155,6 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
       const sheetMonth=payrollCompetenceMonth(value(sheets,sheet,['MESREFERENCIA','MES REFERENCIA']));
       if(key(value(sheets,sheet,['FORNECEDOR']))!==key(supplier) || (tax ? sheetMonth!==selection.competence : !monthWindow(now()).includes(sheetMonth)))
         throw new Error(tax?'Selecione um IDFOLHA desse fornecedor na competência confirmada.':'Selecione uma folha desse fornecedor do mês anterior, atual ou próximo.');
-      if(tax) {
-        const sameMonth=(await all(sheets)).filter(row=>key(value(sheets,row,['FORNECEDOR']))===key(supplier)&&payrollCompetenceMonth(value(sheets,row,['MESREFERENCIA','MES REFERENCIA']))===selection.competence);
-        if(sameMonth.length!==1)throw new Error('Há mais de um IDFOLHA para essa competência; regularize as folhas antes de vincular.');
-        const existing=(await all(payroll)).filter(row=>value(payroll,row,['IDLANCAMENTO'])===selection.launchId&&key(value(payroll,row,['TIPOPGTO']))===key(selection.paymentType));
-        if(existing.length>1)throw new Error('Mais de um pagamento já está vinculado a essa origem; confira a galeria.');
-        if(existing[0]) {
-          const expected=Object.fromEntries(Object.entries({FORNECEDOR:supplier,TIPOPGTO:selection.paymentType,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)}).map(([label,raw])=>[column(payroll,[label]).name,fieldValue(payroll,label,raw)]));
-          return verify(existing[0],expected);
-        }
-      }
       if(!types(payroll).includes(selection.paymentType)) throw new Error('Selecione um tipo de pagamento cadastrado.');
       const currentLaunch=await get(launches,selection.launchId);
       if(key(value(launches,currentLaunch,['FORNECEDOR']))!==key(name)) throw new Error('O fornecedor do lançamento foi alterado; revise a seleção.');

@@ -37,6 +37,28 @@ function fixture() {
   return { repository, data: createHrPayrollGalleryData({ repository,now:()=>new Date('2026-10-05T12:00:00Z') }), writes, changeContractor:()=>{launches[1].fields.EMPREITEIRO='NÃO';},changeSheet:()=>{sheets[1].fields.FORNECEDOR='OUTRO';}, change: () => { amount = 300; quantity = 5; } };
 }
 
+test('generic payroll editor cannot introduce a tax type without competence confirmation',async()=>{
+  const f=fixture(),context=await f.data.loadEditor('FOLHAPGTO','3');
+  assert.equal(context.columns.find(c=>c.name==='TIPOPGTO').choices.includes('INSS'),false);
+  await assert.rejects(f.data.saveEditor(context,{TIPOPGTO:'INSS'}),/opção|competência|editável/i);
+  await assert.rejects(f.data.saveEditor(context,{TIPOPGTO:'INSS',IDFOLHA:'25',IDLANCAMENTO:'3460'}),/fornecedor|opção|competência|editável/i);
+  assert.equal(f.writes.length,0);
+});
+
+test('historical tax editor preserves locked source, type and competence while allowing a date correction',async()=>{
+  const f=fixture(),row=await f.repository.getItem('personal','FOLHAPGTO','3');row.fields.TIPOPGTO='INSS';row.fields.IDFOLHA=35;
+  const context=await f.data.loadEditor('FOLHAPGTO','3');
+  for(const name of ['IDFOLHA','IDLANCAMENTO','TIPOPGTO'])assert.equal(context.columns.find(c=>c.name===name).readOnly,true);
+  await assert.rejects(f.data.saveEditor(context,{IDFOLHA:'15'}),/editável/i);
+  await f.data.saveEditor(context,{DATA:'2026-09-29'});assert.deepEqual(f.writes,[{DATA:'2026-09-29'}]);
+});
+
+test('tax editor rejects a launch belonging to a different employee even when its ID exists',async()=>{
+  const f=fixture(),row=await f.repository.getItem('personal','FOLHAPGTO','3');row.fields.TIPOPGTO='FGTS';row.fields.IDLANCAMENTO=3460;
+  await assert.rejects(f.data.loadEditor('FOLHAPGTO','3'),/fornecedor|funcionário/i);
+  assert.equal(f.writes.length,0);
+});
+
 test('payroll editor hides title, locks source values and restricts supplier and payment type', async () => {
   const { data, writes } = fixture();
   const context = await data.loadEditor('FOLHAPGTO', '3');

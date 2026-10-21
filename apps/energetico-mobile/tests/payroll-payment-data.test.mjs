@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createPayrollPaymentData } from '../src/chat/payroll-payment-data.js';
 
 function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
+  const journal=new Map(),storage={getItem:k=>journal.get(k)??null,setItem:(k,v)=>journal.set(k,v),removeItem:k=>journal.delete(k)};
   const columns = Object.fromEntries(Object.entries({
     FORNECEDORES:['CADASTRO','EMPREITEIRO','STATUS','PROFISSÃO'],
     LANCAMENTOS:['FORNECEDOR','VALOR UNITÁRIO','QUANTIDADE','DATA','PRODUTO','FRETE','DATA PGTO EFETUADO','VALORTOTAL'],
@@ -23,7 +24,7 @@ function fixture(now = () => new Date('2026-10-05T12:00:00Z')) {
     async getItem(_site,list,id) {return rows[list].find(row=>row.id===String(id));},
     async createItem(_site,list,fields) {writes.push({list,fields});const row=item(100+writes.length,fields);rows[list].push(row);return row;},
   };
-  return {rows,writes,repository,data:createPayrollPaymentData({repository,now})};
+  return {rows,writes,repository,storage,data:createPayrollPaymentData({repository,now,storage})};
 }
 const draft={launchId:'10',sheetId:'21',paymentType:'SALÁRIO'};
 const operation={operationId:'payment-test-1'};
@@ -78,9 +79,53 @@ test('reopening a tax source already linked must not duplicate payroll under a n
   const f=fixture();enableTaxes(f);
   const selected={...draft,paymentType:'FGTS',sheetId:'20',competence:'2026-09'};
   const first=await f.data.save(selected,operation);
-  const reopened=createPayrollPaymentData({repository:f.repository,now:()=>new Date('2027-03-01T12:00:00Z')});
+  const reopened=createPayrollPaymentData({repository:f.repository,storage:f.storage,now:()=>new Date('2027-03-01T12:00:00Z')});
   assert.equal((await reopened.save(selected,{operationId:'reopened-tax'})).id,first.id);
   assert.equal(f.writes.length,1);
+});
+
+test('uncertain tax POST stays blocked across service recreation and a new operation until the origin becomes visible',async()=>{
+  const f=fixture();enableTaxes(f);let invisible=true,attempts=0;
+  const pages=f.repository.getItemsPage,create=f.repository.createItem;
+  f.repository.getItemsPage=async(...args)=>args[1]==='FOLHAPGTO'&&invisible?{items:[],hasMore:false}:pages(...args);
+  f.repository.createItem=async(...args)=>{attempts++;await create(...args);throw new Error('response lost');};
+  const selected={...draft,paymentType:'INSS',sheetId:'20',competence:'2026-09'};
+  await assert.rejects(f.data.save(selected,operation),/response lost/);
+  const reopened=createPayrollPaymentData({repository:f.repository,storage:f.storage});
+  await assert.rejects(reopened.save(selected,{operationId:'new-after-reopen'}),/confirm|incert/i);
+  assert.equal(attempts,1);invisible=false;
+  assert.equal((await reopened.save(selected,{operationId:'new-after-reopen'})).id,'101');
+});
+
+test('canonical tax recovery rejects legacy duplicates and a changed sheet supplier',async()=>{
+  for(const conflict of ['duplicate','supplier']) {
+    const f=fixture();enableTaxes(f);const selected={...draft,paymentType:'FGTS',sheetId:'20',competence:'2026-09'};
+    await f.data.save(selected,operation);
+    if(conflict==='duplicate')f.rows.FOLHAPGTO.push({id:'102',fields:{...f.rows.FOLHAPGTO[0].fields,Title:'legacy'}});
+    else f.rows.IDFOLHA[0].fields.FORNECEDOR='OUTRO';
+    await assert.rejects(f.data.save(selected,operation),/Mais de um|fornecedor|competência|IDFOLHA/i);
+    assert.equal(f.writes.length,1);
+  }
+});
+
+test('refreshed tax sheet must be the selected ID, not another sheet that took its month',async()=>{
+  const f=fixture();enableTaxes(f);const pages=f.repository.getItemsPage;
+  f.repository.getItemsPage=async(...args)=>{
+    if(args[1]==='IDFOLHA') {f.rows.IDFOLHA[0].fields.MESREFERENCIA='10/2026';f.rows.IDFOLHA.push({id:'99',fields:{FORNECEDOR:'CLEITON',MESREFERENCIA:'09/2026'}});}
+    return pages(...args);
+  };
+  await assert.rejects(f.data.save({...draft,paymentType:'INSS',sheetId:'20',competence:'2026-09'},operation),/IDFOLHA|competência|alterad/i);
+  assert.equal(f.writes.length,0);
+});
+
+test('tax source and sheet cannot both switch employee while preflight is running',async()=>{
+  const f=fixture();enableTaxes(f);const get=f.repository.getItem;let reads=0;
+  f.repository.getItem=async(...args)=>{
+    if(args[1]==='LANCAMENTOS'&&++reads===2){f.rows.LANCAMENTOS[0].fields.FORNECEDOR='OUTRO';f.rows.IDFOLHA[0].fields.FORNECEDOR='OUTRO';}
+    return get(...args);
+  };
+  await assert.rejects(f.data.save({...draft,paymentType:'INSS',sheetId:'20',competence:'2026-09'},operation),/alterad|fornecedor/i);
+  assert.equal(f.writes.length,0);
 });
 
 test('launch options expose profession, exact unit times quantity plus freight and paid date without writes',async()=>{

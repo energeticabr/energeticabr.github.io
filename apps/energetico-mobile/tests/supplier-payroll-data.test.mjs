@@ -39,6 +39,7 @@ const defs = {
   ],
 };
 export function fixture() {
+  const journal=new Map(), storage={getItem:k=>journal.get(k)??null,setItem:(k,v)=>journal.set(k,v),removeItem:k=>journal.delete(k)};
   const columns = Object.fromEntries(
     Object.entries(defs).map(([list, fields]) => [
       list,
@@ -148,6 +149,7 @@ export function fixture() {
   };
   const data = module.createSupplierPayrollData({
     repository,
+    storage,
     now: () => new Date("2026-10-02T20:00:00Z"),
   });
   const draft = {
@@ -175,6 +177,7 @@ export function fixture() {
   };
   return {
     data,
+    storage,
     repository,
     rows,
     columns,
@@ -642,6 +645,24 @@ function taxSheetFixture(f) {
   f.rows.IDFOLHA.push({id:'12',fields:{...f.rows.IDFOLHA[0].fields,[month]:'09/2026'}});
   return {id:'12',label:'09/2026'};
 }
+
+test('resuming a tax batch reuses a compatible gallery link for the same launch regardless of Title',async()=>{
+  const f=fixture(),taxSheet=taxSheetFixture(f),progress={operationId:'cross-flow-tax'};
+  const selected={...f.draft,sheet:null,taxCompetence:'2026-09',taxSheet,lines:[{...f.draft.lines[0],rubric:'inss'}]};
+  const pages=f.repository.getItemsPage;let fail=true;
+  f.repository.getItemsPage=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail){fail=false;throw new Error('lookup failed');}return pages(...args);};
+  await assert.rejects(f.data.post(selected,progress),/lookup failed/);
+  const fields={Title:'APP-folha-encargo-lancamento-100-INSS',FORNECEDOR:'EDGAR',TIPOPGTO:'INSS',VALORUNITARIO:'100.5',QTD:'2',DATA:'2026-10-02T12:00:00Z',IDFOLHA:'12',IDLANCAMENTO:'100'};
+  f.rows.FOLHAPGTO.push({id:'88',fields:Object.fromEntries(Object.entries(fields).map(([label,value])=>[f.columns.FOLHAPGTO.find(c=>c.displayName===label).name,value]))});
+  await f.data.post(selected,progress);
+  assert.equal(f.rows.FOLHAPGTO.length,1);assert.equal(progress.lines.inss.payrollId,'88');
+});
+
+test('unavailable durable tax journal blocks before any paid launch is created',async()=>{
+  const f=fixture(),taxSheet=taxSheetFixture(f);f.storage.setItem=()=>{throw new Error('quota');};
+  await assert.rejects(f.data.post({...f.draft,sheet:null,taxCompetence:'2026-09',taxSheet,lines:[{...f.draft.lines[0],rubric:'inss'}]}, {operationId:'no-tax-storage'}),/quota|armazenamento/i);
+  assert.equal(f.writes.length,0);
+});
 
 test('mixed payroll keeps salary in October and posts tax only to the September sheet',async()=>{
   const f=fixture(),taxSheet=taxSheetFixture(f);

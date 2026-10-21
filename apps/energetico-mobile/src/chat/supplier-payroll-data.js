@@ -7,6 +7,7 @@ import {
 } from "../../../../portal/data/attachments.js";
 import { payrollKey as key, validatePayrollDraft } from "./supplier-payroll.js";
 import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
+import { ensurePayrollTaxLink, assertPayrollTaxStorage } from './payroll-tax-links.js';
 const SITE = "personal";
 const scalar = (value) =>
   value && typeof value === "object"
@@ -78,6 +79,7 @@ export function createSupplierPayrollData({
   fetchImpl = globalThis.fetch,
   now = () => new Date(),
   assertSession = () => {},
+  storage,
 } = {}) {
   if (!repository) {
     if (typeof tokenProvider !== "function")
@@ -359,6 +361,7 @@ export function createSupplierPayrollData({
         );
       const hasNormal = draft.lines.some(line => !payrollTaxType(line.payrollType));
       const hasTax = draft.lines.some(line => payrollTaxType(line.payrollType));
+      if (hasTax && !progress.fingerprint) assertPayrollTaxStorage(storage);
       const [products, accounts, stages, sheets, taxSheets] = await Promise.all([
         loadProducts(supplier),
         loadAccounts(),
@@ -506,6 +509,22 @@ export function createSupplierPayrollData({
       progress.sheetId = sheet.id;
       for (let i = 0; i < result.lines.length; i++) {
         const line = result.lines[i];
+        if (payrollTaxType(line.payrollType)) {
+          const fields={...payloads[i],...fieldsFor(descriptor,{Title:`APP-folha-encargo-lancamento-${line.id}-${key(line.payrollType)}`})};
+          const saved=await ensurePayrollTaxLink({descriptor,fields,siteKey:SITE,storage,assertSession,matchFinancials:true,
+            allRows:()=>all(descriptor),readItem:async id=>{
+              const item=await repository.getItem(SITE,descriptor.id,id,'$expand=fields');
+              if(String(item?.id)!==id)throw new Error('O vínculo do encargo não foi confirmado.');return item;
+            },createItem:fields=>repository.createItem(SITE,descriptor.id,fields),
+            assertContext:async()=>{
+              const exact=(await registeredSheets(result.supplier)).filter(s=>payrollCompetenceMonth(s.label)===payrollCompetenceMonth(result.taxCompetence));
+              if(exact.length!==1||exact[0].id!==result.taxSheet.id)throw new Error('O IDFOLHA da competência de INSS/FGTS foi alterado.');
+              const launches=await describe('LANCAMENTOS'),source=await repository.getItem(SITE,launches.id,line.id,'$expand=fields');
+              const supplierColumn=column(launches.columns,['FORNECEDOR']);
+              if(String(source?.id)!==line.id||key(source.fields?.[supplierColumn.name])!==key(result.supplier.label))throw new Error('O fornecedor do lançamento do encargo foi alterado.');
+            }});
+          progress.lines[line.rubric].payrollId=String(saved.id);continue;
+        }
         progress.lines[line.rubric].payrollId = await ensure(
           descriptor,
           payloads[i],

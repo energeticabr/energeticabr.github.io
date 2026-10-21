@@ -7,6 +7,8 @@
 - Somente IDFOLHA do funcionário e da competência confirmada pode receber encargos.
 - Lote misto mantém a folha salarial separada da folha de encargos; lote só de encargos dispensa uma folha salarial fictícia.
 - Formulário de vínculo de lançamento existente grava somente FOLHAPGTO. Não cria obrigação, lançamento ou pedido.
+- Reconciliação por origem/rubrica é compartilhada entre os dois fluxos, inclusive registros legados com outro título. Envio incerto deixa marcador persistente no aparelho antes do POST; sem armazenamento disponível, novo vínculo é bloqueado. Web Locks serializa a origem entre abas quando suportado.
+- Edição genérica mantém identidade/competência dos encargos bloqueadas, aceita correção de data em competência histórica e revalida o fornecedor da origem. Para criar/classificar INSS/FGTS, usar o fluxo dedicado com confirmação de competência.
 - Grade semanal não oferece encargos em cada sexta; totais mensais e histórico incluem as duas rubricas.
 
 ## Auditoria de dados existentes — somente leitura
