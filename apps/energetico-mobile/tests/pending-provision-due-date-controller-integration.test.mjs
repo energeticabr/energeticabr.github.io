@@ -111,8 +111,10 @@ test("pencil rejects an unknown explicit row source instead of guessing from its
 test("pencil heals an old child when the parent already has the selected date and row kind overrides a legacy snapshot", async t => {
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T15:00:00Z") });
   const fixture = createProvisionDueDateFixture();
-  fixture.parent.fields[fixture.parentDue] = "2026-10-13T03:00:00.000Z";
-  fixture.children.find(row => row.id === "2").fields[fixture.childDue] = "2026-10-13T03:00:00.000Z";
+  // Match the adapter's local-midnight serialization, not the developer's UTC-3.
+  const alreadySelectedDate = new Date(2026, 9, 13).toISOString();
+  fixture.parent.fields[fixture.parentDue] = alreadySelectedDate;
+  fixture.children.find(row => row.id === "2").fields[fixture.childDue] = alreadySelectedDate;
   const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async options =>
     createPendingProvisionAttachmentsData({ ...options, repository: fixture.repository }) });
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, sourceKind: "", rows: [
