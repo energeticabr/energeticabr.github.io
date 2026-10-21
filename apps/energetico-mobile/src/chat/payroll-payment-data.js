@@ -1,6 +1,8 @@
 import { payrollFieldKey as key } from './payroll-editor-policy.js';
 import { PAYROLL_RUBRICS, payrollDecimal, validPayrollDate } from './supplier-payroll.js';
 import Decimal from 'decimal.js';
+import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
+import { ensurePayrollTaxLink } from './payroll-tax-links.js';
 
 const scalar = value => String(value && typeof value === 'object' ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
 const id = value => { const result = String(value ?? ''); if (!/^[1-9]\d{0,14}$/.test(result) || !Number.isSafeInteger(Number(result))) throw new Error('Selecione um ID cadastrado.'); return result; };
@@ -16,7 +18,7 @@ function monthWindow(now) {
 }
 
 /** Link an existing launch to payroll; this never creates or edits a launch. */
-export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{}}={}) {
+export function createPayrollPaymentData({repository,siteKey='personal',now=()=>new Date(),assertSession=()=>{},storage}={}) {
   const descriptors = new Map(), operations = new Map();
   let saving = false;
   async function describe(name) {
@@ -45,7 +47,9 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     for(let pageNumber=1;pageNumber<=100;pageNumber++) {
       assertSession();if(signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.','AbortError');
       const page=await repository.getItemsPage(siteKey,descriptor.id,`$expand=fields&$top=100${filter?`&$filter=${filter}`:''}`,{pageNumber,maxPages:100,headers:{Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'},...(cursor?{cursor}:{}),...(signal?{signal}:{})});
-      assertSession();rows.push(...(page.items||[]));
+      assertSession();
+      if(!Array.isArray(page?.items)||typeof page.hasMore!=='boolean')throw new Error('A consulta dos pagamentos não pôde ser confirmada.');
+      rows.push(...page.items);
       if(!page.hasMore) return rows;
       if(!page.nextLink||seen.has(page.nextLink)) throw new Error('A consulta dos pagamentos não pôde ser concluída.');
       cursor=page.nextLink;seen.add(cursor);
@@ -74,10 +78,13 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
     const [supplierRows,launchRows,sheetRows]=await Promise.all([suppliers,launches,sheets].map(d=>all(d,{signal})));
     const eligible=supplierRows.filter(row=>activeSupplier(suppliers,row)).map(row=>({id:id(row.id),label:supplierName(suppliers,row),profession:value(suppliers,row,['PROFISSÃO'],false)}));
     const window=monthWindow(now());
+    const allSheets=sheetRows.map(row=>({id:id(row.id),supplier:value(sheets,row,['FORNECEDOR']),label:value(sheets,row,['MESREFERENCIA','MES REFERENCIA'])}))
+      .filter(row=>payrollCompetenceMonth(row.label)).sort((a,b)=>month(a.label).localeCompare(month(b.label))||Number(a.id)-Number(b.id));
     return {
       launches:launchRows.flatMap(row=>{const name=value(launches,row,['FORNECEDOR']),matches=eligible.filter(s=>key(s.label)===key(name));return matches.length===1?[launchRow(launches,row,matches[0])]:[];}).sort((a,b)=>Number(b.id)-Number(a.id)),
       sheets:sheetRows.flatMap(row=>{const reference=value(sheets,row,['MESREFERENCIA','MES REFERENCIA']),supplier=value(sheets,row,['FORNECEDOR']);return window.includes(month(reference))?[{id:id(row.id),supplier,label:reference}]:[];}).sort((a,b)=>month(a.label).localeCompare(month(b.label))||Number(a.id)-Number(b.id)),
       paymentTypes:types(payroll),
+      allSheets,
     };
   }
   async function get(descriptor,rawId) {
@@ -87,13 +94,41 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
   async function save(draft,{operationId}={}) {
     if(saving) throw new Error('O pagamento já está sendo cadastrado.');
     if(!/^[a-zA-Z0-9-]{1,80}$/.test(String(operationId||''))) throw new Error('A operação não foi identificada.');
-    const selection={launchId:id(draft?.launchId),sheetId:id(draft?.sheetId),paymentType:scalar(draft?.paymentType)};
+    const tax=payrollTaxType(draft?.paymentType);
+    const selection={launchId:id(draft?.launchId),sheetId:id(draft?.sheetId),paymentType:scalar(draft?.paymentType),...(tax?{competence:payrollCompetenceMonth(draft?.competence)}:{})};
+    if(tax&&!selection.competence)throw new Error('Confirme a competência de INSS/FGTS.');
     const fingerprint=JSON.stringify(selection),previous=operations.get(operationId);
     if(previous&&previous.fingerprint!==fingerprint) throw new Error('A operação não pode ser alterada depois de iniciar o cadastro.');
     saving=true;
     try {
       const [launches,suppliers,sheets,payroll]=await Promise.all(['LANCAMENTOS','FORNECEDORES','IDFOLHA','FOLHAPGTO'].map(describe));
-      const token=`APP-folha-vinculo-${operationId}`,title=column(payroll,['Title']).name;
+      if(tax) {
+        let sourceIdentity;
+        async function assertContext({creating=false}={}) {
+          const launch=await get(launches,selection.launchId),name=value(launches,launch,['FORNECEDOR']);
+          const identity=JSON.stringify([key(name),value(launches,launch,['VALOR UNITÁRIO','VALORUNITARIO']),value(launches,launch,['QUANTIDADE','QTD']),value(launches,launch,['DATA'])]);
+          if(sourceIdentity&&sourceIdentity!==identity)throw new Error('O lançamento do encargo foi alterado; revise o fornecedor e os valores.');
+          sourceIdentity=identity;
+          const matches=(await all(suppliers)).filter(row=>key(supplierName(suppliers,row))===key(name));
+          if(matches.length!==1||creating&&!activeSupplier(suppliers,matches[0]))throw new Error('O fornecedor do encargo não foi confirmado como empreiteiro ativo.');
+          const supplier=supplierName(suppliers,matches[0]);
+          const exact=(await all(sheets)).filter(row=>key(value(sheets,row,['FORNECEDOR']))===key(supplier)&&payrollCompetenceMonth(value(sheets,row,['MESREFERENCIA','MES REFERENCIA']))===selection.competence);
+          if(exact.length!==1||String(exact[0].id)!==selection.sheetId)throw new Error('Selecione um IDFOLHA único desse fornecedor na competência confirmada; a folha pode ter sido alterada.');
+          return {launch,supplier};
+        }
+        const {launch,supplier}=await assertContext();
+        const date=value(launches,launch,['DATA']).slice(0,10);
+        if(!validPayrollDate(date))throw new Error('O lançamento não possui uma data válida.');
+        const number=aliases=>payrollDecimal(value(launches,launch,aliases)).toNumber();
+        const fields=Object.fromEntries(Object.entries({Title:`APP-folha-encargo-lancamento-${selection.launchId}-${key(selection.paymentType)}`,
+          FORNECEDOR:supplier,TIPOPGTO:selection.paymentType,VALORUNITARIO:number(['VALOR UNITÁRIO','VALORUNITARIO']),QTD:number(['QUANTIDADE','QTD']),
+          DATA:date,IDFOLHA:Number(selection.sheetId),IDLANCAMENTO:Number(selection.launchId)}).map(([label,raw])=>[column(payroll,[label]).name,fieldValue(payroll,label,raw)]));
+        if(!types(payroll).includes(selection.paymentType))throw new Error('Selecione um tipo de pagamento cadastrado.');
+        return await ensurePayrollTaxLink({descriptor:payroll,fields,siteKey,storage,assertSession,assertContext,
+          allRows:()=>all(payroll),readItem:rawId=>get(payroll,rawId),
+          createItem:fields=>repository.createItem(siteKey,payroll.id,fields),onAttempt:()=>operations.set(operationId,{fingerprint})});
+      }
+      const token=tax?`APP-folha-encargo-lancamento-${selection.launchId}-${key(selection.paymentType)}`:`APP-folha-vinculo-${operationId}`,title=column(payroll,['Title']).name;
       let found;
       try { found=await all(payroll,{filter:`fields/${title} eq '${token}'`}); }
       catch(error) { if(error.status!==400) throw error;found=await all(payroll); }
@@ -117,7 +152,9 @@ export function createPayrollPaymentData({repository,siteKey='personal',now=()=>
       const matches=(await all(suppliers)).filter(row=>key(supplierName(suppliers,row))===key(name));
       if(matches.length!==1||!activeSupplier(suppliers,matches[0])) throw new Error('O fornecedor deve ser empreiteiro SIM e estar ATIVO.');
       const supplier=supplierName(suppliers,matches[0]),sheet=await get(sheets,selection.sheetId);
-      if(key(value(sheets,sheet,['FORNECEDOR']))!==key(supplier)||!monthWindow(now()).includes(month(value(sheets,sheet,['MESREFERENCIA','MES REFERENCIA'])))) throw new Error('Selecione uma folha desse fornecedor do mês anterior, atual ou próximo.');
+      const sheetMonth=payrollCompetenceMonth(value(sheets,sheet,['MESREFERENCIA','MES REFERENCIA']));
+      if(key(value(sheets,sheet,['FORNECEDOR']))!==key(supplier) || (tax ? sheetMonth!==selection.competence : !monthWindow(now()).includes(sheetMonth)))
+        throw new Error(tax?'Selecione um IDFOLHA desse fornecedor na competência confirmada.':'Selecione uma folha desse fornecedor do mês anterior, atual ou próximo.');
       if(!types(payroll).includes(selection.paymentType)) throw new Error('Selecione um tipo de pagamento cadastrado.');
       const currentLaunch=await get(launches,selection.launchId);
       if(key(value(launches,currentLaunch,['FORNECEDOR']))!==key(name)) throw new Error('O fornecedor do lançamento foi alterado; revise a seleção.');

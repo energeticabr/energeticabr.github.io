@@ -26,6 +26,15 @@ function harness(options = {}) {
   return { dom, doc: documentRef, data, view, click, input, get posts() { return posts; }, get posted() { return posted; }, fail: () => { fail = true; }, recover: () => { fail = false; } };
 }
 
+test('taxes appear in monthly totals but are not offered as editable weekly obligations',async t=>{
+  const h=harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
+  h.data.loadPayrollContext=async()=>({sheetId:'19',paid:{inss:120,fgts:80},paidTotal:200});
+  await h.view.open();await h.click('[data-breakdown-supplier="7"]');await h.click('[data-breakdown-next]');
+  assert.equal(h.doc.querySelector('[data-breakdown-value$=":inss"]'),null);
+  assert.equal(h.doc.querySelector('[data-breakdown-value$=":fgts"]'),null);
+  assert.match(h.doc.querySelector('[aria-label="Totais por rubrica"]').textContent,/INSS.*120,00.*FGTS.*80,00/s);
+});
+
 test('fluxo filtra fornecedor, oferece sextas e fim do mês e só submete após conferência', async t => {
   const h = harness(); t.after(() => { h.view.destroy(); h.dom.window.close(); }); await h.view.open();
   h.input('[type=search]', 'TESTE'); assert.equal(h.doc.querySelector('[data-breakdown-supplier="8"]').hidden, true);

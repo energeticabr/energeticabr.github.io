@@ -7,6 +7,7 @@ import { createPayrollSheetReader } from './payroll-sheet-options.js';
 import { createPayrollLaunchReader } from './payroll-launch-options.js';
 import { createPayrollSheetAttachments } from './payroll-sheet-attachments.js';
 import { payrollProvisionId } from './payroll-provision-source.js';
+import { payrollTaxType } from './payroll-tax-competence.js';
 import { validateAttachment } from '../../../../portal/data/attachments.js';
 
 function key(value) {
@@ -173,9 +174,11 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
     const sheetColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDFOLHA'):null;
     const sheetSupplier=isPayroll?Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='FORNECEDOR')?.[1]:null;
     const launchColumn=isPayroll?rawColumns.find(c=>payrollFieldKey(c.name)==='IDLANCAMENTO'):null;
+    const taxIdentityLocked=isPayroll&&payrollTaxType(Object.entries(item.fields).find(([name])=>payrollFieldKey(name)==='TIPOPGTO')?.[1]);
+    const taxCompetence=taxIdentityLocked&&sheetColumn ? await payrollSheets.assertSheet(item.fields[sheetColumn.name],sheetSupplier,{allowHistorical:true}) : '';
     const [sheetOptions,launchOptions]=await Promise.all([
-      sheetColumn && !provisionLinked ? payrollSheets.options(sheetSupplier,{signal}):[],
-      launchColumn && !provisionLinked ? payrollLaunches.options({signal}):[],
+      sheetColumn && !provisionLinked && !taxIdentityLocked ? payrollSheets.options(sheetSupplier,{signal}):[],
+      launchColumn && !provisionLinked && !taxIdentityLocked ? payrollLaunches.options({signal}):[],
     ]);
     abort(signal);
     const formColumns = isPayrollSheet ? contract.formColumns.map(column =>
@@ -189,7 +192,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
           powerApps: { closed: true, preserveCurrentValue: true } }
         : column) : contract.formColumns;
     const locked = new Set(readOnlyEditFields.map(key));
-    const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions) : formColumns)
+    const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions,{lockTaxIdentity:taxIdentityLocked}) : formColumns)
       .filter(column => key(column.name) !== 'FOLHAOPERACAO')
       .map(column => provisionLinked || locked.has(key(column.name)) ? { ...column, readOnly: true, disabled: true, editable: true, ...(provisionLinked ? { required: false } : {}) } : column));
     contract = frozenCopy({ ...contract, formColumns: columns, ...(provisionLinked ? { readOnly: true } : {}) });
@@ -248,7 +251,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       ...(sheetAttachments ? { sheetAttachments } : {}),
       ...(refreshDerivedValues ? { refreshDerivedValues } : {}),
       ...(evaluateFieldLocks ? { evaluateFieldLocks } : {}) });
-    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn,sheetAttachments, attachments,
+    contexts.set(context, { list, item, columns, contract, relationshipOptions, form43, statusColumn,sheetColumn,sheetSupplier,launchColumn,taxCompetence,sheetAttachments, attachments,
       savedFields: null, attemptedUploads: new Set(), uploadedNames: new Set(), attemptedDeletions: new Set(), deletedNames: new Set() });
     return context;
   }
@@ -433,7 +436,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       if(baseline.launchColumn.number)normalized[baseline.launchColumn.name]=Number(id);
     }
     const merged = { ...item.fields, ...normalized }, changed = {};
-    if(baseline.sheetColumn)await payrollSheets.assertSheet(merged[baseline.sheetColumn.name],baseline.sheetSupplier);
+    if(baseline.sheetColumn)await payrollSheets.assertSheet(merged[baseline.sheetColumn.name],baseline.sheetSupplier,baseline.taxCompetence?{competence:baseline.taxCompetence}:{});
     if(baseline.launchColumn)await payrollLaunches.assertLaunch(merged[baseline.launchColumn.name]);
     if (isPayroll) await readPayrollSource(merged);
     for (const [name, value] of Object.entries(normalized)) {

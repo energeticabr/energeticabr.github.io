@@ -53,6 +53,8 @@ test("rubricas seguem imagem e total usa quantidade vezes valor, com centavos ex
       "Vale transporte",
       "13º salário",
       "Férias",
+      "INSS",
+      "FGTS",
     ],
   );
   assert.equal(

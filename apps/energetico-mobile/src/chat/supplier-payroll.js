@@ -1,4 +1,6 @@
 import Decimal from "decimal.js";
+import { payrollTaxType, payrollTaxSheet } from './payroll-tax-competence.js';
+export { payrollTaxType, payrollTaxSheet, payrollCompetenceMonth, previousPayrollCompetence } from './payroll-tax-competence.js';
 export const PAYROLL_LAUNCH_REPLY_ID = "action_supplier_payroll_launch";
 export const PAYROLL_RUBRICS = Object.freeze(
   [
@@ -9,6 +11,8 @@ export const PAYROLL_RUBRICS = Object.freeze(
     ["transport", "Vale transporte", "VALE TRANSPORTE"],
     ["thirteenth", "13º salário", "13 SALÁRIO"],
     ["vacation", "Férias", "FÉRIAS E/OU ENCARGOS"],
+    ["inss", "INSS", "INSS"],
+    ["fgts", "FGTS", "FGTS"],
   ].map(([id, label, payrollType]) =>
     Object.freeze({ id, label, payrollType }),
   ),
@@ -84,11 +88,15 @@ export function validatePayrollDraft(draft) {
   }
   if (!String(draft.supplier.branch || "").trim())
     throw new RangeError("O fornecedor não possui filial cadastrada.");
-  if (!/^[1-9]\d*$/.test(String(draft.sheet?.id || "")) || !draft.sheet?.label)
+  const validated = validatePayrollLines(draft.lines);
+  if (validated.lines.some(line => !payrollTaxType(line.payrollType)) &&
+    (!/^[1-9]\d*$/.test(String(draft.sheet?.id || "")) || !draft.sheet?.label))
     throw new RangeError(
       "Selecione o IDFOLHA cadastrado do fornecedor. O vínculo é obrigatório.",
     );
-  return { ...draft, ...validatePayrollLines(draft.lines) };
+  if (validated.lines.some(line => payrollTaxType(line.payrollType)) && !payrollTaxSheet(draft))
+    throw new RangeError('Confirme a competência e selecione o IDFOLHA de INSS/FGTS desse mês.');
+  return { ...draft, ...validated };
 }
 export function validatePayrollLines(rawLines = []) {
   const seen = new Set();

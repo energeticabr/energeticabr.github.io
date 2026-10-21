@@ -1,12 +1,14 @@
 import { PAYROLL_RUBRICS, payrollProvisionDates, validatePayrollBreakdown } from '../chat/payroll-breakdown.js';
 import { payrollBreakdownPeriods, payrollCombinedTotal } from '../chat/payroll-breakdown-history.js';
 import { payrollDecimal, payrollKey } from '../chat/supplier-payroll.js';
+import { payrollTaxType } from '../chat/payroll-tax-competence.js';
 import { applyScreenNavigation } from './screen-navigation.js';
 import { createLoadingIndicator } from './loading-indicator.js';
 
 const money = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateText = date => date.split('-').reverse().join('/');
 let sequence = 0;
+const WEEKLY_RUBRICS = PAYROLL_RUBRICS.filter(rubric => !payrollTaxType(rubric.payrollType));
 
 export function createPayrollBreakdownView({ data, root, documentRef = globalThis.document, assertSession = () => {},
   onHome = () => {}, sessionKey = '', storage = globalThis.localStorage, now = () => new Date() } = {}) {
@@ -85,7 +87,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
     table.append(rows); card.append(table); content.append(card);
   }
   function initializeLines() {
-    draft.lines = payrollProvisionDates(draft.month).flatMap(day => PAYROLL_RUBRICS.map(rubric =>
+    draft.lines = payrollProvisionDates(draft.month).flatMap(day => WEEKLY_RUBRICS.map(rubric =>
       draft.lines.find(line => line.date === day.date && line.rubric === rubric.id) || { date: day.date, rubric: rubric.id, quantity: '1', unitValue: '' }));
   }
   function supplierStep() {
@@ -184,7 +186,7 @@ export function createPayrollBreakdownView({ data, root, documentRef = globalThi
           el('strong', '', `Total: ${money(payment.total)}`), attachmentControl(`payment:${payment.id}`,`${payment.label || payment.rubric} em ${dateText(payment.date)}`,payment.id)); cluster.append(row);
       }
       if (!day.editable && !day.payments.length) cluster.append(el('p', 'payroll-breakdown-week', 'Nenhum pagamento registrado nesta semana.'));
-      for (const rubric of day.editable ? PAYROLL_RUBRICS : []) {
+      for (const rubric of day.editable ? WEEKLY_RUBRICS : []) {
         const line = draft.lines.find(item => item.date === day.date && item.rubric === rubric.id);
         const card = el('div', 'payroll-breakdown-rubric'); card.append(el('h3', '', rubric.label));
         const fields = el('div', 'payroll-breakdown-inputs'), quantity = el('input'), value = el('input'), subtotal = el('p', 'payroll-breakdown-subtotal');

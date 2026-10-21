@@ -46,10 +46,13 @@ export function createPayrollSheetReader(repository,siteKey,now=()=>new Date()) 
     }
     throw new Error('A consulta das folhas excedeu o limite de páginas.');
   }
-  async function assertSheet(value,supplier) {
+  async function assertSheet(value,supplier,{competence,allowHistorical=false}={}) {
     const id=checkedId(value),description=await descriptor();
     const row=await repository.getItem(siteKey,description.list.id,id,'$expand=fields');
-    if(String(row?.id)!==id||!scalar(supplier)||!eligible(row,description,supplier))throw new Error('Selecione uma folha desse fornecedor do mês anterior, atual ou próximo.');
+    const reference=month(row?.fields?.[description.reference]);
+    const matchesSupplier=scalar(supplier)&&key(scalar(row?.fields?.[description.supplier]))===key(supplier);
+    if(String(row?.id)!==id||!matchesSupplier||!reference||(competence?reference!==competence:!allowHistorical&&!monthWindow(now()).includes(reference)))throw new Error('Selecione uma folha desse fornecedor na competência válida.');
+    return reference;
   }
   return Object.freeze({options,assertSheet});
 }
