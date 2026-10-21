@@ -52,7 +52,9 @@ if name == 'iptables' and mode == 'deny' and '-I' in sys.argv: sys.exit(1)
         self.assertIn("8765", calls[inserted])
         self.assertIn("--syn", calls[inserted])
         self.assertIn("--uid-owner", calls[inserted])
-        self.assertTrue(any(row[0] == "systemd-run" for row in calls), "crash watchdog must bound the gate lifetime")
+        watchdog = next(row for row in calls if row[0] == "systemd-run")
+        self.assertEqual(watchdog[4], "/usr/sbin/iptables", "watchdog must execute the cleanup binary, not a stray shell token")
+        self.assertEqual(watchdog[5:7], ["-D", "OUTPUT"])
 
     def test_busy_bridge_times_out_without_leaving_ingress_blocked(self):
         result, calls = self.execute("busy")

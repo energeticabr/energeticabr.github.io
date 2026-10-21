@@ -14,7 +14,7 @@ diary_block_ingress() {
   fi
   iptables -I OUTPUT 1 "${DIARY_GATE_RULE[@]}"
   DIARY_GATE_ACTIVE=1
-  systemd-run --quiet --unit="$DIARY_GATE_UNIT" --on-active=120s +    /usr/sbin/iptables -D OUTPUT "${DIARY_GATE_RULE[@]}"
+  systemd-run --quiet --unit="$DIARY_GATE_UNIT" --on-active=120s /usr/sbin/iptables -D OUTPUT "${DIARY_GATE_RULE[@]}"
 }
 
 diary_drain_requests() {
