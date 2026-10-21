@@ -33,6 +33,10 @@ const orderAttachments = `✅ 🟢 ANEXOS DO PEDIDO ADICIONADOS NA BASE DE DADOS
 🆔 REGISTROS CONFIRMADOS:
 • PEDIDO: ID 406`;
 
+const provisionAttachments = `✅ 🟢 ANEXOS DA PROVISÃO ADICIONADOS NA BASE DE DADOS PROVISÃO PGTOS ÀS 15:09. 🕒
+🆔 REGISTROS CONFIRMADOS:
+• PROVISÃO DE PAGAMENTO: ID 330`;
+
 const diaryCompletion = `✅ 🟢 DIÁRIO DE OBRA PREENCHIDO NA BASE DE DADOS DIÁRIO DE OBRAS ÀS 23:29. 🕒
 🆔 REGISTROS CONFIRMADOS:
 • DIÁRIO DE OBRAS: ID 214`;
@@ -113,6 +117,72 @@ for (const text of [
     assert.match(doc.querySelector('.chat-bubble').textContent, /DIÁRIO DE OBRA PREENCHIDO/);
   });
 }
+
+test('provision attachments use the branded success receipt with the actual ID and source time', () => {
+  const doc = documentFor(provisionAttachments);
+  const card = doc.querySelector('.launch-completion--provision-attachments');
+  assert.ok(card, 'confirmed provision attachments must not fall back to the old paragraph');
+  assert.equal(card.querySelector('h2').textContent, 'ANEXOS DA PROVISÃO');
+  assert.equal(card.querySelector('.launch-completion__success p').textContent, 'Adicionados na base de dados');
+  assert.match(card.querySelector('.launch-completion__operation').textContent, /PROVISÃO PGTOS\s+ÀS 15:09/);
+  assert.equal(card.querySelector('.launch-completion-sender strong').textContent, 'Energético');
+  assert.equal(card.querySelector('.launch-completion-sender time').textContent, '15:09');
+  assert.equal(card.querySelector('.launch-completion-sender img').getAttribute('alt'), 'Mascote Energético');
+  assert.equal(doc.querySelector('.chat-message--launch-completion > .chat-avatar'), null);
+  assert.equal(doc.querySelectorAll('.launch-completion-sender').length, 1);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['PROVISÃO DE PAGAMENTO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 330']);
+  assert.equal(card.querySelector('footer').textContent.trim(), 'Processo concluído com sucesso!');
+  assert.doesNotMatch(card.textContent, /PEDIDO|LANÇAMENTO|R\$|\d{2}\/\d{2}\/\d{4}|\d+ anexos/i);
+  assert.equal(card.querySelectorAll('button, input, [data-action]').length, 0);
+});
+
+test('provision attachment receipt retains every confirmed ID, notes and immutable attachment metadata', () => {
+  const text = provisionAttachments.replace('PROVISÃO PGTOS', 'PROVISAO PGTOS')
+    .replace('• PROVISÃO DE PAGAMENTO: ID 330', '• PROVISÕES DE PAGAMENTO: IDS 330, 9007199254740993\n• PEDIDO: ID 406\n• LANÇAMENTO: ID 3570')
+    + '\n📎 Comprovante: provisao-pendente.pdf\nArquivo: A & B <img src=x onerror=alert(1)>';
+  const attachment = Object.freeze({ id: 'receipt', name: 'provisao-pendente.pdf' });
+  const metadata = Object.freeze({ attachments: Object.freeze([attachment]) });
+  const card = documentFor(text, metadata).querySelector('.launch-completion--provision-attachments');
+  assert.ok(card);
+  assert.deepEqual([...card.querySelectorAll('dt')].map(el => el.textContent.trim()), ['PROVISÃO DE PAGAMENTO', 'PROVISÃO DE PAGAMENTO', 'PEDIDO', 'LANÇAMENTO']);
+  assert.deepEqual([...card.querySelectorAll('dd')].map(el => el.textContent.trim()), ['ID 330', 'ID 9007199254740993', 'ID 406', 'ID 3570']);
+  assert.match(card.querySelector('.launch-completion__details').textContent, /provisao-pendente\.pdf/);
+  assert.ok(card.textContent.includes('Arquivo: A & B <img src=x onerror=alert(1)>'));
+  assert.equal(card.querySelector('img[src="x"]'), null);
+  assert.equal(documentFor(text, metadata).querySelector('.launch-completion').outerHTML, card.outerHTML);
+  assert.deepEqual(metadata.attachments, [attachment]);
+});
+
+for (const [name, text] of [
+  ['missing provision', provisionAttachments.split('\n').slice(0, 2).join('\n')],
+  ['unrelated ID', provisionAttachments.replace('PROVISÃO DE PAGAMENTO: ID 330', 'PEDIDO: ID 406')],
+  ['zero ID', provisionAttachments.replace('ID 330', 'ID 0')],
+  ['invalid ID list', provisionAttachments.replace('ID 330', 'IDS 330, inválido')],
+  ['empty additional provision', provisionAttachments + '\n• PROVISÃO DE PAGAMENTO:'],
+  ['invalid time', provisionAttachments.replace('15:09', '25:09')],
+  ['unrelated database', provisionAttachments.replace('PROVISÃO PGTOS', 'NOTASPENDENTES')],
+  ['negative result', provisionAttachments.replace('ADICIONADOS', 'NÃO ADICIONADOS')],
+  ['failed upload', provisionAttachments + '\n❌ Falha ao enviar um anexo.'],
+  ['pending attachment', provisionAttachments + '\nAnexo adicional pendente de envio.'],
+  ['partially completed upload', provisionAttachments + '\nEnvio dos anexos parcialmente concluído.'],
+  ['only part uploaded', provisionAttachments + '\nApenas parte dos anexos foi adicionada.'],
+  ['unconfirmed file', provisionAttachments + '\nArquivo não adicionado.'],
+  ['negative continuation after filename', provisionAttachments + '\n📎 Comprovante: recibo.pdf, não confirmado.'],
+  ['unresolved warning', provisionAttachments + '\n⚠️ Existem documentos aguardando processamento.'],
+]) {
+  test(`uncertain provision attachments remain fully visible without a green receipt: ${name}`, () => {
+    const doc = documentFor(text);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    for (const line of text.replaceAll('*', '').split('\n')) assert.ok(doc.querySelector('.chat-bubble').textContent.includes(line), line);
+  });
+}
+
+test('provision attachment text from a user or structured response is not a write receipt', () => {
+  for (const metadata of [{ role: 'user' }, { presence_confirmation: { rows: [] } }, { type: 'document' }]) {
+    assert.equal(documentFor(provisionAttachments, metadata).querySelector('.launch-completion'), null);
+  }
+});
 
 test('order attachments confirmation uses the branded success card with the actual order and source time', () => {
   const doc = documentFor(orderAttachments);

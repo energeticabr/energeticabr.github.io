@@ -2003,7 +2003,7 @@ const provisionShortcut = provisionOption ? `<button class="chat-main-provisions
   const avatar = isUser ? userAvatar(account) : assistantAvatar();
   const completion = !isUser && postingCompletion(message);
   if (completion) {
-    const brandedReceipt = completion.kind === 'provision-settlement' || completion.kind === 'order-attachments' || completion.kind === 'diary';
+    const brandedReceipt = completion.kind === 'provision-settlement' || completion.kind === 'order-attachments' || completion.kind === 'provision-attachments' || completion.kind === 'diary';
     const sender = brandedReceipt ? { name, mascotUrl: MASCOT_URL } : null;
     return `<article class="chat-message chat-message--assistant chat-message--launch-completion">${brandedReceipt ? '' : avatar}<div class="chat-bubble">${brandedReceipt ? '' : `<div class="launch-completion-sender"><strong>${escapeHtml(name)}</strong>${completion.time ? `<time>${escapeHtml(completion.time)}</time>` : ''}</div>`}${postingCompletionMarkup(completion, completion.notes.length ? `<p>${formatChatText(completion.notes.join('\n'))}</p>` : '', sender)}</div></article>`;
   }
