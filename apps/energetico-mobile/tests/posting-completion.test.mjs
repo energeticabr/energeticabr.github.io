@@ -157,6 +157,7 @@ test('provision attachment receipt retains every confirmed ID, notes and immutab
 for (const [name, text] of [
   ['missing provision', provisionAttachments.split('\n').slice(0, 2).join('\n')],
   ['unrelated ID', provisionAttachments.replace('PROVISÃO DE PAGAMENTO: ID 330', 'PEDIDO: ID 406')],
+  ['amount instead of a provision ID', provisionAttachments.replace('• PROVISÃO DE PAGAMENTO: ID 330', '• PEDIDO: ID 406\n💰 PROVISÃO DE PAGAMENTO: R$ 100,00')],
   ['zero ID', provisionAttachments.replace('ID 330', 'ID 0')],
   ['invalid ID list', provisionAttachments.replace('ID 330', 'IDS 330, inválido')],
   ['empty additional provision', provisionAttachments + '\n• PROVISÃO DE PAGAMENTO:'],
@@ -170,6 +171,9 @@ for (const [name, text] of [
   ['unconfirmed file', provisionAttachments + '\nArquivo não adicionado.'],
   ['negative continuation after filename', provisionAttachments + '\n📎 Comprovante: recibo.pdf, não confirmado.'],
   ['unresolved warning', provisionAttachments + '\n⚠️ Existem documentos aguardando processamento.'],
+  ['upload failed without failure noun', provisionAttachments + '\nO envio de um anexo falhou.'],
+  ['cancelled upload', provisionAttachments + '\nEnvio dos anexos cancelado.'],
+  ['attachment awaiting processing', provisionAttachments + '\nUm anexo ainda aguarda processamento.'],
 ]) {
   test(`uncertain provision attachments remain fully visible without a green receipt: ${name}`, () => {
     const doc = documentFor(text);
@@ -183,6 +187,22 @@ test('provision attachment text from a user or structured response is not a writ
     assert.equal(documentFor(provisionAttachments, metadata).querySelector('.launch-completion'), null);
   }
 });
+
+for (const notice of ['O envio de um anexo falhou.', 'Envio dos anexos cancelado.', 'Um anexo ainda aguarda processamento.']) {
+  test(`order attachments share the strict completed-upload guard: ${notice}`, () => {
+    const doc = documentFor(orderAttachments + '\n' + notice);
+    assert.equal(doc.querySelector('.launch-completion'), null);
+    assert.ok(doc.querySelector('.chat-bubble').textContent.includes(notice));
+  });
+}
+
+for (const filename of ['anexo cancelado.pdf', 'envio falhou.pdf', 'documento aguarda processamento.pdf']) {
+  test(`status-like words in a filename remain opaque metadata: ${filename}`, () => {
+    const card = documentFor(provisionAttachments + '\n📎 Comprovante: ' + filename).querySelector('.launch-completion--provision-attachments');
+    assert.ok(card);
+    assert.equal(card.querySelector('.launch-completion__details').textContent, '📎 Comprovante: ' + filename);
+  });
+}
 
 test('order attachments confirmation uses the branded success card with the actual order and source time', () => {
   const doc = documentFor(orderAttachments);

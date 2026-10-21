@@ -11,7 +11,7 @@ function incompletePostingNotice(line, attachmentCompletion = false) {
       // A named file is metadata, not a posting status. Later clauses (after
       // a comma, semicolon, etc.) still undergo the conservative status check.
       if (/^(?:(?:O|OS|A|AS|UM|UMA|UNS|UMAS)\s+)?(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\s*:\s*.+\.[a-z\d]{1,10}$/i.test(notice)) continue;
-      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
+      if (/\b(?:NAO|PENDENTES?|INCOMPLET[OA]S?|PARCIAL(?:MENTE)?|FALH(?:OU|ARAM)|CANCELAD[OA]S?|AGUARD(?:A|AM|ANDO)|EM PROCESSAMENTO)\b|\b(?:APENAS|SO(?:MENTE)?)\s+PARTE\b/i.test(notice)) return true;
       continue;
     }
     if (/^(?:ANEXOS?|ARQUIVOS?|COMPROVANTES?|DOCUMENTOS?)\b/i.test(notice)) {
@@ -96,7 +96,7 @@ export function postingCompletion(message) {
   if (settlement && !requiredSettlementRecords
     .every(label => records.some(record => record.icon !== 'total' && label.test(record.label)))) return null;
   if (orderAttachments && !records.some(record => record.icon === 'order' && /^PEDIDO$/i.test(record.label))) return null;
-  if (provisionAttachments && !records.some(record => /^PROVIS[AÃ]O DE PAGAMENTO$/i.test(record.label))) return null;
+  if (provisionAttachments && !records.some(record => record.icon !== 'total' && /^PROVIS[AÃ]O DE PAGAMENTO$/i.test(record.label))) return null;
   if (diary && (records.some(record => !/^DIÁRIO DE OBRAS$/i.test(record.label))
     || !records.some(record => /^DIÁRIO DE OBRAS$/i.test(record.label)))) return null;
   return Object.freeze({ title: heading[1], database: heading[2], time: heading[3], records: Object.freeze(records), notes: Object.freeze(notes), ...(settlement ? { kind: 'provision-settlement' } : orderAttachments ? { kind: 'order-attachments' } : provisionAttachments ? { kind: 'provision-attachments' } : diary ? { kind: 'diary' } : {}) });
