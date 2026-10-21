@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação local — documentos em sequência</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<style>
+  body { margin: 0; }
+  .qa { padding: 8px; background: #fff8dc; font: 12px system-ui; }
+  .qa button { padding: 6px; margin: 2px; }
+  #chat { height: calc(100dvh - 135px); }
+  #evidence { white-space: pre-wrap; max-height: 70px; overflow: auto; margin: 0; }
+</style>
+<section class="qa">
+  Validação local: motor real, apenas registros sintéticos, sem envio ao SharePoint.
+  <div><button id="reset">Reiniciar</button><button id="example">Preparar primeiro exemplo</button><button id="attachment">Anexar PDF sintético</button></div>
+  <pre id="evidence" aria-live="polite"></pre>
+</section>
+<main id="chat"></main>
+<script type="module">
+import { createChatView } from '../../apps/energetico-mobile/src/ui/chat-view.js';
+const view = createChatView(document.querySelector('#chat'));
+async function update(body) {
+  const response = await fetch('/document-qa', body ? { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const result = await response.json();
+  document.querySelector('#evidence').textContent = `Etapa: ${result.stage} · Documentos gravados: ${result.posted}\nAnexos atuais: ${result.attachments.join(', ') || 'nenhum'}\n${JSON.stringify(result.fields)}`;
+  view.render({ sessionStatus: 'authenticated', account: { name: 'Validação local', username: 'qa@example.invalid' },
+    messages: [result.message], draft: '', pendingFiles: [], attachments: [], activeText: null,
+    activeFlow: { flow: 'document', title: '📄 ADICIONAR UM NOVO DOCUMENTO', stage: result.stage } });
+}
+view.on('select-reply', payload => update(payload));
+view.on('send-message', payload => update({ text: payload?.text || payload }));
+document.querySelector('#reset').onclick = () => update({ action: 'reset' });
+document.querySelector('#example').onclick = () => update({ action: 'ready' });
+document.querySelector('#attachment').onclick = () => update({ action: 'attach' });
+await update();
+</script>
+</html>

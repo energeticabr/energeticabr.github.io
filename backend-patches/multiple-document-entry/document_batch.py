@@ -1,0 +1,268 @@
+"""Sequential DOCUMENTOS registration; the existing form owns field validation."""
+from __future__ import annotations
+
+import copy
+import hashlib
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+try:
+    from .logic import condition_matches, normalize_text, resolve_option
+except ImportError:
+    from logic import condition_matches, normalize_text, resolve_option
+
+MODE_STAGE = 'choosing_document_mode'
+DEFAULTS_STAGE = 'document_batch_defaults'
+STAGES = frozenset({MODE_STAGE, DEFAULTS_STAGE})
+SINGLE = 'document_mode_single'
+MULTIPLE = 'document_mode_multiple'
+ADD = 'document_add_another'
+FINISH = 'document_submit_final'
+PROCEED = 'document_defaults_proceed'
+DEFAULT_LABELS = {
+    'filial': 'FILIAL', 'tipo_homologacao': 'TIPO DE HOMOLOGAÇÃO',
+    'pessoa_relacionada': 'FORNECEDOR / PESSOA RELACIONADA',
+    'data_emissao': 'DATA DE EMISSÃO', 'tem_data_validade': 'VALIDADE (INCLUIR OU REMOVER)',
+    'data_validade': 'DATA DE VALIDADE', 'imovel': 'IMÓVEL',
+    'numero_contrato': 'NÚMERO DO CONTRATO', 'tipo_marco': 'TIPO DE MARCO',
+    'tem_observacao': 'OBSERVAÇÃO (INCLUIR OU REMOVER)', 'observacao': 'OBSERVAÇÃO',
+    'confirmar_etapa_venda_imoveis': 'USAR ETAPA VENDA IMÓVEIS', 'etapa_obra': 'ETAPA',
+}
+
+
+def active(state):
+    return bool(state) and state.get('flow') == 'document' and (state.get('document_batch') or {}).get('mode') == 'multiple'
+
+
+def checkpoint_key(state):
+    identity = f"{state['key']}:{state['batch_id']}:{state['document_batch']['index']}"
+    return 'document-batch-row-' + hashlib.sha256(identity.encode()).hexdigest()
+
+
+def guard_event(engine, event, state, etag):
+    """An older prompt/draft cannot change a row after its first write begins."""
+    if not active(state) or state.get('stage') in {
+        'completed', 'choosing_group', 'choosing_action', 'choosing_subaction',
+    }:
+        return None
+    record, _ = engine.state_store.load(checkpoint_key(state))
+    if not record:
+        return None
+    command = normalize_text(event.get('reply_id') or event.get('text') or '')
+    if record['phase'] == 'verified' or command in {
+        'retry_submission', 'retry_after_error', 'continuar', 'resume', 'confirm_yes', ADD, FINISH,
+    }:
+        engine._mark_processed(state, event.get('message_id'))
+        return commit(engine, state, etag, engine._flow_config(state))
+    engine._mark_processed(state, event.get('message_id'))
+    state['stage'] = 'submission_failed'
+    engine._send_text(state, 'A POSTAGEM DESTE DOCUMENTO JÁ COMEÇOU. '
+        'CONCLUA A TENTATIVA PRESERVADA ANTES DE ALTERAR OS DADOS OU SAIR.')
+    engine._send_submission_failed_actions(state)
+    etag = engine._save(state, etag)
+    return {'status': 'document_submission_locked', 'batch_id': state['batch_id'], 'etag': etag}
+
+
+def start(engine, state, etag):
+    state['document_batch'] = {'mode': None, 'index': 0, 'submitted': []}
+    return prompt_mode(engine, state, etag)
+
+
+def prompt_mode(engine, state, etag):
+    state['stage'], state['options'] = MODE_STAGE, []
+    engine._send_actions(state, 'DESEJA ADICIONAR APENAS UM DOCUMENTO OU DIVERSOS DOCUMENTOS?', [
+        {'id': SINGLE, 'title': '📄 APENAS UM DOCUMENTO'},
+        {'id': MULTIPLE, 'title': '📑 DIVERSOS DOCUMENTOS'},
+    ], allow_back=False)
+    etag = engine._save(state, etag)
+    return {'status': 'awaiting_document_mode', 'batch_id': state['batch_id'], 'etag': etag}
+
+
+def prompt_defaults(engine, state, etag):
+    batch = state['document_batch']
+    batch['editing_defaults'] = True
+    state['stage'], state['options'] = DEFAULTS_STAGE, []
+    state.pop('edit_step_indices', None)
+    state['step_index'] = len(engine._flow_config(state)['steps'])
+    labels = {row['field']: row['label'] for row in engine._flow_config(state).get('summary_fields', [])}
+    options = [{'id': PROCEED, 'title': '✅ PROSSEGUIR SEM EDITAR', 'value': '__document_proceed__'}]
+    for index, step in enumerate(engine._flow_config(state)['steps']):
+        if step.get('editable') is False or step['key'] == 'tipo_documento':
+            continue
+        if not condition_matches(step.get('when'), engine._context(state)):
+            continue
+        target = step.get('target_field')
+        label = DEFAULT_LABELS.get(step['key']) or step.get('edit_label') or labels.get(target) or step['prompt'].rstrip('?')
+        options.append({'id': index + 1, 'title': label, 'value': index})
+    state['options'] = options
+    engine._send_options(state, {'key': 'edit_field', 'prompt':
+        'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', 'allow_navigation_back': False}, options)
+    etag = engine._save(state, etag)
+    return {'status': 'awaiting_document_defaults', 'batch_id': state['batch_id'], 'etag': etag}
+
+
+def handle_text(engine, event, state, etag):
+    if state.get('flow') != 'document':
+        return None
+    guarded = guard_event(engine, event, state, etag)
+    if guarded is not None:
+        return guarded
+    command = normalize_text(event.get('reply_id') or event.get('text') or '')
+    if state.get('stage') == MODE_STAGE:
+        engine._mark_processed(state, event.get('message_id'))
+        if command in {SINGLE, '1', 'apenas um documento', 'um documento'}:
+            state['document_batch']['mode'] = 'single'
+        elif command in {MULTIPLE, '2', 'diversos documentos'}:
+            state['document_batch']['mode'] = 'multiple'
+        else:
+            return prompt_mode(engine, state, etag)
+        state['stage'] = 'selecting_fields'
+        return engine._prompt_next_or_summary(state, etag)
+    if active(state) and state.get('stage') == DEFAULTS_STAGE:
+        selected = resolve_option(event.get('reply_id') or event.get('text') or '', state['options'], 'edit_field')
+        if (selected or {}).get('value') == '__document_proceed__' or command in {
+            PROCEED, 'prosseguir sem editar', 'prosseguir',
+        }:
+            engine._mark_processed(state, event.get('message_id'))
+            state['document_batch']['editing_defaults'] = False
+            state['document_batch']['type_only'] = True
+            index = next(i for i, step in enumerate(engine._flow_config(state)['steps'])
+                         if step['key'] == 'tipo_documento')
+            state.update(step_index=index, edit_step_indices=[index], stage='selecting_fields', options=[])
+            return engine._prompt_next_or_summary(state, etag)
+        return engine._handle_edit_field_reply(event, state, etag)
+    return None
+
+
+def after_fields(engine, state, etag):
+    if active(state) and state['document_batch'].get('editing_defaults'):
+        return prompt_defaults(engine, state, etag)
+    if active(state) and state['document_batch'].get('type_only'):
+        # A one-step edit plan is exhausted before attachments are collected.
+        # Persist the end position so finalizing attachments cannot reopen the
+        # ordinary steps after TIPODOCUMENTO.
+        state['step_index'] = len(engine._flow_config(state)['steps'])
+    return None
+
+
+def edit_steps(engine, state, steps):
+    """Inactive commercial copy rules must not erase unrelated shared defaults."""
+    if not active(state) or not state['document_batch'].get('editing_defaults'):
+        return steps
+    steps = copy.deepcopy(steps)
+    for step in steps:
+        step['copy_fields'] = [item for item in step.get('copy_fields', [])
+            if condition_matches(item.get('when'), engine._context(state))]
+    return steps
+
+
+def send_confirmation(engine, state):
+    if not active(state):
+        return False
+    engine._send_actions(state,
+        'DESEJA ADICIONAR MAIS UM DOCUMENTO OU SUBMETER SEM ADICIONAR MAIS DOCUMENTOS?', [
+            {'id': ADD, 'title': '➕ ADICIONAR MAIS UM DOCUMENTO'},
+            {'id': FINISH, 'title': '✅ SUBMETER SEM ADICIONAR MAIS DOCUMENTOS'},
+            {'id': 'confirm_edit', 'title': '✏️ EDITAR'},
+            {'id': 'confirm_cancel', 'title': '❌ CANCELAR'},
+        ], allow_back=False)
+    return True
+
+
+def confirmation(engine, event, state, etag):
+    if not active(state):
+        return None
+    command = normalize_text(event.get('reply_id') or event.get('text') or '')
+    if command not in {ADD, FINISH}:
+        return None
+    state['document_batch']['continuation'] = 'another' if command == ADD else 'finish'
+    # Reuse mandatory attachment, duplicate and consistency checks unchanged.
+    return engine._handle_confirmation_reply({**event, 'reply_id': 'confirm_yes'}, state, etag)
+
+
+def resend(engine, state, etag):
+    if state.get('flow') == 'document':
+        if state.get('stage') == MODE_STAGE:
+            return prompt_mode(engine, state, etag)
+        if active(state) and state.get('stage') == DEFAULTS_STAGE:
+            return prompt_defaults(engine, state, etag)
+    return None
+
+
+def commit(engine, state, etag, flow):
+    """Freeze before POST; unknown outcomes can only be reconciled, not reposted."""
+    batch, key = state['document_batch'], checkpoint_key(state)
+    try:
+        record, version = engine.state_store.load(key)
+        if record is None:
+            record = {'key': key, 'schema_version': 1, 'phase': 'prepared',
+                'token': f"WA-document-{state['batch_id']}:row:{batch['index']}",
+                'continuation': batch.get('continuation', 'finish'),
+                'snapshot': {name: copy.deepcopy(state.get(name, {})) for name in
+                    ('fields', 'display_values', 'answers', 'selections')},
+                'attachments': copy.deepcopy(state['attachments'])}
+            version = engine.state_store.save(key, record, version)
+        # The authoritative row is independent of editable active-state snapshots.
+        state.update(copy.deepcopy(record['snapshot']))
+        state['attachments'] = copy.deepcopy(record['attachments'])
+        if record['phase'] != 'verified':
+            capacity = getattr(engine.sharepoint, 'assert_write_capacity', None)
+            if callable(capacity):
+                capacity()
+            if record['phase'] == 'creating':
+                existing = engine.sharepoint._find_item(record['token'], flow['target_list'],
+                    flow.get('idempotency_field', 'Title'))
+                if not existing:
+                    raise RuntimeError('CRIAÇÃO COM RESULTADO DESCONHECIDO. '
+                        'AGUARDE A RECONCILIAÇÃO DO MESMO DOCUMENTO; NÃO SERÁ FEITO OUTRO POST.')
+                record.update(item_id=existing['Id'], phase='created')
+                version = engine.state_store.save(key, record, version)
+            elif record['phase'] == 'prepared':
+                record['phase'] = 'creating'
+                version = engine.state_store.save(key, record, version)
+                item_id = engine.sharepoint.ensure_item(record['token'], state['fields'],
+                    target_list=flow['target_list'], idempotency_field=flow.get('idempotency_field', 'Title'),
+                    merge_existing=False)
+                record.update(item_id=item_id, phase='created')
+                version = engine.state_store.save(key, record, version)
+            item_id, names = record['item_id'], []
+            for attachment in record['attachments']:
+                engine.sharepoint.ensure_attachment(item_id, attachment['sharepoint_name'],
+                    engine.media_repository.read(attachment), attachment.get('mime_type'), target_list=flow['target_list'])
+                names.append(attachment['sharepoint_name'])
+            verification = engine.sharepoint.verify_item(item_id, state['fields'], names, target_list=flow['target_list'])
+            record.update(phase='verified', receipt={'item_id': item_id, 'attachment_names': names,
+                'verified': verification, 'recorded_at': datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat()})
+            engine.state_store.save(key, record, version)
+    except Exception as error:
+        result = engine._submission_failed(state, etag, error)
+        result['etag'] = engine.state_store.load(state['key'])[1]
+        return result
+    state['sharepoint'] = copy.deepcopy(record['receipt'])
+    item_id = record['item_id']
+    if item_id not in batch['submitted']:
+        batch['submitted'].append(item_id)
+    if record['continuation'] != 'another':
+        state['stage'] = 'notifying'
+        etag = engine._save(state, etag)
+        return engine._notify_completed(state, etag)
+    engine._send_text(state, f'✅ DOCUMENTO ID {item_id} GRAVADO. PREENCHA O PRÓXIMO DOCUMENTO.')
+    return prepare_next(engine, state, etag)
+
+
+def prepare_next(engine, state, etag):
+    batch = state['document_batch']
+    batch['index'] += 1
+    batch.pop('continuation', None)
+    batch.pop('type_only', None)
+    type_step = next(step for step in engine._flow_config(state)['steps'] if step['key'] == 'tipo_documento')
+    engine._clear_step_value(state, type_step)
+    state.update(attachments=[], attachments_decision=None, attachments_phase_completed=False,
+        attachment_compression_approved=False, attachment_compression_result={},
+        attachment_compression_queue=[], attachment_compression_processed_count=0,
+        attachment_compression_all_approved=False, sharepoint={}, options=[], navigation_history=[])
+    for key in ('summary_card', 'option_pagination', 'edit_step_indices', 'submission_failure',
+                'completion_id', 'completion_trigger_message_id', 'idempotency_token'):
+        state.pop(key, None)
+    engine._apply_fixed_fields(state)
+    return prompt_defaults(engine, state, etag)
