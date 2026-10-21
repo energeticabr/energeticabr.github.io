@@ -14,7 +14,28 @@
  from calendar import monthrange
  from pathlib import Path
  from datetime import date, datetime, timedelta, timezone
-@@ -18802,10 +18806,12 @@
+@@ -9773,6 +9777,8 @@
+                 )
+             state["step_index"] = matching_indexes[0]
+ 
++        etag = self._start_supplier_hr_cutover(state, etag)
++
+         if state["flow"] == DOCUMENT_SIGNING_FLOW:
+             return self._start_document_signing(state, etag)
+ 
+@@ -11390,6 +11396,11 @@
+         if not missing:
+             return total, None
+ 
++        if state.get("flow") == "supply_supplier_registration" and state.get("supplier_hr_submission"):
++            frozen_names = {f["filename"] for f in state["supplier_hr_submission"]["files"]}
++            pending = set(state.get("supplier_hr_reattach_names") or [])
++            pending.update(a["sharepoint_name"] for a in missing if a["sharepoint_name"] in frozen_names)
++            state["supplier_hr_reattach_names"] = sorted(pending)
+         state["attachments"] = available
+         state["attachments_decision"] = "yes"
+         state["attachments_phase_completed"] = False
+@@ -18802,10 +18813,12 @@
  
  
      def _migrate_supplier_employment_steps(self, state: dict) -> None:
@@ -29,7 +50,7 @@
          if not added.issubset({step["key"] for step in steps}):
              return
          legacy = [step for step in steps if step["key"] not in added]
-@@ -18820,16 +18826,16 @@
+@@ -18820,16 +18833,16 @@
                  value = option.get("value")
                  if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < len(legacy):
                      option["value"] = translate(value)
@@ -49,7 +70,7 @@
              return None
          fields = state.get("fields") or {}
          if normalize_text(str(fields.get("EMPREITEIRO") or "")) != "sim":
-@@ -18841,12 +18847,14 @@
+@@ -18841,12 +18854,14 @@
          roles = {option["value"] for option in selected[keys[1]][1]["source"]["options"]}
          missing = []
          if link not in links:
@@ -70,27 +91,161 @@
          if not missing:
              return None
          for index in missing:
-@@ -31707,6 +31715,10 @@
+@@ -24789,6 +24804,7 @@
+             f"{heading}\n"
+             "Conclua o cadastro e o fluxo anterior continuará automaticamente.",
+         )
++        etag = self._start_supplier_hr_cutover(state, etag)
+         return self._prompt_next_or_summary(state, etag)
+ 
+     def _resume_launch_with_registered_product(
+@@ -31578,8 +31594,72 @@
+             "launch_cash_writes", "launch_cash_receipts", "launch_cash_receipt_continuation",
+             "partial_diary_item_id", "partial_diary_attachment_names", "partial_diary_save",
+             "summary_card",
++            "supplier_hr_flow_id", "supplier_hr_submission", "supplier_hr_reattach_names",
+         ):
+             state.pop(key, None)
++
++    def _start_supplier_hr_cutover(self, state, etag):
++        # Entry points only. Never called when resuming/migrating an old form.
++        state.pop("supplier_hr_flow_id", None)
++        state.pop("supplier_hr_submission", None)
++        state.pop("supplier_hr_reattach_names", None)
++        if state.get("flow") == "supply_supplier_registration":
++            token = state.get("idempotency_token") or f"WA-supply_supplier_registration-{state['batch_id']}"
++            state["supplier_hr_flow_id"] = supplier_registration_checkpoint.start_future_flow(
++                self.sharepoint, token, state_store=self.state_store
++            )
++            return self._save(state, etag)
++        return etag
++
++    def _reassociate_supplier_hr_files(self, state, frozen_files, local_files):
++        """Bind explicit reuploads by original name AND bytes, never by arrival.
++
++        Reserve surviving exact names first, then consume each missing slot once.
++        The frozen manifest is immutable; only local references/names are rebound.
++        """
++        error = "Cadastro RH congelado: reenvie cada arquivo original com o mesmo nome e conteúdo"
++        attachments = state["attachments"]
++        if len(frozen_files) != len(local_files):
++            raise RuntimeError(error)
++        objects = [a["object_name"] for a in attachments if a.get("object_name")]
++        if len(set(objects)) != len(objects):
++            raise RuntimeError(error)
++        if len({f["filename"] for f in frozen_files}) != len(frozen_files):
++            raise RuntimeError(error)
++        signatures = [(f["original_name"], len(f["content"]), hashlib.sha256(f["content"]).hexdigest())
++                      for f in local_files]
++        def signature(frozen):
++            return (frozen.get("original_name"), frozen["size"], frozen["sha256"])
++        unused = set(range(len(local_files)))
++        bindings = {}
++        # A retained second file must not be consumed for a missing first copy.
++        for slot, frozen in enumerate(frozen_files):
++            exact = [i for i in unused if local_files[i]["filename"] == frozen["filename"]]
++            if len(exact) > 1:
++                raise RuntimeError(error)
++            if exact:
++                index = exact[0]
++                if signatures[index] != signature(frozen):
++                    raise RuntimeError(error)
++                bindings[slot] = index
++                unused.remove(index)
++        pending = set(state.get("supplier_hr_reattach_names") or [])
++        for slot, frozen in enumerate(frozen_files):
++            if slot in bindings:
++                continue
++            if frozen["filename"] not in pending:
++                raise RuntimeError(error)
++            index = next((i for i in sorted(unused) if signatures[i] == signature(frozen)), None)
++            if index is None:
++                raise RuntimeError(error)
++            bindings[slot] = index
++            unused.remove(index)
++        # Publish only after every slot, multiplicity and byte hash was checked.
++        state["attachments"] = [{**attachments[bindings[slot]], "sharepoint_name": frozen["filename"]}
++                                for slot, frozen in enumerate(frozen_files)]
++        state.pop("supplier_hr_reattach_names", None)
++        return [{**local_files[bindings[slot]], "filename": frozen["filename"]}
++                for slot, frozen in enumerate(frozen_files)]
+ 
+     def _recover_legacy_task_identity(self, state: dict, etag: str | None):
+         """Recover only the proven second form opened with a completed task's key.
+@@ -31703,9 +31783,41 @@
+             token = state.get("idempotency_token") or (
+                 f"WA-{state.get('flow', 'document')}-{state['batch_id']}"
+             )
++            supplier_registration = state.get("flow") == "supply_supplier_registration"
++            source_fields = state["fields"]
++            submission_files = []
++            if supplier_registration:
++                # Admission/discharge are HR-only; the source has no such columns.
++                source_fields = {k: v for k, v in state["fields"].items()
++                                 if k not in {"DATAADMISSAO", "DATADESLIGAMENTO"}}
++                for attachment in state["attachments"]:
++                    submission_files.append({"filename": attachment["sharepoint_name"],
++                        "original_name": attachment.get("original_name") or attachment["sharepoint_name"],
++                        "content": self.media_repository.read(attachment),
++                        "mime_type": attachment.get("mime_type")})
++                if state.get("supplier_hr_flow_id"):
++                    previous = state.get("supplier_hr_submission")
++                    if previous is not None:
++                        if previous["token"] != token or previous["fields"] != state["fields"]:
++                            raise RuntimeError("Cadastro RH congelado: restaure as respostas originais")
++                        submission_files = self._reassociate_supplier_hr_files(state, previous["files"], submission_files)
++                    frozen = {"token": token, "fields": copy.deepcopy(state["fields"]),
++                        "files": [{"filename": f["filename"], "original_name": f["original_name"], "size": len(f["content"]),
++                            "sha256": hashlib.sha256(f["content"]).hexdigest()} for f in submission_files]}
++                    if previous is not None and previous != frozen:
++                        raise RuntimeError("Cadastro RH congelado: restaure as respostas e reenvie os mesmos arquivos locais")
++                    if previous is None:
++                        state["supplier_hr_submission"] = frozen
++                    # Persist rebound local references/order before any retry upload.
++                    etag = self._save(state, etag)
+             if state.get("flow") == "launch":
                  item_id, etag = self._ensure_launch_item_checkpoint(
                      state, etag, token, state["fields"], target_list, idempotency_field
-                 )
++                )
 +            elif state.get("flow") == "supply_supplier_registration":
 +                item_id = supplier_registration_checkpoint.ensure_supplier(
-+                    self.sharepoint, token, state["fields"], state_store=self.state_store
-+                )
++                    self.sharepoint, token, source_fields, state_store=self.state_store,
++                    future_flow_id=state.get("supplier_hr_flow_id")
+                 )
              else:
                  item_id = self.sharepoint.ensure_item(
-                     token, state["fields"], target_list=target_list,
-@@ -31729,6 +31741,12 @@
+@@ -31713,8 +31825,9 @@
+                     idempotency_field=idempotency_field, merge_existing=False,
+                 )
+             attachment_names = []
+-            for attachment in state["attachments"]:
+-                content = self.media_repository.read(attachment)
++            for index, attachment in enumerate(state["attachments"]):
++                content = (submission_files[index]["content"] if supplier_registration
++                           else self.media_repository.read(attachment))
+                 self.sharepoint.ensure_attachment(
+                     item_id,
+                     attachment["sharepoint_name"],
+@@ -31725,10 +31838,21 @@
+                 attachment_names.append(attachment["sharepoint_name"])
+             verification = self.sharepoint.verify_item(
+                 item_id,
+-                state["fields"],
++                source_fields,
                  attachment_names,
                  target_list=target_list,
              )
-+            if state.get("flow") == "supply_supplier_registration":
-+                # The original item uses its existing stable submission token on retry.
-+                # Do not announce success until the RH mirror and its attachments agree.
-+                contractor_employment.sync_supplier(
-+                    self.sharepoint, item_id, state_store=self.state_store
-+                )
++            if (supplier_registration and state["fields"].get("EMPREITEIRO") == "SIM"
++                    and state["fields"].get("STATUS") == "ATIVO"
++                    and supplier_registration_checkpoint.future_receipt(self.sharepoint,
++                        item_id, state.get("supplier_hr_flow_id"), state_store=self.state_store)):
++                if not isinstance(verification, dict) or verification.get("fields") is not True or verification.get("attachments") is not True:
++                    raise RuntimeError("Original supplier registration was not verified")
++                receipt = contractor_employment.register_from_submission(
++                    self.sharepoint, item_id, state["fields"], submission_files,
++                    state_store=self.state_store)
++                if not isinstance(receipt, dict) or receipt.get("status") != "registered" or receipt.get("verified") is not True:
++                    raise RuntimeError("HR registration was not verified")
          except FileNotFoundError as exc:
              _attachment_total, attachment_recovery = (
                  self._attachment_total_or_request_reupload(state, etag)
@@ -142,7 +297,7 @@
            },
            "default_value": "",
            "default_display_value": "",
-@@ -2649,9 +2641,27 @@
+@@ -2649,9 +2641,28 @@
                  "id": 7,
                  "title": "MESTRE DE OBRAS",
                  "value": "MESTRE DE OBRAS"
@@ -159,6 +314,7 @@
 +          "key": "admissao_fornecedor_suprimentos",
 +          "kind": "date",
 +          "target_field": "DATAADMISSAO",
++          "storage_scope": "FUNCIONARIOSRH",
 +          "prompt": "📅 QUAL É A DATA DE ADMISSÃO? INFORME NO FORMATO dd/mm/yyyy.",
 +          "edit_label": "DATA DE ADMISSÃO",
 +          "allow_blank": false,
@@ -172,13 +328,14 @@
            "key": "homologacao_fornecedor_suprimentos",
 --- /dev/null
 +++ b/worker/contractor_employment.py
-@@ -0,0 +1,387 @@
-+"""Additive FORNECEDORES mirror. Never log supplier fields or invent dates.
+@@ -0,0 +1,368 @@
++"""Register future app submissions in a new, independent HR list.
 +
-+Writes deliberately bypass ensure_item/_target_payload: those helpers coerce
-+null Text values and cannot persist an uncertain-create checkpoint for us.
++No source list reads, schema discovery, ACL access or background import. The
++ordinary supplier writer shares only the durable locking/checkpoint utilities.
 +"""
 +from contextlib import contextmanager
++from datetime import date, datetime
 +import hashlib
 +import json
 +import os
@@ -191,20 +348,26 @@
 +
 +import requests
 +
-+try:
-+    from .contractor_permissions import verify_mirror_permissions, require_inherited_item
-+except ImportError:
-+    from contractor_permissions import verify_mirror_permissions, require_inherited_item
-+
-+SOURCE = 'FORNECEDORES'
++SOURCE = 'FORNECEDORES'  # Used only by the separate, normal registration writer.
 +TARGET = 'FUNCIONARIOSRH'
 +KEY = 'IDFORNECEDORORIGEM'
-+DATES = ('DATAADMISSAO', 'DATADESLIGAMENTO')
-+AUDIT = {'ORIGEMCRIADOEM': 'DateTime', 'ORIGEMMODIFICADOEM': 'DateTime',
-+         'ORIGEMAUTORJSON': 'Note', 'ORIGEMEDITORJSON': 'Note', 'ORIGEMSNAPSHOTJSON': 'Note'}
-+SYSTEM = {'ID', 'Id', 'Author', 'Editor', 'Created', 'Modified', 'Attachments',
-+          'ContentType', 'ContentTypeId', 'GUID', 'FileSystemObjectType'}
 +JSON_HEADERS = {'Content-Type': 'application/json;odata=nometadata'}
++ROLES = ('SERVENTE DE PEDREIRO I', 'SERVENTE DE PEDREIRO II', 'SERVENTE DE PEDREIRO III',
++         'PEDREIRO I', 'PEDREIRO II', 'PEDREIRO III', 'MESTRE DE OBRAS', 'SUPERVISOR DE OBRAS')
++TEXT_FIELDS = ('Title', KEY, 'CARGO', 'EMPREITEIRO', 'STATUS', 'FILIAL', 'TIPO', 'CIDADE',
++    'VINCULO', 'HOMOLOGACAO', 'TIPODOCUMENTO', 'DOCUMENTOFORNECEDOR', 'TELEFONECONTATO',
++    'WHATSAPP', 'EMAIL', 'PROFISSAO', 'FORMAPGTO', 'VLRDIARIO', 'HORASTRABALHO', 'MEDICAOATUAL', 'IMOVEL')
++NOTE_FIELDS = ('ENDERECO', 'DESCRITIVOETAPAATUAL', 'ATIVIDADEEXERCIDA')
++DATE_FIELDS = ('DATAADMISSAO', 'DATADESLIGAMENTO', 'DATANASCIMENTO')
++FIELD_TYPES = {**dict.fromkeys(TEXT_FIELDS, 'Text'), **dict.fromkeys(NOTE_FIELDS, 'Note'),
++               **dict.fromkeys(DATE_FIELDS, 'DateTime')}
++FIELD_MAP = {name: name for name in FIELD_TYPES if name != KEY}
++FIELD_MAP.update({'CADASTRO': 'Title', 'HOMOLOGAÇÃO': 'HOMOLOGACAO',
++    'DOCUMENTO FORNECEDOR': 'DOCUMENTOFORNECEDOR', 'ENDEREÇO': 'ENDERECO',
++    'FORMA PGTO': 'FORMAPGTO', 'VLR DIARIO': 'VLRDIARIO',
++    'DESCRITIVOETAPA ATUAL': 'DESCRITIVOETAPAATUAL', 'ATIVIDADE EXERCIDA': 'ATIVIDADEEXERCIDA',
++    'MEDIÇÃOATUAL': 'MEDICAOATUAL'})
++MUTABLE_HISTORY = {'CARGO', 'DATAADMISSAO', 'DATADESLIGAMENTO', 'STATUS'}
 +
 +
 +def _positive_id(value):
@@ -214,12 +377,11 @@
 +
 +
 +def collection(client, endpoint, params=None):
-+    """Read every page, accepting only continuations of this exact collection."""
++    """Read all pages, rejecting continuations outside this exact collection."""
 +    original = urljoin(client.site_url.rstrip('/') + '/_api/', endpoint)
 +    expected = urlsplit(original)
 +    allowed = (expected.scheme, expected.netloc, unquote(expected.path).casefold())
-+    seen, result = set(), []
-+    url = original
++    seen, result, url = set(), [], original
 +    while url:
 +        parsed = urlsplit(url)
 +        if (parsed.scheme, parsed.netloc, unquote(parsed.path).casefold()) != allowed or parsed.fragment:
@@ -242,42 +404,36 @@
 +    return result
 +
 +
-+def list_fields(client, title):
++def list_fields(client, title=TARGET):
 +    return collection(client, client._list_endpoint(title) + '/fields', {
-+        '$select': 'InternalName,Title,TypeAsString,ReadOnlyField,Hidden,Required,SchemaXml,Indexed,EnforceUniqueValues',
++        '$select': 'InternalName,Title,TypeAsString,ReadOnlyField,Hidden,SchemaXml,Indexed,EnforceUniqueValues',
 +        '$top': '5000'})
 +
 +
-+def business_fields(fields):
-+    return [f for f in fields if not f.get('ReadOnlyField') and not f.get('Hidden')
-+            and f['InternalName'] not in SYSTEM
-+            and f['TypeAsString'] not in {'Computed', 'Attachments', 'Counter', 'ContentTypeId'}]
++def expected_fields():
++    result = []
++    for name, kind in FIELD_TYPES.items():
++        attrs = {'Name': name, 'StaticName': name, 'DisplayName': 'CADASTRO' if name == 'Title' else name,
++                 'Type': kind, 'Required': 'FALSE'}
++        if name == KEY:
++            attrs.update(Indexed='TRUE', EnforceUniqueValues='TRUE', MaxLength='255')
++        if kind == 'DateTime':
++            attrs['Format'] = 'DateOnly'
++        if kind == 'Note':
++            attrs.update(RichText='FALSE', NumLines='6')
++        result.append({'InternalName': name, 'Title': attrs['DisplayName'], 'TypeAsString': kind,
++                       'SchemaXml': ET.tostring(ET.Element('Field', attrs), encoding='unicode')})
++    return result
 +
 +
 +def validate_field(actual, expected):
 +    name = expected['InternalName']
-+    if actual['TypeAsString'] != expected['TypeAsString'] or actual.get('ReadOnlyField'):
-+        raise ValueError(f'Incompatible field type: {name}')
++    if actual.get('TypeAsString') != expected['TypeAsString'] or actual.get('ReadOnlyField') or actual.get('Hidden'):
++        raise ValueError('Incompatible target field: ' + name)
 +    if name == KEY and not (actual.get('Indexed') is True and actual.get('EnforceUniqueValues') is True):
 +        raise ValueError('Source identity must be unique and indexed')
-+    if name in DATES:
-+        xml = ET.fromstring(actual['SchemaXml'])
-+        if xml.get('Format', '').casefold() != 'dateonly':
-+            raise ValueError(f'Expected date-only field: {name}')
-+
-+
-+def expected_field(name, kind, **attributes):
-+    node = ET.Element('Field', {'Name': name, 'StaticName': name, 'DisplayName': name,
-+        'Type': kind, 'Required': 'FALSE', **attributes})
-+    return {'InternalName': name, 'Title': name, 'TypeAsString': kind,
-+            'SchemaXml': ET.tostring(node, encoding='unicode')}
-+
-+
-+def additional_fields():
-+    return [expected_field(KEY, 'Text', Indexed='TRUE', EnforceUniqueValues='TRUE'),
-+            *(expected_field(n, 'DateTime', Format='DateOnly') for n in DATES),
-+            *(expected_field(n, t, **({'RichText': 'FALSE', 'UnlimitedLengthInDocumentLibrary': 'TRUE'} if t == 'Note' else {}))
-+              for n, t in AUDIT.items())]
++    if name in DATE_FIELDS and ET.fromstring(actual['SchemaXml']).get('Format', '').casefold() != 'dateonly':
++        raise ValueError('Expected date-only target field: ' + name)
 +
 +
 +def _state_directory(client, state_store):
@@ -288,14 +444,14 @@
 +    directory = Path(base).resolve() / 'contractor-employment-register' / site
 +    directory.mkdir(parents=True, mode=0o700, exist_ok=True)
 +    if directory.is_symlink() or not directory.is_dir():
-+        raise RuntimeError('Invalid mirror state directory')
++        raise RuntimeError('Invalid registration state directory')
 +    return directory
 +
 +
 +@contextmanager
-+def supplier_lock(directory, source_id):
-+    """Same persistent inode across services, including services using PrivateTmp."""
-+    descriptor = os.open(directory / f'{source_id}.lock',
++def supplier_lock(directory, identity):
++    """Persistent shared inode, not PrivateTmp, across both service processes."""
++    descriptor = os.open(directory / f'{identity}.lock',
 +        os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
 +    acquired = False
 +    try:
@@ -314,7 +470,7 @@
 +                acquired = True
 +            except (BlockingIOError, OSError):
 +                if time.monotonic() >= deadline:
-+                    raise TimeoutError('Mirror reconciliation already running') from None
++                    raise TimeoutError('Registration reconciliation already running') from None
 +                time.sleep(.05)
 +        yield
 +    finally:
@@ -348,274 +504,207 @@
 +            os.unlink(temporary)
 +
 +
-+def _item(payload):
-+    return payload.get('d', payload)
++def _read_checkpoint(path):
++    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
 +
 +
-+def _versioned_item(client, title, item_id, *, params=None):
-+    response = client._request('GET', client._list_endpoint(title) + f'/items({item_id})',
-+                               params=params, _return_response=True)
-+    item = _item(response.json())
-+    etag = str(response.headers.get('ETag') or item.get('@odata.etag')
-+               or item.get('odata.etag') or item.get('__metadata', {}).get('etag') or '').strip()
-+    if not etag or etag == '*':
-+        raise RuntimeError('Item version unavailable; reconciliation required')
-+    if _positive_id(item.get('Id', item.get('ID'))) != item_id:
-+        raise RuntimeError('Unexpected item identity; reconciliation required')
-+    require_inherited_item(item)
-+    return item, etag
++def submission_proof(client, supplier_id, *, state_store=None, flow_id=None):
++    """Both a post-cutover flow marker and its first source POST are required."""
++    source_id = _positive_id(supplier_id)
++    directory = _state_directory(client, state_store)
++    proof = _read_checkpoint(directory / f'submission-{source_id}.json')
++    marked = proof.get('flow_id', '')
++    if not isinstance(marked, str) or not re.fullmatch('[0-9a-f]{32}', marked):
++        return None
++    marker = _read_checkpoint(directory / f'flow-{marked}.json')
++    if (proof.get('version') != 1 or proof.get('supplier_id') != source_id
++            or marker.get('version') != 1 or marker.get('flow_id') != marked
++            or marker.get('token_hash') != proof.get('token_hash')
++            or not re.fullmatch('[0-9a-f]{64}', str(proof.get('token_hash', '')))
++            or (flow_id is not None and flow_id != marked)):
++        return None
++    return proof
 +
 +
-+def _assert_source_current(client, source_id, source, etag):
-+    current, current_etag = _versioned_item(client, SOURCE, source_id,
-+                                            params={'$select': 'Id,Modified,HasUniqueRoleAssignments'})
-+    if current_etag != etag or current.get('Modified') != source.get('Modified'):
-+        raise RuntimeError('Source changed during mirror copy; reconciliation required')
++def _civil_date(value):
++    if not isinstance(value, str):
++        raise ValueError('Expected a validated civil date')
++    if len(value) > 10:
++        datetime.fromisoformat(value.replace('Z', '+00:00'))
++    day = date.fromisoformat(value[:10]).isoformat()
++    try:
++        from .clients import _sharepoint_datetime_for_civil_date
++    except ImportError:
++        from clients import _sharepoint_datetime_for_civil_date
++    return _sharepoint_datetime_for_civil_date(day)
++
++
++def _payload(source_id, fields):
++    if not isinstance(fields, dict):
++        raise ValueError('Expected validated submission answers')
++    payload = dict.fromkeys(FIELD_TYPES)
++    payload[KEY] = str(source_id)
++    seen = set()
++    for alias, value in fields.items():
++        name = FIELD_MAP.get(alias)
++        if name is None or name in seen:
++            raise ValueError('Unknown or duplicate submission field')
++        seen.add(name)
++        if value in (None, ''):
++            continue
++        if name in DATE_FIELDS:
++            value = _civil_date(value)
++        elif not isinstance(value, str):
++            raise ValueError('Expected a text submission answer')
++        if FIELD_TYPES[name] == 'Text' and len(value) > 255:
++            raise ValueError('Submission text exceeds target capacity')
++        payload[name] = value
++    if (not payload['Title'] or not payload['Title'].strip() or payload['CARGO'] not in ROLES
++            or payload['DATAADMISSAO'] is None or payload['DATADESLIGAMENTO'] is not None
++            or payload['VINCULO'] not in {'CLT', 'TERCEIRIZADO', 'INFORMAL'}):
++        raise ValueError('Incomplete or invalid employee submission')
++    return payload
++
++
++def _files(files):
++    result = {}
++    for file in files:
++        name, content = file.get('filename'), file.get('content')
++        if (not isinstance(name, str) or not name or name in {'.', '..'}
++                or any(c in name for c in '/\\\r\n\0') or name in result
++                or not isinstance(content, bytes)):
++            raise ValueError('Invalid local submission attachment')
++        result[name] = content
++    return result
++
++
++def _digest(value):
++    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
++        separators=(',', ':')).encode('utf-8')).hexdigest()
 +
 +
 +def _lookup(client, source_id):
 +    rows = collection(client, client._list_endpoint(TARGET) + '/items', {
-+        '$filter': f"{KEY} eq '{source_id}'", '$top': '2'})
++        '$select': 'Id,' + KEY, '$filter': f"{KEY} eq '{source_id}'", '$top': '2'})
 +    if len(rows) > 1:
-+        raise RuntimeError('Duplicate mirror identity; manual reconciliation required')
++        raise RuntimeError('Duplicate HR identity; reconciliation required')
 +    return rows[0] if rows else None
 +
 +
-+def _json(value):
-+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
++def _matches(actual, expected, name):
++    if name in DATE_FIELDS and actual is not None and expected is not None:
++        try:
++            return datetime.fromisoformat(actual.replace('Z', '+00:00')) == datetime.fromisoformat(expected.replace('Z', '+00:00'))
++        except (ValueError, AttributeError):
++            return False
++    return actual == expected
 +
 +
-+def _business_payload(source, fields):
-+    result = {}
-+    for f in fields:
-+        name, kind = f['InternalName'], f['TypeAsString']
-+        if kind in {'User', 'UserMulti', 'Lookup', 'LookupMulti'}:
-+            if name + 'Id' not in source and name not in source:
-+                raise ValueError(f'Source response omitted business field: {name}')
-+            value = source.get(name + 'Id', source.get(name))
-+            if kind.endswith('Multi'):
-+                values = value.get('results', []) if isinstance(value, dict) else value or []
-+                value = {'results': [v['Id'] if isinstance(v, dict) else v for v in values]}
-+            elif isinstance(value, dict):
-+                value = value['Id']
-+            result[name + 'Id'] = value
-+        elif name in source:
-+            result[name] = source[name]
-+        else:
-+            raise ValueError(f'Source response omitted business field: {name}')
-+    return result
++def _verify_fields(client, endpoint, target_id, payload, *, historical=False):
++    result = client._request('GET', endpoint, params={'$select': ','.join(['Id', *FIELD_TYPES])})
++    row = result.get('d', result)
++    if _positive_id(row.get('Id', row.get('ID'))) != target_id:
++        raise RuntimeError('HR receipt identity not confirmed')
++    for name, value in payload.items():
++        if historical and name in MUTABLE_HISTORY:
++            continue  # Never restore the original active status over a later edit.
++        if name not in row or not _matches(row[name], value, name):
++            raise RuntimeError('HR registration fields not confirmed')
 +
 +
-+def _attachment_names(client, title, item_id):
-+    return collection(client, client._list_endpoint(title) + f'/items({item_id})/AttachmentFiles',
-+                      {'$select': 'FileName', '$top': '5000'})
++def _attachment_names(client, endpoint):
++    return {row['FileName'] for row in collection(client, endpoint + '/AttachmentFiles',
++        {'$select': 'FileName', '$top': '5000'})}
 +
 +
-+def sync_supplier(client, supplier_id, *, state_store=None) -> dict:
-+    return _sync_supplier(client, _positive_id(supplier_id), state_store=state_store)
++def register_from_submission(client, supplier_id, fields, files=(), *, state_store=None) -> dict:
++    """Create once from local validated input, returning only a verified receipt.
 +
-+
-+def _sync_supplier(client, source_id, *, state_store, fields=None):
-+    directory = _state_directory(client, state_store)
-+    with supplier_lock(directory, source_id):
-+        return _sync_locked(client, source_id, directory / f'{source_id}.json', fields=fields)
-+
-+
-+def _validated_fields(client):
-+    fields = business_fields(list_fields(client, SOURCE))
-+    target_fields = {f['InternalName']: f for f in list_fields(client, TARGET)}
-+    for expected in [*fields, *additional_fields()]:
-+        actual = target_fields.get(expected['InternalName'])
-+        if actual is None:
-+            raise ValueError('Mirror schema must be provisioned before synchronization')
-+        validate_field(actual, expected)
-+    for name in DATES:
-+        source_date = next((f for f in fields if f['InternalName'] == name), None)
-+        if source_date is None:
-+            raise ValueError('Source dates must be provisioned before synchronization')
-+        validate_field(source_date, expected_field(name, 'DateTime'))
-+    return fields
-+
-+
-+def _eligible(source):
-+    return (str(source.get('EMPREITEIRO', '')).strip().upper() == 'SIM'
-+            and str(source.get('STATUS', '')).strip().upper() == 'ATIVO')
-+
-+
-+def _sync_locked(client, source_id, path, *, fields=None):
-+    if fields is None:
-+        fields = _validated_fields(client)
-+    source, source_etag = _versioned_item(client, SOURCE, source_id,
-+        params={'$select': '*,HasUniqueRoleAssignments,Author/Id,Author/Title,Author/EMail,Editor/Id,Editor/Title,Editor/EMail',
-+                '$expand': 'Author,Editor'})
-+    existing = _lookup(client, source_id)
-+    checkpoint = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
-+    if checkpoint and checkpoint.get('phase') not in {'create_pending', 'linked', 'synced'}:
-+        raise RuntimeError('Invalid mirror checkpoint')
-+    if not existing and checkpoint:
-+        raise RuntimeError('Mirror identity unresolved; refusing another create')
-+    if not existing and not _eligible(source):
++    Ineligible input is skipped. Eligible input without both cutover proofs is an
++    error, not permission to import an existing supplier. Replays never MERGE.
++    """
++    source_id = _positive_id(supplier_id)
++    if not isinstance(fields, dict):
++        raise ValueError('Expected validated submission answers')
++    if fields.get('EMPREITEIRO') != 'SIM' or fields.get('STATUS') != 'ATIVO':
 +        return {'status': 'skipped', 'supplier_id': source_id}
-+    verify_mirror_permissions(client)
-+    attachments = _attachment_names(client, SOURCE, source_id)
-+    snapshot = {**source, 'AttachmentFiles': {'results': attachments}}
-+    payload = {**_business_payload(source, fields), KEY: str(source_id),
-+        'ORIGEMCRIADOEM': source.get('Created'), 'ORIGEMMODIFICADOEM': source.get('Modified'),
-+        'ORIGEMAUTORJSON': _json(source.get('Author', source.get('AuthorId'))),
-+        'ORIGEMEDITORJSON': _json(source.get('Editor', source.get('EditorId'))),
-+        'ORIGEMSNAPSHOTJSON': _json(snapshot)}
-+    if existing is None:
-+        _assert_source_current(client, source_id, source, source_etag)
-+        _checkpoint(path, {'phase': 'create_pending', 'supplier_id': source_id})
-+        try:
-+            created = _item(client._request('POST', client._list_endpoint(TARGET) + '/items',
-+                json=payload, headers=JSON_HEADERS))
-+            target_id = _positive_id(created['Id'])
-+        except (requests.RequestException, KeyError, ValueError):
-+            existing = _lookup(client, source_id)
-+            if existing is None:
-+                raise RuntimeError('Mirror create uncertain; reconciliation required') from None
-+            target_id = _positive_id(existing['Id'])
-+    else:
-+        target_id = _positive_id(existing['Id'])
-+    _checkpoint(path, {'phase': 'linked', 'supplier_id': source_id, 'target_id': target_id})
-+    endpoint = client._list_endpoint(TARGET) + f'/items({target_id})'
-+    current, target_etag = _versioned_item(client, TARGET, target_id,
-+                                          params={'$select': '*,HasUniqueRoleAssignments'})
-+    current.update(_business_payload(current, fields))
-+    _assert_source_current(client, source_id, source, source_etag)
-+    changes = {k: v for k, v in payload.items() if current.get(k) != v}
-+    if changes:
-+        try:
-+            client._request('POST', endpoint, json=changes,
-+                headers={**JSON_HEADERS, 'IF-MATCH': target_etag, 'X-HTTP-Method': 'MERGE'})
-+        except requests.HTTPError as error:
-+            if error.response is not None and error.response.status_code == 412:
-+                raise RuntimeError('Target changed during mirror copy; reconciliation required') from None
-+            raise
-+    target_names = {r['FileName'] for r in _attachment_names(client, TARGET, target_id)}
-+    copied = 0
-+    for attachment in attachments:
-+        name = attachment['FileName']
-+        if name in target_names:
-+            continue
-+        escaped = quote(name.replace("'", "''"), safe='')
-+        response = client._request('GET', client._list_endpoint(SOURCE) +
-+            f"/items({source_id})/AttachmentFiles/getByFileName('{escaped}')/$value", _return_response=True)
-+        try:
-+            client._request('POST', endpoint + f"/AttachmentFiles/add(FileName='{escaped}')",
-+                            data=response.content, headers={'Content-Type': 'application/octet-stream'})
-+        except requests.RequestException:
-+            if name not in {r['FileName'] for r in _attachment_names(client, TARGET, target_id)}:
-+                raise RuntimeError('Attachment copy incomplete; reconciliation required') from None
-+        copied += 1
-+    # HasUniqueRoleAssignments must be explicitly selected on real SharePoint.
-+    verified, _ = _versioned_item(client, TARGET, target_id,
-+                                  params={'$select': '*,HasUniqueRoleAssignments'})
-+    verified.update(_business_payload(verified, fields))
-+    if any(verified.get(k) != v for k, v in payload.items()):
-+        raise RuntimeError('Mirror fields not confirmed')
-+    names = {r['FileName'] for r in _attachment_names(client, TARGET, target_id)}
-+    if not {r['FileName'] for r in attachments}.issubset(names):
-+        raise RuntimeError('Mirror attachments not confirmed')
-+    verify_mirror_permissions(client)
-+    _assert_source_current(client, source_id, source, source_etag)
-+    _checkpoint(path, {'phase': 'synced', 'supplier_id': source_id, 'target_id': target_id})
-+    return {'status': 'synced', 'supplier_id': source_id, 'target_id': target_id, 'copied': copied}
-+
-+
-+def sync_all(client, *, state_store=None) -> dict:
-+    rows = collection(client, client._list_endpoint(SOURCE) + '/items', {
-+        '$select': 'Id,EMPREITEIRO,STATUS', '$top': '5000'})
-+    targets = collection(client, client._list_endpoint(TARGET) + '/items', {
-+        '$select': KEY, '$top': '5000'})
-+    tracked = {str(row[KEY]) for row in targets if row.get(KEY) is not None}
-+    counts = {'processed': 0, 'synced': 0, 'skipped': 0, 'errors': 0}
-+    seen = set()
-+    fields, schema_failed = None, False
-+    for row in rows:
-+        source_id = _positive_id(row.get('Id', row.get('ID')))
-+        if source_id in seen:
-+            continue
-+        seen.add(source_id)
-+        counts['processed'] += 1
-+        if not _eligible(row) and str(source_id) not in tracked:
-+            counts['skipped'] += 1
-+            continue
-+        try:
-+            if schema_failed:
-+                counts['errors'] += 1
-+                continue
-+            if fields is None:
++    payload, local_files = _payload(source_id, fields), _files(files)
++    directory = _state_directory(client, state_store)
++    with supplier_lock(directory, 'target-' + str(source_id)):
++        proof = submission_proof(client, source_id, state_store=state_store)
++        if not proof:
++            raise RuntimeError('Future submission authority missing; no HR import allowed')
++        intent = _digest({'payload': payload, 'files': {n: hashlib.sha256(b).hexdigest()
++            for n, b in local_files.items()}, 'proof': proof})
++        path = directory / f'target-{source_id}.json'
++        saved = _read_checkpoint(path)
++        if saved and (saved.get('phase') not in {'create_pending', 'linked', 'verified'}
++                or saved.get('intent') != intent or saved.get('supplier_id') != source_id):
++            raise RuntimeError('HR submission intent changed; reconcile without overwriting')
++        actual = {f['InternalName']: f for f in list_fields(client)}
++        for expected in expected_fields():
++            if expected['InternalName'] not in actual:
++                raise ValueError('Explicit HR schema must be provisioned first')
++            validate_field(actual[expected['InternalName']], expected)
++        existing = _lookup(client, source_id)
++        if existing and not saved:
++            raise RuntimeError('Untracked HR identity; refusing adoption')
++        target_id = _positive_id(existing['Id']) if existing else saved.get('target_id')
++        if existing and saved.get('target_id') not in (None, target_id):
++            raise RuntimeError('HR identity changed; reconcile without overwriting')
++        historical = saved.get('phase') == 'verified'
++        checkpoint = {'phase': 'create_pending', 'supplier_id': source_id, 'intent': intent}
++        if target_id is None:
++            if saved:
++                raise RuntimeError('HR create uncertain; refusing another POST')
++            _checkpoint(path, checkpoint)
++            try:
++                created = client._request('POST', client._list_endpoint(TARGET) + '/items',
++                    json=payload, headers=JSON_HEADERS)
++                target_id = _positive_id(created.get('d', created)['Id'])
++            except (requests.RequestException, KeyError, ValueError):
++                existing = _lookup(client, source_id)
++                if existing is None:
++                    raise RuntimeError('HR create uncertain; reconciliation required') from None
++                target_id = _positive_id(existing['Id'])
++        target_id = _positive_id(target_id)
++        checkpoint.update(phase='verified' if historical else 'linked', target_id=target_id)
++        _checkpoint(path, checkpoint)
++        endpoint = client._list_endpoint(TARGET) + f'/items({target_id})'
++        _verify_fields(client, endpoint, target_id, payload, historical=historical)
++        names = _attachment_names(client, endpoint)
++        if not historical and not names.issubset(local_files):
++            raise RuntimeError('Unexpected HR attachments; reconciliation required')
++        for name, content in local_files.items():
++            escaped = quote(name.replace("'", "''"), safe='')
++            if name not in names:
++                if historical:
++                    raise RuntimeError('Verified HR attachment missing; reconciliation required')
 +                try:
-+                    fields = _validated_fields(client)
-+                except Exception:
-+                    schema_failed = True
-+                    raise
-+            # Only metadata is shared. The locked sync still reads the latest
-+            # source and looks up the target identity before any item write.
-+            result = _sync_supplier(client, source_id, state_store=state_store, fields=fields)
-+            counts[result['status']] += 1
-+        except Exception:
-+            # Remote exceptions can include personal data. Counts are safe to log.
-+            counts['errors'] += 1
-+    return counts
---- /dev/null
-+++ b/worker/sync_contractors.py
-@@ -0,0 +1,47 @@
-+"""Timer entry point. Caller supplies the existing service environment and user."""
-+import argparse
-+import json
-+import os
-+from pathlib import Path
-+from types import SimpleNamespace
-+
-+try:
-+    from .contractor_employment import sync_all, sync_supplier
-+except ImportError:
-+    from contractor_employment import sync_all, sync_supplier
-+
-+
-+def client_from_environment():
-+    try:
-+        from .clients import SharePointClient
-+    except ImportError:
-+        from clients import SharePointClient
-+    return SharePointClient(os.environ['SHAREPOINT_HOST'], os.environ['SHAREPOINT_SITE_PATH'],
-+        os.environ['ENTRA_TENANT_ID'], os.environ['ENTRA_CLIENT_ID'],
-+        Path(os.environ['ENTRA_PRIVATE_KEY_FILE']).read_text(encoding='utf-8'),
-+        Path(os.environ['ENTRA_CERTIFICATE_FILE']).read_text(encoding='utf-8'), 'FORNECEDORES')
-+
-+
-+def main(argv=None):
-+    parser = argparse.ArgumentParser(description=__doc__)
-+    parser.add_argument('--supplier-id', type=int)
-+    parser.add_argument('--state-directory', default=os.getenv('CONTRACTOR_EMPLOYMENT_STATE_DIR'))
-+    args = parser.parse_args(argv)
-+    try:
-+        if not args.state_directory:
-+            raise ValueError('Supply the same persistent state directory as the worker')
-+        store = SimpleNamespace(directory=Path(args.state_directory))
-+        client = client_from_environment()
-+        if args.supplier_id is not None:
-+            result = sync_supplier(client, args.supplier_id, state_store=store)
-+        else:
-+            result = sync_all(client, state_store=store)
-+        print(json.dumps(result))
-+        return 1 if result.get('errors') else 0
-+    except Exception as error:
-+        print(json.dumps({'status': 'error', 'type': type(error).__name__}))
-+        return 1
-+
-+
-+if __name__ == '__main__':
-+    raise SystemExit(main())
++                    client._request('POST', endpoint + f"/AttachmentFiles/add(FileName='{escaped}')",
++                        data=content, headers={'Content-Type': 'application/octet-stream'})
++                except requests.RequestException:
++                    if name not in _attachment_names(client, endpoint):
++                        raise RuntimeError('HR attachment incomplete; retry the same local file') from None
++            response = client._request('GET', endpoint +
++                f"/AttachmentFiles/getByFileName('{escaped}')/$value", _return_response=True)
++            if response.content != content:
++                raise RuntimeError('HR attachment bytes not confirmed')
++        final_names = _attachment_names(client, endpoint)
++        if (not set(local_files).issubset(final_names)
++                or (not historical and final_names != set(local_files))):
++            raise RuntimeError('HR attachment set not confirmed')
++        _verify_fields(client, endpoint, target_id, payload, historical=historical)
++        _checkpoint(path, {**checkpoint, 'phase': 'verified'})
++        return {'status': 'registered', 'supplier_id': source_id, 'target_id': target_id, 'verified': True}
 --- /dev/null
 +++ b/worker/supplier_registration_checkpoint.py
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,96 @@
 +"""Single-POST supplier registration, durable even if its response is lost."""
 +import hashlib
 +import json
++import re
++import secrets
 +
 +try:
 +    from .contractor_employment import SOURCE, JSON_HEADERS, collection, _positive_id, _state_directory, _checkpoint, supplier_lock
@@ -623,7 +712,39 @@
 +    from contractor_employment import SOURCE, JSON_HEADERS, collection, _positive_id, _state_directory, _checkpoint, supplier_lock
 +
 +
-+def ensure_supplier(client, token, fields, *, state_store=None):
++def start_future_flow(client, token, *, state_store=None):
++    """Called only when opening a genuinely NEW registration, never migration."""
++    if not isinstance(token, str) or not token or len(token) > 255:
++        raise ValueError('Invalid supplier submission identity')
++    directory = _state_directory(client, state_store)
++    flow_id = secrets.token_hex(16)
++    _checkpoint(directory / f'flow-{flow_id}.json', {'version': 1, 'flow_id': flow_id,
++        'token_hash': hashlib.sha256(token.encode('utf-8')).hexdigest()})
++    return flow_id
++
++
++def _flow_marker(directory, flow_id, token):
++    if not isinstance(flow_id, str) or not re.fullmatch('[0-9a-f]{32}', flow_id):
++        return None
++    path = directory / f'flow-{flow_id}.json'
++    marker = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
++    if marker == {'version': 1, 'flow_id': flow_id,
++                  'token_hash': hashlib.sha256(token.encode('utf-8')).hexdigest()}:
++        return marker
++    return None
++
++
++def future_receipt(client, supplier_id, flow_id, *, state_store=None):
++    if not flow_id:
++        return None
++    try:
++        from .contractor_employment import submission_proof
++    except ImportError:
++        from contractor_employment import submission_proof
++    return submission_proof(client, supplier_id, state_store=state_store, flow_id=flow_id)
++
++
++def ensure_supplier(client, token, fields, *, state_store=None, future_flow_id=None):
 +    if not isinstance(token, str) or not token or len(token) > 255:
 +        raise ValueError('Invalid supplier submission identity')
 +    directory = _state_directory(client, state_store)
@@ -652,7 +773,11 @@
 +            raise RuntimeError('Supplier creation outcome unknown; reconcile before retrying')
 +        if item_id is None:
 +            payload = {**client._target_payload(fields, SOURCE), internal: token}
-+            _checkpoint(path, {'phase': 'create_pending', 'token': token})
++            marker = _flow_marker(directory, future_flow_id, token)
++            checkpoint = {'phase': 'create_pending', 'token': token}
++            if marker:
++                checkpoint['future_flow_id'] = marker['flow_id']
++            _checkpoint(path, checkpoint)
 +            try:
 +                created = client._request('POST', endpoint, json=payload, headers=JSON_HEADERS)
 +                item_id = _positive_id(created.get('d', created)['Id'])
@@ -662,125 +787,12 @@
 +                item_id = lookup()
 +                if item_id is None:
 +                    raise RuntimeError('Supplier creation outcome unknown; reconcile before retrying') from None
-+        _checkpoint(path, {'phase': 'linked', 'token': token, 'item_id': item_id})
++        # Only the marker frozen BEFORE the FIRST new POST is authoritative.
++        # A token lookup or old uncertain checkpoint never gains this flag.
++        marker = _flow_marker(directory, checkpoint.get('future_flow_id'), token)
++        linked = {**checkpoint, 'phase': 'linked', 'token': token, 'item_id': item_id}
++        _checkpoint(path, linked)
++        if marker:
++            _checkpoint(directory / f'submission-{item_id}.json', {
++                **marker, 'supplier_id': item_id})
 +        return item_id
---- /dev/null
-+++ b/worker/contractor_permissions.py
-@@ -0,0 +1,117 @@
-+"""Exact list ACL mirror; never resolve principals, elevate scope, or copy data."""
-+import hashlib
-+import json
-+
-+import requests
-+
-+SOURCE = 'FORNECEDORES'
-+TARGET = 'FUNCIONARIOSRH'
-+HEADERS = {'Content-Type': 'application/json;odata=nometadata'}
-+
-+
-+def _request(client, method, endpoint, **kwargs):
-+    try:
-+        return client._request(method, endpoint, **kwargs)
-+    except requests.HTTPError as error:
-+        if error.response is not None and error.response.status_code in (401, 403):
-+            raise PermissionError('Existing ManagePermissions access required; no elevation attempted') from None
-+        raise
-+
-+
-+def _roles(client, title):
-+    try:
-+        from .contractor_employment import collection
-+    except ImportError:
-+        from contractor_employment import collection
-+    try:
-+        rows = collection(client, client._list_endpoint(title) + '/roleassignments', {
-+            '$select': 'PrincipalId,RoleDefinitionBindings/Id',
-+            '$expand': 'RoleDefinitionBindings', '$top': '5000'})
-+    except requests.HTTPError as error:
-+        if error.response is not None and error.response.status_code in (401, 403):
-+            raise PermissionError('Permission metadata unavailable; no elevation attempted') from None
-+        raise
-+    roles = {}
-+    for row in rows:
-+        principal = row.get('PrincipalId')
-+        bindings = row.get('RoleDefinitionBindings')
-+        bindings = bindings.get('results') if isinstance(bindings, dict) else bindings
-+        if type(principal) is not int or principal <= 0 or not isinstance(bindings, list) or not bindings:
-+            raise PermissionError('Incomplete permission metadata')
-+        ids = [r.get('Id') for r in bindings if isinstance(r, dict)]
-+        if len(ids) != len(bindings) or any(type(i) is not int or i <= 0 for i in ids):
-+            raise PermissionError('Incomplete permission metadata')
-+        roles.setdefault(principal, set()).update(ids)
-+    return {p: sorted(ids) for p, ids in sorted(roles.items())}
-+
-+
-+def read_acl(client, title):
-+    payload = _request(client, 'GET', client._list_endpoint(title), params={
-+        '$select': 'HasUniqueRoleAssignments,ReadSecurity,WriteSecurity'})
-+    value = payload.get('d', payload)
-+    if type(value.get('HasUniqueRoleAssignments')) is not bool:
-+        raise PermissionError('Permission inheritance metadata unavailable')
-+    if type(value.get('ReadSecurity')) is not int or value['ReadSecurity'] not in (1, 2):
-+        raise PermissionError('ReadSecurity metadata unavailable')
-+    if type(value.get('WriteSecurity')) is not int or value['WriteSecurity'] not in (1, 2, 4):
-+        raise PermissionError('WriteSecurity metadata unavailable')
-+    return {'unique': value['HasUniqueRoleAssignments'], 'read': value['ReadSecurity'],
-+            'write': value['WriteSecurity'], 'roles': _roles(client, title)}
-+
-+
-+def acl_hash(acl):
-+    payload = {'read': acl['read'], 'write': acl['write'],
-+               'roles': [[p, ids] for p, ids in sorted(acl['roles'].items())]}
-+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-+
-+
-+def equivalent(source, target):
-+    return (not source['unique'] or target['unique']) and acl_hash(source) == acl_hash(target)
-+
-+
-+def verify_mirror_permissions(client, *, allow_own_items=False):
-+    source, target = read_acl(client, SOURCE), read_acl(client, TARGET)
-+    if not equivalent(source, target):
-+        raise PermissionError('Mirror permission boundary differs from source; copying refused')
-+    if not allow_own_items and (source['read'] == 2 or source['write'] == 2):
-+        raise PermissionError('Own-item permissions require native source authorship; copying refused')
-+    return acl_hash(source)
-+
-+
-+def require_inherited_item(item):
-+    if item.get('HasUniqueRoleAssignments') is not False:
-+        raise PermissionError('Unique or unknown item permissions; copying refused')
-+
-+
-+def mirror_permissions(client, *, source=None):
-+    source = source if source is not None else read_acl(client, SOURCE)
-+    target = read_acl(client, TARGET)
-+    endpoint = client._list_endpoint(TARGET)
-+    if equivalent(source, target):
-+        if acl_hash(read_acl(client, SOURCE)) != acl_hash(source):
-+            raise PermissionError('Source permissions changed during provisioning')
-+        return acl_hash(source)
-+    if not target['unique'] and (source['unique'] or target['roles'] != source['roles']):
-+        # Preserve existing inherited bindings. copy=false would implicitly
-+        # introduce caller Full Control before any fallible grant/cleanup.
-+        _request(client, 'POST', endpoint + '/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=false)')
-+        target = read_acl(client, TARGET)
-+    if (target['read'], target['write']) != (source['read'], source['write']):
-+        _request(client, 'POST', endpoint, json={'ReadSecurity': source['read'], 'WriteSecurity': source['write']},
-+            headers={**HEADERS, 'IF-MATCH': '*', 'X-HTTP-Method': 'MERGE'})
-+    # Only source recipients/role IDs may be added. Inherited extras remain
-+    # unchanged until grants succeed, then are removed before data is allowed.
-+    for principal, roles in source['roles'].items():
-+        for role in roles:
-+            if role not in target['roles'].get(principal, []):
-+                _request(client, 'POST', endpoint +
-+                    f'/roleassignments/addroleassignment(principalid={principal},roledefid={role})')
-+    for principal, roles in target['roles'].items():
-+        for role in roles:
-+            if role not in source['roles'].get(principal, []):
-+                _request(client, 'POST', endpoint +
-+                    f'/roleassignments/removeroleassignment(principalid={principal},roledefid={role})')
-+    latest_source, latest_target = read_acl(client, SOURCE), read_acl(client, TARGET)
-+    if acl_hash(latest_source) != acl_hash(source) or not equivalent(latest_source, latest_target):
-+        raise PermissionError('Permission mirror not confirmed; no data may be copied')
-+    return acl_hash(latest_source)

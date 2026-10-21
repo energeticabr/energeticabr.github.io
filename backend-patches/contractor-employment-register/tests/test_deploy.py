@@ -156,3 +156,15 @@ def test_check_only_does_not_write_live_sources(tmp_path, monkeypatch):
     result = deploy.rollout(manifest, candidate, runner, check_only=True)
     assert result['status'] == 'checked'
     assert (roots[0] / 'worker/workflow.py').read_text() == 'VALUE = 1\n'
+
+
+def test_future_bundle_contains_only_four_files_without_old_background_or_acl_code(tmp_path, monkeypatch):
+    deploy, package, roots, stage = setup(tmp_path, monkeypatch)
+    with tarfile.open(stage / 'source-files.tar') as archive:
+        assert set(archive.getnames()) == {'worker/workflow.py', 'worker/workflow_config.json',
+            'worker/contractor_employment.py', 'worker/supplier_registration_checkpoint.py'}
+    manifest=json.loads((stage/'deploy-manifest.json').read_text())
+    manifest['files']['worker/contractor_permissions.py']={'before':None,'after':'bad'}
+    (stage/'deploy-manifest.json').write_text(json.dumps(manifest))
+    with pytest.raises(RuntimeError,match='scope'):
+        deploy.checked_manifest(deploy.digest(stage/'deploy-manifest.json'))

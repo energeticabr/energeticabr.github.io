@@ -15,11 +15,11 @@ import sys
 from datetime import datetime, timezone
 
 ROOTS = (Path('/opt/energetica-whatsapp'), Path('/home/opc/energetica-build'))
-STAGE = Path('/home/opc/contractor-employment-register-20261020')
+STAGE = Path('/home/opc/contractor-employment-future-20261020')
 BACKUPS = Path('/var/backups/energetica-whatsapp')
 SHARED_RUNNER_SHA = '01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2'
-FILES = ('worker/workflow.py', 'worker/workflow_config.json', 'worker/contractor_employment.py', 'worker/sync_contractors.py', 'worker/supplier_registration_checkpoint.py', 'worker/contractor_permissions.py')
-NEW_HELPERS = ('worker/contractor_employment.py', 'worker/sync_contractors.py', 'worker/supplier_registration_checkpoint.py', 'worker/contractor_permissions.py')
+FILES = ('worker/workflow.py', 'worker/workflow_config.json', 'worker/contractor_employment.py', 'worker/supplier_registration_checkpoint.py')
+NEW_HELPERS = ('worker/contractor_employment.py', 'worker/supplier_registration_checkpoint.py')
 
 
 def digest(path):

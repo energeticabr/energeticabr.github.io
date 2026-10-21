@@ -1,54 +1,81 @@
-# Verificação e bloqueio de ativação
+# Verificação da revisão futura e bloqueio de provisionamento
 
-## Implementação
+## Escopo vigente
 
-- Cargo obrigatório para todo EMPREITEIRO=SIM, com oito opções, e admissão em campo de data.
-- Índices de sessões anteriores migrados por chave; confirmação antiga não grava sem completar dados.
-- Espelho histórico FUNCIONARIOSRH por IDFORNECEDORORIGEM único, todos os campos de negócio,
-  auditoria original e anexos, sem inventar cargo/data de registros anteriores.
-- Galeria de funcionários abaixo de Presenças, pesquisa completa paginada e regularização.
-- Desligamento obrigatório ao inativar; atualização fonte/espelho com ETag e reconciliação explícita.
-- Sincronizador protege contra leitura obsoleta e não desfaz inativação concorrente.
-- Criação original e espelho têm checkpoints antes de POST: resposta incerta não autoriza duplicar.
+O usuário confirmou FUNCIONARIOSRH vazia, somente futuros cadastros SIM/ATIVO.
+Não importar dados, anexos, esquema, auditoria ou permissões de FORNECEDORES.
+Não instalar timer/backfill nem criar colunas RH na origem. A restrição antiga de
+leitura de ACL não é dependência desta revisão.
 
-## Testes executados
+- Cargo com oito opções e admissão são perguntados uma etapa por vez para novo SIM.
+- O destino recebe respostas e bytes locais, nunca cópias lidas da origem.
+- Prova durável de novo fluxo e recibo congelado antes do primeiro POST impedem
+  importar retroativamente sessões antigas, retomadas e IDs históricos.
+- Criação incerta não autoriza outro POST. Reenvio idêntico preserva nomes e ordem
+  congelados, inclusive após reinício; bytes/nome/multiplicidade distintos são recusados.
+- Galeria abaixo de Presenças lê somente o destino e mostra estado vazio explícito.
+- Cargo/datas pertencem ao destino. Inativação explícita de funcionário vinculado
+  exige desligamento e confirma STATUS na origem/destino com ETags/checkpoints.
+  EMPREITEIRO=NÃO não contorna a exigência. Antigos sem vínculo não são importados.
+- Sem cálculos de folha, INSS ou FGTS nesta entrega.
 
-- 88 testes backend, esquema, permissões, criação, motor e instalador passaram em 20/10/2026.
-- Suíte completa final do cliente após os ajustes de concorrência: 6.734 aprovados,
-  dois skips, zero falhas (6.736 totais); os ajustes têm testes RED/GREEN específicos.
-- Verificação final do cliente após os ajustes de concorrência: 526 testes direcionados
-  aprovados, zero falhas, incluindo controlador, autenticação, galeria e inativação.
-- Root/portal: 1.124 aprovados, seis skips, zero falhas. Builds web/PWA passaram.
-- Após integrar o ajuste de teste da PR #555, a matriz executou os 19 testes de
-  vencimento em UTC e America/Sao_Paulo, todos aprovados. Os subdiretórios de código
-  de produção do cliente e portal permaneceram idênticos aos da suíte completa final.
-- Prova visual com fixture sintética: galeria, dados pendentes de regularização e
-  bloqueio de inativação sem desligamento. Nenhum funcionário real fictício foi criado.
-- A execução indiscriminada de pytest na raiz encontrou 40 erros de coleta em pacotes
-  históricos que exigem snapshots/variáveis próprios. Não é apresentada como suíte verde;
-  os testes relevantes do backend usam o snapshot privado atual e têm comandos explícitos.
+## Evidência de código
 
-## Bloqueio real: autorização SharePoint
+- Backend direcionado: 77 aprovados, zero falhas, execução independente.
+- Revisão independente encerrada: nove testes de recuperação com WorkflowEngine,
+  LocalMediaRepository, LocalStateStore e SharePointClient reais, HTTP sintético.
+  Um POST por lista, arquivos preservados, nenhum download da origem.
+- Revisão cliente encerrada: 54 testes aprovados; implementador executou 65,
+  incluindo EMPREITEIRO=NÃO/INATIVO combinados e alteração em duas etapas.
+- Root/portal final: 1.124 aprovados, seis skips, zero falhas.
+- Suíte móvel final após a última correção: 6.762 aprovados, dois skips, zero falhas,
+  6.764 totais, 797278ms. Não confundir com contagens do desenho substituído.
+- Guard de assinatura: 14 regiões preservadas; git diff --check sem erros.
+- Galeria vazia/bloqueio de desligamento ausente verificados com fixture sintética.
+  Nenhum funcionário fictício ou pagamento real criado/alterado para QA.
+- pytest indiscriminado na raiz encontrou 41 erros de coleta em pacotes históricos
+  com ambientes/namespaces distintos; nenhum teste executado nessa chamada.
+  Não é apresentado como suíte verde.
 
-A consulta GET confirmou `FORNECEDORES.HasUniqueRoleAssignments=true`. A integração da
-VM recebeu `403 Forbidden` em `/roleassignments`. Portanto não é possível certificar nem
-reproduzir o mesmo acesso com a autorização atual. Os testes de 403 impedem qualquer POST
-de esquema ou dados, tanto na criação imediata quanto no timer.
+## Pacote revisado, ainda não instalado
 
-**Não ativado:** nova lista, colunas de admissão/desligamento, cópia de funcionários,
-timer e novo fluxo/galeria em produção. Não concedemos privilégios, não ampliamos escopos
-e não alteramos a lista original. Código permanece em revisão/draft até haver autoridade
-administrativa apropriada para preservar os mesmos acessos, sem público adicional.
+Manifesto SHA-256:
+`573fed76df20d654e39ed32e67e81d89fe8587523551906f5bacd294e78466bc`.
 
-O provisionador clona os vínculos de principal/nível e ReadSecurity/WriteSecurity e exige
-verificação antes dos dados. Casos com ACL individual desconhecida ou regras baseadas em
-autor são recusados, não convertidos silenciosamente. Referência da API:
-[permissões de listas com REST](https://learn.microsoft.com/en-us/sharepoint/dev/sp-add-ins/set-custom-permissions-on-a-list-by-using-the-rest-interface).
+Exatamente quatro arquivos: worker/workflow.py, worker/workflow_config.json,
+worker/contractor_employment.py, worker/supplier_registration_checkpoint.py.
+Hashes locais/staging remoto conferidos. Nenhum deploy/restart/ativação desta revisão.
 
-A quebra de herança copia as atribuições existentes (`copyRoleAssignments=true`),
-evitando a concessão automática de Full Control ao chamador. Falhas 403 no primeiro
-grant e no meio dos grants foram reproduzidas em RED/GREEN; nenhuma cria esse acesso
-extra, a lista fica vazia e a retomada reconcilia as permissões antes de copiar dados.
+## Bloqueio atual: criar a nova lista
 
-A correção independente do vencimento de provisões deve ser publicada separadamente;
-não depende da nova base RH e não implica reagendar pagamentos reais para teste.
+Plano GET confirmou destino ausente e 28 ações aditivas. Uma única tentativa autorizada
+de provisionamento retornou "Target list creation uncertain; rerun read-only plan".
+GET posterior confirmou novamente exists:false. Checkpoint create_pending preservado;
+nenhum novo POST tentado. A exceção original foi suprimida pelo provisionador:
+não atribuir à tentativa um código HTTP que não foi registrado.
+
+Diagnóstico GET da MESMA credencial de serviço:
+
+- Token com papel Sites.Selected; nenhum token divulgado.
+- web/EffectiveBasePermissions: High 66224, Low 1008964335.
+- Low & 0x800 == 0: falta ManageLists para criar listas/colunas.
+- Lista ausente, nenhum item RH escrito, nenhuma mudança na lista anterior.
+- Sem concessões, novos escopos, troca de identidade ou alteração de ACL.
+
+É necessária ação de administrador para criar a estrutura vazia ou autorizar a
+permissão apropriada no site. Não ampliar privilégios autonomamente. Não mesclar,
+ativar ou publicar como funcional antes de confirmar a lista real, 27 campos
+explícitos, anexos habilitados e contagem zero. Preservar os dados existentes.
+
+Referências: [Manage Lists](https://learn.microsoft.com/en-us/sharepoint/understanding-permission-levels)
+e [máscara 0x800](https://learn.microsoft.com/en-us/openspecs/sharepoint_protocols/ms-wssfo3/1f5e3322-920f-431c-bbc4-7f65c477e698).
+
+## Vencimentos: outra solicitação concluída
+
+PRs #554/#555 integradas em 47f1428393e8c7bbbac7564d899e1af253258596.
+Pages 39527486048 success e ativo HTTP200; Android 39527486125 success,
+1.0.1400/code1400, artefato e commit interno confirmados; iOS 39527485977 success,
+build1704 enviado/associado ao grupo ENERGETICO Validacao.
+
+Editar vencimento do descritivo atualiza DATA PREVISTO PGTO de todas as vinculadas
+sem mudar STATUS/data de pagamento efetuado. Essa entrega não depende da base RH.

@@ -69,7 +69,7 @@ export function createContractorEmploymentView({ document: doc = globalThis.docu
       const missing = [];
       if (!CONTRACTOR_EMPLOYMENT_CARGOS.includes(fields.CARGO)) missing.push('cargo');
       if (!contractorEmploymentDate(fields.DATAADMISSAO)) missing.push('admissão');
-      if (missing.length) card.append(el('p', 'ce-regularize', 'Regularizar ' + missing.join(' e ')));
+      if (missing.length) card.append(el('p', 'ce-regularize', 'Dados de RH incompletos: ' + missing.join(' e ')));
       const detail = el('details'), summary = el('summary', '', 'Todos os campos e auditoria'), values = el('dl', 'ce-details');
       const all = new Map([['ID', row.id], ...columns.filter(column => !column.hidden).map(column => [column.name, fields[column.name]]), ...Object.entries(fields)]);
       for (const [name, value] of all) {
@@ -78,30 +78,33 @@ export function createContractorEmploymentView({ document: doc = globalThis.docu
       }
       detail.append(summary, values); card.append(detail);
       const actions = el('div', 'ce-actions');
-      actions.append(button('Editar / regularizar', 'edit', () => edit(row)));
+      actions.append(button('Editar', 'edit', () => edit(row)));
       if (fields.STATUS !== 'INATIVO') actions.append(button('Inativar', 'inactivate', () => edit(row, true)));
-      if (data.loadConflict && data.renewBaseline) actions.append(button('Conferir fonte e espelho', 'review-conflict', () => reviewConflict(row)));
+      if (data.loadConflict && data.renewBaseline) actions.append(button('Conferir versões atuais', 'review-conflict', () => reviewConflict(row)));
       card.append(actions); list.append(card);
     }
-    if (!visible.length) list.append(el('p', '', 'Nenhum funcionário encontrado.'));
+    if (!visible.length) list.append(el('p', '', rows.length ? 'Nenhum funcionário encontrado.' : 'Nenhum funcionário cadastrado. Esta base recebe somente futuros cadastros do app.'));
   }
   async function reviewConflict(row) {
     if (saving) return;
     const current = generation, previousNodes = [...editor.childNodes];
     const panel = el('section', 'ce-conflict');
-    panel.append(el('h2', '', 'Conferir fonte e espelho'), el('p', '', 'Consultando as versões atuais…'));
+    panel.append(el('h2', '', 'Conferir versões atuais'), el('p', '', 'Consultando as versões atuais…'));
     editor.replaceChildren(panel); setBusy(true);
     try {
       const review = await data.loadConflict(row, { signal: controller?.signal });
       if (destroyed || generation !== current) return;
-      panel.replaceChildren(el('h2', '', 'Conferir fonte e espelho'));
+      panel.replaceChildren(el('h2', '', review.source ? 'Conferir RH e status da fonte' : 'Conferir cadastro RH'));
       const comparison = el('div', 'ce-conflict-comparison');
-      for (const [name, label] of [['source', 'Fornecedor de origem'], ['target', 'Espelho RH']]) {
+      for (const [name, label] of [['source', 'Status do fornecedor de origem'], ['target', 'Cadastro RH']]) {
         const record = review[name], section = el('section');
+        if (!record) continue;
         section.dataset[name === 'source' ? 'conflictSource' : 'conflictTarget'] = '';
         section.append(el('h3', '', label + ' #' + record.id), el('p', '', 'Versão: ' + (record.eTag || record['@odata.etag'])));
         const values = el('dl', 'ce-details');
-        for (const [field, caption] of [['CARGO', 'Cargo'], ['DATAADMISSAO', 'Admissão'], ['DATADESLIGAMENTO', 'Desligamento'], ['STATUS', 'Status']]) {
+        const details = name === 'source' ? [['STATUS', 'Status']]
+          : [['CARGO', 'Cargo'], ['DATAADMISSAO', 'Admissão'], ['DATADESLIGAMENTO', 'Desligamento'], ['STATUS', 'Status']];
+        for (const [field, caption] of details) {
           const pair = el('div');
           pair.append(el('dt', '', caption), el('dd', '', display(field.startsWith('DATA') ? contractorEmploymentDate(record.fields[field]) : record.fields[field])));
           values.append(pair);
@@ -109,7 +112,7 @@ export function createContractorEmploymentView({ document: doc = globalThis.docu
         section.append(values); comparison.append(section);
       }
       panel.append(comparison, el('p', '', review.canRenew
-        ? 'Use os dados atuais da fonte para iniciar outra edição. Isso não confirma a tentativa anterior nem grava alterações.'
+        ? (review.source ? 'Use os dados atuais do RH e o status conferido do fornecedor para iniciar outra edição.' : 'Use os dados atuais do RH para iniciar outra edição.') + ' Isso não confirma a tentativa anterior nem grava alterações.'
         : 'A gravação anterior permanece incerta. Volte e confirme a tentativa original; a pendência será preservada.'));
       const accept = button('Usar dados atuais e iniciar nova edição', 'renew-baseline', async () => {
         if (saving) return;
@@ -118,7 +121,7 @@ export function createContractorEmploymentView({ document: doc = globalThis.docu
           const baseline = await data.renewBaseline(review, { signal: controller?.signal });
           if (destroyed || generation !== current) return;
           setBusy(false);
-          edit(baseline, false, 'Dados atuais da fonte conferidos. Isso não confirma a tentativa anterior; revise e salve para confirmar a nova edição.');
+          edit(baseline, false, (review.source ? 'Dados atuais do RH e status do fornecedor conferidos.' : 'Dados atuais do RH conferidos.') + ' Isso não confirma a tentativa anterior; revise e salve para confirmar a nova edição.');
         } catch (cause) { if (!destroyed && generation === current) alert.textContent = cause.message; }
         finally { if (!destroyed && generation === current) setBusy(false); }
       });
@@ -151,7 +154,8 @@ export function createContractorEmploymentView({ document: doc = globalThis.docu
     if (inactivate) state.value = 'INATIVO';
     const termination = field('DATADESLIGAMENTO', 'Data de desligamento');
     const updateRequirement = () => { termination.required = state.value === 'INATIVO'; termination.min = controls.DATAADMISSAO.value; };
-    state.addEventListener('change', updateRequirement); controls.DATAADMISSAO.addEventListener('change', updateRequirement); updateRequirement();
+    state.addEventListener('change', () => { if (state.value === 'ATIVO') termination.value = ''; updateRequirement(); });
+    controls.DATAADMISSAO.addEventListener('change', updateRequirement); updateRequirement();
     const save = el('button', 'rg-button', 'Salvar'); save.type = 'submit';
     const cancel = button('Cancelar', 'cancel-edit', () => { editor.replaceChildren(); alert.textContent = unconfirmedMessage(); });
     const actions = el('div', 'ce-actions'); actions.append(save, cancel); form.append(actions);

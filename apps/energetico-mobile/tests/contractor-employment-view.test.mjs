@@ -4,17 +4,17 @@ import { JSDOM } from 'jsdom';
 import * as subject from '../src/ui/contractor-employment-view.js';
 import { createContractorEmploymentFixture } from './helpers/contractor-employment-fixture.mjs';
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const synthetic = { id: '4', eTag: '"1"', fields: { Title: 'Funcionário Exemplo', CARGO: '', DATAADMISSAO: '', STATUS: 'ATIVO', FILIAL: 'Obra A', IDFORNECEDORORIGEM: '17', field_6: 31, ORIGEMAUTORJSON: '{"Title":"Autor Exemplo"}', ORIGEMCRIADOEM: '2026-01-01' } };
-test('shows all fields and missing regularization, and cancelling inactivation never saves', async () => {
+const synthetic = { id: '4', eTag: '"1"', fields: { Title: 'Funcionário Exemplo', CARGO: '', DATAADMISSAO: '', STATUS: 'ATIVO', FILIAL: 'Obra A', IDFORNECEDORORIGEM: '17', field_6: 31, Author: 'Autor Exemplo', Created: '2026-01-01' } };
+test('shows all target fields and incomplete RH data, and cancelling inactivation never saves', async () => {
   const dom = new JSDOM('<main></main>'), doc = dom.window.document, saved = [];
   const data = { loadSnapshot: async () => ({ rows: [synthetic], columns: [{ name: 'field_6', displayName: 'ENDEREÇO' }] }), save: async (...args) => { saved.push(args); return synthetic; } };
   const view = subject.createContractorEmploymentView({ document: doc, data });
   try {
     await view.open();
-    assert.match(doc.body.textContent, /Regularizar cargo e admissão/);
+    assert.match(doc.body.textContent, /Dados de RH incompletos: cargo e admissão/);
     assert.match(doc.body.textContent, /ENDEREÇO/);
     assert.match(doc.body.textContent, /31/);
-    assert.match(doc.body.textContent, /ORIGEMCRIADOEM/);
+    assert.match(doc.body.textContent, /Created/);
     doc.querySelector('[data-action="inactivate"]').click();
     assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').required, true);
     assert.equal(doc.querySelectorAll('[name="CARGO"] option').length, 9);
@@ -93,62 +93,60 @@ test('failed refresh never presents a partial or empty search as a completed que
   } finally { view.destroy(); dom.window.close(); }
 });
 
-test('source inactivation blocks a stale cargo edit and the explicit comparison preserves inactive status in the new editor', async () => {
-  const dom = new JSDOM('<main></main>'), doc = dom.window.document;
-  const { data, source, writes } = createContractorEmploymentFixture();
-  source.fields.STATUS = 'INATIVO'; source.fields.DATADESLIGAMENTO = '2026-02-20'; source.eTag = '"9"';
-  const view = subject.createContractorEmploymentView({ document: doc, data });
+test('cargo edit cannot reactivate source; explicit status review shows RH-only dates and requires termination', async () => {
+  const dom = new JSDOM('<main></main>'), doc = dom.window.document, f = createContractorEmploymentFixture();
+  f.source.fields.STATUS = 'INATIVO'; f.source.eTag = '"9"';
+  const view = subject.createContractorEmploymentView({ document: doc, data: f.data });
   try {
-    await view.open();
-    doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
+    await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
     doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
     doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
-    assert.equal(writes.length, 0); assert.match(doc.querySelector('[role="alert"]').textContent, /divergem/);
-    const review = doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]');
-    assert.ok(review, 'divergence must expose source/target comparison');
-    review.click(); await tick();
-    assert.match(doc.querySelector('[data-conflict-source]').textContent, /INATIVO/);
-    assert.match(doc.querySelector('[data-conflict-target]').textContent, /ATIVO/);
+    assert.deepEqual(f.writes.map(w => w.list), ['FUNCIONARIOSRH']); assert.equal(f.source.fields.STATUS, 'INATIVO');
+    doc.querySelector('[data-employment-row="4"] [data-action="inactivate"]').click();
+    doc.querySelector('[name="DATADESLIGAMENTO"]').value = '2026-02-20';
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    assert.equal(f.writes.length, 1); assert.match(doc.querySelector('[role="alert"]').textContent, /diverge/);
+    doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]').click(); await tick();
+    const source = doc.querySelector('[data-conflict-source]');
+    assert.match(source.textContent, /INATIVO/); assert.doesNotMatch(source.textContent, /Cargo|Admissão|Desligamento/);
+    assert.match(doc.querySelector('[data-conflict-target]').textContent, /MESTRE DE OBRAS/);
     doc.querySelector('[data-action="renew-baseline"]').click(); await tick();
-    assert.equal(writes.length, 0);
     assert.equal(doc.querySelector('[name="STATUS"]').value, 'INATIVO');
-    assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').value, '2026-02-20');
-    doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
+    assert.equal(doc.querySelector('[name="DATAADMISSAO"]').value, '2026-01-20');
+    assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').value, '');
     doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
-    assert.equal(writes.length, 2); assert.equal(source.fields.STATUS, 'INATIVO');
+    assert.equal(f.writes.length, 1); assert.match(doc.querySelector('[role="alert"]').textContent, /desligamento/);
+    doc.querySelector('[name="DATADESLIGAMENTO"]').value = '2026-02-20';
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    assert.equal(f.writes.length, 2); assert.equal(f.source.fields.STATUS, 'INATIVO');
   } finally { view.destroy(); dom.window.close(); }
 });
-test('partial conflict can be cancelled without writes then renewed after refresh using the visible source and mirror', async () => {
-  const dom = new JSDOM('<main></main>'), doc = dom.window.document;
-  const { data, source, writes, failTarget } = createContractorEmploymentFixture();
-  const view = subject.createContractorEmploymentView({ document: doc, data });
+
+test('target partial conflict can be cancelled then renewed after a reviewed superseding RH version', async () => {
+  const dom = new JSDOM('<main></main>'), doc = dom.window.document, f = createContractorEmploymentFixture();
+  const view = subject.createContractorEmploymentView({ document: doc, data: f.data });
   try {
-    await view.open(); failTarget(true);
-    doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
-    doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
+    await view.open(); f.failTarget(true);
+    doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click(); doc.querySelector('[name="CARGO"]').value = 'MESTRE DE OBRAS';
     doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
-    assert.equal(writes.length, 2); assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/);
-    source.fields.STATUS = 'INATIVO'; source.fields.DATADESLIGAMENTO = '2026-02-20'; source.fields.CARGO = 'SUPERVISOR DE OBRAS'; source.eTag = '"9"'; failTarget(false);
+    assert.equal(f.writes.length, 1); assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/);
+    f.target.fields.CARGO = 'SUPERVISOR DE OBRAS'; f.target.eTag = '"9"'; f.source.fields.STATUS = 'INATIVO'; f.source.eTag = '"9"'; f.failTarget(false);
     doc.querySelector('[data-action="refresh"]').click(); await tick();
-    assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/, 'refresh cannot hide an unverified partial write');
+    assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/);
     const review = () => doc.querySelector('[data-employment-row="4"] [data-action="review-conflict"]');
-    assert.ok(review(), 'refresh must keep conflict reconciliation reachable');
-    review().click(); await tick();
-    assert.match(doc.querySelector('[data-conflict-source]').textContent, /SUPERVISOR DE OBRAS/);
-    assert.match(doc.querySelector('[data-conflict-target]').textContent, /PEDREIRO III/);
-    doc.querySelector('[data-action="cancel-conflict"]').click(); await tick();
-    assert.equal(writes.length, 2);
+    review().click(); await tick(); assert.match(doc.querySelector('[data-conflict-target]').textContent, /SUPERVISOR DE OBRAS/);
+    doc.querySelector('[data-action="cancel-conflict"]').click(); assert.equal(f.writes.length, 1);
     review().click(); await tick(); doc.querySelector('[data-action="renew-baseline"]').click(); await tick();
     assert.match(doc.querySelector('.ce-editor').textContent, /não confirma a tentativa anterior/i);
-    assert.equal(doc.querySelector('[name="STATUS"]').value, 'INATIVO');
+    assert.equal(doc.querySelector('[name="STATUS"]').value, 'ATIVO'); assert.equal(doc.querySelector('[name="CARGO"]').value, 'SUPERVISOR DE OBRAS');
     assert.doesNotMatch(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
     doc.querySelector('[name="CARGO"]').value = 'SERVENTE DE PEDREIRO III';
     doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
-    assert.equal(writes.length, 4); assert.equal(source.fields.STATUS, 'INATIVO');
-    assert.match(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
+    assert.equal(f.writes.length, 2); assert.equal(f.source.fields.STATUS, 'INATIVO'); assert.match(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
   } finally { view.destroy(); dom.window.close(); }
 });
-test('review cannot discard an uncertain source write whose original ETag has not changed', async () => {
+
+test('review cannot discard an uncertain target write whose original ETag has not changed', async () => {
   const dom = new JSDOM('<main></main>'), doc = dom.window.document;
   const { data, repository, writes } = createContractorEmploymentFixture();
   repository.updateItem = async () => { throw new Error('synthetic unknown write'); };
@@ -182,5 +180,30 @@ test('a new partial save replaces any earlier success status until both records 
     doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
     assert.match(doc.querySelector('[role="alert"]').textContent, /não foi confirmada/);
     assert.doesNotMatch(doc.querySelector('[role="status"]').textContent, /Atualização confirmada/);
+  } finally { view.destroy(); dom.window.close(); }
+});
+
+test('zero future registrations is a valid empty gallery, never a historical regularization request', async () => {
+  const dom = new JSDOM('<main></main>'), f = createContractorEmploymentFixture();
+  f.repository.getItemsPage = async () => ({ items: [], hasMore: false });
+  const view = subject.createContractorEmploymentView({ document: dom.window.document, data: f.data });
+  try {
+    await view.open();
+    assert.match(dom.window.document.querySelector('[role="status"]').textContent, /0 de 0/);
+    assert.match(dom.window.document.querySelector('.ce-list').textContent, /futuros cadastros/i);
+    assert.doesNotMatch(dom.window.document.body.textContent, /regularizar|importar|históric.*fonte/i);
+    assert.deepEqual(f.resolved, ['FUNCIONARIOSRH']); assert.equal(f.writes.length, 0);
+  } finally { view.destroy(); dom.window.close(); }
+});
+test('choosing reactivation explicitly clears the RH termination before synchronizing statuses', async () => {
+  const dom = new JSDOM('<main></main>'), doc = dom.window.document, f = createContractorEmploymentFixture();
+  f.source.fields.STATUS = f.target.fields.STATUS = 'INATIVO'; f.target.fields.DATADESLIGAMENTO = '2026-02-20';
+  const view = subject.createContractorEmploymentView({ document: doc, data: f.data });
+  try {
+    await view.open(); doc.querySelector('[data-employment-row="4"] [data-action="edit"]').click();
+    const state = doc.querySelector('[name="STATUS"]'); state.value = 'ATIVO'; state.dispatchEvent(new dom.window.Event('change'));
+    assert.equal(doc.querySelector('[name="DATADESLIGAMENTO"]').value, '');
+    doc.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    assert.equal(f.target.fields.DATADESLIGAMENTO, null); assert.deepEqual(f.writes[0].fields, { STATUS: 'ATIVO' });
   } finally { view.destroy(); dom.window.close(); }
 });

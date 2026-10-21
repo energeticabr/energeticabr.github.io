@@ -7,7 +7,7 @@ import io
 import tarfile
 from pathlib import Path
 
-FILES = ('worker/workflow.py', 'worker/workflow_config.json', 'worker/contractor_employment.py', 'worker/sync_contractors.py', 'worker/supplier_registration_checkpoint.py', 'worker/contractor_permissions.py')
+FILES = ('worker/workflow.py', 'worker/workflow_config.json', 'worker/contractor_employment.py', 'worker/supplier_registration_checkpoint.py')
 
 
 def digest(data):

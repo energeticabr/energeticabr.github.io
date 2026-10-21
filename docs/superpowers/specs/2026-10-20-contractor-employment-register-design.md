@@ -1,5 +1,50 @@
 # Cadastro e histórico de funcionários empreiteiros
 
+## Revisão vigente — escolha explícita do usuário
+
+Esta revisão substitui os trechos de importação, espelhamento, reconciliação periódica,
+colunas da fonte e clonagem de permissões descritos abaixo. O usuário confirmou:
+**base vazia; receber os futuros cadastros de EMPREITEIRO=SIM do app, sem importar os antigos**.
+
+- Criar `FUNCIONARIOSRH` do zero, com esquema explícito e nenhum registro inicial.
+  Não copiar registros, anexos, auditoria, esquema ou permissões de FORNECEDORES.
+- O cadastro normal de fornecedor continua existindo. Para um novo cadastro com
+  EMPREITEIRO=SIM e STATUS=ATIVO, usar as mesmas respostas digitadas pelo usuário e os
+  mesmos arquivos locais para uma nova linha RH, após obter o ID do novo fornecedor.
+  Não reler o fornecedor para preencher a base. O ID conhecido vira chave única
+  `IDFORNECEDORORIGEM`, não autorização para importar funcionários anteriores.
+- Manter cargo e admissão obrigatórios, uma pergunta por vez, para todo novo SIM.
+  Os oito cargos continuam os definidos nesta especificação. Datas RH ficam apenas
+  na nova base: não adicionar admissão/desligamento na lista FORNECEDORES.
+- Todos os campos de negócio do cadastro serão definidos explicitamente na base
+  nova; Title terá rótulo CADASTRO. Manter CARGO, DATAADMISSAO, DATADESLIGAMENTO,
+  EMPREITEIRO, STATUS, FILIAL e a chave de vínculo como contrato estável do cliente.
+- Criação incerta mantém checkpoints duráveis por cadastro e nunca repete POST sem
+  comprovação. Confirmar dados e anexos do novo destino antes de anunciar sucesso.
+- O corte é positivo e durável: somente um fluxo novo iniciado após esta revisão,
+  com recibo da criação nova vinculado ao token, é elegível. Não atribuir elegibilidade
+  na migração de sessões antigas, em IDs já submetidos ou em POST anterior retomado.
+  Preservar respostas e arquivos locais até confirmar RH; perda do arquivo exige
+  recuperação explícita pelo usuário, nunca cópia de anexos de FORNECEDORES.
+- Não instalar timer, varredura, backfill ou `sync_all`. Mudanças em registros antigos
+  de FORNECEDORES não criam linhas na nova base, nem em segundo plano.
+- A galeria RH lê somente sua nova base. Cargo/admissão/desligamento são editados
+  nela. Para os novos funcionários já vinculados, uma ação explícita de inativação
+  pergunta desligamento e confirma STATUS nas duas linhas, com ETag e retomada segura.
+  O formulário antigo pede desligamento somente quando houver vínculo RH existente;
+  fornecedores antigos não vinculados mantêm o comportamento anterior e não são importados.
+  A ação explícita de STATUS pode consultar somente identidade/STATUS/EMPREITEIRO/ETag
+  da linha de origem vinculada para confirmar as duas gravações; isso não autoriza
+  preencher campos RH a partir da origem nem varrer seus registros.
+- Usar o site já utilizado pelo app e suas permissões padrão, sem concessões novas,
+  ampliação de escopos ou leitura/cópia de ACLs da lista anterior. A nova lista começa
+  vazia; qualquer falha real de criação/gravação deve ser reportada sem elevar acessos.
+- Validar com dados sintéticos e consultas reais sem registrar funcionário fictício.
+  Conferir lista vazia e galeria publicada; backend, web/Windows, Android internal e
+  iOS TestFlight devem ser verificados separadamente.
+
+## Desenho anterior — histórico, não implementar a importação abaixo
+
 ## Objetivo
 
 Manter uma nova lista privada no mesmo site SharePoint, `FUNCIONARIOSRH`, vinculada a

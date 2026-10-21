@@ -41,11 +41,11 @@ def client(remote):
     value=SharePointClient('synthetic.invalid','sites/synthetic','','','','','FORNECEDORES')
     value.session=remote; value._token=lambda refresh=False:'synthetic'; return value
 
-def ensure(sp,token,fields,store):
+def ensure(sp,token,fields,store,**kwargs):
     try: module=importlib.import_module('supplier_registration_checkpoint')
     except ModuleNotFoundError:
         return sp.ensure_item(token,fields,target_list='FORNECEDORES',idempotency_field='__PowerAppsId__',merge_existing=False)
-    return module.ensure_supplier(sp,token,fields,state_store=store)
+    return module.ensure_supplier(sp,token,fields,state_store=store,**kwargs)
 
 def test_invisible_accepted_source_post_is_not_repeated_on_retry_or_restart(tmp_path):
     remote=Transport(); remote.hidden=True; remote.lost=True
@@ -70,3 +70,46 @@ def test_old_duplicate_token_is_rejected_instead_of_choosing_an_employee(tmp_pat
     with pytest.raises(RuntimeError):
         ensure(client(remote),'WA-SYNTHETIC',{'CADASTRO':'SYNTHETIC'},SimpleNamespace(directory=tmp_path))
     assert remote.posts==0
+
+
+def test_only_new_source_post_authorizes_future_hr_submission(tmp_path):
+    remote=Transport(); store=SimpleNamespace(directory=tmp_path)
+    helper=importlib.import_module('supplier_registration_checkpoint')
+    start=getattr(helper,'start_future_flow',None)
+    assert callable(start), 'Positive flow cutover marker is missing'
+    flow_id=start(client(remote),'NEW-TOKEN',state_store=store)
+    item_id=ensure(client(remote),'NEW-TOKEN',{'CADASTRO':'SYNTHETIC'},store,future_flow_id=flow_id)
+    proofs=list(tmp_path.rglob('submission-*.json'))
+    assert len(proofs)==1
+    proof=json.loads(proofs[0].read_text())
+    assert proof['supplier_id']==item_id and proof['version']==1
+    assert len(proof['token_hash'])==64 and 'SYNTHETIC' not in json.dumps(proof)
+
+
+def test_preexisting_source_token_is_not_authority_to_import(tmp_path):
+    remote=Transport(); remote.rows=[{'Id':77,'field_7':'OLD-TOKEN'}]
+    assert ensure(client(remote),'OLD-TOKEN',{'CADASTRO':'SYNTHETIC'},SimpleNamespace(directory=tmp_path))==77
+    assert remote.posts==0 and list(tmp_path.rglob('submission-*.json'))==[]
+
+
+def test_unmarked_new_source_post_does_not_authorize_old_session(tmp_path):
+    remote=Transport(); store=SimpleNamespace(directory=tmp_path)
+    ensure(client(remote),'OLD-SESSION',{'CADASTRO':'SYNTHETIC'},store)
+    assert remote.posts==1 and list(tmp_path.rglob('submission-*.json'))==[]
+
+
+def test_old_uncertain_checkpoint_lookup_cannot_be_retroactively_marked(tmp_path):
+    import contractor_employment as hr
+    import hashlib
+    helper=importlib.import_module('supplier_registration_checkpoint')
+    start=getattr(helper,'start_future_flow',None)
+    assert callable(start), 'Positive flow cutover marker is missing'
+    remote=Transport(); store=SimpleNamespace(directory=tmp_path); sp=client(remote)
+    directory=hr._state_directory(sp,store)
+    token='OLD-UNCERTAIN'
+    hr._checkpoint(directory/('source-'+hashlib.sha256(token.encode()).hexdigest()+'.json'),
+        {'phase':'create_pending','token':token})
+    remote.rows=[{'Id':77,'field_7':token}]
+    flow_id=start(sp,token,state_store=store)
+    assert ensure(sp,token,{'CADASTRO':'SYNTHETIC'},store,future_flow_id=flow_id)==77
+    assert list(tmp_path.rglob('submission-*.json'))==[]

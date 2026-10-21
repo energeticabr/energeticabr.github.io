@@ -1,5 +1,44 @@
 # Contractor Employment Register Implementation Plan
 
+## Plano vigente após escolha do usuário — base vazia e cadastros futuros
+
+Os planos/checklists históricos abaixo não autorizam importar FORNECEDORES, copiar
+suas permissões, adicionar campos à fonte ou instalar sincronizador periódico.
+O bloqueio 403 da clonagem de ACL deixa de ser dependência deste novo desenho.
+
+### A. Backend e esquema explícito — Rawls
+
+- [ ] Criar testes RED que rejeitem leitura/cópia de dados/esquema/ACL de FORNECEDORES
+  pelo fluxo RH, importação antiga, alterações de esquema da fonte e POST incerto repetido.
+- [ ] Definir esquema novo de todos os dados de negócio do cadastro, cargo e datas;
+  provisionar somente FUNCIONARIOSRH, vazia, com chave única/indexada por novo fornecedor.
+- [ ] Manter criação normal da fonte e seu checkpoint; gravar RH diretamente das
+  respostas e arquivos locais do mesmo novo cadastro SIM/ATIVO, sem reler a fonte.
+- [ ] Remover dependências de timer/sync/ACL do pacote e da implantação; verificar
+  payload/anexos por leitura do destino, mantendo retomada idempotente e falhas explícitas.
+- [ ] Testes GREEN e pacote reproduzível/hash-pinned de quatro arquivos worker.
+
+### B. Cliente e inativação dos novos vinculados — Franklin
+
+- [ ] Testes RED de base vazia, ausência de importação, edição de cargo/datas só no
+  destino, inativação vinculada com data e ETags, fornecedores antigos sem criação RH.
+- [ ] Adaptar galeria abaixo de Presenças ao destino independente; dados completos,
+  filtros, estado vazio e datas obrigatórias sem depender de colunas RH na fonte.
+- [ ] No formulário antigo, perguntar desligamento apenas para um vínculo RH já
+  existente; confirmar STATUS em ambas e data no destino, sem importar os não vinculados.
+- [ ] Testes GREEN, 14 blocos de assinatura intactos, builds e prova visual sintética.
+
+### C. Integração e publicação — principal
+
+- [ ] Revisão independente do novo desenho e correção RED/GREEN de achados.
+- [ ] Provisionar somente nova lista e confirmar contagem zero; implantar backend com
+  backup, hashes e saúde, sem mudar credenciais/permissões ou registrar funcionário real.
+- [ ] Verificar fluxo instalado e galeria vazia, executar suítes/builds, atualizar PR
+  #556 e integrar apenas após validação; confirmar publicação nas três plataformas.
+- [ ] Conferir separadamente esta entrega e a correção de vencimento das PRs #554/#555.
+
+## Plano anterior — histórico substituído nos pontos acima
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Cadastro, espelhamento idempotente e galeria de funcionários com cargo e datas.

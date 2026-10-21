@@ -20,6 +20,15 @@ ADMISSION='admissao_fornecedor_suprimentos'
 ROLES=['SERVENTE DE PEDREIRO I','SERVENTE DE PEDREIRO II','SERVENTE DE PEDREIRO III',
        'PEDREIRO I','PEDREIRO II','PEDREIRO III','MESTRE DE OBRAS','SUPERVISOR DE OBRAS']
 
+def test_all_configured_supplier_answers_have_explicit_hr_columns():
+    config = json.loads((ROOT / 'worker/workflow_config.json').read_text(encoding='utf-8'))
+    flow = config['sharepoint']['supply_supplier_registration_flow']
+    fields = {step['target_field'] for step in [*flow['steps'], *flow.get('fixed_fields', [])]
+              if step.get('target_field')}
+    mapping = workflow.contractor_employment.FIELD_MAP
+    assert fields <= mapping.keys(), 'A registration answer would be omitted from the new HR schema'
+    assert {mapping[name] for name in fields} <= workflow.contractor_employment.FIELD_TYPES.keys()
+
 class Store:
     def __init__(self): self.values={}
     def load(self,key): return copy.deepcopy(self.values.get(key)),None
@@ -42,7 +51,11 @@ class Catalog:
         item_id=len(self.rows)+10; self.post_count+=1
         self.tokens[token]=item_id; self.rows[item_id]={'fields':copy.deepcopy(fields),'list':target_list}
         return item_id
-    def verify_item(self,*args,**kwargs): return {'fields':True,'attachments':True}
+    def verify_item(self,item_id,fields,attachment_names,**kwargs):
+        assert 'DATAADMISSAO' not in fields and 'DATADESLIGAMENTO' not in fields
+        return {'fields':True,'attachments':True}
+    def ensure_attachment(self,item_id,name,content,mime_type,**kwargs):
+        self.uploaded=(item_id,name,content)
     def _internal_field(self,title,field): return field
     def _target_payload(self,fields,title): return copy.deepcopy(fields)
     def _list_endpoint(self,title): return "web/lists/getByTitle('"+title+"')"
@@ -51,6 +64,7 @@ class Catalog:
             token=kwargs['params']['$filter'].split("'")[1]
             return {'value':[{'Id':self.tokens[token]}] if token in self.tokens else []}
         fields=kwargs['json']; token=fields['__PowerAppsId__']
+        assert 'DATAADMISSAO' not in fields and 'DATADESLIGAMENTO' not in fields
         return {'Id':self.ensure_item(token,fields,target_list='FORNECEDORES')}
 
 class Summary:
@@ -68,6 +82,10 @@ class EmploymentWorkflowTests(unittest.TestCase):
         self.state.update(flow='supply_supplier_registration',stage='selecting_fields',supplier_employment_version=2,
             fields={'CADASTRO':'FUNCIONÁRIO SINTÉTICO','TIPO':'MÃO DE OBRA','EMPREITEIRO':'SIM','STATUS':'ATIVO',
                     'VINCULO':'CLT','CARGO':'PEDREIRO I','DATAADMISSAO':'2026-10-01T00:00:00Z'})
+        start=getattr(workflow.supplier_registration_checkpoint,'start_future_flow',None)
+        if start:
+            token=f"WA-supply_supplier_registration-{self.state['batch_id']}"
+            self.state['supplier_hr_flow_id']=start(self.catalog,token,state_store=self.store)
 
     def index(self,key): return next(i for i,s in enumerate(self.steps) if s['key']==key)
     def event(self,text): return {'kind':'text','message_id':'qa-reply','text':text}
@@ -142,15 +160,111 @@ class EmploymentWorkflowTests(unittest.TestCase):
         self.assertEqual(step['key'],'telefone_fornecedor_suprimentos')
         self.assertEqual(self.state['supplier_employment_version'],2)
 
-    def test_sync_failure_is_not_reported_as_complete_and_retry_keeps_supplier_id(self):
-        sync=SimpleNamespace(sync_supplier=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('synthetic mirror failure')))
+    def test_hr_failure_is_not_reported_as_complete_and_retry_keeps_supplier_id(self):
+        sync=SimpleNamespace(register_from_submission=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('synthetic target failure')))
         with patch.object(workflow,'contractor_employment',sync,create=True):
             result=self.commit()
         self.assertEqual(result['status'],'submission_failed')
         self.assertEqual(self.catalog.post_count,1)
-        sync.sync_supplier=lambda *a,**k: {'status':'synced','item_id':20}
+        sync.register_from_submission=lambda *a,**k: {'status':'registered','target_id':20,'verified':True}
         with patch.object(workflow,'contractor_employment',sync,create=True):
             self.assertEqual(self.commit()['status'],'completed')
+        self.assertEqual(self.catalog.post_count,1)
+
+    def test_hr_receives_private_answers_and_same_local_bytes_after_source_verification(self):
+        content=b'LOCAL SYNTHETIC FILE'
+        self.state['attachments']=[{'sharepoint_name':'test.pdf','mime_type':'application/pdf','size':len(content)}]
+        self.engine.media_repository=SimpleNamespace(read=lambda attachment:content)
+        received=[]
+        def register(client,supplier_id,fields,files=(),*,state_store=None):
+            self.assertEqual(self.catalog.rows[supplier_id]['fields']['CARGO'],'PEDREIRO I')
+            self.assertNotIn('DATAADMISSAO',self.catalog.rows[supplier_id]['fields'])
+            self.assertEqual(fields['DATAADMISSAO'],'2026-10-01T00:00:00Z')
+            self.assertIs(files[0]['content'],self.catalog.uploaded[2])
+            self.assertIs(files[0]['content'],content)
+            received.append(supplier_id)
+            return {'status':'registered','target_id':20,'verified':True}
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=register)):
+            self.assertEqual(self.commit()['status'],'completed')
+        self.assertEqual(received,[10])
+
+    def test_non_employee_registration_never_calls_hr(self):
+        self.state['fields']['EMPREITEIRO']='NÃO'
+        def forbidden(*args,**kwargs): raise AssertionError('NO must not call HR')
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=forbidden)):
+            self.assertEqual(self.commit()['status'],'completed')
+
+    def test_unverified_hr_receipt_is_not_announced_complete(self):
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k:{'status':'registered','verified':False})):
+            self.assertEqual(self.commit()['status'],'submission_failed')
+
+    def test_legacy_resumed_session_does_not_create_hr_even_with_all_answers(self):
+        self.state.pop('supplier_hr_flow_id',None)
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k: (_ for _ in ()).throw(AssertionError('legacy import')))):
+            self.assertEqual(self.commit()['status'],'completed')
+        self.assertEqual(self.catalog.post_count,1)
+
+    def test_actual_new_flow_entry_persists_marker_but_migration_does_not(self):
+        self.state.pop('supplier_hr_flow_id',None)
+        self.engine._begin_action(self.state,None,{'flow':'supply_supplier_registration','title':'NOVO'})
+        self.assertTrue(self.state.get('supplier_hr_flow_id'))
+        self.assertTrue(list(Path(self.temp.name).rglob('flow-*.json')))
+        self.state.pop('supplier_hr_flow_id',None)
+        self.state.pop('supplier_employment_version',None)
+        self.engine._migrate_supplier_employment_steps(self.state)
+        self.assertNotIn('supplier_hr_flow_id',self.state)
+
+    def test_retry_cannot_change_frozen_submission_answers(self):
+        failing=SimpleNamespace(register_from_submission=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('partial')))
+        with patch.object(workflow,'contractor_employment',failing):
+            self.assertEqual(self.commit()['status'],'submission_failed')
+        self.state['fields']['CARGO']='PEDREIRO II'
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k:{'status':'registered','verified':True})):
+            self.assertEqual(self.commit()['status'],'submission_failed')
+        self.assertEqual(self.catalog.post_count,1)
+
+    def test_missing_local_file_requests_reattach_and_cannot_silently_complete_without_it(self):
+        content=b'FROZEN LOCAL FILE'
+        self.state['attachments']=[{'sharepoint_name':'test.pdf','original_name':'test.pdf','mime_type':'application/pdf','size':len(content)}]
+        media=SimpleNamespace(read=lambda attachment:content)
+        self.engine.media_repository=media
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('partial')))):
+            self.assertEqual(self.commit()['status'],'submission_failed')
+        frozen=copy.deepcopy(self.state['supplier_hr_submission'])
+        media.read=lambda attachment: (_ for _ in ()).throw(FileNotFoundError('local file missing'))
+        self.assertEqual(self.commit()['status'],'waiting_for_attachment_reupload')
+        self.assertEqual(self.state['supplier_hr_submission'],frozen)
+        self.assertIn('REENVIE',self.messenger.messages[-1]['prompt'] if isinstance(self.messenger.messages[-1],dict) else self.messenger.messages[-1])
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k:{'status':'registered','verified':True})):
+            self.assertEqual(self.commit()['status'],'submission_failed')
+        self.assertEqual(self.catalog.post_count,1)
+
+    def test_new_flow_with_preexisting_source_token_skips_hr(self):
+        token=f"WA-supply_supplier_registration-{self.state['batch_id']}"
+        self.catalog.ensure_item(token,{'CADASTRO':'OLD'},target_list='FORNECEDORES')
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k: (_ for _ in ()).throw(AssertionError('old POST import')))):
+            self.assertEqual(self.commit()['status'],'completed')
+        self.assertEqual(self.catalog.post_count,1)
+
+    def test_embedded_new_supplier_flow_also_gets_cutover_marker(self):
+        self.state.update(flow='launch',supplier_hr_flow_id=None)
+        self.engine._start_embedded_supplier_registration(self.state,None)
+        self.assertTrue(self.state['supplier_hr_flow_id'])
+        self.assertTrue(self.state['idempotency_token'].startswith('WA-supply_supplier_registration-'))
+
+    def test_actual_store_restart_keeps_frozen_answers_and_source_id(self):
+        from local_app import LocalStateStore
+        store=LocalStateStore(Path(self.temp.name))
+        engine=WorkflowEngine(self.config,store,None,self.messenger,self.catalog,summary_builder=Summary())
+        self.state.update(stage='committing',step_index=len(self.steps))
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k: (_ for _ in ()).throw(RuntimeError('partial')))):
+            self.assertEqual(engine._commit(self.state,None)['status'],'submission_failed')
+        state,etag=LocalStateStore(Path(self.temp.name)).load(self.state['key'])
+        frozen=copy.deepcopy(state['supplier_hr_submission'])
+        restarted=WorkflowEngine(self.config,LocalStateStore(Path(self.temp.name)),None,self.messenger,self.catalog,summary_builder=Summary())
+        with patch.object(workflow,'contractor_employment',SimpleNamespace(register_from_submission=lambda *a,**k:{'status':'registered','verified':True})), patch.object(restarted,'_notify_completed',return_value={'status':'completed'}):
+            self.assertEqual(restarted._commit(state,etag)['status'],'completed')
+        self.assertEqual(state['supplier_hr_submission'],frozen)
         self.assertEqual(self.catalog.post_count,1)
 
 if __name__=='__main__': unittest.main()

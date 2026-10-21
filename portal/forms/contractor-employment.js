@@ -11,7 +11,6 @@ export function contractorEmploymentDate(value) {
   const date = new Date(day + 'T12:00:00Z');
   return Number(day.slice(0, 4)) > 0 && Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day ? day : '';
 }
-
 export function validateContractorTermination(fields) {
   const admission = contractorEmploymentDate(fields.DATAADMISSAO);
   const termination = contractorEmploymentDate(fields.DATADESLIGAMENTO);
@@ -65,17 +64,4 @@ export function requestContractorTerminationDate({ document: doc = globalThis.do
     if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
     input.focus();
   });
-}
-
-export async function prepareContractorSupplierEdit(entity, item, fields, options = {}) {
-  if (entity?.id !== 'fornecedores' || options.mode !== 'edit') return fields;
-  const current = { ...item?.fields, ...fields };
-  const contractor = String(current.EMPREITEIRO ?? '').trim().toUpperCase() === 'SIM';
-  if (!contractor || String(current.STATUS ?? '').trim().toUpperCase() !== 'INATIVO') return fields;
-  if (!current.DATADESLIGAMENTO) {
-    current.DATADESLIGAMENTO = await requestContractorTerminationDate({
-      document: options.document ?? globalThis.document, admission: current.DATAADMISSAO,
-    });
-  }
-  return { ...fields, DATADESLIGAMENTO: validateContractorTermination(current) };
 }

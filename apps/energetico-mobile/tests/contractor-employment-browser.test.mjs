@@ -15,7 +15,7 @@ test('employee gallery, inactivation form and supplier date prompt fit phones, t
   await server.listen();
   try {
     for (const [width, height] of [[320, 740], [390, 844], [768, 1024], [1365, 900]]) {
-      for (const mode of ['', '?edit=1', '?portal=1', '?conflict=1']) {
+      for (const mode of ['', '?edit=1', '?portal=1', '?conflict=1', '?empty=1']) {
         const capture = Boolean(process.env.CONTRACTOR_EMPLOYMENT_SCREENSHOT_DIR) && mode !== '?portal=1';
         const { stdout, screenshot } = await runBrowserLayout(browser, { width, height,
           url: 'http://127.0.0.1:' + server.httpServer.address().port + '/tests/fixtures/contractor-employment-responsive.html' + mode,
@@ -24,13 +24,14 @@ test('employee gallery, inactivation form and supplier date prompt fit phones, t
         const dom = new JSDOM(stdout), result = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
         assert.equal(result.overflow, false, width + mode + ': no horizontal overflow');
         assert.equal(result.controlsFit, true, width + mode + ': touch controls fit');
-        assert.equal(result.rows, 3);
+        assert.equal(result.rows, mode === '?empty=1' ? 0 : 3);
         assert.equal(result.editor, mode === '?edit=1');
         assert.equal(result.portal, mode === '?portal=1');
         if (mode === '?conflict=1') assert.equal(result.conflict, true, 'comparison must show the current source and mirror together');
         if (capture) {
           await mkdir(process.env.CONTRACTOR_EMPLOYMENT_SCREENSHOT_DIR, { recursive: true });
-          const output = join(process.env.CONTRACTOR_EMPLOYMENT_SCREENSHOT_DIR, 'funcionarios-' + width + (mode === '?conflict=1' ? '-conflict' : mode ? '-edit' : '') + '.png');
+          const suffix = mode === '?conflict=1' ? '-conflict' : mode === '?empty=1' ? '-empty' : mode ? '-edit' : '';
+          const output = join(process.env.CONTRACTOR_EMPLOYMENT_SCREENSHOT_DIR, 'funcionarios-' + width + suffix + '.png');
           await writeFile(output, screenshot); t.diagnostic(output);
         }
       }
