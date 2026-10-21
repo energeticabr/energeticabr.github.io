@@ -90,6 +90,14 @@ class WeeklyFlowTests(unittest.TestCase):
                          'startTime': '2026-10-25T06:00:00', 'schedule': {'weekDays': ['Sunday'], 'hours': [6], 'minutes': [0]}})
         self.assertEqual(trigger['runtimeConfiguration']['concurrency']['runs'], 1)
 
+    def test_power_automate_initializes_one_variable_per_top_level_action(self):
+        definition = flow.build_definition()
+        all_inits = [(name, action) for name, action in actions_in(definition['actions']) if action['type'] == 'InitializeVariable']
+        self.assertGreaterEqual(len(all_inits), 5)
+        for name, action in all_inits:
+            self.assertIn(name, definition['actions'])
+            self.assertEqual(len(action['inputs']['variables']), 1)
+
     def test_non_sunday_preview_has_no_financial_writes_and_no_other_lists(self):
         definition = flow.build_definition()
         financial = definition['actions']['Somente_Domingo']
@@ -108,8 +116,39 @@ class WeeklyFlowTests(unittest.TestCase):
         self.assertIn('FOLHAOPERACAO', lookup)
         recovery = definition['actions']['Recuperar_Ou_Ler_Cadastro']['actions']
         self.assertEqual(recovery['Ler_Manifesto']['inputs']['host']['operationId'], 'GetFileContentByPath')
-        self.assertIn("?['Title']", recovery['Ler_Manifesto']['inputs']['parameters']['path'])
+        self.assertEqual(recovery['Ler_Manifesto']['inputs']['parameters']['path'], "@variables('Reserva')?['manifestPath']")
         self.assertNotIn('Ler_Fornecedores', recovery)
+
+    def test_json_recovery_forces_binary_envelopes_before_base64_decoding(self):
+        actions = dict(actions_in(flow.build_definition()['actions']))
+        for name in ['Ler_Reserva', 'Ler_Manifesto', 'Confirmar_Reserva']:
+            self.assertIn(name, actions, 'Durable snapshot recovery is missing')
+            self.assertIs(actions[name]['inputs']['parameters']['inferContentType'], False)
+
+    def test_weekly_snapshot_survives_uncommitted_parent_with_changed_roster(self):
+        actions = flow.build_definition()['actions']
+        self.assertIn('Procurar_Reserva', actions, 'The snapshot must be discoverable without the parent')
+        lookup = actions['Procurar_Reserva']['inputs']['parameters']['path']
+        self.assertEqual(lookup, "@concat('/VA-RESERVA-', outputs('Domingo'), '.json')")
+        choose = actions['Recuperar_Ou_Ler_Cadastro']
+        self.assertEqual(choose['expression'], "@equals(actions('Procurar_Reserva')?['status'], 'Succeeded')")
+        nested = dict(actions_in(actions))
+        copy = nested['Reservar_Sem_Sobrescrever']
+        self.assertEqual(copy['inputs']['host']['operationId'], 'CopyDriveFile')
+        self.assertIs(copy['inputs']['parameters']['overwrite'], False)
+        self.assertEqual(copy['inputs']['parameters']['destination'], lookup)
+        self.assertEqual(nested['Confirmar_Reserva']['runAfter'], {'Reservar_Sem_Sobrescrever': ['Succeeded', 'Failed', 'TimedOut']})
+
+    def test_same_count_manifest_substitution_is_rejected_by_version_pins(self):
+        actions = dict(actions_in(flow.build_definition()['actions']))
+        self.assertIn('Versao_Manifesto_Original', actions, 'Manifest version pin is missing')
+        self.assertEqual(actions['Versao_Manifesto_Original']['expression'], "@and(not(empty(variables('Reserva')?['manifestETag'])), equals(body('Meta_Manifesto_Original')?['ETag'], variables('Reserva')?['manifestETag']))")
+        self.assertEqual(actions['Versao_PDF_Original']['expression'], "@and(not(empty(variables('Reserva')?['pdfETag'])), equals(body('Meta_PDF_Original')?['ETag'], variables('Reserva')?['pdfETag']))")
+        parent_fields = actions['Campos_Descritivo']['inputs']
+        self.assertEqual(parent_fields['Title'], "@outputs('Titulo_Imutavel')")
+        guard = actions['Conferir_Reserva_Descritivo']
+        self.assertIn("first(body('Procurar_Descritivo')?['value'])?['Title'], outputs('Titulo_Imutavel')", guard['expression'])
+        self.assertEqual(actions['Conferir_PDF']['runAfter'], {'Conferir_Reserva_Descritivo': ['Succeeded']})
 
     def test_conversion_and_validation_precede_financial_create(self):
         definition = flow.build_definition()

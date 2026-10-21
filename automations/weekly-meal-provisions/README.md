@@ -23,8 +23,11 @@ Manual executions on other weekdays produce only a private PDF preview.
 - 5 × R$45 = R$225 each; PRODUTO/OBS=VALE ALIMENTAÇÃO; IMOVEL=TODOS; account blank.
 - The child column VALORTOTAL stores **unit price 45**, not extended total 225.
 - Unique indexed FOLHAOPERACAO keys prevent duplicate weekly records.
-- A private OneDrive JSON/PDF pair, referenced by parent Title, freezes the roster.
-  Preserve these files for recovery. No public links are created.
+- A private OneDrive JSON/PDF pair and `VA-RESERVA-<Sunday>.json` freeze the roster.
+  The reservation is copied without overwrite, independently of the financial
+  parent, and pins both file versions. Parent Title also pins the reservation's
+  version. Preserve these files for recovery; do not edit them. No public links
+  are created. Run-specific staging files alone do not commit a weekly snapshot.
 - Failed creates are followed by a lookup and strict field checks, never a blind
   second POST. Paid/changed records are not overwritten. Existing PDF bytes must
   match the frozen original, otherwise the flow stops.

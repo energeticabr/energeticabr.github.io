@@ -175,16 +175,25 @@ def attachments(guid, label, item_id, prev=None):
 
 def build_definition():
     key_expr = "concat('VA-SEMANAL:', outputs('Domingo'))"
+    reservation_path = "@concat('/VA-RESERVA-', outputs('Domingo'), '.json')"
     supplier_uri = f"_api/web/lists(guid'{SUPPLIERS}')/items?$select=Id,Title,CARGO,STATUS,EMPREITEIRO,FILIAL&$filter=EMPREITEIRO%20eq%20'SIM'%20and%20STATUS%20eq%20'ATIVO'&$orderby=Id&$top=500"
     a = {'Agora_Brasilia': compose("@convertTimeZone(utcNow(), 'UTC', 'E. South America Standard Time')")}
     a['Domingo'] = compose("@formatDateTime(addDays(outputs('Agora_Brasilia'), sub(0, dayOfWeek(outputs('Agora_Brasilia')))), 'yyyy-MM-dd')", 'Agora_Brasilia')
     a['Sexta'] = compose("@formatDateTime(addDays(outputs('Domingo'), 5), 'yyyy-MM-dd')", 'Domingo')
-    a['Inicializar'] = {'type': 'InitializeVariable', 'inputs': {'variables': [
-        {'name': 'Manifesto', 'type': 'object', 'value': {}}, {'name': 'Fornecedores', 'type': 'array', 'value': []},
+    initial_variables = [
+        {'name': 'Manifesto', 'type': 'object', 'value': {}}, {'name': 'Reserva', 'type': 'object', 'value': {}}, {'name': 'Fornecedores', 'type': 'array', 'value': []},
         {'name': 'PaginaSeguinte', 'type': 'string', 'value': supplier_uri}, {'name': 'HTMLRows', 'type': 'string', 'value': ''},
-        {'name': 'PDFBase64', 'type': 'string', 'value': ''}]}, 'runAfter': after('Sexta')}
-    a['Procurar_Descritivo'] = http(listing(PARENT, key_expr), 'Inicializar')
+        {'name': 'PDFBase64', 'type': 'string', 'value': ''}]
+    initialized = 'Sexta'
+    for value in initial_variables:
+        name = 'Inicializar_' + value['name']
+        a[name] = {'type': 'InitializeVariable', 'inputs': {'variables': [value]}, 'runAfter': after(initialized)}
+        initialized = name
+    a['Procurar_Descritivo'] = http(listing(PARENT, key_expr), initialized)
     a['Descritivo_Unico'] = require("@lessOrEquals(length(body('Procurar_Descritivo')?['value']), 1)", 'Procurar_Descritivo')
+    a['Procurar_Reserva'] = api('shared_onedriveforbusiness', 'GetFileMetadataByPath', {'path': reservation_path}, 'Descritivo_Unico')
+    a['Reserva_Disponivel_Ou_Ausente'] = require("@or(equals(actions('Procurar_Reserva')?['status'], 'Succeeded'), equals(outputs('Procurar_Reserva')?['statusCode'], 404))", message='Não foi possível consultar a reserva semanal. Falha de conexão não significa cadastro vazio.')
+    a['Reserva_Disponivel_Ou_Ausente']['runAfter'] = {'Procurar_Reserva': ['Succeeded', 'Failed', 'TimedOut']}
 
     page = {'Ler_Fornecedores': http("@replace(variables('PaginaSeguinte'), '" + SITE + "/', '')")}
     page['Acumular'] = {'type': 'Foreach', 'foreach': "@body('Ler_Fornecedores')?['value']", 'actions': {
@@ -202,11 +211,16 @@ def build_definition():
         'title': "@concat('VA-', outputs('Domingo'), '-', workflow()?['run']?['name'])", 'pdfName': "@concat('VALE-ALIMENTACAO-', outputs('Domingo'), '.pdf')",
         'rows': "@body('Linhas')", 'total': "@mul(length(body('Linhas')), 225)"}, 'Linhas')
     fresh['Usar_Cadastro'] = variable('Manifesto', "@outputs('Novo_Manifesto')", 'Novo_Manifesto')
-    recovery = {'Ler_Manifesto': api('shared_onedriveforbusiness', 'GetFileContentByPath', {
-        'path': "@concat('/', first(body('Procurar_Descritivo')?['value'])?['Title'], '.json')", 'inferContentType': True}),
+    recovery = {
+        'Ler_Reserva': api('shared_onedriveforbusiness', 'GetFileContentByPath', {'path': reservation_path, 'inferContentType': False}),
+        'Usar_Reserva': variable('Reserva', "@json(base64ToString(body('Ler_Reserva')?['$content']))", 'Ler_Reserva'),
+        'Meta_Manifesto_Original': api('shared_onedriveforbusiness', 'GetFileMetadataByPath', {'path': "@variables('Reserva')?['manifestPath']"}, 'Usar_Reserva'),
+        'Versao_Manifesto_Original': require("@and(not(empty(variables('Reserva')?['manifestETag'])), equals(body('Meta_Manifesto_Original')?['ETag'], variables('Reserva')?['manifestETag']))", 'Meta_Manifesto_Original', 'O manifesto reservado foi alterado. Não criar nem trocar destinatários.'),
+        'Ler_Manifesto': api('shared_onedriveforbusiness', 'GetFileContentByPath', {
+        'path': "@variables('Reserva')?['manifestPath']", 'inferContentType': False}, 'Versao_Manifesto_Original'),
         'Usar_Manifesto_Original': variable('Manifesto', "@json(base64ToString(body('Ler_Manifesto')?['$content']))", 'Ler_Manifesto')}
-    a['Recuperar_Ou_Ler_Cadastro'] = {'type': 'If', 'expression': "@equals(length(body('Procurar_Descritivo')?['value']), 1)",
-        'actions': recovery, 'else': {'actions': fresh}, 'runAfter': after('Descritivo_Unico')}
+    a['Recuperar_Ou_Ler_Cadastro'] = {'type': 'If', 'expression': "@equals(actions('Procurar_Reserva')?['status'], 'Succeeded')",
+        'actions': recovery, 'else': {'actions': fresh}, 'runAfter': after('Reserva_Disponivel_Ou_Ausente')}
     a['Validar_Estrutura'] = {'type': 'ParseJson', 'inputs': {'content': "@variables('Manifesto')", 'schema': {
         'type': 'object', 'required': ['version', 'sunday', 'friday', 'key', 'title', 'pdfName', 'rows', 'total'],
         'properties': {**{k: {'type': 'string'} for k in ['sunday', 'friday', 'key', 'title', 'pdfName']}, 'version': {'type': 'integer'}, 'total': {'type': 'integer'},
@@ -225,16 +239,33 @@ def build_definition():
     a['Salvar_HTML'] = api('shared_onedriveforbusiness', 'CreateFile', {'folderPath': '/', 'name': "@concat(variables('Manifesto')?['title'], '-', workflow()?['run']?['name'], '.html')", 'body': "@outputs('HTML')"}, 'HTML')
     a['Aguardar_Conversao'] = {'type': 'Wait', 'inputs': {'interval': {'count': 5, 'unit': 'Second'}}, 'runAfter': after('Salvar_HTML')}
     a['Converter_PDF'] = api('shared_onedriveforbusiness', 'ConvertFile', {'id': "@body('Salvar_HTML')?['Id']", 'type': 'PDF'}, 'Aguardar_Conversao')
-    a['Preservar_PDF_Original'] = {'type': 'If', 'expression': "@equals(length(body('Procurar_Descritivo')?['value']), 1)", 'actions': {
-        'Ler_PDF_Original': api('shared_onedriveforbusiness', 'GetFileContentByPath', {'path': "@concat('/', variables('Manifesto')?['title'], '.pdf')", 'inferContentType': True}),
+    new_files = {
+        'Salvar_PDF': api('shared_onedriveforbusiness', 'CreateFile', {'folderPath': '/', 'name': "@concat(variables('Manifesto')?['title'], '.pdf')", 'body': "@body('Converter_PDF')"}),
+        'Meta_PDF_Novo': api('shared_onedriveforbusiness', 'GetFileMetadataByPath', {'path': "@concat('/', variables('Manifesto')?['title'], '.pdf')"}, 'Salvar_PDF'),
+        'Salvar_Manifesto': api('shared_onedriveforbusiness', 'CreateFile', {'folderPath': '/', 'name': "@concat(variables('Manifesto')?['title'], '.json')", 'body': "@string(variables('Manifesto'))"}, 'Meta_PDF_Novo'),
+        'Meta_Manifesto_Novo': api('shared_onedriveforbusiness', 'GetFileMetadataByPath', {'path': "@concat('/', variables('Manifesto')?['title'], '.json')"}, 'Salvar_Manifesto'),
+        'Campos_Reserva': compose({'key': "@variables('Manifesto')?['key']", 'manifestPath': "@concat('/', variables('Manifesto')?['title'], '.json')", 'manifestETag': "@body('Meta_Manifesto_Novo')?['ETag']",
+            'pdfPath': "@concat('/', variables('Manifesto')?['title'], '.pdf')", 'pdfETag': "@body('Meta_PDF_Novo')?['ETag']"}, 'Meta_Manifesto_Novo'),
+        'Preparar_Reserva': api('shared_onedriveforbusiness', 'CreateFile', {'folderPath': '/', 'name': "@concat(variables('Manifesto')?['title'], '-reserva.json')", 'body': "@string(outputs('Campos_Reserva'))"}, 'Campos_Reserva'),
+        'Reservar_Sem_Sobrescrever': api('shared_onedriveforbusiness', 'CopyDriveFile', {'id': "@body('Preparar_Reserva')?['Id']", 'destination': reservation_path, 'overwrite': False}, 'Preparar_Reserva'),
+        'Confirmar_Reserva': api('shared_onedriveforbusiness', 'GetFileContentByPath', {'path': reservation_path, 'inferContentType': False}),
+        'Usar_Reserva_Confirmada': variable('Reserva', "@json(base64ToString(body('Confirmar_Reserva')?['$content']))", 'Confirmar_Reserva'),
+        'Reserva_Do_Lote': require('@and(' + ', '.join(f"equals(variables('Reserva')?['{field}'], outputs('Campos_Reserva')?['{field}'])" for field in ['key', 'manifestPath', 'manifestETag', 'pdfPath', 'pdfETag']) + ')', 'Usar_Reserva_Confirmada', 'Outra tentativa reservou este lote. Retome para usar o retrato original, sem criar outro.'),
+        'Usar_PDF_Novo': variable('PDFBase64', "@base64(body('Converter_PDF'))", 'Reserva_Do_Lote')}
+    new_files['Reservar_Sem_Sobrescrever']['inputs']['retryPolicy'] = {'type': 'none'}
+    new_files['Confirmar_Reserva']['runAfter'] = {'Reservar_Sem_Sobrescrever': ['Succeeded', 'Failed', 'TimedOut']}
+    a['Preservar_PDF_Original'] = {'type': 'If', 'expression': "@equals(actions('Procurar_Reserva')?['status'], 'Succeeded')", 'actions': {
+        'Meta_PDF_Original': api('shared_onedriveforbusiness', 'GetFileMetadataByPath', {'path': "@variables('Reserva')?['pdfPath']"}),
+        'Versao_PDF_Original': require("@and(not(empty(variables('Reserva')?['pdfETag'])), equals(body('Meta_PDF_Original')?['ETag'], variables('Reserva')?['pdfETag']))", 'Meta_PDF_Original', 'O PDF original foi alterado. Não anexar um relatório diferente.'),
+        'Ler_PDF_Original': api('shared_onedriveforbusiness', 'GetFileContentByPath', {'path': "@variables('Reserva')?['pdfPath']", 'inferContentType': False}, 'Versao_PDF_Original'),
         'Usar_PDF_Original': variable('PDFBase64', "@base64(body('Ler_PDF_Original'))", 'Ler_PDF_Original')},
-        'else': {'actions': {
-            'Salvar_Manifesto': api('shared_onedriveforbusiness', 'CreateFile', {'folderPath': '/', 'name': "@concat(variables('Manifesto')?['title'], '.json')", 'body': "@string(variables('Manifesto'))"}),
-            'Salvar_PDF': api('shared_onedriveforbusiness', 'CreateFile', {'folderPath': '/', 'name': "@concat(variables('Manifesto')?['title'], '.pdf')", 'body': "@body('Converter_PDF')"}, 'Salvar_Manifesto'),
-            'Usar_PDF_Novo': variable('PDFBase64', "@base64(body('Converter_PDF'))", 'Salvar_PDF')}}, 'runAfter': after('Converter_PDF')}
-    a['Conferir_PDF'] = require("@and(greater(length(variables('PDFBase64')), 100), startsWith(variables('PDFBase64'), 'JVBER'))", 'Preservar_PDF_Original', 'Conversão PDF não confirmada; nenhuma provisão criada.')
+        'else': {'actions': new_files}, 'runAfter': after('Converter_PDF')}
+    a['Meta_Reserva_Permanente'] = api('shared_onedriveforbusiness', 'GetFileMetadataByPath', {'path': reservation_path}, 'Preservar_PDF_Original')
+    a['Titulo_Imutavel'] = compose("@concat(variables('Manifesto')?['title'], '|', body('Meta_Reserva_Permanente')?['ETag'])", 'Meta_Reserva_Permanente')
+    a['Conferir_Reserva_Descritivo'] = require("@and(not(empty(body('Meta_Reserva_Permanente')?['ETag'])), lessOrEquals(length(outputs('Titulo_Imutavel')), 255), equals(variables('Reserva')?['key'], variables('Manifesto')?['key']), equals(variables('Reserva')?['manifestPath'], concat('/', variables('Manifesto')?['title'], '.json')), equals(variables('Reserva')?['pdfPath'], concat('/', variables('Manifesto')?['title'], '.pdf')), if(equals(length(body('Procurar_Descritivo')?['value']), 1), equals(first(body('Procurar_Descritivo')?['value'])?['Title'], outputs('Titulo_Imutavel')), true))", 'Titulo_Imutavel', 'A reserva semanal diverge do descritivo; nenhum destinatário pode ser substituído.')
+    a['Conferir_PDF'] = require("@and(greater(length(variables('PDFBase64')), 100), startsWith(variables('PDFBase64'), 'JVBER'))", 'Conferir_Reserva_Descritivo', 'Conversão PDF não confirmada; nenhuma provisão criada.')
 
-    parent_fields = {'Title': "@variables('Manifesto')?['title']", 'FOLHAOPERACAO': "@variables('Manifesto')?['key']", 'FILIAL': "@if(equals(length(union(body('Filiais'), body('Filiais'))), 1), first(body('Filiais')), 'DIVERSAS')",
+    parent_fields = {'Title': "@outputs('Titulo_Imutavel')", 'FOLHAOPERACAO': "@variables('Manifesto')?['key']", 'FILIAL': "@if(equals(length(union(body('Filiais'), body('Filiais'))), 1), first(body('Filiais')), 'DIVERSAS')",
         'FORNECEDOR': "@if(equals(length(variables('Manifesto')?['rows']), 1), first(variables('Manifesto')?['rows'])?['name'], 'DIVERSOS')",
         'VALORTOTAL': "@string(variables('Manifesto')?['total'])", 'OBS': LABEL, 'FORMAPGTO': '', 'STATUS': 'PAGAMENTO PREVISTO', 'DATAPREVISTOPGTO': "@concat(variables('Manifesto')?['friday'], 'T12:00:00Z')"}
     financial, prev, parent_id = ensure(PARENT, 'Descritivo', parent_fields, "variables('Manifesto')?['key']")

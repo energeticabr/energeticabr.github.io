@@ -30,8 +30,12 @@ are always their individual supplier's FILIAL.
 
 Use the existing indexed unique FOLHAOPERACAO in both target lists. Parent key:
 VA-SEMANAL:YYYY-MM-DD; child key: parent key + :supplierId. The first run freezes
-the eligible names/IDs/branches in a private OneDrive JSON manifest, referenced
-by the parent's Title. Retries recover that manifest, not a changed live roster.
+the eligible names/IDs/branches in a private OneDrive JSON manifest. A deterministic
+weekly reservation is copied with overwrite=false and pins the manifest/PDF ETags;
+it is discoverable even if the financial parent was never committed. Unique
+staging files are not a committed snapshot until this reservation exists. Parent
+Title pins the reservation ETag as well, detecting accidental reservation edits.
+Retries recover the reserved manifest, not a changed live roster.
 Read after every potentially ambiguous create, verify fields and exact keys,
 and never overwrite settled or manually edited records.
 
@@ -41,6 +45,8 @@ quantity, unit value, row total and grand total, with Sunday/Friday dates.
 Attach the deterministic PDF to the parent and every child, skipping existing
 files of that name only after retrieving their content for comparison. Retain
 private working files for recovery; no public links or additional sharing.
+JSON content inference is disabled to normalize connector responses to binary
+envelopes before parsing. InitializeVariable declares one variable per action.
 
 ## Safe validation
 
