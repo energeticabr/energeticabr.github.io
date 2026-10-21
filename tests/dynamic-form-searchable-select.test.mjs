@@ -1925,7 +1925,7 @@ test("provider Power Apps indisponível mantém o campo fechado e recusa texto l
   controller.cleanup();
 });
 
-test("contrato real de lancamentos monta opções remotas na criação e opções sem digitação na edição", async () => {
+test("contrato real de lancamentos monta opções remotas pesquisáveis na criação e edição", async () => {
   const lancamentos = ENTITIES.find(candidate => candidate.id === "lancamentos");
   const columns = [
     {
@@ -2028,7 +2028,7 @@ test("contrato real de lancamentos monta opções remotas na criação e opçõe
       },
     });
     const input = mountedSearchable(fixture).input;
-    assert.equal(input.readOnly, true);
+    assert.equal(input.readOnly, false);
     input.dispatch('focus');
     await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(input.disabled, false);

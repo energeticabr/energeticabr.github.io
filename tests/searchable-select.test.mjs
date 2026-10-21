@@ -170,6 +170,51 @@ test("abrir uma seleção existente mostra todas as opções sem perder o valor 
   assert.equal(control.input.value, "Bruno Almeida Costa");
 });
 
+test("apagar o texto limpa a seleção e o blur não restaura o dado excluído", () => {
+  const { control, changes } = fixture({ value: "bruno" });
+  type(control, "");
+  control.input.dispatch("blur");
+  assert.equal(control.getValue(), "");
+  assert.equal(control.input.value, "");
+  assert.deepEqual(changes, [{ value: "", option: null }]);
+});
+
+test("atualização remota preserva pesquisa, seleção e intenção de abrir ou fechar", () => {
+  const { control } = fixture({ value: "bruno" });
+  control.input.dispatch("focus");
+  control.setOptions(OPTIONS, { preserveInput: true });
+  assert.equal(control.input.value, "Bruno Almeida Costa");
+  assert.equal(control.visibleOptions().length, 3);
+  type(control, "car");
+  control.setOptions(OPTIONS, { preserveInput: true });
+  assert.equal(control.input.value, "car");
+  assert.deepEqual(control.visibleOptions().map(option => option.value), ["carla"]);
+  control.input.dispatch("keydown", { key: "Escape" });
+  control.setOptions(OPTIONS, { preserveInput: true });
+  assert.equal(control.listbox.hidden, true);
+  control.input.dispatch("focus");
+  control.input.dispatch("blur");
+  control.setOptions(OPTIONS, { preserveInput: true });
+  assert.equal(control.listbox.hidden, true);
+});
+
+test("botão de limpar remove a seleção, mas respeita um campo bloqueado", () => {
+  const { control } = fixture({ value: "bruno", clearable: true });
+  const clear = Array.from(control.element.children).find(child => child.getAttribute("data-searchable-clear") !== null);
+  assert.ok(clear);
+  control.input.dispatch("focus");
+  for (const event of ["pointerdown", "mousedown"]) {
+    assert.equal(clear.dispatch(event).defaultPrevented, true, "do not blur/collapse the list and move the clear button before click");
+  }
+  control.input.disabled = true;
+  clear.dispatch("click");
+  assert.equal(control.getValue(), "bruno");
+  control.input.disabled = false;
+  clear.dispatch("click");
+  assert.equal(control.getValue(), "");
+  assert.equal(clear.hidden, true);
+});
+
 test("teclado navega, seleciona uma única opção e fecha a lista", () => {
   const { control, changes } = fixture();
   type(control, "almeida");

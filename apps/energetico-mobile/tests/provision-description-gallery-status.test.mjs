@@ -209,7 +209,7 @@ test('changing the real STATUS dropdown saves parent and linked children and ref
   assert.equal(status.multiple, false);
   assert.deepEqual([...status.options].map(option => option.value).filter(Boolean).sort(), [paid, predicted]);
   const chooser = status.closest('label').querySelector('[role="combobox"]');
-  assert.equal(chooser.readOnly, true, 'the editor only accepts selection from the real dropdown');
+  assert.equal(chooser.readOnly, false, 'editing permits search while persistence still validates a real option');
   chooser.click();
   const paidOption = [...status.closest('label').querySelectorAll('[role="option"]')].find(option => option.textContent === paid);
   assert.ok(paidOption);

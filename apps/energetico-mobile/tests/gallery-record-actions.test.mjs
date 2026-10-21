@@ -186,21 +186,25 @@ test('provisao mostra anexos depois de DATAEXECUCAOAGENDAMENTO e envia exclusao 
   assert.deepEqual(calls[0].deletions,['PROVISAO.pdf']);
 });
 
-test('editing dropdowns preserve labels under typing, deletion and paste but accept another option', async t => {
+test('editing dropdowns allow typing, deletion and paste but only save a selected option', async t => {
   const ctx = await setup(t, {loadEditor: async id => ({...context(id), columns: [
     {name:'STATUS', label:'Status', control:'select', editable:true, choices:['ATIVO','PENDENTE']},
   ], item:{id,fields:{STATUS:'ATIVO'}}})});
   click(ctx,'edit'); await settle(); await settle();
   const input=ctx.get('[role=combobox]');
-  assert.equal(input.readOnly,true); assert.equal(input.type,'text');
+  assert.equal(input.readOnly,false); assert.equal(input.type,'search');
   for(const name of ['a','Backspace','Delete']) {
     const event=new ctx.dom.window.KeyboardEvent('keydown',{key:name,bubbles:true,cancelable:true});
-    input.dispatchEvent(event); assert.equal(event.defaultPrevented,true);
+    input.dispatchEvent(event); assert.equal(event.defaultPrevented,false);
   }
   const paste=new ctx.dom.window.Event('paste',{bubbles:true,cancelable:true});
-  input.dispatchEvent(paste); assert.equal(paste.defaultPrevented,true);
+  input.dispatchEvent(paste); assert.equal(paste.defaultPrevented,false);
   input.value='Tampered'; input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
-  assert.equal(input.value,'ATIVO'); assert.equal(ctx.get('[name=STATUS]').value,'ATIVO');
+  assert.equal(input.value,'Tampered'); assert.equal(ctx.get('[name=STATUS]').value,'ATIVO');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true})); await settle();
+  assert.equal(ctx.writes.length,0,'free text cannot become a closed choice');
+  input.value=''; input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  assert.equal(ctx.get('[name=STATUS]').value,'');
   input.click();
   ctx.get('[role=option]').parentElement.querySelectorAll('[role=option]')[1].click();
   assert.equal(input.value,'PENDENTE');
@@ -214,7 +218,7 @@ test('editing a remote relationship browses options beyond the first search batc
     {name:'CLIENTE',label:'Cliente',control:'lookup',editable:true,relation:{kind:'lookup',listId:'clients',displayField:'Title',resolvable:true,multiple:false}},
   ],item:{id,fields:{CLIENTELookupId:1,CLIENTE:'Cliente 1'}},relationshipSearch:async(column,term,options)=>{calls.push({term,browse:options.browse});return Array.from({length:32},(_,n)=>({id:n+1,label:`Cliente ${n+1}`}));}})});
   click(ctx,'edit');await settle();await settle();
-  const input=ctx.get('[data-relation-searchable-root] [role=combobox]'); assert.equal(input.readOnly,true); input.click();
+  const input=ctx.get('[data-relation-searchable-root] [role=combobox]'); assert.equal(input.readOnly,false); input.click();
   await new Promise(r=>setTimeout(r,360));
   assert.ok(calls.every(c=>c.term===''&&c.browse===true));
   assert.equal(input.value,'Cliente 1');
@@ -225,11 +229,129 @@ test('editing a remote relationship browses options beyond the first search batc
   assert.equal(ctx.writes[0][2].CLIENTELookupId,32);
 });
 
+for (const name of ['TIPODOCUMENTO','TIPOHOMOLOGACAO','PESSOARELACIONADA','ETAPA','TIPOMARCO','FILIAL','STATUS','IMOVEL']) test(`document editor ${name} browses, clears and searches beyond the visible batch`, async t => {
+  const calls=[];
+  const current='POLÍTICA VALE ALIMENTAÇÃO';
+  const target='CERTIDÃO ATUALIZADA';
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),entity:{id:'documentos',title:'Documentos'},columns:[{
+    name,label:name,control:'select',editable:true,choices:[current],
+    powerApps:{closed:true,preserveCurrentValue:true,optionSources:[{kind:'related',listName:'TIPOS',valueField:'Title'}]},
+  }],item:{id,fields:{[name]:current}},powerAppsOptionSearch:async(_column,_source,term,_dependencies,options)=>{
+    calls.push({term,browse:options.browse});
+    return term ? [{value:target,label:target}] : [{value:current,label:current},{value:'OUTRO DOCUMENTO',label:'OUTRO DOCUMENTO'}];
+  }})});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[role=combobox]');
+  assert.equal(input.readOnly,false);
+  input.click();await new Promise(r=>setTimeout(r,340));
+  assert.equal(input.value,current);
+  assert.equal(ctx.get('[role=listbox]').querySelectorAll('[role=option]').length,2);
+  assert.deepEqual(calls.at(-1),{term:'',browse:true});
+  ctx.get('[data-searchable-clear]').click();
+  assert.equal(ctx.get(`[name="${name}"]`).value,'');
+  input.value='certidao';input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,340));
+  assert.equal(input.value,'certidao');
+  assert.equal(calls.at(-1).term,'certidao');
+  assert.notEqual(calls.at(-1).browse,true,'typing uses bounded server search, not an unfiltered full browse');
+  const option=[...ctx.document.querySelectorAll('[role=option]')].find(option=>option.textContent===target);
+  assert.ok(option,'a result absent from the initially displayed options must be selectable');
+  option.click();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2][name],target);
+});
+
 test('remote dropdown read errors do not erase the current edit selection',async t=>{
   const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[{name:'CLIENTE',label:'Cliente',control:'lookup',editable:true,relation:{kind:'lookup',listId:'clients',displayField:'Title',resolvable:true,multiple:false}}],item:{id,fields:{CLIENTELookupId:1,CLIENTE:'Cliente 1'}},relationshipSearch:async()=>{throw new Error('Sem conexão');}})});
   click(ctx,'edit');await settle();await settle();
   const input=ctx.get('[data-relation-searchable-root] input');input.click();await new Promise(r=>setTimeout(r,360));
   assert.equal(input.value,'Cliente 1');assert.equal(ctx.get('[data-relation-value=CLIENTE]').value,'1');
+});
+
+for (const control of ['lookup','person']) test(`editable ${control} searches the full typed name and can save a cleared optional value`,async t=>{
+  const calls=[];
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[{
+    name:'PESSOA',label:'Pessoa',control,editable:true,relation:{kind:control,listId:'people',displayField:'Title',principalType:'peopleOnly',resolvable:true,multiple:false},
+  }],item:{id,fields:{PESSOALookupId:1,PESSOA:'Pessoa atual'}},relationshipSearch:async(_column,term)=>{
+    calls.push(term);return [{id:99,label:'Maria Silva'}];
+  }})});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[data-relation-searchable-root] [role=combobox]');
+  input.value='Maria Silva';input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,340));
+  assert.equal(calls.at(-1),'Maria Silva');
+  ctx.get('[role=option]').click();
+  assert.equal(ctx.get('[data-relation-value]').value,'99');
+  ctx.get('[data-searchable-clear]').click();
+  input.blur();
+  assert.equal(input.value,'');assert.equal(ctx.get('[data-relation-value]').value,'');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2].PESSOALookupId,null);
+});
+
+test('clearing a remote edit starts a fresh browse and stale results cannot restore the selection or reopen on blur',async t=>{
+  const requests=[];
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[{
+    name:'TIPODOCUMENTO',label:'Tipo de documento',control:'select',editable:true,choices:['ATUAL'],
+    powerApps:{closed:true,preserveCurrentValue:true,optionSources:[{kind:'related',listName:'TIPOS',valueField:'Title'}]},
+  }],item:{id,fields:{TIPODOCUMENTO:'ATUAL'}},powerAppsOptionSearch:(_column,_source,term,_deps,options)=>{
+    const response=deferred();requests.push({term,signal:options.signal,response});return response.promise;
+  }})});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[role=combobox]');
+  input.focus();input.click();
+  await new Promise(r=>setTimeout(r,340));
+  input.value='novo';input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,340));
+  assert.equal(requests[0].signal.aborted,true);
+  ctx.get('[data-searchable-clear]').click();
+  await new Promise(r=>setTimeout(r,340));
+  assert.equal(requests.at(-1).term,'');
+  assert.equal(requests[1].signal.aborted,true);
+  input.blur();
+  requests[1].response.resolve([{value:'NOVO',label:'NOVO'}]);
+  requests.at(-1).response.resolve([{value:'OUTRO',label:'OUTRO'}]);await settle();
+  assert.equal(input.value,'');assert.equal(ctx.get('[name=TIPODOCUMENTO]').value,'');
+  assert.equal(ctx.get('[role=listbox]').hidden,true);
+});
+
+test('required edit choice can be cleared but cannot submit empty, and read-only choices remain blocked',async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[
+    {name:'TIPODOCUMENTO',label:'Tipo',control:'select',editable:true,required:true,choices:['A','B']},
+    {name:'FIXO',label:'Fixo',control:'select',editable:true,readOnly:true,choices:['X','Y']},
+  ],item:{id,fields:{TIPODOCUMENTO:'A',FIXO:'X'}}})});
+  click(ctx,'edit');await settle();await settle();
+  assert.equal(ctx.get('[data-searchable-field=FIXO] [role=combobox]').disabled,true);
+  assert.equal(ctx.get('[data-searchable-field=FIXO] [data-searchable-clear]'),null);
+  ctx.get('[data-searchable-clear]').click();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes.length,0);
+  assert.equal(ctx.get('[data-searchable-field=TIPODOCUMENTO] [role=combobox]').validity.valueMissing,true);
+});
+
+test('real document contract clears the selected type and revokes its old options when homologation changes',async t=>{
+  const {default:entities}=await import('../../../portal/catalog/entities.js');
+  const {resolvePowerAppsUiContract}=await import('../../../portal/catalog/powerapps-ui-contract.js');
+  const entity=entities.find(entity=>entity.id==='documentos-operacionais');
+  const contract=resolvePowerAppsUiContract(entity,['TIPOHOMOLOGACAO','TIPODOCUMENTO'].map(name=>({name,label:name,control:'text',editable:true})),{mode:'edit'});
+  const old='POLÍTICA VALE ALIMENTAÇÃO';
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),entity,contract,columns:contract.formColumns,
+    item:{id,fields:{TIPOHOMOLOGACAO:'HOMOLOGAÇÃO MÃO DE OBRA',TIPODOCUMENTO:old}},
+    powerAppsOptionSearch:async(_column,_source,_term,deps)=>{
+      assert.equal(deps.TIPOHOMOLOGACAO,'HOMOLOGAÇÃO FILIAL');
+      return [{value:'CERTIDÃO FILIAL',label:'CERTIDÃO FILIAL'}];
+    },
+  })});
+  click(ctx,'edit');await settle();await settle();
+  ctx.get('[data-searchable-field=TIPOHOMOLOGACAO] [role=combobox]').click();
+  [...ctx.document.querySelectorAll('[role=option]')].find(option=>option.textContent==='HOMOLOGAÇÃO FILIAL').click();
+  const type=ctx.get('[data-searchable-field=TIPODOCUMENTO] [role=combobox]');
+  assert.equal(type.value,'');assert.equal(ctx.get('[name=TIPODOCUMENTO]').value,'');
+  type.click();await new Promise(r=>setTimeout(r,340));
+  const choices=[...ctx.document.querySelectorAll('[data-searchable-field=TIPODOCUMENTO] [role=option]')].map(option=>option.textContent);
+  assert.deepEqual(choices,['CERTIDÃO FILIAL'],'old-category selections must not be offered again');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2].TIPODOCUMENTO,null);
 });
 
 test('payroll screen preserves edits while source values refresh and omits read-only fields on save', async t => {
@@ -511,7 +633,8 @@ test("Power Apps choice keyboard selection stays inside editor and rejects arbit
   const input = ctx.get('[role="combobox"]');
   input.value = "Inventado";
   input.dispatchEvent(new ctx.dom.window.Event("input", { bubbles: true }));
-  assert.equal(input.value, 'ABERTO');
+  assert.equal(input.value, 'Inventado');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true})); await settle();
   assert.equal(ctx.writes.length, 0);
   input.value = "FECHADO";
   input.dispatchEvent(new ctx.dom.window.Event("input", { bubbles: true }));

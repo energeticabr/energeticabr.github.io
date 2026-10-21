@@ -70,6 +70,7 @@ export function createSearchableSelect(root, config = {}) {
   input.className = "searchable-select-input";
   input.setAttribute("type", "search");
   const selectionOnly = config.selectionOnly === true;
+  input.readOnly = selectionOnly;
   if (selectionOnly) {
     input.setAttribute('type', 'text');
     input.readOnly = true;
@@ -95,7 +96,19 @@ export function createSearchableSelect(root, config = {}) {
   let selectedOption = null;
   let activeIndex = -1;
   let open = false;
+  let wantsOptions = false;
   let destroyed = false;
+  const clearButton = config.clearable === true && !selectionOnly ? documentRef.createElement("button") : null;
+  if (clearButton) {
+    clearButton.type = "button";
+    clearButton.className = "button-link searchable-select-clear";
+    clearButton.textContent = "Limpar";
+    clearButton.setAttribute("data-searchable-clear", "");
+    clearButton.setAttribute("aria-label", `Limpar ${String(config.label || "seleção")}`);
+    clearButton.hidden = true;
+    container.append(clearButton);
+  }
+  const syncClearButton = () => { if (clearButton) clearButton.hidden = !selectedOption; };
 
   const findOption = value => allOptions.find(option => optionKey(option.value) === optionKey(value)) || null;
   const emit = () => config.onChange?.(selectedOption?.value ?? "", selectedOption);
@@ -127,7 +140,9 @@ export function createSearchableSelect(root, config = {}) {
     if (!option || !findOption(option.value)) return false;
     const changed = !selectedOption || optionKey(selectedOption.value) !== optionKey(option.value);
     selectedOption = option;
+    syncClearButton();
     input.value = option.label;
+    wantsOptions = false;
     filteredOptions = Object.freeze([]);
     listbox.replaceChildren();
     setExpanded(false);
@@ -163,11 +178,18 @@ export function createSearchableSelect(root, config = {}) {
 
   function onInput() {
     if (selectionOnly) { input.value = selectedOption?.label || ''; return; }
+    if (!input.value && selectedOption) {
+      selectedOption = null;
+      syncClearButton();
+      emit();
+    }
+    wantsOptions = true;
     filterOptions(input.value);
     renderOptions();
   }
 
   function openOptions() {
+    wantsOptions = true;
     const clearEmptyLabel = !selectionOnly && config.clearEmptyLabelOnOpen === true
       && selectedOption
       && String(selectedOption.value ?? "") === ""
@@ -188,8 +210,7 @@ export function createSearchableSelect(root, config = {}) {
     if (event?.isComposing || event?.keyCode === 229) return;
     if (event?.key === "ArrowDown") {
       if (!open) {
-        filterOptions(selectionOnly ? '' : input.value);
-        renderOptions();
+        openOptions();
       }
       if (!filteredOptions.length) return;
       event.preventDefault?.();
@@ -197,8 +218,7 @@ export function createSearchableSelect(root, config = {}) {
       setActive(activeIndex < 0 ? 0 : activeIndex + 1);
     } else if (event?.key === "ArrowUp") {
       if (!open) {
-        filterOptions(selectionOnly ? '' : input.value);
-        renderOptions();
+        openOptions();
       }
       if (!filteredOptions.length) return;
       event.preventDefault?.();
@@ -210,11 +230,13 @@ export function createSearchableSelect(root, config = {}) {
     } else if (event?.key === "Escape") {
       if (open) event.preventDefault?.();
       input.value = selectedOption?.label || "";
+      wantsOptions = false;
       setExpanded(false);
     }
   }
 
   function onBlur() {
+    wantsOptions = false;
     input.value = selectedOption?.label || "";
     setExpanded(false);
   }
@@ -227,6 +249,25 @@ export function createSearchableSelect(root, config = {}) {
   const blockEditing = event => event.preventDefault?.();
   const editEvents = ['beforeinput', 'paste', 'cut', 'drop'];
   if (selectionOnly) editEvents.forEach(name => input.addEventListener(name, blockEditing));
+  const onClear = () => {
+    if (input.disabled || input.readOnly) return;
+    selectedOption = null;
+    input.value = "";
+    syncClearButton();
+    emit();
+    input.focus();
+    openOptions();
+    if (typeof input.dispatchEvent === "function") {
+      const EventConstructor = documentRef.defaultView?.Event || globalThis.Event;
+      input.dispatchEvent(new EventConstructor("input", { bubbles: true }));
+    } else input.dispatch?.("input");
+  };
+  // Keep the list open until click: blur would collapse it and move this button
+  // between pointer-down and pointer-up, losing the click on mouse and touch.
+  const keepClearTarget = event => { if (!input.disabled && !input.readOnly) event.preventDefault(); };
+  clearButton?.addEventListener("pointerdown", keepClearTarget);
+  clearButton?.addEventListener("mousedown", keepClearTarget);
+  clearButton?.addEventListener("click", onClear);
 
   const initial = findOption(config.value);
   if (initial) choose(initial, false);
@@ -244,7 +285,9 @@ export function createSearchableSelect(root, config = {}) {
       if (!option) {
         const changed = Boolean(selectedOption);
         selectedOption = null;
+        syncClearButton();
         input.value = "";
+        wantsOptions = false;
         filteredOptions = Object.freeze([]);
         listbox.replaceChildren();
         setExpanded(false);
@@ -253,9 +296,11 @@ export function createSearchableSelect(root, config = {}) {
       }
       return choose(option);
     },
-    setOptions(options) {
+    setOptions(options, { preserveInput = false } = {}) {
       if (destroyed) return;
       const previous = selectedOption;
+      const query = input.value;
+      const reopen = preserveInput && wantsOptions;
       allOptions = validatedOptions(options, optionValidation);
       const replacement = previous ? findOption(previous.value) : null;
       if (replacement) {
@@ -266,12 +311,18 @@ export function createSearchableSelect(root, config = {}) {
         input.value = "";
         if (previous) emit();
       }
+      syncClearButton();
       filteredOptions = Object.freeze([]);
       listbox.replaceChildren();
       setExpanded(false);
+      if (preserveInput) {
+        input.value = previous && query === previous.label && replacement ? replacement.label : query;
+        if (reopen) openOptions();
+      } else wantsOptions = false;
     },
     search(query) {
       if (destroyed) return Object.freeze([]);
+      wantsOptions = true;
       if (!selectionOnly) input.value = String(query ?? "");
       const matches = filterOptions(selectionOnly ? '' : input.value);
       renderOptions();
@@ -289,6 +340,9 @@ export function createSearchableSelect(root, config = {}) {
       input.removeEventListener("keydown", onKeyDown);
       input.removeEventListener("blur", onBlur);
       if (selectionOnly) editEvents.forEach(name => input.removeEventListener(name, blockEditing));
+      clearButton?.removeEventListener("click", onClear);
+      clearButton?.removeEventListener("pointerdown", keepClearTarget);
+      clearButton?.removeEventListener("mousedown", keepClearTarget);
       root.replaceChildren();
     },
   });
