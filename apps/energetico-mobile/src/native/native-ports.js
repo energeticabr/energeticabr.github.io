@@ -5,7 +5,8 @@ import { App } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
 
 import { validateAttachment } from "../chat/file-policy.js";
-import { DocumentPicker, ShareInbox } from "./plugins.js";
+import { DocumentPicker, DocumentScanner, ShareInbox } from "./plugins.js";
+import { editDocumentScan } from '../ui/document-scanner.js';
 
 export class NativePermissionError extends Error {
   constructor(message = "Permissão negada pelo iPhone.") {
@@ -79,6 +80,8 @@ function makeFile(blob, metadata, { FileCtor, randomUUID }) {
 export function createNativePorts({
   camera = Camera,
   documentPicker = DocumentPicker,
+  documentScanner = DocumentScanner,
+  editScan = file => editDocumentScan(file),
   filesystem = Filesystem,
   shareInbox = ShareInbox,
   share = Share,
@@ -146,6 +149,46 @@ export function createNativePorts({
       const normalized = normalizeNativeError(error);
       if (!normalized) return [];
       throw normalized;
+    }
+  }
+
+  async function scanDocument() {
+    let result;
+    try {
+      result = await documentScanner.scan();
+    } catch (error) {
+      if (isPluginUnavailable(error) || error?.code === 'SCAN_UNSUPPORTED') {
+        const [photo] = await capturePhoto();
+        if (!photo) return [];
+        const edited = await editScan(photo);
+        if (edited) validateAttachment(edited);
+        return edited ? [edited] : [];
+      }
+      const normalized = normalizeNativeError(error);
+      if (!normalized) return [];
+      throw normalized;
+    }
+    try {
+      const items = result?.items || [];
+      if (!Array.isArray(items) || items.length > 20) throw new Error('Escaneie no máximo 20 páginas por vez.');
+      let total = 0;
+      for (const item of items) {
+        validateAttachment(item);
+        if (item.type !== 'image/jpeg' || !item.uri) throw new Error('O scanner devolveu uma página inválida.');
+        total += item.size;
+      }
+      if (total > 60_000_000) throw new Error('O documento escaneado ultrapassa o limite de 60 MB.');
+      const files = [];
+      for (const item of items) {
+        const contents = await filesystem.readFile({ path: item.uri });
+        const blob = await dataToBlob(contents.data, 'image/jpeg');
+        if (blob.size !== item.size) throw new Error('Não foi possível ler a página completa do scanner.');
+        files.push(makeFile(blob, item, {FileCtor, randomUUID}));
+      }
+      return files;
+    } finally {
+      // Only the native scanner may resolve its opaque session token into a path.
+      if (result?.id) await documentScanner.release({ id: result.id }).catch(() => {});
     }
   }
 
@@ -411,6 +454,7 @@ export function createNativePorts({
       return () => listener.remove();
     },
     capturePhoto,
+    scanDocument,
     requestMicrophonePermission,
     pickPhotos,
     pickDocuments,

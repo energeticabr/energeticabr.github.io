@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(MicrosoftAuthPlugin.class);
         registerPlugin(DocumentPickerPlugin.class);
+        registerPlugin(DocumentScannerPlugin.class);
         registerPlugin(ShareInboxPlugin.class);
         registerPlugin(PowerBiZoomPlugin.class);
         super.onCreate(savedInstanceState);
