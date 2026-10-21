@@ -1,0 +1,20 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Competência INSS/FGTS — teste sem gravação</title></head><body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/supplier-payroll.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createSupplierPayrollView } from '../../src/ui/supplier-payroll-view.js';
+const mixed=new URLSearchParams(location.search).get('mixed')==='1';
+const data={
+  loadSuppliers:async()=>[{id:'1',label:'FUNCIONÁRIO DE TESTE',branch:'OBRA TESTE',profession:'PEDREIRO'}],
+  loadProducts:async()=>[{id:'2',label:'PEDREIRO',recommended:true}],loadAccounts:async()=>[{id:'3',label:'CONTA TESTE'}],
+  loadStages:async()=>[{id:'4',label:'ETAPA TESTE'}],
+  loadSheets:async(_supplier,options)=>options?[{id:'8',label:'09/2026'}]:[{id:'9',label:'10/2026',recommended:true}],
+  post:async draft=>({...draft,sheet:draft.sheet||draft.taxSheet,lines:draft.lines.map((line,i)=>({...line,id:String(100+i)}))}),
+};
+const view=createSupplierPayrollView({data,documentRef:document,root:document.querySelector('#app')});await view.open();
+function input(selector,value){const control=document.querySelector(selector);control.value=value;control.dispatchEvent(new Event(control.tagName==='SELECT'?'change':'input',{bubbles:true}));}
+async function advance(selector){document.querySelector(selector).click();while(!document.querySelector('.supplier-payroll-question'))await new Promise(resolve=>setTimeout(resolve,10));}
+input('[name=date]','2026-10-20');await advance('[data-payroll-next]');await advance('[data-payroll-option="1"]');await advance('[data-payroll-option="2"]');
+for(const [rubric,value] of [...(mixed?[['salary','1000']]:[]),['inss','120'],['fgts','80']]){input(`[name=${rubric}-value]`,value);input(`[name=${rubric}-account]`,'3');}
+await advance('[data-payroll-next]');document.documentElement.dataset.ready='true';
+</script></body></html>

@@ -10,6 +10,7 @@ import {
 } from "../chat/supplier-payroll.js";
 import { createLoadingIndicator } from "./loading-indicator.js";
 import { openPayrollReceiptPicker } from "./payroll-receipt-picker.js";
+import { payrollTaxType, payrollCompetenceMonth, previousPayrollCompetence } from '../chat/payroll-tax-competence.js';
 const money = (value) =>
   Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 let sequence = 0;
@@ -83,7 +84,7 @@ export function createSupplierPayrollView({
     products = [],
     accounts = [],
     stages = [],
-    sheets = [];
+    sheets = [], taxSheets = [];
   const fresh = () => {
     draft = {
       date: "",
@@ -91,6 +92,8 @@ export function createSupplierPayrollView({
       product: null,
       stage: null,
       sheet: null,
+      taxCompetence: '',
+      taxSheet: null,
       lines: PAYROLL_RUBRICS.map((r) => ({
         rubric: r.id,
         quantity: "1",
@@ -108,6 +111,13 @@ export function createSupplierPayrollView({
     step = "date";
   };
   fresh();
+  const hasTax = () => validatePayrollLines(draft.lines).lines.some(line => payrollTaxType(line.payrollType));
+  const hasNormal = () => validatePayrollLines(draft.lines).lines.some(line => !payrollTaxType(line.payrollType));
+  function taxCompetenceStep() {
+    draft.taxCompetence ||= previousPayrollCompetence(draft.date);
+    draft.taxSheet = null;
+    step = 'tax-competence';
+  }
   function button(label, attribute, handler) {
     const el = element("button", "supplier-payroll-button", label);
     el.type = "button";
@@ -196,7 +206,7 @@ export function createSupplierPayrollView({
     const buttons = [];
     for (const option of options) {
       const el = button(
-        `${option.recommended ? "⭐ " : ""}${option.label}${step === "sheet" ? ` — ID ${option.id}` : ""}`,
+        `${option.recommended ? "⭐ " : ""}${option.label}${["sheet", "tax-sheet"].includes(step) ? ` — ID ${option.id}` : ""}`,
         null,
         () => select(option),
       );
@@ -395,10 +405,15 @@ export function createSupplierPayrollView({
       return table;
     };
     const context = element("div", "supplier-payroll-summary-context");
-    context.append(detailsTable("Referência da folha", [
+    if (hasNormal()) context.append(detailsTable("Referência da folha", [
       ["Etapa", draft.stage.label],
       ["IDFOLHA", String(draft.sheet.id)],
       ["Referência", draft.sheet.label],
+    ]));
+    if (hasTax()) context.append(detailsTable('Referência de INSS/FGTS', [
+      ['Rubricas', 'INSS e FGTS'],
+      ['Competência', `${draft.taxCompetence.slice(5)}/${draft.taxCompetence.slice(0,4)}`],
+      ['IDFOLHA', String(draft.taxSheet.id)],
     ]));
     const list = element("div", "supplier-payroll-summary");
     for (const line of validatePayrollDraft(draft).lines) {
@@ -415,6 +430,7 @@ export function createSupplierPayrollView({
           ["Quantidade", String(line.quantity)],
           ["Valor unitário", money(line.unitValue)],
           ["Subtotal", money(payrollTotal([line]))],
+          ...(hasTax() ? [['IDFOLHA', String((payrollTaxType(line.payrollType) ? draft.taxSheet : draft.sheet).id)]] : []),
           ["Forma de pagamento", line.account.label],
           ["Comprovantes", receipts],
         ]),
@@ -457,16 +473,23 @@ export function createSupplierPayrollView({
         step = "stage";
       });
     }
+    if (step === 'tax-competence') {
+      if (!payrollCompetenceMonth(draft.taxCompetence)) { showError(new Error('Informe uma competência válida.')); return; }
+      return work(async assertCurrent => {
+        const loaded = await data.loadSheets(draft.supplier, {competence:draft.taxCompetence});
+        assertCurrent(); taxSheets = loaded; draft.taxSheet = null; step = 'tax-sheet';
+      });
+    }
   }
   function back() {
     if (progress.fingerprint) return;
-    const previous = {
+    const previous = step === 'tax-competence' ? (hasNormal() ? 'sheet' : 'stage') : step === 'summary' ? (hasTax() ? 'tax-sheet' : 'sheet') : {
       supplier: "date",
       product: "supplier",
       rubrics: "product",
       stage: "rubrics",
       sheet: "stage",
-      summary: "sheet",
+      'tax-sheet': 'tax-competence',
     }[step];
     if (previous) {
       step = previous;
@@ -509,6 +532,7 @@ export function createSupplierPayrollView({
       input.name = "date";
       input.value = draft.date;
       input.addEventListener("input", () => {
+        if (draft.date !== input.value) { draft.taxCompetence = ''; draft.taxSheet = null; }
         draft.date = input.value;
       });
       content.append(field("Data", input));
@@ -529,6 +553,8 @@ export function createSupplierPayrollView({
             }));
             draft.stage = null;
             draft.sheet = null;
+            draft.taxCompetence = '';
+            draft.taxSheet = null;
             draft.product = null;
           }
           draft.supplier = option;
@@ -562,12 +588,13 @@ export function createSupplierPayrollView({
       identity();
       choiceList(stages, (option) =>
         work(async (assertCurrent) => {
-          const loaded = await data.loadSheets(draft.supplier);
+          const normal = hasNormal();
+          const loaded = normal ? await data.loadSheets(draft.supplier) : [];
           assertCurrent();
           draft.stage = option;
           draft.sheet = null;
           sheets = loaded;
-          step = "sheet";
+          if (normal) step = "sheet"; else taxCompetenceStep();
         }),
       );
     }
@@ -600,12 +627,12 @@ export function createSupplierPayrollView({
         element(
           "p",
           "",
-          "O IDFOLHA é obrigatório. Selecione a folha que receberá todas as rubricas.",
+          hasTax() ? 'Selecione a folha das rubricas salariais. INSS/FGTS terão sua competência confirmada na próxima etapa.' : "O IDFOLHA é obrigatório. Selecione a folha que receberá todas as rubricas.",
         ),
       );
       choiceList(sheets, (option) => {
         draft.sheet = option;
-        step = "summary";
+        if (hasTax()) taxCompetenceStep(); else step = "summary";
         render();
         focus();
       });
@@ -619,13 +646,24 @@ export function createSupplierPayrollView({
         );
       }
     }
+    if (step === 'tax-competence') {
+      heading('Qual é a competência de INSS/FGTS?'); identity();
+      const month = element('input'); month.type = 'month'; month.name = 'taxCompetence'; month.value = draft.taxCompetence;
+      month.addEventListener('input', () => { draft.taxCompetence = month.value; draft.taxSheet = null; });
+      content.append(field('Competência (mês e ano)', month), element('p', '', 'Sugerimos o mês anterior à data do pagamento. Confirme ou altere para a competência correta; a data do pagamento não será alterada.'));
+    }
+    if (step === 'tax-sheet') {
+      heading(`Qual IDFOLHA receberá INSS/FGTS da competência ${draft.taxCompetence.slice(5)}/${draft.taxCompetence.slice(0,4)}?`); identity();
+      choiceList(taxSheets.length === 1 ? taxSheets : [], option => { draft.taxSheet = option; step = 'summary'; render(); focus(); });
+      if (taxSheets.length !== 1) content.append(element('p', '', taxSheets.length ? 'Há mais de um IDFOLHA desse fornecedor nessa competência. Regularize as folhas antes de postar.' : 'O fornecedor não possui IDFOLHA cadastrado nessa competência. Cadastre a folha e volte para selecioná-la.'));
+    }
     if (step === "linked") {
       heading("Folha postada e vinculada ao IDFOLHA");
       content.append(
         element(
           "p",
           "",
-          `IDFOLHA: ${result.sheet.id} · Referência: ${result.sheet.label}. Lançamentos: ${result.lines.map((l) => l.id).join(", ")}.`,
+          `IDFOLHA: ${(result.sheet || result.taxSheet).id} · Referência: ${(result.sheet || result.taxSheet).label}.${result.taxSheet ? ` INSS/FGTS — IDFOLHA ${result.taxSheet.id} · Competência ${result.taxSheet.label}.` : ''} Lançamentos: ${result.lines.map((l) => l.id).join(", ")}.`,
         ),
         element(
           "p",
@@ -637,7 +675,7 @@ export function createSupplierPayrollView({
     }
     if (step === "rubrics")
       footer.append(button("Voltar", "data-payroll-back", navigateBack));
-    if (["date", "rubrics"].includes(step))
+    if (["date", "rubrics", "tax-competence"].includes(step))
       footer.append(button("Continuar", "data-payroll-next", next));
     footer.hidden = footer.childElementCount === 0;
   }

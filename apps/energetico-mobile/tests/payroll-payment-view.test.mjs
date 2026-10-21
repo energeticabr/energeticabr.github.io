@@ -9,6 +9,37 @@ function setup(t,gallery='FOLHAPGTO',overrides={}) {
   const panel=createHrPayrollGallery({document:doc,root:doc.querySelector('#root'),gallery,request:async()=>({gallery,page:1,rows:[],hasMore:false}),loadPaymentOptions:async()=>{reads++;return options;},savePayment:async(...args)=>{saves.push(args);return {id:'100'};},...overrides});
   t.after(()=>{panel.destroy();dom.window.close();});return {panel,doc,dom,saves,reads:()=>reads};
 }
+
+test('tax composer confirms previous payment month and filters all historical sheets, not the current window',async t=>{
+  const detailed={...options,paymentTypes:['SALÁRIO','INSS','FGTS'],
+    launches:[{...options.launches[0],paidDate:'2027-01-20'}],
+    allSheets:[...options.sheets,{id:'18',supplier:'CLEITON',label:'12/2026'},{id:'17',supplier:'CLEITON',label:'08/2026'}]};
+  const f=setup(t,'FOLHAPGTO',{loadPaymentOptions:async()=>detailed});await f.panel.open();
+  f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
+  const screen=f.doc.querySelector('[data-payroll-payment-screen]'),launch=screen.querySelector('[name=IDLANCAMENTO]'),type=screen.querySelector('[name=TIPOPGTO]'),sheet=screen.querySelector('[name=IDFOLHA]');
+  launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change'));type.value='INSS';type.dispatchEvent(new f.dom.window.Event('change'));
+  const month=screen.querySelector('[name=competence]');assert.ok(month);assert.equal(month.type,'month');assert.equal(month.value,'2026-12');assert.equal(month.closest('label').hidden,false);
+  assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['18']);
+  month.value='';month.dispatchEvent(new f.dom.window.Event('input'));assert.equal(month.value,'');assert.equal(screen.querySelector('[type=submit]').disabled,true);
+  month.value='2026-12';month.dispatchEvent(new f.dom.window.Event('input'));
+  sheet.value='18';month.value='2026-08';month.dispatchEvent(new f.dom.window.Event('input'));
+  assert.equal(sheet.value,'');assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['17']);
+  sheet.value='17';screen.querySelector('form').dispatchEvent(new f.dom.window.Event('submit',{bubbles:true,cancelable:true}));await tick();
+  assert.deepEqual(f.saves[0][0],{launchId:'10',sheetId:'17',paymentType:'INSS',competence:'2026-08'});
+});
+
+test('tax composer clears incompatible choices, shows missing competence sheet and cancels without writes',async t=>{
+  const f=setup(t,'FOLHAPGTO',{loadPaymentOptions:async()=>({...options,paymentTypes:['SALÁRIO','INSS'],allSheets:options.sheets})});await f.panel.open();
+  f.doc.querySelector('[data-action="add-payroll-payment"]').click();await tick();
+  const screen=f.doc.querySelector('[data-payroll-payment-screen]'),launch=screen.querySelector('[name=IDLANCAMENTO]'),type=screen.querySelector('[name=TIPOPGTO]'),sheet=screen.querySelector('[name=IDFOLHA]');
+  launch.value='10';launch.dispatchEvent(new f.dom.window.Event('change'));sheet.value='21';type.value='INSS';type.dispatchEvent(new f.dom.window.Event('change'));
+  assert.equal(sheet.value,'');assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['20']);
+  const month=screen.querySelector('[name=competence]');month.value='2025-01';month.dispatchEvent(new f.dom.window.Event('input'));
+  assert.match(screen.querySelector('[role=alert]').textContent,/competência/i);assert.equal(screen.querySelector('[type=submit]').disabled,true);
+  type.value='SALÁRIO';type.dispatchEvent(new f.dom.window.Event('change'));assert.equal(month.closest('label').hidden,true);
+  assert.deepEqual([...sheet.options].filter(o=>o.value).map(o=>o.value),['20','21','22']);
+  f.doc.querySelector('[data-payment-cancel]').click();assert.equal(f.saves.length,0);
+});
 test('white add-payment action opens a full screen with dependent closed selections and locked values',async t=>{
   const f=setup(t);await f.panel.open();const add=f.doc.querySelector('[data-action="add-payroll-payment"]');assert.ok(add);assert.equal(add.getAttribute('aria-label'),'Acrescentar pagamento');
   assert.ok(add.closest('.hr-gallery-toolbar'));assert.equal(add.previousElementSibling.dataset.action,'toggle-payroll-filters');

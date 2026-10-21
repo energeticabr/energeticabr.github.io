@@ -1,6 +1,7 @@
 import { createLoadingIndicator } from './loading-indicator.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 import { payrollFieldKey } from '../chat/payroll-editor-policy.js';
+import { payrollTaxType, payrollCompetenceMonth, previousPayrollCompetence } from '../chat/payroll-tax-competence.js';
 
 export function createPayrollPaymentComposer({document:doc,host,loadOptions,save,onSaved,onClose}={}) {
   let current=null,sequence=0;
@@ -53,33 +54,40 @@ export function createPayrollPaymentComposer({document:doc,host,loadOptions,save
       for(const label of ['Fornecedor','Valor unitário','Qtd','Data']) {const row=el('tr'),key=el('th','',label),value=el('td');key.scope='row';row.append(key,value);rows.append(row);values.push(value);}
       summary.append(rows);const [supplier,unitValue,quantity,date]=values;supplier.dataset.paymentSupplier='';summary.dataset.paymentValues='';
       const type=select('TIPOPGTO','Tipo de pagamento','Selecione o tipo');for(const value of options.paymentTypes)type.append(new doc.defaultView.Option(value,value));
+      const competenceField=el('label','dynamic-field','Competência de INSS/FGTS'),competence=el('input');
+      competence.type='month';competence.name='competence';competence.setAttribute('aria-label','Competência de INSS/FGTS');competenceField.append(competence);grid.append(competenceField);
       const sheet=select('IDFOLHA','Folha (IDFOLHA)','Selecione a folha');sheet.disabled=true;
       form.append(grid,summary);body.append(form);
-      function update() {
+      function update({resetCompetence=false}={}) {
         const selected=options.launches.find(row=>row.id===launch.value);
+        const tax=payrollTaxType(type.value);
+        competenceField.hidden=!tax;competence.disabled=!tax;competence.required=tax;
+        if(resetCompetence)competence.value=previousPayrollCompetence(selected?.paidDate||selected?.date);
         sheet.replaceChildren(new doc.defaultView.Option('Selecione a folha',''));sheet.disabled=!selected;
-        for(const row of selected?options.sheets.filter(row=>payrollFieldKey(row.supplier)===payrollFieldKey(selected.supplier)):[])sheet.append(new doc.defaultView.Option(`${row.id} — ${row.label}`,row.id));
+        const available=selected?(tax?(options.allSheets||options.sheets):options.sheets).filter(row=>payrollFieldKey(row.supplier)===payrollFieldKey(selected.supplier)&&(!tax||payrollCompetenceMonth(row.label)===competence.value)):[];
+        const ambiguous=tax&&available.length>1;
+        for(const row of ambiguous?[]:available)sheet.append(new doc.defaultView.Option(`${row.id} — ${row.label}`,row.id));
         summary.hidden=!selected;supplier.textContent=selected?.supplier||'';
         const unit=typeof selected?.unitValue==='string'&&selected.unitValue.includes(',')?selected.unitValue.replace(/\./g,'').replace(',','.'):selected?.unitValue;
         unitValue.textContent=selected&&Number.isFinite(Number(unit))?Number(unit).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'—';
         quantity.textContent=selected?.quantity??'—';date.textContent=selected?.date?.split('-').reverse().join('/')||'—';
         submit.disabled=!selected||sheet.options.length===1;
-        if(selected&&sheet.options.length===1)fail(new Error('Este fornecedor não possui folha cadastrada do mês anterior, atual ou próximo.'));
+        if(selected&&sheet.options.length===1)fail(new Error(tax?(ambiguous?'Há mais de um IDFOLHA nessa competência. Regularize as folhas antes de vincular.':'Este fornecedor não possui IDFOLHA cadastrado na competência confirmada.'):'Este fornecedor não possui folha cadastrada do mês anterior, atual ou próximo.'));
         else error.hidden=true;
         state.picker?.sync();
       }
-      launch.addEventListener('change',update);update();state.picker=bindSearchableFilterSelects(form);
+      launch.addEventListener('change',()=>update({resetCompetence:true}));type.addEventListener('change',()=>update({resetCompetence:payrollTaxType(type.value)&&!competence.value}));competence.addEventListener('input',()=>update());update();state.picker=bindSearchableFilterSelects(form);
       form.addEventListener('submit',async event=>{
         event.preventDefault();if(!active()||state.busy)return;
-        if(!state.saved&&(!launch.value||!sheet.value||!type.value)){fail(new Error('Selecione o lançamento, o tipo de pagamento e a folha.'));return;}
+        if(!state.saved&&(!launch.value||!sheet.value||!type.value||payrollTaxType(type.value)&&!payrollCompetenceMonth(competence.value))){fail(new Error('Selecione o lançamento, o tipo de pagamento, a competência e a folha.'));return;}
         state.busy=true;error.hidden=true;screen.setAttribute('aria-busy','true');
         const controls=[...screen.querySelectorAll('button,input,select')],disabled=controls.map(c=>c.disabled);controls.forEach(c=>{c.disabled=true;});state.picker?.close();
         try {
-          state.saved ||= await save({launchId:launch.value,sheetId:sheet.value,paymentType:type.value},{operationId:state.operationId});
+          state.saved ||= await save({launchId:launch.value,sheetId:sheet.value,paymentType:type.value,...(payrollTaxType(type.value)?{competence:competence.value}:{})},{operationId:state.operationId});
           if(!active())return;
           await onSaved?.(state.saved);if(active())close(true);
         } catch(err) {fail(err);if(state.saved)submit.textContent='Atualizar galeria';}
-        finally {if(active()){state.busy=false;screen.setAttribute('aria-busy','false');controls.forEach((c,i)=>{c.disabled=disabled[i];});if(state.saved){launch.disabled=true;sheet.disabled=true;type.disabled=true;}state.picker?.sync();}}
+        finally {if(active()){state.busy=false;screen.setAttribute('aria-busy','false');controls.forEach((c,i)=>{c.disabled=disabled[i];});if(state.saved){launch.disabled=true;sheet.disabled=true;type.disabled=true;competence.disabled=true;}state.picker?.sync();}}
       });
       if(!options.launches.length)fail(new Error('Nenhum lançamento de fornecedor empreiteiro SIM e ATIVO foi encontrado.'));
     } catch(err) {if(active()){body.replaceChildren();fail(err);const retry=el('button','hr-gallery-button','Tentar novamente');retry.type='button';body.append(retry);retry.addEventListener('click',()=>{close();void open(trigger);});}}

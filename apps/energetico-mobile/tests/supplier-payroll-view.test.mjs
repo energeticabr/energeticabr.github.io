@@ -232,6 +232,41 @@ async function openRubrics(h) {
   await h.click('[data-payroll-option="2"]');
 }
 
+test('tax-only flow confirms competence once and selects its sheet without a fictitious normal sheet',async t=>{
+  const h=await harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
+  const requests=[];h.data.loadSheets=async(supplier,options)=>{requests.push(options);return [{id:'8',label:'09/2026'}];};
+  await openRubrics(h);h.input('[name=inss-value]','100');h.input('[name=inss-account]','3');h.input('[name=fgts-value]','80');h.input('[name=fgts-account]','3');
+  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="4"]');
+  const doc=h.dom.window.document;assert.equal(doc.querySelector('[name=taxCompetence]')?.value,'2026-09');assert.equal(requests.length,0);
+  await h.click('[data-payroll-next]');assert.deepEqual(requests,[{competence:'2026-09'}]);await h.click('[data-payroll-option="8"]');
+  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent,/Competência.*09\/2026.*IDFOLHA.*8/s);
+  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent,/Rubricas.*INSS e FGTS/);
+  await h.click('[data-payroll-post]');assert.equal(h.posts.length,1);assert.equal(h.posts[0].sheet,null);assert.equal(h.posts[0].taxSheet.id,'8');
+  assert.equal(h.posts[0].taxCompetence,'2026-09');
+});
+
+test('mixed flow preserves ordinary sheet and shows separate tax competence and historical sheet',async t=>{
+  const h=await harness();t.after(()=>{h.view.destroy();h.dom.window.close();});
+  h.data.loadSheets=async(supplier,options)=>options?[{id:'8',label:'08/2026'}]:[{id:'5',label:'10/2026'}];
+  await openRubrics(h);for(const rubric of ['salary','inss']){h.input(`[name=${rubric}-value]`,'100');h.input(`[name=${rubric}-account]`,'3');}
+  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="4"]');await h.click('[data-payroll-option="5"]');
+  const doc=h.dom.window.document;assert.equal(doc.querySelector('[name=taxCompetence]')?.value,'2026-09');h.input('[name=taxCompetence]','2026-08');
+  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="8"]');
+  assert.match(doc.querySelector('[aria-label="Referência da folha"]').textContent,/IDFOLHA.*5.*10\/2026/s);
+  assert.match(doc.querySelector('[aria-label="Referência de INSS/FGTS"]').textContent,/08\/2026.*8/s);
+  await h.click('[data-payroll-header-back]');await h.click('[data-payroll-header-back]');assert.equal(doc.querySelector('[name=taxCompetence]').value,'2026-08');
+  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="8"]');await h.click('[data-payroll-post]');
+  assert.equal(h.posts[0].sheet.id,'5');assert.equal(h.posts[0].taxSheet.id,'8');assert.equal(h.posts[0].taxCompetence,'2026-08');
+});
+
+test('missing tax competence sheet cannot reach posting and back returns to the competence question',async t=>{
+  const h=await harness();t.after(()=>{h.view.destroy();h.dom.window.close();});h.data.loadSheets=async()=>[];
+  await openRubrics(h);h.input('[name=fgts-value]','80');h.input('[name=fgts-account]','3');
+  await h.click('[data-payroll-next]');await h.click('[data-payroll-option="4"]');await h.click('[data-payroll-next]');
+  const doc=h.dom.window.document;assert.match(doc.body.textContent,/competência/i);assert.equal(doc.querySelector('[data-payroll-post]'),null);
+  await h.click('[data-payroll-header-back]');assert.equal(doc.querySelector('[name=taxCompetence]').value,'2026-09');assert.equal(h.posts.length,0);
+});
+
 test("BUSCAR oferece foto e arquivo, pré-seleciona comprovantes e envia só na rubrica confirmada", async t => {
   const h = await harness();
   t.after(() => { h.view.destroy(); h.dom.window.close(); });
