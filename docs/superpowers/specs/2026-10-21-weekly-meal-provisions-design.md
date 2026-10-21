@@ -13,10 +13,15 @@ checkpoints. Implement inline, with a fresh final review before activation.
 ## Data contract
 
 Read the complete FORNECEDORES list on each new week. Eligibility is
-EMPREITEIRO=SIM, STATUS=ATIVO and a nonblank CARGO. Names, IDs and FILIAL are
+EMPREITEIRO=SIM, STATUS=ATIVO and a CARGO from the eight roles explicitly
+provided by the user (three SERVENTE levels, three PEDREIRO levels, MESTRE,
+SUPERVISOR). A merely nonblank unrelated company role does not qualify.
+Names, IDs and FILIAL are
 read from that record, never fuzzy matched. Current seven named suppliers have
-IDs 240,253,254,260,264,265,269. An existing nonblank CARGO=ENGENHEIRO is eligible
-too. This automation does not alter any supplier's role.
+IDs 240,253,254,260,264,265,269. The user's explicit supervisor assignment for
+source ID 240 bridges its legacy CARGO=ENGENHEIRO; other engineers are not
+implicitly entitled, and clearing ID 240's role still excludes it. This
+automation does not alter any supplier's stored role.
 
 For every child: PRODUTO and OBS = VALE ALIMENTAÇÃO; QTD = "5";
 VALORTOTAL = "45" (the existing child column stores UNIT price); FRETE="0";
@@ -50,7 +55,8 @@ envelopes before parsing. InitializeVariable declares one variable per action.
 
 ## Safe validation
 
-Manual executions on non-Sundays are preview-only: generate the same detailed
+Manual executions on non-Sundays use separate VA-PREVIA keys and reservation
+paths so they cannot freeze or replace a real financial week. They generate the same detailed
 PDF but never create parent or child records. Live activation is complete only
 after connections, preview PDF, Sunday recurrence/time zone and enabled state
 are verified in Power Automate. Do not create an out-of-schedule first batch.

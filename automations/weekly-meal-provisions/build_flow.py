@@ -16,6 +16,8 @@ SUPPLIERS = 'eb179360-ebda-4693-852f-f3aed3eb50b7'
 PARENT = '514bf67a-9e76-4bfc-99b7-1f7297ae611a'
 CHILD = '6e5c235e-797a-4a86-8c05-25e0ab6ad870'
 LABEL = 'VALE ALIMENTAÇÃO'
+ALLOWED_ROLES = ('SERVENTE DE PEDREIRO I', 'SERVENTE DE PEDREIRO II', 'SERVENTE DE PEDREIRO III',
+                 'PEDREIRO I', 'PEDREIRO II', 'PEDREIRO III', 'MESTRE DE OBRAS', 'SUPERVISOR DE OBRAS')
 APIS = {'shared_sharepointonline': 'SharePoint', 'shared_onedriveforbusiness': 'OneDrive for Business'}
 NS = uuid.UUID('0451b457-3406-4445-a536-9a2f569628db')
 
@@ -24,20 +26,32 @@ def normalized(value):
     return ''.join(c for c in unicodedata.normalize('NFD', str(value or '').strip()).upper() if c.isascii() and c.isalnum())
 
 
+def canonical_role(supplier_id, value):
+    role = normalized(value)
+    # Explicit supervisor assignment supplied by the user; source remains
+    # untouched. A blank role or inactive contractor still does not qualify.
+    if supplier_id == 240 and role == 'ENGENHEIRO':
+        return 'SUPERVISOR DE OBRAS'
+    if role == 'PERDEIROIII':
+        role = 'PEDREIROIII'
+    return next((candidate for candidate in ALLOWED_ROLES if normalized(candidate) == role), '')
+
+
 def plan_week(suppliers, reference_date):
     sunday = reference_date - timedelta(days=(reference_date.weekday() + 1) % 7)
     rows, ids, names = [], set(), set()
     for source in suppliers:
         if normalized(source.get('STATUS')) != 'ATIVO' or normalized(source.get('EMPREITEIRO')) != 'SIM':
             continue
-        if normalized(source.get('CARGO')) in {'', '0', 'EMBRANCO', 'NAOINFORMADO', 'NAODEFINIDO'}:
+        cargo = canonical_role(source.get('Id'), source.get('CARGO'))
+        if not cargo:
             continue
         sid, name, branch = source.get('Id'), str(source.get('Title') or '').strip(), str(source.get('FILIAL') or '').strip()
         if type(sid) is not int or sid <= 0 or sid in ids or not name or normalized(name) in names or not branch:
             raise ValueError('Supplier identity/name/branch is missing or duplicated')
         ids.add(sid)
         names.add(normalized(name))
-        rows.append({'id': sid, 'name': name, 'branch': branch, 'cargo': str(source['CARGO']).strip(),
+        rows.append({'id': sid, 'name': name, 'branch': branch, 'cargo': cargo,
                      'quantity': 5, 'unitValue': 45, 'total': 225})
     rows.sort(key=lambda row: normalized(row['name']))
     return {'sunday': sunday.isoformat(), 'friday': (sunday + timedelta(days=5)).isoformat(),
@@ -174,8 +188,8 @@ def attachments(guid, label, item_id, prev=None):
 
 
 def build_definition():
-    key_expr = "concat('VA-SEMANAL:', outputs('Domingo'))"
-    reservation_path = "@concat('/VA-RESERVA-', outputs('Domingo'), '.json')"
+    key_expr = "concat(if(equals(dayOfWeek(outputs('Agora_Brasilia')), 0), 'VA-SEMANAL:', 'VA-PREVIA:'), outputs('Domingo'))"
+    reservation_path = "@concat(if(equals(dayOfWeek(outputs('Agora_Brasilia')), 0), '/VA-RESERVA-', '/VA-PREVIA-RESERVA-'), outputs('Domingo'), '.json')"
     supplier_uri = f"_api/web/lists(guid'{SUPPLIERS}')/items?$select=Id,Title,CARGO,STATUS,EMPREITEIRO,FILIAL&$filter=EMPREITEIRO%20eq%20'SIM'%20and%20STATUS%20eq%20'ATIVO'&$orderby=Id&$top=500"
     a = {'Agora_Brasilia': compose("@convertTimeZone(utcNow(), 'UTC', 'E. South America Standard Time')")}
     a['Domingo'] = compose("@formatDateTime(addDays(outputs('Agora_Brasilia'), sub(0, dayOfWeek(outputs('Agora_Brasilia')))), 'yyyy-MM-dd')", 'Agora_Brasilia')
@@ -203,10 +217,14 @@ def build_definition():
     fresh = {'Todas_As_Paginas': {'type': 'Until', 'expression': "@equals(variables('PaginaSeguinte'), '')", 'limit': {'count': 200, 'timeout': 'PT1H'}, 'actions': page, 'runAfter': {}}}
     fresh['Leitura_Completa'] = require("@equals(variables('PaginaSeguinte'), '')", 'Todas_As_Paginas', 'Paginação incompleta. Nenhuma provisão foi criada.')
     cargo = "toUpper(trim(coalesce(item()?['CARGO'], '')))"
+    roles = 'createArray(' + ', '.join("'" + role + "'" for role in (*ALLOWED_ROLES, 'PERDEIRO III')) + ')'
+    explicit_supervisor = "and(equals(item()?['Id'], 240), equals(" + cargo + ", 'ENGENHEIRO'))"
     fresh['Elegiveis'] = {'type': 'Query', 'inputs': {'from': "@variables('Fornecedores')", 'where':
-        "@and(equals(toUpper(trim(coalesce(item()?['EMPREITEIRO'], ''))), 'SIM'), equals(toUpper(trim(coalesce(item()?['STATUS'], ''))), 'ATIVO'), not(contains(createArray('', '0', 'EM BRANCO', 'NÃO INFORMADO', 'NAO INFORMADO', 'NÃO DEFINIDO', 'NAO DEFINIDO'), " + cargo + ")))"}, 'runAfter': after('Leitura_Completa')}
+        "@and(equals(toUpper(trim(coalesce(item()?['EMPREITEIRO'], ''))), 'SIM'), equals(toUpper(trim(coalesce(item()?['STATUS'], ''))), 'ATIVO'), or(contains(" + roles + ', ' + cargo + '), ' + explicit_supervisor + '))'}, 'runAfter': after('Leitura_Completa')}
     fresh['Linhas'] = {'type': 'Select', 'inputs': {'from': "@body('Elegiveis')", 'select': {
-        'id': "@item()?['Id']", 'name': "@trim(coalesce(item()?['Title'], ''))", 'branch': "@trim(coalesce(item()?['FILIAL'], ''))", 'cargo': "@trim(item()?['CARGO'])", 'quantity': 5, 'unitValue': 45, 'total': 225}}, 'runAfter': after('Elegiveis')}
+        'id': "@item()?['Id']", 'name': "@trim(coalesce(item()?['Title'], ''))", 'branch': "@trim(coalesce(item()?['FILIAL'], ''))",
+        'cargo': '@if(' + explicit_supervisor + ", 'SUPERVISOR DE OBRAS', if(equals(" + cargo + ", 'PERDEIRO III'), 'PEDREIRO III', " + cargo + '))',
+        'quantity': 5, 'unitValue': 45, 'total': 225}}, 'runAfter': after('Elegiveis')}
     fresh['Novo_Manifesto'] = compose({'version': 1, 'sunday': "@outputs('Domingo')", 'friday': "@outputs('Sexta')", 'key': '@' + key_expr,
         'title': "@concat('VA-', outputs('Domingo'), '-', workflow()?['run']?['name'])", 'pdfName': "@concat('VALE-ALIMENTACAO-', outputs('Domingo'), '.pdf')",
         'rows': "@body('Linhas')", 'total': "@mul(length(body('Linhas')), 225)"}, 'Linhas')
@@ -227,7 +245,7 @@ def build_definition():
             'rows': {'type': 'array', 'items': {'type': 'object', 'required': ['id', 'name', 'branch', 'cargo', 'quantity', 'unitValue', 'total'],
                 'properties': {**{k: {'type': 'integer'} for k in ['id', 'quantity', 'unitValue', 'total']}, **{k: {'type': 'string'} for k in ['name', 'branch', 'cargo']}}}}}}}, 'runAfter': after('Recuperar_Ou_Ler_Cadastro')}
     a['Linhas_Invalidas'] = {'type': 'Query', 'inputs': {'from': "@variables('Manifesto')?['rows']", 'where':
-        "@or(lessOrEquals(item()?['id'], 0), empty(trim(item()?['name'])), empty(trim(item()?['branch'])), empty(trim(item()?['cargo'])), not(equals(item()?['quantity'], 5)), not(equals(item()?['unitValue'], 45)), not(equals(item()?['total'], 225)))"}, 'runAfter': after('Validar_Estrutura')}
+        "@or(lessOrEquals(item()?['id'], 0), empty(trim(item()?['name'])), empty(trim(item()?['branch'])), not(contains(" + roles + ", toUpper(trim(item()?['cargo'])))), not(equals(item()?['quantity'], 5)), not(equals(item()?['unitValue'], 45)), not(equals(item()?['total'], 225)))"}, 'runAfter': after('Validar_Estrutura')}
     for name, value, prev in [('IDs', "@item()?['id']", 'Linhas_Invalidas'), ('Nomes', "@toUpper(trim(item()?['name']))", 'IDs'), ('Filiais', "@item()?['branch']", 'Nomes')]:
         a[name] = {'type': 'Select', 'inputs': {'from': "@variables('Manifesto')?['rows']", 'select': value}, 'runAfter': after(prev)}
     a['Conferir_Manifesto'] = require("@and(equals(variables('Manifesto')?['version'], 1), equals(variables('Manifesto')?['sunday'], outputs('Domingo')), equals(variables('Manifesto')?['friday'], outputs('Sexta')), equals(variables('Manifesto')?['key'], " + key_expr + "), startsWith(variables('Manifesto')?['title'], concat('VA-', outputs('Domingo'), '-')), equals(variables('Manifesto')?['pdfName'], concat('VALE-ALIMENTACAO-', outputs('Domingo'), '.pdf')), equals(length(body('Linhas_Invalidas')), 0), equals(length(union(body('IDs'), body('IDs'))), length(variables('Manifesto')?['rows'])), equals(length(union(body('Nomes'), body('Nomes'))), length(variables('Manifesto')?['rows'])), equals(variables('Manifesto')?['total'], mul(length(variables('Manifesto')?['rows']), 225)))", 'Filiais')

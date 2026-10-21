@@ -18,7 +18,11 @@ Manual executions on other weekdays produce only a private PDF preview.
 
 ## Data and recovery
 
-- FORNECEDORES: EMPREITEIRO=SIM, STATUS=ATIVO, CARGO filled, identity/name/branch valid.
+- FORNECEDORES: EMPREITEIRO=SIM, STATUS=ATIVO, CARGO in the eight user-specified
+  employee roles, identity/name/branch valid. A nonblank unrelated company role
+  does not qualify. Source ID 240's explicit supervisor assignment bridges its
+  legacy ENGENHEIRO role without changing the source record; a blank role still
+  excludes it. No general engineer entitlement is introduced.
 - One DESCRITIVOPROVISAO for the week; one PROVISÃO PGTOS for each supplier.
 - 5 × R$45 = R$225 each; PRODUTO/OBS=VALE ALIMENTAÇÃO; IMOVEL=TODOS; account blank.
 - The child column VALORTOTAL stores **unit price 45**, not extended total 225.
@@ -28,6 +32,8 @@ Manual executions on other weekdays produce only a private PDF preview.
   parent, and pins both file versions. Parent Title also pins the reservation's
   version. Preserve these files for recovery; do not edit them. No public links
   are created. Run-specific staging files alone do not commit a weekly snapshot.
+- Non-Sunday previews use separate `VA-PREVIA:` keys and
+  `VA-PREVIA-RESERVA-<Sunday>.json` files; they cannot reserve production batches.
 - Failed creates are followed by a lookup and strict field checks, never a blind
   second POST. Paid/changed records are not overwritten. Existing PDF bytes must
   match the frozen original, otherwise the flow stops.

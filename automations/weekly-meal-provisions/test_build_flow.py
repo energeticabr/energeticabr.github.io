@@ -72,6 +72,25 @@ class WeeklyFlowTests(unittest.TestCase):
         result = flow.plan_week([supplier(1, CARGO='EM BRANCO'), supplier(2, CARGO='0'), supplier(3, CARGO=None)], date(2026, 10, 25))
         self.assertEqual(result['rows'], [])
 
+    def test_nonblank_unlisted_roles_are_not_entitled_and_explicit_supervisor_is(self):
+        result = flow.plan_week([
+            supplier(250, Title='EMPRESA TESTE', CARGO='ESCORADOR E ARMADOR'),
+            supplier(999, Title='ENGENHEIRO NÃO INDICADO', CARGO='ENGENHEIRO'),
+            supplier(240, Title='SUPERVISOR INDICADO', CARGO='ENGENHEIRO'),
+            supplier(3, Title='COLABORADOR SEM CARGO', CARGO=''),
+        ], date(2026, 10, 25))
+        self.assertEqual([row['id'] for row in result['rows']], [240])
+        self.assertEqual(result['rows'][0]['cargo'], 'SUPERVISOR DE OBRAS')
+        self.assertEqual(flow.plan_week([supplier(240, CARGO='')], date(2026, 10, 25))['rows'], [])
+        self.assertEqual(result['total'], 225)
+
+    def test_preview_does_not_freeze_a_real_weekly_reservation(self):
+        definition = flow.build_definition()
+        path = definition['actions']['Procurar_Reserva']['inputs']['parameters']['path']
+        self.assertEqual(path, "@concat(if(equals(dayOfWeek(outputs('Agora_Brasilia')), 0), '/VA-RESERVA-', '/VA-PREVIA-RESERVA-'), outputs('Domingo'), '.json')")
+        manifest = dict(actions_in(definition['actions']))['Novo_Manifesto']['inputs']
+        self.assertEqual(manifest['key'], "@concat(if(equals(dayOfWeek(outputs('Agora_Brasilia')), 0), 'VA-SEMANAL:', 'VA-PREVIA:'), outputs('Domingo'))")
+
     def test_seven_rows_are_1575_and_line_price_is_225(self):
         result = flow.plan_week([supplier(i, Title=f'PESSOA {i}') for i in range(1, 8)], date(2026, 10, 25))
         self.assertEqual((len(result['rows']), result['total']), (7, 1575))
@@ -129,7 +148,7 @@ class WeeklyFlowTests(unittest.TestCase):
         actions = flow.build_definition()['actions']
         self.assertIn('Procurar_Reserva', actions, 'The snapshot must be discoverable without the parent')
         lookup = actions['Procurar_Reserva']['inputs']['parameters']['path']
-        self.assertEqual(lookup, "@concat('/VA-RESERVA-', outputs('Domingo'), '.json')")
+        self.assertEqual(lookup, "@concat(if(equals(dayOfWeek(outputs('Agora_Brasilia')), 0), '/VA-RESERVA-', '/VA-PREVIA-RESERVA-'), outputs('Domingo'), '.json')")
         choose = actions['Recuperar_Ou_Ler_Cadastro']
         self.assertEqual(choose['expression'], "@equals(actions('Procurar_Reserva')?['status'], 'Succeeded')")
         nested = dict(actions_in(actions))
