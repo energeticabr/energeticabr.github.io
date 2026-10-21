@@ -2733,7 +2733,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
   const pendingFiles = (Array.isArray(state.pendingFiles) ? state.pendingFiles : [])
     .filter(item => item?.status !== "failed");
   const attachments = Array.isArray(state.attachments) ? state.attachments : [];
-  const busy = Boolean(state.activeText || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
+  const busy = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.recoveryBlocked || state.recoveryUncertain || state.responseTransitionPending)
     || pendingFiles.some(item => item.status === "sending") || rhidAttendanceReport?.busy === true || state.pendingProvisionOpening === true;
   const pendingAttachment = pendingFiles.length > 0;
   const firstName = String(state.account?.name || "Você").split(/\s+/)[0];
@@ -2764,7 +2764,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
           : rhidAttendanceReportMarkup(rhidAttendanceReport)
         : transcriptMessages.length ? transcriptMessages.map((message, index) => renderMessage(message, state.account, busy, { finalSignedDocument: index === finalSignedIndex && isSignedDocumentMessage(message), draft: state.draft, databaseFilterMessage: databaseFilter?.message, activeFlow: state.activeFlow, attendanceSelectedIds, attendanceExpandedIds: message === latestPoll ? attendanceExpandedIds : [], attendanceIrregularityChecking: message === latestPoll && attendanceIrregularityChecking, currentPoll: message === latestPoll, attendanceHoursCurrent: message === latestAttendanceMessage, rhidRefresh, launchPayrollSelectedIds, launchPayrollCurrent: message === latestPoll })).join("") : state.recoveryPreview ? "" : `<article class="chat-message chat-message--assistant">${assistantAvatar()}<div class="chat-bubble"><strong>Energético</strong><p>Olá, ${escapeHtml(firstName)}. O que vamos fazer?</p></div></article>`}
     </div>
-    ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true, progress: state.activeText ? state.diaryAttachmentProgress?.percent : undefined })}</div>` : ""}
+    ${busy ? `<div class="chat-progress${rhidAttendanceReport?.busy ? " sr-only" : ""}">${loadingIndicatorMarkup(rhidAttendanceReport?.busy ? "Consultando relatório RHID…" : state.pendingProvisionOpening ? "Consultando provisões de pagamento…" : state.recoveryUncertain ? "Aguardando sincronização com a VM…" : state.responseTransitionPending ? "Atualizando a próxima pergunta…" : state.resuming ? "Retomando conversa…" : state.activeText ? "Processando sua resposta…" : state.recoveryBlocked ? "Aguardando conexão com a VM…" : "Enviando anexo…", { compact: true, progress: state.activeText ? state.diaryAttachmentProgress?.percent : state.attachmentUploadProgress?.percent, progressLabel: state.activeText ? 'Finalização dos anexos' : 'Envio do anexo' })}</div>` : ""}
     ${!generatedSignatureChoice && (attachments.length || pendingFiles.length || state.activeFlow?.launches || state.activeFlow?.measurementLines || provisionLines) ? `<div class="chat-file-tray">${renderAttachments(attachments, busy, Boolean(state.activeFlow), state.activeFlow?.allowBulkAttachmentDelete === true, state.activeFlow?.id === "pending_document_attachment")}${pendingFiles.length ? `<ul class="pending-files" aria-label="Anexos pendentes">${pendingFiles.map(renderPendingFile).join("")}</ul>` : ""}${renderLaunches(state.activeFlow?.launches, busy)}${renderMeasurementLines(state.activeFlow?.measurementLines, busy)}${renderProvisionLines(provisionLines)}</div>` : ""}
     ${signaturePrompt ? signaturePadTriggerMarkup(busy) : ""}
     <form class="chat-composer" data-chat-form>
@@ -3975,7 +3975,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       && lastState.account?.homeAccountId === state.account?.homeAccountId
        && (!state.recoveryReference || Boolean(lastState.draft) === Boolean(state.draft))
        && [
-         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress",
+         "messages", "attachments", "pendingFiles", "activeText", "activeFlow", "resuming", "diaryAttachmentProgress", "attachmentUploadProgress",
          "responseTransitionPending", "error", "recoveryPreview", "recoveryReference",
          "recoveryReferenceCount", "recoveryWarning", "recoveryBlocked", "recoveryUncertain", "signaturePlacement",
          "pendingProvisions", "pendingProvisionOpening", "pendingConstructionDiaries", "pendingConstructionDiaryFillingId", "pendingConstructionDiaryError", "pendingNotes", "pendingNoteLaunchOrderId", "pendingProvisionReminderOpen",
@@ -4035,7 +4035,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
     }
     if (draft) draft.disabled = state.recoveryUncertain === true;
-    if (!draftOnly) composerBusy = Boolean(state.activeText || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain || rhidAttendanceReportBusy)
+    if (!draftOnly) composerBusy = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain || rhidAttendanceReportBusy)
       || (state.pendingFiles || []).some(item => item.status === "sending");
     for (const action of draftOnly ? ["send-text"] : ["send-text", "capture-photo", "pick-files"]) {
       const button = composerControls[action];

@@ -1,6 +1,7 @@
 import { validateAttachment } from "./file-policy.js";
 import { audioTranscriptionText } from "./audio-transcription.js";
 import { startDiaryProgress } from "./diary-attachment-progress.js";
+import { uploadWithProgress } from "./upload-transport.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -129,6 +130,7 @@ export function createChatClient({
   apiPrefix = "/api",
   tokenProvider,
   fetchImpl = globalThis.fetch,
+  xhrFactory = typeof globalThis.XMLHttpRequest === 'function' ? () => new globalThis.XMLHttpRequest() : null,
   randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto),
   retryDelay = ms => new Promise(resolve => setTimeout(resolve, ms)),
 } = {}) {
@@ -191,11 +193,11 @@ export function createChatClient({
   const verifySignatureEvidence = options => signatureEvidence("verify", options);
   const captureSignatureEvidence = options => signatureEvidence("capture", options);
 
-  async function request(url, options, read, readOnly = false, { retryTransient = false } = {}) {
+  async function request(url, options, read, readOnly = false, { retryTransient = false, transport = fetchImpl } = {}) {
     for (let attempt = 0; ; attempt++) {
       checkRequestCancellation(options.signal);
       try {
-        const result = await read(await fetchImpl(url, apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options));
+        const result = await read(await transport(url, apiPrefix === "/api/demo" ? { ...options, redirect: "error" } : options));
         checkRequestCancellation(options.signal);
         if (apiPrefix === "/api/demo" && result?.status === "processed") {
           // Server preview URLs must not become direct <img> network requests.
@@ -303,15 +305,24 @@ export function createChatClient({
     }, true);
   }
 
-  async function sendFile(file) {
+  async function sendFile(file, { onProgress, progressSignal } = {}) {
     const fileName = validateAttachment(file);
-    const token = await acquireToken(tokenProvider);
+    let previousPercent;
+    const progress = percent => {
+      if (progressSignal?.aborted || previousPercent === percent) return;
+      previousPercent = percent;
+      // Optional presentation must never break or retry a real upload.
+      try { onProgress?.({ percent }); } catch { /* telemetry only */ }
+    };
+    checkRequestCancellation(progressSignal);
+    progress(0);
+    const token = await cancellableToken(tokenProvider, progressSignal);
     // Keep the native inbox identifier across retries, without accepting arbitrary headers.
     const suppliedId = [file.uploadMessageId, file.sourceId].find(value => (
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
     ));
     const sourceId = suppliedId || newMessageId();
-    return request(uploadUrl.href, {
+    const result = await request(uploadUrl.href, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -323,7 +334,14 @@ export function createChatClient({
       body: file,
       cache: "no-store",
       credentials: "omit",
-    }, response => parsePortalResponse(response, "O upload"), false, { retryTransient: true });
+      ...(progressSignal ? { signal: progressSignal } : {}),
+    }, response => parsePortalResponse(response, "O upload"), false, {
+      retryTransient: true,
+      ...(typeof onProgress === 'function' && typeof xhrFactory === 'function' && apiPrefix !== '/api/demo'
+        ? { transport: (url, options) => uploadWithProgress(url, options, { xhrFactory, onProgress: progress }) } : {}),
+    });
+    if (!result.error && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || '')))) progress(100);
+    return result;
   }
 
   async function transcribeAudio(file) {

@@ -1329,6 +1329,13 @@ export function createAppController({
     diaryProgressAbort = null;
     diaryAttachmentProgress = null;
   }
+  let attachmentUploadProgress = null;
+  let attachmentUploadAbort = null;
+  function clearAttachmentUploadProgress() {
+    attachmentUploadAbort?.abort();
+    attachmentUploadAbort = null;
+    attachmentUploadProgress = null;
+  }
   let attendanceIrregularitySource = null;
   function getAttendanceIrregularitySource() {
     const owner = account, revision = sessionRevision;
@@ -4135,7 +4142,7 @@ export function createAppController({
 
   function flowBusy({ allowUncertainRecovery = false } = {}) {
     const state = store.getState();
-    return resuming || attachmentActionBusy || responseTransitionTimer !== null
+    return resuming || attachmentActionBusy || Boolean(attachmentUploadProgress) || responseTransitionTimer !== null
       || Boolean(state.activeText) || state.pendingFiles.some(item => item.status === "sending")
       || (!allowUncertainRecovery && recoveryUncertain);
   }
@@ -4583,6 +4590,7 @@ export function createAppController({
     view.render({
       ...state,
       diaryAttachmentProgress,
+      attachmentUploadProgress,
       ...(renderMessages !== state.messages ? { messages: renderMessages } : {}),
       epiSelectedProductIds: epiSelectionIds,
       account,
@@ -9802,13 +9810,19 @@ export function createAppController({
     cancelAttachmentReminder();
     cancelResponseTransition();
     const uploadAccount = account;
+    const uploadRevision = sessionRevision;
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     const previousAttachmentCount = store.getState().attachments.length;
     cancelCompletionMenu();
     sessionError = null;
     let operation;
+    const abort = new AbortController();
+    const currentUpload = () => !stopped && account === uploadAccount
+      && sessionRevision === uploadRevision && !abort.signal.aborted;
     try {
+      attachmentUploadAbort = abort;
+      attachmentUploadProgress = { fileId, percent: 0 };
       attachmentRevision += 1;
       currentAssistantPollSnapshot = null;
       operation = store.beginFile(fileId);
@@ -9816,7 +9830,21 @@ export function createAppController({
       if (cachedResult && (cachedResult.status !== "processed" || !Array.isArray(cachedResult.messages))) {
         throw new Error("A confirmação armazenada do anexo é inválida.");
       }
-      const result = cachedResult || await client.sendFile(item.file);
+      const result = cachedResult || await client.sendFile(item.file, {
+        progressSignal: abort.signal,
+        onProgress: value => {
+          if (!currentUpload() || !store.getState().pendingFiles.some(candidate => candidate.operationId === operation?.id)
+              || typeof value?.percent !== 'number' || !Number.isFinite(value.percent) || value.percent < 0 || value.percent > 100) return;
+          // The response and, if necessary, its attachment snapshot still
+          // have to be accepted before this operation can display 100%.
+          const percent = Math.min(99, Math.floor(value.percent));
+          if (attachmentUploadProgress?.percent !== percent) {
+            attachmentUploadProgress = { fileId, percent };
+            render();
+          }
+        },
+      });
+      if (!currentUpload()) return false;
       attachmentRevision += 1;
       const menuResult = isMenuResult(result);
       const responseResult = menuResult
@@ -9854,7 +9882,9 @@ export function createAppController({
           && typeof client.getAttachments === "function") {
           const synchronized = await syncAttachmentSnapshotAfterUpload(uploadAccount, {
             minimumCount: previousAttachmentCount + 1,
+            isCurrent: currentUpload,
           });
+          if (!currentUpload()) return false;
           if (!synchronized) {
             const confirmationError = new Error(
               "A VM não confirmou este anexo. Ele foi mantido como falho para tentar novamente; o formulário está bloqueado até confirmar ou remover o arquivo.",
@@ -9864,9 +9894,18 @@ export function createAppController({
             return false;
           }
         }
+        if (!effectiveResult.error && !effectiveResult.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || '')))) {
+          attachmentUploadProgress = { fileId, percent: 100 };
+          render();
+          await paintDiaryCompletion();
+          if (!currentUpload()) return false;
+        }
+        attachmentUploadProgress = null;
+        render();
         if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
         else cancelAttachmentReminder();
         await maybeOfferAttachmentCompression(item, effectiveResult, uploadCompleted);
+        if (!currentUpload()) return false;
         if (staged) scheduleResponseTransition(staged.nextMessages);
         scheduleCompletionMenu(effectiveResult);
       }
@@ -9879,11 +9918,17 @@ export function createAppController({
       }
       return confirmed;
     } catch (error) {
+      if (!currentUpload()) return false;
       if (operation && store.getState().pendingFiles.some(item => item.operationId === operation.id)
         && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
       if (operation) store.failFile(operation, error);
       else setSessionError(error, "Não foi possível enviar o arquivo.");
       return false;
+    } finally {
+      if (attachmentUploadAbort === abort) {
+        clearAttachmentUploadProgress();
+        if (!stopped && account === uploadAccount && sessionRevision === uploadRevision) render();
+      }
     }
   }
 
@@ -10010,6 +10055,8 @@ export function createAppController({
   }
 
   async function signIn() {
+    clearAttachmentUploadProgress();
+    attachmentActionBusy = false;
     const signInRevision = ++sessionRevision;
     clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
@@ -10112,6 +10159,8 @@ export function createAppController({
   }
 
   async function signOut() {
+    clearAttachmentUploadProgress();
+    attachmentActionBusy = false;
     clearDiaryAttachmentProgress();
     clearDiaryFieldVisits();
     clearAttendanceRhidBadges();
@@ -10297,17 +10346,18 @@ export function createAppController({
     return sharedResume;
   }
 
-  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account, { minimumCount = 0 } = {}) {
-    if (!snapshotAccount || stopped || account !== snapshotAccount || typeof client.getAttachments !== "function") return false;
+  async function syncAttachmentSnapshotAfterUpload(snapshotAccount = account, { minimumCount = 0, isCurrent = () => true } = {}) {
+    if (!isCurrent() || !snapshotAccount || stopped || account !== snapshotAccount || typeof client.getAttachments !== "function") return false;
     // A large upload can be acknowledged before the attachment index is
     // visible to the follow-up snapshot request. Keep the form open while
     // that local VM state catches up instead of marking a confirmed file as
     // failed after only half a second.
     const retryDelays = [250, 500, 1000, 1500];
     for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+      if (!isCurrent()) return false;
       try {
         const attachments = await client.getAttachments();
-        if (stopped || account !== snapshotAccount) return false;
+        if (!isCurrent() || stopped || account !== snapshotAccount) return false;
         const confirmed = (Array.isArray(attachments) ? attachments : [])
           .filter(item => item?.id && item?.mediaUrl);
         if (confirmed.length >= minimumCount) {
@@ -10690,30 +10740,33 @@ export function createAppController({
 
   async function compressAttachment(fileId) {
     if (!account || stopped || flowBusy() || typeof client.compressAttachment !== "function") return false;
+    const actionAccount = account, actionRevision = sessionRevision;
+    const currentCompression = () => !stopped && account === actionAccount && sessionRevision === actionRevision;
     const item = await resolveCurrentAttachment(fileId);
-    if (!item) return false;
+    if (!item || !currentCompression()) return false;
     cancelAttachmentReminder();
     cancelCompletionMenu();
     sessionError = null;
-    const actionAccount = account;
     attachmentActionBusy = true;
     attachmentRevision += 1;
     render();
     try {
       currentAssistantPollSnapshot = null;
       const result = attachCompressionPreview(await client.compressAttachment(item.id), item);
-      if (stopped || account !== actionAccount) return false;
+      if (!currentCompression()) return false;
       store.ingestRemoteMessages(result.messages, { ...result, resetConversation: false, attachments: result.attachments });
       rememberCurrentAssistantPoll(result, result.messages);
       hydrateMediaPreviews();
       return true;
     } catch (error) {
-      if (!stopped && account === actionAccount) setSessionError(error, "Não foi possível comprimir o anexo.");
+      if (currentCompression()) setSessionError(error, "Não foi possível comprimir o anexo.");
       return false;
     } finally {
-      attachmentActionBusy = false;
-      attachmentRevision += 1;
-      if (!stopped) render();
+      if (currentCompression()) {
+        attachmentActionBusy = false;
+        attachmentRevision += 1;
+        render();
+      }
     }
   }
 
@@ -11388,6 +11441,7 @@ export function createAppController({
   }
 
   function stop() {
+    clearAttachmentUploadProgress();
     clearDiaryAttachmentProgress();
     clearDiaryFieldVisits();
     attendanceIrregularitySource = null;

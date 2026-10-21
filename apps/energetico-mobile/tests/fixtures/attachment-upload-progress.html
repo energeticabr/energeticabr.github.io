@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Progresso do envio de anexo — teste</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createChatClient } from '../../src/chat/chat-client.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+import { createAppController } from '../../src/app-controller.js';
+const params = new URLSearchParams(location.search), root = document.querySelector('#app');
+const view = createChatView(root), percent = Number(params.get('percent') || 37);
+const file = new File([new Uint8Array(16 * 1024 * 1024)], 'documento-teste.pdf', { type: 'application/pdf' });
+const question = { type: 'poll', role: 'assistant', id: 'question', question: 'QUAL O IMÓVEL?', options: [{ id: 'blank', label: '0 - EM BRANCO' }, { id: 'all', label: '10 - TODOS' }] };
+const state = { sessionStatus: 'authenticated', account: { name: 'QA', homeAccountId: 'QA' }, messages: [question],
+  activeFlow: { id: 'document_create', title: 'ADICIONAR UM NOVO DOCUMENTO' },
+  draft: '', attachments: [], pendingFiles: [{ id: 'test-file', file, status: 'sending' }] };
+if (params.get('mode') === 'network') {
+  const seen = [], displayed = [], store = createConversationStore();
+  const client = createChatClient({ apiBaseUrl: 'https://upload.example.test', tokenProvider: async () => 'local-test-token',
+    xhrFactory: () => {
+      const xhr = new XMLHttpRequest(), open = xhr.open.bind(xhr);
+      // Local-only test boundary: the real browser still sends the binary
+      // body, emits upload events and receives the actual HTTP receipt.
+      xhr.open = (method, url, async) => open(method, new URL(url).pathname + location.search, async);
+      return xhr;
+    },
+  });
+  const controller = createAppController({ store,
+    client: { ...client, sendText: async () => ({ status: 'processed', messages: [question], activeFlow: state.activeFlow, attachments: [] }) },
+    view: { ...view, render(value) {
+      view.render(value);
+      if (value.attachmentUploadProgress) {
+        seen.push(value.attachmentUploadProgress.percent);
+        displayed.push(root.querySelector('.chat-progress [role="progressbar"]')?.textContent);
+      }
+    } },
+    auth: { initialize: async () => state.account, getToken: async () => 'local-test-token' },
+    native: { importSharedItems: async () => [], discardSharedItem: async () => {} },
+    pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
+  });
+  await controller.start(); store.queueFiles([file]);
+  const success = await controller.uploadFile(store.getState().pendingFiles[0].id);
+  document.documentElement.dataset.layout = JSON.stringify({ success, seen, displayed,
+    confirmed: store.getState().attachments.length, pending: store.getState().pendingFiles.length,
+    badgeCleared: !root.querySelector('.chat-progress [role="progressbar"]') });
+  controller.stop();
+} else {
+  view.render({ ...state, attachmentUploadProgress: { fileId: 'test-file', percent } });
+  await document.fonts.ready;
+  const badge = root.querySelector('[role="progressbar"]'), spinner = root.querySelector('.app-loading__spinner');
+  const b = badge.getBoundingClientRect(), s = spinner.getBoundingClientRect(), c = root.querySelector('.chat-progress').getBoundingClientRect();
+  document.documentElement.dataset.layout = JSON.stringify({ percent: badge.textContent,
+    adjacent: b.left >= s.right && b.left - s.right <= 16,
+    aligned: Math.abs((b.top + b.height / 2) - (s.top + s.height / 2)) <= 2,
+    contained: b.left >= c.left && b.right <= c.right && b.top >= c.top && b.bottom <= c.bottom,
+    overflow: document.documentElement.scrollWidth > innerWidth + 1 });
+}
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
