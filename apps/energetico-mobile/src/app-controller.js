@@ -1867,7 +1867,7 @@ export function createAppController({
         return token;
       }
     };
-    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, ...(kind ? { sourceKind: kind } : {}) })).then(data => {
+    const request = Promise.resolve().then(() => pendingProvisionAttachmentsDataFactory({ tokenProvider,assertSession:assertCurrentSession, sourceKind: kind })).then(data => {
       if (typeof data?.listAttachments !== "function" || typeof data?.downloadAttachment !== "function") {
         throw new Error("A consulta autenticada dos anexos não está disponível.");
       }
@@ -3507,9 +3507,13 @@ export function createAppController({
 
   async function savePendingProvisionDueDate(paymentId, rawValue) {
     const id = String(paymentId || "").trim();
+    const selectedRow = pendingProvisionSnapshot?.rows?.find(row => String(row?.id ?? "").trim() === id);
     if (!account || stopped || pendingProvisionDeletion || pendingProvisionReminderOpen || pendingProvisionDateEditBusy
       || !id || id !== pendingProvisionDateEditPaymentId
-      || !pendingProvisionSnapshot?.rows?.some(row => String(row?.id ?? "").trim() === id)) return false;
+      || !selectedRow) return false;
+    // A mixed/legacy snapshot may only identify the list on the selected row.
+    // Empty string is an explicit legacy child kind, not permission to reuse a parent provider.
+    const sourceKind = selectedRow.sourceKind ?? pendingProvisionSnapshot?.sourceKind ?? "";
     const date = pendingProvisionDateIso(rawValue);
     if (!date) {
       pendingProvisionDateEditValue = String(rawValue || "").slice(0, 10);
@@ -3524,7 +3528,10 @@ export function createAppController({
     pendingProvisionDateEditError = "";
     render();
     try {
-      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
+      if (!["", "provision-description"].includes(sourceKind)) {
+        throw Object.assign(new Error("A origem desta provisão não foi identificada. Atualize a lista antes de editar o vencimento."), { code: "PENDING_PROVISION_SOURCE_INVALID" });
+      }
+      const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision, sourceKind);
       if (typeof data.updateDueDate !== "function") throw new Error("A edição da data não está disponível para esta provisão.");
       await data.updateDueDate(id, date);
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
@@ -3532,7 +3539,7 @@ export function createAppController({
       const updatedRows = (pendingProvisionSnapshot?.rows || []).flatMap(row => {
         if (String(row?.id ?? "").trim() !== id) return [row];
         if (date > provisionDayOffset(new Date(), 2)) return [];
-        return [{ ...row, dueDate: pendingProvisionSnapshot?.sourceKind === "provision-description"
+        return [{ ...row, dueDate: sourceKind === "provision-description"
           ? date : `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }];
       });
       pendingProvisionDateEditPaymentId = "";
@@ -3554,7 +3561,7 @@ export function createAppController({
     } catch (error) {
       if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return false;
       pendingProvisionDateEditBusy = false;
-      pendingProvisionDateEditError = error?.code === 'PROVISION_DESCRIPTION_SYNC_INCOMPLETE'
+      pendingProvisionDateEditError = ['PROVISION_DESCRIPTION_SYNC_INCOMPLETE', 'PENDING_PROVISION_SOURCE_INVALID'].includes(error?.code)
         ? error.message : "Não foi possível atualizar a data no SharePoint. Confira a conexão e tente novamente.";
       render();
       return false;
