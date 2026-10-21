@@ -212,7 +212,8 @@ function displayChoiceValue(value, column) {
 
 function serializeChoiceValue(value, column) {
   const transform = column?.powerApps?.valueTransform;
-  if (transform?.kind !== "scale" || value === "" || value === null || value === undefined) return value;
+  if (transform?.kind !== "scale") return value;
+  if (value === "" || value === null || value === undefined) return null;
   const number = Number(value);
   const divisor = Number(transform.submitDivisor);
   return Number.isFinite(number) && Number.isFinite(divisor) && divisor !== 0 ? number / divisor : value;
@@ -1008,7 +1009,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
             const nextOptions = mergedOptions(state.options);
             synchronizeNativeChoiceOptions(native, nextOptions);
             refreshing = true;
-            control.setOptions(nextOptions, { preserveInput: true });
+            control.setOptions(nextOptions, { preserveInput: true, matchingValues: state.options.map(option => String(option.value)) });
             refreshing = false;
           },
         });
@@ -1030,6 +1031,7 @@ function bindChoiceSelectors(form, columns, options = {}) {
           .map(fieldName => form?.elements?.namedItem?.(fieldName))
           .filter(Boolean);
         const onDependencyChange = () => {
+          const hadSelection = multiple ? selectedOptions.length > 0 : Boolean(selectedOption || native.value);
           // Preserve literal options, not the record's legacy value from a
           // different parent/category. Only the new source can authorize it.
           sourceChoices = choices.filter(option => (column.choices || []).map(String).includes(option.value));
@@ -1045,6 +1047,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
           control.setOptions([]);
           refreshing = false;
           searchController.input("");
+          // Notify descendants too; stop once a field is already empty so a
+          // metadata cycle cannot dispatch changes indefinitely.
+          if (hadSelection) dispatchNativeChange();
         };
         dependencyControls.forEach(dependencyControl => dependencyControl.addEventListener?.("change", onDependencyChange));
         cleanups.push(() => {
@@ -1096,7 +1101,9 @@ function bindChoiceSelectors(form, columns, options = {}) {
     }
     if (Array.isArray(column?.powerApps?.sharedOutputs) && column.powerApps.sharedOutputs.length) {
       sharedFieldReaders.push(() => {
-        if (!selectedOption) return {};
+        if (!selectedOption) return options.mode === "edit"
+          ? Object.fromEntries(column.powerApps.sharedOutputs.map(output => [output.fieldName, null]))
+          : {};
         const selectedSource = resolvePowerAppsRemoteSource(form, remoteSource);
         return Object.fromEntries(column.powerApps.sharedOutputs.flatMap(output => {
           const value = output.sourceField === selectedSource?.valueField
@@ -1290,7 +1297,12 @@ function bindRelationshipSelectors(form, columns, options = {}) {
           if (!["ready", "empty", "error"].includes(state.status)) return;
           const retained = !multiple && selectedProof ? [{value:selectedProof.id,label:selectedProof.label}] : [];
           refreshing = true;
-          control.setOptions([...new Map([...retained, ...(state.options || []).map(option => ({ value: option.id, label: option.label }))].map(option => [String(option.value),option])).values()], { preserveInput: true });
+          control.setOptions([...new Map([...retained, ...(state.options || []).map(option => ({ value: option.id, label: option.label }))].map(option => [String(option.value),option])).values()], {
+            preserveInput: true,
+            // Create mode intentionally searches the first token, then refines
+            // the remaining words locally. Edit mode sends the complete query.
+            matchingValues: options.mode === "edit" ? state.options.map(option => option.id) : [],
+          });
           refreshing = false;
         },
       });

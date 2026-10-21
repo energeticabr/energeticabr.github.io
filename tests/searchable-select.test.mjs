@@ -215,6 +215,28 @@ test("botão de limpar remove a seleção, mas respeita um campo bloqueado", () 
   assert.equal(clear.hidden, true);
 });
 
+test("Escape cancela pesquisa sem resultados antes de liberar o fechamento do formulário", () => {
+  const { control } = fixture({ value: "bruno" });
+  type(control, "nenhum resultado");
+  assert.equal(control.listbox.hidden, true);
+  assert.equal(control.input.dispatch("keydown", { key: "Escape" }).defaultPrevented, true);
+  assert.equal(control.input.value, "Bruno Almeida Costa");
+  assert.equal(control.input.dispatch("keydown", { key: "Escape" }).defaultPrevented, false);
+});
+
+test("resultados do provedor podem corresponder a outro campo sem aceitar texto livre nem vazar para outra pesquisa", () => {
+  const { control } = fixture();
+  type(control, "assinatura-123");
+  control.setOptions(OPTIONS, { preserveInput:true, matchingValues:["carla"] });
+  assert.deepEqual(control.visibleOptions().map(option=>option.value), ["carla"]);
+  assert.equal(control.getValue(), "");
+  type(control, "outro termo");
+  assert.equal(control.visibleOptions().length, 0);
+  control.input.dispatch("blur");
+  control.setOptions(OPTIONS, { preserveInput:true, matchingValues:["carla"] });
+  assert.equal(control.listbox.hidden, true);
+});
+
 test("teclado navega, seleciona uma única opção e fecha a lista", () => {
   const { control, changes } = fixture();
   type(control, "almeida");

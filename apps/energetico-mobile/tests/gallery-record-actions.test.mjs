@@ -229,6 +229,19 @@ test('editing a remote relationship browses options beyond the first search batc
   assert.equal(ctx.writes[0][2].CLIENTELookupId,32);
 });
 
+test('Escape cancels an unmatched edit search without discarding the editor draft',async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:[
+    {name:'STATUS',label:'Status',control:'select',editable:true,choices:['ATIVO','PENDENTE']},
+  ],item:{id,fields:{STATUS:'ATIVO'}}})});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[role=combobox]');input.focus();
+  input.value='nenhum resultado';input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  key(ctx,input,'Escape');
+  assert.ok(ctx.get('[data-gallery-record-screen]'));
+  assert.equal(input.value,'ATIVO');assert.equal(ctx.writes.length,0);
+  key(ctx,input,'Escape');assert.equal(ctx.get('[data-gallery-record-screen]'),null);
+});
+
 for (const name of ['TIPODOCUMENTO','TIPOHOMOLOGACAO','PESSOARELACIONADA','ETAPA','TIPOMARCO','FILIAL','STATUS','IMOVEL']) test(`document editor ${name} browses, clears and searches beyond the visible batch`, async t => {
   const calls=[];
   const current='POLÍTICA VALE ALIMENTAÇÃO';
@@ -352,6 +365,72 @@ test('real document contract clears the selected type and revokes its old option
   assert.deepEqual(choices,['CERTIDÃO FILIAL'],'old-category selections must not be offered again');
   ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
   assert.equal(ctx.writes[0][2].TIPODOCUMENTO,null);
+});
+
+test('real document contract cascades homologation invalidation through person to milestone',async t=>{
+  const {default:entities}=await import('../../../portal/catalog/entities.js');
+  const {resolvePowerAppsUiContract}=await import('../../../portal/catalog/powerapps-ui-contract.js');
+  const entity=entities.find(entity=>entity.id==='documentos-operacionais');
+  const contract=resolvePowerAppsUiContract(entity,['TIPOHOMOLOGACAO','PESSOARELACIONADA','TIPOMARCO'].map(name=>({name,label:name,control:'text',editable:true})),{mode:'edit'});
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),entity,contract,columns:contract.formColumns,
+    item:{id,fields:{TIPOHOMOLOGACAO:'HOMOLOGAÇÃO MÃO DE OBRA',PESSOARELACIONADA:'PESSOA ANTIGA',TIPOMARCO:'MARCO ANTIGO'}},
+    powerAppsOptionSearch:async()=>[],
+  })});
+  click(ctx,'edit');await settle();await settle();
+  ctx.get('[data-searchable-field=TIPOHOMOLOGACAO] [role=combobox]').click();
+  [...ctx.document.querySelectorAll('[role=option]')].find(option=>option.textContent==='HOMOLOGAÇÃO FILIAL').click();
+  for(const name of ['PESSOARELACIONADA','TIPOMARCO']) {
+    assert.equal(ctx.get(`[name=${name}]`).value,'',name);
+    assert.equal(ctx.get(`[data-searchable-field=${name}] [role=combobox]`).value,'',name);
+  }
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2].PESSOARELACIONADA,null);
+  assert.equal(ctx.writes[0][2].TIPOMARCO,null);
+});
+
+async function realContractContext(id) {
+  const {default:entities}=await import('../../../portal/catalog/entities.js');
+  const {resolvePowerAppsUiContract}=await import('../../../portal/catalog/powerapps-ui-contract.js');
+  const entity=entities.find(entity=>entity.id==='lancamentos');
+  const contract=resolvePowerAppsUiContract(entity,['CONTRATO','MEDICAOPARCIAL'].map(name=>({name,label:name,control:'text',editable:true})),{mode:'edit'});
+  return {...context(id),entity,contract,columns:contract.formColumns,item:{id,fields:{CONTRATO:'CT-ANTIGO',MEDICAOPARCIAL:'12'}}};
+}
+
+test('real contract provider result stays visible when search matches a hidden signature field',async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...await realContractContext(id),
+    powerAppsOptionSearch:async()=>[{value:'CT-23',label:'23 - EMPRESA (CT-23)',data:{NUMEROCONTRATO:'CT-23',ID:'23'}}],
+  })});
+  click(ctx,'edit');await settle();await settle();
+  const input=ctx.get('[data-searchable-field=CONTRATO] [role=combobox]');
+  input.value='ASSINATURA-XYZ';input.dispatchEvent(new ctx.dom.window.Event('input',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,340));
+  assert.equal(input.value,'ASSINATURA-XYZ');
+  const option=ctx.get('[data-searchable-field=CONTRATO] [role=option]');
+  assert.equal(option?.textContent,'23 - EMPRESA (CT-23)');
+  option.click();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2].CONTRATO,'CT-23');assert.equal(ctx.writes[0][2].MEDICAOPARCIAL,'23');
+});
+
+test('clearing the real shared contract selector clears its linked measurement in the patch',async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...await realContractContext(id),powerAppsOptionSearch:async()=>[]})});
+  click(ctx,'edit');await settle();await settle();
+  ctx.get('[data-searchable-field=CONTRATO] [data-searchable-clear]').click();
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.equal(ctx.writes[0][2].CONTRATO,null);assert.equal(ctx.writes[0][2].MEDICAOPARCIAL,null);
+});
+
+test('clearing cascading selections terminates safely even with cyclic dependency metadata',async t=>{
+  const ctx=await setup(t,{loadEditor:async id=>({...context(id),columns:['A','B'].map(name=>({
+    name,label:name,control:'select',editable:true,choices:[],powerApps:{closed:true,preserveCurrentValue:true,
+      optionSources:[{kind:'dependent',listName:'TIPOS',valueField:'Title',dependsOn:[{fieldName:name==='A'?'B':'A',targetField:'Title'}]}],
+    },
+  })),item:{id,fields:{A:'ANTIGO A',B:'ANTIGO B'}},powerAppsOptionSearch:async()=>[]})});
+  click(ctx,'edit');await settle();await settle();
+  ctx.get('[data-searchable-field=A] [data-searchable-clear]').click();
+  assert.equal(ctx.get('[name=A]').value,'');assert.equal(ctx.get('[name=B]').value,'');
+  ctx.get('form').dispatchEvent(new ctx.dom.window.Event('submit',{bubbles:true,cancelable:true}));await settle();
+  assert.deepEqual(ctx.writes[0][2],{A:null,B:null});
 });
 
 test('payroll screen preserves edits while source values refresh and omits read-only fields on save', async t => {

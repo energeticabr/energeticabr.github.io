@@ -31,8 +31,8 @@
 
 **Interfaces:** createSearchableSelect(root, config) adds opt-in clearable and setOptions(options, {preserveInput}) behavior; dynamic forms use searchable edit controls and request browse on open, bounded term search on input.
 
-- [ ] Write regressions: document fields accept typing and clearing, open all remote alternatives, select a remote-only result, reject arbitrary text, preserve selection on errors and ignore stale responses after dismissing/changing query.
-- [ ] Run focused tests; observe failures against current source.
-- [ ] Implement minimal shared changes and update superseded edit-only expectations.
+- [x] Write regressions: document fields accept typing and clearing, open all remote alternatives, select a remote-only result, reject arbitrary text, preserve selection on errors and ignore stale responses after dismissing/changing query.
+- [x] Run focused tests; observe failures against current source.
+- [x] Implement minimal shared changes and update superseded edit-only expectations.
 - [ ] Run focused suites, full suites, signature guard, native config/security checks and build; verify phone and desktop browser UI without saving real records.
 - [ ] Commit, obtain fresh review, address important findings with RED/GREEN tests, then PR/merge and verify all three publications for the merged revision.

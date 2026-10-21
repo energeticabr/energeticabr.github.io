@@ -97,6 +97,8 @@ export function createSearchableSelect(root, config = {}) {
   let activeIndex = -1;
   let open = false;
   let wantsOptions = false;
+  let providerQuery = "";
+  let providerMatches = new Set();
   let destroyed = false;
   const clearButton = config.clearable === true && !selectionOnly ? documentRef.createElement("button") : null;
   if (clearButton) {
@@ -168,8 +170,10 @@ export function createSearchableSelect(root, config = {}) {
   }
 
   function filterOptions(query) {
-    const terms = normalizeText(query).split(/\s+/).filter(Boolean);
+    const normalized = normalizeText(query);
+    const terms = normalized.split(/\s+/).filter(Boolean);
     filteredOptions = Object.freeze(allOptions.filter(option => {
+      if (normalized === providerQuery && providerMatches.has(optionKey(option.value))) return true;
       const searchable = normalizeText(`${option.label} ${String(option.value)}`);
       return terms.every(term => searchable.includes(term));
     }));
@@ -178,6 +182,7 @@ export function createSearchableSelect(root, config = {}) {
 
   function onInput() {
     if (selectionOnly) { input.value = selectedOption?.label || ''; return; }
+    providerMatches = new Set();
     if (!input.value && selectedOption) {
       selectedOption = null;
       syncClearButton();
@@ -228,7 +233,7 @@ export function createSearchableSelect(root, config = {}) {
       event.preventDefault?.();
       choose(filteredOptions[activeIndex]);
     } else if (event?.key === "Escape") {
-      if (open) event.preventDefault?.();
+      if (open || wantsOptions) event.preventDefault?.();
       input.value = selectedOption?.label || "";
       wantsOptions = false;
       setExpanded(false);
@@ -296,10 +301,12 @@ export function createSearchableSelect(root, config = {}) {
       }
       return choose(option);
     },
-    setOptions(options, { preserveInput = false } = {}) {
+    setOptions(options, { preserveInput = false, matchingValues = [] } = {}) {
       if (destroyed) return;
       const previous = selectedOption;
       const query = input.value;
+      providerQuery = normalizeText(query);
+      providerMatches = new Set(matchingValues.map(optionKey));
       const reopen = preserveInput && wantsOptions;
       allOptions = validatedOptions(options, optionValidation);
       const replacement = previous ? findOption(previous.value) : null;

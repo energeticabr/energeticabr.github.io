@@ -57,7 +57,7 @@ test('movement editor uses dependent closed choices and rejects foreign descript
   assert.equal(root.querySelector('[name="VALOR"]').value, '1234.56');
   const select = root.querySelector('select[name="INSTITUICAO"]');
   const combo = select.closest('.dynamic-field').querySelector('[role="combobox"]');
-  assert.equal(combo.readOnly, true);
+  assert.equal(combo.readOnly, false);
   combo.click();
   await new Promise(resolve => setTimeout(resolve, 30));
   const option = [...root.querySelectorAll('[role="option"]')].find(o => o.textContent === 'BANCO B');
