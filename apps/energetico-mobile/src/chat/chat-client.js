@@ -279,7 +279,9 @@ export function createChatClient({
       cache: "no-store",
       credentials: "omit",
       }, response => parsePortalResponse(response, "O canal do Energético", { allowRecovery: true }));
-      if (result.diaryEvidenceProgress?.requestId === payload.messageId) progress?.complete(result.diaryEvidenceProgress);
+      if (result.status === "processed" && !result.error
+          && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || "")))
+          && result.diaryEvidenceProgress?.requestId === payload.messageId) progress?.complete(result.diaryEvidenceProgress);
       return result;
     } finally { progress?.stop(); }
   }

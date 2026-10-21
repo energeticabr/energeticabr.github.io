@@ -53,6 +53,15 @@ test('a valid VM error response does not falsely finish the percentage', async t
   assert.deepEqual(h.updates, [0, 37]);
 });
 
+test('a recovery response carrying an inconsistent 100 is not shown as successful', async t => {
+  const h = clientHarness(t);
+  const pending = h.client.sendText({ replyId: 'diary_finish', onProgress: p => h.updates.push(p.percent) });
+  await settle();
+  h.finish({ ...finished, status: 'processed_with_recovery', results: [{ status: 'flow_paused_after_error' }] });
+  await pending;
+  assert.deepEqual(h.updates, [0]);
+});
+
 test('telemetry failure does not hide a later successful main confirmation', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let finish;

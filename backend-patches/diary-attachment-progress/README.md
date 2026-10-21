@@ -35,3 +35,11 @@ guardar backup dos três arquivos, instalar o módulo novo na raiz do serviço,
 validar testes/compilação e reiniciar somente a ponte. Rollback restaura os
 três arquivos do backup e reinicia a ponte; o módulo opcional pode permanecer.
 Nenhuma alteração em dados de diário ou anexos existentes é necessária.
+
+`deploy.sh` bloqueia temporariamente novas conexões locais não-root à porta
+8765 e aguarda até 30 segundos pelas requisições existentes, mantendo a exclusão
+até a troca/reinício/verificação. A autenticação e as demais portas não mudam.
+Sondas root continuam liberadas. Trap remove a regra; um watchdog independente
+a remove em até 120 segundos se a sessão for terminada abruptamente. Os testes
+do gate executam o shell real com comandos de sistema simulados, sem tocar no
+firewall.

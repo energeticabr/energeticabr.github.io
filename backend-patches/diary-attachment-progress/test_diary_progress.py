@@ -51,6 +51,16 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(result["diaryEvidenceProgress"]["status"], "failed")
         self.assertLess(result["diaryEvidenceProgress"]["percent"], 100)
 
+    def test_late_workflow_recovery_after_ready_never_reports_100(self):
+        def handle():
+            emit_progress(99, "ready")
+            # The bridge recovers when the draft-marker save fails after PDF creation.
+            return {"status": "processed_with_recovery", "messages": [],
+                    "results": [{"status": "flow_paused_after_error"}]}
+        result = finish_diary_request(OWNER, {"messageId": REQUEST}, handle, lambda value: value, registry=self.registry)
+        self.assertEqual(result["diaryEvidenceProgress"]["status"], "failed")
+        self.assertEqual(result["diaryEvidenceProgress"]["percent"], 99)
+
     def test_failed_public_response_never_reports_success(self):
         def handle():
             emit_progress(99, "ready")

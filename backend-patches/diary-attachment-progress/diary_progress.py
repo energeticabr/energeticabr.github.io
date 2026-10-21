@@ -98,5 +98,11 @@ def finish_diary_request(identity, body, handle, make_public, *, registry=REGIST
     request_id = body.get("messageId")
     with registry.scope(identity, request_id) as job:
         result = make_public(handle())
-        job["confirmed"] = True
+        job["confirmed"] = (
+            result.get("status") == "processed"
+            and isinstance(result.get("messages"), list)
+            and not result.get("error")
+            and not any(re.search(r"error|fail|paused|invalid|unavailable|reupload", str(item.get("status") or ""), re.I)
+                        for item in result.get("results", []) if isinstance(item, dict))
+        )
     return {**result, "diaryEvidenceProgress": registry.snapshot(identity, request_id)}

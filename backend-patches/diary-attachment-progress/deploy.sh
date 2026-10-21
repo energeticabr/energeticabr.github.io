@@ -20,10 +20,11 @@ cp -- "$PACKAGE/test_diary_evidence.py" "$STAGING/tests/test_diary_evidence.py"
 (cd "$STAGING" && PYTHONPATH="$STAGING/worker:$STAGING" "$PYTHON" -m unittest discover -s tests -p test_diary_evidence.py)
 # Abort if any other deployment changed the running files during verification.
 (cd "$ROOT" && sha256sum --check "$PACKAGE/base.sha256")
-if ss -Hnt state established '( sport = :8765 )' | grep -q .; then
-  echo "Bridge has an active request; retry this verified deployment when idle" >&2
-  exit 1
-fi
+source "$PACKAGE/deployment_gate.sh"
+trap diary_release_ingress EXIT
+trap 'exit 1' HUP INT TERM
+diary_block_ingress
+diary_drain_requests
 BACKUP="$(mktemp -d /opt/energetica-whatsapp/diary-progress-backup.XXXXXXXX)"
 mkdir -p "$BACKUP/worker"
 for file in "${FILES[@]}"; do
