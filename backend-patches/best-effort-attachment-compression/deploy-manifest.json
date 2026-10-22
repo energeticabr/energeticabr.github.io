@@ -1,0 +1,28 @@
+{
+  "files": {
+    "worker/compression.py": {
+      "before": "138515fe0004e304f990f1eb90d4623214538c14c26de27767819264b78af517",
+      "after": "7de490f75c60cc8eacebf9d413ad8831b2fe899861c9867cf5dafcdfb7dee48f"
+    },
+    "channel_bridge.py": {
+      "before": "41cff91d025485cbe13cf73fbc8228598ce74e9b8510593f1b776e13802642aa",
+      "after": "85f963428e6f82ab5207d1c75c177aeba20d42ba47136257652bc53e6c52f164"
+    },
+    "worker/workflow.py": {
+      "before": "aac994185f7b6b540f32497ba79a87bb692509eb087db7c7e4598413d2a3aefd",
+      "after": "9053523f509f23118d306ba826b2b8f310ecf2ef0773677a9b87d7606e17b832"
+    }
+  },
+  "mirror": {
+    "worker/compression.py": "e3fef6adf8f0dc147f39c6268de46eb830ae55171713c4cd01af9f8dd1280b40",
+    "channel_bridge.py": "a5a8244d6525f34f53de781caa399570073df1f55ef8148ed4c1c5f9cdfa5e19",
+    "worker/workflow.py": "aac994185f7b6b540f32497ba79a87bb692509eb087db7c7e4598413d2a3aefd"
+  },
+  "inputs": {
+    "patch_backend.py": "a1e8ac710a63b665b303248248a8e8751b83cd327bcfa63025f10a1780a688c2",
+    "deploy.py": "4239fd64059ae6c48a9ae63e84202d1f51b9eb769291ea1bb90ec6f5666cce38",
+    "deploy.sh": "1fafab5f43a7b5e63b4e6d3fe77bddd851b8f41030aac6d086aa169e2406fb5d",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2"
+  }
+}

@@ -47,9 +47,17 @@ const controller = createAppController({ store, view,
     },
     async chooseAttachmentCompression(choice) {
       choices.push(choice);
-      const original = attachments[0], compressed = { ...original, id: 'qa-compressed', size: 400_000 };
+      const original = attachments[0], compressed = { ...original, id: 'qa-compressed', size: params.has('best-effort') ? 1_600_000 : 400_000 };
+      if (choice === 'attachment_compression_level_high' && params.get('mode') === 'unchanged') return {
+        status: 'processed', operation: 'attachment_compression_unchanged',
+        messages: [{ type: 'text', text: '📎 Não foi possível reduzir mais este arquivo preservando resolução útil. O original foi mantido.' }],
+      };
       if (choice === 'attachment_compression_level_high') return { status: 'processed', messages: [{ type: 'poll',
-        question: 'CONFIRA A LEGIBILIDADE. QUAL VERSÃO DESEJA USAR?', attachment_compression_preview: { original, compressed }, options: [
+        question: params.has('best-effort')
+          ? 'Meta mais restritiva: 1000000 bytes. Resultado: 1600000 bytes (87.5% de redução). A meta não foi atingida; esta é a melhor redução possível preservando resolução útil. Confira a legibilidade. Qual versão deseja usar?'
+          : 'CONFIRA A LEGIBILIDADE. QUAL VERSÃO DESEJA USAR?',
+        attachment_compression_preview: { original, compressed, ...(params.has('best-effort')
+          ? { goal: { targetBytes: 1_000_000, actualBytes: 1_600_000, met: false, reductionPercent: 87.5, level: 'high' } } : {}) }, options: [
           { id: 'attachment_compression_use_compressed', label: 'USAR COMPRIMIDA' }, { id: 'attachment_compression_use_original', label: 'USAR ORIGINAL' },
         ] }] };
       if (choice === 'attachment_compression_use_compressed') attachments[0] = compressed;
@@ -76,8 +84,9 @@ if (!params.has('interactive')) {
   const mode = params.get('mode');
   if (mode) {
     await click('[data-action="compress-attachment"]', () => root.querySelector('[data-reply-id="attachment_compression_level_high"]:not(:disabled)'));
-    if (mode !== 'original-level') await click('[data-reply-id="attachment_compression_level_high"]', () => root.querySelector('[data-reply-id="attachment_compression_use_compressed"]:not(:disabled)'));
-    await click(`[data-reply-id="attachment_compression_use_${mode === 'compressed' ? 'compressed' : 'original'}"]`, () => root.querySelector('[data-reply-id="input_continue"]:not(:disabled)'));
+    if (mode !== 'original-level') await click('[data-reply-id="attachment_compression_level_high"]', () => root.querySelector(mode === 'unchanged'
+      ? '[data-reply-id="input_continue"]:not(:disabled)' : '[data-reply-id="attachment_compression_use_compressed"]:not(:disabled)'));
+    if (!['preview', 'unchanged'].includes(mode)) await click(`[data-reply-id="attachment_compression_use_${mode === 'compressed' ? 'compressed' : 'original'}"]`, () => root.querySelector('[data-reply-id="input_continue"]:not(:disabled)'));
   }
   await document.fonts.ready;
   await new Promise(requestAnimationFrame);
@@ -85,6 +94,9 @@ if (!params.has('interactive')) {
     error: root.querySelector('.error-banner')?.textContent || '', compressionCalls, uploads, requests, choices,
     restored: Boolean(root.querySelector('[data-reply-id="input_continue"]:not(:disabled)')),
     pendingCompression: Boolean(root.querySelector('[data-reply-id^="attachment_compression_"]')),
+    goalMissVisible: root.textContent.includes('A meta não foi atingida'),
+    originalChoice: Boolean(root.querySelector('[data-reply-id="attachment_compression_use_original"]:not(:disabled)')),
+    compressedChoice: Boolean(root.querySelector('[data-reply-id="attachment_compression_use_compressed"]:not(:disabled)')),
     attachmentCount: store.getState().attachments.length, sizes: store.getState().attachments.map(item => item.size),
     flow: store.getState().activeFlow?.contextId, overflow: document.documentElement.scrollWidth > innerWidth + 1,
   });

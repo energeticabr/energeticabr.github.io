@@ -47,9 +47,10 @@ function correctionButton(h, slot) {
   return h.root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${slot}"]`);
 }
 
-for (const [slot, label, suggested] of [['exit1', 'Saída 1', '12:00'], ['entry2', 'Entrada 2', '13:00'], ['exit2', 'Saída 2', '17:00']]) {
+for (const [slot, label, suggested] of [['entry1', 'Entrada 1', '07:00'], ['exit1', 'Saída 1', '12:00'], ['entry2', 'Entrada 2', '13:00'], ['exit2', 'Saída 2', '17:00']]) {
+  const rows = [row({ BATIDAS_RHID: slot === 'entry1' ? '12:00;13:00;17:00' : '06:52' })];
   test(`missing ${slot} opens the existing RHID dialog without selecting or submitting attendance`, async t => {
-    const h = await harness(t);
+    const h = await harness(t, { rows });
     const button = correctionButton(h, slot);
     assert.ok(button, 'the missing punch must be a real button');
     assert.equal(button.tagName, 'BUTTON');
@@ -69,7 +70,7 @@ for (const [slot, label, suggested] of [['exit1', 'Saída 1', '12:00'], ['entry2
   });
 
   test(`saving missing ${slot} updates the same presence immediately and persists its audited correction`, async t => {
-    const h = await harness(t);
+    const h = await harness(t, { rows });
     assert.ok(correctionButton(h, slot));
     correctionButton(h, slot).click();
     const input = h.root.querySelector('[data-role="rhid-adjustment-time"]');
@@ -86,9 +87,38 @@ for (const [slot, label, suggested] of [['exit1', 'Saída 1', '12:00'], ['entry2
   });
 }
 
-test('E1 and populated slots never become missing-punch controls', async t => {
-  const h = await harness(t, { rows: [row({ BATIDAS_RHID: '12:00;13:00;17:00' })] });
+test('populated slots never become missing-punch controls', async t => {
+  const h = await harness(t, { rows: [row({ BATIDAS_RHID: '07:00;12:00;13:00;17:00' })] });
   assert.equal(h.root.querySelectorAll('[data-action="attendance-rhid-adjust-open"]').length, 0);
+});
+
+test('E1 is editable when all punches were initially empty', async t => {
+  const h = await harness(t, { rows: [row({ BATIDAS_RHID: '' })] });
+  const button = correctionButton(h, 'entry1');
+  assert.ok(button, 'an initially empty E1 must offer the correction action');
+  button.click();
+  assert.equal(h.root.querySelector('[data-role="rhid-adjustment-time"]').value, '07:00');
+  assert.deepEqual(h.saves, []);
+  assert.deepEqual(h.writes, []);
+});
+
+for (const extra of [
+  { BATIDAS_RHID: '06:50;07:10;12:00;13:00;17:00' },
+  { BATIDAS_RHID: '12:00;13:00;17:00', ADMIN_AJUSTES: { entry1: { time: '07:15', reason: 'Conferido' } } },
+]) {
+  test(`E1 with existing RHID candidates or an approved adjustment stays protected: ${JSON.stringify(extra)}`, async t => {
+    const h = await harness(t, { rows: [row(extra)] });
+    assert.equal(correctionButton(h, 'entry1'), null);
+    assert.deepEqual(h.saves, []);
+  });
+}
+
+test('a disabled presence does not offer an empty E1 correction', async t => {
+  const message = poll();
+  message.options[0].disabled = true;
+  const h = await harness(t, { message, rows: [row({ BATIDAS_RHID: '' })] });
+  assert.equal(correctionButton(h, 'entry1'), null);
+  assert.deepEqual(h.saves, []);
 });
 
 test('Friday keeps the RHID standard exit of 16:00', async t => {
@@ -251,21 +281,25 @@ test('consecutive confirmed corrections all survive a later lagging collection',
   assert.equal(h.root.querySelector('.chat-attendance-rhid-badge').textContent, '09h08');
 });
 
-test('a slot filled by a refreshed report between open and save cannot be overwritten here', async t => {
-  let clock = Date.now();
-  t.mock.method(Date, 'now', () => clock);
-  const h = await harness(t);
-  correctionButton(h, 'exit1').click();
-  h.client.getRhidAttendanceReport = async date => ({ date, rows: [row({ ADMIN_AJUSTES: { exit1: { time: '12:10' } } })] });
-  clock += 61000;
-  h.store.setDraft('HELISON');
-  await tick(); await tick();
-  h.root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
-  await tick();
-  assert.deepEqual(h.saves, []);
-  assert.match(h.root.querySelector('[data-rhid-slot="exit1"]').textContent, /12:10/);
-  assert.match(h.root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]').textContent, /validar o ajuste/);
-});
+for (const [slot, punches, filled] of [['entry1', '12:00;13:00;17:00', '07:10'], ['exit1', '06:52', '12:10']]) {
+  test(`${slot} filled by a refreshed report between open and save cannot be overwritten here`, async t => {
+    let clock = Date.now();
+    t.mock.method(Date, 'now', () => clock);
+    const h = await harness(t, { rows: [row({ BATIDAS_RHID: punches })] });
+    const button = correctionButton(h, slot);
+    assert.ok(button, 'the empty slot must be editable before the refresh');
+    button.click();
+    h.client.getRhidAttendanceReport = async date => ({ date, rows: [row({ BATIDAS_RHID: punches, ADMIN_AJUSTES: { [slot]: { time: filled } } })] });
+    clock += 61000;
+    h.store.setDraft('HELISON');
+    await tick(); await tick();
+    h.root.querySelector('[data-action="rhid-attendance-adjust-save"]').click();
+    await tick();
+    assert.deepEqual(h.saves, []);
+    assert.match(h.root.querySelector(`[data-rhid-slot="${slot}"]`).textContent, new RegExp(filled));
+    assert.match(h.root.querySelector('[data-rhid-adjustment-dialog] [role="alert"]').textContent, /validar o ajuste/);
+  });
+}
 
 test('a save resolving after sign-out does not restore the old presence or dialog', async t => {
   let resolve;
