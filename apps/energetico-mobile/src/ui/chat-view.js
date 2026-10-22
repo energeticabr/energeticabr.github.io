@@ -286,6 +286,13 @@ function normalizedQuestionWithMap(value) {
 
 function questionFieldRange(value) {
   const { raw, normalized, map } = normalizedQuestionWithMap(value);
+  // This yes/no question is about expiry, not the document mentioned first.
+  const validityQuestion = /\bPOSSUI\s+(DATA\s+DE\s+VALIDADE)\s*\?/u.exec(normalized);
+  if (validityQuestion) {
+    const start = validityQuestion.index + validityQuestion[0].indexOf(validityQuestion[1]);
+    const end = start + validityQuestion[1].length;
+    return { start: map[start].start, end: map[end - 1].end };
+  }
   let best = null;
   for (const label of QUESTION_FIELD_LABELS) {
     const needle = label

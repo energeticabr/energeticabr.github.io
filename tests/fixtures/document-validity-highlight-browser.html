@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Energético — destaque de data de validade</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<style>
+  body { margin: 0; }
+  .qa { padding: 8px; background: #fff8dc; font: 12px system-ui; }
+  #chat { height: calc(100dvh - 44px); }
+</style>
+<aside class="qa">Prévia local com dados fictícios. Nenhum envio ao SharePoint.</aside>
+<main id="chat"></main>
+<script type="module">
+  import { createChatView } from '../../apps/energetico-mobile/src/ui/chat-view.js';
+  const view = createChatView(document.querySelector('#chat'));
+  view.render({
+    sessionStatus: 'authenticated', account: { name: 'Validação local' },
+    activeFlow: { id: 'document', title: '📄 ADICIONAR UM NOVO DOCUMENTO' },
+    draft: '', pendingFiles: [], error: null,
+    messages: [{ id: 'validity-preview', role: 'assistant', type: 'poll',
+      question: '📅 O DOCUMENTO DE HOMOLOGAÇÃO QUE ESTÁ SENDO CADASTRADO POSSUI DATA DE VALIDADE? Se responder SIM, a data de validade será solicitada na próxima etapa.',
+      options: [
+        { id: 'choice:possui_validade:0', label: '0 - ⬜ EM BRANCO' },
+        { id: 'choice:possui_validade:1', label: '1 - ✅ SIM' },
+        { id: 'choice:possui_validade:2', label: '2 - ❌ NÃO' },
+      ],
+    }],
+  });
+</script>
+</html>
