@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação local — frete no primeiro item</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<style>
+  body { margin: 0; }
+  #chat { height: 100dvh; }
+  #evidence { position: fixed; bottom: 112px; right: 10px; z-index: 1000; padding: 6px 10px;
+    background: #effff5; border: 1px solid #166534; border-radius: 10px; color: #14532d; font: 12px system-ui; pointer-events: none; }
+</style>
+<main id="chat"></main><output id="evidence" aria-live="polite"></output>
+<script type="module">
+  import { createAppController } from '../../apps/energetico-mobile/src/app-controller.js';
+  import { createConversationStore } from '../../apps/energetico-mobile/src/chat/conversation-store.js';
+  import { createChatView } from '../../apps/energetico-mobile/src/ui/chat-view.js';
+  const store = createConversationStore({ historyMode: 'current-step' });
+  const view = createChatView(document.querySelector('#chat'));
+  let first = true;
+  async function request(body) {
+    const response = await fetch('http://127.0.0.1:8879', body ? {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    } : undefined);
+    if (!response.ok) throw new Error(`QA local: ${response.status}`);
+    const value = await response.json();
+    document.querySelector('#evidence').textContent = `QA local · Perguntas de frete: ${value.qa.questions} · Postagens: ${value.qa.posted}`;
+    return value;
+  }
+  const controller = createAppController({ store, view,
+    client: {
+      getAttachments: async () => [],
+      async sendText({ replyId, text }) {
+        if (first) { first = false; return request(); }
+        return request({ replyId, text });
+      },
+    },
+    auth: { initialize: async () => ({ homeAccountId: 'qa-freight', name: 'Validação local' }), getToken: async () => 'qa-only' },
+    native: { importSharedItems: async () => [] },
+    diaryFieldVisitDataFactory: async () => ({ load: async () => [] }),
+    pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
+  });
+  await controller.start();
+</script>
+</html>
