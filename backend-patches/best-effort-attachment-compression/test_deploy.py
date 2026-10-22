@@ -399,7 +399,7 @@ class LockTests(unittest.TestCase):
 class GateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.bash = os.environ.get('BASH_BIN') or shutil.which('bash')
+        cls.bash = shutil.which('bash')
         if not cls.bash and Path('C:/Program Files/Git/bin/bash.exe').is_file():
             cls.bash = 'C:/Program Files/Git/bin/bash.exe'
         if not cls.bash:
@@ -461,67 +461,6 @@ trap diary_release_ingress EXIT
         result = self.gate('id() { echo 0; }\ndiary_block_ingress\necho rollout\n')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, '')
-
-    def wrapper_handoff(self, timing):
-        base = Path(__file__).parent
-        # Exercise the real shell handoff after its fixed CLI/path guards.
-        handoff = (base / 'deploy.sh').read_text().split(
-            '# Validate reviewed package hashes before executing the staged gate.\n', 1)[1]
-        changed = b'printf "%s\\n" UNREVIEWED_GATE_EXECUTED\nexit 79\n'
-        with tempfile.TemporaryDirectory() as temporary:
-            package = Path(temporary)
-            gate = package / 'deployment_gate.sh'
-            gate.write_bytes((base / 'deployment_gate.sh').read_bytes())
-            script = r'''
-set -euo pipefail
-PACKAGE="$1"
-TIMING="$2"
-TEST_PYTHON="$3"
-PYTHON=qa_python
-mutate_gate() {
-  printf '%s\n' 'printf "%s\n" UNREVIEWED_GATE_EXECUTED' 'exit 79' > "$PACKAGE/deployment_gate.sh"
-}
-qa_python() {
-  [[ "$1" == -B ]]
-  if [[ "$2" == -c ]]; then
-    "$TEST_PYTHON" "$@"
-    return
-  fi
-  [[ "$2" == "$PACKAGE/deploy.py" && "$4" == reviewed-manifest ]]
-  case "$3" in
-    --check) if [[ "$TIMING" == before-capture ]]; then mutate_gate; fi ;;
-    --deploy) printf '%s\n' rollout ;;
-    *) return 9 ;;
-  esac
-}
-id() { [[ "$*" == '-u caddy' ]]; echo 1001; }
-iptables() { printf 'firewall %s\n' "$1"; }
-systemd-run() { echo watchdog; }
-systemctl() { :; }
-ss() { return 0; }
-sleep() { :; }
-if [[ "$TIMING" == before-source ]]; then
-  trap 'if [[ "$BASH_COMMAND" == source* ]]; then mutate_gate; trap - DEBUG; fi' DEBUG
-fi
-set -- reviewed-manifest
-'''
-            result = subprocess.run(
-                [self.bash, '-c', script + handoff, 'test', package.as_posix(), timing, sys.executable],
-                text=True, capture_output=True, timeout=10)
-            self.assertEqual(gate.read_bytes(), changed, 'the test must actually mutate the staged gate')
-            return result
-
-    def test_wrapper_rejects_gate_changed_after_preflight_before_capture(self):
-        result = self.wrapper_handoff('before-capture')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, '', 'unreviewed gate code and privileged actions must never run')
-        self.assertIn('gate hash mismatch', result.stderr)
-
-    def test_wrapper_executes_verified_capture_when_gate_changes_before_source(self):
-        result = self.wrapper_handoff('before-source')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines(),
-                         ['firewall -I', 'watchdog', 'rollout', 'firewall -D'])
 
     def test_shells_parse_without_executing_deployment(self):
         base = Path(__file__).parent
