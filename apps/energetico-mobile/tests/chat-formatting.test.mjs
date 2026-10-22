@@ -89,6 +89,37 @@ test('destaca o identificador principal da pergunta em uma enquete', async t => 
     '🏭 QUAL É A FILIAL? A opção com ⭐ é a filial padrão.');
 });
 
+test('destaca data de validade em vermelho na pergunta sobre documento com vencimento', async t => {
+  const question = '📅 O DOCUMENTO DE HOMOLOGAÇÃO QUE ESTÁ SENDO CADASTRADO POSSUI DATA DE VALIDADE? Se responder SIM, a data de validade será solicitada na próxima etapa.';
+  const options = [
+    { id: 'choice:possui_validade:0', label: '0 - ⬜ EM BRANCO' },
+    { id: 'choice:possui_validade:1', label: '1 - ✅ SIM' },
+    { id: 'choice:possui_validade:2', label: '2 - ❌ NÃO' },
+  ];
+  const dom = render(t, [{ type: 'poll', question, options }]);
+  const document = dom.window.document;
+  const style = document.createElement('style');
+  style.textContent = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+  document.head.append(style);
+  const paragraph = document.querySelector('.chat-choice-card p');
+  const field = paragraph.querySelector('.chat-question-field');
+  assert.equal(field?.textContent, 'DATA DE VALIDADE');
+  assert.equal(dom.window.getComputedStyle(field).color, 'rgb(180, 35, 24)');
+  assert.equal(paragraph.textContent, question);
+  assert.deepEqual([...document.querySelectorAll('[data-action="select-reply"]')].map(button => commandFromTarget(button)),
+    options.map(option => ({ type: 'select-reply', replyId: option.id, label: option.label })));
+});
+
+test('destaque da validade aceita caixa e quebras de linha sem mudar outras perguntas', t => {
+  const dom = render(t, [
+    { type: 'text', text: 'O documento de homologação possui data\nde validade?' },
+    { type: 'poll', question: 'QUAL O DOCUMENTO? A data de validade será solicitada depois.', options: [] },
+    { type: 'text', role: 'user', text: 'O documento possui data de validade?' },
+  ]);
+  assert.deepEqual([...dom.window.document.querySelectorAll('.chat-question-field')].map(field => field.textContent),
+    ['data\nde validade', 'DOCUMENTO']);
+});
+
 test('destaca identificadores compostos também em perguntas digitadas', t => {
   const dom = render(t, [
     { type: 'poll', question: 'QUAL O TIPO DE HOMOLOGAÇÃO?', options: [] },
