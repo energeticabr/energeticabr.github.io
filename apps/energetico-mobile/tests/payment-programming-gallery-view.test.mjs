@@ -38,6 +38,77 @@ async function setup(t, overrides = {}) {
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test("G28 destaca a data prevista conforme os dias de calendário até o vencimento", async t => {
+  const fixtures = [
+    { id: "601", date: "2026-10-28", tone: "future", deadline: "VENCE EM 6 DIAS" },
+    { id: "602", date: "27/10/2026", tone: "soon", deadline: "VENCE EM 5 DIAS" },
+    { id: "603", date: "2026-10-26", tone: "soon", deadline: "VENCE EM 4 DIAS" },
+    { id: "604", date: "2026-10-24T03:00:00Z", tone: "soon", deadline: "VENCE EM 2 DIAS" },
+    { id: "605", date: "2026-10-23", tone: "tomorrow", deadline: "VENCE EM 1 DIA" },
+    { id: "606", date: "2026-10-22", tone: "overdue", deadline: "VENCE HOJE" },
+    { id: "607", date: "2026-10-21", tone: "overdue", deadline: "VENCIDO HÁ 1 DIA" },
+  ];
+  const ctx = await setup(t, {
+    rows: fixtures.map(item => ({ id: item.id, hasAttachments: false, fields: {
+      ID: Number(item.id), FORNECEDOR: `FORNECEDOR ${item.id}`, STATUS: "PAGAMENTO PREVISTO",
+      [item.id === "602" ? "DATAPGTOPREVISTO" : "DATA PREVISTO PGTO"]: item.date,
+      FILIAL: "004 - EDIFÍCIO XAVANTE", QTD: 1, VALORTOTAL: 45,
+    } })),
+    now: () => new Date("2026-10-22T23:58:00-03:00"),
+  });
+  await ctx.gallery.open();
+  for (const item of fixtures) await t.test(item.deadline, () => {
+    const card = ctx.root().querySelector(`[data-item-id="${item.id}"]`);
+    const due = card.querySelector('[data-field="DATA PREVISTA PGTO"]');
+    assert.ok(due.classList.contains(`pg-due-date--${item.tone}`), `${item.date}: ${due.className}`);
+    assert.equal(card.querySelector(".pg-deadline").textContent, item.deadline);
+    assert.equal(card.querySelector('[data-field="FILIAL"]').className.includes("pg-due-date--"), false,
+      "o destaque é exclusivo da data, não do cartão inteiro");
+  });
+  assert.deepEqual(ctx.calls.map(([operation]) => operation), ["snapshot"], "destacar não altera registros");
+});
+
+test("G28 não atribui urgência a data vazia ou inválida", async t => {
+  const ctx = await setup(t, { rows: [null, "", "sem data", "2026-02-30", "30/02/2026", "2026-13-01",
+    "00/10/2026", "2026-02-30T03:00:00Z", "29/02/2027"].map((date, index) => ({
+    id: String(700 + index), hasAttachments: false, fields: {
+      ID: 700 + index, FORNECEDOR: "SEM VENCIMENTO", STATUS: "PAGAMENTO PREVISTO", DATAPGTOPREVISTO: date,
+    },
+  })) });
+  await ctx.gallery.open();
+  for (const card of ctx.root().querySelectorAll(".pg-card")) {
+    assert.equal(card.querySelector('[data-field="DATA PREVISTA PGTO"]').className.includes("pg-due-date--"), false);
+    assert.equal(card.querySelector(".pg-deadline"), null);
+  }
+});
+
+test("G28 aceita 29 de fevereiro em ano bissexto", async t => {
+  const ctx = await setup(t, { rows: [{ id: "720", hasAttachments: false, fields: {
+    ID: 720, FORNECEDOR: "ANO BISSEXTO", STATUS: "PAGAMENTO PREVISTO", DATAPGTOPREVISTO: "2028-02-29",
+  } }], now: () => new Date("2028-02-28T23:59:00-03:00") });
+  await ctx.gallery.open();
+  assert.ok(ctx.root().querySelector('[data-field="DATA PREVISTA PGTO"]').classList.contains("pg-due-date--tomorrow"));
+  assert.equal(ctx.root().querySelector(".pg-deadline").textContent, "VENCE EM 1 DIA");
+});
+
+test("G28 muda de amanhã para hoje na virada do dia em Brasília ao recarregar", async t => {
+  let current = new Date("2026-10-23T01:59:00Z"); // 22/10, 22:59 em Brasília.
+  const ctx = await setup(t, { rows: [{ id: "710", hasAttachments: false, fields: {
+    ID: 710, FORNECEDOR: "VENCIMENTO À MEIA-NOITE", STATUS: "PAGAMENTO PREVISTO",
+    DATAPGTOPREVISTO: "2026-10-23T03:00:00Z",
+    DATAPGTOAGENDADO: "2026-10-29", DATAEXECUCAOAGENDAMENTO: "2026-10-29",
+  } }], now: () => current });
+  await ctx.gallery.open();
+  const due = () => ctx.root().querySelector('[data-field="DATA PREVISTA PGTO"]');
+  assert.ok(due().classList.contains("pg-due-date--tomorrow"));
+  current = new Date("2026-10-23T03:01:00Z");
+  await ctx.gallery.reload();
+  assert.ok(due().classList.contains("pg-due-date--overdue"));
+  assert.match(ctx.root().querySelector(".pg-deadline").textContent, /VENCE HOJE/);
+  assert.equal(due().querySelector("dd").textContent, "23/10/2026");
+});
+
 function deferred() {
   let resolve, reject;
   const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
