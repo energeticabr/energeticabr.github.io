@@ -10266,6 +10266,38 @@ test('documento em sequência preserva novos arquivos e não ressuscita anexos j
   assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['new-row'], 'snapshot antigo não pode restaurar o arquivo consumido, mesmo com nomes iguais');
 });
 
+test('documento em sequência respeita a intenção congelada ao retomar por submeter sem adicionar', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const first = { id: 'frozen-row', fileName: 'documento.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/frozen-row' };
+  let attachments = [first];
+  h.store.ingestRemoteMessages([], { activeFlow, attachments });
+  h.client.getAttachments = async () => attachments;
+  const replies = [];
+  h.client.sendText = async payload => {
+    replies.push(payload.replyId);
+    if (replies.length === 1) return { status: 'processed', activeFlow, attachments,
+      results: [{ status: 'submission_failed' }], messages: [] };
+    if (payload.replyId === 'document_submit_final') {
+      attachments = [];
+      return { status: 'processed', activeFlow, attachments,
+        results: [{ status: 'awaiting_document_defaults' }],
+        messages: [{ type: 'poll', question: 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', options: [] }] };
+    }
+    assert.equal(payload.replyId, 'document_defaults_proceed');
+    return { status: 'processed', activeFlow, attachments, results: [{ status: 'awaiting_field' }],
+      messages: [{ type: 'poll', question: 'QUAL O TIPO DE DOCUMENTO?', options: [] }] };
+  };
+  await h.controller.sendText('Adicionar mais um', 'document_add_another');
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['frozen-row']);
+  assert.equal(await h.controller.sendText('Submeter sem adicionar mais', 'document_submit_final'), true);
+  assert.deepEqual(h.store.getState().attachments, [], 'o checkpoint confirmou a linha e manteve a intenção de adicionar outro');
+  assert.equal(await h.controller.sendText('Prosseguir sem editar', 'document_defaults_proceed'), true);
+  assert.deepEqual(replies, ['document_add_another', 'document_submit_final', 'document_defaults_proceed']);
+});
+
 for (const failure of ['network', 'submission_failed']) test(`documento em sequência conserva a bandeja após falha ${failure} e só limpa no retry confirmado`, async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());

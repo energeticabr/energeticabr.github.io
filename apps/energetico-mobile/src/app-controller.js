@@ -762,7 +762,8 @@ function hasCompletedSubmission(result = {}) {
 
 function hasPostedDocumentContinuation(result, previousFlow, command) {
   return previousFlow?.id === "document" && result.activeFlow?.id === "document"
-    && ["document_add_another", "retry_submission", "retry_after_error", "confirm_yes", "continuar", "resume"]
+    && ["document_add_another", "document_submit_final", "retry_submission", "retry_after_error",
+      "confirm_yes", "continuar", "resume"]
       .includes(String(command || "").trim().toLowerCase())
     && Array.isArray(result.attachments)
     && result.results?.at(-1)?.status === "awaiting_document_defaults";
