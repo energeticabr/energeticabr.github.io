@@ -272,21 +272,44 @@ test('an old attachment snapshot cannot populate a fresh session even when auth 
   assert.equal(h.store.getState().attachments.length, 0, 'discard the old snapshot before it writes to the new session');
 });
 
-for (const sameAccount of [false, true]) test(`a late automatic compression cannot write or transition after reauthentication (${sameAccount ? 'same account' : 'other account'})`, async t => {
+for (const sameAccount of [false, true]) test(`a late requested compression cannot write or transition after reauthentication (${sameAccount ? 'same account' : 'other account'})`, async t => {
   const h = controllerHarness(t, { historyMode: 'current-step' }); await h.controller.start(); let finishCompression;
   const large = { name: 'comprovante.pdf', type: 'application/pdf', size: 6400000 };
   h.client.compressAttachment = () => new Promise(resolve => { finishCompression = resolve; });
   h.store.queueFiles([large]);
   const pending = h.controller.uploadFile(h.store.getState().pendingFiles[0].id); await settle();
   h.uploads[0].resolve({ status: 'processed', activeFlow: { id: 'document_create', title: 'ADICIONAR UM NOVO DOCUMENTO' },
-    messages: [{ type: 'text', text: 'Anexo recebido com sucesso' }, { type: 'text', text: 'Pergunta antiga da conta A' }],
+    messages: [{ type: 'text', text: 'Pergunta antiga da conta A' }],
     attachments: [{ ...receipt.attachments[0], fileName: large.name, mimeType: large.type, size: large.size }] });
+  assert.equal(await pending, true);
+  assert.equal(finishCompression, undefined, 'upload size cannot request compression');
+  const requested = h.events.get('compress-attachment')({ fileId: 'uploaded' });
   await settle(); assert.equal(typeof finishCompression, 'function', JSON.stringify(h.store.getState()));
   await h.events.get('sign-out')();
   if (!sameAccount) h.auth.signIn = async () => ({ homeAccountId: 'OTHER', name: 'Outra conta' });
   await h.events.get('sign-in')();
   finishCompression({ status: 'processed', attachments: receipt.attachments, messages: [{ type: 'text', text: 'Compactação antiga da conta A' }] });
-  assert.equal(await pending, false);
+  assert.equal(await requested, false);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  assert.equal(h.store.getState().attachments.length, 0);
+  assert.ok(!h.store.getState().messages.some(m => /antiga da conta A/.test(m.text || '')));
+});
+
+for (const sameAccount of [false, true]) test(`a heavy upload cannot leak its delayed form transition after reauthentication (${sameAccount ? 'same account' : 'other account'})`, async t => {
+  const h = controllerHarness(t, { historyMode: 'current-step' }); await h.controller.start();
+  let compressions = 0;
+  h.client.compressAttachment = async () => { compressions++; return { status: 'processed', messages: [] }; };
+  const large = { name: 'comprovante.pdf', type: 'application/pdf', size: 6400000 };
+  h.store.queueFiles([large]);
+  const pending = h.controller.uploadFile(h.store.getState().pendingFiles[0].id); await settle();
+  h.uploads[0].resolve({ status: 'processed', activeFlow: { id: 'document_create', title: 'ADICIONAR UM NOVO DOCUMENTO' },
+    messages: [{ type: 'text', text: 'Anexo recebido com sucesso' }, { type: 'text', text: 'Pergunta antiga da conta A' }],
+    attachments: [{ ...receipt.attachments[0], fileName: large.name, mimeType: large.type, size: large.size }] });
+  assert.equal(await pending, true);
+  assert.equal(compressions, 0);
+  await h.events.get('sign-out')();
+  if (!sameAccount) h.auth.signIn = async () => ({ homeAccountId: 'OTHER', name: 'Outra conta' });
+  await h.events.get('sign-in')();
   await new Promise(resolve => setTimeout(resolve, 1100));
   assert.equal(h.store.getState().attachments.length, 0);
   assert.ok(!h.store.getState().messages.some(m => /antiga da conta A/.test(m.text || '')));
