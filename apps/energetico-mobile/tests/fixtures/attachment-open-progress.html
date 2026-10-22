@@ -10,8 +10,10 @@ import { createSharePointRestTransport } from '../../../../portal/data/attachmen
 import { createAttachmentPreviewController } from '../../../../portal/ui/attachments-panel.js';
 
 const params = new URLSearchParams(location.search), channel = params.get('channel') || 'VM', mode = params.get('mode');
-const endpoint = '/qa/download' + location.search, seen = []; let layout, completeBeforeRendered = false, cancelled = false;
-const preview = createAttachmentPreview({ exportMedia: async () => {} });
+const endpoint = '/qa/download' + location.search, seen = []; let layout, completeBeforeRendered = false, cancelled = false, loadedNativeFrame;
+const watchedFrames = new WeakSet();
+const preview = createAttachmentPreview({ exportMedia: async () => {},
+  ...(mode === 'native' ? { canEmbedPdf: () => true, loadPdfPreview: async () => { throw new Error('Fallback nativo — teste'); } } : {}) });
 const client = createChatClient({ apiBaseUrl: 'https://api.example.test', tokenProvider: async () => 'local-test-only',
   fetchImpl: (_, options) => fetch(endpoint, options) });
 const transport = createSharePointRestTransport({ tokenProvider: async () => 'local-test-only',
@@ -20,8 +22,13 @@ const remote = options => transport.request({ host: 'tenant.sharepoint.com', pat
 const editor = createAttachmentPreviewController({ files: [{ name: 'PDF de teste.pdf', mimeType: 'application/pdf' }],
   actions: { canView: () => true, downloadAttachment: (_, options) => remote(options) } });
 const badge = () => document.querySelector('.attachment-preview-dialog [role="progressbar"]');
-const rendered = () => Boolean(document.querySelector('.attachment-preview-pdf-canvas'));
+const rendered = () => Boolean(document.querySelector('.attachment-preview-pdf-canvas') || loadedNativeFrame?.isConnected);
 function sample() {
+  const frame = document.querySelector('.attachment-preview-pdf-native');
+  if (frame && !watchedFrames.has(frame)) {
+    watchedFrames.add(frame);
+    frame.addEventListener('load', () => { loadedNativeFrame = frame; sample(); }, { once: true, capture: true });
+  }
   const node = badge(), value = node?.textContent;
   if (value && seen.at(-1) !== value) seen.push(value);
   if (value === '100%' && !rendered()) completeBeforeRendered = true;
@@ -51,6 +58,7 @@ async function open() {
   });
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); sample();
   document.documentElement.dataset.layout = JSON.stringify({ seen, layout, pageRendered: rendered(), completeBeforeRendered,
+    nativeReady: Boolean(loadedNativeFrame?.isConnected),
     closed: !document.querySelector('.attachment-preview-dialog')?.open,
     failed: !badge() && document.querySelector('.attachment-preview-dialog')?.textContent.includes('Não foi possível') });
 }

@@ -23,8 +23,8 @@ test('opening attachments paints measured download progress next to spinner, the
     assert.ok(data.seen.includes('50%'), JSON.stringify(data));
     assert.ok(data.seen.includes('99%'), JSON.stringify(data));
     assert.equal(data.seen.at(-1), '100%');
-    assert.equal(data.pageRendered, true);
-    assert.equal(data.completeBeforeRendered, false);
+    assert.equal(data.pageRendered, true, JSON.stringify(data));
+    assert.equal(data.completeBeforeRendered, false, JSON.stringify(data));
     assert.deepEqual(data.layout, { adjacent: true, aligned: true, contained: true, overflow: false },
       JSON.stringify({ channel, width, colorScheme, data }));
   }
@@ -35,13 +35,20 @@ test('opening attachments paints measured download progress next to spinner, the
 test('unknown totals and failed/cancelled opening never fabricate completion in the real browser', { timeout: 90000 }, async t => {
   if (!browser) return t.skip('Chrome/Edge unavailable');
   const server = await startAttachmentDownloadServer(); t.after(() => server.close());
-  for (const mode of ['unknown', 'denied', 'cancel']) {
+  for (const mode of ['unknown', 'denied', 'cancel', 'native']) {
     const { stdout } = await runBrowserLayout(browser, { width: 390, height: 844,
       url: `${server.url}/tests/fixtures/attachment-open-progress.html?channel=VM&mode=${mode}` });
     const dom = new JSDOM(stdout), data = JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
-    assert.equal(data.seen.includes('100%'), mode === 'unknown', JSON.stringify(data));
+    assert.equal(data.seen.includes('100%'), mode === 'unknown' || mode === 'native', JSON.stringify(data));
+    if (mode === 'native') {
+      assert.equal(data.pageRendered, true, JSON.stringify(data));
+      assert.equal(data.nativeReady, true, 'native fallback must emit its real iframe load event');
+      assert.equal(data.completeBeforeRendered, false);
+      assert.ok(data.seen.indexOf('99%') >= 0 && data.seen.indexOf('99%') < data.seen.indexOf('100%'), JSON.stringify(data));
+      assert.equal(data.seen.at(-1), '100%'); continue;
+    }
     if (mode === 'unknown') {
-      assert.ok(data.seen.includes('—%')); assert.equal(data.pageRendered, true);
+      assert.ok(data.seen.includes('—%')); assert.equal(data.pageRendered, true, JSON.stringify(data));
     } else if (mode === 'cancel') assert.equal(data.closed, true);
     else assert.equal(data.failed, true);
   }
