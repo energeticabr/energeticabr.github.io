@@ -1,0 +1,30 @@
+{
+  "files": {
+    "worker/payment_provision_flow.py": {
+      "after": "2e2f21ddfd4f831fb610115fa11e9dd94db4604ff8df2b30aea5b83115ce25c0",
+      "before": "859bbef7c96938b057cc93101d369298e7dda2baae9d94e573b474de0ae5e3c5"
+    },
+    "worker/payment_provision_group.py": {
+      "after": "beafa846dd1f7dfb402c41cd995baedc7a33ac23a9b3112fdb48bbbda1ff6909",
+      "before": "5bce7fcb11e77bd643591874b1efc04ac7fecdd788ea387fa8a8b7d0ecb5d27c"
+    },
+    "worker/workflow.py": {
+      "after": "93c939e16fea9ab361b7970261c0f24eacd5cb87cc810ed6bbfc354ddd144d90",
+      "before": "27494ebe5989110e3e0df5c64e53bdb4fad88bb3862dc74da5afdcbd112ab444"
+    }
+  },
+  "inputs": {
+    "deploy.py": "43d401949d81aa86e964c51d5c1cebe47f2a2f235dcd2a26bba5476b0952a1cd",
+    "deploy.sh": "eb1fe8cbabff80e95a0ee5c0eac783194cf0988ab6a71b29a20b2e1c71d8190f",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "patch_backend.py": "af95e1ab6e59f7b2291e0ad67429c2e5bc214239c4352c0c0d8c4e92153f96d6",
+    "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
+    "source-files.tar": "16da3fa0692edc72cc615237f5a85c32527ab208ad3d37f80634c49452181db4",
+    "source.patch": "c6d5381e712ebe36a3a4170be25753fd4aa422cba607302f54ad6baabf4d5ad0"
+  },
+  "mirror": {
+    "worker/payment_provision_flow.py": "7c4b4984fef7479b2d2c74fa1e4cb751d86f47cf783137495e4ee7cc4c0cd3ff",
+    "worker/payment_provision_group.py": "5bce7fcb11e77bd643591874b1efc04ac7fecdd788ea387fa8a8b7d0ecb5d27c",
+    "worker/workflow.py": "aac994185f7b6b540f32497ba79a87bb692509eb087db7c7e4598413d2a3aefd"
+  }
+}

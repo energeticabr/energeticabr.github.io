@@ -1,0 +1,266 @@
+--- a/worker/payment_provision_group.py
++++ b/worker/payment_provision_group.py
+@@ -6,0 +7 @@
++import copy
+@@ -32,2 +33,4 @@
+-    if isinstance(raw, Decimal):
+-        value = raw
++    if isinstance(raw, (Decimal, float)):
++        # JSON numeric values may use scientific notation for small units.
++        # User-entered strings still follow the ordinary decimal-input rules.
++        value = raw if isinstance(raw, Decimal) else Decimal(str(raw))
+@@ -99,0 +103,86 @@
++
++
++def provision_money(value):
++    """Totals are BRL amounts; unit prices retain their numeric precision."""
++    with localcontext() as context:
++        context.prec = max(50, value.adjusted() + 4)
++        return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
++
++
++def restore_provision_discount(lines):
++    restored = copy.deepcopy(lines)
++    for line in restored:
++        adjustment = line.pop("provision_discount_adjustment", None)
++        if not adjustment:
++            continue
++        fields = line.setdefault("fields", {})
++        if _number(fields.get("VALOR TOTAL"), "VALOR TOTAL") != _number(
++                adjustment["adjusted_unit_value"], "VALOR TOTAL"):
++            # An explicit price edit is already a new original, never overwrite it.
++            continue
++        fields["VALOR TOTAL"] = adjustment["original_unit_value"]
++        display = line.setdefault("display_values", {})
++        if adjustment["display_present"]:
++            display["VALOR TOTAL"] = adjustment["original_unit_display"]
++        else:
++            display.pop("VALOR TOTAL", None)
++        answers = line.setdefault("answers", {})
++        if adjustment["answer_present"]:
++            answers["valor_unitario_pagamento"] = adjustment["original_unit_answer"]
++        else:
++            answers.pop("valor_unitario_pagamento", None)
++    return restored
++
++
++def apply_provision_discount(lines, raw_discount):
++    """A common unit-price factor, excluding freight, at SharePoint precision.
++
++    Return new snapshots only after validating the entire calculation. Never
++    round each unit to cents: quantities can require fractional unit prices.
++    """
++    original = restore_provision_discount(lines)
++    discount = _number(raw_discount, "DESCONTO GLOBAL", positive=True)
++    if discount != provision_money(discount):
++        raise ValueError("Informe o desconto em reais, com no máximo duas casas decimais")
++    amounts = [_amounts(line.get("fields") or {}) for line in original]
++    with localcontext() as context:
++        context.prec = 60
++        products = _sum(quantity * unit for quantity, unit, _ in amounts)
++        gross = _sum(_line_total(*values) for values in amounts)
++        if discount > products or products <= 0:
++            raise ValueError("O desconto não pode exceder o valor total dos produtos, sem o frete")
++        factor = (products - discount) / products
++        result = copy.deepcopy(original)
++        for line, (quantity, unit, freight) in zip(result, amounts):
++            # Number/Currency fields cross the same IEEE-754 boundary in clients.py.
++            adjusted = _number(Decimal(str(float(unit * factor))), "VALOR TOTAL")
++            fields, display, answers = (line.setdefault(key, {})
++                                        for key in ("fields", "display_values", "answers"))
++            line["provision_discount_adjustment"] = {
++                "original_unit_value": _canonical(unit),
++                "adjusted_unit_value": _canonical(adjusted),
++                "display_present": "VALOR TOTAL" in display,
++                "original_unit_display": display.get("VALOR TOTAL"),
++                "answer_present": "valor_unitario_pagamento" in answers,
++                "original_unit_answer": answers.get("valor_unitario_pagamento"),
++            }
++            fields["VALOR TOTAL"] = _canonical(adjusted)
++            display["VALOR TOTAL"] = _currency(adjusted)
++            answers["valor_unitario_pagamento"] = _canonical(adjusted)
++        net = provision_money(gross - discount)
++        actual = provision_money(_sum(
++            _line_total(
++                _number(Decimal(str(float(quantity))), "QTD", positive=True),
++                _number(line["fields"]["VALOR TOTAL"], "VALOR TOTAL"),
++                _number(Decimal(str(float(freight))), "FRETE"),
++            )
++            for line, (quantity, _unit, freight) in zip(result, amounts)
++        ))
++        preview_total = provision_money(_sum(provision_line_total(line["fields"]) for line in result))
++        if actual != net or preview_total != net:
++            raise ValueError("Não foi possível representar esse desconto com a precisão dos valores unitários")
++        return result, {
++            "enabled": True, "decision_complete": True,
++            "amount": _canonical(discount), "percentage": _canonical(discount * 100 / products),
++            "original_total": _canonical(provision_money(gross)), "net_total": _canonical(net),
++        }
+@@ -200,0 +290,2 @@
++    if (state.get("provision_discount") or {}).get("enabled"):
++        total = provision_money(total)
+--- a/worker/payment_provision_flow.py
++++ b/worker/payment_provision_flow.py
+@@ -5,0 +6 @@
++import json
+@@ -12 +13,2 @@
+-    from .payment_provision_group import _number, provision_parent_fields, provision_preview
++    from .payment_provision_group import (_number, _canonical, _currency, _sum, provision_line_total,
++        provision_money, apply_provision_discount, restore_provision_discount, provision_parent_fields, provision_preview)
+@@ -16 +18,2 @@
+-    from payment_provision_group import _number, provision_parent_fields, provision_preview
++    from payment_provision_group import (_number, _canonical, _currency, _sum, provision_line_total,
++        provision_money, apply_provision_discount, restore_provision_discount, provision_parent_fields, provision_preview)
+@@ -23,0 +27 @@
++    "asking_provision_discount", "entering_provision_discount",
+@@ -31,0 +36 @@
++    "provision_discount",
+@@ -35,0 +41,58 @@
++    def _provision_discount_eligible(self, state):
++        return (self._provision_multiple(state) and len(state.get("provision_lines") or []) > 1
++                and not state.get("provision_commit") and state.get("stage") not in {"notifying", "completed"})
++
++    def _provision_discount_identity(self, state):
++        metadata = state.get("provision_discount") or {}
++        payload = [metadata.get("enabled"), metadata.get("amount"),
++                   [line.get("fields", {}) for line in state.get("provision_lines", [])]]
++        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
++
++    def _provision_sync_discount_current(self, state):
++        if not state.get("provision_current_saved") or not state.get("provision_lines"):
++            return
++        last = state["provision_lines"][-1]
++        for bucket, key in (("fields", "VALOR TOTAL"), ("display_values", "VALOR TOTAL"),
++                            ("answers", "valor_unitario_pagamento")):
++            destination = state.setdefault(bucket, {})
++            if key in last.get(bucket, {}):
++                destination[key] = copy.deepcopy(last[bucket][key])
++            else:
++                destination.pop(key, None)
++
++    def _provision_prepare_discount_edit(self, state):
++        if self._provision_discount_eligible(state):
++            state["provision_lines"] = restore_provision_discount(state["provision_lines"])
++            self._provision_sync_discount_current(state)
++
++    def _provision_discount_before_review(self, state, etag):
++        if not self._provision_discount_eligible(state):
++            return None
++        self._provision_first_freight_only(state)
++        metadata = state.get("provision_discount") or {}
++        if not metadata.get("decision_complete"):
++            return self._prompt_provision_question(state, etag, "asking_provision_discount")
++        if metadata.get("enabled"):
++            try:
++                lines, updated = apply_provision_discount(state["provision_lines"], metadata["amount"])
++            except ValueError as exc:
++                self._send_text(state, str(exc))
++                self._provision_prepare_discount_edit(state)
++                return self._prompt_provision_question(state, etag, "entering_provision_discount")
++            updated["review_identity"] = metadata.get("review_identity")
++            state["provision_lines"], state["provision_discount"] = lines, updated
++            self._provision_sync_discount_current(state)
++        return None
++
++    def _provision_discount_before_commit(self, state, etag):
++        if not self._provision_discount_eligible(state):
++            return None
++        pending = self._provision_discount_before_review(state, etag)
++        if pending is not None:
++            return pending
++        metadata = state.get("provision_discount") or {}
++        if metadata.get("enabled") and metadata.get("review_identity") != self._provision_discount_identity(state):
++            self._send_text(state, "CONFIRA A PRÉVIA ATUALIZADA DO DESCONTO ANTES DE CONFIRMAR.")
++            return self._summarize_and_confirm(state, etag)
++        return None
++
+@@ -149,0 +213,8 @@
++        if stage == "asking_provision_discount":
++            return {"key": "aplicar_desconto_global_provisao", "kind": "selection",
++                    "prompt": "💸 DESEJA APLICAR UM DESCONTO GLOBAL SOBRE O VALOR DA PROVISÃO?",
++                    "source": {"options": [{"id": 1, "title": "✅ SIM", "value": "SIM"},
++                                            {"id": 2, "title": "❌ NÃO", "value": "NAO"}]}}
++        if stage == "entering_provision_discount":
++            return {"key": "valor_desconto_global_provisao", "kind": "number", "number_style": "currency",
++                    "prompt": "💰 QUAL É O VALOR DO DESCONTO GLOBAL? Informe o valor em reais."}
+@@ -193,0 +265,7 @@
++        if state["stage"] == "entering_provision_discount":
++            state["options"] = []
++            state.pop("option_pagination", None)
++            self._send_input_question(state, step["prompt"])
++            etag = self._save(state, etag)
++            return {"status": "awaiting_provision_discount", "field": step["key"],
++                    "batch_id": state["batch_id"], "etag": etag}
+@@ -217,0 +296,4 @@
++            adjustment = lines[-1].get("provision_discount_adjustment")
++            if (adjustment and _number(snapshot["fields"].get("VALOR TOTAL"), "VALOR TOTAL")
++                    == _number(adjustment["adjusted_unit_value"], "VALOR TOTAL")):
++                snapshot["provision_discount_adjustment"] = copy.deepcopy(adjustment)
+@@ -231,0 +314,3 @@
++        pending = self._provision_discount_before_review(state, etag)
++        if pending is not None:
++            return pending
+@@ -243,0 +329,12 @@
++        if state["stage"] == "entering_provision_discount":
++            self._mark_processed(state, event["message_id"])
++            try:
++                lines, metadata = apply_provision_discount(state["provision_lines"],
++                        (event.get("text") or event.get("reply_id") or "").strip())
++            except ValueError as exc:
++                self._send_text(state, str(exc))
++                return self._prompt_provision_question(state, etag)
++            state["provision_lines"], state["provision_discount"] = lines, metadata
++            self._provision_sync_discount_current(state)
++            state["stage"] = "selecting_fields"
++            return self._prompt_next_or_summary(state, etag)
+@@ -251 +348,6 @@
+-        if stage == "choosing_provision_type":
++        if stage == "asking_provision_discount":
++            if value == "SIM":
++                return self._prompt_provision_question(state, etag, "entering_provision_discount")
++            self._provision_prepare_discount_edit(state)
++            state["provision_discount"] = {"enabled": False, "decision_complete": True, "amount": "0"}
++        elif stage == "choosing_provision_type":
+@@ -324,0 +427,5 @@
++        discount = state.get("provision_discount") or {}
++        if discount.get("enabled"):
++            rows.append({"label": "TOTAL ORIGINAL", "value": _currency(_number(discount["original_total"], "TOTAL"))})
++            rows.append({"label": "DESCONTO GLOBAL", "value": _currency(_number(discount["amount"], "DESCONTO"))
++                         + " · " + _canonical(_number(discount["percentage"], "PERCENTUAL")) + "% nos produtos"})
+@@ -397,0 +505,2 @@
++            if progress.get("global_discount"):
++                total = _canonical(provision_money(_number(total, "VALORTOTAL")))
+@@ -443,0 +553,3 @@
++            pending = self._provision_discount_before_commit(state, etag)
++            if pending is not None:
++                return pending
+@@ -454,0 +567,3 @@
++            discounted = bool((state.get("provision_discount") or {}).get("enabled"))
++            if discounted:
++                parent_fields["VALORTOTAL"] = _canonical(provision_money(_number(parent_fields["VALORTOTAL"], "TOTAL")))
+@@ -460,0 +576 @@
++                "global_discount": discounted,
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -28819,0 +28820,3 @@
++        provision_discount = self._provision_discount_before_review(state, etag)
++        if provision_discount is not None:
++            return provision_discount
+@@ -28836,0 +28840,3 @@
++        if (state.get("flow") == "payment" and not state.get("provision_commit")
++                and (state.get("provision_discount") or {}).get("enabled")):
++            state["provision_discount"]["review_identity"] = self._provision_discount_identity(state)
+@@ -29315,0 +29322,3 @@
++            discount_result = self._provision_discount_before_commit(state, etag)
++            if discount_result is not None:
++                return discount_result
+@@ -29897,0 +29907,3 @@
++        if self._provision_discount_eligible(state):
++            options.append({"id": "edit_provision_discount", "title": "💸 DESCONTO GLOBAL",
++                            "value": "__edit_provision_discount__"})
+@@ -30801,0 +30814,5 @@
++        if selected["value"] == "__edit_provision_discount__":
++            self._provision_prepare_discount_edit(state)
++            state.setdefault("provision_discount", {}).pop("decision_complete", None)
++            return self._prompt_provision_question(state, etag, "asking_provision_discount")
++        self._provision_prepare_discount_edit(state)

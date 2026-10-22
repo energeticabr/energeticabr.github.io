@@ -1,0 +1,27 @@
+name: Backend — desconto global da provisão
+
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/provision-global-discount/**'
+      - '.github/workflows/backend-provision-discount.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/provision-global-discount/**'
+      - '.github/workflows/backend-provision-discount.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validar pacote e instalação segura sem dados reais
+        run: python -B -m unittest discover -s backend-patches/provision-global-discount -v
