@@ -16,7 +16,7 @@ test('provision summary fits phone, tablet and desktop with scrollable details a
     server: { host: '127.0.0.1', port: 0 }, logLevel: 'silent' });
   try {
     await server.listen();
-    for (const [width, height] of [[390, 844], [1024, 768], [1440, 900]]) {
+    for (const [width, height] of [[320, 740], [390, 844], [1024, 768], [1440, 900]]) {
       const result = await runBrowserLayout(browser, { width, height,
         url: 'http://127.0.0.1:' + server.httpServer.address().port + '/tests/fixtures/provision-summary.html' });
       const dom = new JSDOM(result.stdout);
@@ -39,9 +39,15 @@ test('provision summary fits phone, tablet and desktop with scrollable details a
       }
       assert.ok(layout.expanded.trayScrollHeight > layout.expanded.trayClientHeight);
       assert.equal(layout.lastLineReachable, true);
+      const alternatingBackgrounds = ['rgb(255, 255, 255)', 'rgb(232, 243, 255)',
+        'rgb(255, 255, 255)', 'rgb(232, 243, 255)'];
+      assert.deepEqual(layout.expanded.entryBackgrounds, alternatingBackgrounds,
+        'consecutive provision lines alternate white and light blue');
       assert.equal(layout.sameBatch.open, true);
       assert.equal(layout.sameBatch.scroll, layout.sameBatch.previousScroll);
       assert.equal(layout.sameBatch.composerPreserved, true);
+      assert.deepEqual(layout.sameBatch.entryBackgrounds, alternatingBackgrounds,
+        'alternating line colors survive the next conversation render');
       assert.deepEqual(layout.changedBatch, { open: false, scroll: 0 });
     }
   } finally { await server.close(); }
