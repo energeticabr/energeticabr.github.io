@@ -8222,6 +8222,71 @@ test("anexo grande abre a prévia de compactação depois de ser confirmado", as
   h.controller.stop();
 });
 
+for (const [phase, options] of [
+  ["oferta", ["compress_attachments_yes", "compress_attachments_no", "compress_all_attachments"]],
+  ["nível", ["compression_level_low", "compression_level_medium", "compression_level_high", "compression_level_very_high", "compress_attachments_no"]],
+  ["prévia", ["use_compressed_attachment", "request_intermediate_attachment", "use_original_attachment"]],
+  ["prévia intermediária", ["use_intermediate_attachment", "use_compressed_attachment", "use_original_attachment"]],
+  ["portal", ["attachment_compression_level_high", "attachment_compression_use_original"]],
+]) for (const receipt of [false, true]) {
+  test(`upload aceito com ${phase} de compressão ${receipt ? "após recibo" : "direta"} não inicia outra compactação nem exibe falso erro`, async t => {
+    const h = makeHarness({ historyMode: "current-step" });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    const file = { name: "documento-pesado.pdf", size: 12_800_000, type: "application/pdf" };
+    const attachment = { id: "accepted", fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: "/api/portal-media/accepted" };
+    const activeFlow = { id: "supplies", title: "SUPRIMENTOS", contextId: "supplies:upload" };
+    const prompt = { type: "poll", question: "ANEXO 1/2 — DESEJA COMPRIMIR?", options: options.map(id => ({ id, reply: id, label: id })) };
+    h.native.pickDocuments = async () => [file];
+    h.client.sendFile = async () => ({ status: "processed", activeFlow, attachments: [attachment],
+      messages: receipt ? [{ type: "text", text: "Anexo recebido com sucesso." }, prompt] : [prompt] });
+    h.client.compressAttachment = async id => {
+      h.chatCalls.push(["compress-attachment", id]);
+      throw new Error("O anexo não está mais disponível neste fluxo");
+    };
+    await h.view.emit("pick-files");
+    if (receipt) await new Promise(resolve => setTimeout(resolve, 1050));
+    assert.equal(h.view.renders.some(state => Boolean(state.error)), false, "a second compression must not turn a successful upload into an error");
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), []);
+    assert.equal(h.store.getState().pendingFiles.length, 0);
+    assert.equal(h.store.getState().attachments.length, 1);
+    assert.equal(h.store.getState().attachments[0].id, attachment.id);
+    assert.equal(h.store.getState().activeFlow.contextId, activeFlow.contextId);
+    assert.equal(h.store.getState().messages.at(-1).question, prompt.question);
+    assert.deepEqual(h.store.getState().messages.at(-1).options, prompt.options);
+    if (phase !== "portal") {
+      const replyId = options.find(id => /(?:_no|original_attachment)$/.test(id));
+      await h.view.emit("select-reply", { replyId, label: "MANTER ORIGINAL" });
+      assert.deepEqual(h.chatCalls.at(-1), ["text", { text: "MANTER ORIGINAL", replyId }]);
+    }
+  });
+}
+
+test("compactação manual de anexo realmente indisponível continua exibindo o erro", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow: { id: "supplies", title: "SUPRIMENTOS" }, attachments: [
+    { id: "missing", fileName: "indisponivel.pdf", mimeType: "application/pdf", size: 8_000_000, mediaUrl: "/api/portal-media/missing" },
+  ] });
+  h.client.compressAttachment = async () => { throw new Error("O anexo não está mais disponível neste fluxo"); };
+  assert.equal(await h.view.emit("compress-attachment", { fileId: "missing" }), false);
+  assert.match(h.view.renders.at(-1).error, /O anexo não está mais disponível neste fluxo/);
+});
+
+test("upload pesado que realmente falhou continua exibindo o erro e não oferece compactação", async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  h.native.pickDocuments = async () => [{ name: "falhou.pdf", size: 12_800_000, type: "application/pdf" }];
+  h.client.sendFile = async () => { throw new Error("Falha real no envio"); };
+  h.client.compressAttachment = async () => { h.chatCalls.push(["compress-attachment"]); };
+  await h.view.emit("pick-files");
+  assert.equal(h.store.getState().attachments.length, 0);
+  assert.match(h.view.renders.at(-1).error, /Falha real no envio/);
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), []);
+});
+
 test("menu de níveis aguarda a escolha sem inventar prévia e mostra o candidato escolhido", async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());

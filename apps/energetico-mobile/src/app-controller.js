@@ -778,6 +778,14 @@ function hasAttachmentCompressionChoice(messages = []) {
   ));
 }
 
+function hasWorkflowAttachmentCompressionChoice(messages = []) {
+  return (Array.isArray(messages) ? messages : []).some(message => (
+    Array.isArray(message?.options)
+      && message.options.some(option => /^(?:compress_attachments_(?:yes|no)|compress_all_attachments|compression_level_(?:low|medium|high|very_high)|use_(?:original|compressed|intermediate)_attachment|request_intermediate_attachment)$/
+        .test(String(option?.reply || option?.id || "").trim().toLowerCase()))
+  ));
+}
+
 function attachmentCompressionDescriptor(item) {
   if (!item || typeof item !== "object") return null;
   const id = String(item.id || "").trim();
@@ -10835,7 +10843,12 @@ export function createAppController({
       || /\bdiario\s+de\s+obras?\b/.test(normalizedChoiceText(currentFlow?.title))) return false;
     const uploadedFile = uploadedItem?.file;
     if (!(Number(uploadedFile?.size) > AUTO_COMPRESSION_THRESHOLD_BYTES)) return false;
-    if (hasAttachmentCompressionChoice(result?.messages)) return false;
+    // The upload may already be waiting for the VM's own compression choice.
+    // Do not open the separate tray action against that pending file: it is
+    // not necessarily in the retained attachment collection yet. Its replies
+    // must still go through the normal workflow, not the portal side action.
+    if (hasAttachmentCompressionChoice(result?.messages)
+      || hasWorkflowAttachmentCompressionChoice(result?.messages)) return false;
     const state = store.getState();
     if (!state.activeFlow) return false;
     const candidates = state.attachments.filter(item => (
