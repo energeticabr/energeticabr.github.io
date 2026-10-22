@@ -12,6 +12,8 @@ import { createConversationStore } from "../src/chat/conversation-store.js";
 import { validateAttachment } from "../../../portal/data/attachments.js";
 import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
 import { createAttachmentPreview } from '../src/web/attachment-preview.js';
+import { createNativePorts } from '../src/native/native-ports.js';
+import { scannedPages } from './helpers/scanned-pages.mjs';
 
 function makeView() {
   const handlers = new Map();
@@ -121,6 +123,42 @@ for (const mode of ['scan','photo',null]) test(`camera mode ${mode} uses only th
   h.native.capturePhoto=async()=>[new File(['photo'],'photo.jpg',{type:'image/jpeg'})];
   await h.view.emit('capture-photo');
   assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),mode?[["file",`${mode}.jpg`]]:[]);
+});
+
+// A regression to queueing every scanner image, or merging a later check, must fail at sendFile.
+test('scanner batches reach the tray and upload as one separate PDF per check without merging existing photos',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  const fixture=await scannedPages([[[80,120,'red'],[160,90,'blue']],[[70,110,'green'],[90,130,'yellow'],[100,140,'purple']]]);
+  h.native.scanDocument=createNativePorts(fixture).scanDocument;
+  h.view.chooseCaptureMode=async()=>'scan';
+  h.store.queueFiles([new File(['existing'],'foto-anterior.jpg',{type:'image/jpeg'})]);
+  const uploaded=[];let finish;
+  h.client.sendFile=async file=>{uploaded.push(file);return new Promise(resolve=>finish=()=>resolve({status:'processed',messages:[],attachments:[]}));};
+  const first=h.view.emit('capture-photo');
+  for(let i=0;i<100&&!uploaded.length;i++)await new Promise(r=>setTimeout(r,10));
+  assert.equal(uploaded.length,1);
+  assert.deepEqual(h.store.getState().pendingFiles.map(item=>item.file.type),['image/jpeg','application/pdf']);
+  finish();await first;
+  h.client.sendFile=async file=>{uploaded.push(file);return {status:'processed',messages:[],attachments:[]};};
+  assert.equal(await h.view.emit('capture-photo'),true);
+  assert.equal(uploaded.length,2);
+  assert.ok(uploaded.every(file=>file.type==='application/pdf'));
+  assert.notEqual(uploaded[0].name,uploaded[1].name);
+  assert.equal((await PDFDocument.load(await uploaded[0].arrayBuffer())).getPageCount(),2);
+  assert.equal((await PDFDocument.load(await uploaded[1].arrayBuffer())).getPageCount(),3);
+  assert.ok(h.store.getState().pendingFiles.some(item=>item.file.name==='foto-anterior.jpg'),'não consumir outras fotos da bandeja');
+});
+
+test('invalid multi-page scan never queues or uploads partial images and reports a retryable error',async t=>{
+  const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
+  const fixture=await scannedPages([[[80,120,'red'],[160,90,'blue']]]);
+  fixture.bytes.set('file:///scan/1/2.jpg',Buffer.from('not-a-jpeg'));fixture.results[0].items[1].size=10;
+  h.native.scanDocument=createNativePorts(fixture).scanDocument;h.view.chooseCaptureMode=async()=>'scan';
+  assert.equal(await h.view.emit('capture-photo'),false);
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file'),[]);
+  assert.deepEqual(h.store.getState().pendingFiles,[]);
+  assert.ok(h.view.renders.some(state=>state.error||state.sessionError),'exibir falha de preparação sem enviar páginas soltas');
+  assert.deepEqual(fixture.released,[{id:'scan-session-1'}]);
 });
 
 test('camera selection is single-flight and never uploads after the session ends',async t=>{
