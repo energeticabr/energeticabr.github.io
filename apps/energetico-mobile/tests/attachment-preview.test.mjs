@@ -27,6 +27,295 @@ function setup(t, options = {}) {
   return { preview, documentRef, dom, revoked };
 }
 
+function setupAppendPreview(t, options = {}) {
+  return setup(t, {
+    loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: Promise.resolve(), destroy() {} }) }),
+    ...options,
+  });
+}
+
+function chooseAppend(documentRef, mode) {
+  const button = documentRef.querySelector('[data-preview-action="append-pages"]');
+  assert.ok(button, "a prévia autorizada deve oferecer o botão +");
+  assert.equal(button.hidden, false);
+  button.click();
+  const menu = documentRef.querySelector('.attachment-preview-append-menu');
+  assert.equal(menu.hidden, false);
+  menu.querySelector(`[data-preview-action="append-${mode}"]`).click();
+}
+
+const afterPreviewAction = () => new Promise(resolve => setImmediate(resolve));
+
+test('append menu offers files before camera and waits for a choice before invoking the scoped handler', async t => {
+  let calls = 0;
+  const { preview, documentRef } = setupAppendPreview(t);
+  await preview.open(new Blob(['image'], { type: 'image/jpeg' }), 'foto.jpg', { onAppendPages: () => { calls++; return null; } });
+  const header = documentRef.querySelector('.attachment-preview-header');
+  const button = header.querySelector('[data-preview-action="append-pages"]');
+  assert.ok(button, 'o botão + pertence ao cabeçalho');
+  assert.equal(button.hidden, false);
+  assert.equal(button.textContent.trim(), '+');
+  assert.match(button.getAttribute('aria-label'), /páginas|anexos/i);
+  assert.equal(button.getAttribute('aria-haspopup'), 'menu');
+  assert.equal(button.getAttribute('aria-expanded'), 'false');
+  button.click();
+  const menu = documentRef.getElementById(button.getAttribute('aria-controls'));
+  assert.equal(menu.hidden, false);
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  assert.deepEqual([...menu.querySelectorAll('[role="menuitem"]')].map(item => item.textContent), ['📎 ADICIONAR ANEXOS', '📷 FOTO/ ESCANEAR']);
+  assert.equal(calls, 0);
+  documentRef.querySelector('.attachment-preview-content').click();
+  assert.equal(menu.hidden, true, 'tocar fora do menu preserva a prévia');
+  assert.equal(documentRef.querySelector('dialog').open, true);
+});
+
+for (const mode of ['files', 'camera']) test(`append ${mode} passes the current file and replaces it only with the confirmed PDF`, async t => {
+  const original = new Blob(['original'], { type: mode === 'files' ? 'application/pdf' : 'image/jpeg' });
+  const name = mode === 'files' ? 'original.pdf' : 'original.jpg';
+  const replacement = new Blob(['%PDF-merged'], { type: 'application/pdf' });
+  const calls = [], exported = [];
+  const { preview, documentRef } = setupAppendPreview(t, { exportMedia: (blob, fileName) => { exported.push({ blob, fileName }); } });
+  await preview.open(original, name, { onAppendPages: async (selectedMode, context) => {
+    calls.push({ mode: selectedMode, ...context });
+    return { blob: replacement, fileName: 'acrescido.pdf' };
+  } });
+  chooseAppend(documentRef, mode);
+  await afterPreviewAction();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].mode, mode);
+  assert.equal(calls[0].blob, original);
+  assert.equal(calls[0].fileName, name);
+  assert.equal(typeof calls[0].signal?.aborted, 'boolean');
+  assert.equal(typeof calls[0].onProgress, 'function');
+  assert.equal(documentRef.querySelector('h2').textContent, 'acrescido.pdf');
+  assert.equal(documentRef.querySelector('dialog').open, true);
+  documentRef.querySelector('[data-preview-action="export"]').click();
+  await afterPreviewAction();
+  assert.deepEqual(exported, [{ blob: replacement, fileName: 'acrescido.pdf' }]);
+});
+
+test('repeat appends use the newly confirmed PDF and retain close and return-focus ownership', async t => {
+  const original = new Blob(['image'], { type: 'image/png' });
+  const first = new Blob(['%PDF-first'], { type: 'application/pdf' });
+  const second = new Blob(['%PDF-second'], { type: 'application/pdf' });
+  const calls = [];
+  let closed = 0, focusResolved = 0;
+  const { preview, documentRef } = setupAppendPreview(t);
+  const draft = documentRef.querySelector('textarea');
+  draft.focus();
+  await preview.open(original, 'foto.png', {
+    onClose: () => { closed++; },
+    resolveReturnFocus: () => { focusResolved++; return draft; },
+    onAppendPages: async (mode, { blob, fileName }) => {
+      calls.push({ mode, blob, fileName });
+      return calls.length === 1 ? { blob: first, fileName: 'primeiro.pdf' } : { blob: second, fileName: 'segundo.pdf' };
+    },
+  });
+  chooseAppend(documentRef, 'files'); await afterPreviewAction();
+  assert.equal(closed, 0, 'substituir o conteúdo não encerra a prévia');
+  chooseAppend(documentRef, 'camera'); await afterPreviewAction();
+  assert.deepEqual(calls, [
+    { mode: 'files', blob: original, fileName: 'foto.png' },
+    { mode: 'camera', blob: first, fileName: 'primeiro.pdf' },
+  ]);
+  assert.equal(documentRef.querySelector('h2').textContent, 'segundo.pdf');
+  assert.equal(closed, 0);
+  assert.equal(focusResolved, 0);
+  preview.close();
+  assert.equal(closed, 1);
+  assert.equal(focusResolved, 1);
+  assert.equal(documentRef.activeElement, draft);
+  assert.equal(draft.value, 'rascunho preservado');
+});
+
+for (const cancellation of ['null', 'AbortError']) test(`append cancellation via ${cancellation} retains the original and allows another choice`, async t => {
+  const calls = [];
+  const { preview, documentRef, dom, revoked } = setupAppendPreview(t);
+  const original = new Blob(['image'], { type: 'image/jpeg' });
+  await preview.open(original, 'foto.jpg', { onAppendPages: async (mode, context) => {
+    calls.push({ mode, ...context });
+    if (cancellation === 'AbortError') throw new DOMException('Cancelado', 'AbortError');
+    return null;
+  } });
+  const image = documentRef.querySelector('.attachment-preview-image');
+  image.dispatchEvent(new dom.window.Event('load'));
+  const previousStatus = documentRef.querySelector('.attachment-preview-status').textContent;
+  chooseAppend(documentRef, 'files'); await afterPreviewAction();
+  assert.equal(documentRef.querySelector('.attachment-preview-image'), image);
+  assert.deepEqual(revoked, []);
+  assert.equal(documentRef.querySelector('h2').textContent, 'foto.jpg');
+  assert.equal(documentRef.querySelector('.attachment-preview-status').textContent, previousStatus);
+  calls[0].onProgress({ percent: 100 });
+  assert.equal(documentRef.querySelector('.attachment-preview-status').textContent, previousStatus, 'progresso tardio não reativa o carregamento');
+  chooseAppend(documentRef, 'camera'); await afterPreviewAction();
+  assert.deepEqual(calls.map(call => [call.mode, call.blob, call.fileName]), [['files', original, 'foto.jpg'], ['camera', original, 'foto.jpg']]);
+});
+
+test('an append error leaves the original visible and retry still uses that original', async t => {
+  const original = new Blob(['image'], { type: 'image/jpeg' });
+  const replacement = new Blob(['%PDF-confirmed'], { type: 'application/pdf' });
+  const calls = [];
+  const { preview, documentRef, dom, revoked } = setupAppendPreview(t);
+  await preview.open(original, 'foto.jpg', { onAppendPages: async (mode, context) => {
+    calls.push({ mode, ...context });
+    if (calls.length === 1) throw new Error('Servidor indisponível');
+    return { blob: replacement, fileName: 'confirmado.pdf' };
+  } });
+  const image = documentRef.querySelector('.attachment-preview-image');
+  chooseAppend(documentRef, 'files'); await afterPreviewAction();
+  const status = documentRef.querySelector('.attachment-preview-status');
+  assert.equal(documentRef.querySelector('.attachment-preview-image'), image);
+  assert.deepEqual(revoked, []);
+  assert.match(status.textContent, /Servidor indisponível/);
+  assert.match(status.textContent, /tente novamente/i);
+  assert.equal(status.querySelector('.app-loading__spinner'), null);
+  const errorStatus = status.textContent;
+  image.dispatchEvent(new dom.window.Event('load'));
+  calls[0].onProgress({ percent: 100 });
+  assert.equal(status.textContent, errorStatus, 'eventos antigos não apagam o erro da tentativa');
+  chooseAppend(documentRef, 'files'); await afterPreviewAction();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].blob, original);
+  assert.equal(documentRef.querySelector('h2').textContent, 'confirmado.pdf');
+  assert.deepEqual(revoked, ['blob:preview-1']);
+});
+
+test('cancelled append restores the image readiness received while the choice was pending', async t => {
+  let finish;
+  const { preview, documentRef, dom } = setupAppendPreview(t);
+  await preview.open(new Blob(['image'], { type: 'image/png' }), 'foto.png', { onAppendPages: () => new Promise(resolve => { finish = resolve; }) });
+  chooseAppend(documentRef, 'files');
+  documentRef.querySelector('.attachment-preview-image').dispatchEvent(new dom.window.Event('load'));
+  finish(null); await afterPreviewAction();
+  assert.equal(documentRef.querySelector('.attachment-preview-status [role="progressbar"]').textContent, '100%');
+  assert.equal(documentRef.querySelector('.attachment-preview-status .app-loading__spinner'), null);
+});
+
+test('a malformed or non-PDF append result retains the original and offers retry', async t => {
+  const { preview, documentRef, revoked } = setupAppendPreview(t);
+  for (const result of [{ fileName: 'invalido.pdf' }, { blob: new Blob(['image'], { type: 'image/png' }), fileName: 'invalido.png' }]) {
+    await preview.open(new Blob(['image'], { type: 'image/jpeg' }), 'original.jpg', { onAppendPages: async () => result });
+    const image = documentRef.querySelector('.attachment-preview-image');
+    const revokedBefore = [...revoked];
+    chooseAppend(documentRef, 'files'); await afterPreviewAction();
+    assert.equal(documentRef.querySelector('.attachment-preview-image'), image);
+    assert.equal(documentRef.querySelector('h2').textContent, 'original.jpg');
+    assert.deepEqual(revoked, revokedBefore);
+    assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /PDF|inválido/i);
+    assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]').disabled, false);
+  }
+});
+
+test('busy append excludes duplicate choices, keeps Close available and caps progress until confirmation', async t => {
+  let finish, context, calls = 0;
+  const { preview, documentRef, dom } = setupAppendPreview(t);
+  await preview.open(new Blob(['image'], { type: 'image/png' }), 'foto.png', { onAppendPages: (_mode, options) => {
+    calls++; context = options;
+    return new Promise(resolve => { finish = resolve; });
+  } });
+  chooseAppend(documentRef, 'files');
+  const button = documentRef.querySelector('[data-preview-action="append-pages"]');
+  const status = documentRef.querySelector('.attachment-preview-status');
+  assert.equal(button.disabled, true);
+  assert.equal(documentRef.querySelector('.attachment-preview-close').disabled, false);
+  assert.equal(status.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '0');
+  assert.ok(status.querySelector('.app-loading__spinner'));
+  documentRef.querySelector('[data-preview-action="append-camera"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(calls, 1);
+  context.onProgress({ percent: null });
+  assert.equal(status.querySelector('[role="progressbar"]').hasAttribute('aria-valuenow'), false);
+  context.onProgress({ percent: 45 });
+  assert.equal(status.querySelector('[role="progressbar"]').textContent, '45%');
+  context.onProgress({ percent: 100 });
+  documentRef.querySelector('.attachment-preview-image').dispatchEvent(new dom.window.Event('load'));
+  assert.equal(status.querySelector('[role="progressbar"]').textContent, '99%');
+  assert.equal(documentRef.querySelector('h2').textContent, 'foto.png');
+  finish({ blob: new Blob(['%PDF-confirmed'], { type: 'application/pdf' }), fileName: 'confirmado.pdf' });
+  await afterPreviewAction();
+  assert.equal(documentRef.querySelector('h2').textContent, 'confirmado.pdf');
+  assert.equal(button.disabled, false);
+  assert.equal(status.querySelector('[role="progressbar"]').textContent, '100%');
+});
+
+for (const closing of [true, false]) for (const outcome of ['success', 'error']) test(`append ignores late ${outcome} after ${closing ? 'Close' : 'opening a different preview'}`, async t => {
+  let finish, fail, context;
+  const { preview, documentRef } = setupAppendPreview(t);
+  await preview.open(new Blob(['image'], { type: 'image/png' }), 'antigo.png', { onAppendPages: (_mode, options) => {
+    context = options;
+    return new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+  } });
+  chooseAppend(documentRef, 'camera');
+  if (closing) documentRef.querySelector('.attachment-preview-close').click();
+  else await preview.open(new Blob(['atual'], { type: 'text/plain' }), 'atual.txt');
+  assert.equal(context.signal.aborted, true);
+  const status = documentRef.querySelector('.attachment-preview-status');
+  const previousStatus = status.textContent;
+  context.onProgress({ percent: 100 });
+  if (outcome === 'success') finish({ blob: new Blob(['%PDF-stale'], { type: 'application/pdf' }), fileName: 'obsoleto.pdf' });
+  else fail(new Error('erro obsoleto'));
+  await afterPreviewAction();
+  assert.equal(status.textContent, previousStatus);
+  assert.equal(documentRef.querySelector('dialog').open, !closing);
+  assert.doesNotMatch(documentRef.querySelector('dialog').textContent, /obsoleto/);
+  if (!closing) {
+    assert.equal(documentRef.querySelector('h2').textContent, 'atual.txt');
+    assert.equal(documentRef.querySelector('pre').textContent, 'atual');
+  }
+});
+
+test('append action is absent in ordinary gallery, report and collection previews and does not leak from a previous open', async t => {
+  let calls = 0;
+  const { preview, documentRef } = setupAppendPreview(t);
+  const pdf = new Blob(['%PDF'], { type: 'application/pdf' });
+  await preview.open(pdf, 'autorizado.pdf', { onAppendPages: () => { calls++; return null; } });
+  assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]')?.hidden, false);
+  for (const open of [
+    () => preview.open(pdf, 'galeria.pdf'),
+    () => preview.open(pdf, 'relatorio.pdf', { layout: 'report-pdf' }),
+    () => preview.openCollection([{ source: pdf, fileName: 'colecao.pdf' }]),
+  ]) {
+    await open();
+    assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]').hidden, true);
+    documentRef.querySelector('[data-preview-action="append-files"]').click();
+    documentRef.querySelector('[data-preview-action="append-camera"]').click();
+  }
+  assert.equal(calls, 0);
+});
+
+test('append action waits for its source and rejects media or unsupported types even with a handler', async t => {
+  let finish, calls = 0;
+  const { preview, documentRef } = setupAppendPreview(t);
+  const onAppendPages = () => { calls++; return null; };
+  const opening = preview.open(new Promise(resolve => { finish = resolve; }), 'carregando.pdf', { onAppendPages });
+  assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]')?.hidden, true);
+  finish(new Blob(['%PDF'], { type: 'application/pdf' })); await opening;
+  assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]').hidden, false);
+  for (const [name, type] of [['a.mp4', 'video/mp4'], ['a.mp3', 'audio/mpeg'], ['a.txt', 'text/plain'], ['a.svg', 'image/svg+xml']]) {
+    await preview.open(new Blob(['data'], { type }), name, { onAppendPages });
+    assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]').hidden, true);
+    documentRef.querySelector('[data-preview-action="append-files"]').click();
+  }
+  assert.equal(calls, 0);
+});
+
+test('append menu supports arrow navigation and Escape without closing the preview', async t => {
+  const { preview, documentRef, dom } = setupAppendPreview(t);
+  await preview.open(new Blob(['%PDF'], { type: 'application/pdf' }), 'a.pdf', { onAppendPages: async () => null });
+  const button = documentRef.querySelector('[data-preview-action="append-pages"]');
+  assert.ok(button);
+  button.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  const files = documentRef.querySelector('[data-preview-action="append-files"]');
+  const camera = documentRef.querySelector('[data-preview-action="append-camera"]');
+  assert.equal(documentRef.activeElement, files);
+  files.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  assert.equal(documentRef.activeElement, camera);
+  camera.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert.equal(documentRef.querySelector('.attachment-preview-append-menu').hidden, true);
+  assert.equal(documentRef.activeElement, button);
+  assert.equal(documentRef.querySelector('dialog').open, true);
+});
+
 test('attachment loader shows real download percentage next to the spinner and waits for PDF rendering before 100%', async t => {
   let progress, finishDownload, finishPdf;
   const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({

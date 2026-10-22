@@ -282,7 +282,7 @@ export function createChatClient({
     }, true);
   }
 
-  async function sendFile(file, { onProgress, progressSignal } = {}) {
+  async function uploadFile(file, { onProgress, progressSignal, uploadId } = {}, target = uploadUrl) {
     const fileName = validateAttachment(file);
     let previousPercent;
     const progress = percent => {
@@ -295,11 +295,11 @@ export function createChatClient({
     progress(0);
     const token = await cancellableToken(tokenProvider, progressSignal);
     // Keep the native inbox identifier across retries, without accepting arbitrary headers.
-    const suppliedId = [file.uploadMessageId, file.sourceId].find(value => (
+    const suppliedId = [uploadId, file.uploadMessageId, file.sourceId].find(value => (
       typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
     ));
     const sourceId = suppliedId || newMessageId();
-    const result = await request(uploadUrl.href, {
+    const result = await request(target.href, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -318,6 +318,38 @@ export function createChatClient({
         ? { transport: (url, options) => uploadWithProgress(url, options, { xhrFactory, onProgress: progress }) } : {}),
     });
     if (!result.error && !result.results?.some(item => /error|fail|paused|invalid|unavailable|reupload/i.test(String(item?.status || '')))) progress(100);
+    return result;
+  }
+
+  function sendFile(file, options) { return uploadFile(file, options); }
+
+  async function replaceAttachment(attachmentId, file, { expectedSha256, requestId, onProgress, progressSignal } = {}) {
+    const id = String(attachmentId || ''), sha = String(expectedSha256 || '');
+    if (!/^[a-f0-9]{64}$/.test(id) || !/^[a-f0-9]{64}$/.test(sha)
+      || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(String(requestId || ''))) {
+      throw new TypeError('Identificador ou hash da substituição inválido.');
+    }
+    if (file?.type !== 'application/pdf' || !/\.pdf$/i.test(file?.name || '')) {
+      throw new TypeError('A substituição deve ser um PDF.');
+    }
+    const target = new URL(uploadUrl);
+    for (const [key, value] of Object.entries({ operation: 'attachment_replace', attachment_id: id,
+      expected_sha256: sha, request_id: requestId })) target.searchParams.set(key, value);
+    const result = await uploadFile(file, { progressSignal, uploadId: requestId,
+      ...(typeof onProgress === 'function' ? { onProgress: progress => onProgress({ percent: Math.min(99, progress.percent) }) } : {}),
+    }, target);
+    const replacement = result.replacement;
+    if (result.operation !== 'attachment_replaced' || result.requestId !== requestId
+      || result.previousAttachmentId !== id || !/^[a-f0-9]{64}$/.test(replacement?.id || '')
+      || replacement.id === id || replacement.fileName !== file.name || replacement.mimeType !== 'application/pdf'
+      || replacement.size !== file.size || !replacement.mediaUrl || !Array.isArray(result.attachments)
+      || result.attachments.some(item => item.id === id)
+      || !result.attachments.some(item => item.id === replacement.id && item.mediaUrl === replacement.mediaUrl
+        && item.fileName === replacement.fileName && item.size === file.size && item.mimeType === 'application/pdf')) {
+      throw new Error('A VM não confirmou a substituição deste anexo. Atualize a bandeja antes de tentar novamente.');
+    }
+    checkRequestCancellation(progressSignal);
+    try { onProgress?.({ percent: 100 }); } catch { /* presentation only */ }
     return result;
   }
 
@@ -691,5 +723,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ sendText, sendFile, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }

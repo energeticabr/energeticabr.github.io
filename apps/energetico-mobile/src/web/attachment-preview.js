@@ -64,7 +64,29 @@ export function createAttachmentPreview({
   const closeButton = element("button", "attachment-preview-close", "Fechar");
   closeButton.type = "button";
   closeButton.autofocus = true;
-  header.append(title, closeButton);
+  const appendButton = element("button", "attachment-preview-append", "+");
+  appendButton.type = "button";
+  appendButton.dataset.previewAction = "append-pages";
+  appendButton.setAttribute("aria-label", "Adicionar páginas ao anexo");
+  appendButton.setAttribute("aria-haspopup", "menu");
+  appendButton.setAttribute("aria-expanded", "false");
+  appendButton.hidden = true;
+  const appendMenu = element("div", "attachment-preview-append-menu");
+  appendMenu.id = `${title.id}-append-menu`;
+  appendMenu.setAttribute("role", "menu");
+  appendMenu.setAttribute("aria-label", "Adicionar páginas ao anexo");
+  appendMenu.hidden = true;
+  appendButton.setAttribute("aria-controls", appendMenu.id);
+  const appendFilesButton = element("button", "attachment-preview-append-files", "📎 ADICIONAR ANEXOS");
+  const appendCameraButton = element("button", "attachment-preview-append-camera", "📷 FOTO/ ESCANEAR");
+  for (const [button, mode] of [[appendFilesButton, "files"], [appendCameraButton, "camera"]]) {
+    button.type = "button";
+    button.dataset.previewAction = `append-${mode}`;
+    button.setAttribute("role", "menuitem");
+    button.tabIndex = -1;
+  }
+  appendMenu.append(appendFilesButton, appendCameraButton);
+  header.append(title, appendButton, closeButton, appendMenu);
   const content = element("div", "attachment-preview-content");
   const status = element("p", "attachment-preview-status");
   status.setAttribute("role", "status");
@@ -131,6 +153,117 @@ export function createAttachmentPreview({
   let destroyed = false;
   let collection = null;
   let addToTrayHandler = null;
+
+  function setAppendMenuOpen(open) {
+    appendMenu.hidden = !open;
+    appendButton.setAttribute("aria-expanded", String(open));
+  }
+
+  function updateAppendControls() {
+    const allowed = Boolean(active?.blob && ["pdf", "image"].includes(active.kind) && typeof active.onAppendPages === "function");
+    appendButton.hidden = !allowed;
+    appendButton.disabled = appendFilesButton.disabled = appendCameraButton.disabled = !allowed || Boolean(active?.append);
+    if (appendButton.disabled) setAppendMenuOpen(false);
+  }
+
+  // Preview rendering may finish while selection/upload owns the status line.
+  // Keep that latest status ready to restore when the operation is cancelled.
+  function showPreviewStatus(session, ...nodes) {
+    if (active !== session) return;
+    session.statusContent = nodes.filter(node => node != null).map(node => typeof node === "string" ? documentRef.createTextNode(node) : node);
+    if (!session.appendFeedback) status.replaceChildren(...session.statusContent);
+  }
+
+  async function appendPages(mode) {
+    const session = active;
+    if (appendMenu.hidden || !session?.blob || session.append || typeof session.onAppendPages !== "function" || !["pdf", "image"].includes(session.kind)) return;
+    const operation = { abort: new AbortController() };
+    session.append = operation;
+    session.appendFeedback = true;
+    const loader = createLoadingIndicator(documentRef, "Acrescentando páginas…", { compact: true, progress: 0, progressLabel: "Acréscimo de páginas" });
+    // Nest the compact loader so the existing full-preview loading overlay
+    // does not cover the original image/PDF during an append.
+    const feedback = element("span", "attachment-preview-append-feedback");
+    feedback.append(loader);
+    status.replaceChildren(feedback);
+    status.setAttribute("aria-busy", "true");
+    updateAppendControls();
+    const isCurrent = () => active === session && session.append === operation && !operation.abort.signal.aborted;
+    const restoreStatus = () => {
+      session.appendFeedback = false;
+      status.replaceChildren(...session.statusContent);
+    };
+    try {
+      const result = await session.onAppendPages(mode, {
+        blob: session.blob,
+        fileName: session.fileName,
+        signal: operation.abort.signal,
+        onProgress: value => {
+          if (!isCurrent()) return;
+          const percent = typeof value === "number" ? value : value?.percent;
+          if (percent === null || (Number.isFinite(percent) && percent >= 0 && percent <= 100)) {
+            updateLoadingIndicator(loader, { progress: percent === null ? null : Math.min(99, Math.floor(percent)), progressLabel: "Acréscimo de páginas" });
+          }
+        },
+      });
+      if (!isCurrent()) return;
+      if (result == null) {
+        restoreStatus();
+        return;
+      }
+      const replacementName = String(result.fileName || "arquivo.pdf");
+      if (!result.blob || typeof result.blob.slice !== "function" || typeof result.blob.arrayBuffer !== "function" || previewKind(result.blob, replacementName) !== "pdf") {
+        throw new Error("O resultado precisa ser um PDF válido.");
+      }
+      const onClose = session.onClose;
+      // Transfer dialog ownership; replacing its content is not a close.
+      session.onClose = undefined;
+      await openOne(result.blob, replacementName, {
+        onClose, onAppendPages: session.onAppendPages, onSign: session.onSign, onStamp: session.onStamp, layout: session.layout,
+      });
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (error?.name === "AbortError") restoreStatus();
+      else status.textContent = `Não foi possível acrescentar páginas. ${error?.message || ""} Tente novamente no botão +.`;
+    } finally {
+      if (active === session && session.append === operation) {
+        session.append = null;
+        status.removeAttribute("aria-busy");
+        updateAppendControls();
+        appendButton.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  appendButton.addEventListener("click", () => {
+    if (appendButton.hidden || appendButton.disabled) return;
+    setAppendMenuOpen(appendMenu.hidden);
+    if (!appendMenu.hidden) appendFilesButton.focus({ preventScroll: true });
+  });
+  appendButton.addEventListener("keydown", event => {
+    if (appendButton.hidden || appendButton.disabled || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    setAppendMenuOpen(true);
+    (event.key === "ArrowUp" ? appendCameraButton : appendFilesButton).focus({ preventScroll: true });
+  });
+  appendMenu.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setAppendMenuOpen(false);
+      appendButton.focus({ preventScroll: true });
+    } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const next = event.key === "Home" ? appendFilesButton : event.key === "End" ? appendCameraButton
+        : documentRef.activeElement === appendFilesButton ? appendCameraButton : appendFilesButton;
+      next.focus({ preventScroll: true });
+    } else if (event.key === "Tab") setAppendMenuOpen(false);
+  });
+  appendFilesButton.addEventListener("click", () => { void appendPages("files"); });
+  appendCameraButton.addEventListener("click", () => { void appendPages("camera"); });
+  dialog.addEventListener("click", event => {
+    if (event.target !== appendButton && !appendMenu.contains(event.target)) setAppendMenuOpen(false);
+  });
 
   function updateCollectionNavigation() {
     const hasCollection = Boolean(collection?.items?.length);
@@ -221,12 +354,15 @@ export function createAttachmentPreview({
     if (!active) return;
     const previous = active;
     active = null;
+    previous.append?.abort.abort();
     previous.abort.abort();
     previous.pdf?.destroy();
     previous.zoom?.destroy();
     previous.urls.forEach(url => urlApi.revokeObjectURL(url));
     previous.urls.clear();
     previous.onClose?.();
+    updateAppendControls();
+    status.removeAttribute("aria-busy");
     content.replaceChildren();
     addChoice.hidden = true;
     addAllButton.disabled = false;
@@ -262,21 +398,21 @@ export function createAttachmentPreview({
     session.zoom?.destroy();
     session.zoom = null;
     content.replaceChildren(element("p", "attachment-preview-explanation", message));
-    status.textContent = "Use ENCAMINHAR para acessar o arquivo original.";
+    showPreviewStatus(session, "Use ENCAMINHAR para acessar o arquivo original.");
   }
 
   function loading(session, label, progress = session.progress) {
     if (active !== session || session.failed) return;
     session.progress = progress;
     updateLoadingIndicator(session.loader, { label, progress, progressLabel: 'Carregamento do anexo' });
-    if (session.loader.parentElement !== status) status.replaceChildren(session.loader);
+    showPreviewStatus(session, session.loader);
   }
 
   function ready(session, message) {
     if (active !== session || session.failed) return;
     updateLoadingIndicator(session.loader, { progress: 100, progressLabel: 'Carregamento do anexo' });
     const badge = session.loader.querySelector('[role="progressbar"]');
-    status.replaceChildren(badge, documentRef.createTextNode(` ${message}`));
+    showPreviewStatus(session, badge, ` ${message}`);
   }
 
   async function showNativePdf(session) {
@@ -297,7 +433,7 @@ export function createAttachmentPreview({
     return true;
   }
 
-  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, resolveReturnFocus, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
+  async function openOne(blobOrPromise, fileName = "arquivo", { onClose, onSign, onStamp, onAppendPages, resolveReturnFocus, initialPage = 1, layout = /^resumo-.+\.png$/i.test(String(fileName)) ? "flow-summary" : "media" } = {}) {
     if (destroyed) throw new Error("O visualizador já foi encerrado.");
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
@@ -306,12 +442,12 @@ export function createAttachmentPreview({
     closeButton.textContent = reportLayout ? "❌" : "Fechar";
     closeButton.setAttribute("aria-label", reportLayout ? "Fechar relatório" : "Fechar");
     backButton.hidden = reportLayout;
-    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp,
+    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp, onAppendPages, layout,
       progress: 0, failed: false, loader: createLoadingIndicator(documentRef, 'Carregando arquivo…', { progress: 0, progressLabel: 'Carregamento do anexo' }) };
     active = session;
     title.textContent = session.fileName;
     updateCollectionNavigation();
-    status.replaceChildren(session.loader);
+    showPreviewStatus(session, session.loader);
     exportButton.disabled = true;
     if (!dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
@@ -347,6 +483,7 @@ export function createAttachmentPreview({
         if (detectedJpeg) kind = "image";
       }
       session.kind = kind;
+      updateAppendControls();
       signButton.hidden = kind !== "pdf" || typeof onSign !== "function";
       stampButton.hidden = kind !== "pdf" || typeof onStamp !== "function";
       signActions.hidden = signButton.hidden && stampButton.hidden;
@@ -503,7 +640,7 @@ export function createAttachmentPreview({
         await session.pdf.ready;
         if (active === session) {
           const summary = session.pdf.getSummary?.() || 'PDF pronto.';
-          if (session.pdf.hasRenderedPages?.() === false) status.textContent = summary;
+          if (session.pdf.hasRenderedPages?.() === false) showPreviewStatus(session, summary);
           else ready(session, summary);
           session.signatureReady = Number.isInteger(session.pdf.getCurrentPage?.());
           signButton.disabled = stampButton.disabled = !session.signatureReady;
@@ -528,16 +665,16 @@ export function createAttachmentPreview({
       explain(session, session.blob
         ? "Não foi possível mostrar este arquivo. Se o PDF tiver senha ou estiver danificado, tente abri-lo em outro app."
         : "Não foi possível carregar este arquivo. Feche esta janela e tente novamente no chat.");
-      if (!session.blob) status.textContent = "O arquivo ainda não está disponível para salvar.";
+      if (!session.blob) showPreviewStatus(session, "O arquivo ainda não está disponível para salvar.");
     }
   }
 
-  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout, initialPage } = {}) {
+  async function open(blobOrPromise, fileName = "arquivo", { onAddToTray, onAppendPages, returnLabel = "Voltar ao chat", onClose, onSign, onStamp, resolveReturnFocus, layout, initialPage } = {}) {
     backButton.textContent = returnLabel;
     collection = null;
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
     updateCollectionNavigation();
-    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, resolveReturnFocus, layout, initialPage });
+    return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, onAppendPages, resolveReturnFocus, layout, initialPage });
   }
 
   async function openCollection(items, { onAddToTray, initialIndex = 0 } = {}) {
