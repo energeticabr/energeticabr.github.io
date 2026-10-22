@@ -9,7 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 export async function runBrowserLayout(browser, { width, height, url, safeAreaInsets, mediaType, colorScheme, mobile = false, gestureProbes = [], captureScreenshot = false, maxBuffer = 2_000_000, readyTimeoutMs = 30_000, startupTimeoutMs = 10_000 }) {
   const temporaryRoot = resolve(tmpdir());
   const profile = await mkdtemp(join(temporaryRoot, "energetico-layout-"));
-  const pending = new Map();
+  const pending = new Map(), diagnostics = [];
   let child, socket, sequence = 0, sessionId, onLoaded, spawnError, browserStderr = '';
   try {
     child = spawn(browser, [
@@ -51,6 +51,8 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     socket.addEventListener("message", event => {
       const reply = JSON.parse(event.data);
       if (reply.method) {
+        if (reply.method === 'Runtime.exceptionThrown') diagnostics.push(reply.params.exceptionDetails.exception?.description || reply.params.exceptionDetails.text);
+        if (reply.method === 'Log.entryAdded' && reply.params.entry.level === 'error') diagnostics.push(reply.params.entry.text);
         if (reply.method === "Page.loadEventFired" && reply.sessionId === sessionId) onLoaded?.();
         return;
       }
@@ -72,6 +74,8 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
     const { targetId } = await send("Target.createTarget", { url: "about:blank" });
     ({ sessionId } = await send("Target.attachToTarget", { targetId, flatten: true }));
     await send("Page.enable", {}, sessionId);
+    await send('Runtime.enable', {}, sessionId);
+    await send('Log.enable', {}, sessionId);
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile }, sessionId);
     if (mediaType || colorScheme) await send("Emulation.setEmulatedMedia", {
       ...(mediaType ? { media: mediaType } : {}),
@@ -109,7 +113,7 @@ export async function runBrowserLayout(browser, { width, height, url, safeAreaIn
       returnByValue: true,
       awaitPromise: true,
     }, sessionId);
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    if (result.exceptionDetails) throw new Error((result.exceptionDetails.exception?.description || result.exceptionDetails.text) + '\nDIAGNOSTIC: ' + diagnostics.slice(-10).join('\n'));
     if (typeof result.result?.value !== "string") throw new Error("Medição de layout inválida.");
     const gestureScales = [];
     const gestureDetails = [];

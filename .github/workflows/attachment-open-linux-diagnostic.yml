@@ -1,0 +1,26 @@
+name: Attachment opening Linux diagnostic (no release)
+on:
+  push:
+    branches: [chore/attachment-open-linux-diagnostic-20261021]
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install exact locked dependencies
+        working-directory: apps/energetico-mobile
+        run: pnpm install --frozen-lockfile
+      - name: Diagnose actual cold browser fixtures without production requests
+        working-directory: apps/energetico-mobile
+        run: |
+          /usr/bin/google-chrome --version
+          node --test --test-concurrency=2 tests/attachment-open-progress-browser.test.mjs tests/attachment-upload-compression-browser.test.mjs
