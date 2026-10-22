@@ -737,7 +737,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
       await openMediaCollection(attachments.map(item => ({
         fileName: item.fileName,
-        source: data.downloadAttachment(row.id, item.fileName),
+        source: options => data.downloadAttachment(row.id, item.fileName, options),
       })));
     } catch {
       if (!destroyed && !root.hidden && current === attachmentRequest) {

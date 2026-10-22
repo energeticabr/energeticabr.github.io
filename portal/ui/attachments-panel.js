@@ -92,9 +92,10 @@ export function bindAttachmentViewerBackdrop(dialog, onClose) {
   };
 }
 
-export function createAttachmentPreviewController({ files = [], actions, urlApi = globalThis.URL } = {}) {
+export function createAttachmentPreviewController({ files = [], actions, urlApi = globalThis.URL, documentRef = globalThis.document } = {}) {
   let disposed = false;
   let generation = 0;
+  let appPreview = null;
   let state = Object.freeze({ activeIndex: -1, preview: undefined });
   const revoke = () => {
     if (state.preview?.url) urlApi?.revokeObjectURL?.(state.preview.url);
@@ -105,6 +106,24 @@ export function createAttachmentPreviewController({ files = [], actions, urlApi 
     if (!Number.isInteger(index) || index < 0 || index >= files.length) throw new RangeError("O anexo selecionado não está disponível.");
     const token = ++generation;
     const file = files[index];
+    const Event = documentRef?.defaultView?.CustomEvent;
+    if (typeof Event === 'function') {
+      const detail = { index, items: files.map(candidate => ({ fileName: candidate.name,
+        source: async options => {
+          if (disposed || actions?.canView?.() !== true) throw new Error('Você não tem permissão para visualizar este anexo.');
+          const bytes = await actions.downloadAttachment(candidate.name, options);
+          if (disposed || options.signal?.aborted) throw new DOMException('Prévia cancelada.', 'AbortError');
+          if (!bytes) throw new TypeError('Não foi possível preparar a prévia deste anexo.');
+          return createAttachmentBlob(bytes, candidate);
+        },
+      })) };
+      appPreview?.close?.();
+      if (!documentRef.dispatchEvent(new Event('energetico:preview-attachments', { cancelable: true, detail })) && typeof detail.close === 'function') {
+        appPreview = detail;
+        revoke(); state = Object.freeze({ activeIndex: index, preview: undefined });
+        return undefined;
+      }
+    }
     const type = attachmentMimeType(file);
     const kind = attachmentPreviewKind(file);
     if (kind === "unsupported") {
@@ -126,11 +145,13 @@ export function createAttachmentPreviewController({ files = [], actions, urlApi 
     next: () => open(state.activeIndex + 1),
     getState: () => state,
     close() {
+      appPreview?.close?.(); appPreview = null;
       generation += 1;
       revoke();
       state = Object.freeze({ activeIndex: -1, preview: undefined });
     },
     cleanup() {
+      appPreview?.close?.(); appPreview = null;
       disposed = true;
       generation += 1;
       revoke();
@@ -328,7 +349,7 @@ export function renderAttachmentsPanel(root, { availability, files, actions, onC
     }
   };
   const presenter = createAttachmentPresenter();
-  const previewController = createAttachmentPreviewController({ files: visibleFiles, actions });
+  const previewController = createAttachmentPreviewController({ files: visibleFiles, actions, documentRef: root.ownerDocument });
   const downloadFile = file => createAttachmentDownloadHandler({ presenter, actions, file, setStatus, isActive: () => !disposed })();
   const closeViewer = () => {
     previewController.close();

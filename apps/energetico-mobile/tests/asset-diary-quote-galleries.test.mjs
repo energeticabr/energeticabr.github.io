@@ -321,7 +321,9 @@ test("new gallery attachment actions open registered media and use record langua
   assert.match(button.getAttribute("aria-label"), /imobilizado 8/i);
   button.click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(opened, [[{ fileName: "bem.pdf", source: "8/bem.pdf" }]]);
+  assert.equal(opened.length, 1);
+  assert.deepEqual(opened[0].map(item => item.fileName), ['bem.pdf']);
+  assert.equal(await opened[0][0].source({}), '8/bem.pdf');
 });
 
 test("asset function metadata editor exposes only its proved function column and pins edit/delete versions", async () => {

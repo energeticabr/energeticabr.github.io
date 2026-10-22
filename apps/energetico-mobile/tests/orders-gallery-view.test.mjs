@@ -185,7 +185,9 @@ test("SharePoint attachments open as a navigable collection in the shared viewer
   await settle();
   assert.equal(opened.length, 1);
   assert.deepEqual(opened[0].map(item => item.fileName), ["pedido.pdf", "foto.jpg"]);
-  assert.equal((await opened[0][0].source).type, "application/pdf");
+  assert.equal(ctx.calls.filter(([name]) => name === 'downloadAttachment').length, 0, 'files are not prefetched before the viewer opens');
+  assert.equal((await opened[0][0].source({})).type, "application/pdf");
+  await opened[0][1].source({});
   assert.deepEqual(ctx.calls.filter(([name]) => name === "downloadAttachment").map(call => call.slice(1)), [["319", "pedido.pdf"], ["319", "foto.jpg"]]);
 });
 

@@ -2124,12 +2124,14 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     });
   }
 
-  async function downloadAttachment(siteKey, listId, itemId, fileName) {
+  async function downloadAttachment(siteKey, listId, itemId, fileName, options = {}) {
     await authorize("view", siteKey, listId, { itemId: String(itemId || "") });
     const name = attachmentName(fileName);
     return requestAttachment(siteKey, listId, itemId, `('${name}')/$value`, {
       method: "GET",
       responseType: "arrayBuffer",
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(typeof options.onProgress === 'function' ? { onProgress: options.onProgress } : {}),
     });
   }
 

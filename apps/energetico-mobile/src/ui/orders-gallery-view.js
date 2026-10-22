@@ -533,7 +533,7 @@ export function createOrdersGallery({
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
       const items = attachments.map(item => ({
         fileName: item.fileName,
-        source: data.downloadAttachment(row.id, item.fileName),
+        source: options => data.downloadAttachment(row.id, item.fileName, options),
       }));
       await openMediaCollection(items);
     } catch (error) {

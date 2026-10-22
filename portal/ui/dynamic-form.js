@@ -1566,14 +1566,14 @@ export function bindFormAttachments(root, options = {}) {
   };
   const fileActions = Object.freeze({
     canView: () => options.canView === true,
-    async downloadAttachment(name) {
+    async downloadAttachment(name, downloadOptions) {
       const index = files.findIndex(file => file?.name === name);
       if (index < 0) throw new RangeError("O anexo selecionado não está disponível.");
-      return draft.readFile(index);
+      return draft.readFile(index, downloadOptions);
     },
   });
   const presenter = createAttachmentPresenter({ urlApi: options.urlApi || globalThis.URL });
-  const previewController = createAttachmentPreviewController({ files, actions: fileActions, urlApi: options.urlApi || globalThis.URL });
+  const previewController = createAttachmentPreviewController({ files, actions: fileActions, urlApi: options.urlApi || globalThis.URL, documentRef: root.ownerDocument });
   let cleanupViewerEvents = () => undefined;
   const resetViewerEvents = () => {
     cleanupViewerEvents();

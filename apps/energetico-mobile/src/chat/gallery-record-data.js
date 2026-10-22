@@ -234,11 +234,11 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
         attachments = Object.freeze({ enabled: true, canView: true,
           canEdit: typeof repository.uploadAttachment === 'function' && typeof repository.deleteAttachment === 'function',
           existingFiles,
-          async readExisting(file) {
+          async readExisting(file, options) {
             const name = existingFiles.find(entry => attachmentKey(entry.name) === attachmentKey(file?.name))?.name;
             if (!name || typeof repository.downloadAttachment !== 'function') throw new Error('O anexo não está disponível neste registro.');
             assertSession();
-            return repository.downloadAttachment(siteKey, list.id, item.id, name);
+            return repository.downloadAttachment(siteKey, list.id, item.id, name, ...(options ? [options] : []));
           } });
       } catch (error) {
         if (signal?.aborted) throw error;

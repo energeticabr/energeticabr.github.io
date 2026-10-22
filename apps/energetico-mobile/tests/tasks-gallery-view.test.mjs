@@ -761,7 +761,7 @@ test("tarefa abre seus campos pelo lápis e anexos no visualizador compartilhado
   await settle();
   assert.equal(opened.length, 1);
   assert.deepEqual(opened[0].map(item => item.fileName), ["tarefa.pdf"]);
-  assert.equal((await opened[0][0].source).type, "application/pdf");
+  assert.equal((await opened[0][0].source({})).type, "application/pdf");
 });
 
 test("tarefas mostram a quantidade de anexos abaixo do ícone no trilho esquerdo", async t => {

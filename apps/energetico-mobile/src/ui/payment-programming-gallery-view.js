@@ -589,7 +589,7 @@ export function createPaymentProgrammingGallery({
       if (!attachments) throw new Error("A consulta de anexos não está disponível.");
       if (!attachments.length) { setNotice(`O pagamento previsto #${row.id} não possui anexos.`); return; }
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
-      await openMediaCollection(attachments.map(item => ({ fileName: item.fileName, source: data.downloadAttachment(row.id, item.fileName) })));
+      await openMediaCollection(attachments.map(item => ({ fileName: item.fileName, source: options => data.downloadAttachment(row.id, item.fileName, options) })));
     } catch (error) {
       if (opened && !destroyed && current === session) setNotice(safeFailure(error, `Não foi possível abrir os anexos do pagamento #${row.id}`), true);
     } finally {

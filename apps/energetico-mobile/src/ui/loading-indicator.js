@@ -30,7 +30,27 @@ export function loadingIndicatorMarkup(label, { compact = false, progress, progr
   return `<span class="app-loading${compact ? " app-loading--compact" : ""}" data-loading-variant="${variant}" role="status" aria-live="polite"><img class="app-loading__mascot" src="${MASCOT_URLS[variant]}" alt="" aria-hidden="true" draggable="false">${spinnerMarkup(progress, progressLabel)}<span class="app-loading__text">${escapeHtml(label)}</span></span>`;
 }
 
-export function createLoadingIndicator(documentRef, label, { compact = false } = {}) {
+export function updateLoadingIndicator(root, { label, progress, progressLabel = 'Carregamento do arquivo' } = {}) {
+  if (label !== undefined) root.querySelector('.app-loading__text').textContent = String(label);
+  if (progress === undefined) return;
+  const doc = root.ownerDocument;
+  let row = root.querySelector('.app-loading__progress-row');
+  if (!row) {
+    row = doc.createElement('span'); row.className = 'app-loading__progress-row';
+    const spinner = root.querySelector('.app-loading__spinner');
+    spinner.before(row); row.append(spinner);
+    const badge = doc.createElement('span'); badge.className = 'app-loading__percentage';
+    badge.setAttribute('role', 'progressbar'); badge.setAttribute('aria-valuemin', '0'); badge.setAttribute('aria-valuemax', '100');
+    row.append(badge);
+  }
+  const badge = row.querySelector('[role="progressbar"]'), percent = progressValue(progress);
+  badge.setAttribute('aria-label', progressLabel);
+  badge.textContent = percent === null ? '—%' : `${percent}%`;
+  if (percent === null) { badge.removeAttribute('aria-valuenow'); badge.setAttribute('aria-valuetext', 'Tamanho total não informado'); }
+  else { badge.setAttribute('aria-valuenow', String(percent)); badge.removeAttribute('aria-valuetext'); }
+}
+
+export function createLoadingIndicator(documentRef, label, { compact = false, progress, progressLabel } = {}) {
   const root = documentRef.createElement("span");
   root.className = `app-loading${compact ? " app-loading--compact" : ""}`;
   root.dataset.loadingVariant = String(loadingVariant(label));
@@ -49,5 +69,6 @@ export function createLoadingIndicator(documentRef, label, { compact = false } =
   text.className = "app-loading__text";
   text.textContent = String(label ?? "");
   root.append(mascot, spinner, text);
+  updateLoadingIndicator(root, { progress, progressLabel });
   return root;
 }
