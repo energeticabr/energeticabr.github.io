@@ -44,7 +44,8 @@ test('unknown totals and failed/cancelled opening never fabricate completion in 
       assert.equal(data.pageRendered, true, JSON.stringify(data));
       assert.equal(data.nativeReady, true, 'native fallback must emit its real iframe load event');
       assert.equal(data.completeBeforeRendered, false);
-      assert.ok(data.seen.includes('99%')); continue;
+      assert.ok(data.seen.indexOf('99%') >= 0 && data.seen.indexOf('99%') < data.seen.indexOf('100%'), JSON.stringify(data));
+      assert.equal(data.seen.at(-1), '100%'); continue;
     }
     if (mode === 'unknown') {
       assert.ok(data.seen.includes('—%')); assert.equal(data.pageRendered, true, JSON.stringify(data));
