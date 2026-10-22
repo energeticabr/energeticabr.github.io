@@ -5679,7 +5679,8 @@ test("atualiza a lista de pessoa relacionada enquanto o usuário digita", () => 
   dom.window.close();
 });
 
-test("não filtra localmente mais de duas palavras antes do envio manual", () => {
+test("filtra nomes completos de pessoa relacionada sem aguardar envio manual", () => {
+  for (const databaseFilterKey of ["pessoa_relacionada", "document_person"]) {
   const markup = renderChatMarkup(signedInState({
     draft: "Luiz Bernardo dos",
     messages: [{
@@ -5688,7 +5689,7 @@ test("não filtra localmente mais de duas palavras antes do envio manual", () =>
       type: "poll",
       question: "QUAL A PESSOA RELACIONADA?",
       databaseFilter: true,
-      databaseFilterKey: "document_person",
+      databaseFilterKey,
       options: [
         { id: "269", label: "269 - LUIZ BERNARDO DOS SANTOS", reply: "269" },
         { id: "260", label: "260 - FELICIANO ROGÉRIO DA SILVA", reply: "260" },
@@ -5697,7 +5698,8 @@ test("não filtra localmente mais de duas palavras antes do envio manual", () =>
   }));
 
   assert.match(markup, /LUIZ BERNARDO DOS SANTOS/);
-  assert.match(markup, /FELICIANO ROGÉRIO DA SILVA/);
+  assert.doesNotMatch(markup, /FELICIANO ROGÉRIO DA SILVA/);
+  }
 });
 
 test("filtra somente a pergunta de banco atual e preserva listas anteriores", () => {

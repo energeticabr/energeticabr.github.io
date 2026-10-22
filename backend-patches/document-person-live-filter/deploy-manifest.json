@@ -1,0 +1,18 @@
+{
+  "files": {
+    "channel_bridge.py": {
+      "before": "85f963428e6f82ab5207d1c75c177aeba20d42ba47136257652bc53e6c52f164",
+      "after": "15ad4a8e23a8ee475719463199fe0a6d34e792fff4c3ed21676849596ad46bea"
+    }
+  },
+  "mirror": {
+    "channel_bridge.py": "a5a8244d6525f34f53de781caa399570073df1f55ef8148ed4c1c5f9cdfa5e19"
+  },
+  "inputs": {
+    "deploy.py": "50996a3aa9ed238ce96bb5b3664dc7e390aa7386071be94b87749949a5790abd",
+    "deploy.sh": "b6cae6e9d966a21529651684b6dc2ea9d88ce0a3ed482c44484444d6b5e10232",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "patch_bridge.py": "baf3bca960d1238bd57199aa6cdb50988b0aded158407960d6343a2a58987965",
+    "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2"
+  }
+}

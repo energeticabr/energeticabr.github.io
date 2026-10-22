@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Energético — busca automática de pessoa relacionada</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<style>
+  body { margin: 0; }
+  .qa { padding: 8px; background: #fff8dc; font: 12px system-ui; }
+  #chat { height: calc(100dvh - 70px); }
+  #evidence { display: block; white-space: pre-wrap; }
+</style>
+<section class="qa">Validação local com dados fictícios. Nenhum envio ao SharePoint.
+  <output id="evidence" aria-live="polite"></output>
+</section>
+<main id="chat"></main>
+<script type="module">
+  import { createAppController } from '../../apps/energetico-mobile/src/app-controller.js';
+  import { createConversationStore } from '../../apps/energetico-mobile/src/chat/conversation-store.js';
+  import { createChatView } from '../../apps/energetico-mobile/src/ui/chat-view.js';
+
+  const store = createConversationStore({ historyMode: 'current-step' });
+  const view = createChatView(document.querySelector('#chat'));
+  const activeFlow = { id: 'document', title: '📄 ADICIONAR UM NOVO DOCUMENTO' };
+  const person = { id: 'choice:pessoa_relacionada:901', reply: 'choice:pessoa_relacionada:901',
+    label: '901 - JOÃO GERALDO DE OLIVEIRA (ATIVO — EMPREITEIRO: SIM)' };
+  const catalog = Array.from({ length: 40 }, (_, index) => ({
+    id: `choice:pessoa_relacionada:${index + 1}`, reply: `choice:pessoa_relacionada:${index + 1}`,
+    label: `${index + 1} - PESSOA FICTÍCIA ${index + 1}`,
+  })).concat(person);
+  const blank = { id: 'choice:pessoa_relacionada:0', reply: 'choice:pessoa_relacionada:0', label: '0 - ⬜ EM BRANCO' };
+  const poll = options => ({ type: 'poll', question: 'QUAL A PESSOA RELACIONADA? CASO DESEJE FILTRAR, DIGITE UM TEXTO.',
+    databaseFilter: true, databaseFilterKey: 'pessoa_relacionada', options });
+  const response = options => ({ status: 'processed', activeFlow, messages: [poll(options)] });
+  const normalize = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+  let queries = 0, selections = 0;
+  const client = {
+    async sendText(payload) {
+      const search = payload.replyId === 'filter_query', clear = payload.replyId === 'filter_clear';
+      const selected = String(payload.replyId || '').startsWith('choice:pessoa_relacionada:');
+      if (!search && !clear && !selected) return response([blank, ...catalog.slice(0, 6)]);
+      if (search || clear) queries += 1;
+      else if (selected) selections += 1;
+      document.querySelector('#evidence').textContent = `Pesquisas automáticas: ${queries} · Seleções: ${selections}\n${payload.replyId}: ${payload.text}`;
+      await new Promise(resolve => setTimeout(resolve, 120));
+      if (clear) return response([blank, ...catalog.slice(0, 6)]);
+      if (search) {
+        const words = normalize(payload.text).split(/\s+/u).filter(Boolean);
+        return response(catalog.filter(option => words.every(word => normalize(option.label).includes(word))));
+      }
+      return { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'QUAL A DATA DE EMISSÃO?', options: [] }] };
+    },
+  };
+  const controller = createAppController({ store, view, client,
+    auth: { initialize: async () => ({ homeAccountId: 'qa', name: 'Validação local' }), getToken: async () => 'local-fixture' },
+    native: { importSharedItems: async () => [] },
+    diaryFieldVisitDataFactory: async () => ({ load: async () => [] }),
+    pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
+  });
+  await controller.start();
+  store.ingestRemoteMessages(response([blank, ...catalog.slice(0, 6)]).messages, { activeFlow });
+  document.querySelector('#evidence').textContent = 'Pesquisas automáticas: 0 · Seleções: 0';
+</script>
+</html>
