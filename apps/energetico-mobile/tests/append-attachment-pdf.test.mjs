@@ -244,6 +244,18 @@ test('rejects a checked box whose selected appearance is missing instead of subs
     /aparência|aparencia|formulário|formulario/i);
 });
 
+for (const flag of [1, 2, 32]) test(`does not expose invisible form widget with annotation flag ${flag}`, async () => {
+  const original = await pdfFile([[300, 400, 'VISIBLE HEADER']], 'hidden.pdf', pdf => {
+    const field = pdf.getForm().createTextField('internal');
+    field.setText('PRIVATE HIDDEN VALUE');
+    field.addToPage(pdf.getPage(0), { x: 30, y: 80, width: 200, height: 25 });
+    pdf.getForm().updateFieldAppearances();
+    field.acroField.getWidgets()[0].dict.set(PDFName.of('F'), pdf.context.obj(flag));
+  });
+  await assert.rejects(appendAttachmentPdf(original, original.name, [await pdfFile([[50, 60, 'END']])]),
+    /aparência|aparencia|formulário|formulario|oculto/i);
+});
+
 test('rejects XFA forms whose appearance cannot safely be flattened', async () => {
   const original = await pdfFile([[100, 200, 'HEADER']], 'xfa.pdf', pdf => {
     pdf.getForm().acroForm.dict.set(PDFName.of('XFA'), PDFString.of('<xfa/>'));

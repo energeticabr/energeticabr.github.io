@@ -292,6 +292,11 @@ function flattenExistingAppearances(pdf, signal) {
       }
       for (const widget of field.acroField.getWidgets()) {
         checkAbort(signal);
+        // Flattening ignores annotation visibility and could expose internal
+        // values. A static export is required when view/print visibility differs.
+        if (widget.getFlags() & (1 | 2 | 32)) {
+          throw new Error('O formulário contém campos ocultos cuja aparência não pode ser preservada.');
+        }
         const normal = widget.AP()?.lookup(nameOf('N'));
         if (normal instanceof PDFDict) {
           // Freeze the state actually displayed by the widget. pdf-lib otherwise

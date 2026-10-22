@@ -10703,10 +10703,10 @@ export function createAppController({
             files = await (choice === 'scan' ? native.scanDocument() : native.capturePhoto());
           }
           if (!current() || !files?.length) return null;
-          // Refresh identity before mutation; server also compares the actual original hash.
-          const resolved = await resolveCurrentAttachment(target.id, { ...target,
-            fileName: fileName || target.fileName || target.file?.name,
-            mimeType: blob?.type || target.mimeType, size: blob?.size ?? target.size });
+          // Only the open target's exact identity is writable. A homonym with
+          // identical bytes is still a different attachment, not a replacement.
+          await refreshAttachments({ silent: true, force: true });
+          const resolved = store.getState().attachments.find(item => item.id === target.id);
           if (!current()) return null;
           if (!resolved || resolved.readOnly || resolved.existing || !/^[a-f0-9]{64}$/.test(resolved.id)) {
             throw new Error('O anexo foi alterado ou é somente leitura. Atualize a bandeja e abra-o novamente.');

@@ -97,3 +97,12 @@ test('uncertain replacement retry reuses composed PDF and request id instead of 
   assert.equal(selections, 1);
   assert.equal((await PDFDocument.load(await result.blob.arrayBuffer())).getPageCount(), 2);
 });
+
+test('removed open attachment never falls back to an identical homonym during refresh', async t => {
+  const h = await harness(t), preview = h.previews[0];
+  h.client.getAttachments = async () => [{ id: nextId, fileName: h.original.name, size: h.original.size,
+    mimeType: h.original.type, mediaUrl: '/api/portal-media/identical-other' }];
+  await assert.rejects(preview.onAppendPages('files', { blob: h.original, fileName: h.original.name,
+    signal: new AbortController().signal }), /alterado|disponível|abra-o/i);
+  assert.equal(h.calls.length, 0, 'do not replace another file even if its bytes and name are identical');
+});

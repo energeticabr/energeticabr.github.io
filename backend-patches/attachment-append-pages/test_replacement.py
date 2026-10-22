@@ -1,9 +1,12 @@
+import ast
 import copy
 import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import re
 import tempfile
 import threading
 from types import SimpleNamespace
@@ -59,6 +62,7 @@ class ReplacementTests(unittest.TestCase):
         self.upload_path.write_bytes(pdf_bytes())
         self.upload = SimpleNamespace(path=self.upload_path, file_name='foto.pdf', mime_type='application/pdf')
         self.request_id = '74728688-9c56-41d6-924a-7261dd4f7d10'
+        self.media_store = SimpleNamespace(register=lambda *args, **kwargs: 'synthetic-media')
 
     def authorize(self, key, identity, **kwargs):
         if self.deny or identity.get('oid') != 'owner':
@@ -88,7 +92,40 @@ class ReplacementTests(unittest.TestCase):
         args = dict(attachment_id=self.old_id, expected_sha256=self.old_hash,
                     request_id=self.request_id, allowed_emails={'owner@example.test'})
         args.update(kwargs)
-        return replacement.portal_replace_attachment(self.bridge, self.identity, self.upload, None, **args)
+        return replacement.portal_replace_attachment(self.bridge, self.identity, self.upload, self.media_store, **args)
+
+    def test_confirmation_and_retry_do_not_reenter_the_real_nonreentrant_bridge_lock(self):
+        self.bridge.lock = threading.Lock()
+        baseline = os.environ.get('ATTACHMENT_APPEND_BRIDGE_BASELINE')
+        if baseline:
+            tree = ast.parse(Path(baseline).read_text(encoding='utf-8'))
+            bridge_class = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'ChannelBridge')
+            method = next(node for node in bridge_class.body if isinstance(node, ast.FunctionDef) and node.name == 'portal_attachment_snapshot')
+            context = {'PortalMediaStore': object, 'Path': Path, 're': re, 'json': json, 'hashlib': hashlib}
+            exec(compile(ast.Module(body=[method], type_ignores=[]), '<actual-bridge-snapshot>', 'exec'), context)
+            actual_snapshot = context['portal_attachment_snapshot']
+            self.bridge.portal_attachment_snapshot = lambda *a, **kw: actual_snapshot(self.bridge, *a, **kw)
+        else:
+            # Same public lock contract as the production method; CI has no private bundle.
+            def locked_snapshot(*args, **kwargs):
+                with self.bridge.lock:
+                    return self.snapshot(*args, **kwargs)
+            self.bridge.portal_attachment_snapshot = locked_snapshot
+        results, errors = [], []
+        def run():
+            try:
+                results.extend([self.replace(), self.replace()])
+            except BaseException as exc:
+                errors.append(exc)
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        thread.join(3)
+        self.assertFalse(thread.is_alive(), 'snapshot deadlocked the non-reentrant bridge lock after committing')
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 2)
+        self.assertEqual(self.saves, 1)
+        self.assertTrue(self.bridge.lock.acquire(blocking=False), 'bridge remains blocked after response')
+        self.bridge.lock.release()
 
     def test_replaces_only_target_after_single_commit_without_advancing_question(self):
         previous = copy.deepcopy(self.state)
