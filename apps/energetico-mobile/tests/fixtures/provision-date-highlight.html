@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prévia: cores da data prevista de pagamento</title>
+  <link rel="stylesheet" href="../../src/styles.css">
+  <link rel="stylesheet" href="../../src/ui/orders-gallery.css">
+  <link rel="stylesheet" href="../../src/ui/searchable-filter-selects.css">
+  <link rel="stylesheet" href="../../src/ui/gallery-record-actions.css">
+</head>
+<body>
+  <script type="module">
+    import { createPaymentProgrammingGallery } from "../../src/ui/payment-programming-gallery-view.js";
+
+    // Somente dados fictícios; nenhuma conexão com o cadastro financeiro.
+    const dates = ["2026-10-28", "2026-10-27", "2026-10-26", "2026-10-24", "2026-10-23", "2026-10-22", "2026-10-21"];
+    const rows = dates.map((date, index) => ({ id: String(601 + index), hasAttachments: false, fields: {
+      ID: 601 + index, FORNECEDOR: `FORNECEDOR DE TESTE ${index + 1}`, STATUS: "PAGAMENTO PREVISTO",
+      DATAPGTOPREVISTO: date, VALORTOTAL: 45, QTD: 5, FRETE: 0, DESCRICAOPGTO: "MATERIAL DE TESTE",
+      FILIAL: "004 - EDIFÍCIO XAVANTE", IMOVEL: "TODOS", PGTOAGENDADO: "PENDENTE",
+    } }));
+    const gallery = createPaymentProgrammingGallery({ document,
+      now: () => new Date("2026-10-22T12:00:00-03:00"),
+      data: { async loadSnapshot() { return { rows }; } },
+    });
+    await gallery.open();
+    await document.fonts.ready;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const cards = [...document.querySelectorAll(".pg-card")];
+    document.documentElement.dataset.layout = JSON.stringify({
+      width: innerWidth, documentWidth: document.documentElement.scrollWidth,
+      cards: cards.map(card => {
+        const due = card.querySelector('[data-field="DATA PREVISTA PGTO"]');
+        const box = card.getBoundingClientRect();
+        return { id: card.dataset.itemId, background: getComputedStyle(due).backgroundColor,
+          dateColor: getComputedStyle(due.querySelector("dd")).color,
+          labelColor: getComputedStyle(due.querySelector("dt")).color,
+          date: due.querySelector("dd").textContent, deadline: card.querySelector(".pg-deadline").textContent,
+          overflow: card.scrollWidth > card.clientWidth + 1 || box.right > innerWidth + 1,
+          buttons: [...card.querySelectorAll(".gallery-record-action")].map(button => {
+            const rect = button.getBoundingClientRect(); return { width: rect.width, height: rect.height };
+          }),
+        };
+      }),
+    });
+    document.documentElement.dataset.ready = "true";
+  </script>
+</body>
+</html>

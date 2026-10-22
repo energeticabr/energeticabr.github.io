@@ -54,10 +54,17 @@ function normalized(value) {
 function dateParts(value) {
   const raw = text(value).trim();
   if (!raw) return null;
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) };
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/i);
   const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (br) return { year: Number(br[3]), month: Number(br[2]), day: Number(br[1]) };
+  if (iso || br) {
+    const parts = iso ? { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) }
+      : { year: Number(br[3]), month: Number(br[2]), day: Number(br[1]) };
+    const calendar = new Date(0);
+    calendar.setUTCFullYear(parts.year, parts.month - 1, parts.day);
+    if (calendar.getUTCFullYear() !== parts.year || calendar.getUTCMonth() !== parts.month - 1
+      || calendar.getUTCDate() !== parts.day) return null;
+    if (br || raw.length === 10) return parts;
+  }
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) return null;
   const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "America/Sao_Paulo" }).formatToParts(date);
@@ -114,13 +121,18 @@ function filterValue(fields, name, aliases) {
   return "";
 }
 
+function paymentDueDays(fields, now) {
+  const due = dateKey(field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
+  const today = dateKey(now);
+  if (!due || !today) return null;
+  return Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+}
+
 function paymentTiming(fields, now) {
   const paidAt = field(fields, ["DATA PGTO EFETUADO", "DATAPGTOEFETUADO"]);
   if (paidAt) return `PAGO EM ${formatDate("DATA PGTO EFETUADO", paidAt)}`;
-  const due = dateKey(field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]));
-  const today = dateKey(now);
-  if (!due || !today) return "";
-  const difference = Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  const difference = paymentDueDays(fields, now);
+  if (difference == null) return "";
   if (difference < 0) {
     const days = Math.abs(difference);
     return `VENCIDO HÁ ${days} ${days === 1 ? "DIA" : "DIAS"}`;
@@ -477,6 +489,7 @@ export function createPaymentProgrammingGallery({
     }[label] || label;
     pair.append(symbol, el("dt", "", visibleLabel), el("dd", "", displayValue(label, value)));
     list.append(pair);
+    return pair;
   }
 
   function cardIcon(name) {
@@ -503,7 +516,8 @@ export function createPaymentProgrammingGallery({
     const paid = /pago|efetuado|quitado/i.test(statusText);
     const pending = /pendente|previst/i.test(statusText);
     const status = el("span", `og-status pg-status${pending ? " og-status--pending" : paid ? " pg-status--paid" : ""}`, statusText);
-    const timingText = paymentTiming(fields, now());
+    const currentDate = now();
+    const timingText = paymentTiming(fields, currentDate);
     const timing = timingText ? el("p", `pg-deadline${timingText.startsWith("VENCIDO") ? " pg-deadline--overdue" : timingText === "VENCE HOJE" ? " pg-deadline--today" : ""}`, timingText) : null;
     if (timing) identifier.append(timing);
     card.classList.toggle('pg-card--overdue', timingText.startsWith('VENCIDO'));
@@ -523,7 +537,12 @@ export function createPaymentProgrammingGallery({
     appendSummaryField(summary, "QTD", field(fields, ["QTD", "QUANTIDADE"]), "quantity");
     const freight = field(fields, ["FRETE"]);
     appendSummaryField(summary, "FRETE", text(freight).trim() ? freight : 0, "freight");
-    appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "calendar");
+    const dueDate = appendSummaryField(summary, "DATA PREVISTA PGTO", field(fields, ["DATA PREVISTO PGTO", "DATAPGTOPREVISTO"]), "calendar");
+    const dueDays = paymentDueDays(fields, currentDate);
+    if (Number.isFinite(dueDays)) {
+      const tone = dueDays <= 0 ? "overdue" : dueDays === 1 ? "tomorrow" : dueDays <= 5 ? "soon" : "future";
+      dueDate.classList.add(`pg-due-date--${tone}`);
+    }
     appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "branch");
     appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "property");
     appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "clock");

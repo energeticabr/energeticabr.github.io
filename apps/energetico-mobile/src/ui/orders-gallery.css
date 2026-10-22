@@ -175,6 +175,10 @@
 .pg-summary-icon { display: grid; grid-column: 1; grid-row: 1 / span 2; width: 24px; height: 28px; place-items: center; border-radius: 7px; color: #168be1; background: #e7f3fe; }
 .pg-card-grid [data-field="VALOR UNITÁRIO"] .pg-summary-icon, .pg-card-grid [data-field="QTD"] .pg-summary-icon, .pg-card-grid [data-field="FRETE"] .pg-summary-icon { color: #1767a5; background: transparent; }
 .pg-summary-field--wide { grid-column: 1 / -1; }
+.pg-card-grid .pg-due-date--future { background: #e5f6e9; border-color: #b5d9bf; }
+.pg-card-grid .pg-due-date--soon { background: #ffebd6; border-color: #e8bf96; }
+.pg-card-grid .pg-due-date--tomorrow { background: #fff7c7; border-color: #e1d17f; }
+.pg-card-grid .pg-due-date--overdue { background: #fde8e9; border-color: #e5afb5; }
 .pg-observation { align-items: start !important; }
 .pg-observation .pg-summary-icon { grid-row: 1 / span 2; }
 .pg-observation dd { white-space: pre-wrap; font-size: .8rem !important; font-weight: 750 !important; }
