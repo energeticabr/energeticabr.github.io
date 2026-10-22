@@ -1,0 +1,28 @@
+class ChannelBridge:
+    pass
+
+
+class BridgeHandler:
+    def _process_portal_upload(self, identity: dict, length: int, cors_origin: str = ""):
+        upload = None
+        try:
+            self.bridge.portal_authorize(identity, allowed_emails=self.portal_authenticator.allowed_emails)
+            upload = self.portal_upload_store.stage(self.rfile, content_length=length,
+                encoded_file_name=self.headers.get("X-Portal-File-Name", ""),
+                mime_type=self.headers.get("Content-Type", "application/octet-stream"), owner_oid=identity.get("oid", ""))
+            result = self.bridge.handle(
+                portal_channel_payload(
+                    {
+                        "messageId": self.headers.get("X-Portal-Message-Id", "") or uuid.uuid4().hex,
+                        "media": upload.as_media(),
+                    },
+                    identity,
+                )
+            )
+            return self._send_json(200, result, cors_origin=cors_origin)
+        except PermissionError as exc:
+            return self._send_json(401, {"error": str(exc)}, cors_origin=cors_origin)
+        except (OSError, RuntimeError, ValueError) as exc:
+            return self._send_json(422, {"error": str(exc)}, cors_origin=cors_origin)
+        finally:
+            self.portal_upload_store.remove(upload)

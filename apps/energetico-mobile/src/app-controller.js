@@ -10662,12 +10662,85 @@ export function createAppController({
       || state.attachments.find(file => file.id === fileId);
     if (!item) return false;
     try {
-      await showMedia(options => loadAttachment(item, options), item.fileName || item.file?.name || "arquivo");
+      const name = item.fileName || item.file?.name || 'arquivo';
+      const appendable = /^(application\/pdf|image\/)/i.test(item.mimeType || item.file?.type || '')
+        || /\.(pdf|jpe?g|png|webp|heic|heif|avif|bmp|tiff?)$/i.test(name);
+      await showMedia(options => loadAttachment(item, options), name, {
+        ...(appendable && !item.readOnly && !item.existing && typeof client.replaceAttachment === 'function'
+          ? { onAppendPages: trayPageAppender(item) } : {}),
+      });
       return true;
     } catch (error) {
       if (!stopped && account) setSessionError(error, "Não foi possível visualizar o anexo.");
       return false;
     }
+  }
+
+  function trayPageAppender(initialItem) {
+    let target = initialItem, pendingAttempt = null;
+    const owner = account, revision = sessionRevision, flow = store.getState().activeFlow;
+    return async (mode, { blob, fileName, signal, onProgress } = {}) => {
+      const current = () => !stopped && account === owner && sessionRevision === revision
+        && !signal?.aborted && !isDifferentActiveFlow(flow, store.getState().activeFlow)
+        && Boolean(flow) === Boolean(store.getState().activeFlow);
+      if (!current()) return null;
+      if (flowBusy() || attachmentSigningBusy) throw new Error('Aguarde a operação atual antes de acrescentar páginas.');
+      if (!['files', 'camera'].includes(mode)) return null;
+      if (store.getState().pendingFiles.some(item => item.id === target.id)) {
+        throw new Error('Aguarde a confirmação do envio deste anexo e abra-o novamente para acrescentar páginas.');
+      }
+      attachmentActionBusy = true;
+      attachmentRevision += 1;
+      sessionError = null;
+      render();
+      try {
+        if (!pendingAttempt) {
+          let files;
+          if (mode === 'files') files = await native.pickDocuments();
+          else {
+            const choice = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
+            if (!current() || !['photo', 'scan'].includes(choice)) return null;
+            files = await (choice === 'scan' ? native.scanDocument() : native.capturePhoto());
+          }
+          if (!current() || !files?.length) return null;
+          // Only the open target's exact identity is writable. A homonym with
+          // identical bytes is still a different attachment, not a replacement.
+          await refreshAttachments({ silent: true, force: true });
+          const resolved = store.getState().attachments.find(item => item.id === target.id);
+          if (!current()) return null;
+          if (!resolved || resolved.readOnly || resolved.existing || !/^[a-f0-9]{64}$/.test(resolved.id)) {
+            throw new Error('O anexo foi alterado ou é somente leitura. Atualize a bandeja e abra-o novamente.');
+          }
+          const originalBytes = await blob.arrayBuffer();
+          const hash = await globalThis.crypto.subtle.digest('SHA-256', originalBytes);
+          if (!current()) return null;
+          const { appendAttachmentPdf } = await import('./web/append-attachment-pdf.js');
+          const pdf = await appendAttachmentPdf(blob, fileName, files, { signal,
+            onProgress: progress => { if (current()) onProgress?.({ percent: Math.min(45, Math.round(Number(progress?.percent ?? progress) * .45)) }); } });
+          if (!current()) return null;
+          pendingAttempt = { targetId: resolved.id, file: pdf, requestId: globalThis.crypto.randomUUID(),
+            expectedSha256: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('') };
+        }
+        const attempt = pendingAttempt;
+        if (!current()) return null;
+        const result = await client.replaceAttachment(attempt.targetId, attempt.file, {
+          requestId: attempt.requestId, expectedSha256: attempt.expectedSha256, progressSignal: signal,
+          onProgress: progress => { if (current()) onProgress?.({ percent: Math.min(99, 45 + Math.round(progress.percent * .54)) }); },
+        });
+        if (!current()) return null;
+        target = result.replacement;
+        store.syncAttachments(result.attachments);
+        pendingAttempt = null;
+        hydrateMediaPreviews();
+        return { blob: attempt.file, fileName: attempt.file.name };
+      } finally {
+        if (!stopped && account === owner && sessionRevision === revision) {
+          attachmentActionBusy = false;
+          attachmentRevision += 1;
+          render();
+        }
+      }
+    };
   }
 
   async function shareAttachment(fileId) {
