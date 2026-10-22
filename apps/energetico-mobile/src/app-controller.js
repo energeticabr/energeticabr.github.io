@@ -760,6 +760,15 @@ function hasCompletedSubmission(result = {}) {
   });
 }
 
+function hasPostedDocumentContinuation(result, previousFlow, command) {
+  return previousFlow?.id === "document" && result.activeFlow?.id === "document"
+    && ["document_add_another", "document_submit_final", "retry_submission", "retry_after_error",
+      "confirm_yes", "continuar", "resume"]
+      .includes(String(command || "").trim().toLowerCase())
+    && Array.isArray(result.attachments)
+    && result.results?.at(-1)?.status === "awaiting_document_defaults";
+}
+
 function isDifferentActiveFlow(previousFlow, nextFlow) {
   if (!nextFlow) return false;
   if (!previousFlow) return true;
@@ -9538,6 +9547,14 @@ export function createAppController({
       const confirmed = store.confirmText(operation, staged?.immediate || presentationResult);
       let resumeEpiFinalize = false;
       if (confirmed) {
+        if (hasPostedDocumentContinuation(effectiveResult, previousState.activeFlow, replyId || operation.text)) {
+          // The VM verified this row and started the next one. Retire only
+          // those references; new files and pending uploads belong to the next
+          // document, while late snapshots must not resurrect the posted files.
+          for (const item of previousState.attachments) {
+            store.removeAttachment(item.id, { dismissFromSnapshots: true });
+          }
+        }
         if (behavior.autoDiscardExit === true && menuResult) {
           pendingHomeExit = null;
           store.setDraft("");

@@ -10181,6 +10181,163 @@ test("bloqueia a submissão se um anexo da bandeja desapareceu da VM", async () 
   harness.controller.stop();
 });
 
+test('documento em sequência retira os anexos postados antes de responder sobre o próximo', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO', contextId: 'document-batch-qa' };
+  const first = { id: 'first-row', fileName: 'primeiro.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/first-row' };
+  const second = { id: 'second-row', fileName: 'segundo.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/second-row' };
+  let remoteAttachments = [first];
+  h.client.getAttachments = async () => remoteAttachments;
+  h.store.ingestRemoteMessages([{ type: 'poll', question: 'DESEJA ADICIONAR MAIS UM DOCUMENTO OU SUBMETER SEM ADICIONAR MAIS DOCUMENTOS?',
+    options: [{ id: 'document_add_another', label: '➕ ADICIONAR MAIS UM DOCUMENTO' }] }], { activeFlow, attachments: [first] });
+  const replies = [];
+  h.client.sendText = async payload => {
+    replies.push(payload.replyId);
+    if (payload.replyId === 'document_add_another') {
+      remoteAttachments = [];
+      return { status: 'processed', activeFlow, attachments: [],
+        results: [{ status: 'awaiting_document_defaults', batch_id: 'batch-qa', etag: '2' }],
+        messages: [{ type: 'text', text: '✅ DOCUMENTO ID 901 GRAVADO. PREENCHA O PRÓXIMO DOCUMENTO.' },
+          { type: 'poll', question: 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?',
+            options: [{ id: 'document_defaults_proceed', label: '✅ PROSSEGUIR SEM EDITAR' }] }] };
+    }
+    if (payload.replyId === 'document_defaults_proceed') return { status: 'processed', activeFlow, attachments: [],
+      results: [{ status: 'awaiting_field', field: 'tipo_documento' }],
+      messages: [{ type: 'poll', question: 'QUAL O TIPO DE DOCUMENTO?', options: [] }] };
+    assert.equal(payload.replyId, 'document_submit_final');
+    assert.deepEqual(remoteAttachments.map(item => item.id), ['second-row']);
+    return { status: 'processed', activeFlow: null, resetConversation: true, attachments: [],
+      results: [{ status: 'completed' }], messages: [{ type: 'text', text: 'DOCUMENTO ID 902 GRAVADO.' }] };
+  };
+  assert.equal(await h.controller.sendText('➕ ADICIONAR MAIS UM DOCUMENTO', 'document_add_another'), true);
+  assert.deepEqual(h.store.getState().attachments, [], 'a bandeja da próxima linha não pode reter o arquivo já postado');
+  assert.equal(h.store.getState().activeFlow.id, 'document');
+  assert.equal(h.store.getState().completionNavigation, null, 'a postagem de uma linha não encerra o fluxo');
+  assert.equal(await h.controller.sendText('✅ PROSSEGUIR SEM EDITAR', 'document_defaults_proceed'), true);
+  assert.equal(h.view.renders.at(-1).error, null);
+  assert.equal(h.store.getState().messages.at(-1).question, 'QUAL O TIPO DE DOCUMENTO?');
+  remoteAttachments = [second];
+  h.store.syncAttachments(remoteAttachments);
+  assert.equal(await h.controller.sendText('✅ SUBMETER SEM ADICIONAR MAIS DOCUMENTOS', 'document_submit_final'), true);
+  assert.deepEqual(replies, ['document_add_another', 'document_defaults_proceed', 'document_submit_final']);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === 'delete-attachment'), [], 'retirar referências não exclui os arquivos já gravados');
+});
+
+for (const replyId of ['retry_submission', 'retry_after_error', 'confirm_yes', 'continuar', 'resume']) test(`documento em sequência limpa a linha confirmada na retomada ${replyId}`, async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const first = { id: 'retry-row', fileName: 'primeiro.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/retry-row' };
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [first] });
+  h.client.getAttachments = async () => [first];
+  h.client.sendText = async () => ({ status: 'processed', activeFlow, attachments: [],
+    results: [{ status: 'awaiting_document_defaults', batch_id: 'batch-qa', etag: '2' }],
+    messages: [{ type: 'poll', question: 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', options: [] }] });
+  assert.equal(await h.controller.sendText('Tentar novamente', replyId), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+});
+
+test('documento em sequência preserva novos arquivos e não ressuscita anexos já postados', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const first = { id: 'consumed-row', fileName: 'documento.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/consumed-row' };
+  const second = { ...first, id: 'new-row', mediaUrl: '/api/portal-media/new-row' };
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [first] });
+  h.client.getAttachments = async () => [first];
+  let finish;
+  h.client.sendText = () => new Promise(resolve => { finish = resolve; });
+  const posting = h.controller.sendText('Adicionar mais um', 'document_add_another');
+  await new Promise(resolve => setImmediate(resolve));
+  h.store.syncAttachments([first, second]);
+  h.store.queueFiles([new File(['novo'], 'pendente.pdf', { type: 'application/pdf' })]);
+  finish({ status: 'processed', activeFlow, attachments: [],
+    results: [{ status: 'awaiting_document_defaults' }],
+    messages: [{ type: 'poll', question: 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', options: [] }] });
+  assert.equal(await posting, true);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['new-row']);
+  assert.deepEqual(h.store.getState().pendingFiles.map(item => item.file.name), ['pendente.pdf']);
+  h.store.syncAttachments([first, second]);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['new-row'], 'snapshot antigo não pode restaurar o arquivo consumido, mesmo com nomes iguais');
+});
+
+test('documento em sequência respeita a intenção congelada ao retomar por submeter sem adicionar', async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const first = { id: 'frozen-row', fileName: 'documento.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/frozen-row' };
+  let attachments = [first];
+  h.store.ingestRemoteMessages([], { activeFlow, attachments });
+  h.client.getAttachments = async () => attachments;
+  const replies = [];
+  h.client.sendText = async payload => {
+    replies.push(payload.replyId);
+    if (replies.length === 1) return { status: 'processed', activeFlow, attachments,
+      results: [{ status: 'submission_failed' }], messages: [] };
+    if (payload.replyId === 'document_submit_final') {
+      attachments = [];
+      return { status: 'processed', activeFlow, attachments,
+        results: [{ status: 'awaiting_document_defaults' }],
+        messages: [{ type: 'poll', question: 'DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', options: [] }] };
+    }
+    assert.equal(payload.replyId, 'document_defaults_proceed');
+    return { status: 'processed', activeFlow, attachments, results: [{ status: 'awaiting_field' }],
+      messages: [{ type: 'poll', question: 'QUAL O TIPO DE DOCUMENTO?', options: [] }] };
+  };
+  await h.controller.sendText('Adicionar mais um', 'document_add_another');
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['frozen-row']);
+  assert.equal(await h.controller.sendText('Submeter sem adicionar mais', 'document_submit_final'), true);
+  assert.deepEqual(h.store.getState().attachments, [], 'o checkpoint confirmou a linha e manteve a intenção de adicionar outro');
+  assert.equal(await h.controller.sendText('Prosseguir sem editar', 'document_defaults_proceed'), true);
+  assert.deepEqual(replies, ['document_add_another', 'document_submit_final', 'document_defaults_proceed']);
+});
+
+for (const failure of ['network', 'submission_failed']) test(`documento em sequência conserva a bandeja após falha ${failure} e só limpa no retry confirmado`, async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const first = { id: 'failed-row', fileName: 'documento.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/failed-row' };
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [first] });
+  h.client.getAttachments = async () => [first];
+  const replies = [];
+  h.client.sendText = async payload => {
+    replies.push(payload.replyId);
+    if (replies.length === 1 && failure === 'network') throw new Error('Falha de conexão de teste');
+    return { status: 'processed', activeFlow, attachments: [],
+      results: [{ status: replies.length === 1 ? 'submission_failed' : 'awaiting_document_defaults' }],
+      messages: [{ type: 'text', text: 'Resposta da VM de teste' }] };
+  };
+  await h.controller.sendText('Adicionar mais um', 'document_add_another');
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['failed-row']);
+  assert.equal(await h.controller.sendText('Tentar novamente', 'retry_submission'), true);
+  assert.deepEqual(h.store.getState().attachments, []);
+  assert.deepEqual(replies, ['document_add_another', 'retry_submission']);
+});
+
+for (const scenario of ['edit-default', 'missing-snapshot', 'missing-status', 'later-failure', 'other-flow']) test(`documento em sequência não confunde ${scenario} com postagem confirmada`, async t => {
+  const h = makeHarness();
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: scenario === 'other-flow' ? 'launch' : 'document', title: 'FLUXO DE TESTE' };
+  const first = { id: 'not-posted', fileName: 'documento.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/api/portal-media/not-posted' };
+  h.store.ingestRemoteMessages([], { activeFlow, attachments: [first] });
+  h.client.getAttachments = async () => [first];
+  h.client.sendText = async () => ({ status: 'processed', activeFlow: { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' },
+    ...(scenario === 'missing-snapshot' ? {} : { attachments: [] }),
+    results: scenario === 'missing-status' ? [] : [{ status: 'awaiting_document_defaults' },
+      ...(scenario === 'later-failure' ? [{ status: 'submission_failed' }] : [])],
+    messages: [{ type: 'text', text: '✅ DOCUMENTO ID 901 GRAVADO. PREENCHA O PRÓXIMO DOCUMENTO.' }] });
+  assert.equal(await h.controller.sendText('Resposta', scenario === 'edit-default' ? 'choice:edit_field:5' : 'document_add_another'), true);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.id), ['not-posted']);
+});
+
 test("cadastro incorporado não valida anexos do fluxo pai como se fossem do cadastro", async () => {
   const harness = makeHarness();
   await harness.controller.start();
