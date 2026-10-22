@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Upload aceito — validação local</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+import { createAppController } from '../../src/app-controller.js';
+
+// Only the external boundary is synthetic. Exercise the real upload, store,
+// view and button handlers without transmitting any actual user document.
+const root = document.querySelector('#app'), view = createChatView(root);
+const store = createConversationStore({ historyMode: 'current-step' });
+const params = new URLSearchParams(location.search);
+const activeFlow = { id: 'supplies', title: '📦 SUPRIMENTOS', contextId: 'qa-supplies' };
+const uploadPrompt = { type: 'poll', question: 'ADICIONE OS ANEXOS DESTE LANÇAMENTO.', options: [] };
+const compressionPrompt = { type: 'poll', question: '📎 🗜️ ANEXO 1/2 — documento-teste.pdf — 12,8 MB. DESEJA COMPRIMIR? EM SEGUIDA, ESCOLHA O NÍVEL E CONFIRA A PRÉVIA.', options: [
+  { id: 'compress_attachments_yes', label: '🗜️ COMPACTAR ESTE' },
+  { id: 'compress_attachments_no', label: '📎 MANTER ORIGINAL' },
+  { id: 'compress_all_attachments', label: '🗜️ COMPACTAR TODOS' },
+] };
+const nextPrompt = { type: 'poll', question: 'COMO DESEJA PROSSEGUIR COM OS ANEXOS?', options: [{ id: 'input_continue', label: '✅ FINALIZAR ANEXOS' }] };
+const file = new File([new Uint8Array(12_800_000)], 'documento-teste.pdf', { type: 'application/pdf' });
+const accepted = { id: 'qa-accepted', fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: '/api/portal-media/qa-accepted' };
+let attachments = ['primeiro', 'segundo'].map(id => ({ id, fileName: `${id}.pdf`, mimeType: file.type, size: 200_000, mediaUrl: `/api/portal-media/qa-${id}` }));
+const requests = [];
+let compressionCalls = 0, uploads = 0, initialized = false;
+const controller = createAppController({ store, view,
+  auth: { initialize: async () => ({ homeAccountId: 'qa-upload', name: 'Validação local' }), getToken: async () => 'local-test-only' },
+  native: { importSharedItems: async () => [], pickDocuments: async () => [file] },
+  pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
+  client: {
+    async sendText(payload) {
+      if (initialized) requests.push(payload);
+      initialized = true;
+      return { status: 'processed', activeFlow, messages: [payload.replyId === 'compress_attachments_no' ? nextPrompt : uploadPrompt], attachments };
+    },
+    async sendFile() {
+      uploads += 1;
+      attachments = [...attachments, accepted];
+      return { status: 'processed', activeFlow, attachments,
+        messages: params.has('receipt') ? [{ type: 'text', text: 'Anexo recebido com sucesso.' }, compressionPrompt] : [compressionPrompt] };
+    },
+    async getAttachments() { return attachments; },
+    async compressAttachment() {
+      compressionCalls += 1;
+      throw new Error('O anexo não está mais disponível neste fluxo');
+    },
+  },
+});
+async function click(selector, expected) {
+  const button = root.querySelector(selector);
+  if (!button || button.disabled) throw new Error(`Botão indisponível: ${selector}`);
+  button.click();
+  const deadline = performance.now() + 5000;
+  while (!expected()) {
+    if (performance.now() > deadline) throw new Error(`A etapa não apareceu após ${selector}`);
+    await new Promise(requestAnimationFrame);
+  }
+}
+await controller.start();
+await click('[data-action="pick-files"]', () => root.querySelector('[data-action="pick-document-files"]'));
+await click('[data-action="pick-document-files"]', () => root.querySelector('[data-reply-id="compress_attachments_no"]:not(:disabled)'));
+if (params.has('keep')) await click('[data-reply-id="compress_attachments_no"]', () => root.querySelector('[data-reply-id="input_continue"]:not(:disabled)'));
+await document.fonts.ready;
+await new Promise(requestAnimationFrame);
+document.documentElement.dataset.layout = JSON.stringify({
+  error: root.querySelector('.error-banner')?.textContent || '', compressionCalls, uploads,
+  prompt: Boolean(root.querySelector('[data-reply-id="compress_attachments_no"]:not(:disabled)')),
+  continued: Boolean(root.querySelector('[data-reply-id="input_continue"]:not(:disabled)')),
+  requests,
+  attachmentCount: store.getState().attachments.length,
+  size: store.getState().attachments.find(item => item.id === accepted.id)?.size,
+  flow: store.getState().activeFlow?.contextId,
+  overflow: document.documentElement.scrollWidth > innerWidth + 1,
+});
+window.addEventListener('pagehide', () => controller.stop(), { once: true });
+</script></body></html>
