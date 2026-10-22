@@ -551,7 +551,7 @@ export function createTasksGallery({ document: documentRef = globalThis.document
       if (!attachments) throw new Error("A consulta de anexos não está disponível.");
       if (!attachments.length) { showNotice(`A tarefa ${text(field(row.fields, ["ID 2", "ID"]) ?? row.id)} não possui anexos.`); return; }
       if (typeof openMediaCollection !== "function") throw new Error("O visualizador de anexos não está disponível neste aparelho.");
-      await openMediaCollection(attachments.map(item => ({ fileName: item.fileName, source: data.downloadAttachment(row.id, item.fileName) })));
+      await openMediaCollection(attachments.map(item => ({ fileName: item.fileName, source: options => data.downloadAttachment(row.id, item.fileName, options) })));
     } catch (error) {
       if (opened && !destroyed && current === session) showNotice(safeFailure(error, "Não foi possível abrir os anexos da tarefa"), true);
     } finally {

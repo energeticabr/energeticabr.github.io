@@ -472,6 +472,7 @@ export function createPdfPreview({
     ready,
     destroy,
     getCurrentPage,
+    hasRenderedPages: () => renderedCanvases.length > 0,
     getSummary: () => {
       if (!pdf) return "";
       const failed = Number(root.dataset.failedPages || 0);

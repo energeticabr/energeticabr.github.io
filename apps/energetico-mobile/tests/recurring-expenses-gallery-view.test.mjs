@@ -192,7 +192,7 @@ test("dados da despesa abrem pelo lápis e anexos no visualizador compartilhado"
   await settle();
   assert.equal(opened.length, 1);
   assert.deepEqual(opened[0].map(item => item.fileName), ["conta.pdf"]);
-  assert.equal((await opened[0][0].source).type, "application/pdf");
+  assert.equal((await opened[0][0].source({})).type, "application/pdf");
   assert.deepEqual(ctx.calls.slice(-2), [["listAttachments", "33"], ["downloadAttachment", "33", "conta.pdf"]]);
 });
 

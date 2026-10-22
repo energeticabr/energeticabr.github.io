@@ -837,7 +837,7 @@ function createSharePointListData({
     }
   }
 
-  async function downloadAttachment(rawId, rawName) {
+  async function downloadAttachment(rawId, rawName, options) {
     const id = itemId(rawId);
     const fileName = String(rawName || "").trim();
     if (!fileName || fileName.length > 400 || /[\\/\u0000-\u001f]/.test(fileName)) {
@@ -845,7 +845,7 @@ function createSharePointListData({
     }
     const list = await resolveList();
     if (typeof repository.downloadAttachment !== "function") throw new Error("A abertura de anexos SharePoint não está disponível.");
-    const payload = await repository.downloadAttachment(siteKey, list.id, id, fileName);
+    const payload = await repository.downloadAttachment(siteKey, list.id, id, fileName, ...(options ? [options] : []));
     const metadata = (await listAttachments(id)).find(entry => entry.fileName === fileName);
     return asBlob(payload, metadata?.mimeType || attachmentMimeType(fileName));
   }

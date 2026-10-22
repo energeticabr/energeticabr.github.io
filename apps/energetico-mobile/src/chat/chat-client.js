@@ -2,6 +2,7 @@ import { validateAttachment } from "./file-policy.js";
 import { audioTranscriptionText } from "./audio-transcription.js";
 import { startDiaryProgress } from "./diary-attachment-progress.js";
 import { uploadWithProgress } from "./upload-transport.js";
+import { readDownloadBlob } from "../../../../portal/data/download-progress.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -61,33 +62,9 @@ async function readJson(response) {
   }
 }
 
-async function readMediaBlob(response, maxBytes) {
-  if (maxBytes === undefined) return response.blob();
+async function readMediaBlob(response, maxBytes, options = {}) {
   const tooLarge = () => Object.assign(new Error('O original excede o limite da prévia automática.'), { code: 'MEDIA_PREVIEW_TOO_LARGE' });
-  if (Number(response.headers?.get('Content-Length')) > maxBytes) {
-    await response.body?.cancel?.().catch(() => {});
-    throw tooLarge();
-  }
-  if (!response.body?.getReader) {
-    const blob = await response.blob();
-    if (blob.size > maxBytes) throw tooLarge();
-    return blob;
-  }
-  const reader = response.body.getReader(), chunks = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > maxBytes) throw tooLarge();
-      chunks.push(value);
-    }
-    return new Blob(chunks, { type: response.headers?.get('Content-Type') || '' });
-  } catch (error) {
-    await reader.cancel().catch(() => {});
-    throw error;
-  } finally { reader.releaseLock(); }
+  return readDownloadBlob(response, { ...options, maxBytes, tooLarge });
 }
 
 function confirmedResult(result, { allowRecovery = false } = {}) {
@@ -683,7 +660,7 @@ export function createChatClient({
     }, response => parsePortalResponse(response, "A consulta do menu"), true);
   }
 
-  async function fetchMedia(message = {}, { signal, maxBytes } = {}) {
+  async function fetchMedia(message = {}, { signal, maxBytes, onProgress } = {}) {
     if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)) throw new TypeError('Limite de prévia inválido.');
     let mediaUrl;
     try {
@@ -695,7 +672,7 @@ export function createChatClient({
       throw new Error("Endereço de mídia inválido.");
     }
 
-    const token = await acquireToken(tokenProvider);
+    const token = await cancellableToken(tokenProvider, signal);
     return request(mediaUrl.href, {
       headers: {
         Accept: "*/*",
@@ -710,7 +687,7 @@ export function createChatClient({
         error.status = response.status;
         throw error;
       }
-      return readMediaBlob(response, maxBytes);
+      return readMediaBlob(response, maxBytes, { signal, onProgress });
     }, true);
   }
 

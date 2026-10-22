@@ -3823,9 +3823,9 @@ export function createAppController({
     return true;
   }
 
-  async function pendingProvisionAttachmentBlob(paymentId, attachment, targetAccount, targetRevision) {
+  async function pendingProvisionAttachmentBlob(paymentId, attachment, targetAccount, targetRevision, options) {
     const data = await getPendingProvisionAttachmentsData(targetAccount, targetRevision);
-    const payload = await data.downloadAttachment(paymentId, attachment.fileName);
+    const payload = await data.downloadAttachment(paymentId, attachment.fileName, options);
     if (stopped || account !== targetAccount || sessionRevision !== targetRevision) return null;
     const mimeType = String(attachment.mimeType || "application/octet-stream");
     return payload instanceof Blob && payload.type === mimeType
@@ -3843,9 +3843,7 @@ export function createAppController({
     const targetAccount = account;
     const targetRevision = sessionRevision;
     try {
-      const blob = await pendingProvisionAttachmentBlob(id, attachment, targetAccount, targetRevision);
-      if (!blob || stopped || account !== targetAccount) return false;
-      await showMedia(blob, attachment.fileName);
+      await showMedia(options => pendingProvisionAttachmentBlob(id, attachment, targetAccount, targetRevision, options), attachment.fileName);
       return true;
     } catch {
       if (!stopped && account === targetAccount) {
@@ -5728,7 +5726,8 @@ export function createAppController({
       const files = [];
       for (const item of selected) {
         assertSession();
-        const attachmentBlob = await (item?.source ?? item?.blob ?? blob);
+        const source = item?.source ?? item?.blob ?? blob;
+        const attachmentBlob = await (typeof source === 'function' ? source({}) : source);
         assertSession();
         if (!attachmentBlob || typeof attachmentBlob.slice !== "function"
           || typeof attachmentBlob.arrayBuffer !== "function") {
@@ -6289,7 +6288,7 @@ export function createAppController({
             },
             openMedia: descriptor => {
               assertSession();
-              return showMedia(client.fetchMedia(descriptor), descriptor.fileName || "arquivo", {
+              return showMedia(options => client.fetchMedia(descriptor, options), descriptor.fileName || "arquivo", {
                 onAddToTray: galleryAddToTray(assertSession),
               });
             },
@@ -6297,7 +6296,7 @@ export function createAppController({
               assertSession();
               const items = (Array.isArray(descriptors) ? descriptors : []).map(descriptor => ({
                 ...descriptor,
-                source: client.fetchMedia(descriptor),
+                source: options => client.fetchMedia(descriptor, options),
               }));
               return openGalleryMedia(items, assertSession);
             },
@@ -9483,7 +9482,7 @@ export function createAppController({
         const image = result.messages.find(item => item.type === "image" && item.mediaUrl);
         if (summaryStatus === "flow_summary" && image) {
           try {
-            await showMedia(client.fetchMedia(image), image.fileName || "Resumo do fluxo.png", { layout: "flow-summary" });
+            await showMedia(options => client.fetchMedia(image, options), image.fileName || "Resumo do fluxo.png", { layout: "flow-summary" });
           } catch (error) {
             if (!stopped && account) setSessionError(error, "Não foi possível abrir o resumo.");
           }
@@ -10304,7 +10303,7 @@ export function createAppController({
       return false;
     }
     try {
-      await showMedia(client.fetchMedia(message), message.fileName || message.caption || "arquivo");
+      await showMedia(options => client.fetchMedia(message, options), message.fileName || message.caption || "arquivo");
       return true;
     } catch (error) {
       setSessionError(error, "Não foi possível abrir o arquivo.");
@@ -10415,20 +10414,20 @@ export function createAppController({
     }
     if (native.previewMedia) return native.previewMedia(source, fileName, previewOptions);
     const previewAccount = account;
-    const blob = await source;
+    const blob = await (typeof source === 'function' ? source({}) : source);
     if (!stopped && account === previewAccount) return native.exportMedia(blob, fileName);
   }
 
-  async function loadAttachment(item) {
+  async function loadAttachment(item, options) {
     if (item.file) return item.file;
     try {
-      return await client.fetchMedia(item);
+      return await client.fetchMedia(item, options);
     } catch (error) {
       if (error?.status !== 404) throw error;
       const refreshed = await refreshAttachments({ silent: true, force: true });
       const current = refreshed && store.getState().attachments.find(candidate => candidate.id === item.id);
       if (!current) throw new Error("Este anexo não está mais disponível no fluxo atual. Feche a prévia para voltar ao chat.");
-      return client.fetchMedia(current);
+      return client.fetchMedia(current, options);
     }
   }
 
@@ -10646,7 +10645,7 @@ export function createAppController({
       || state.attachments.find(file => file.id === fileId);
     if (!item) return false;
     try {
-      await showMedia(loadAttachment(item), item.fileName || item.file?.name || "arquivo");
+      await showMedia(options => loadAttachment(item, options), item.fileName || item.file?.name || "arquivo");
       return true;
     } catch (error) {
       if (!stopped && account) setSessionError(error, "Não foi possível visualizar o anexo.");

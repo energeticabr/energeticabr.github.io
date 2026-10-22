@@ -11,6 +11,7 @@ import { createAppController, shouldRemoveSignedSource } from "../src/app-contro
 import { createConversationStore } from "../src/chat/conversation-store.js";
 import { validateAttachment } from "../../../portal/data/attachments.js";
 import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
+import { createAttachmentPreview } from '../src/web/attachment-preview.js';
 
 function makeView() {
   const handlers = new Map();
@@ -27,6 +28,9 @@ function makeView() {
     destroy() { handlers.clear(); },
   };
 }
+
+// The native preview accepts local blobs, legacy promises and cancellable loaders.
+const previewSource = async source => typeof source === 'function' ? source({}) : source;
 
 function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, historyMode, mediaLoadTimeoutMs, rhidReportTimeoutMs, authTimeoutMs, authSignInTimeoutMs, signPdfAttachment, launchGalleryFactory, ordersGalleryFactory, ordersGalleryDataFactory, tasksGalleryFactory, tasksGalleryDataFactory, contractorReportsFactory, paymentLedgerFactory, paymentLedgerDataFactory, cargosFactory, cargosDataFactory, paymentProgrammingGalleryFactory, paymentProgrammingGalleryDataFactory, recurringExpensesGalleryFactory, recurringExpensesGalleryDataFactory, registrationGalleryFactory, registrationGalleryDataFactory, pendingProvisionAttachmentsDataFactory, pendingConstructionDiaryDataFactory, recentDiaryActivitiesDataFactory, hrPayrollGalleryFactory, hrPayrollGalleryDataFactory, payrollSheetCreateFactory, supplierPayrollFactory, supplierPayrollDataFactory, mealVoucherFactory, mealVoucherDataFactory, databaseFilterDebounceMs, view: suppliedView } = {}) {
   let next = 0;
@@ -80,6 +84,35 @@ function makeHarness({ account = { homeAccountId: "a1", name: "Bernardo" }, hist
 }
 
 const observationQuestion = '💬 DESEJA FAZER ALGUMA OBSERVAÇÃO?\nDIGITE DIRETAMENTE A OBSERVAÇÃO OU DESCRIÇÃO, OU SELECIONE UMA DAS OPÇÕES ABAIXO.';
+
+for (const command of ['open-file', 'open-media']) test(`${command} opens the real preview before downloading and forwards measured progress`, async t => {
+  const h = makeHarness();
+  const dom = new JSDOM('<main></main>'), documentRef = dom.window.document;
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  const preview = createAttachmentPreview({ documentRef });
+  h.native.previewMedia = preview.open; h.native.closePreview = preview.close;
+  t.after(() => { h.controller.stop(); preview.destroy(); dom.window.close(); });
+  await h.controller.start();
+  const attachment = { id: 'download', fileName: 'large.txt', mimeType: 'text/plain', size: 12_000_000, mediaUrl: '/api/portal-media/download' };
+  h.store.ingestRemoteMessages([{ ...attachment, type: 'document' }], { attachments: [attachment], activeFlow: { id: 'supplies', title: 'SUPRIMENTOS' } });
+  let received, finish, openedAtRequest;
+  h.client.fetchMedia = (_item, options) => {
+    received = options;
+    openedAtRequest = documentRef.querySelector('dialog').open;
+    return new Promise(resolve => { finish = resolve; });
+  };
+  const opening = h.view.emit(command, { fileId: 'download', messageId: 'download' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(openedAtRequest, true);
+  assert.equal(typeof received?.onProgress, 'function');
+  received.onProgress({ percent: 40, loaded: 4, total: 10 });
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '40%');
+  finish(new Blob(['conteúdo'], { type: 'text/plain' }));
+  assert.equal(await opening, true);
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '100%');
+  assert.equal(documentRef.querySelector('.attachment-preview-text').textContent, 'conteúdo');
+});
 
 for (const mode of ['scan','photo',null]) test(`camera mode ${mode} uses only the chosen confirmed files`, async t => {
   const h=makeHarness();t.after(()=>h.controller.stop());await h.controller.start();
@@ -150,7 +183,7 @@ for (const [replyId, category] of [
     t.after(() => h.controller.stop());
     await h.controller.start();
     const previews = [];
-    h.native.previewMedia = async (blob, name, options) => { previews.push({ blob: await blob, name, options }); };
+    h.native.previewMedia = async (blob, name, options) => { previews.push({ blob: await previewSource(blob), name, options }); };
     h.client.sendText = async () => provisionPdfResult(category);
     assert.equal(await h.view.emit('select-reply', { replyId, label: category }), true);
     assert.equal(previews.length, 1);
@@ -203,7 +236,7 @@ for (const [replyId, category] of [
       : new Blob([readFileSync(new URL('../../../assets/projeto-bandeirante/bandeirante-sala-cozinha-render.jpg', import.meta.url))]);
   };
   const previews = [];
-  h.native.previewMedia = async (blob, name, options) => { previews.push({ blob: await blob, name, options }); };
+  h.native.previewMedia = async (blob, name, options) => { previews.push({ blob: await previewSource(blob), name, options }); };
   assert.equal(await h.view.emit('select-reply', { replyId, label: category }), true);
   assert.equal(previews.length, 1, 'one popup for the whole report, not one per image');
   assert.equal(previews[0].blob.type, 'application/pdf');
@@ -1601,7 +1634,7 @@ test("atalho RHID consulta hoje e abre apenas a tela de presenças, sem PDF auto
       COLETADO_EM: "2026-09-27T20:11:00Z",
     }] };
   };
-  h.native.previewMedia = async (source, fileName) => previews.push({ blob: await source, fileName });
+  h.native.previewMedia = async (source, fileName) => previews.push({ blob: await previewSource(source), fileName });
   t.after(() => h.controller.stop());
   await h.controller.start();
 
@@ -1615,7 +1648,7 @@ test("atalho RHID consulta hoje e abre apenas a tela de presenças, sem PDF auto
 test('Gerar relatório abaixo do calendário RHID abre o dia selecionado sem gerar PDF',async t=>{
  const h=makeHarness(),previews=[];
  h.client.getRhidAttendanceReport=async date=>({date,rows:[{ID_PESSOA_RHID:'1',NOME_COLABORADOR:'ANA',BATIDAS_RHID:'07:00;12:00;13:00;17:00'}]});
- h.native.previewMedia=async(source,name,options)=>previews.push({blob:await source,name,options});
+ h.native.previewMedia=async(source,name,options)=>previews.push({blob:await previewSource(source),name,options});
  t.after(()=>h.controller.stop());await h.controller.start();
  assert.equal(await h.view.emit('rhid-attendance-report-generate',{value:'2026-10-08'}),true);
  assert.equal(previews.length,0);
@@ -1658,7 +1691,7 @@ test("atalho RHID abre a tela mesmo sem presenças no dia, sem PDF automático",
   const h = makeHarness();
   const previews = [];
   h.client.getRhidAttendanceReport = async date => ({ date, rows: [] });
-  h.native.previewMedia = async (source, name) => previews.push({ blob: await source, name });
+  h.native.previewMedia = async (source, name) => previews.push({ blob: await previewSource(source), name });
   t.after(() => h.controller.stop());
   await h.controller.start();
 
@@ -2279,7 +2312,7 @@ test("anexo único da Galeria Lançamentos também pode ser adicionado à barra"
     return { open() {}, destroy() {} };
   } });
   h.native.previewMedia = async (source, fileName, options) => {
-    previewBlob = await source;
+    previewBlob = await previewSource(source);
     previewOptions = options;
     assert.equal(fileName, "foto.jpg");
   };
@@ -7541,7 +7574,7 @@ test('ao abrir identifica o fluxo ativo e permite resumo em imagem sem substitui
     return {status:'processed', activeFlow, results:[{status:'flow_summary'}], messages:[{type:'image',mediaUrl:'/api/portal-media/summary',fileName:'resumo.png'}]};
   };
   const previews = [];
-  h.native.previewMedia = async (source, name, options) => { previews.push([await source,name,options]); };
+  h.native.previewMedia = async (source, name, options) => { previews.push([await previewSource(source),name,options]); };
   await h.view.emit('show-summary');
   assert.equal(previews.length, 1);
   assert.equal(previews[0][1], 'resumo.png');
@@ -7557,7 +7590,7 @@ test('resumos automáticos para confirmação e imagens reabertas recebem layout
   const previews = [];
   const original = new Blob(['png original'], { type: 'image/png' });
   h.client.fetchMedia = async () => original;
-  h.native.previewMedia = async (source, name, options) => { previews.push({ blob: await source, name, options }); };
+  h.native.previewMedia = async (source, name, options) => { previews.push({ blob: await previewSource(source), name, options }); };
   for (const [index, name, status] of [[1,'resumo-lancamento.png','awaiting_confirmation'], [2,'RESUMO-documentos.PNG','awaiting_confirmation'], [3,'foto.png','processed']]) {
     h.client.sendText = async () => ({ status: 'processed', activeFlow: { id: 'task', title: 'TAREFA' }, results: [{ status }], messages: [{ id: `media-${index}`, type: 'image', mediaUrl: '/api/portal-media/synthetic', fileName: name }] });
     await h.controller.sendText('Avançar');
@@ -10164,7 +10197,7 @@ test("web conserva a pergunta durante envio e falha e a troca depois de tentar n
 test("visualiza anexo local confirmado e pendente sem reenviar nem alterar a pergunta", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   const previews = [];
-  harness.native.previewMedia = async (source, name) => previews.push([await source, name]);
+  harness.native.previewMedia = async (source, name) => previews.push([await previewSource(source), name]);
   await harness.controller.start();
   const file = new File(["foto"], "obra.jpg", { type: "image/jpeg" });
   harness.store.queueFiles([file]);
@@ -10203,7 +10236,7 @@ test("encaminha apenas o anexo selecionado com nome e conteúdo originais", asyn
 test("retorno do Atalho atualiza somente anexos e entrega mídia remota ao visualizador", async () => {
   const harness = makeHarness({ historyMode: "current-step" });
   const previews = [];
-  harness.native.previewMedia = async (source, name) => previews.push([await source, name]);
+  harness.native.previewMedia = async (source, name) => previews.push([await previewSource(source), name]);
   await harness.controller.start();
   harness.client.getAttachments = async () => [{ id: "from-shortcut", fileName: "planta.pdf", mediaUrl: "/api/portal-media/a" }];
   assert.equal(typeof harness.controller.refreshAttachments, "function");
@@ -10384,7 +10417,7 @@ test("mídia expirada renova snapshot sem reenviar resposta ao fluxo", async () 
     return new Blob(["renovado"]);
   };
   let previewText;
-  harness.native.previewMedia = async source => { previewText = await (await source).text(); };
+  harness.native.previewMedia = async source => { previewText = await (await previewSource(source)).text(); };
   await harness.view.emit("open-file", { fileId: "file" });
   assert.equal(previewText, "renovado");
   assert.equal(harness.chatCalls.length, 1);

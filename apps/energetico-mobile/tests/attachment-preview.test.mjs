@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import { createAttachmentPreview } from "../src/web/attachment-preview.js";
 import { createPdfPreview } from "../src/web/pdf-preview.js";
 import { installAppZoomGuard } from "../src/web/app-zoom-guard.js";
+import { createAttachmentPreviewController } from '../../../portal/ui/attachments-panel.js';
 
 function setup(t, options = {}) {
   const dom = new JSDOM('<main><textarea>rascunho preservado</textarea><section id="messages">Conversa</section></main>');
@@ -25,6 +26,125 @@ function setup(t, options = {}) {
   t.after(() => { preview.destroy(); stopPageZoom(); dom.window.close(); });
   return { preview, documentRef, dom, revoked };
 }
+
+test('attachment loader shows real download percentage next to the spinner and waits for PDF rendering before 100%', async t => {
+  let progress, finishDownload, finishPdf;
+  const { preview, documentRef } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({
+    ready: new Promise(resolve => { finishPdf = resolve; }), destroy() {},
+  }) }) });
+  const pending = preview.open(({ onProgress }) => {
+    progress = onProgress;
+    return new Promise(resolve => { finishDownload = resolve; });
+  }, 'large.pdf');
+  const percent = () => documentRef.querySelector('.attachment-preview-status [role="progressbar"]');
+  assert.equal(percent()?.getAttribute('aria-valuenow'), '0');
+  assert.ok(percent().parentElement.querySelector('.app-loading__spinner'));
+  progress({ loaded: 4, total: 8, percent: 50 });
+  assert.equal(percent().textContent, '50%');
+  progress({ loaded: 8, total: 8, percent: 100 });
+  finishDownload(new Blob(['%PDF'], { type: 'application/pdf' }));
+  for (let i = 0; i < 3; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(percent().getAttribute('aria-valuenow'), '99');
+  assert.equal(documentRef.querySelector('.attachment-preview-sign').disabled, true);
+  finishPdf(); await pending;
+  assert.equal(percent().getAttribute('aria-valuenow'), '100');
+  assert.equal(documentRef.querySelector('.attachment-preview-status .app-loading__spinner'), null);
+  assert.doesNotThrow(() => progress({ percent: 20, loaded: 2, total: 10 }));
+  assert.equal(percent().getAttribute('aria-valuenow'), '100');
+});
+
+test('a real PDF with no rendered pages never reports 100%', async t => {
+  const pdf = { numPages: 1, getPage: async () => { throw new Error('page failed'); } };
+  const { preview, documentRef, dom } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: options => createPdfPreview({ ...options,
+    loadPdfJs: async () => ({ getDocument: () => ({ promise: Promise.resolve(pdf), destroy: async () => {} }) }) }) }) });
+  dom.reconfigure({ url: 'https://example.test/energetico/' });
+  await preview.open(new Blob(['%PDF'], { type: 'application/pdf' }), 'unrenderable.pdf');
+  assert.equal(documentRef.querySelectorAll('canvas').length, 0);
+  assert.ok(documentRef.querySelector('.attachment-preview-pdf-page--error'));
+  assert.equal(documentRef.querySelector('[aria-valuenow="100"]'), null);
+  assert.equal(documentRef.querySelector('.app-loading__spinner'), null);
+  assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /não pôde ser exibida/);
+});
+
+for (const kind of ['video', 'audio']) test(`${kind} waits for decoded data rather than metadata before reporting 100%`, async t => {
+  const { preview, documentRef, dom } = setup(t);
+  await preview.open(new Blob(['media'], { type: `${kind}/mp4` }), kind === 'audio' ? 'audio.m4a' : 'video.mp4');
+  const media = documentRef.querySelector(kind);
+  media.dispatchEvent(new dom.window.Event('loadedmetadata'));
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '99%');
+  media.dispatchEvent(new dom.window.Event('loadeddata'));
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '100%');
+});
+
+test('a media error cannot be followed by a stale completion event', async t => {
+  const { preview, documentRef, dom } = setup(t);
+  await preview.open(new Blob(['media'], { type: 'video/mp4' }), 'broken.mp4');
+  const media = documentRef.querySelector('video');
+  media.dispatchEvent(new dom.window.Event('error'));
+  media.dispatchEvent(new dom.window.Event('loadeddata'));
+  assert.equal(documentRef.querySelector('[aria-valuenow="100"]'), null);
+  assert.match(documentRef.querySelector('dialog').textContent, /não conseguiu reproduzir/);
+});
+
+test('closing or replacing the attachment aborts its download and ignores its late progress', async t => {
+  const { preview, documentRef } = setup(t);
+  let firstProgress, firstSignal, finishFirst;
+  const first = preview.open(({ onProgress, signal }) => { firstProgress = onProgress; firstSignal = signal; return new Promise(resolve => { finishFirst = resolve; }); }, 'old.txt');
+  const second = preview.open(new Promise(() => {}), 'new.txt');
+  assert.equal(firstSignal?.aborted, true);
+  firstProgress({ percent: 95, loaded: 95, total: 100 });
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '0%');
+  finishFirst(new Blob(['old'], { type: 'text/plain' })); await first;
+  assert.equal(documentRef.querySelector('h2').textContent, 'new.txt');
+  preview.close();
+  assert.equal(documentRef.querySelector('dialog').open, false);
+  void second;
+});
+
+test('attachments inside gallery editors use the app loader, retain collection navigation and cancel only their own preview', async t => {
+  const { preview, documentRef } = setup(t), downloads = [];
+  let finish, downloadOptions;
+  const editor = createAttachmentPreviewController({ documentRef, files: [{ name: 'one.txt', type: 'text/plain' }, { name: 'two.txt', type: 'text/plain' }], actions: {
+    canView: () => true,
+    downloadAttachment(name, options) { downloads.push(name); downloadOptions = options; return new Promise(resolve => { finish = resolve; }); },
+  } });
+  t.after(() => editor.cleanup());
+  await editor.open(1);
+  assert.equal(documentRef.querySelector('dialog').open, true);
+  assert.equal(documentRef.querySelector('h2').textContent, 'two.txt');
+  assert.deepEqual(downloads, ['two.txt']);
+  downloadOptions.onProgress({ percent: 50 });
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '50%');
+  finish(new Blob(['second'], { type: 'text/plain' }));
+  for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(documentRef.querySelector('[role="progressbar"]').textContent, '100%');
+  documentRef.querySelector('[data-preview-action="previous"]').click();
+  assert.deepEqual(downloads, ['two.txt', 'one.txt']);
+  assert.equal(documentRef.querySelector('h2').textContent, 'one.txt');
+  const previousSignal = downloadOptions.signal;
+  await preview.open(new Blob(['other'], { type: 'text/plain' }), 'other.txt');
+  assert.equal(previousSignal.aborted, true);
+  editor.cleanup();
+  assert.equal(documentRef.querySelector('dialog').open, true, 'closing an old editor cannot close a newer tray preview');
+  assert.equal(documentRef.querySelector('h2').textContent, 'other.txt');
+  finish(new Blob(['late'], { type: 'text/plain' }));
+});
+
+test('unknown attachment size is explicitly indeterminate and download errors never reach 100%', async t => {
+  const { preview, documentRef } = setup(t);
+  let progress, fail;
+  const pending = preview.open(({ onProgress }) => { progress = onProgress; return new Promise((_, reject) => { fail = reject; }); }, 'unavailable.pdf');
+  progress({ percent: null, loaded: 200, total: null });
+  const badge = documentRef.querySelector('[role="progressbar"]');
+  assert.equal(badge.hasAttribute('aria-valuenow'), false);
+  assert.equal(badge.textContent, '—%');
+  assert.match(badge.getAttribute('aria-valuetext'), /não informado/);
+  fail(new Error('offline')); await pending;
+  assert.equal(documentRef.querySelector('[role="progressbar"]'), null);
+  assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /não está disponível/);
+  assert.doesNotThrow(() => progress({ percent: 100 }));
+  assert.equal(documentRef.querySelector('[role="progressbar"]'), null);
+});
 for (const layout of ['report-pdf', 'flow-summary']) test(`${layout} has one emoji close and no duplicate return button, including loading and errors`, async t => {
   const { preview, documentRef, dom } = setup(t, { loadPdfPreview: async () => ({ createPdfPreview: () => ({ ready: Promise.resolve(), destroy() {} }) }) });
   let resolve, closed = 0;
@@ -424,7 +544,7 @@ test("PDF mostra páginas e tamanho no rodapé, sem a mensagem de instrução", 
   });
   await preview.open(new Blob(["%PDF"], { type: "application/pdf" }), "ata.pdf");
   const dialog = documentRef.querySelector("dialog");
-  assert.equal(dialog.querySelector(".attachment-preview-status").textContent, "3 páginas • 12 KB");
+  assert.equal(dialog.querySelector(".attachment-preview-status").textContent, "100% 3 páginas • 12 KB");
   assert.doesNotMatch(dialog.textContent, /PDF aberto|Deslize para baixo/);
   assert.match(dialog.querySelector(".attachment-preview-footer").textContent, /Voltar ao chat/);
   const forwardButton = dialog.querySelector(".attachment-preview-export");
@@ -595,6 +715,9 @@ test("navegador desktop abre o PDF no leitor nativo quando o PDF.js falha", asyn
   assert.ok(frame, "o leitor nativo do navegador deve substituir a mensagem de erro");
   assert.equal(frame.title, "comprovante.pdf");
   assert.equal(frame.src, "blob:preview-1");
+  assert.equal(documentRef.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '99');
+  frame.dispatchEvent(new documentRef.defaultView.Event('load'));
+  assert.equal(documentRef.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '100');
   assert.match(documentRef.querySelector(".attachment-preview-status").textContent, /leitor do navegador/i);
   assert.doesNotMatch(documentRef.querySelector("dialog").textContent, /não foi possível mostrar este arquivo/i);
 

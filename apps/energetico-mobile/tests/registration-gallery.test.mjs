@@ -37,7 +37,9 @@ test("Galeria de presenças mostra descritivos e ações de editar e deletar", a
   assert.ok(card.querySelector('[data-gallery-action="delete"]'));
   card.querySelector('[data-action="registration-attachments"]').click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(opened, [[{ fileName: "comprovante.pdf", source: "2249/comprovante.pdf" }]]);
+  assert.equal(opened.length, 1);
+  assert.deepEqual(opened[0].map(item => item.fileName), ['comprovante.pdf']);
+  assert.equal(await opened[0][0].source({}), '2249/comprovante.pdf');
   gallery.destroy(); dom.window.close();
 });
 
@@ -116,7 +118,9 @@ test("Galeria de documentos segue os campos de consulta e filtros da G47", async
   assert.equal(doc.querySelectorAll('[data-registration-row="21"] [data-action="registration-attachments"]').length, 1);
   attachmentRail.querySelector(".rg-row-file__label").click();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(opened, [[{ fileName: "contrato.pdf", source: "21/contrato.pdf" }]]);
+  assert.equal(opened.length, 1);
+  assert.deepEqual(opened[0].map(item => item.fileName), ['contrato.pdf']);
+  assert.equal(await opened[0][0].source({}), '21/contrato.pdf');
   assert.match(doc.querySelector("[data-registration-row]").textContent, /Observação A/);
   assert.match(doc.querySelector("[data-registration-row]").textContent, /DATA SUBMETIDO\s*20\/09\/2026/);
   filialFilter.value = "";

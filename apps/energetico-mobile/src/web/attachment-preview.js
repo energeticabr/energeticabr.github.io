@@ -1,5 +1,5 @@
 import { createPinchZoom } from "./pinch-zoom.js";
-import { createLoadingIndicator } from "../ui/loading-indicator.js";
+import { createLoadingIndicator, updateLoadingIndicator } from "../ui/loading-indicator.js";
 
 let nextPreviewId = 0;
 
@@ -265,6 +265,20 @@ export function createAttachmentPreview({
     status.textContent = "Use ENCAMINHAR para acessar o arquivo original.";
   }
 
+  function loading(session, label, progress = session.progress) {
+    if (active !== session || session.failed) return;
+    session.progress = progress;
+    updateLoadingIndicator(session.loader, { label, progress, progressLabel: 'Carregamento do anexo' });
+    if (session.loader.parentElement !== status) status.replaceChildren(session.loader);
+  }
+
+  function ready(session, message) {
+    if (active !== session || session.failed) return;
+    updateLoadingIndicator(session.loader, { progress: 100, progressLabel: 'Carregamento do anexo' });
+    const badge = session.loader.querySelector('[role="progressbar"]');
+    status.replaceChildren(badge, documentRef.createTextNode(` ${message}`));
+  }
+
   async function showNativePdf(session) {
     if (!session.blob || !canEmbedPdf(session.blob, session.fileName) || !(await hasPdfHeader(session.blob))) return false;
     if (active !== session) return false;
@@ -275,9 +289,11 @@ export function createAttachmentPreview({
     session.urls.add(href);
     const frame = element("iframe", "attachment-preview-pdf-native");
     frame.title = session.fileName;
+    frame.addEventListener('load', () => ready(session, 'PDF aberto no leitor do navegador.'), { once: true });
+    frame.addEventListener('error', () => { if (active === session) explain(session, 'Não foi possível abrir o PDF neste navegador.'); }, { once: true });
+    loading(session, 'Preparando PDF…', 99);
     frame.src = href;
     content.replaceChildren(frame);
-    status.textContent = "PDF aberto no leitor do navegador.";
     return true;
   }
 
@@ -290,11 +306,12 @@ export function createAttachmentPreview({
     closeButton.textContent = reportLayout ? "❌" : "Fechar";
     closeButton.setAttribute("aria-label", reportLayout ? "Fechar relatório" : "Fechar");
     backButton.hidden = reportLayout;
-    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp };
+    const session = { abort: new AbortController(), urls: new Set(), blob: null, pdf: null, zoom: null, kind: null, fileName: String(fileName || "arquivo"), onClose, onSign, onStamp,
+      progress: 0, failed: false, loader: createLoadingIndicator(documentRef, 'Carregando arquivo…', { progress: 0, progressLabel: 'Carregamento do anexo' }) };
     active = session;
     title.textContent = session.fileName;
     updateCollectionNavigation();
-    status.replaceChildren(createLoadingIndicator(documentRef, "Carregando arquivo…"));
+    status.replaceChildren(session.loader);
     exportButton.disabled = true;
     if (!dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
@@ -302,9 +319,21 @@ export function createAttachmentPreview({
     }
     closeButton.focus({ preventScroll: true });
     try {
-      const blob = typeof blobOrPromise?.then === "function" ? await blobOrPromise : blobOrPromise;
+      const source = typeof blobOrPromise === 'function' ? blobOrPromise({
+        signal: session.abort.signal,
+        onProgress: value => {
+          if (active !== session || session.abort.signal.aborted || session.failed || session.downloadComplete) return;
+          if (value?.percent === null) loading(session, 'Carregando arquivo… Tamanho total não informado.', null);
+          else if (typeof value?.percent === 'number' && Number.isFinite(value.percent) && value.percent >= 0 && value.percent <= 100) {
+            loading(session, 'Carregando arquivo…', Math.min(99, Math.floor(value.percent)));
+          }
+        },
+      }) : blobOrPromise;
+      const blob = typeof source?.then === 'function' ? await source : source;
       if (active !== session) return;
       if (!blob || typeof blob.slice !== "function" || typeof blob.arrayBuffer !== "function") throw new Error("Arquivo inválido.");
+      session.downloadComplete = true;
+      loading(session, 'Preparando arquivo…', 99);
       session.blob = blob;
       exportButton.disabled = typeof exportMedia !== "function";
       let kind = previewKind(blob, session.fileName);
@@ -374,10 +403,11 @@ export function createAttachmentPreview({
           captureImageBaseSize();
           const pendingZoom = session.zoom?.getZoom?.() || 1;
           if (pendingZoom !== 1) applyImageZoom(pendingZoom);
-          status.textContent = "Imagem pronta.";
+          ready(session, "Imagem pronta.");
         }, { once: true });
         img.addEventListener("error", () => {
           if (active !== session) return;
+          session.failed = true;
           urlApi.revokeObjectURL(href);
           session.urls.delete(href);
           explain(session, "Este navegador não conseguiu mostrar esta imagem. Você pode abri-la em outro app.");
@@ -423,31 +453,32 @@ export function createAttachmentPreview({
             },
           };
         }
-        status.replaceChildren(createLoadingIndicator(documentRef, "Carregando imagem…"));
+        loading(session, "Carregando imagem…");
       } else if (kind === "video" || kind === "audio") {
         const media = element(kind, `attachment-preview-${kind}`);
         media.controls = true;
-        media.preload = "metadata";
+        media.preload = "auto";
         if (kind === "video") media.playsInline = true;
         const href = urlApi.createObjectURL(blob);
         session.urls.add(href);
-        media.addEventListener("loadedmetadata", () => {
-          if (active === session) status.textContent = kind === "video" ? "Vídeo pronto." : "Áudio pronto.";
+        media.addEventListener("loadeddata", () => {
+          ready(session, kind === "video" ? "Vídeo pronto." : "Áudio pronto.");
         }, { once: true });
         media.addEventListener("error", () => {
           if (active !== session) return;
+          session.failed = true;
           urlApi.revokeObjectURL(href);
           session.urls.delete(href);
           explain(session, `Este navegador não conseguiu reproduzir este ${kind === "video" ? "vídeo" : "áudio"}. Você pode abri-lo em outro app.`);
         }, { once: true });
         media.src = href;
         content.append(media);
-        status.replaceChildren(createLoadingIndicator(documentRef, `Carregando ${kind === "video" ? "vídeo" : "áudio"}…`));
+        loading(session, `Carregando ${kind === "video" ? "vídeo" : "áudio"}…`);
       } else if (kind === "text") {
         const text = await readText(blob.slice(0, maxTextBytes));
         if (active !== session) return;
         content.append(element("pre", "attachment-preview-text", text));
-        status.textContent = blob.size > maxTextBytes ? "Exibindo apenas o início do arquivo. Salve o original para ler tudo." : "Arquivo pronto.";
+        ready(session, blob.size > maxTextBytes ? "Exibindo apenas o início do arquivo. Salve o original para ler tudo." : "Arquivo pronto.");
       } else if (kind === "pdf") {
         const { createPdfPreview } = await loadPdfPreview();
         if (active !== session) return;
@@ -463,6 +494,7 @@ export function createAttachmentPreview({
           },
           onError: () => {
             if (active !== session) return;
+            session.failed = true;
             session.signatureReady = false;
             signButton.disabled = stampButton.disabled = true;
             explain(session, "Não foi possível mostrar esta página do PDF. Tente abrir o arquivo em outro app.");
@@ -470,7 +502,9 @@ export function createAttachmentPreview({
         });
         await session.pdf.ready;
         if (active === session) {
-          status.textContent = session.pdf.getSummary?.() || "";
+          const summary = session.pdf.getSummary?.() || 'PDF pronto.';
+          if (session.pdf.hasRenderedPages?.() === false) status.textContent = summary;
+          else ready(session, summary);
           session.signatureReady = Number.isInteger(session.pdf.getCurrentPage?.());
           signButton.disabled = stampButton.disabled = !session.signatureReady;
         }
@@ -479,6 +513,7 @@ export function createAttachmentPreview({
       }
     } catch {
       if (active !== session) return;
+      session.downloadComplete = true;
       session.pdf?.destroy();
       session.pdf = null;
       session.signatureReady = false;
@@ -505,16 +540,17 @@ export function createAttachmentPreview({
     return openOne(blobOrPromise, fileName, { onClose: typeof onClose === "function" ? onClose : undefined, onSign, onStamp, resolveReturnFocus, layout, initialPage });
   }
 
-  async function openCollection(items, { onAddToTray } = {}) {
+  async function openCollection(items, { onAddToTray, initialIndex = 0 } = {}) {
     backButton.textContent = "Voltar ao chat";
     const normalized = (Array.isArray(items) ? items : [])
       .map(item => ({ source: item?.source, fileName: String(item?.fileName || "arquivo") }))
       .filter(item => item.source != null);
     if (!normalized.length) throw new Error("Nenhum anexo disponível.");
     addToTrayHandler = typeof onAddToTray === "function" ? onAddToTray : null;
-    collection = { items: normalized, index: 0 };
+    const index = Number.isInteger(initialIndex) && initialIndex >= 0 && initialIndex < normalized.length ? initialIndex : 0;
+    collection = { items: normalized, index };
     updateCollectionNavigation();
-    return openOne(normalized[0].source, normalized[0].fileName);
+    return openOne(normalized[index].source, normalized[index].fileName);
   }
 
   async function moveCollection(delta) {
@@ -574,5 +610,21 @@ export function createAttachmentPreview({
     void addAttachmentsToTray(session, selectedAttachments(session, false), false);
   });
 
-  return Object.freeze({ open, openCollection, close, destroy() { if (destroyed) return; close(); dialog.remove(); destroyed = true; } });
+  // Gallery editors are also used by the standalone portal. Let the app's
+  // existing viewer own their preview only while it is installed in this document.
+  const openEditorAttachments = event => {
+    const detail = event.detail;
+    if (destroyed || !event.cancelable || !Array.isArray(detail?.items) || !detail.items.length) return;
+    event.preventDefault();
+    const opening = openCollection(detail.items, { initialIndex: detail.index });
+    const owner = collection;
+    detail.close = () => { if (collection === owner) close(); };
+    void opening.catch(() => { if (collection === owner) close(); });
+  };
+  documentRef.addEventListener('energetico:preview-attachments', openEditorAttachments);
+  return Object.freeze({ open, openCollection, close, destroy() {
+    if (destroyed) return;
+    documentRef.removeEventListener('energetico:preview-attachments', openEditorAttachments);
+    close(); dialog.remove(); destroyed = true;
+  } });
 }

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Abertura de anexo — teste local</title></head>
+<body><p>Teste local com documento fictício. Nenhum cadastro ou envio real.</p><button id="open">Abrir PDF de teste</button>
+<script type="module">
+import '../../src/styles.css';
+import '../../src/web/attachment-preview.css';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import { createChatClient } from '../../src/chat/chat-client.js';
+import { createSharePointRestTransport } from '../../../../portal/data/attachments.js';
+import { createAttachmentPreviewController } from '../../../../portal/ui/attachments-panel.js';
+
+const params = new URLSearchParams(location.search), channel = params.get('channel') || 'VM', mode = params.get('mode');
+const endpoint = '/qa/download' + location.search, seen = []; let layout, completeBeforeRendered = false, cancelled = false;
+const preview = createAttachmentPreview({ exportMedia: async () => {} });
+const client = createChatClient({ apiBaseUrl: 'https://api.example.test', tokenProvider: async () => 'local-test-only',
+  fetchImpl: (_, options) => fetch(endpoint, options) });
+const transport = createSharePointRestTransport({ tokenProvider: async () => 'local-test-only',
+  allowedSites: [{ host: 'tenant.sharepoint.com', path: '/sites/test' }], fetch: (_, options) => fetch(endpoint, options) });
+const remote = options => transport.request({ host: 'tenant.sharepoint.com', path: '/sites/test' }, '/_api/web/test/$value', { ...options, responseType: 'blob' });
+const editor = createAttachmentPreviewController({ files: [{ name: 'PDF de teste.pdf', mimeType: 'application/pdf' }],
+  actions: { canView: () => true, downloadAttachment: (_, options) => remote(options) } });
+const badge = () => document.querySelector('.attachment-preview-dialog [role="progressbar"]');
+const rendered = () => Boolean(document.querySelector('.attachment-preview-pdf-canvas'));
+function sample() {
+  const node = badge(), value = node?.textContent;
+  if (value && seen.at(-1) !== value) seen.push(value);
+  if (value === '100%' && !rendered()) completeBeforeRendered = true;
+  if ((value === '50%' || value === '—%') && !layout) {
+    const b = node.getBoundingClientRect(), s = document.querySelector('.app-loading__spinner').getBoundingClientRect();
+    const c = document.querySelector('.attachment-preview-dialog').getBoundingClientRect();
+    layout = { adjacent: b.left >= s.right && b.left - s.right <= 16,
+      aligned: Math.abs(b.top + b.height / 2 - s.top - s.height / 2) <= 2,
+      contained: b.left >= c.left && b.right <= c.right && b.top >= c.top && b.bottom <= c.bottom,
+      overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+  }
+  if (mode === 'cancel' && value === '50%' && !cancelled) { cancelled = true; preview.close(); }
+}
+new MutationObserver(sample).observe(document.body, { childList: true, subtree: true, characterData: true });
+async function open() {
+  const opening = channel === 'editor' ? editor.open(0) : channel === 'SharePoint'
+    ? preview.openCollection([{ fileName: 'PDF de teste.pdf', source: remote }])
+    : preview.open(options => client.fetchMedia({ mediaUrl: '/api/portal-media/test' }, options), 'PDF de teste.pdf');
+  sample(); await opening;
+  await new Promise((resolve, reject) => {
+    const done = () => badge()?.textContent === '100%' || !document.querySelector('.attachment-preview-dialog')?.open
+      || (!badge() && document.querySelector('.attachment-preview-dialog')?.textContent.includes('Não foi possível'));
+    if (done()) return resolve();
+    const timer = setTimeout(() => { observer.disconnect(); reject(new Error('A prévia de teste não finalizou.')); }, 15000);
+    const observer = new MutationObserver(() => { if (done()) { clearTimeout(timer); observer.disconnect(); resolve(); } });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); sample();
+  document.documentElement.dataset.layout = JSON.stringify({ seen, layout, pageRendered: rendered(), completeBeforeRendered,
+    closed: !document.querySelector('.attachment-preview-dialog')?.open,
+    failed: !badge() && document.querySelector('.attachment-preview-dialog')?.textContent.includes('Não foi possível') });
+}
+document.querySelector('#open').onclick = open;
+if (!params.has('interactive')) await open();
+</script></body></html>

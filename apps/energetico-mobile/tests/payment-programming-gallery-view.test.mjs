@@ -207,7 +207,7 @@ test("G28 mostra o clipe lateral salvo ausência confirmada e abre a coleção c
   assert.deepEqual(ctx.calls.filter(call => call[0] === "listAttachments"), [["listAttachments", "306"], ["listAttachments", "308"]]);
   assert.equal(opened.length, 2);
   assert.deepEqual(opened[0].map(item => item.fileName), ["nota.pdf"]);
-  assert.equal((await opened[0][0].source).type, "application/pdf");
+  assert.equal((await opened[0][0].source({})).type, "application/pdf");
   assert.deepEqual(opened[1].map(item => item.fileName), ["nota.pdf"]);
 });
 
@@ -385,7 +385,7 @@ test("G28 mostra dados seguros no cartão e anexos usam o visualizador compartil
   await settle();
   assert.equal(opened.length, 1);
   assert.deepEqual(opened[0].map(item => item.fileName), ["nota.pdf"]);
-  assert.equal((await opened[0][0].source).type, "application/pdf");
+  assert.equal((await opened[0][0].source({})).type, "application/pdf");
 });
 
 test("vencimento ignora a data de agendamento e não marca pagamento sem vencimento como atrasado", async t => {

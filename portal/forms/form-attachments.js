@@ -118,12 +118,12 @@ export function createFormAttachmentDraft({ existingFiles = [], readExisting } =
     ]);
   }
 
-  async function readFile(index) {
+  async function readFile(index, options) {
     const files = visibleFiles();
     if (!Number.isInteger(index) || index < 0 || index >= files.length) throw new RangeError("O anexo selecionado não está disponível.");
     const file = files[index];
     if (uploads.includes(file) && typeof file?.arrayBuffer === "function") return file.arrayBuffer();
-    if (typeof readExisting === "function") return readExisting(file);
+    if (typeof readExisting === "function") return readExisting(file, ...(options ? [options] : []));
     throw new Error("O anexo atual não pôde ser lido.");
   }
 

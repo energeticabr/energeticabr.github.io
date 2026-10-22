@@ -1,3 +1,5 @@
+import { readDownloadBlob } from './download-progress.js';
+
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENT_NAME_LENGTH = 400;
 const ALLOWED_FILE_TYPES = new Map([
@@ -27,8 +29,12 @@ function isForbidden(error) {
   return error?.status === 401 || error?.status === 403 || ["accessDenied", "forbidden", "token_unavailable"].includes(error?.code);
 }
 
-async function readAttachmentResponse(response, responseType) {
+async function readAttachmentResponse(response, responseType, options = {}) {
   if (response.status === 204) return Promise.resolve(undefined);
+  if (response.ok && ['arrayBuffer', 'blob'].includes(responseType) && typeof options.onProgress === 'function') {
+    const blob = await readDownloadBlob(response, options);
+    return responseType === 'arrayBuffer' ? blob.arrayBuffer() : blob;
+  }
   if (responseType === "arrayBuffer") return response.arrayBuffer();
   if (responseType === "blob") return response.blob();
   return response.json().catch(() => undefined);
@@ -156,13 +162,13 @@ export function createAttachmentActions({ repository, entity, access, can, listI
     }
   }
 
-  async function downloadAttachment(fileName) {
+  async function downloadAttachment(fileName, options) {
     assertReadable();
     const name = safeFileName(fileName);
     if (!name) throw new AttachmentRequestError({ status: 400, code: "invalid_attachment_name", message: "O nome do arquivo não é permitido." });
     assertReadable();
     try {
-      const result = await repository.downloadAttachment(entity.siteKey, listId, itemId, name);
+      const result = await repository.downloadAttachment(entity.siteKey, listId, itemId, name, ...(options ? [options] : []));
       state.error = "";
       state.message = "Anexo preparado para abertura.";
       state.diagnostic = "";
@@ -303,7 +309,7 @@ export function createSharePointRestTransport({ tokenProvider, allowedSites, fet
         body: options.body,
         signal: options.signal,
       });
-      const payload = await readAttachmentResponse(response, options.responseType);
+      const payload = await readAttachmentResponse(response, options.responseType, options);
       if (!response.ok) {
         throw new AttachmentRequestError({
           status: response.status,

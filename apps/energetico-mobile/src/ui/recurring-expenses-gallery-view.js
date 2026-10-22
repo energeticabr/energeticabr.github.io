@@ -600,7 +600,7 @@ export function createRecurringExpensesGallery({
       if (!attachments.length) { setNotice("Este item não possui anexos."); return; }
       const items = attachments.map(attachment => ({
         fileName: attachment.fileName,
-        source: data.downloadAttachment(row.id, attachment.fileName),
+        source: options => data.downloadAttachment(row.id, attachment.fileName, options),
       }));
       if (typeof openMediaCollection === "function") await openMediaCollection(items);
     } catch (error) {
