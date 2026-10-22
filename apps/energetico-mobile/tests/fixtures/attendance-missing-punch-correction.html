@@ -6,6 +6,8 @@ import { createAppController } from '/src/app-controller.js';
 import { createConversationStore } from '/src/chat/conversation-store.js';
 const root = document.querySelector('#app'), view = createChatView(root), store = createConversationStore();
 const date = '2020-10-15', name = 'HELISON ROSA LUIS', writes = [], saves = [];
+const params = new URLSearchParams(location.search), interactive = params.get('interactive') === '1';
+const slot = (params.get('slot') || (interactive ? 'entry1' : 'exit1')) === 'entry1' ? 'entry1' : 'exit1';
 const account = { homeAccountId: 'isolated-correction-test', name: 'Teste' };
 const controller = createAppController({ store, view,
   auth: { initialize: async () => account, getToken: async () => 'test-token', signOut: async () => {} },
@@ -13,7 +15,7 @@ const controller = createAppController({ store, view,
   pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [] }),
   client: {
     sendText: async payload => { writes.push(payload); return { status: 'processed', messages: [] }; },
-    getRhidAttendanceReport: async () => ({ date, rows: [{ Id: '10', ID_PESSOA_RHID: '23', DATA_REFERENCIA: date, NOME_COLABORADOR: name, BATIDAS_RHID: '06:52' }] }),
+    getRhidAttendanceReport: async () => ({ date, rows: [{ Id: '10', ID_PESSOA_RHID: '23', DATA_REFERENCIA: date, NOME_COLABORADOR: name, BATIDAS_RHID: slot === 'entry1' ? '13:00;17:00' : '06:52' }] }),
     saveRhidAttendanceAdjustment: async payload => { saves.push(payload); return { time: payload.time, reason: payload.reason }; },
   },
 });
@@ -26,27 +28,37 @@ const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAn
 await document.fonts.ready;
 for (let n = 0; n < 50 && !root.querySelector('[data-action="attendance-rhid-adjust-open"]'); n++) await frame();
 writes.length = 0;
-const button = root.querySelector('[data-action="attendance-rhid-adjust-open"][data-slot="exit1"]');
+const button = root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${slot}"]`);
 const evidence = { realButton: button?.tagName === 'BUTTON', nestedButtons: root.querySelectorAll('button button').length };
-const identity = root.querySelector('.chat-attendance-select__identity');
-const identityBounds = identity.getBoundingClientRect(), identityRange = document.createRange();
-identityRange.selectNodeContents(identity);
-evidence.identityFits = [...identityRange.getClientRects()].every(rect => rect.top >= identityBounds.top - 1 && rect.bottom <= identityBounds.bottom + 1 && rect.right <= identityBounds.right + 1);
-button.click(); await frame();
-const dialog = root.querySelector('[data-rhid-adjustment-dialog] [role="dialog"]');
-const bounds = dialog.getBoundingClientRect();
-evidence.fits = bounds.left >= 0 && bounds.right <= innerWidth + 1 && bounds.top >= 0 && bounds.bottom <= innerHeight + 1;
-evidence.overflow = dialog.scrollWidth > dialog.clientWidth + 1;
-evidence.suggested = dialog.querySelector('input[type="time"]').value;
-evidence.reason = dialog.querySelector('textarea').value;
-root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await frame();
-evidence.saved = saves;
-evidence.displayed = root.querySelector('[data-rhid-slot="exit1"]').textContent;
-evidence.selected = root.querySelector('[data-action="attendance-select-toggle"]').checked;
-evidence.attendanceWrites = writes.length;
-evidence.closed = !root.querySelector('[data-rhid-adjustment-dialog]');
-if (new URLSearchParams(location.search).get('view') === 'dialog') {
-  root.querySelector('[data-action="attendance-rhid-adjust-open"][data-slot="entry2"]').click(); await frame();
+if (!button) {
+  document.documentElement.dataset.layout = JSON.stringify(evidence);
+  throw new Error(`Missing correction button for ${slot}`);
+}
+if (interactive) {
+  evidence.saved = saves;
+  evidence.attendanceWrites = writes.length;
+} else {
+  const identity = root.querySelector('.chat-attendance-select__identity');
+  const identityBounds = identity.getBoundingClientRect(), identityRange = document.createRange();
+  identityRange.selectNodeContents(identity);
+  evidence.identityFits = [...identityRange.getClientRects()].every(rect => rect.top >= identityBounds.top - 1 && rect.bottom <= identityBounds.bottom + 1 && rect.right <= identityBounds.right + 1);
+  button.click(); await frame();
+  const dialog = root.querySelector('[data-rhid-adjustment-dialog] [role="dialog"]');
+  const bounds = dialog.getBoundingClientRect();
+  evidence.fits = bounds.left >= 0 && bounds.right <= innerWidth + 1 && bounds.top >= 0 && bounds.bottom <= innerHeight + 1;
+  evidence.overflow = dialog.scrollWidth > dialog.clientWidth + 1;
+  evidence.suggested = dialog.querySelector('input[type="time"]').value;
+  evidence.reason = dialog.querySelector('textarea').value;
+  root.querySelector('[data-action="rhid-attendance-adjust-save"]').click(); await frame();
+  evidence.saved = saves;
+  evidence.displayed = root.querySelector(`[data-rhid-slot="${slot}"]`).textContent;
+  evidence.selected = root.querySelector('[data-action="attendance-select-toggle"]').checked;
+  evidence.attendanceWrites = writes.length;
+  evidence.closed = !root.querySelector('[data-rhid-adjustment-dialog]');
+  if (params.get('view') === 'dialog') {
+    const nextSlot = slot === 'entry1' ? 'exit1' : 'entry2';
+    root.querySelector(`[data-action="attendance-rhid-adjust-open"][data-slot="${nextSlot}"]`).click(); await frame();
+  }
 }
 document.documentElement.dataset.layout = JSON.stringify(evidence);
 document.documentElement.dataset.ready = 'true';

@@ -70,7 +70,7 @@ export function attendanceValidationDate(poll) {
 export function attendanceMissingPunchContext(option, poll, slot) {
   if (!attendanceRhidPollEligible(poll) || poll.presentation === "attendance_supplier_sync"
     || (poll.options || []).some(item => /supplier_sync_target:\d+$/.test(replyId(item)))
-    || !["exit1", "entry2", "exit2"].includes(slot) || option?.disabled) return null;
+    || !SLOTS.includes(slot) || option?.disabled) return null;
   const context = attendanceRhidOptionContext(option, poll);
   const badge = option?.rhidBadge;
   const correction = badge?.correction;

@@ -1741,7 +1741,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
       const label = String(option.label || option.title || `${id} - FORNECEDOR`);
       const nameMarkup = formatChatText(label);
       const correctable = !supplierSync && !busy && currentPoll && !optionUnavailable && !attendanceIrregularityChecking
-        && ["exit1", "entry2", "exit2"].some(slot => attendanceMissingPunchContext(option, message, slot));
+        && ["entry1", "exit1", "entry2", "exit2"].some(slot => attendanceMissingPunchContext(option, message, slot));
       const selectionAttributes = ` data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"`;
       const rhidBadge = attendanceRhidBadgeMarkup(option.rhidBadge, { message, option, editable: correctable,
         selectionAttributes: correctable ? selectionAttributes : "" });
@@ -4529,7 +4529,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       const target = attendanceMissingPunchContext(option, message, command.slot);
       if (composerBusy || attendanceIrregularityDialog || attendanceIrregularityPending || rhidAttendanceAdjustment
         || String(message?.id || "") !== String(command.messageId || "") || !target) return;
-      const label = { exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
+      const label = { entry1: "Entrada 1", exit1: "Saída 1", entry2: "Entrada 2", exit2: "Saída 2" }[command.slot];
       rhidAttendanceAdjustment = {
         adjustmentId: ++rhidAttendanceAdjustmentSequence,
         messageId: message.id, presenceId: target.presenceId, personKey: target.personKey, slot: command.slot,
