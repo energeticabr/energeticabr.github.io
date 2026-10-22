@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escaneamento por sessão — teste sintético</title></head>
+<body><main id="app"></main><script type="module">
+import '../../src/styles.css';
+import '../../src/web/attachment-preview.css';
+import { createNativePorts } from '../../src/native/native-ports.js';
+import { createChatView } from '../../src/ui/chat-view.js';
+import { createConversationStore } from '../../src/chat/conversation-store.js';
+import { createAppController } from '../../src/app-controller.js';
+import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import { PDFDocument } from 'pdf-lib';
+import { getDocument, GlobalWorkerOptions, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import worker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
+GlobalWorkerOptions.workerSrc = worker;
+
+// Only the camera and server boundaries are synthetic; PDF assembly, controller,
+// store, tray, button handlers and viewer are the real application components.
+const root=document.querySelector('#app'), view=createChatView(root), store=createConversationStore();
+const pages=new Map(), uploaded=[], attachments=[], released=[];
+let session=0, uuid=0, photoCalls=0, networkWrites=0;
+const fetchBefore=window.fetch;
+window.fetch=(url,options)=>{if(options?.method&&!['GET','HEAD'].includes(options.method))networkWrites++;return fetchBefore(url,options);};
+const prompt={type:'poll',question:'ESCANEAMENTO DE TESTE — cada check cria um documento separado.',options:[{id:'continue',label:'FINALIZAR ANEXOS'}]};
+async function scan(){
+  const current=++session,items=[];
+  for(let index=0;index<(current===1?2:3);index++){
+    const canvas=document.createElement('canvas');canvas.width=index%2?800:600;canvas.height=index%2?500:800;
+    const ctx=canvas.getContext('2d');ctx.fillStyle=current===1?'#0c576a':'#963a42';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#fff';ctx.fillRect(24,24,canvas.width-48,canvas.height-48);
+    ctx.fillStyle='#0c576a';ctx.font='bold 24px sans-serif';ctx.fillText(`SESSAO ${current} - PAGINA ${index+1}`,45,75);
+    ctx.font='18px sans-serif';ctx.fillText('DOCUMENTO SINTETICO',45,115);ctx.fillText('Sem cadastro ou envio real',45,145);
+    for(let row=0;row<6;row++)ctx.fillRect(45,200+row*38,canvas.width-90,2);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.95));
+    const uri=`scan://${current}/${index+1}`;pages.set(uri,blob);
+    items.push({id:`${current}-${index+1}`,uri,name:`documento-${index+1}.jpg`,type:'image/jpeg',size:blob.size});
+  }
+  return {id:`session-${current}`,items};
+}
+const native=createNativePorts({randomUUID:()=>`teste-${++uuid}`,documentScanner:{scan,release:async value=>released.push(value.id)},
+  filesystem:{readFile:async({path})=>({data:pages.get(path)})},camera:{takePhoto:async()=>{photoCalls++;throw new Error('Não usar foto normal');}}});
+const preview=createAttachmentPreview({canEmbedPdf:()=>false});
+const activeFlow={id:'order_attachment',title:'ADICIONAR UM ANEXO A UM PEDIDO'};
+const controller=createAppController({store,view,native:{...native,importSharedItems:async()=>[],previewMedia:preview.open,closePreview:preview.close},
+  auth:{initialize:async()=>({homeAccountId:'synthetic',name:'Teste local'}),getToken:async()=>'synthetic-only'},
+  pendingProvisionAttachmentsDataFactory:async()=>({loadUpcomingPayments:async()=>[],listAttachments:async()=>[]}),
+  client:{sendText:async()=>({status:'processed',messages:[prompt],attachments,activeFlow}),
+    sendFile:async(file,options)=>{
+      uploaded.push(file);const id=`upload-${uploaded.length}`;
+      options?.onProgress?.({loaded:file.size,total:file.size,percent:100});
+      attachments.push({id,fileName:file.name,mimeType:file.type,size:file.size,mediaUrl:`/synthetic/${id}`,isNew:true});
+      return {status:'processed',messages:[prompt],attachments:[...attachments],activeFlow};
+    },fetchMedia:async item=>uploaded[attachments.findIndex(value=>value.id===item.id)],
+  }});
+async function wait(predicate,label){
+  const deadline=performance.now()+15000;
+  while(!predicate()){if(performance.now()>deadline)throw new Error(label);await new Promise(requestAnimationFrame);}
+}
+async function run(){
+  await controller.start();
+  for(let index=1;index<=2;index++){
+    await wait(()=>root.querySelector('[data-action="capture-photo"]:not(:disabled)'),'Câmera ainda ocupada');
+    root.querySelector('[data-action="capture-photo"]').click();
+    await wait(()=>document.querySelector('[data-camera-mode="scan"]'),'Câmera não abriu');
+    document.querySelector('[data-camera-mode="scan"]').click();
+    await wait(()=>uploaded.length===index&&store.getState().pendingFiles.length===0&&root.querySelector('[data-action="capture-photo"]:not(:disabled)'),'PDF não entrou na bandeja');
+  }
+  const pageCounts=[],painted=[],colors=[];
+  for(const file of uploaded){
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    pageCounts.push((await PDFDocument.load(bytes)).getPageCount());
+    const task=getDocument({data:bytes.slice()}),pdf=await task.promise;
+    try{
+      for(let number=1;number<=pdf.numPages;number++){
+        const page=await pdf.getPage(number),ops=await page.getOperatorList();
+        painted.push(ops.fnArray.filter(op=>op===OPS.paintImageXObject).length);
+        const viewport=page.getViewport({scale:0.2}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+        await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+        colors.push([...canvas.getContext('2d').getImageData(1,1,1,1).data].slice(0,3));
+      }
+    }finally{await task.destroy();}
+  }
+  await document.fonts.ready;
+  const result={pageCounts,painted,colors,types:uploaded.map(file=>file.type),names:uploaded.map(file=>file.name),
+    tray:root.querySelectorAll('.chat-attachment-cluster').length,photoCalls,released,networkWrites,
+    overflow:document.documentElement.scrollWidth>innerWidth+1};
+  if(new URLSearchParams(location.search).get('shot')==='preview'){
+    root.querySelector('[data-action="open-file"][data-file-id="upload-1"]').click();
+    await wait(()=>document.querySelector('.attachment-preview-dialog [role="progressbar"]')?.textContent==='100%','PDF não abriu');
+    result.previewReady=!!document.querySelector('.attachment-preview-pdf-canvas');
+  }
+  document.documentElement.dataset.layout=JSON.stringify(result);
+}
+window.addEventListener('pagehide',()=>{controller.stop();preview.destroy();},{once:true});
+run().catch(error=>document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)}));
+</script></body></html>

@@ -7,6 +7,7 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { validateAttachment } from "../chat/file-policy.js";
 import { DocumentPicker, DocumentScanner, ShareInbox } from "./plugins.js";
 import { editDocumentScan } from '../ui/document-scanner.js';
+import { jpegOrientation } from './jpeg-orientation.js';
 
 export class NativePermissionError extends Error {
   constructor(message = "Permissão negada pelo iPhone.") {
@@ -184,6 +185,38 @@ export function createNativePorts({
         const blob = await dataToBlob(contents.data, 'image/jpeg');
         if (blob.size !== item.size) throw new Error('Não foi possível ler a página completa do scanner.');
         files.push(makeFile(blob, item, {FileCtor, randomUUID}));
+      }
+      if (files.length > 1) {
+        // A native scanner check ends one document, not a batch of loose photos.
+        // Build before returning anything so errors cannot enqueue partial pages.
+        let bytes;
+        try {
+          const { PDFDocument, pushGraphicsState, concatTransformationMatrix, popGraphicsState } = await import('pdf-lib');
+          const pdf = await PDFDocument.create();
+          for (const file of files) {
+            const jpeg = new Uint8Array(await file.arrayBuffer()), orientation = jpegOrientation(jpeg);
+            const image = await pdf.embedJpg(jpeg), swap = orientation >= 5;
+            const scale = 595.28 / (swap ? image.height : image.width);
+            const width = image.width * scale, height = image.height * scale;
+            const page = pdf.addPage(swap ? [height, width] : [width, height]);
+            // EXIF rotations/reflections are PDF transforms: keep the JPEG intact.
+            const matrix = {
+              2: [-1, 0, 0, 1, width, 0], 3: [-1, 0, 0, -1, width, height], 4: [1, 0, 0, -1, 0, height],
+              5: [0, -1, -1, 0, height, width], 6: [0, -1, 1, 0, 0, width],
+              7: [0, 1, 1, 0, 0, 0], 8: [0, 1, -1, 0, height, 0],
+            }[orientation];
+            if (matrix) page.pushOperators(pushGraphicsState(), concatTransformationMatrix(...matrix));
+            page.drawImage(image, { x: 0, y: 0, width, height });
+            if (matrix) page.pushOperators(popGraphicsState());
+          }
+          bytes = await pdf.save();
+        } catch (cause) {
+          throw new Error('Não foi possível gerar o PDF do escaneamento. Tente escanear novamente.', { cause });
+        }
+        const id = String(randomUUID());
+        return [makeFile(new Blob([bytes], { type: 'application/pdf' }), {
+          id, name: `documento-${id}.pdf`, type: 'application/pdf',
+        }, { FileCtor, randomUUID })];
       }
       return files;
     } finally {
