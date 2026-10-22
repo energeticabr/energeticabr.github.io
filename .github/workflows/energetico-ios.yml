@@ -140,7 +140,9 @@ jobs:
 
   native-share-tests:
     name: Testes nativos do compartilhamento
-    runs-on: macos-26-intel
+    # Match the iOS build host; Intel's simulator first-boot migration can stall.
+    # Run the same Swift/HTTP and 18 UIKit assertions, without relaxed timeouts.
+    runs-on: macos-26
     steps:
       - name: Baixar código
         uses: actions/checkout@v4

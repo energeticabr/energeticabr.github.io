@@ -527,7 +527,7 @@ const PENDING_PROVISION_REMINDER_KEY = "energetico.pending-provision-reminder";
 const PENDING_PROVISION_AUTO_INTERVAL_MS = 30 * 60 * 1000;
 const PENDING_PROVISION_ATTACHMENT_CONCURRENCY = 4;
 const DOCUMENT_LINE_SELECTION_KEY = "energetico.document-line-selection";
-const AUTO_COMPRESSION_THRESHOLD_BYTES = 5 * 1024 * 1024;
+const MEDIA_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 
 function isMenuFlow(flow) {
   return String(flow?.id || "").trim().toLocaleLowerCase("pt-BR").startsWith("menu:");
@@ -775,14 +775,6 @@ function hasAttachmentCompressionChoice(messages = []) {
     Array.isArray(message?.options)
       && message.options.some(option => String(option?.reply || option?.id || "")
         .trim().toLowerCase().startsWith("attachment_compression_"))
-  ));
-}
-
-function hasWorkflowAttachmentCompressionChoice(messages = []) {
-  return (Array.isArray(messages) ? messages : []).some(message => (
-    Array.isArray(message?.options)
-      && message.options.some(option => /^(?:compress_attachments_(?:yes|no)|compress_all_attachments|compression_level_(?:low|medium|high|very_high)|use_(?:original|compressed|intermediate)_attachment|request_intermediate_attachment)$/
-        .test(String(option?.reply || option?.id || "").trim().toLowerCase()))
   ));
 }
 
@@ -4902,7 +4894,7 @@ export function createAppController({
       // Large originals remain available through Open/Share. Do not fetch a
       // second complete copy just to decorate the tray during a mobile upload.
       if (item.previewUrl
-        || Number(item.size) > AUTO_COMPRESSION_THRESHOLD_BYTES) continue;
+        || Number(item.size) > MEDIA_PREVIEW_MAX_BYTES) continue;
       // Metadata echoes rotate media URLs. Refresh waiting descriptors rather
       // than stranding earlier files behind the stale URL from the first upload.
       if (previewLoading.has(item.previewKey) && !previewQueue.has(item.previewKey)) continue;
@@ -4943,9 +4935,9 @@ export function createAppController({
     previewAbort = abort;
     try {
       if (!currentItem()) return;
-      const blob = await withTimeout(client.fetchMedia(item, { signal: abort.signal, maxBytes: AUTO_COMPRESSION_THRESHOLD_BYTES }), 15_000,
+      const blob = await withTimeout(client.fetchMedia(item, { signal: abort.signal, maxBytes: MEDIA_PREVIEW_MAX_BYTES }), 15_000,
         'A prévia do anexo demorou mais que o esperado.');
-      if (!currentItem() || blob.size > AUTO_COMPRESSION_THRESHOLD_BYTES) return;
+      if (!currentItem() || blob.size > MEDIA_PREVIEW_MAX_BYTES) return;
       const url = await createMediaThumbnail(blob, item.fileName || item.caption || 'arquivo');
       if (!url) return;
       if (!currentItem()) { URL.revokeObjectURL(url); return; }
@@ -9821,7 +9813,7 @@ export function createAppController({
     const item = store.getState().pendingFiles.find(candidate => candidate.id === fileId);
     if (!item) return false;
     const previousAttachmentCount = store.getState().attachments.length;
-    const compressionReturnPoint = captureAttachmentCompressionReturnPoint();
+    const uploadReturnPoint = captureAttachmentCompressionReturnPoint();
     cancelCompletionMenu();
     sessionError = null;
     let operation;
@@ -9912,13 +9904,19 @@ export function createAppController({
         render();
         if (!uploadCompleted && attachmentReminderDetails()) scheduleAttachmentReminder();
         else cancelAttachmentReminder();
-        const nextCompressionPrompt = staged?.nextMessages.findLast(message => (
-          message?.role !== "user" && ["poll", "text"].includes(message?.type)
-        ));
-        const compressionOffered = await maybeOfferAttachmentCompression(item, effectiveResult, uploadCompleted,
-          nextCompressionPrompt ? { message: nextCompressionPrompt, activeFlow: store.getState().activeFlow } : compressionReturnPoint);
-        if (!currentUpload()) return false;
-        if (staged && !compressionOffered) scheduleResponseTransition(staged.nextMessages);
+        // Compression is an explicit tray action; upload size never opens it.
+        if (staged) scheduleResponseTransition(staged.nextMessages);
+        else if (!uploadCompleted && uploadReturnPoint && effectiveResult.messages?.length === 1
+          && isTransientSuccessMessage(effectiveResult.messages[0])
+          && !/[?？]|\b(?:qual|quando|informe|digite|selecione|escolha|deseja|envie)\b/iu.test(effectiveResult.messages[0].text || '')
+          && Boolean(uploadReturnPoint.activeFlow) === Boolean(store.getState().activeFlow)
+          && !isDifferentActiveFlow(uploadReturnPoint.activeFlow, store.getState().activeFlow)) {
+          // A receipt is not the answer to the still-open form. Keep that
+          // question available for a later manual action, without resending it.
+          const messages = [...effectiveResult.messages, uploadReturnPoint.message];
+          store.replaceCurrentResponse(messages);
+          rememberCurrentAssistantPoll(effectiveResult, messages);
+        }
         scheduleCompletionMenu(effectiveResult);
       }
       if (confirmed && item.sourceId) {
@@ -10831,33 +10829,6 @@ export function createAppController({
         render();
       }
     }
-  }
-
-  async function maybeOfferAttachmentCompression(uploadedItem, result, uploadCompleted, returnPoint) {
-    if (uploadCompleted || typeof client.compressAttachment !== "function") return false;
-    // The diary accepts batches of originals. Per-file compression is an
-    // optional tray action, not another blocking VM round-trip for every photo.
-    const currentFlow = store.getState().activeFlow;
-    if (/^(?:construction_diary|diary|diario_obra|diario_de_obras)(?:_|$)/.test(normalizedChoiceText(currentFlow?.id))
-      || /\bdiario\s+de\s+obras?\b/.test(normalizedChoiceText(currentFlow?.title))) return false;
-    const uploadedFile = uploadedItem?.file;
-    if (!(Number(uploadedFile?.size) > AUTO_COMPRESSION_THRESHOLD_BYTES)) return false;
-    // The upload may already be waiting for the VM's own compression choice.
-    // Do not open the separate tray action against that pending file: it is
-    // not necessarily in the retained attachment collection yet. Its replies
-    // must still go through the normal workflow, not the portal side action.
-    if (hasAttachmentCompressionChoice(result?.messages)
-      || hasWorkflowAttachmentCompressionChoice(result?.messages)) return false;
-    const state = store.getState();
-    if (!state.activeFlow) return false;
-    const candidates = state.attachments.filter(item => (
-      item?.fileName === uploadedFile?.name
-      && (!uploadedFile?.type || !item?.mimeType || item.mimeType === uploadedFile.type)
-      && (!Number(uploadedFile?.size) || !Number(item?.size) || Number(item.size) === Number(uploadedFile.size))
-    ));
-    const attachment = candidates.at(-1);
-    if (!attachment?.id) return false;
-    return compressAttachment(attachment.id, returnPoint);
   }
 
   async function chooseAttachmentCompression(choice) {

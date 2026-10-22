@@ -159,7 +159,7 @@ test('an unchanged unavailable preview is not automatically retried in a loop', 
 });
 
 for (const id of ['construction_stage_registration', 'construction_stage_demonstrative_create']) {
-  test(`${id} keeps its existing compression offer because it is not a work diary`, async t => {
+  test(`${id} offers compression only through the tray icon, just like work diaries`, async t => {
     const receipts = [], h = harness(t, receipts), activeFlow = { id, title: 'ETAPA DE OBRA' };
     h.client.sendText = async () => ({ status: 'processed', activeFlow, messages: [], attachments: receipts });
     h.native.pickDocuments = async () => [{ name: 'report.pdf', type: 'application/pdf', size: 8_000_000 }];
@@ -168,8 +168,17 @@ for (const id of ['construction_stage_registration', 'construction_stage_demonst
       return { status: 'processed', activeFlow, messages: [], attachments: [...receipts] };
     };
     let offers = 0;
-    h.client.compressAttachment = async () => { offers++; return { status: 'processed', activeFlow, messages: [], attachments: [...receipts] }; };
+    h.client.compressAttachment = async () => { offers++; return { status: 'processed', activeFlow, messages: [{
+      type: 'poll', question: 'ESCOLHA O NÍVEL DE COMPRESSÃO', options: [
+        { id: 'attachment_compression_level_high', label: 'ALTA COMPRESSÃO' },
+        { id: 'attachment_compression_use_original', label: 'MANTER ORIGINAL' },
+      ],
+    }], attachments: [...receipts] }; };
     await h.controller.start(); await h.emit('pick-files');
+    assert.equal(offers, 0);
+    assert.equal(h.store.getState().attachments[0].size, 8_000_000);
+    assert.equal(await h.emit('compress-attachment', { fileId: 'report' }), true);
     assert.equal(offers, 1);
+    assert.equal(h.store.getState().messages.at(-1).question, 'ESCOLHA O NÍVEL DE COMPRESSÃO');
   });
 }

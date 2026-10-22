@@ -8229,8 +8229,9 @@ test("anexo selecionado durante resposta em trânsito aguarda e depois é enviad
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
-test("anexo grande abre a prévia de compactação depois de ser confirmado", async () => {
+test("anexo grande só abre a prévia de compactação quando o usuário toca no ícone", async t => {
   const h = makeHarness();
+  t.after(() => h.controller.stop());
   const largeFile = { name: "comprovante.pdf", size: 6_400_000, type: "application/pdf" };
   h.native.pickDocuments = async () => [largeFile];
   h.client.sendFile = async file => ({
@@ -8269,6 +8270,10 @@ test("anexo grande abre a prévia de compactação depois de ser confirmado", as
   await h.controller.start();
   await h.view.emit("pick-files");
 
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), []);
+  assert.equal(h.store.getState().attachments[0].size, 6_400_000);
+  assert.equal(h.store.getState().messages.some(message => message.attachment_compression_preview), false);
+  assert.equal(await h.view.emit("compress-attachment", { fileId: "large-attachment" }), true);
   assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), [
     ["compress-attachment", "large-attachment"],
   ]);
@@ -8290,7 +8295,38 @@ test("anexo grande abre a prévia de compactação depois de ser confirmado", as
       mediaUrl: "/api/portal-media/large-attachment",
     },
   });
-  h.controller.stop();
+});
+
+for (const [size, count, flow] of [
+  [500_001, 1, "supplies"], [5_242_880, 1, "document"], [6_400_000, 1, "asset"],
+  [12_800_000, 3, "supplies"], [12_800_000, 3, "construction_diary_fill"],
+]) test(`upload de ${count} anexo(s) de ${size} bytes em ${flow} segue sem oferecer compactação`, async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const activeFlow = { id: flow, title: flow, contextId: `manual-only:${flow}` };
+  const prompt = { type: "poll", question: "COMO DESEJA PROSSEGUIR COM OS ANEXOS?", options: [
+    { id: "input_continue", label: "FINALIZAR ANEXOS" },
+  ] };
+  h.store.ingestRemoteMessages([prompt], { activeFlow });
+  const files = Array.from({ length: count }, (_, index) => ({ name: `arquivo-${index}.pdf`, size, type: "application/pdf" }));
+  const uploaded = [];
+  h.native.pickDocuments = async () => files;
+  h.client.sendFile = async file => {
+    uploaded.push({ id: file.name, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: `/api/portal-media/${file.name}` });
+    return { status: "processed", activeFlow, attachments: [...uploaded], messages: [prompt] };
+  };
+  h.client.compressAttachment = async id => {
+    h.chatCalls.push(["compress-attachment", id]);
+    return { status: "processed", messages: [compressionLevelPrompt] };
+  };
+  await h.view.emit("pick-files");
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  assert.equal(h.store.getState().attachments.length, count);
+  assert.deepEqual(h.store.getState().attachments.map(item => item.size), Array(count).fill(size));
+  assert.equal(h.store.getState().messages.at(-1).question, prompt.question);
+  assert.deepEqual(h.chatCalls.filter(call => call[0] === "compress-attachment"), []);
+  assert.equal(h.view.renders.some(state => state.error), false);
 });
 
 for (const [phase, options] of [
@@ -8465,7 +8501,7 @@ for (const choice of ["attachment_compression_use_original", "attachment_compres
   });
 }
 
-test("compressão automática após upload retorna à pergunta anterior quando o recibo contém só aviso", async t => {
+test("compressão pedida pelo ícone após upload retorna à pergunta quando o recibo contém só aviso", async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop());
   await h.controller.start();
@@ -8476,6 +8512,8 @@ test("compressão automática após upload retorna à pergunta anterior quando o
   h.client.compressAttachment = async () => ({ status: "processed", messages: [compressionLevelPrompt] });
   h.client.chooseAttachmentCompression = async () => ({ status: "processed", messages: [{ type: "text", text: "📎 Anexo original mantido." }] });
   await h.view.emit("pick-files");
+  assert.equal(h.store.getState().messages.at(-1).question, compressionFlowPrompt.question);
+  await h.view.emit("compress-attachment", { fileId: compressionOriginal.id });
   assert.equal(h.store.getState().messages.at(-1).question, "Escolha o nível de compressão");
   await h.view.emit("select-reply", { replyId: "attachment_compression_use_original", label: "MANTER ORIGINAL" });
   assert.equal(h.store.getState().messages.at(-1).question, "COMO DESEJA PROSSEGUIR COM OS ANEXOS?");
@@ -8483,10 +8521,26 @@ test("compressão automática após upload retorna à pergunta anterior quando o
   assert.equal(h.store.getState().pendingFiles.length, 0);
 });
 
+for (const response of [
+  { activeFlow: { ...compressionFlow, contextId: "pedido:426" }, messages: [{ type: "text", text: "Anexo recebido." }] },
+  { activeFlow: compressionFlow, messages: [{ type: "text", text: "Anexo recebido. Qual a data?" }] },
+  { activeFlow: compressionFlow, messages: [{ type: "text", text: "QUAL A DATA DO DOCUMENTO?" }] },
+  { activeFlow: null, resetConversation: true, messages: [{ type: "text", text: "Anexo enviado com sucesso." }] },
+]) test(`upload não restaura pergunta obsoleta sobre a resposta ${JSON.stringify(response)}`, async t => {
+  const h = makeHarness({ historyMode: "current-step" });
+  t.after(() => h.controller.stop()); await h.controller.start();
+  h.store.ingestRemoteMessages([compressionFlowPrompt], { activeFlow: compressionFlow });
+  h.native.pickDocuments = async () => [{ name: "nota.pdf", type: "application/pdf", size: 6_400_000 }];
+  h.client.sendFile = async () => ({ status: "processed", attachments: [compressionOriginal], ...response });
+  await h.view.emit("pick-files");
+  assert.equal(h.store.getState().messages.some(message => message.question === compressionFlowPrompt.question), false);
+  assert.equal(h.store.getState().messages.at(-1).text, response.messages[0].text);
+});
+
 for (const nextPrompt of [
   { type: "poll", question: "DESEJA POSTAR OS ANEXOS?", options: [{ id: "post", label: "POSTAR" }] },
   { type: "text", text: "QUAL A DATA DO DOCUMENTO?" },
-]) test(`compressão automática mantém a escolha visível antes de retomar ${nextPrompt.type}`, async t => {
+]) test(`upload retoma ${nextPrompt.type} sem compactação até o clique no ícone`, async t => {
   const h = makeHarness({ historyMode: "current-step" });
   t.after(() => h.controller.stop()); await h.controller.start();
   h.store.ingestRemoteMessages([compressionFlowPrompt], { activeFlow: compressionFlow });
@@ -8499,6 +8553,8 @@ for (const nextPrompt of [
     : { status: "processed", messages: [{ type: "text", text: "Anexo comprimido selecionado." }] };
   await h.view.emit("pick-files");
   await new Promise(resolve => setTimeout(resolve, 1050));
+  assert.equal(h.store.getState().messages.at(-1).question || h.store.getState().messages.at(-1).text, nextPrompt.question || nextPrompt.text);
+  await h.view.emit("compress-attachment", { fileId: compressionOriginal.id });
   assert.equal(h.store.getState().messages.at(-1).question, "Escolha o nível de compressão", "o temporizador do recibo de upload não pode esconder escolhas pendentes");
   assert.equal(await h.view.emit("select-reply", { replyId: "attachment_compression_level_high", label: "ALTA COMPRESSÃO" }), true);
   await new Promise(resolve => setTimeout(resolve, 1050));
