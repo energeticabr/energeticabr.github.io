@@ -1,0 +1,226 @@
+--- a/worker/payment_provision_flow.py
++++ b/worker/payment_provision_flow.py
+@@ -9,11 +9,11 @@
+ 
+ try:
+     from .logic import resolve_option
+-    from .payment_provision_group import provision_parent_fields, provision_preview
++    from .payment_provision_group import _number, provision_parent_fields, provision_preview
+     from .provision_parent_choice import append_options, parent_id, read_parent, validate_parent, linked_total, same_total
+ except ImportError:
+     from logic import resolve_option
+-    from payment_provision_group import provision_parent_fields, provision_preview
++    from payment_provision_group import _number, provision_parent_fields, provision_preview
+     from provision_parent_choice import append_options, parent_id, read_parent, validate_parent, linked_total, same_total
+ 
+ 
+@@ -28,6 +28,7 @@
+     "provision_collecting_additional", "provision_commit",
+     "provision_parent_mode", "provision_parent_selection", "provision_parent_choice_required",
+     "provision_parent_choice_complete",
++    "provision_freight_review_required",
+ )
+ 
+ 
+@@ -78,6 +79,58 @@
+     @staticmethod
+     def _provision_multiple(state):
+         return state.get("flow") == "payment" and state.get("answers",{}).get("tipo_provisao_pagamento") == "MULTIPLOS"
++
++    def _provision_first_freight_only(self, state):
++        """Only the first unsubmitted batch row owns freight; freeze started writes."""
++        if (not self._provision_multiple(state) or state.get("provision_commit")
++                or state.get("stage") in {"notifying", "completed"}):
++            return False
++        lines = state.get("provision_lines") or []
++        additional = bool(lines) and (not state.get("provision_current_saved") or len(lines) > 1)
++        for snapshot in lines[1:]:
++            freight = (snapshot.get("fields") or {}).get("FRETE")
++            try:
++                changed = freight not in (None, "") and _number(freight, "FRETE") != 0
++            except ValueError:
++                changed = True
++            if changed:
++                state["provision_freight_review_required"] = True
++        without_freight = [*lines[1:], *([state] if additional else [])]
++        for snapshot in without_freight:
++            for key in ("fields", "answers", "selections", "display_values"):
++                snapshot.setdefault(key, {})
++            self._clear_step_value(snapshot, {"key": "tem_frete_pagamento"})
++            self._clear_step_value(snapshot, {"key": "frete_pagamento", "target_field": "FRETE"})
++            snapshot["answers"]["tem_frete_pagamento"] = "NÃO"
++            snapshot["fields"]["FRETE"] = "0"
++            snapshot["display_values"]["FRETE"] = "R$ 0,00"
++        return additional
++
++    def _provision_reissue_skipped_freight(self, state, etag, event=None):
++        if state.get("stage") != "selecting_fields" or not self._provision_multiple(state):
++            return None
++        steps = self._flow_config(state)["steps"]
++        index = state.get("step_index", 0)
++        if not (0 <= index < len(steps)
++                and steps[index]["key"] in {"tem_frete_pagamento", "frete_pagamento"}
++                and self._provision_first_freight_only(state)):
++            return None
++        if event:
++            self._mark_processed(state, event.get("message_id"))
++        state["options"] = []
++        state.pop("option_pagination", None)
++        # This response belongs to the removed freight question, not the next field.
++        return self._prompt_next_or_summary(state, etag)
++
++    def _provision_review_changed_freight(self, state, etag):
++        self._provision_first_freight_only(state)
++        if (not self._provision_multiple(state) or state.get("provision_commit")
++                or state.get("stage") in {"notifying", "completed"}
++                or not state.get("provision_freight_review_required")):
++            return None
++        self._send_text(state, "O FRETE DESTA PROVISÃO FICA APENAS NA PRIMEIRA LINHA. "
++                        "CONFIRA O TOTAL ATUALIZADO ANTES DE CONFIRMAR.")
++        return self._summarize_and_confirm(state, etag)
+ 
+     def _provision_product_guard(self,event,state,etag,step):
+         if not (self._provision_multiple(state) and step.get("key") == "produto_pagamento"):
+@@ -144,6 +197,7 @@
+         return {"status":"awaiting_provision_choice","batch_id":state["batch_id"],"etag":etag}
+ 
+     def _provision_snapshot(self, state):
++        self._provision_first_freight_only(state)
+         self._apply_fixed_fields(state)
+         self._apply_derived_fields(state)
+         return {key:copy.deepcopy(state.get(key) or {})
+@@ -222,6 +276,7 @@
+                 for key,values in state["provision_lines"][-1].items():
+                     state[key] = copy.deepcopy(values)
+                 state["provision_current_saved"] = False
++                self._provision_first_freight_only(state)
+                 state.pop("provision_reference_supplier", None)
+                 return self._prompt_provision_question(state, etag, "choosing_provision_variation")
+             state["provision_composition_complete"] = True
+@@ -231,8 +286,7 @@
+         elif stage == "choosing_provision_variation":
+             steps = self._flow_config(state)["steps"]
+             if value == "CONTINUAR":
+-                keys = {"produto_pagamento","quantidade_pagamento","valor_unitario_pagamento",
+-                        "tem_frete_pagamento","frete_pagamento"}
++                keys = {"produto_pagamento","quantidade_pagamento","valor_unitario_pagamento"}
+                 indices = [i for i,s in enumerate(steps) if s["key"] in keys]
+                 state["provision_collecting_additional"] = True
+             else:
+@@ -248,6 +302,7 @@
+         return self._prompt_next_or_summary(state, etag)
+ 
+     def _provision_summary_rows(self, state):
++        self._provision_first_freight_only(state)
+         preview = provision_preview(state)
+         if not preview:
+             return []
+@@ -371,6 +426,9 @@
+         return isinstance(result, dict) and result.get("fields") is True and result.get("attachments") is True
+ 
+     def _commit_provision_group(self, state, etag, flow):
++        review = self._provision_review_changed_freight(state, etag)
++        if review is not None:
++            return review
+         try:
+             return self._persist_provision_group(state, etag, flow)
+         except Exception as exc:
+@@ -383,6 +441,9 @@
+         progress = state.get("provision_commit")
+         token = state.get("idempotency_token") or f"WA-payment-{state['batch_id']}"
+         if not progress:
++            self._provision_first_freight_only(state)
++            if state.get("provision_freight_review_required"):
++                raise ValueError("Confira o total atualizado antes de confirmar a provisão")
+             if state.get("provision_parent_choice_required") and not state.get("provision_parent_choice_complete"):
+                 raise ValueError("Escolha o descritivo antes de confirmar a provisão")
+             lines = copy.deepcopy(state.get("provision_lines") or [self._provision_snapshot(state)])
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -3724,6 +3724,12 @@
+         return self._save(state, etag)
+ 
+     def _resume_draft_prompt(self, state: dict, etag: str | None) -> dict:
++        provision_result = self._provision_reissue_skipped_freight(state, etag)
++        if provision_result is None and state.get("stage") == "awaiting_confirmation":
++            provision_result = self._provision_review_changed_freight(state, etag)
++        if provision_result is not None:
++            return {**provision_result, "status": "draft_resumed", "draft_resumed": True,
++                    "batch_id": state["batch_id"], "resumed_stage": state["stage"]}
+         # Re-display the pending question, never regenerate a confirmation card
+         # or run a commit while restoring a draft.
+         if state.get("stage") == "awaiting_confirmation":
+@@ -18883,6 +18889,7 @@
+ 
+     def _current_step(self, state: dict):
+         self._migrate_supplier_employment_steps(state)
++        skip_provision_freight = self._provision_first_freight_only(state)
+         steps = self._flow_config(state)["steps"]
+         while state["step_index"] < len(steps):
+             edit_step_indices = state.get("edit_step_indices")
+@@ -18897,6 +18904,9 @@
+                     return None
+                 state["step_index"] = remaining[0]
+             step = financial_catalog.step_with_create(self, state, steps[state["step_index"]])
++            if skip_provision_freight and step.get("key") in {"tem_frete_pagamento", "frete_pagamento"}:
++                state["step_index"] += 1
++                continue
+             if (state.get("flow") == "construction_visit"
+                     and step.get("key") == "criar_diario_obra"
+                     and visit_diary.skip_if_existing(
+@@ -21309,6 +21319,9 @@
+         }
+ 
+     def _handle_step_reply(self, event, state, etag) -> dict:
++        provision_result = self._provision_reissue_skipped_freight(state, etag, event)
++        if provision_result is not None:
++            return provision_result
+         step = self._current_step(state)
+         if not step:
+             return self._prompt_next_or_summary(state, etag)
+@@ -28799,6 +28812,7 @@
+             return blank_review
+         self._send_confirmation_actions(state)
+         card = self._send_summary_card(state)
++        state.pop("provision_freight_review_required", None)
+         state["stage"] = "awaiting_confirmation"
+         state["options"] = []
+         state["summary_card"] = {
+@@ -29277,6 +29291,9 @@
+             }
+         self._mark_processed(state, event["message_id"])
+         if command in {"sim", "confirm_yes"}:
++            provision_result = self._provision_review_changed_freight(state, etag)
++            if provision_result is not None:
++                return provision_result
+             flow = self._flow_config(state)
+             if (
+                 state.get("flow") == "document"
+@@ -29765,6 +29782,7 @@
+         return self._prompt_next_or_summary(state, etag)
+ 
+     def _editable_options(self, state: dict) -> list[dict]:
++        skip_provision_freight = self._provision_first_freight_only(state)
+         flow = self._flow_config(state)
+         labels = {
+             item["field"]: item["label"]
+@@ -29785,6 +29803,8 @@
+                 *self._launch_line_required_keys(),
+             }
+         for index, step in enumerate(flow["steps"]):
++            if skip_provision_freight and step.get("key") in {"tem_frete_pagamento", "frete_pagamento"}:
++                continue
+             if step.get("editable") is False:
+                 continue
+             if allowed_keys is not None and step["key"] not in allowed_keys:
+@@ -35170,6 +35190,10 @@
+         )
+ 
+     def _resend_current_prompt(self, state: dict, etag: str | None) -> dict:
++        if state.get("stage") == "awaiting_confirmation":
++            provision_result = self._provision_review_changed_freight(state, etag)
++            if provision_result is not None:
++                return provision_result
+         if state.get("legacy_attachment_compression_recovery") or state.get("stage") in {
+             "confirming_attachment_compression", "confirming_compressed_attachment_choice",
+             "confirming_intermediate_attachment_choice", "awaiting_attachment_compression_consent",

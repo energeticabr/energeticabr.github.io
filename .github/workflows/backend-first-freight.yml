@@ -1,0 +1,32 @@
+name: Backend — frete no primeiro item
+
+on:
+  pull_request:
+    paths:
+      - "backend-patches/multi-provision-first-freight/**"
+      - ".github/workflows/backend-first-freight.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend-patches/multi-provision-first-freight/**"
+      - ".github/workflows/backend-first-freight.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-freight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-contract:
+    name: Contrato do pacote backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validar bundle, instalador, lock e gate sem dados reais
+        run: python -B -m unittest discover -s backend-patches/multi-provision-first-freight -v
