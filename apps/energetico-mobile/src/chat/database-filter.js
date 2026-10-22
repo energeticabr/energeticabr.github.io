@@ -3,6 +3,12 @@ export function isSupplierGroupingDatabaseFilter(message) {
     && String(message.databaseFilterKey || "").trim() === "fornecedor_agrupador_lancamento";
 }
 
+export function supportsFullNameDatabaseFilter(message) {
+  return isSupplierGroupingDatabaseFilter(message)
+    || (message?.databaseFilter === true
+      && ["pessoa_relacionada", "document_person"].includes(String(message.databaseFilterKey || "").trim()));
+}
+
 export function latestDatabaseFilter(messages = []) {
   const poll = [...messages]
     .reverse()

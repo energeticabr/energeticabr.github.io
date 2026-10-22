@@ -3252,6 +3252,142 @@ test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opçõ
   assert.deepEqual(h.store.getState().messages.at(-1).options, []);
 });
 
+for (const filterKey of ['pessoa_relacionada', 'document_person']) test(`pessoa relacionada ${filterKey} pesquisa nome completo fora das opções iniciais sem Enviar`, async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ view: createChatView(root), historyMode: 'current-step', databaseFilterDebounceMs: 1 });
+  t.after(() => { h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const initial = { id: `choice:${filterKey}:10`, reply: `choice:${filterKey}:10`, label: '10 - OUTRA PESSOA' };
+  const person = { id: `choice:${filterKey}:804`, reply: `choice:${filterKey}:804`, label: '804 - JOSÉ GERALDO DOS SANTOS (ATIVO — EMPREITEIRO: SIM)' };
+  const poll = options => ({ type: 'poll', question: 'QUAL A PESSOA RELACIONADA? CASO DESEJE FILTRAR, DIGITE UM TEXTO.',
+    databaseFilter: true, databaseFilterKey: filterKey, options });
+  const response = options => ({ status: 'processed', activeFlow, messages: [poll(options)] });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === 'filter_clear') return response([initial]);
+    if (payload.replyId === 'filter_query') return response(payload.text === 'Pessoa que nao existe' ? [] : [person]);
+    return { status: 'processed', activeFlow, messages: [{ type: 'poll', question: 'QUAL A DATA DE EMISSÃO?', options: [] }] };
+  };
+  h.store.ingestRemoteMessages([poll([initial])], { activeFlow });
+  const input = value => {
+    const draft = root.querySelector('[data-role="draft"]');
+    draft.value = value;
+    draft.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+
+  input('Jose Geraldo dos Santos');
+  await waitForSupplierGrouping(() => payloads.length === 1 && !h.store.getState().activeText);
+  assert.deepEqual(payloads, [{ text: 'Jose Geraldo dos Santos', replyId: 'filter_query' }]);
+  assert.equal(h.store.getState().draft, 'Jose Geraldo dos Santos');
+  assert.equal(h.store.getState().messages.some(message => message.role === 'user'), false);
+  assert.ok(root.querySelector(`[data-reply-id="${person.id}"]`));
+  assert.equal(root.querySelector(`[data-reply-id="${initial.id}"]`), null);
+
+  input('');
+  await waitForSupplierGrouping(() => payloads.length === 2 && !h.store.getState().activeText);
+  assert.deepEqual(payloads.at(-1), { text: 'Limpar filtro', replyId: 'filter_clear' });
+  assert.ok(root.querySelector(`[data-reply-id="${initial.id}"]`));
+
+  input('Pessoa que nao existe');
+  await waitForSupplierGrouping(() => payloads.length === 3 && !h.store.getState().activeText);
+  assert.deepEqual(h.store.getState().messages.at(-1).options, []);
+  assert.equal(root.querySelector(`[data-reply-id="${person.id}"]`), null);
+
+  input('804');
+  await waitForSupplierGrouping(() => payloads.length === 4 && !h.store.getState().activeText);
+  assert.deepEqual(payloads.at(-1), { text: '804', replyId: 'filter_query' });
+  assert.equal(h.store.getState().messages.at(-1).question, poll([]).question);
+  input('Jose Geraldo dos Santos');
+  root.querySelector(`[data-reply-id="${person.id}"]`).click();
+  await waitForSupplierGrouping(() => payloads.length === 5 && !h.store.getState().activeText);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(payloads.at(-1), { text: person.label, replyId: person.id });
+  assert.equal(h.store.getState().draft, '');
+  assert.equal(root.querySelector('[data-role="draft"]').dataset.databaseFilterKey, undefined);
+});
+
+for (const filterKey of ['pessoa_relacionada', 'document_person']) test(`pessoa relacionada ${filterKey} refaz A após B pendente sem descartar a última digitação`, async t => {
+  const dom = new JSDOM('<main id="app"></main>');
+  const root = dom.window.document.querySelector('#app');
+  const h = makeHarness({ view: createChatView(root), historyMode: 'current-step', databaseFilterDebounceMs: 1 });
+  const pending = deferred();
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const personA = { id: `choice:${filterKey}:804`, reply: `choice:${filterKey}:804`, label: '804 - JOSÉ GERALDO DOS SANTOS' };
+  const personB = { id: `choice:${filterKey}:805`, reply: `choice:${filterKey}:805`, label: '805 - MARIA SILVA DE SOUZA' };
+  const response = options => ({ status: 'processed', activeFlow, messages: [{ type: 'poll',
+    question: 'QUAL A PESSOA RELACIONADA?', databaseFilter: true, databaseFilterKey: filterKey, options }] });
+  t.after(() => { pending.resolve(response([])); h.controller.stop(); dom.window.close(); });
+  await h.controller.start();
+  h.store.ingestRemoteMessages(response([personA, personB]).messages, { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return payload.text === 'Maria Silva de Souza' ? pending.promise : response([personA]);
+  };
+  const input = value => {
+    const draft = root.querySelector('[data-role="draft"]');
+    draft.value = value;
+    draft.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+  input('Jose Geraldo dos Santos');
+  await waitForSupplierGrouping(() => payloads.length === 1 && !h.store.getState().activeText);
+  input('Maria Silva de Souza');
+  await waitForSupplierGrouping(() => payloads.length === 2);
+  input('Jose Geraldo dos Santos');
+  pending.resolve(response([personB]));
+  await waitForSupplierGrouping(() => payloads.length === 3 && !h.store.getState().activeText);
+  assert.deepEqual(payloads, [
+    { text: 'Jose Geraldo dos Santos', replyId: 'filter_query' },
+    { text: 'Maria Silva de Souza', replyId: 'filter_query' },
+    { text: 'Jose Geraldo dos Santos', replyId: 'filter_query' },
+  ]);
+  assert.equal(h.store.getState().draft, 'Jose Geraldo dos Santos');
+  assert.ok(root.querySelector(`[data-reply-id="${personA.id}"]`));
+  assert.equal(root.querySelector(`[data-reply-id="${personB.id}"]`), null);
+});
+
+test('pessoa relacionada usa a última digitação e restaura a lista ao apagar durante pesquisa pendente', async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  const activeFlow = { id: 'document', title: 'ADICIONAR UM NOVO DOCUMENTO' };
+  const first = deferred(), second = deferred();
+  const initial = { id: 'choice:pessoa_relacionada:10', reply: 'choice:pessoa_relacionada:10', label: '10 - OUTRA PESSOA' };
+  const response = options => ({ status: 'processed', activeFlow, messages: [{ type: 'poll',
+    question: 'QUAL A PESSOA RELACIONADA?', databaseFilter: true, databaseFilterKey: 'pessoa_relacionada', options }] });
+  t.after(() => { first.resolve(response([])); second.resolve(response([])); h.controller.stop(); });
+  await h.controller.start();
+  h.store.ingestRemoteMessages(response([initial]).messages, { activeFlow });
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    if (payload.replyId === 'filter_clear') return response([initial]);
+    return payloads.length === 1 ? first.promise : second.promise;
+  };
+  const input = async value => {
+    await h.view.emit('draft-changed', { value });
+    await h.view.emit('database-filter-changed', { value, filterKey: 'pessoa_relacionada' });
+  };
+  await input('Jose Geraldo dos Santos');
+  await waitForSupplierGrouping(() => payloads.length === 1);
+  await input('Maria Silva');
+  await input('Maria Silva de Souza');
+  first.resolve(response([{ id: '804', reply: '804', label: '804 - JOSÉ GERALDO DOS SANTOS' }]));
+  await waitForSupplierGrouping(() => payloads.length === 2);
+  assert.deepEqual(payloads, [
+    { text: 'Jose Geraldo dos Santos', replyId: 'filter_query' },
+    { text: 'Maria Silva de Souza', replyId: 'filter_query' },
+  ]);
+  assert.equal(h.store.getState().draft, 'Maria Silva de Souza');
+  await input('');
+  second.resolve(response([{ id: '805', reply: '805', label: '805 - MARIA SILVA DE SOUZA' }]));
+  await waitForSupplierGrouping(() => payloads.length === 3 && !h.store.getState().activeText);
+  assert.deepEqual(payloads.at(-1), { text: 'Limpar filtro', replyId: 'filter_clear' });
+  assert.equal(h.store.getState().draft, '');
+  assert.deepEqual(h.store.getState().messages.at(-1).options, [initial]);
+});
+
 async function waitForSupplierGrouping(predicate) {
   for (let attempt = 0; attempt < 50 && !predicate(); attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10));
