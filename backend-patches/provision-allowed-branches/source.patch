@@ -1,0 +1,38 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -18906,0 +18907,2 @@
++            if self._restricted_provision_branch_step(state, step):
++                step = {**step, "allow_blank": False}
+@@ -19294,0 +19297,16 @@
++    @staticmethod
++    def _restricted_provision_branch_step(state: dict, step: dict) -> bool:
++        return (
++            state.get("flow") in {
++                "payment", "payment_provision_edit", "payment_settlement"
++            }
++            and step.get("target_field") == "FILIAL"
++            and step.get("kind") == "selection"
++        )
++
++    def _allowed_provision_branch_options(self, options: list[dict]) -> list[dict]:
++        return [
++            item for item in options
++            if self._launch_branch_code(item.get("value")) in {"000", "004"}
++        ]
++
+@@ -19529,0 +19548,2 @@
++        if self._restricted_provision_branch_step(state, step):
++            normalized = self._allowed_provision_branch_options(normalized)
+@@ -21451 +21471,3 @@
+-        if refresh_descriptions or not state.get("options"):
++        if (refresh_descriptions
++                or self._restricted_provision_branch_step(state, step)
++                or not state.get("options")):
+@@ -35768,0 +35791,7 @@
++        if self._restricted_provision_branch_step(state, step):
++            # Old pagination/abandonment snapshots bypass selection handling.
++            # Preserve the search subset, but never re-emit retired choices.
++            step["allow_blank"] = False
++            options = self._allowed_provision_branch_options(options)
++            state["options"] = self._allowed_provision_branch_options(state.get("options", []))
++            pagination.update(step=copy.deepcopy(step), options=copy.deepcopy(options), offset=0)
