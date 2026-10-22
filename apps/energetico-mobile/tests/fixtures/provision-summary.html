@@ -32,6 +32,8 @@ const measure = () => {
     unsupportedControls: panel.querySelectorAll('button, input').length,
     entryBackgrounds: [...panel.querySelectorAll('.chat-provision-entry')].slice(0, 4)
       .map(entry => getComputedStyle(entry).backgroundColor),
+    entryTextColors: [...panel.querySelectorAll('.chat-provision-entry')].slice(0, 4)
+      .map(entry => [...entry.querySelectorAll('h3, dt, dd')].map(node => getComputedStyle(node).color)),
   };
 };
 const panel = root.querySelector('.chat-provisions');
@@ -57,6 +59,7 @@ if (!panel) {
   await frame();
   const changedBatch = { open: root.querySelector('.chat-provisions').open, scroll: root.querySelector('.chat-file-tray').scrollTop };
   document.documentElement.dataset.layout = JSON.stringify({ missing: false, width: innerWidth, height: innerHeight,
+    colorScheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
     collapsed, expanded, lastLineReachable, sameBatch, changedBatch });
 }
 </script></body></html>
