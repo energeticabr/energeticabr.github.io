@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validação local — anexos de documentos em sequência</title>
+<link rel="stylesheet" href="../../apps/energetico-mobile/src/styles.css">
+<style>
+  body { margin: 0; }
+  #chat { height: 100dvh; }
+  #evidence { position: fixed; bottom: 112px; right: 10px; z-index: 1000; padding: 6px 10px;
+    background: #effff5; border: 1px solid #166534; border-radius: 10px; color: #14532d; font: 12px system-ui; pointer-events: none; }
+</style>
+<main id="chat"></main>
+<output id="evidence" aria-live="polite"></output>
+<script type="module">
+  import { createAppController } from '../../apps/energetico-mobile/src/app-controller.js';
+  import { createConversationStore } from '../../apps/energetico-mobile/src/chat/conversation-store.js';
+  import { createChatView } from '../../apps/energetico-mobile/src/ui/chat-view.js';
+  const store = createConversationStore({ historyMode: 'current-step' });
+  const view = createChatView(document.querySelector('#chat'));
+  const activeFlow = { id: 'document', title: '📄 ADICIONAR UM NOVO DOCUMENTO', contextId: 'qa-document-batch' };
+  let phase = 'confirmation', posted = 0, uploads = 0;
+  let attachments = [{ id: 'qa-first', fileName: 'primeiro-documento-qa.pdf', mimeType: 'application/pdf', size: 19, mediaUrl: '/qa-media/first.pdf' }];
+  const poll = (question, options) => ({ type: 'poll', question, options });
+  const confirmation = () => poll('DESEJA ADICIONAR MAIS UM DOCUMENTO OU SUBMETER SEM ADICIONAR MAIS DOCUMENTOS?', [
+    { id: 'document_add_another', label: '➕ ADICIONAR MAIS UM DOCUMENTO' },
+    { id: 'document_submit_final', label: '✅ SUBMETER SEM ADICIONAR MAIS DOCUMENTOS' },
+  ]);
+  const attachmentPrompt = () => poll('📎 ENVIE OS ANEXOS DO DOCUMENTO. AO TERMINAR, FINALIZE OS ANEXOS.', [
+    { id: 'input_continue', label: '✅ FINALIZAR ANEXOS' },
+  ]);
+  const result = (messages, status = 'awaiting_confirmation') => ({ status: 'processed', activeFlow,
+    attachments, messages, results: [{ status, batch_id: 'qa-batch', etag: String(posted + uploads + 1) }] });
+  store.subscribe(state => {
+    document.querySelector('#evidence').textContent = `QA local · Gravados: ${posted} · Bandeja: ${state.attachments.length} · Uploads: ${uploads}`;
+  });
+  const client = {
+    async getAttachments() { return attachments; },
+    async sendText({ replyId }) {
+      if (replyId === 'document_add_another') {
+        posted += 1; phase = 'defaults'; attachments = [];
+        return result([
+          { type: 'text', text: `✅ DOCUMENTO ID ${900 + posted} GRAVADO. PREENCHA O PRÓXIMO DOCUMENTO.` },
+          poll('DESEJA EDITAR ALGUM DADO PARA O NOVO DOCUMENTO?', [
+            { id: 'document_defaults_proceed', label: '✅ PROSSEGUIR SEM EDITAR' },
+            { id: 'choice:edit_field:1', label: '1 - FILIAL' },
+            { id: 'choice:edit_field:4', label: '4 - FORNECEDOR / PESSOA RELACIONADA' },
+          ]),
+        ], 'awaiting_document_defaults');
+      }
+      if (replyId === 'document_defaults_proceed') {
+        phase = 'type';
+        return result([poll('QUAL O TIPO DE DOCUMENTO?', [{ id: 'choice:tipo_documento:2', label: '2 - DOCUMENTO FICTÍCIO PARA VALIDAÇÃO' }])], 'awaiting_field');
+      }
+      if (replyId === 'choice:tipo_documento:2') { phase = 'attachments'; return result([attachmentPrompt()], 'waiting_for_attachments'); }
+      if (replyId === 'input_continue' && phase === 'attachments') {
+        if (!attachments.length) throw new Error('Anexe o PDF sintético antes de finalizar.');
+        phase = 'confirmation';
+        return result([confirmation()]);
+      }
+      if (replyId === 'document_submit_final') {
+        posted += 1; phase = 'done'; attachments = [];
+        return { ...result([{ type: 'text', text: `✅ DOCUMENTO ID ${900 + posted} GRAVADO COM SUCESSO.` }], 'completed'), activeFlow: null, resetConversation: true };
+      }
+      return result([confirmation()]);
+    },
+    async sendFile(file) {
+      uploads += 1;
+      attachments = [{ id: `qa-upload-${uploads}`, fileName: file.name, mimeType: file.type, size: file.size, mediaUrl: `/qa-media/upload-${uploads}.pdf` }];
+      return result([attachmentPrompt()], 'waiting_for_attachments');
+    },
+  };
+  const controller = createAppController({ store, view, client,
+    auth: { initialize: async () => ({ homeAccountId: 'qa-documents', name: 'Validação local' }), getToken: async () => 'qa-only' },
+    native: { importSharedItems: async () => [], pickDocuments: async () => [new File(['%PDF-1.4\nQA local\n%%EOF'], `documento-${posted + 1}-qa.pdf`, { type: 'application/pdf' })] },
+    diaryFieldVisitDataFactory: async () => ({ load: async () => [] }),
+    pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
+  });
+  await controller.start();
+</script>
+</html>
