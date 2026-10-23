@@ -27,7 +27,8 @@ test('all gallery loaders are centered below navigation without leaking content 
       assert.ok(Array.isArray(results), JSON.stringify(results));
       assert.equal(results.length, galleryCases.length);
       for (const result of results) {
-        for (const state of ['initial', 'refreshing']) {
+        if (result.name === 'launch') assert.equal(result.filtering.label, 'Recalculando a galeria…');
+        for (const state of ['initial', 'refreshing', ...(result.filtering ? ['filtering'] : [])]) {
           const layout = result[state], message = `${width}x${height} ${result.name} ${state}: ${JSON.stringify(layout)}`;
           assert.equal(layout.missing, undefined, message);
           assert.ok(layout.covered && layout.headerVisible && layout.loaderVisible && layout.opaque && layout.centeredHit && layout.keyboardSafe, message);

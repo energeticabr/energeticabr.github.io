@@ -2,7 +2,7 @@ import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
-import { createLoadingIndicator } from "./loading-indicator.js";
+import { createLoadingIndicator, updateLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
@@ -292,7 +292,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return `${context}: ${error?.message || 'não foi possível concluir'}. Tente novamente; se persistir, confira a conexão e atualize os dados.`;
   }
   function updateBusy() {
-    loadingScreen.sync(opened && listLoading && listBlocking);
+    updateLoadingIndicator(loadingScreen.element, {
+      label: listBlocking ? 'Carregando lançamentos…' : 'Recalculando a galeria…',
+    });
+    loadingScreen.sync(opened && listLoading);
     root.setAttribute('aria-busy', String(opened && (listLoading || detailLoading || busy)));
     for (const control of root.querySelectorAll('[data-lg-lock]')) {
       control.disabled = busy || control.dataset.lgDisabled === 'true';
@@ -455,6 +458,7 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     const data = query(1);
     if (preservePage && data.sort === applied.sort && JSON.stringify(data.filters) === JSON.stringify(applied.filters)) data.page = page;
     if (data.filters.dateStart && data.filters.dateEnd && data.filters.dateStart > data.filters.dateEnd) {
+      ++listVersion; listLoading = false; updateBusy();
       notify('A data final deve ser igual ou posterior à data inicial.', true); return;
     }
     notify(''); return loadSnapshot(data, { refresh, blocking: refresh || blocking });
@@ -508,7 +512,10 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
         }, { locked: false }));
       return false;
     } finally {
-      if (active(epoch) && version === listVersion) { listLoading = false; updateBusy(); }
+      if (active(epoch) && version === listVersion) {
+        // Keep stale results covered while a newer filter is still debouncing.
+        listLoading = !matchesCurrentFilters(); updateBusy();
+      }
     }
   }
 
