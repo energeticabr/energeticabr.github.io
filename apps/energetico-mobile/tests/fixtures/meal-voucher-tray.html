@@ -11,9 +11,10 @@ try {
   const names={FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'],CADASTROCONTA:['CONTA'],LANCAMENTOOBRA:['ETAPA','FILIAL'],
     IDFOLHA:['MESREFERENCIA','FORNECEDOR'],FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
     NOTASPENDENTES:['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
-    LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS']};
+    LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS','IDFOLHA']};
   const columns=Object.fromEntries(Object.entries(names).map(([list,fields])=>[list,fields.map(name=>({name,displayName:name,...(/DATA/.test(name)?{dateTime:{}}:{text:{}})}))]));
   Object.assign(columns.NOTASPENDENTES.find(c=>c.name==='VALECONTROLE'),{hidden:true,text:{allowMultipleLines:true,textType:'plain',appendChangesToExistingText:false}});
+  Object.assign(columns.LANCAMENTOS.find(c=>c.name==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
   const people=['ANA SILVA (TESTE)','BRUNO SOUZA (TESTE)','CARLA LIMA (TESTE)'];
   const rows={FORNECEDORES:people.map((name,i)=>({id:String(i+1),fields:{CADASTRO:name,STATUS:'ATIVO',EMPREITEIRO:'SIM',FILIAL:'004 - OBRA DE TESTE',PROFISSAO:'PEDREIRO'}})),
     CADASTROCONTA:[{id:'8',fields:{CONTA:'CAIXA DE TESTE'}}],LANCAMENTOOBRA:[{id:'7',fields:{ETAPA:'FUNDAÇÃO',FILIAL:'004 - OBRA DE TESTE'}}],
