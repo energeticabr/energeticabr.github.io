@@ -7,6 +7,9 @@ import { payrollDecimal } from './supplier-payroll.js';
 import { PAYROLL_RUBRICS } from './supplier-payroll.js';
 import { MEAL_VOUCHER_CONTROL_COLUMN, mealVoucherControlColumn, ensureMealVoucherSchema } from './meal-voucher-schema.js';
 import { createMealVoucherAttachments } from './meal-voucher-attachments.js';
+import { payrollLaunchReferenceColumn, ensurePayrollLaunchSchema, confirmPayrollLaunchReference, compatiblePayrollLaunchLink,
+  payrollLaunchLinkFilter, payrollCreationKey, payrollOriginKey, withPayrollWriteLock, ensurePayrollCreation,
+  assertPayrollCreationStorage, pendingPayrollCreation, clearPayrollCreation } from './payroll-launch-reference.js';
 
 const scalar = value => String(value && typeof value === 'object' ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
 const numericId = value => /^[1-9]\d{0,14}$/.test(String(value ?? '')) && Number.isSafeInteger(Number(value));
@@ -48,7 +51,7 @@ function monthKey(raw) {
   return brazil ? `${brazil[2]}-${brazil[1].padStart(2, '0')}` : iso ? `${iso[1]}-${iso[2].padStart(2, '0')}` : '';
 }
 
-export function createMealVoucherData({ repository, graph, tokenProvider, siteConfig = SHAREPOINT_SITES, fetchImpl = globalThis.fetch, siteKey = 'personal', assertSession = () => {} } = {}) {
+export function createMealVoucherData({ repository, graph, tokenProvider, storage, siteConfig = SHAREPOINT_SITES, fetchImpl = globalThis.fetch, siteKey = 'personal', assertSession = () => {} } = {}) {
   if (!repository) {
     if (typeof tokenProvider !== 'function') throw new TypeError('É necessária uma sessão Microsoft ativa.');
     graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
@@ -64,7 +67,9 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
       if (!await tokenProvider(scopes)) throw new Error('Não foi possível autorizar os lançamentos.');
     }
     await ensureMealVoucherSchema({ repository, graph, assertSession, siteKey });
+    await ensurePayrollLaunchSchema({ repository, graph, assertSession, siteKey });
     descriptors.delete('NOTASPENDENTES');
+    descriptors.delete('LANCAMENTOS');
   }
   async function describe(name) {
     assertSession();
@@ -131,11 +136,12 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
         || descriptor.columns.find(c => c.name === name)?.dateTime && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10);
     });
   }
-  function launchFields(descriptor, draft, line, orderId) {
+  function launchFields(descriptor, draft, line, orderId, sheet) {
     return payload(descriptor, { AGRUPAR:String(orderId), FILIAL:draft.branch, 'TIPO TRANSAÇÃO':'CUSTO', DATA:draft.date,
-      'DATA PGTO PREVISTO':draft.dueDate, ...(draft.paymentDate ? { 'DATA PGTO EFETUADO':draft.paymentDate } : {}),
+      'DATA PGTO PREVISTO':draft.dueDate, ...(column(descriptor,['DATA PGTO EFETUADO'],false) ? { 'DATA PGTO EFETUADO':draft.paymentDate || null } : {}),
       FORNECEDOR:line.supplier.label, PRODUTO:line.supplier.profession, ETAPA:draft.stage.label, QUANTIDADE:line.quantity,
-      'VALOR UNITÁRIO':line.unitValue, CONTA:draft.account.label, FRETE:0, OBS:`VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+      'VALOR UNITÁRIO':line.unitValue, CONTA:draft.account.label, FRETE:0, IDFOLHA:Number(sheet.id),
+      OBS:`VALE ALIMENTAÇÃO${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
   }
   function payrollFields(descriptor, draft, line, sheet, launchId) {
     return payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:mealPaymentType, VALORUNITARIO:line.unitValue,
@@ -148,12 +154,18 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
     const paidColumn = column(launches, ['DATA PGTO EFETUADO'], false)?.name;
     const prefix = `APP-vale-alimentacao-${operationId}-`;
+    const reference = payrollLaunchReferenceColumn(launches.columns);
     const selected = new Map(draft.lines.map(line => [String(line.supplier.id), line]));
     const owned = (rows, tokenName, start) => rows.filter(row => scalar(row.fields?.[tokenName]).startsWith(start) && /^\d+$/.test(scalar(row.fields[tokenName]).slice(start.length)));
     for (const row of owned(savedLaunches, launchToken, prefix)) {
       const line = selected.get(scalar(row.fields[launchToken]).slice(prefix.length));
-      if (!line || !matchesFields(launches, row, launchFields(launches, draft, line, orderId))
+      const fields = line && launchFields(launches, draft, line, orderId, sheets[line.supplier.id]);
+      // Only an empty legacy reference may be adopted later with a fresh ETag.
+      if (fields && !scalar(row.fields[reference.name])) delete fields[reference.name];
+      if (!line || !matchesFields(launches, row, fields)
         || !draft.paymentDate && paidColumn && scalar(row.fields[paidColumn])) throw new Error('A revisão do lote está desatualizada ou os dados de um lançamento foram alterados. Confira antes de retomar.');
+      compatiblePayrollLaunchLink({ columns:payroll.columns, rows:savedPayroll,
+        fields:payrollFields(payroll, draft, line, sheets[line.supplier.id], row.id) });
     }
     const payrollPrefix = `${prefix}folha-`;
     for (const row of owned(savedPayroll, payrollToken, payrollPrefix)) {
@@ -180,11 +192,11 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     }
     return revision;
   }
-  async function all(descriptor) {
+  async function all(descriptor, filter = '') {
     const result = [], seen = new Set(); let cursor;
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
       assertSession();
-      const page = await repository.getItemsPage(siteKey, descriptor.id, `${readQuery(descriptor)}&$top=100`, { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
+      const page = await repository.getItemsPage(siteKey, descriptor.id, `${readQuery(descriptor)}&$top=100${filter ? `&$filter=${filter}` : ''}`, { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
       assertSession();
       if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean') throw new Error('A resposta do SharePoint está incompleta.');
       result.push(...page.items.map(row=>normalizedOrder(descriptor,row)));
@@ -242,21 +254,45 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     if (matches.length > 1) throw new Error('Foram encontrados registros duplicados da operação.');
     return matches[0];
   }
-  async function ensure(descriptor, fields, label, token, tokenCache) {
+  async function freshToken(descriptor, label, token) {
     const name = column(descriptor, [label]).name;
-    let row = await findToken(descriptor, label, token, tokenCache);
-    if (!row) { assertSession(); row = await repository.createItem(siteKey, descriptor.id, { ...fields, [name]: token }); assertSession(); tokenCache.get(descriptor.id).push(row); }
-    if (!numericId(row?.id)) throw new Error('O SharePoint não confirmou o ID criado.');
-    const saved = await get(descriptor, row.id);
-    for (const [field, expected] of Object.entries({ ...fields, [name]: token })) {
-      const actual = saved.fields?.[field];
-      const date = descriptor.columns.find(c => c.name === field)?.dateTime;
-      if (!(typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected) || date && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10)))
-        throw new Error('O SharePoint não confirmou os dados gravados.');
-    }
-    return String(row.id);
+    const rows = (await all(descriptor,`fields/${name} eq '${token.replace(/'/g,"''")}'`)).filter(row=>scalar(row.fields?.[name])===token);
+    if(rows.length>1)throw new Error('Foram encontrados registros duplicados da operação.');
+    return rows[0];
   }
-  async function ensureOrder(descriptor, fields, marker, tokenCache, edit) {
+  const originRows = (descriptor,id) => all(descriptor,payrollLaunchLinkFilter(descriptor.columns,id));
+  async function ensure(descriptor, fields, label, token, tokenCache, assertReference) {
+    const name = column(descriptor,[label]).name, payroll = descriptor.name === 'FOLHAPGTO';
+    const launchId = payroll ? fields[column(descriptor,['IDLANCAMENTO']).name] : null;
+    let origin;
+    const saved = await ensurePayrollCreation({ storage, assertSession,
+      key:payroll ? payrollOriginKey(siteKey,descriptor.id,launchId) : payrollCreationKey(siteKey,descriptor.id,token),
+      findItem:async()=>{
+        const row=await freshToken(descriptor,label,token);
+        if(!payroll)return row;
+        origin=compatiblePayrollLaunchLink({columns:descriptor.columns,rows:await originRows(descriptor,launchId),fields});
+        if(row&&origin&&String(row.id)!==String(origin.id))throw new Error('O vínculo da operação está associado a outro lançamento.');
+        return origin||row;
+      },
+      createItem:()=>repository.createItem(siteKey,descriptor.id,{...fields,[name]:token}),
+      verifyItem:async row=>{
+        if(!numericId(row?.id))throw new Error('O SharePoint não confirmou o ID criado.');
+        const expectedFields={...fields,...(!origin?{[name]:token}:{})};
+        let current;
+        if(!payroll) {
+          const links=await describe('FOLHAPGTO');
+          current=await withPayrollWriteLock(payrollOriginKey(siteKey,links.id,row.id),()=>confirmPayrollLaunchReference({
+            columns:descriptor.columns,item:row,fields:expectedFields,assertSession,assertContext:assertReference,
+            readItem:id=>get(descriptor,id),updateItem:(id,changes,options)=>repository.updateItem(siteKey,descriptor.id,id,changes,options) }));
+        } else current=await get(descriptor,row.id);
+        if(!matchesFields(descriptor,current,expectedFields))throw new Error('O SharePoint não confirmou os dados gravados.');
+        return current;
+      } });
+    const cached=tokenCache.get(descriptor.id);
+    if(cached&&!cached.some(row=>String(row.id)===String(saved.id)))cached.push(saved);
+    return String(saved.id);
+  }
+  async function ensureOrder(descriptor, fields, marker, tokenCache, edit, writeKey) {
     const obsName = column(descriptor, ['OBS']).name, controlName = control(descriptor);
     const totalName = column(descriptor,['VALORTOTAL']).name;
     if (!tokenCache.has(descriptor.id)) tokenCache.set(descriptor.id, await all(descriptor));
@@ -283,9 +319,17 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
       }
     }
     if (!row) {
-      assertSession();
-      row = await repository.createItem(siteKey, descriptor.id, fields);
-      assertSession();
+      row = await ensurePayrollCreation({key:writeKey,storage,assertSession,
+        findItem:async()=>{
+          const found=(await all(descriptor)).filter(item=>scalar(item.fields?.[controlName]).includes(marker));
+          if(found.length>1)throw new Error('Foram encontrados pedidos duplicados da operação.');
+          return found[0];
+        },createItem:()=>repository.createItem(siteKey,descriptor.id,fields),
+        verifyItem:async item=>{
+          const saved=await get(descriptor,item?.id);
+          if(!scalar(saved.fields[controlName]).includes(marker))throw new Error('O controle do pedido não foi confirmado.');
+          return saved;
+        } });
       tokenCache.get(descriptor.id).push(row);
     }
     if (!numericId(row?.id)) throw new Error('O SharePoint não confirmou o ID do pedido.');
@@ -299,6 +343,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
         : !(typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected) || date && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10)))
         throw new Error('O SharePoint não confirmou os dados do pedido gravado.');
     }
+    clearPayrollCreation(storage,writeKey);
     return String(row.id);
   }
   async function confirmOriginatingOrderTotal(orders,launches,orderId,draft,operationId,tokenCache) {
@@ -363,6 +408,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     const ownsToken = (raw, start) => { const token = scalar(raw).toUpperCase(); return token.startsWith(start) && /^\d+$/.test(token.slice(start.length)); };
     assertSession();
     const ownedOrders = records[0].filter(row => scalar(row.fields[controlName]).toUpperCase().includes(marker) || title && scalar(row.fields[title]).toUpperCase() === prefix);
+    if (!ownedOrders.length && pendingPayrollCreation(storage,payrollCreationKey(siteKey,orders.id,`order:${progress.operationId}`))
+      || original.lines?.some(line=>pendingPayrollCreation(storage,payrollCreationKey(siteKey,launches.id,`APP-vale-alimentacao-${progress.operationId}-${line.supplier?.id}`)))) return blocked;
     if (ownedOrders.length > 1 || records[1].some(row => ownsToken(row.fields[launchToken], `${prefix}-`)
       || ownedOrders.some(order => scalar(value(launches, row, ['AGRUPAR'], false)) === String(order.id)))
       || records[2].some(row => ownsToken(row.fields[payrollToken], `${prefix}-FOLHA-`))) return blocked;
@@ -424,6 +471,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     posting = true;
     try {
       const draft = validateMealVoucherDraft(rawDraft);
+      assertSession(); assertPayrollCreationStorage(storage);
       const hadOriginalDraft = Boolean(progress.signature);
       const signature = JSON.stringify({ ...draft, files: draft.files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })) });
       let edit;
@@ -450,6 +498,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
       for (const file of draft.files) { const validation = validateAttachment(file); if (!validation.valid) throw new Error(validation.message); }
       const sheets = await loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier));
       const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
+      if (!payrollLaunchReferenceColumn(launches.columns)) throw new Error('IDFOLHA de LANCAMENTOS não está disponível. Prepare a referência antes de enviar; nenhum registro financeiro foi criado.');
       if (column(orders,[MEAL_VOUCHER_CONTROL_COLUMN]).virtual) throw new Error('VALECONTROLE não está disponível. Prepare o controle técnico antes de enviar; nenhum registro financeiro foi criado.');
       const entries = await attachments.prepare(draft.files,progress.fileManifest);
       const tokenCache = new Map();
@@ -499,7 +548,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
           if (key(value(orders, repaired, ['FILIAL'])) !== key(draft.branch) || !scalar(repaired.fields[control(orders)]).includes(marker))
             throw new Error('O pedido anterior não foi confirmado no SharePoint.');
           orderId = String(legacy.id);
-        } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress });
+        } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress },
+          payrollCreationKey(siteKey,orders.id,`order:${progress.operationId}`));
       }
       await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
       if (draft.orderMode === 'new') await confirmOriginatingOrderTotal(orders,launches,orderId,draft,progress.operationId,tokenCache);
@@ -516,13 +566,33 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
       delete progress.orderEdit;
       onProgress();
       progress.lines ??= {};
+      progress.payroll ??= {};
+      const sheetDescriptor = await describe('IDFOLHA');
+      const confirmSheet = async (line, sheet) => {
+        const currentSheet = await get(sheetDescriptor, sheet.id);
+        if (monthKey(value(sheetDescriptor, currentSheet, ['MESREFERENCIA', 'MES REFERENCIA'])) !== draft.referenceMonth
+          || key(value(sheetDescriptor, currentSheet, ['FORNECEDOR'])) !== key(line.supplier.label))
+          throw new Error(`A IDFOLHA de ${line.supplier.label} mudou durante o lançamento; confira e retome.`);
+        const exact = await loadSheetAssignments(draft.referenceMonth, [line.supplier]);
+        if (exact[line.supplier.id].id !== sheet.id) throw new Error('A IDFOLHA selecionada foi alterada; confira antes de retomar.');
+      };
       const resultLines = [];
       for (const line of draft.lines) {
-        const fields = launchFields(launches, draft, line, orderId);
-        const launchId = await ensure(launches, fields, '__PowerAppsId__', `APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}`, tokenCache);
+        const sheet = sheets[line.supplier.id];
+        await confirmSheet(line, sheet);
+        const fields = launchFields(launches, draft, line, orderId, sheet);
+        const launchId = await ensure(launches, fields, '__PowerAppsId__', `APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}`, tokenCache,
+          async saved=>compatiblePayrollLaunchLink({columns:payroll.columns,rows:await originRows(payroll,saved.id),
+            fields:payrollFields(payroll,draft,line,sheet,saved.id)}));
         progress.lines[line.supplier.id] = launchId;
         onProgress();
-        resultLines.push({ supplier: line.supplier.label, id: launchId, total: line.total });
+        await confirmSheet(line, sheet);
+        // Confirm each association before the next financial row or any upload.
+        const payrollId = await ensure(payroll, payrollFields(payroll, draft, line, sheet, launchId), 'Title',
+          `APP-vale-alimentacao-${progress.operationId}-folha-${line.supplier.id}`, tokenCache);
+        progress.payroll[line.supplier.id] = payrollId;
+        onProgress();
+        resultLines.push({ supplier: line.supplier.label, id: launchId, total: line.total, sheetId:sheet.id, payrollId });
       }
       if (draft.orderMode === 'existing') {
         const current = await get(orders, orderId);
@@ -549,20 +619,20 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
           throw new Error('O vínculo do último lançamento mudou. Confira os anexos antes de retomar.');
         await attachments.submit([{listId:orders.id,id:orderId},{listId:launches.id,id:launchId}],entries,() => onProgress());
       }
-      progress.payroll ??= {};
-      const sheetDescriptor = await describe('IDFOLHA');
+      // Uploads can be slow. Success requires a fresh, read-only confirmation
+      // of the selected sheets, financial origins and their associations.
+      const confirmedPayroll = await all(payroll);
       for (let index = 0; index < draft.lines.length; index++) {
-        const line = draft.lines[index], sheet = sheets[line.supplier.id], resultLine = resultLines[index];
-        const currentSheet = await get(sheetDescriptor, sheet.id);
-        if (monthKey(value(sheetDescriptor, currentSheet, ['MESREFERENCIA', 'MES REFERENCIA'])) !== draft.referenceMonth
-          || key(value(sheetDescriptor, currentSheet, ['FORNECEDOR'])) !== key(line.supplier.label))
-          throw new Error(`A IDFOLHA de ${line.supplier.label} mudou durante o lançamento; confira e retome.`);
-        const fields = payrollFields(payroll, draft, line, sheet, resultLine.id);
-        const payrollId = await ensure(payroll, fields, 'Title', `APP-vale-alimentacao-${progress.operationId}-folha-${line.supplier.id}`, tokenCache);
-        progress.payroll[line.supplier.id] = payrollId;
-        onProgress();
-        resultLine.sheetId = sheet.id;
-        resultLine.payrollId = payrollId;
+        const line = draft.lines[index], resultLine = resultLines[index], sheet = sheets[line.supplier.id];
+        await confirmSheet(line, sheet);
+        const saved = await get(launches, resultLine.id);
+        if (!matchesFields(launches, saved, { ...launchFields(launches,draft,line,orderId,sheet),
+          [column(launches,['__PowerAppsId__']).name]:`APP-vale-alimentacao-${progress.operationId}-${line.supplier.id}` }))
+          throw new Error('Os dados ou IDFOLHA do lançamento mudaram durante o envio. Confira antes de concluir.');
+        const fields = payrollFields(payroll,draft,line,sheet,resultLine.id);
+        const linked = compatiblePayrollLaunchLink({ columns:payroll.columns, rows:confirmedPayroll, fields });
+        if (!linked || String(linked.id) !== resultLine.payrollId || !matchesFields(payroll,await get(payroll,linked.id),fields))
+          throw new Error('O vínculo da folha não foi confirmado ao concluir o envio. Retome para conferir os registros pendentes.');
       }
       return { orderId, lines: resultLines, total: draft.total };
     } finally { posting = false; }

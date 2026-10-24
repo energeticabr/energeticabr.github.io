@@ -11,12 +11,13 @@ try {
     FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'], CADASTROCONTA:['CONTA'], LANCAMENTOOBRA:['ETAPA','FILIAL'],
     IDFOLHA:['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
     NOTASPENDENTES:['Title','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
-    LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS'],
+    LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS','IDFOLHA'],
   };
   const columns = Object.fromEntries(Object.entries(names).map(([list, fields]) => [list, fields.map(name => ({ name,
     displayName:list === 'NOTASPENDENTES' && name === 'Title' ? 'FILIAL' : name,
     ...(/DATA/.test(name) ? { dateTime:{} } : { text:{} }) }))]));
   Object.assign(columns.NOTASPENDENTES.find(c=>c.name==='VALECONTROLE'),{hidden:true,text:{allowMultipleLines:true,textType:'plain',appendChangesToExistingText:false}});
+  Object.assign(columns.LANCAMENTOS.find(c=>c.name==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
   const rows = {
     FORNECEDORES:[{ id:'1', fields:{ CADASTRO:'Colaborador de teste', STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA TESTE', PROFISSAO:'PEDREIRO' } }],
     CADASTROCONTA:[{ id:'8', fields:{ CONTA:'CAIXA' } },{ id:'9', fields:{ CONTA:'BANCO' } }],
@@ -31,7 +32,7 @@ try {
     getItemsPage:async (_site, list) => ({ items:rows[list], hasMore:false }),
     getItem:async (_site, list, id) => structuredClone(rows[list].find(row => row.id === String(id))),
     createItem:async (_site, list, fields) => {
-      if (list === 'LANCAMENTOS' && rejectLaunch) throw new Error('Falha de teste antes do lançamento');
+      if (list === 'LANCAMENTOS' && rejectLaunch) throw Object.assign(new Error('Falha de teste antes do lançamento'),{status:400,code:'invalidRequest'});
       const row = { id:String(rows[list].length+1), fields:structuredClone(fields), eTag:'"1"' }; rows[list].push(row); writes++; return row;
     },
     updateItem:async (_site, list, id, fields, options) => {

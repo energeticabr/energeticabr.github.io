@@ -1,8 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMealVoucherData } from '../src/chat/meal-voucher-data.js';
+import { createMealVoucherData as createProductionMealVoucherData } from '../src/chat/meal-voucher-data.js';
 import { JSDOM } from 'jsdom';
 import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
+
+// Browser production uses localStorage; each simulated repository gets its own
+// persistent journal across reconstructed service instances.
+const journals = new WeakMap();
+// These simulated server-side 400 rejections are safe to edit/retry. Separate
+// delayed-commit tests below cover unknown network outcomes conservatively.
+const rejectedWrite = message => Object.assign(new Error(message),{status:400,code:'invalidRequest'});
+function createMealVoucherData(options) {
+  if (options.repository && !Object.hasOwn(options,'storage')) {
+    if(!journals.has(options.repository)) {
+      const records=new Map();journals.set(options.repository,{getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)});
+    }
+    options={...options,storage:journals.get(options.repository)};
+  }
+  return createProductionMealVoucherData(options);
+}
 
 function fixture() {
   const names = {
@@ -10,10 +26,11 @@ function fixture() {
     CADASTROCONTA: ['CONTA'], LANCAMENTOOBRA: ['ETAPA','FILIAL'],
     IDFOLHA: ['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO: ['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
     NOTASPENDENTES: ['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
-    LANCAMENTOS: ['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS'],
+    LANCAMENTOS: ['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS','IDFOLHA'],
   };
   const columns = Object.fromEntries(Object.entries(names).map(([list, labels]) => [list, labels.map(label => ({ name: label, displayName: label, ...(/DATA/.test(label) ? { dateTime: {} } : list === 'NOTASPENDENTES' && label === 'VALORTOTAL' ? { number: {} } : { text: {} }) }))]));
   Object.assign(columns.NOTASPENDENTES.find(c => c.name === 'VALECONTROLE'), { hidden:true, text:{ allowMultipleLines:true, textType:'plain', appendChangesToExistingText:false } });
+  Object.assign(columns.LANCAMENTOS.find(c => c.name === 'IDFOLHA'), { text:undefined, number:{ decimalPlaces:'none' }, required:false });
   const rows = { FORNECEDORES: [
     { id: '1', fields: { CADASTRO: 'Ana', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'PEDREIRO' } },
     { id: '2', fields: { CADASTRO: 'Beto', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'SERVENTE' } },
@@ -29,7 +46,7 @@ function fixture() {
     getColumns: async (_site, list) => columns[list],
     getItemsPage: async (_site, list) => ({ items: rows[list], hasMore: false }),
     getItem: async (_site, list, id) => rows[list].find(row => row.id === String(id)),
-    createItem: async (_site, list, fields) => { if (failSecond && list === 'LANCAMENTOS' && rows.LANCAMENTOS.length === 1) throw new Error('rede interrompida'); if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'Title')?.displayName === 'FILIAL' && fields.Title !== 'OBRA A') throw new Error('General exception while processing'); if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL')?.text && typeof fields.VALORTOTAL !== 'string') throw new Error('General exception while processing'); const row = { id: String(rows[list].length + (list === 'FORNECEDORES' ? 10 : 1)), fields: { ...fields }, eTag: '"1"' }; rows[list].push(row); writes.push({ list, fields }); if (appendOrderObs && list === 'NOTASPENDENTES') row.fields.OBS += '\nAuditado automaticamente'; if (loseOrderResponse && list === 'NOTASPENDENTES') { loseOrderResponse = false; throw new Error('General exception while processing'); } if (changeSheetDuringLaunch && list === 'LANCAMENTOS') rows.IDFOLHA[0].fields.MESREFERENCIA = '11/2026'; if (changeOrderDuringLaunch && list === 'LANCAMENTOS') { rows.NOTASPENDENTES[0].fields.VALORTOTAL = 45; changeOrderDuringLaunch = false; } return row; },
+    createItem: async (_site, list, fields) => { if (failSecond && list === 'LANCAMENTOS' && rows.LANCAMENTOS.length === 1) throw rejectedWrite('rede interrompida'); if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'Title')?.displayName === 'FILIAL' && fields.Title !== 'OBRA A') throw new Error('General exception while processing'); if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL')?.text && typeof fields.VALORTOTAL !== 'string') throw new Error('General exception while processing'); const row = { id: String(rows[list].length + (list === 'FORNECEDORES' ? 10 : 1)), fields: { ...fields }, eTag: '"1"' }; rows[list].push(row); writes.push({ list, fields }); if (appendOrderObs && list === 'NOTASPENDENTES') row.fields.OBS += '\nAuditado automaticamente'; if (loseOrderResponse && list === 'NOTASPENDENTES') { loseOrderResponse = false; throw new Error('General exception while processing'); } if (changeSheetDuringLaunch && list === 'LANCAMENTOS') rows.IDFOLHA[0].fields.MESREFERENCIA = '11/2026'; if (changeOrderDuringLaunch && list === 'LANCAMENTOS') { rows.NOTASPENDENTES[0].fields.VALORTOTAL = 45; changeOrderDuringLaunch = false; } return row; },
     updateItem: async (_site, list, id, fields) => { if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL')?.text && fields.VALORTOTAL !== undefined && typeof fields.VALORTOTAL !== 'string') throw new Error('General exception while processing'); const row = rows[list].find(item => item.id === String(id)); Object.assign(row.fields, fields); writes.push({ list, fields, update: true }); return row; },
     listAttachments: async (_site, list, id) => [...storedFiles].filter(([key]) => key.startsWith(`${list}:${id}:`)).map(([key, bytes]) => ({ name:key.slice(`${list}:${id}:`.length), size:bytes.byteLength })),
     downloadAttachment: async (_site, list, id, name) => storedFiles.get(`${list}:${id}:${name}`).slice().buffer,
@@ -49,7 +66,7 @@ async function waitForSubmission(doc) {
 test('falha antes de gravar permite corrigir datas, referência, conta e etapa mantendo a operação', async () => {
   const f = fixture(), create = f.repo.createItem;
   let rejected = false;
-  f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw new Error('dados rejeitados'); } return create(...args); };
+f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw rejectedWrite('dados rejeitados'); } return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:'editable-1' };
   await assert.rejects(data.post(original, progress), /rejeitados/);
@@ -82,7 +99,7 @@ test('resposta perdida permite corrigir pedido vazio sem criar outro pedido', as
 
 test('pedido vazio confirmado libera todos os dados e reaproveita o ID na confirmação corrigida', async () => {
   const f = fixture(), create = f.repo.createItem;
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('lançamento rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('lançamento rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft(suppliers), progress = { operationId:'empty-order-edit' };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -111,7 +128,7 @@ test('pedido vazio confirmado libera todos os dados e reaproveita o ID na confir
 
 test('a tela reaberta edita pedido já criado e só grava após nova confirmação', async t => {
   const f = fixture(), create = f.repo.createItem;
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:'empty-order-view' };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -141,7 +158,7 @@ test('a tela reaberta edita pedido já criado e só grava após nova confirmaç�
 
 for (const committed of [false, true]) test(`correção retoma PATCH com resposta perdida (${committed ? 'gravado' : 'não gravado'}) e aceita nova revisão`, async () => {
   const f = fixture(), create = f.repo.createItem, update = f.repo.updateItem;
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:`patch-${committed}` };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -169,7 +186,7 @@ for (const committed of [false, true]) test(`correção retoma PATCH com respost
 
 test('correção retoma o mesmo PATCH não gravado sem exigir outra edição', async () => {
   const f = fixture(), create = f.repo.createItem, update = f.repo.updateItem;
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:'patch-exact-retry' };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -186,7 +203,7 @@ test('pedido vazio com Title como FILIAL e total texto continua editável', asyn
   f.columns.NOTASPENDENTES = f.columns.NOTASPENDENTES.filter(c => c.name !== 'FILIAL');
   f.columns.NOTASPENDENTES.find(c => c.name === 'Title').displayName = 'FILIAL';
   const total = f.columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL'); total.number = undefined; total.text = {};
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:'real-columns' };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -200,7 +217,7 @@ test('pedido vazio com Title como FILIAL e total texto continua editável', asyn
 for (const scenario of ['lançamento sem token','folha sem progresso','pedido auditado','anexo gravado','total alterado','sem versão','consulta incompleta'])
   test(`não libera pedido vazio com ${scenario}`, async () => {
     const f = fixture(), create = f.repo.createItem;
-    f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
     const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
     const original = draft([suppliers[0]]), progress = { operationId:'protected-order', editable:true };
     await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -301,7 +318,7 @@ for (const finish of [false,true]) test(`aba antiga não pode enviar fornecedore
   const f = fixture(), create = f.repo.createItem;
   f.rows.FORNECEDORES.push(...['Caio','Davi'].map((CADASTRO,i) => ({ id:String(i+4), fields:{ CADASTRO, STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA A', PROFISSAO:'PEDREIRO' } })));
   f.rows.IDFOLHA.push(...['Caio','Davi'].map((FORNECEDOR,i) => ({ id:String(i+44), fields:{ MESREFERENCIA:'10/2026', FORNECEDOR } })));
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft(suppliers.filter(s => ['Ana','Beto'].includes(s.label))), progress = { operationId:`stale-${finish}` };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -344,7 +361,7 @@ for (const malformed of [false,true]) test(`retomada não cria itens se ${malfor
 
 for (const action of ['confirmar','fechar']) test(`aba antiga não sobrescreve o rascunho corrigido ao ${action}`, async t => {
   const f = fixture(), create = f.repo.createItem;
-  f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rejeitado'); return create(...args); };
+f.repo.createItem = async (...args) => { if (args[1] === 'LANCAMENTOS') throw rejectedWrite('rejeitado'); return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:`stale-storage-${action}` };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -425,7 +442,7 @@ test('pedido existente apenas selecionado não bloqueia correção antes do prim
   const f = fixture(), create = f.repo.createItem;
   f.rows.NOTASPENDENTES.push(...['98','99'].map(id => ({ id, fields:{ FILIAL:'OBRA A', FORNECEDOR:'DIVERSOS', STATUS:'PENDENTE', VALORTOTAL:100, OBS:'' }, eTag:'"1"' })));
   let rejected = false;
-  f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw new Error('dados rejeitados'); } return create(...args); };
+f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw rejectedWrite('dados rejeitados'); } return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = { ...draft([suppliers[0]]), orderMode:'existing', orderId:'99' }, progress = { operationId:'existing-edit' };
   await assert.rejects(data.post(original, progress), /rejeitados/);
@@ -460,7 +477,7 @@ test('consulta incompleta não autoriza editar uma tentativa anterior', async ()
 test('tela recupera a tentativa sem gravações e confirma pagamento corrigido no serviço real', async t => {
   const f = fixture(), create = f.repo.createItem;
   let rejected = false;
-  f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw new Error('rejeitado'); } return create(...args); };
+f.repo.createItem = async (...args) => { if (!rejected) { rejected = true; throw rejectedWrite('rejeitado'); } return create(...args); };
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
   const original = draft([suppliers[0]]), progress = { operationId:'view-data-recovery' };
   await assert.rejects(data.post(original, progress), /rejeitado/);
@@ -786,7 +803,7 @@ test('destino dos anexos é fixado antes da primeira linha mesmo com resposta pe
 
 test('lote originador retoma depois de outro lote acrescentar ao pedido sem repetir o total',async()=>{
   const f=fixture(),create=f.repo.createItem;let fail=true;
-  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw new Error('folha indisponível');return create(...args);};
+f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw rejectedWrite('folha indisponível');return create(...args);};
   const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-a'};
   await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
   await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-b'});
@@ -797,7 +814,7 @@ test('lote originador retoma depois de outro lote acrescentar ao pedido sem repe
 
 test('total acumulado divergente continua bloqueado mesmo quando coincide com o valor só do lote originador',async()=>{
   const f=fixture(),create=f.repo.createItem;let fail=true;
-  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw new Error('folha indisponível');return create(...args);};
+f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw rejectedWrite('folha indisponível');return create(...args);};
   const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-safe'};
   await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
   await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-safe'});
@@ -836,7 +853,7 @@ test('retomada migra marcadores legados da OBS sem alterar notas humanas nem rep
 
 for (const committed of [false,true]) test(`journal de PATCH legado permanece recuperável (${committed ? 'gravado' : 'não gravado'}) sem códigos na OBS`, async () => {
   const f=fixture(),create=f.repo.createItem,update=f.repo.updateItem;
-  f.repo.createItem=async(...args)=>{if(args[1]==='LANCAMENTOS')throw new Error('lançamento rejeitado');return create(...args);};
+f.repo.createItem=async(...args)=>{if(args[1]==='LANCAMENTOS')throw rejectedWrite('lançamento rejeitado');return create(...args);};
   const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
   const original=draft(suppliers),progress={operationId:`old-edit-${committed}`};
   await assert.rejects(data.post(original,progress),/rejeitado/);
@@ -861,4 +878,141 @@ test('leituras de itens selecionam explicitamente o campo oculto antes de reconc
   f.repo.getItem=async(...args)=>{if(args[1]==='NOTASPENDENTES'){queries.push(args[3]);assert.match(args[3],/fields\(\$select=[^)]*VALECONTROLE/);}return get(...args);};
   const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();await data.post(draft(suppliers),{operationId:'explicit-hidden'});
   assert.ok(queries.length>2);
+});
+
+test('vale salva IDFOLHA no próprio lançamento e vincula antes de iniciar a próxima linha', async () => {
+  const f=fixture(),create=f.repo.createItem;let check=false;
+  f.repo.createItem=async(...args)=>{
+    if(args[1]==='LANCAMENTOS' && f.rows.LANCAMENTOS.length===1){
+      assert.equal(f.rows.FOLHAPGTO.length,1,'primeiro vínculo deve preceder o segundo lançamento');check=true;
+    }
+    return create(...args);
+  };
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  await data.post(draft(suppliers),{operationId:'automatic-reference'});
+  assert.equal(check,true);assert.deepEqual(f.rows.LANCAMENTOS.map(row=>row.fields.IDFOLHA),[11,12]);
+});
+
+test('falha no vínculo mantém IDFOLHA na única linha gravada e retomada reutiliza a origem', async () => {
+  const f=fixture(),create=f.repo.createItem;let fail=true;
+f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw rejectedWrite('vínculo offline');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'link-offline'};
+  await assert.rejects(data.post(selected,progress),/offline/);
+  assert.equal(f.rows.LANCAMENTOS.length,1);assert.equal(f.rows.LANCAMENTOS[0].fields.IDFOLHA,11);
+  fail=false;await createMealVoucherData({repository:f.repo}).post(selected,JSON.parse(JSON.stringify(progress)));
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('upload interrompido não impede o vínculo automático de todas as linhas do vale', async () => {
+  const f=fixture(),upload=f.repo.uploadAttachment;
+  f.repo.uploadAttachment=async()=>{throw new Error('anexo offline');};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  const selected={...draft(suppliers),files:[new File(['abc'],'nota.pdf',{type:'application/pdf',lastModified:0})]},progress={operationId:'attachment-after-link'};
+  await assert.rejects(data.post(selected,progress),/offline/);
+  assert.deepEqual(f.rows.FOLHAPGTO.map(row=>row.fields.IDFOLHA),[11,12]);
+  f.repo.uploadAttachment=upload;await createMealVoucherData({repository:f.repo}).post(selected,progress);
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);assert.equal(f.deliveries.length,2);
+});
+
+test('resposta perdida do vínculo é reconciliada sem gerar outro lançamento ou pagamento', async () => {
+  const f=fixture(),create=f.repo.createItem;let lose=true;
+  f.repo.createItem=async(...args)=>{const row=await create(...args);if(args[1]==='FOLHAPGTO'&&lose){lose=false;throw new Error('resposta perdida do vínculo');}return row;};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'lost-link'};
+  await assert.rejects(data.post(selected,progress),/resposta perdida/);
+  assert.equal(f.rows.LANCAMENTOS.length,1);assert.equal(f.rows.LANCAMENTOS[0].fields.IDFOLHA,11);
+  await createMealVoucherData({repository:f.repo}).post(selected,{operationId:'lost-link'});
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('coluna IDFOLHA ausente bloqueia vale antes de gravar pedido ou lançamento', async () => {
+  const f=fixture();f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.name!=='IDFOLHA');
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  await assert.rejects(data.post(draft(suppliers),{operationId:'missing-launch-sheet'}),/IDFOLHA/);assert.equal(f.writes.length,0);
+});
+
+test('retomada não sobrescreve referência IDFOLHA divergente no lançamento', async () => {
+  const f=fixture(),data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'wrong-launch-sheet'};
+  await data.post(selected,progress);f.rows.LANCAMENTOS[0].fields.IDFOLHA=999;const writes=f.writes.length;
+  await assert.rejects(createMealVoucherData({repository:f.repo}).post(selected,progress),/IDFOLHA|dados|alterad/i);
+  assert.equal(f.writes.length,writes);assert.equal(f.rows.LANCAMENTOS[0].fields.IDFOLHA,999);
+});
+
+test('vínculo compatível já existente para a origem é reutilizado mesmo com Title diferente', async () => {
+  const f=fixture(),data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'adopt-compatible'};
+  await data.post(selected,progress);f.rows.FOLHAPGTO[0].fields.Title='vínculo confirmado por outra entrada';
+  await createMealVoucherData({repository:f.repo}).post(selected,progress);
+  assert.equal(f.rows.FOLHAPGTO.length,2);assert.equal(f.rows.LANCAMENTOS.length,2);
+});
+
+test('mudança da folha durante upload impede conclusão sem recriar os lançamentos', async () => {
+  const f=fixture(),upload=f.repo.uploadAttachment;
+  f.repo.uploadAttachment=async(...args)=>{await upload(...args);f.rows.IDFOLHA[0].fields.MESREFERENCIA='11/2026';};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  const selected={...draft(suppliers),files:[new File(['abc'],'nota.pdf',{type:'application/pdf',lastModified:0})]};
+  await assert.rejects(data.post(selected,{operationId:'sheet-changed-during-upload'}),/IDFOLHA|folha/);
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('retomada legada preenche apenas a referência vazia com ETag e preserva os vínculos', async () => {
+  const f=fixture(),data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'legacy-reference'};
+  await data.post(selected,progress);
+  for(const row of f.rows.LANCAMENTOS) delete row.fields.IDFOLHA;
+  const before=structuredClone(f.rows.LANCAMENTOS),patches=[],update=f.repo.updateItem;
+  f.repo.updateItem=async(...args)=>{if(args[1]==='LANCAMENTOS')patches.push(args);return update(...args);};
+  await createMealVoucherData({repository:f.repo}).post(selected,progress);
+  assert.deepEqual(patches.map(args=>args[3]),[{IDFOLHA:11},{IDFOLHA:12}]);
+  assert.ok(patches.every(args=>args[4].eTag==='"1"'));
+  for(let i=0;i<before.length;i++)assert.deepEqual({...f.rows.LANCAMENTOS[i].fields,IDFOLHA:undefined},{...before[i].fields,IDFOLHA:undefined});
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('data de pagamento originalmente vazia é conferida novamente antes de adotar referência legada', async () => {
+  const f=fixture(),data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft([suppliers[0]]),progress={operationId:'legacy-paid-race'};
+  await data.post(selected,progress);delete f.rows.LANCAMENTOS[0].fields.IDFOLHA;
+  const get=f.repo.getItem;let changed=false;
+  f.repo.getItem=async(...args)=>{const row=await get(...args);if(args[1]==='LANCAMENTOS'&&!changed){changed=true;row.fields['DATA PGTO EFETUADO']='2026-10-24T12:00:00Z';row.eTag='"2"';}return row;};
+  await assert.rejects(createMealVoucherData({repository:f.repo}).post(selected,progress),/dados|alterad|pagamento/);
+  assert.equal(f.rows.LANCAMENTOS[0].fields.IDFOLHA,undefined);assert.equal(f.rows.FOLHAPGTO.length,1);
+});
+
+for (const target of ['NOTASPENDENTES','LANCAMENTOS','FOLHAPGTO']) test(`POST incerto de ${target} não é repetido enquanto a primeira gravação ainda não estiver visível`,async()=>{
+  const f=fixture(),create=f.repo.createItem;let commit,posts=0;
+  f.repo.createItem=async(...args)=>{if(args[1]===target){posts++;if(posts===1){commit=()=>create(...args);throw new Error('resposta pendente');}}return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft([suppliers[0]]),progress={operationId:`uncertain-${target}`};
+  await assert.rejects(data.post(selected,progress),/pendente/);
+  await assert.rejects(createMealVoucherData({repository:f.repo}).post(selected,structuredClone(progress)),/confirmad|pendente|reconcilia/);
+  assert.equal(posts,1);await commit();
+  await createMealVoucherData({repository:f.repo}).post(selected,{operationId:progress.operationId});
+  assert.equal(posts,1);assert.equal(f.rows.LANCAMENTOS.length,1);assert.equal(f.rows.FOLHAPGTO.length,1);
+});
+
+test('erro geral HTTP 400 não é confundido com rejeição definitiva de gravação',async()=>{
+  const f=fixture(),create=f.repo.createItem;let posts=0;
+  f.repo.createItem=async(...args)=>{if(args[1]==='LANCAMENTOS'){posts++;throw Object.assign(new Error('erro geral'),{status:400,code:'generalException'});}return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft([suppliers[0]]),progress={operationId:'uncertain-general-400'};
+  await assert.rejects(data.post(selected,progress),/erro geral/);
+  await assert.rejects(data.post(selected,progress),/pendente|confirmação/);
+  assert.equal(posts,1);
+});
+
+test('vínculo criado após preflight é relido pela origem antes de qualquer novo POST',async()=>{
+  const f=fixture(),create=f.repo.createItem;let inserted=false;
+  f.repo.createItem=async(...args)=>{const row=await create(...args);if(args[1]==='LANCAMENTOS'&&!inserted){inserted=true;f.rows.FOLHAPGTO.push({id:'90',fields:{Title:'outro-fluxo',FORNECEDOR:'Ana',TIPOPGTO:'VALE REFEIÇÃO',VALORUNITARIO:10,QTD:1,DATA:'2026-10-15T03:00:00Z',IDFOLHA:11,IDLANCAMENTO:Number(row.id)}});}return row;};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  await data.post(draft([suppliers[0]]),{operationId:'fresh-origin'});
+  assert.equal(f.rows.FOLHAPGTO.length,1);assert.equal(f.rows.FOLHAPGTO[0].id,'90');
+});
+
+test('conflito na associação surgido após preflight impede preenchimento da referência legada',async()=>{
+  const f=fixture(),data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft([suppliers[0]]),progress={operationId:'legacy-link-race'};
+  await data.post(selected,progress);delete f.rows.LANCAMENTOS[0].fields.IDFOLHA;f.rows.FOLHAPGTO.length=0;
+  const get=f.repo.getItem;let changed=false;
+  f.repo.getItem=async(...args)=>{const row=await get(...args);if(args[1]==='LANCAMENTOS'&&!changed){changed=true;f.rows.FOLHAPGTO.push({id:'91',fields:{Title:'conflito',FORNECEDOR:'Ana',TIPOPGTO:'VALE REFEIÇÃO',VALORUNITARIO:10,QTD:1,DATA:'2026-10-15T12:00:00Z',IDFOLHA:999,IDLANCAMENTO:Number(row.id)}});}return row;};
+  await assert.rejects(createMealVoucherData({repository:f.repo}).post(selected,progress),/vínculo|IDFOLHA/);
+  assert.equal(f.rows.LANCAMENTOS[0].fields.IDFOLHA,undefined);assert.equal(f.rows.FOLHAPGTO.length,1);
+});
+
+test('armazenamento indisponível bloqueia antes de qualquer pedido ou lançamento',async()=>{
+  const f=fixture(),data=createMealVoucherData({repository:f.repo,storage:{getItem:()=>null,setItem:()=>{throw new Error('quota');},removeItem:()=>{}}}),{suppliers}=await data.loadOptions();
+  await assert.rejects(data.post(draft(suppliers),{operationId:'no-journal'}),/quota|armazenamento/);assert.equal(f.writes.length,0);
 });

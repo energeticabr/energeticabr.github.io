@@ -8,6 +8,8 @@ import {
 import { payrollKey as key, validatePayrollDraft } from "./supplier-payroll.js";
 import { payrollTaxType, payrollCompetenceMonth } from './payroll-tax-competence.js';
 import { ensurePayrollTaxLink, assertPayrollTaxStorage } from './payroll-tax-links.js';
+import { payrollLaunchReferenceColumn, ensurePayrollLaunchSchema, confirmPayrollLaunchReference, compatiblePayrollLaunchLink,
+  payrollLaunchLinkFilter, payrollCreationKey, payrollOriginKey, withPayrollWriteLock, ensurePayrollCreation, assertPayrollCreationStorage } from './payroll-launch-reference.js';
 const SITE = "personal";
 const scalar = (value) =>
   value && typeof value === "object"
@@ -74,6 +76,7 @@ function shiftMonth(value, delta) {
 }
 export function createSupplierPayrollData({
   repository,
+  graph,
   tokenProvider,
   siteConfig = SHAREPOINT_SITES,
   fetchImpl = globalThis.fetch,
@@ -84,7 +87,7 @@ export function createSupplierPayrollData({
   if (!repository) {
     if (typeof tokenProvider !== "function")
       throw new TypeError("A folha requer uma sessão Microsoft ativa.");
-    const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
+    graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
     const attachmentTransport = createSharePointAttachmentTransport({
       tokenProvider,
       allowedSites: Object.values(siteConfig),
@@ -116,6 +119,8 @@ export function createSupplierPayrollData({
           "Não foi possível autorizar a folha e seus comprovantes.",
         );
     }
+    await ensurePayrollLaunchSchema({ repository, graph, assertSession, siteKey:SITE });
+    descriptions.delete('LANCAMENTOS');
   }
   async function describe(name) {
     assertSession();
@@ -273,46 +278,44 @@ export function createSupplierPayrollData({
       );
     return matches[0];
   }
-  async function ensure(descriptor, fields, tokenLabel, token, checkpoint) {
+  const originRows=(descriptor,id)=>all(descriptor,payrollLaunchLinkFilter(descriptor.columns,id));
+  async function ensure(descriptor, fields, tokenLabel, token, checkpoint, assertExisting) {
     const c = column(descriptor.columns, [tokenLabel]);
-    let item = await findToken(descriptor, c, token);
-    if (!item) {
-      if (checkpoint?.attempted?.[tokenLabel])
-        throw new Error('O envio anterior ainda não foi confirmado. Confira a galeria antes de iniciar outro cadastro.');
-      assertSession();
-      if (checkpoint) (checkpoint.attempted ??= {})[tokenLabel] = true;
-      item = await repository.createItem(SITE, descriptor.id, {
-        ...fields,
-        [c.name]: token,
-      });
-      assertSession();
-    }
-    if (!/^[1-9]\d*$/.test(String(item?.id)))
-      throw new Error("O SharePoint não confirmou o ID do registro.");
-    const saved = await repository.getItem(
-      SITE,
-      descriptor.id,
-      item.id,
-      "$expand=fields",
-    );
-    assertSession();
-    for (const [name, value] of Object.entries({
-      ...fields,
-      [c.name]: token,
-    })) {
-      const actual = saved?.fields?.[name];
-      const equal =
-        typeof value === "number"
-          ? Number(actual) === value
-          : String(actual ?? "") === String(value) ||
-            (descriptor.columns.find((c) => c.name === name)?.dateTime &&
-              String(actual || "").slice(0, 10) === String(value).slice(0, 10));
-      if (!equal)
-        throw new Error(
-          "O SharePoint não confirmou todos os dados da rubrica.",
-        );
-    }
-    return String(item.id);
+    const payroll=descriptor.name==='FOLHAPGTO',launchId=payroll?fields[column(descriptor.columns,['IDLANCAMENTO']).name]:null;
+    let origin;
+    const saved=await ensurePayrollCreation({storage,assertSession,
+      key:payroll?payrollOriginKey(SITE,descriptor.id,launchId):payrollCreationKey(SITE,descriptor.id,token),
+      findItem:async()=>{
+        let item=await findToken(descriptor,c,token);
+        if(payroll){
+          origin=compatiblePayrollLaunchLink({columns:descriptor.columns,rows:await originRows(descriptor,launchId),fields});
+          if(item&&origin&&String(item.id)!==String(origin.id))throw new Error('O vínculo da operação está associado a outro lançamento.');
+          item=origin||item;
+        }
+        if(!item&&checkpoint?.attempted?.[tokenLabel])throw new Error('O envio anterior ainda não foi confirmado. Confira a galeria antes de iniciar outro cadastro.');
+        return item;
+      },createItem:()=>repository.createItem(SITE,descriptor.id,{...fields,[c.name]:token}),
+      verifyItem:async item=>{
+        if(!/^[1-9]\d*$/.test(String(item?.id)))throw new Error('O SharePoint não confirmou o ID do registro.');
+        const expected={...fields,...(!origin?{[c.name]:token}:{})};
+        let current;
+        if(!payroll){
+          const links=await describe('FOLHAPGTO');
+          current=await withPayrollWriteLock(payrollOriginKey(SITE,links.id,item.id),()=>confirmPayrollLaunchReference({
+            columns:descriptor.columns,item,fields:expected,assertSession,assertContext:assertExisting?row=>assertExisting(String(row.id)):undefined,
+            readItem:id=>repository.getItem(SITE,descriptor.id,id,'$expand=fields'),
+            updateItem:(id,changes,options)=>repository.updateItem(SITE,descriptor.id,id,changes,options) }));
+        }else current=await repository.getItem(SITE,descriptor.id,item.id,'$expand=fields');
+        assertSession();
+        if(String(current?.id)!==String(item.id))throw new Error('O SharePoint não confirmou o registro da rubrica.');
+        for(const [name,value] of Object.entries(expected)){
+          const actual=current.fields?.[name],date=descriptor.columns.find(c=>c.name===name)?.dateTime;
+          if(!(typeof value==='number'?Number(actual)===value:scalar(actual)===scalar(value)||date&&scalar(actual).slice(0,10)===scalar(value).slice(0,10)))
+            throw new Error('O SharePoint não confirmou todos os dados da rubrica.');
+        }
+        return current;
+      } });
+    return String(saved.id);
   }
   function operation(progress) {
     if (!/^[a-zA-Z0-9-]{1,80}$/.test(String(progress?.operationId || "")))
@@ -334,6 +337,7 @@ export function createSupplierPayrollData({
     posting = true;
     try {
       const draft = validatePayrollDraft(rawDraft);
+      assertSession();assertPayrollCreationStorage(storage);
       const fingerprint = JSON.stringify({
         ...draft,
         lines: draft.lines.map((l) => ({
@@ -394,6 +398,7 @@ export function createSupplierPayrollData({
           payrollValues({ ...draft, supplier }, payrollTaxType(line.payrollType) ? taxSheet : sheet, line),
         );
       const descriptor = await describe("LANCAMENTOS");
+      if (!payrollLaunchReferenceColumn(descriptor.columns)) throw new Error('IDFOLHA de LANCAMENTOS não está disponível; nenhum pagamento foi criado.');
       const values = draft.lines.map((line) => {
         const account = accounts.find((a) => a.id === line.account.id);
         if (!account || key(account.label) !== key(line.account.label))
@@ -425,6 +430,7 @@ export function createSupplierPayrollData({
             GERADESEMBOLSO: "SIM",
             APROVACAO: "PENDENTE DE APROVAÇÃO",
             FRETE: 0,
+            IDFOLHA: Number((payrollTaxType(line.payrollType) ? taxSheet : sheet).id),
             OBS: `FOLHA DE PAGAMENTO — ${line.label.toUpperCase()}`,
           },
           ["UN", "TIPO DESPESA", "GERADESEMBOLSO", "APROVACAO", "FRETE", "OBS"],
@@ -436,6 +442,10 @@ export function createSupplierPayrollData({
       const lines = [];
       for (let index = 0; index < draft.lines.length; index++) {
         const line = draft.lines[index];
+        const selectedSheet = payrollTaxType(line.payrollType) ? taxSheet : sheet;
+        const currentSheets = await registeredSheets(supplier);
+        const exact = currentSheets.filter(s=>monthKey(s.label) === monthKey(selectedSheet.label));
+        if (exact.length !== 1 || exact[0].id !== selectedSheet.id) throw new Error('O IDFOLHA do fornecedor foi alterado ou está ambíguo; confira antes de retomar.');
         const saved = (progress.lines[line.rubric] ??= {});
         const id = await ensure(
           descriptor,
@@ -443,8 +453,15 @@ export function createSupplierPayrollData({
           "__PowerAppsId__",
           `APP-folha-${progress.operationId}-${line.rubric}`,
           saved,
+          async id => {
+            compatiblePayrollLaunchLink({ columns:payrollDescriptor.columns, rows:await originRows(payrollDescriptor,id),
+              fields:fieldsFor(payrollDescriptor,{...payrollValues({...draft,supplier},selectedSheet,line),IDLANCAMENTO:Number(id)}) });
+          },
         );
         saved.id = id;
+        const postedLine = { ...line, id };
+        // A receipt failure must never leave a launch without its payroll link.
+        await linkPayroll({ ...draft, supplier, product, stage, sheet, ...(hasTax ? {taxSheet} : {}), lines:[postedLine] }, sheet.id, progress);
         if (line.files.length) {
           const existing = await repository.listAttachments(
             SITE,
@@ -453,7 +470,7 @@ export function createSupplierPayrollData({
           );
           for (const file of line.files) {
             assertSession();
-            if (!existing.some((a) => a.fileName === file.name)) {
+            if (!existing.some((a) => (a.name ?? a.fileName) === file.name)) {
               await repository.uploadAttachment(SITE, descriptor.id, id, file);
               assertSession();
               const verified = await repository.listAttachments(
@@ -461,12 +478,18 @@ export function createSupplierPayrollData({
                 descriptor.id,
                 id,
               );
-              if (!verified.some((a) => a.fileName === file.name))
+              if (!verified.some((a) => (a.name ?? a.fileName) === file.name))
                 throw new Error("O SharePoint não confirmou o comprovante.");
             }
           }
         }
-        lines.push({ ...line, id });
+        lines.push(postedLine);
+      }
+      for (let index = 0; index < lines.length; index++) {
+        await confirmPayrollLaunchReference({ columns:descriptor.columns, item:lines[index], assertSession,
+          fields:{...values[index],[column(descriptor.columns,['__PowerAppsId__']).name]:`APP-folha-${progress.operationId}-${lines[index].rubric}`},
+          readItem:id=>repository.getItem(SITE,descriptor.id,id,'$expand=fields'),
+          updateItem:async()=>{throw new Error('A referência IDFOLHA mudou durante o envio; confira antes de concluir.');} });
       }
       const result = { ...draft, supplier, product, stage, sheet, ...(hasTax ? {taxSheet} : {}), lines };
       const linked = await linkPayroll(result, sheet.id, progress);
@@ -493,6 +516,7 @@ export function createSupplierPayrollData({
           s.id === String(sheetId) && key(s.label) === key(result.sheet.label),
       );
       if (!sheet) throw new Error("Escolha uma folha válida desse fornecedor.");
+      if (sheets.filter(s=>monthKey(s.label) === monthKey(sheet.label)).length !== 1) throw new Error('O IDFOLHA do fornecedor está ambíguo.');
       const taxLines = result.lines.filter(line => payrollTaxType(line.payrollType));
       const taxSheets = sheets.filter(s => payrollCompetenceMonth(s.label) === payrollCompetenceMonth(result.taxCompetence));
       const taxSheet = taxSheets.find(s => s.id === result.taxSheet?.id);
@@ -509,10 +533,16 @@ export function createSupplierPayrollData({
       progress.sheetId = sheet.id;
       for (let i = 0; i < result.lines.length; i++) {
         const line = result.lines[i];
+        const launches = await describe('LANCAMENTOS'), reference = payrollLaunchReferenceColumn(launches.columns);
+        const source = await repository.getItem(SITE, launches.id, line.id, '$expand=fields'); assertSession();
+        const supplierColumn = column(launches.columns, ['FORNECEDOR']);
+        const selectedSheet = payrollTaxType(line.payrollType) ? taxSheet : sheet;
+        if (!reference || String(source?.id) !== line.id || key(source.fields?.[supplierColumn.name]) !== key(result.supplier.label)
+          || Number(source.fields?.[reference.name]) !== Number(selectedSheet.id)) throw new Error('O fornecedor ou IDFOLHA do lançamento foi alterado; confira o vínculo.');
         if (payrollTaxType(line.payrollType)) {
           const fields={...payloads[i],...fieldsFor(descriptor,{Title:`APP-folha-encargo-lancamento-${line.id}-${key(line.payrollType)}`})};
           const saved=await ensurePayrollTaxLink({descriptor,fields,siteKey:SITE,storage,assertSession,matchFinancials:true,
-            allRows:()=>all(descriptor),readItem:async id=>{
+            allRows:()=>originRows(descriptor,line.id),readItem:async id=>{
               const item=await repository.getItem(SITE,descriptor.id,id,'$expand=fields');
               if(String(item?.id)!==id)throw new Error('O vínculo do encargo não foi confirmado.');return item;
             },createItem:fields=>repository.createItem(SITE,descriptor.id,fields),
@@ -521,7 +551,9 @@ export function createSupplierPayrollData({
               if(exact.length!==1||exact[0].id!==result.taxSheet.id)throw new Error('O IDFOLHA da competência de INSS/FGTS foi alterado.');
               const launches=await describe('LANCAMENTOS'),source=await repository.getItem(SITE,launches.id,line.id,'$expand=fields');
               const supplierColumn=column(launches.columns,['FORNECEDOR']);
-              if(String(source?.id)!==line.id||key(source.fields?.[supplierColumn.name])!==key(result.supplier.label))throw new Error('O fornecedor do lançamento do encargo foi alterado.');
+              const reference=payrollLaunchReferenceColumn(launches.columns);
+              if(!reference||String(source?.id)!==line.id||key(source.fields?.[supplierColumn.name])!==key(result.supplier.label)
+                ||Number(source.fields?.[reference.name])!==Number(taxSheet.id))throw new Error('O fornecedor ou IDFOLHA do lançamento do encargo foi alterado.');
             }});
           progress.lines[line.rubric].payrollId=String(saved.id);continue;
         }

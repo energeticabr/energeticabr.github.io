@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as module from "../src/chat/supplier-payroll-data.js";
+import * as production from "../src/chat/supplier-payroll-data.js";
+const journals=new WeakMap();
+const module={...production,createSupplierPayrollData(options){
+  if(options.repository){
+    if(options.storage)journals.set(options.repository,options.storage);
+    if(!journals.has(options.repository)){const records=new Map();journals.set(options.repository,{getItem:k=>records.get(k)??null,setItem:(k,v)=>records.set(k,v),removeItem:k=>records.delete(k)});}
+    options={...options,storage:journals.get(options.repository)};
+  }
+  return production.createSupplierPayrollData(options);
+}};
 const defs = {
   FORNECEDORES: ["CADASTRO", "STATUS", "EMPREITEIRO", "FILIAL", "PROFISSAO"],
   CADASTROPRODUTO: ["PRODUTO", "SATUS", "TIPO", "UNIDADE", "TIPODESPESA"],
@@ -25,6 +34,7 @@ const defs = {
     "APROVACAO",
     "OBS",
     "FRETE",
+    "IDFOLHA",
   ],
   IDFOLHA: ["MESREFERENCIA", "FORNECEDOR"],
   FOLHAPGTO: [
@@ -59,6 +69,7 @@ export function fixture() {
         v,
       ]),
     );
+  Object.assign(columns.LANCAMENTOS.find(c=>c.displayName==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
   const item = (list, id, fields) => ({
     id: String(id),
     fields: encode(list, fields),
@@ -199,6 +210,62 @@ export function fixture() {
     },
   };
 }
+test('folha vincula cada rubrica antes do comprovante e da próxima linha', async () => {
+  const f=fixture();f.draft.lines[0].files=[new File(['abc'],'comprovante.pdf',{type:'application/pdf'})];
+  const upload=f.repository.uploadAttachment;
+  f.repository.uploadAttachment=async(...args)=>{
+    assert.equal(f.rows.FOLHAPGTO.length,1,'comprovante não pode impedir o vínculo');
+    assert.equal(f.decode('LANCAMENTOS',f.rows.LANCAMENTOS[0].fields).IDFOLHA,9);
+    return upload(...args);
+  };
+  await f.data.post(f.draft,{operationId:'per-line-link'});
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row=>f.decode('LANCAMENTOS',row.fields).IDFOLHA),[9,9]);
+  assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('folha interrompida no comprovante já mantém o primeiro vínculo confirmado', async () => {
+  const f=fixture();f.draft.lines[0].files=[new File(['abc'],'comprovante.pdf',{type:'application/pdf'})];f.failUpload();
+  const progress={operationId:'receipt-failure-link'};
+  await assert.rejects(f.data.post(f.draft,progress),/upload falhou/);
+  assert.equal(f.rows.LANCAMENTOS.length,1);assert.equal(f.rows.FOLHAPGTO.length,1);
+  assert.equal(f.decode('LANCAMENTOS',f.rows.LANCAMENTOS[0].fields).IDFOLHA,9);
+  await f.data.post(f.draft,progress);assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('folha bloqueia coluna IDFOLHA ausente antes de registrar qualquer pagamento', async () => {
+  const f=fixture();f.columns.LANCAMENTOS=f.columns.LANCAMENTOS.filter(c=>c.displayName!=='IDFOLHA');
+  await assert.rejects(f.data.post(f.draft,{operationId:'missing-sheet-column'}),/IDFOLHA/);assert.equal(f.writes.length,0);
+});
+
+test('mudança financeira no lançamento durante upload bloqueia a conclusão da folha', async () => {
+  const f=fixture();f.draft.lines[0].files=[new File(['abc'],'nota.pdf',{type:'application/pdf'})];
+  const upload=f.repository.uploadAttachment,unit=f.columns.LANCAMENTOS.find(c=>c.displayName==='VALOR UNITÁRIO').name;
+  f.repository.uploadAttachment=async(...args)=>{await upload(...args);f.rows.LANCAMENTOS[0].fields[unit]=999;};
+  await assert.rejects(f.data.post(f.draft,{operationId:'financial-upload-race'}),/dados|alterad|rubrica/);
+});
+
+test('reconciliação consulta apenas a origem em uma folha com mais de 10000 registros históricos',async()=>{
+  const f=fixture(),pages=f.repository.getItemsPage,origin=f.columns.FOLHAPGTO.find(c=>c.displayName==='IDLANCAMENTO').name;let scoped=0;
+  f.repository.getItemsPage=async(...args)=>{
+    if(args[1]==='FOLHAPGTO'&&!args[2].includes(`fields/${origin} eq`)){
+      if(args[2].includes('$filter='))return pages(...args);
+      return {items:[],hasMore:true,nextLink:`page-${args[3].pageNumber+1}`};
+    }
+    if(args[1]==='FOLHAPGTO')scoped++;
+    return pages(...args);
+  };
+  await f.data.post(f.draft,{operationId:'large-payroll-history'});
+  assert.ok(scoped>0);assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('comprovantes reconhecem o campo name real do repositório sem upload duplicado',async()=>{
+  const f=fixture();f.draft.lines[0].files=[new File(['abc'],'comprovante.pdf',{type:'application/pdf'})];
+  f.repository.listAttachments=async()=>f.uploads.map(name=>({name}));
+  const progress={operationId:'canonical-receipt-name'};
+  await f.data.post(f.draft,progress);await f.data.post(f.draft,progress);
+  assert.equal(f.uploads.length,1);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
 test("folha usa paginação Graph real e inclui fornecedores após a primeira página", async () => {
   const f = fixture();
   const calls = [];
@@ -549,7 +616,9 @@ test("falha na confirmação do vínculo retoma a mesma folha sem duplicar regis
     return row;
   };
   await assert.rejects(f.data.post(f.draft, p), /vínculo perdida/);
-  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  // Stop at the first interrupted association instead of opening another launch.
+  assert.equal(f.rows.LANCAMENTOS.length, 1);
+  assert.equal(f.decode('LANCAMENTOS', f.rows.LANCAMENTOS[0].fields).IDFOLHA, 9);
   assert.equal(f.rows.FOLHAPGTO.length, 1);
   await assert.rejects(
     f.data.post({ ...f.draft, sheet: { id: "12", label: "11/2026" } }, p),
@@ -670,6 +739,7 @@ test('mixed payroll keeps salary in October and posts tax only to the September 
     lines:[f.draft.lines[0],{...f.draft.lines[0],rubric:'inss',quantity:'1',unitValue:'10'}]}, {operationId:'mixed-tax-test'});
   const payments=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields));
   assert.deepEqual(payments.map(p=>[p.TIPOPGTO,Number(p.IDFOLHA)]),[['SALÁRIO',9],['INSS',12]]);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row=>f.decode('LANCAMENTOS',row.fields).IDFOLHA),[9,12]);
   assert.equal(result.taxSheet.id,'12');
   assert.equal(result.sheet.id,'9');
 });
@@ -681,6 +751,7 @@ test('tax-only payroll posts to historical competence without requiring a normal
   const payment=f.writes.filter(w=>w.list==='FOLHAPGTO').map(w=>f.decode('FOLHAPGTO',w.fields))[0];
   assert.equal(Number(payment.IDFOLHA),10);
   assert.equal(payment.TIPOPGTO,'FGTS');
+  assert.equal(f.decode('LANCAMENTOS',f.rows.LANCAMENTOS[0].fields).IDFOLHA,10);
 });
 
 test('tax sheets from another supplier or wrong competence fail before any financial write',async()=>{
