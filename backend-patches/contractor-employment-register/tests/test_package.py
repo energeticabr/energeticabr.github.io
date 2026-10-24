@@ -20,6 +20,17 @@ def builder():
     return result
 
 
+@pytest.fixture
+def legacy_path_write_text(monkeypatch):
+    """Exercise the service Python 3.9 Path API on newer local interpreters."""
+    original = Path.write_text
+
+    def write_text(path, data, encoding=None, errors=None):
+        return original(path, data, encoding=encoding, errors=errors)
+
+    monkeypatch.setattr(Path, 'write_text', write_text)
+
+
 def test_output_alias_is_rejected_before_any_generated_write(tmp_path, monkeypatch):
     output = tmp_path / 'stage'
     original = Path.is_symlink
@@ -29,7 +40,7 @@ def test_output_alias_is_rejected_before_any_generated_write(tmp_path, monkeypat
     assert not output.exists()
 
 
-def test_repeated_build_produces_the_same_eight_targets_diff_and_manifest(tmp_path):
+def test_repeated_build_produces_the_same_eight_targets_diff_and_manifest(tmp_path, legacy_path_write_text):
     package = builder()
     first, second = tmp_path / 'first', tmp_path / 'second'
     manifest = package.package(PRIVATE / 'live', first)
@@ -44,7 +55,7 @@ def test_repeated_build_produces_the_same_eight_targets_diff_and_manifest(tmp_pa
     assert (first / 'app/worker/workflow.py').read_bytes() != (first / 'build/worker/workflow.py').read_bytes()
 
 
-def test_private_stage_includes_reviewed_installer_and_only_its_two_code_dependencies(tmp_path):
+def test_private_stage_includes_reviewed_installer_and_only_its_two_code_dependencies(tmp_path, legacy_path_write_text):
     package = builder()
     output = tmp_path / 'stage'
     manifest = package.package(PRIVATE / 'live', output)

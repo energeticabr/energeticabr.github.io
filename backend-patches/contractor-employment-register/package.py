@@ -110,7 +110,7 @@ def package(live, output):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
     (output / 'source.patch').write_bytes(patch)
-    (output / 'deploy-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8', newline='\n')
+    (output / 'deploy-manifest.json').write_bytes((json.dumps(manifest, indent=2) + '\n').encode('utf-8'))
     return manifest
 
 
