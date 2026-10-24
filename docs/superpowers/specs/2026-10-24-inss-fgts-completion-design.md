@@ -48,6 +48,12 @@ as partes técnicas independentes. Transferências bancárias não fazem parte d
   Antigo sem vínculo não é importado por editar STATUS.
 - Toda leitura de origem nesse editor fica restrita à identidade/STATUS/EMPREITEIRO/ETag,
   incluindo o readback do adaptador. As chamadas de outros consumidores não mudam.
+  Exceção estrita para uma edição mista no formulário geral de FORNECEDORES:
+  os campos não-RH que o próprio usuário alterou nessa operação podem ser relidos
+  individualmente para conferir sua gravação. Não solicitar fields inteiro nem
+  qualquer outro campo. A galeria RH e a sincronização isolada de STATUS mantêm
+  a seleção mínima anterior. Confirmar cada alteração antes de anunciá-la, e não
+  repetir campos já confirmados sobre uma alteração posterior de outra pessoa.
 - Salvamento parcial, ETag 412, rede incerta e recriação da página devem permitir
   retomada/reconciliação do mesmo item e intenção, sem sobrescrever conflito alheio.
   Persistir o diário mínimo por site/conta antes da mutação; indisponibilidade bloqueia
