@@ -5007,6 +5007,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   let immediateClickSuppression = null;
   let releaseOnlyPointer = null;
   let releaseOnlyClickSuppression = null;
+  let attachmentGestureSessionKey = null, attachmentSessionRevision = 0;
   let attachmentTrayOpen = null;
   let attachmentTrayGesture = null;
   let attachmentTrayClickSuppression = null;
@@ -5278,6 +5279,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       releaseOnlyPointer = {
         target: releaseOnlyTarget,
         command: commandFromTarget(releaseOnlyTarget),
+        attachmentSessionRevision,
         pointerId: event.pointerId,
         startX: Number(event.clientX) || 0,
         startY: Number(event.clientY) || 0,
@@ -5305,7 +5307,8 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
       || release.pointerId === event.pointerId);
     if (sameReleasePointer) {
       updateReleaseOnlyMovement(release, event);
-      if (release.moved || event?.type === "pointercancel") {
+      if (release.moved || event?.type === "pointercancel"
+        || (release.command?.type === 'open-file' && release.attachmentSessionRevision !== attachmentSessionRevision)) {
         releaseOnlyClickSuppression = {
           target: release.target,
           command: release.command,
@@ -5326,10 +5329,16 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
           detail: Number.isFinite(releaseX) && Number.isFinite(releaseY) ? 1 : 0,
         });
         Object.defineProperty(releaseClick, RELEASE_CLICK_COMMAND, { value: release.command });
-        release.target.dispatchEvent(releaseClick);
+        // Thumbnail hydration can replace a tray button between press and
+        // release. Rebind only this read-only action to the exact same file.
+        const target = release.command.type === 'open-file' && !root.contains(release.target)
+          ? [...root.querySelectorAll('button[data-action="open-file"]')]
+            .find(node => commandFromTarget(node)?.fileId === release.command.fileId) || release.target
+          : release.target;
+        target.dispatchEvent(releaseClick);
         // The browser may still synthesize its own click after pointerup.
         // Consume that duplicate after the deliberate release click above.
-        rememberImmediateClick(release.target, release.command);
+        rememberImmediateClick(target, release.command);
       }
       releaseOnlyPointer = null;
     }
@@ -5457,6 +5466,12 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
   }
 
   function render(state) {
+    const sessionKey = JSON.stringify([state.sessionStatus, state.account?.homeAccountId ?? state.account?.localAccountId
+      ?? state.account?.username ?? state.account?.id ?? state.account?.name ?? null]);
+    if (sessionKey !== attachmentGestureSessionKey) {
+      attachmentGestureSessionKey = sessionKey;
+      attachmentSessionRevision++;
+    }
     const newestPoll = [...(state.messages || [])].reverse().find(message => message?.role !== "user" && message?.type === "poll");
     const isAttendancePoll = isAttendanceSelectionPoll(newestPoll);
     const nextAttendancePollKey = isAttendancePoll ? String(newestPoll.id || newestPoll.question || "") : "";

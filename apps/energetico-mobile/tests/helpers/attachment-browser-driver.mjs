@@ -86,6 +86,8 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
       await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     };
     await command('Page.enable');
+    await command('Runtime.enable');
+    await command('Log.enable');
     await command('Page.setInterceptFileChooserDialog', { enabled: true });
     await command('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 600 });
     await command('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
@@ -98,7 +100,18 @@ export async function withAttachmentBrowser(browser, { width = 390, height = 844
       try { await Promise.all([command('Page.navigate', { url }), loaded]); }
       finally { clearTimeout(timer); onLoaded = undefined; }
     };
-    await run({ evaluate, wait, tap, command, events, navigate });
+    try { await run({ evaluate, wait, tap, command, events, navigate }); }
+    catch (error) {
+      const errors = events.filter(event => event.method === 'Runtime.exceptionThrown'
+        || (event.method === 'Log.entryAdded' && ['error', 'warning'].includes(event.params.entry?.level)))
+        .slice(-8).map(event => JSON.stringify(event.params).slice(0, 1200));
+      const state = await evaluate(`({ title: document.querySelector('.attachment-preview-title')?.textContent,
+        status: document.querySelector('.attachment-preview-status')?.textContent,
+        dialogs: [...document.querySelectorAll('dialog')].map(node => ({className:node.className,open:node.open})),
+        fixture: window.attachmentAppendFixture?.snapshot() })`).catch(() => null);
+      console.error('Attachment browser diagnostics:', JSON.stringify({ message: error.message, errors, state }));
+      throw error;
+    }
   } finally {
     for (const request of requests.values()) clearTimeout(request.timer);
     socket?.close();

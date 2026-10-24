@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createServer } from 'vite';
+import { createIsolatedViteServer as createServer } from './helpers/isolated-vite-server.mjs';
 import { withAttachmentBrowser } from './helpers/attachment-browser-driver.mjs';
 
 test('Tab before the search debounce keeps focus inside the masked launch gallery', { timeout: 60_000 }, async t => {
