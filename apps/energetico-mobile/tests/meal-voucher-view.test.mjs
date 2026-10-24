@@ -76,6 +76,29 @@ test('fechar durante a leitura dos anexos permite reabrir sem a resposta antiga 
   assert.equal(h.doc.querySelector('[name="meal-obs"]').value,'Texto da nova abertura');assert.equal(h.doc.querySelector('[data-meal-confirm]'),null);
 });
 
+for(const phase of ['extras','review'])test(`seleção de anexo ainda aberta bloqueia avanço e confirmação no passo ${phase}`,async t=>{
+  const first=new File(['abc'],'primeiro.pdf',{type:'application/pdf'}),second=new File(['xyz'],'segundo.pdf',{type:'application/pdf'});let posts=0,posted;
+  const h=await extrasPanel(t,{files:[first],post:async value=>{posts++;posted=value;return {orderId:'5',lines:[],total:50};}});
+  if(phase==='review'){h.doc.querySelector('[data-meal-next]').click();await tick();}
+  let release;h.tray.pickFiles=()=>new Promise(resolve=>{release=()=>{h.tray.set([first,second]);resolve();};});h.tray.set([first]);
+  h.doc.querySelector('[data-meal-tray-pick]').click();
+  const advance=h.doc.querySelector(phase==='extras'?'[data-meal-next]':'[data-meal-confirm]');advance.click();await tick();
+  h.doc.querySelector('[data-meal-confirm]')?.click();await tick();const earlyPosts=posts;
+  release();await tick();assert.equal(earlyPosts,0,'não grava enquanto o seletor ainda está preparando o arquivo');
+  h.doc.querySelector('[data-meal-next]').click();await tick();h.doc.querySelector('[data-meal-confirm]').click();await tick();
+  assert.deepEqual(posted.files,[first,second]);assert.equal(posts,1);
+});
+
+for(const outcome of ['cancel','error','success'])test(`voltar à escolha do pedido durante seleção permite navegar após ${outcome}`,async t=>{
+  const file=new File(['abc'],'nota.pdf',{type:'application/pdf'}),h=await extrasPanel(t,{files:[file]});
+  let release;h.tray.pickFiles=()=>new Promise((resolve,reject)=>{release=()=>{if(outcome==='error')reject(new Error('Falha na seleção'));else{if(outcome==='success')h.tray.set([file,new File(['xyz'],'novo.pdf',{type:'application/pdf'})]);resolve();}};});h.tray.set([file]);
+  h.doc.querySelector('[data-meal-tray-pick]').click();
+  h.doc.querySelector('[aria-label="Voltar"]').click();h.doc.querySelector('[aria-label="Voltar"]').click();
+  assert.ok(h.doc.querySelector('[data-meal-order-new]'));
+  release();await tick();h.doc.querySelector('[data-meal-order-new]').click();
+  assert.ok(h.doc.querySelector('[name="meal-date"]'),'as escolhas voltam a responder quando a seleção termina');
+});
+
 function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
   const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
