@@ -89,6 +89,16 @@ for(const phase of ['extras','review'])test(`seleção de anexo ainda aberta blo
   assert.deepEqual(posted.files,[first,second]);assert.equal(posts,1);
 });
 
+for(const outcome of ['cancel','error','success'])test(`voltar à escolha do pedido durante seleção permite navegar após ${outcome}`,async t=>{
+  const file=new File(['abc'],'nota.pdf',{type:'application/pdf'}),h=await extrasPanel(t,{files:[file]});
+  let release;h.tray.pickFiles=()=>new Promise((resolve,reject)=>{release=()=>{if(outcome==='error')reject(new Error('Falha na seleção'));else{if(outcome==='success')h.tray.set([file,new File(['xyz'],'novo.pdf',{type:'application/pdf'})]);resolve();}};});h.tray.set([file]);
+  h.doc.querySelector('[data-meal-tray-pick]').click();
+  h.doc.querySelector('[aria-label="Voltar"]').click();h.doc.querySelector('[aria-label="Voltar"]').click();
+  assert.ok(h.doc.querySelector('[data-meal-order-new]'));
+  release();await tick();h.doc.querySelector('[data-meal-order-new]').click();
+  assert.ok(h.doc.querySelector('[name="meal-date"]'),'as escolhas voltam a responder quando a seleção termina');
+});
+
 function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
   const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
