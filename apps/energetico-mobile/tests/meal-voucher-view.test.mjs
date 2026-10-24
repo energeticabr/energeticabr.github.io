@@ -6,6 +6,76 @@ import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+function testTray(initial = []) {
+  let files=initial;const listeners=new Set(),actions=[];let consumed=0;
+  const snapshot=()=>files.map(file=>({id:file.name,fileName:file.name,size:file.size,mimeType:file.type,source:file,status:'ready'}));
+  return {snapshot,actions,get consumed(){return consumed;},
+    set(value){files=value;for(const listener of listeners)listener();},
+    subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
+    read:async()=>files,
+    consume:async()=>{consumed++;files=[];for(const listener of listeners)listener();},
+    pickFiles:async()=>{actions.push('files');},capture:async()=>{actions.push('camera');},open:async id=>{actions.push(`open:${id}`);},remove:async id=>{actions.push(`remove:${id}`);},
+  };
+}
+async function extrasPanel(t,{files=[],post=async()=>({orderId:'5',lines:[],total:50})}={}) {
+  const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document,tray=testTray(files);
+  const panel=createMealVoucherView({documentRef:doc,attachmentTray:tray,data:{
+    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
+    loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post,
+  }});t.after(()=>{panel.destroy();dom.window.close();});
+  const type=(selector,value)=>{const input=doc.querySelector(selector);input.value=value;input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));};
+  await panel.open();type('[data-meal-value="1"]','10');doc.querySelector('[data-meal-next]').click();await tick();doc.querySelector('[data-meal-order-new]').click();
+  for(const [name,value] of [['meal-date','2026-10-15'],['meal-due-date','2026-10-30'],['meal-reference-month','2026-10']])type(`[name="${name}"]`,value);
+  for(const [name,value] of [['meal-account','8'],['meal-stage','7']]){const select=doc.querySelector(`[name="${name}"]`);select.value=value;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));}
+  doc.querySelector('[data-meal-next]').click();await tick();return {dom,doc,tray,panel,type};
+}
+
+test('OBS não tem seletor próprio: a barra inclui os arquivos automaticamente e só os consome após confirmar',async t=>{
+  const file=new File(['abc'],'comprovante.pdf',{type:'application/pdf',lastModified:0});let posted;
+  const h=await extrasPanel(t,{files:[file],post:async value=>{posted=value;return {orderId:'5',lines:[],total:50};}});
+  assert.equal(h.doc.querySelector('input[type="file"]'),null);
+  assert.match(h.doc.querySelector('[data-meal-tray]').textContent,/comprovante.pdf/);
+  h.type('[name="meal-obs"]','Minha observação');h.doc.querySelector('[data-meal-next]').click();await tick();
+  assert.equal(posted,undefined);assert.match(h.doc.querySelector('[data-meal-review-files]').textContent,/comprovante.pdf/);
+  h.doc.querySelector('[data-meal-confirm]').click();await tick();
+  assert.equal(posted.obs,'Minha observação');assert.deepEqual(posted.files,[file]);assert.equal(h.tray.consumed,1);
+  assert.match(h.doc.querySelector('.meal-voucher-content h2').textContent,/sucesso/);
+});
+test('clipe, câmera, visualizar e remover da barra funcionam sem apagar a OBS digitada',async t=>{
+  const file=new File(['abc'],'nota.pdf',{type:'application/pdf'}),h=await extrasPanel(t,{files:[file]});
+  h.type('[name="meal-obs"]','Não perder este texto');
+  for(const selector of ['[data-meal-tray-pick]','[data-meal-tray-capture]','[data-meal-tray-open]','[data-meal-tray-remove]']){h.doc.querySelector(selector).click();await tick();}
+  assert.deepEqual(h.tray.actions,['files','camera','open:nota.pdf','remove:nota.pdf']);
+  h.tray.set([file,new File(['outro'],'novo.pdf',{type:'application/pdf'})]);
+  assert.equal(h.doc.querySelector('[name="meal-obs"]').value,'Não perder este texto');assert.match(h.doc.querySelector('[data-meal-tray]').textContent,/novo.pdf/);
+});
+test('alteração da bandeja depois da revisão exige revisar novamente e não posta arquivos antigos',async t=>{
+  let posts=0;const h=await extrasPanel(t,{files:[new File(['abc'],'nota.pdf',{type:'application/pdf'})],post:async()=>{posts++;}});
+  h.doc.querySelector('[data-meal-next]').click();await tick();
+  h.tray.set([new File(['xyz'],'nota.pdf',{type:'application/pdf'})]);
+  assert.ok(h.doc.querySelector('[name="meal-obs"]'));assert.equal(h.doc.querySelector('[data-meal-confirm]'),null);assert.equal(posts,0);
+  assert.match(h.doc.querySelector('[role="alert"]').textContent,/bandeja|revis/i);
+});
+test('falha na postagem mantém a bandeja intacta e falha de limpeza não apaga o recibo de sucesso',async t=>{
+  let fail=true;const h=await extrasPanel(t,{files:[new File(['abc'],'nota.pdf',{type:'application/pdf'})],post:async()=>{if(fail)throw new Error('rede caiu');return {orderId:'5',lines:[],total:50};}});
+  h.doc.querySelector('[data-meal-next]').click();await tick();h.doc.querySelector('[data-meal-confirm]').click();await tick();
+  assert.equal(h.tray.consumed,0);assert.equal(h.tray.snapshot().length,1);
+  fail=false;h.tray.consume=async()=>{throw new Error('Não foi possível limpar cópia temporária; não repita o lançamento.');};
+  h.doc.querySelector('[data-meal-confirm]').click();await tick();
+  assert.match(h.doc.querySelector('.meal-voucher-content h2').textContent,/sucesso/);assert.ok(h.doc.querySelector('[data-meal-done]'));
+  assert.match(h.doc.querySelector('[role="alert"]').textContent,/não repita/);
+});
+
+test('fechar durante a leitura dos anexos permite reabrir sem a resposta antiga avançar a tela',async t=>{
+  const file=new File(['abc'],'nota.pdf',{type:'application/pdf'}),h=await extrasPanel(t,{files:[file]});
+  let finish;h.tray.read=()=>new Promise(resolve=>{finish=resolve;});
+  h.doc.querySelector('[data-meal-next]').click();assert.ok(finish);
+  assert.equal(h.panel.close(),true);await h.panel.open();
+  assert.ok(h.doc.querySelector('[name="meal-obs"]'),'a nova abertura não deve ficar presa no carregamento anterior');
+  h.type('[name="meal-obs"]','Texto da nova abertura');finish([file]);await tick();
+  assert.equal(h.doc.querySelector('[name="meal-obs"]').value,'Texto da nova abertura');assert.equal(h.doc.querySelector('[data-meal-confirm]'),null);
+});
+
 function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
   const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
@@ -42,7 +112,7 @@ test('registros encontrados restauram o lote original e preservam os anexos pend
   const file = { name:'comprovante.pdf', size:11, lastModified:123 };
   const h = recoveryPanel(t, { canEdit:async () => false, files:[file], change:draft => { draft.date = '2026-11-02'; } });
   await h.panel.open();
-  assert.ok(h.doc.querySelector('[name="meal-files"]'));
+  assert.ok(h.doc.querySelector('[data-meal-tray]'));
   h.doc.querySelector('[aria-label="Voltar"]').click();
   assert.equal(h.doc.querySelector('[name="meal-date"]').value, '2026-10-15');
   assert.equal(h.doc.querySelector('[name="meal-date"]').disabled, true);
@@ -110,8 +180,8 @@ test('revisão do vale mostra cartões por colaborador, total, OBS e anexos sem 
     { id: '1', label: 'Ana Silva', branch: 'OBRA A', profession: 'PEDREIRO' },
     { id: '2', label: 'Bruno Souza', branch: 'OBRA A', profession: 'MESTRE DE OBRAS' },
   ];
-  let posts = 0;
-  const panel = createMealVoucherView({ documentRef: doc, data: {
+  let posts = 0; const tray=testTray();
+  const panel = createMealVoucherView({ documentRef: doc, attachmentTray:tray, data: {
     loadOptions: async () => ({ suppliers, accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
     loadOrders: async () => [],
     loadSheetAssignments: async () => ({ '1': { id: '11' }, '2': { id: '12' } }),
@@ -130,9 +200,8 @@ test('revisão do vale mostra cartões por colaborador, total, OBS e anexos sem 
     doc.querySelector('[data-meal-next]').click(); await tick();
     type('[name="meal-obs"]', 'Semana com feriado');
     const file = new dom.window.File(['arquivo'], 'comprovante.pdf', { type: 'application/pdf' });
-    Object.defineProperty(doc.querySelector('[name="meal-files"]'), 'files', { value: [file], configurable: true });
-    doc.querySelector('[name="meal-files"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    doc.querySelector('[data-meal-next]').click();
+    tray.set([file]);
+    doc.querySelector('[data-meal-next]').click(); await tick();
 
     const review = doc.querySelector('[data-meal-review]');
     assert.ok(review, 'a revisão deve usar o layout em cartões');
@@ -150,7 +219,7 @@ test('revisão do vale mostra cartões por colaborador, total, OBS e anexos sem 
     assert.ok(doc.querySelector('[data-meal-review-back]'), 'há Voltar no rodapé da revisão');
     assert.equal(posts, 0);
     doc.querySelector('[data-meal-review-back]').click();
-    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS/);
     doc.querySelector('[data-meal-next]').click();
     assert.equal(posts, 0);
   } finally { panel.destroy(); dom.window.close(); }
@@ -197,7 +266,7 @@ test('dados do vale alimentação permitem filtrar conta e etapa digitando sem m
       type(doc.querySelector(`[name="${name}"]`), value);
     }
     doc.querySelector('[data-meal-next]').click(); await tick();
-    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS/);
     doc.querySelector('.meal-voucher-navigation').click();
     assert.equal(doc.querySelector('[name="meal-account"]').value, '9');
     assert.equal(doc.querySelector('[name="meal-stage"]').value, '7');
@@ -378,7 +447,7 @@ test('seta volta à pergunta anterior após falha no envio sem fechar o vale-ali
 
     doc.querySelector('[aria-label="Voltar"]').click();
     assert.equal(doc.querySelector('.meal-voucher-page').hidden, false);
-    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS/);
     assert.equal(doc.querySelector('[name="meal-obs"]').value, 'feriado');
     assert.equal(doc.querySelector('[name="meal-obs"]').disabled, true, 'lote iniciado é somente para revisão');
     doc.querySelector('[aria-label="Voltar"]').click();
@@ -392,7 +461,7 @@ test('seta volta à pergunta anterior após falha no envio sem fechar o vale-ali
     assert.equal(doc.querySelector('[data-meal-value="1"]').value, '10');
     assert.equal(doc.querySelector('[data-meal-value="1"]').disabled, true);
     for (let index = 0; index < 3; index++) doc.querySelector('[data-meal-next]').click();
-    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS/);
     doc.querySelector('[data-meal-next]').click();
     assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Confirme os lançamentos/);
     assert.match(doc.querySelector('[data-meal-confirm]').textContent, /Retomar envio/);
@@ -402,19 +471,19 @@ test('seta volta à pergunta anterior após falha no envio sem fechar o vale-ali
   } finally { panel.destroy(); dom.window.close(); }
 });
 
-test('retomada com anexos mantém somente a reescolha dos mesmos arquivos disponível', async () => {
+test('retomada com anexos usa a barra e aceita somente os arquivos da tentativa original', async () => {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://example.invalid' });
   const doc = dom.window.document, cache = new Map();
   const storage = { getItem: key => cache.get(key) || null, setItem: (key, value) => cache.set(key, value), removeItem: key => cache.delete(key) };
   const supplier = { id: '1', label: 'Ana', branch: 'OBRA A', profession: 'PEDREIRO' };
-  const data = {
+  const tray=testTray(); const data = {
     loadOptions: async () => ({ suppliers: [supplier], accounts: [{ id: '8', label: 'CAIXA' }], stages: [{ id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }] }),
     loadOrders: async () => [], loadSheetAssignments: async () => ({ '1': { id: '11' } }),
-    post: async (_draft, progress, onProgress) => { progress.signature = 'envio-iniciado'; onProgress(); throw new Error('rede interrompida'); },
+    post: async (_draft, progress, onProgress) => { progress.signature = JSON.stringify({..._draft,files:_draft.files.map(({name,size,lastModified})=>({name,size,lastModified}))}); onProgress(); throw new Error('rede interrompida'); },
   };
   const attachment = new dom.window.File(['comprovante'], 'comprovante.pdf', { type: 'application/pdf', lastModified: 1234 });
   const type = (selector, value) => { const input = doc.querySelector(selector); input.value = value; input.dispatchEvent(new dom.window.Event('input', { bubbles: true })); };
-  const original = createMealVoucherView({ documentRef: doc, data, storage, sessionKey: 'conta-anexo' });
+  const original = createMealVoucherView({ documentRef: doc, data, attachmentTray:tray, storage, sessionKey: 'conta-anexo' });
   try {
     await original.open();
     type('[data-meal-value="1"]', '10');
@@ -425,25 +494,23 @@ test('retomada com anexos mantém somente a reescolha dos mesmos arquivos dispon
       const select = doc.querySelector(`[name="${name}"]`); select.value = value; select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     }
     doc.querySelector('[data-meal-next]').click(); await tick();
-    const firstFiles = doc.querySelector('[name="meal-files"]');
-    Object.defineProperty(firstFiles, 'files', { value: [attachment], configurable: true });
-    firstFiles.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    doc.querySelector('[data-meal-next]').click();
+    tray.set([attachment]);
+    doc.querySelector('[data-meal-next]').click(); await tick();
     doc.querySelector('[data-meal-confirm]').click(); await tick();
   } finally { original.destroy(); }
 
-  const resumed = createMealVoucherView({ documentRef: doc, data, storage, sessionKey: 'conta-anexo' });
+  tray.set([]);
+  const resumed = createMealVoucherView({ documentRef: doc, data, attachmentTray:tray, storage, sessionKey: 'conta-anexo' });
   try {
     await resumed.open(); await tick();
-    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS ou anexos/);
+    assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /OBS/);
     assert.equal(doc.querySelector('[name="meal-obs"]').disabled, true);
-    const files = doc.querySelector('[name="meal-files"]');
-    assert.equal(files.disabled, false, 'os anexos pendentes podem ser selecionados novamente');
-    doc.querySelector('[data-meal-next]').click();
-    assert.match(doc.querySelector('.meal-voucher-error').textContent, /Selecione novamente/);
-    Object.defineProperty(files, 'files', { value: [attachment], configurable: true });
-    files.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-    doc.querySelector('[data-meal-next]').click();
+    assert.equal(doc.querySelector('[data-meal-tray-pick]').disabled, false, 'a barra permite repor os anexos pendentes');
+    assert.equal(doc.querySelector('input[type="file"]'),null);
+    doc.querySelector('[data-meal-next]').click(); await tick();
+    assert.match(doc.querySelector('.meal-voucher-error').textContent, /mesmos anexos/);
+    tray.set([attachment]);
+    doc.querySelector('[data-meal-next]').click(); await tick();
     assert.match(doc.querySelector('.meal-voucher-content h2').textContent, /Confirme os lançamentos/);
   } finally { resumed.destroy(); dom.window.close(); }
 });

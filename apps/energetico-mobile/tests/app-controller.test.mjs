@@ -11,6 +11,7 @@ import { createAppController, shouldRemoveSignedSource } from "../src/app-contro
 import { createConversationStore } from "../src/chat/conversation-store.js";
 import { validateAttachment } from "../../../portal/data/attachments.js";
 import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
+import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 import { createAttachmentPreview } from '../src/web/attachment-preview.js';
 import { createNativePorts } from '../src/native/native-ports.js';
 import { scannedPages } from './helpers/scanned-pages.mjs';
@@ -11302,6 +11303,73 @@ test('vale-alimentação abre tela local sem enviar resposta à VM e encerra na 
 function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
+
+test('vale usa bandeja compartilhada, lê os bytes, consome apenas o lote confirmado e invalida a sessão', async t => {
+  let options; const h=makeHarness({mealVoucherDataFactory:async()=>({prepare:async()=>{}}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop()); await h.controller.start(); openPayrollMenu(h);
+  const receipt={id:'receipt',fileName:'comprovante.pdf',size:3,mimeType:'application/pdf',mediaUrl:'/api/portal-media/receipt'};
+  h.store.syncAttachments([receipt,{id:'existing',fileName:'antigo.pdf',mediaUrl:'/api/portal-media/existing',existing:true}]);
+  await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  const tray=options.attachmentTray; assert.ok(tray,'a tela recebe a bandeja do controlador');
+  h.client.fetchMedia=async()=>new Blob(['abc'],{type:'application/pdf'});
+  let changed=0;const off=tray.subscribe(()=>changed++);const selected=tray.snapshot();
+  assert.deepEqual(selected.map(f=>f.fileName),['comprovante.pdf']);
+  const files=await tray.read(selected);assert.equal(await files[0].text(),'abc');assert.equal(files[0].name,'comprovante.pdf');assert.equal(files[0].lastModified,0);
+  assert.equal(h.store.getState().attachments.length,2,'ler a bandeja não a consome');
+  h.store.syncAttachments([receipt,{id:'new',fileName:'depois.pdf',mediaUrl:'/api/portal-media/new'}]);
+  assert.ok(changed);await assert.rejects(tray.read(selected),/bandeja.*mud|mud.*bandeja/i);
+  await tray.consume(selected);
+  assert.deepEqual(h.store.getState().attachments.map(f=>f.id),['new']);
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='delete-attachment'),[['delete-attachment','receipt']]);
+  off();h.controller.stop();assert.throws(()=>tray.snapshot(),/sessão/);await assert.rejects(tray.read([]),/sessão/);
+});
+
+test('vale não libera confirmação com envio pendente ou falho nem com arquivo removido durante a leitura', async t => {
+  let options;const h=makeHarness({mealVoucherDataFactory:async()=>({}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  const file=new File(['abc'],'local.pdf',{type:'application/pdf'});h.store.queueFiles([file]);
+  const id=h.store.getState().pendingFiles[0].id,operation=h.store.beginFile(id);
+  await assert.rejects(options.attachmentTray.read(options.attachmentTray.snapshot()),/envi|aguarde/i);
+  h.store.markFileError(id,new Error('falhou'));await assert.rejects(options.attachmentTray.read(options.attachmentTray.snapshot()),/falh|remov|tente/i);
+  h.store.discardFile(id);
+  h.store.syncAttachments([{id:'remote',fileName:'nota.pdf',mediaUrl:'/api/portal-media/remote'}]);
+  let finish;h.client.fetchMedia=()=>new Promise(resolve=>{finish=resolve;});const pending=options.attachmentTray.read(options.attachmentTray.snapshot());
+  await tickController();h.store.syncAttachments([]);finish(new Blob(['abc'],{type:'application/pdf'}));
+  await assert.rejects(pending,/bandeja.*mud|mud.*bandeja/i);
+});
+
+async function tickController(){await new Promise(resolve=>setImmediate(resolve));}
+
+for(const mode of ['file','camera'])test(`falha real no ${mode} do vale conserva o anexo e bloqueia postagem até descarte deliberado`,async t=>{
+  const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document;let posts=0;
+  const h=makeHarness({mealVoucherFactory:async options=>createMealVoucherView({...options,documentRef:doc,storage:dom.window.localStorage}),mealVoucherDataFactory:async()=>({
+    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
+    loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post:async value=>{posts++;assert.deepEqual(value.files,[]);return {orderId:'5',lines:[],total:50};},
+  })});t.after(()=>{h.controller.stop();dom.window.close();});await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  const type=(selector,value)=>{const input=doc.querySelector(selector);input.value=value;input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));};
+  type('[data-meal-value="1"]','10');doc.querySelector('[data-meal-next]').click();await tickController();doc.querySelector('[data-meal-order-new]').click();
+  for(const [name,value]of [['meal-date','2026-10-15'],['meal-due-date','2026-10-30'],['meal-reference-month','2026-10']])type(`[name="${name}"]`,value);
+  for(const [name,value]of [['meal-account','8'],['meal-stage','7']]){const select=doc.querySelector(`[name="${name}"]`);select.value=value;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));}
+  doc.querySelector('[data-meal-next]').click();await tickController();
+  const file=new File(['abc'],'comprovante.pdf',{type:'application/pdf'});h.native.pickDocuments=async()=>[file];h.native.capturePhoto=async()=>[file];
+  h.client.sendFile=async()=>{throw new Error('rede interrompida');};
+  doc.querySelector(mode==='file'?'[data-meal-tray-pick]':'[data-meal-tray-capture]').click();await tickController();await tickController();
+  assert.equal(doc.querySelector('[role="alert"]').hidden,false);assert.match(doc.querySelector('[role="alert"]').textContent,/rede interrompida/);
+  assert.match(doc.querySelector('[data-meal-tray]').textContent,/comprovante.pdf/);assert.equal(h.store.getState().pendingFiles[0]?.status,'failed');
+  doc.querySelector('[data-meal-next]').click();await tickController();assert.equal(doc.querySelector('[data-meal-confirm]'),null);assert.equal(posts,0);
+  doc.querySelector('[data-meal-tray-remove]').click();await tickController();doc.querySelector('[data-meal-next]').click();
+  doc.querySelector('[data-meal-confirm]').click();await tickController();assert.equal(posts,1);
+});
+
+test('clipe e câmera da bandeja do vale usam os mesmos caminhos nativos de arquivo e escaneamento', async t => {
+  let options;const h=makeHarness({mealVoucherDataFactory:async()=>({}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  h.native.pickDocuments=async()=>[new File(['pdf'],'arquivo.pdf',{type:'application/pdf'})];
+  h.view.chooseCaptureMode=async()=>'scan';h.native.scanDocument=async()=>[new File(['scan'],'escaneado.pdf',{type:'application/pdf'})];
+  await options.attachmentTray.pickFiles();await options.attachmentTray.capture();
+  assert.deepEqual(options.attachmentTray.snapshot().map(item=>item.fileName),['arquivo.pdf','escaneado.pdf']);
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file').map(c=>c[1]),['arquivo.pdf','escaneado.pdf']);
+});
 
 test("BUSCAR da folha usa seletores nativos sem enviar anexos ao chat e rejeita sessão encerrada", async t => {
   let options;

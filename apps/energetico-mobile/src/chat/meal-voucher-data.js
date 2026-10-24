@@ -5,6 +5,8 @@ import { createSharePointAttachmentTransport, validateAttachment } from '../../.
 import { mealVoucherKey as key, validateMealVoucherDraft } from './meal-voucher.js';
 import { payrollDecimal } from './supplier-payroll.js';
 import { PAYROLL_RUBRICS } from './supplier-payroll.js';
+import { MEAL_VOUCHER_CONTROL_COLUMN, mealVoucherControlColumn, ensureMealVoucherSchema } from './meal-voucher-schema.js';
+import { createMealVoucherAttachments } from './meal-voucher-attachments.js';
 
 const scalar = value => String(value && typeof value === 'object' ? value.LookupValue ?? value.Value ?? value.value ?? '' : value ?? '').trim();
 const numericId = value => /^[1-9]\d{0,14}$/.test(String(value ?? '')) && Number.isSafeInteger(Number(value));
@@ -46,13 +48,14 @@ function monthKey(raw) {
   return brazil ? `${brazil[2]}-${brazil[1].padStart(2, '0')}` : iso ? `${iso[1]}-${iso[2].padStart(2, '0')}` : '';
 }
 
-export function createMealVoucherData({ repository, tokenProvider, siteConfig = SHAREPOINT_SITES, fetchImpl = globalThis.fetch, siteKey = 'personal', assertSession = () => {} } = {}) {
+export function createMealVoucherData({ repository, graph, tokenProvider, siteConfig = SHAREPOINT_SITES, fetchImpl = globalThis.fetch, siteKey = 'personal', assertSession = () => {} } = {}) {
   if (!repository) {
     if (typeof tokenProvider !== 'function') throw new TypeError('É necessária uma sessão Microsoft ativa.');
-    const graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
+    graph = createGraphClient(tokenProvider, { fetch: fetchImpl });
     repository = createSharePointRepository(graph, siteConfig, { attachmentTransport: createSharePointAttachmentTransport({ tokenProvider, allowedSites: Object.values(siteConfig), fetch: fetchImpl }) });
   }
   const descriptors = new Map();
+  const attachments = createMealVoucherAttachments({ repository, assertSession, siteKey });
   let posting = false;
   async function prepare() {
     if (!tokenProvider) return;
@@ -60,15 +63,20 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       assertSession();
       if (!await tokenProvider(scopes)) throw new Error('Não foi possível autorizar os lançamentos.');
     }
+    await ensureMealVoucherSchema({ repository, graph, assertSession, siteKey });
+    descriptors.delete('NOTASPENDENTES');
   }
   async function describe(name) {
     assertSession();
     if (!descriptors.has(name)) {
       const list = await repository.resolveList(siteKey, [name]);
       if (list?.status !== 'resolved' || !list.id) throw new Error(`A lista ${name} não está disponível.`);
-      const columns = await repository.getColumns(siteKey, list.id);
+      const columns = [...await repository.getColumns(siteKey, list.id, name === 'NOTASPENDENTES' ? { includeHidden:true } : {})];
       assertSession();
-      descriptors.set(name, { id: list.id, columns });
+      // Legacy inspection stays read-only even before the schema migration.
+      if (name === 'NOTASPENDENTES' && !mealVoucherControlColumn(columns)) columns.push({ name:MEAL_VOUCHER_CONTROL_COLUMN,
+        hidden:true, text:{allowMultipleLines:true}, virtual:true });
+      descriptors.set(name, { id: list.id, name, columns });
     }
     return descriptors.get(name);
   }
@@ -90,17 +98,36 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     return result;
   }
   function orderTotal(descriptor, value) { return column(descriptor, ['VALORTOTAL']).text ? String(value) : value; }
+  function control(descriptor) { return column(descriptor, [MEAL_VOUCHER_CONTROL_COLUMN]).name; }
+  function readQuery(descriptor) {
+    if (descriptor.name !== 'NOTASPENDENTES' || column(descriptor,[MEAL_VOUCHER_CONTROL_COLUMN]).virtual) return '$expand=fields';
+    // Graph omits hidden values from a bare expand, even when the column exists.
+    const names = descriptor.columns.filter(c=>!c.virtual && /^[A-Za-z_][A-Za-z0-9_]*$/.test(c.name)).map(c=>c.name);
+    return `$expand=fields($select=${names.join(',')})`;
+  }
+  function normalizedOrder(descriptor, row) {
+    if (descriptor.name !== 'NOTASPENDENTES' || !row?.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)) return row;
+    const obsName = column(descriptor,['OBS']).name, controlName = control(descriptor);
+    const technical = /^\[VALE (?:ALIMENTAÇÃO [A-Za-z0-9-]{1,80}|REVISÃO [A-Za-z0-9-]{1,80} [a-f0-9]{64}|DESTINO [A-Za-z0-9-]{1,80} [1-9]\d*)\]$/;
+    const lines = scalar(row.fields[obsName]).split('\n'), legacy = lines.filter(line=>technical.test(line));
+    if (!legacy.length) return row;
+    const existing = scalar(row.fields[controlName]).split('\n').filter(Boolean);
+    return { ...row, mealLegacyObs:true, fields:{ ...row.fields,
+      [obsName]:lines.filter(line=>!technical.test(line)).join('\n').trim(),
+      [controlName]:[...new Set([...existing,...legacy])].join('\n') } };
+  }
   async function orderFields(descriptor, draft, operationId, versioned = true) {
     const marker = `[VALE ALIMENTAÇÃO ${operationId}]`;
     const revision = versioned ? `\n${await revisionMarker(draft, operationId)}` : '';
+    const destination = versioned && draft.files.length ? `\n[VALE DESTINO ${operationId} ${draft.lines.at(-1).supplier.id}]` : '';
     return payload(descriptor, { FILIAL:draft.branch, FORNECEDOR:draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS',
       VALORTOTAL:orderTotal(descriptor, draft.total), 'DATA PEDIDO':draft.date, STATUS:'PENDENTE AUDITORIA',
-      OBS:`${draft.obs}${draft.obs ? '\n' : ''}${marker}${revision}`, FORMAPGTO:draft.account.label, 'NOTA FISCAL':'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
+      OBS:draft.obs, [MEAL_VOUCHER_CONTROL_COLUMN]:`${marker}${revision}${destination}`, FORMAPGTO:draft.account.label, 'NOTA FISCAL':'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
   }
   function matchesFields(descriptor, row, fields) {
     return Object.entries(fields).every(([name, expected]) => {
       const actual = row.fields?.[name];
-      return typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected)
+      return typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === scalar(expected)
         || descriptor.columns.find(c => c.name === name)?.dateTime && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10);
     });
   }
@@ -137,15 +164,19 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     tokenCache.set(launches.id, savedLaunches); tokenCache.set(payroll.id, savedPayroll);
   }
   async function confirmOrderRevision(orders, orderId, draft, operationId) {
-    const row = await get(orders, orderId), obsName = column(orders, ['OBS']).name, revision = await revisionMarker(draft, operationId);
-    const known = revisions(row.fields[obsName], operationId);
+    const row = await get(orders, orderId), controlName = control(orders), revision = await revisionMarker(draft, operationId);
+    const known = revisions(row.fields[controlName], operationId);
     if (known.length && (known.length !== 1 || known[0] !== revision)) throw new Error('Esta tela está com uma revisão desatualizada do lote. Reabra o lançamento antes de continuar.');
-    if (!known.length && draft.orderMode === 'new') {
+    if (!known.length && draft.orderMode === 'new' || row.mealLegacyObs) {
       const eTag = row.eTag || row['@odata.etag'];
       if (!eTag || eTag === '*') throw new Error('A versão do pedido não foi confirmada.');
-      await repository.updateItem(siteKey, orders.id, orderId, { [obsName]:`${scalar(row.fields[obsName])}\n${revision}` }, { eTag });
+      const next = known.length || draft.orderMode !== 'new' ? scalar(row.fields[controlName]) : `${scalar(row.fields[controlName])}\n${revision}`;
+      const obsName = column(orders,['OBS']).name;
+      await repository.updateItem(siteKey, orders.id, orderId, { [controlName]:next,
+        ...(row.mealLegacyObs ? {[obsName]:row.fields[obsName]} : {}) }, { eTag });
+      assertSession();
       const saved = await get(orders, orderId);
-      if (JSON.stringify(revisions(saved.fields[obsName], operationId)) !== JSON.stringify([revision])) throw new Error('A revisão do pedido não foi confirmada.');
+      if (saved.mealLegacyObs || JSON.stringify(revisions(saved.fields[controlName], operationId)) !== JSON.stringify(known.length || draft.orderMode === 'new' ? [revision] : [])) throw new Error('A revisão do pedido não foi confirmada.');
     }
     return revision;
   }
@@ -153,10 +184,10 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     const result = [], seen = new Set(); let cursor;
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
       assertSession();
-      const page = await repository.getItemsPage(siteKey, descriptor.id, '$expand=fields&$top=100', { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
+      const page = await repository.getItemsPage(siteKey, descriptor.id, `${readQuery(descriptor)}&$top=100`, { pageNumber, maxPages: 100, ...(cursor ? { cursor } : {}), headers: { Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' } });
       assertSession();
       if (!Array.isArray(page?.items) || typeof page.hasMore !== 'boolean') throw new Error('A resposta do SharePoint está incompleta.');
-      result.push(...page.items);
+      result.push(...page.items.map(row=>normalizedOrder(descriptor,row)));
       if (!page.hasMore) return result;
       if (!page.nextLink || seen.has(page.nextLink)) throw new Error('A paginação do SharePoint está incompleta.');
       seen.add(page.nextLink); cursor = page.nextLink;
@@ -199,10 +230,10 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
   }
   async function get(descriptor, id) {
     if (!numericId(id)) throw new Error('ID inválido.');
-    const row = await repository.getItem(siteKey, descriptor.id, String(id), '$expand=fields');
+    const row = await repository.getItem(siteKey, descriptor.id, String(id), readQuery(descriptor));
     assertSession();
     if (String(row?.id) !== String(id)) throw new Error('O registro não foi confirmado no SharePoint.');
-    return row;
+    return normalizedOrder(descriptor,row);
   }
   async function findToken(descriptor, label, token, tokenCache) {
     const name = column(descriptor, [label]).name;
@@ -226,9 +257,10 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     return String(row.id);
   }
   async function ensureOrder(descriptor, fields, marker, tokenCache, edit) {
-    const obsName = column(descriptor, ['OBS']).name;
+    const obsName = column(descriptor, ['OBS']).name, controlName = control(descriptor);
+    const totalName = column(descriptor,['VALORTOTAL']).name;
     if (!tokenCache.has(descriptor.id)) tokenCache.set(descriptor.id, await all(descriptor));
-    const matches = tokenCache.get(descriptor.id).filter(row => scalar(row.fields?.[obsName]).includes(marker));
+    const matches = tokenCache.get(descriptor.id).filter(row => scalar(row.fields?.[controlName]).includes(marker));
     if (matches.length > 1) throw new Error('Foram encontrados pedidos duplicados da operação. Confira os registros antes de retomar.');
     let row = matches[0] || edit?.row;
     if (edit) {
@@ -261,11 +293,54 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     for (const [field, expected] of Object.entries(fields)) {
       const actual = saved.fields?.[field];
       const date = descriptor.columns.find(c => c.name === field)?.dateTime;
-      if (field === obsName ? !scalar(actual).includes(marker)
+      if (field === totalName) continue; // Verified against all recognized batches before any launch write below.
+      if (field === controlName ? !scalar(actual).includes(marker)
+        : field === obsName ? !(scalar(actual) === scalar(expected) || scalar(actual).startsWith(`${scalar(expected)}${scalar(expected) ? '\n' : ''}`))
         : !(typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected) || date && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10)))
         throw new Error('O SharePoint não confirmou os dados do pedido gravado.');
     }
     return String(row.id);
+  }
+  async function confirmOriginatingOrderTotal(orders,launches,orderId,draft,operationId,tokenCache) {
+    const row = await get(orders,orderId), actual = amount(value(orders,row,['VALORTOTAL']));
+    const controls = scalar(row.fields[control(orders)]).split('\n');
+    const otherOperations = [...new Set(controls.map(line=>line.match(/^\[VALE ALIMENTAÇÃO ([A-Za-z0-9-]{1,80})\]$/)?.[1]).filter(id=>id && id !== operationId))];
+    let expected = amount(draft.total);
+    for (const id of otherOperations) {
+      if (revisions(row.fields[control(orders)],id).length !== 1) throw new Error('O total acumulado do pedido não foi confirmado.');
+      const prefix = `APP-vale-alimentacao-${id}-`;
+      const additions = tokenCache.get(launches.id).filter(item=>value(launches,item,['AGRUPAR'],false) === String(orderId)
+        && scalar(item.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix)
+        && /^\d+$/.test(scalar(item.fields[column(launches,['__PowerAppsId__']).name]).slice(prefix.length)));
+      if (!additions.length) throw new Error('O total acumulado do pedido não foi confirmado.');
+      for (const addition of additions) {
+        const quantity = payrollDecimal(value(launches,addition,['QUANTIDADE'])), unit = payrollDecimal(value(launches,addition,['VALOR UNITÁRIO']));
+        if (!quantity.gt(0) || !unit.gt(0) || !amount(value(launches,addition,['FRETE'],false)).isZero()) throw new Error('Os valores do lote adicional do pedido mudaram.');
+        expected = expected.plus(quantity.times(unit).toDecimalPlaces(2));
+      }
+    }
+    if (!actual.equals(expected)) throw new Error('O SharePoint não confirmou o total acumulado do pedido. Confira os registros antes de retomar.');
+  }
+  async function attachmentDestination(orders, orderId, draft, progress, {mayInfer = true, replace = false} = {}) {
+    const row = await get(orders,orderId), name = control(orders);
+    const prefix = `[VALE DESTINO ${progress.operationId} `;
+    const matches = scalar(row.fields[name]).split('\n').filter(line=>line.startsWith(prefix));
+    if (matches.length > 1) throw new Error('O destino dos anexos do lote está ambíguo.');
+    let saved = matches[0]?.slice(prefix.length,-1);
+    if (replace) saved = undefined;
+    if (!saved && !mayInfer) throw new Error('Não foi possível recuperar a ordem original deste lote legado. Retome com o rascunho original para definir o último lançamento; nenhum anexo foi enviado.');
+    const supplierId = saved || String(draft.lines.at(-1).supplier.id);
+    if (saved && matches[0] !== `${prefix}${supplierId}]` || !draft.lines.some(line=>String(line.supplier.id)===supplierId)
+      || progress.attachmentSupplierId && progress.attachmentSupplierId !== supplierId) throw new Error('O destino dos anexos deste lote mudou. Confira a tentativa original.');
+    if (!saved) {
+      const eTag = row.eTag || row['@odata.etag'];
+      if (!eTag || eTag === '*') throw new Error('A versão do destino dos anexos não foi confirmada.');
+      const previous = scalar(row.fields[name]).split('\n').filter(line=>!line.startsWith(prefix)).join('\n');
+      await repository.updateItem(siteKey,orders.id,orderId,{[name]:`${previous}\n${prefix}${supplierId}]`},{eTag}); assertSession();
+      const confirmed = await get(orders,orderId);
+      if (!scalar(confirmed.fields[name]).split('\n').includes(`${prefix}${supplierId}]`)) throw new Error('O destino dos anexos não foi confirmado.');
+    }
+    return supplierId;
   }
   async function inspectPending(rawDraft, progress = {}) {
     assertSession();
@@ -278,7 +353,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       if (!original || !['new', 'existing'].includes(original.orderMode)) throw new Error('O lote anterior está incompleto.');
     }
     const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
-    const obs = column(orders, ['OBS']).name, title = column(orders, ['Title'], false)?.name;
+    const obs = column(orders, ['OBS']).name, controlName = control(orders), title = column(orders, ['Title'], false)?.name;
     const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
     const records = await Promise.all([orders, launches, payroll].map(all));
     if (records.some(rows => rows.some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields))))
@@ -287,7 +362,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`.toUpperCase();
     const ownsToken = (raw, start) => { const token = scalar(raw).toUpperCase(); return token.startsWith(start) && /^\d+$/.test(token.slice(start.length)); };
     assertSession();
-    const ownedOrders = records[0].filter(row => scalar(row.fields[obs]).toUpperCase().includes(marker) || title && scalar(row.fields[title]).toUpperCase() === prefix);
+    const ownedOrders = records[0].filter(row => scalar(row.fields[controlName]).toUpperCase().includes(marker) || title && scalar(row.fields[title]).toUpperCase() === prefix);
     if (ownedOrders.length > 1 || records[1].some(row => ownsToken(row.fields[launchToken], `${prefix}-`)
       || ownedOrders.some(order => scalar(value(launches, row, ['AGRUPAR'], false)) === String(order.id)))
       || records[2].some(row => ownsToken(row.fields[payrollToken], `${prefix}-FOLHA-`))) return blocked;
@@ -299,7 +374,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     const verified = validateMealVoucherDraft(original);
     const baseline = await orderFields(orders, verified, progress.operationId);
     const candidates = [{ fields:baseline, expectedObs:baseline[obs] }];
-    if (!revisions(row.fields[obs], progress.operationId).length) {
+    if (!revisions(row.fields[controlName], progress.operationId).length) {
       const legacy = await orderFields(orders, verified, progress.operationId, false);
       candidates.push({ fields:legacy, expectedObs:legacy[obs] });
       // The first app version stored the operation token in Title, which can
@@ -319,12 +394,15 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       }
     }
     // Both outcomes of a lost PATCH response remain recognizable after reopening.
-    if (String(progress.orderEdit?.id) === String(row.id)) candidates.push(
-      { fields:progress.orderEdit.before, expectedObs:progress.orderEdit.beforeObs },
-      { fields:progress.orderEdit.after, expectedObs:progress.orderEdit.afterObs });
+    if (String(progress.orderEdit?.id) === String(row.id)) for (const phase of ['before','after']) {
+      const fields = progress.orderEdit[phase], expectedObs = progress.orderEdit[`${phase}Obs`];
+      if (!fields || typeof expectedObs !== 'string') continue;
+      candidates.push({ fields:normalizedOrder(orders,{fields}).fields,
+        expectedObs:normalizedOrder(orders,{fields:{[obs]:expectedObs}}).fields[obs] });
+    }
     const expected = candidates.find(({ fields, expectedObs }) => fields && typeof expectedObs === 'string' && Object.keys(baseline).every(name => Object.hasOwn(fields, name))
-      && matchesFields(orders, row, { ...fields, [obs]:scalar(row.fields[obs]) })
-      && JSON.stringify(revisions(row.fields[obs], progress.operationId)) === JSON.stringify(revisions(expectedObs, progress.operationId))
+      && matchesFields(orders, row, { ...fields, [obs]:scalar(row.fields[obs]), [controlName]:scalar(row.fields[controlName]) })
+      && JSON.stringify(revisions(row.fields[controlName], progress.operationId)) === JSON.stringify(revisions(fields[controlName], progress.operationId))
       && (!expectedObs || scalar(row.fields[obs]) === expectedObs || scalar(row.fields[obs]).startsWith(`${expectedObs}\n`)));
     if (!expected) return blocked;
     const attachments = await repository.listAttachments(siteKey, orders.id, row.id);
@@ -346,6 +424,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
     posting = true;
     try {
       const draft = validateMealVoucherDraft(rawDraft);
+      const hadOriginalDraft = Boolean(progress.signature);
       const signature = JSON.stringify({ ...draft, files: draft.files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })) });
       let edit;
       if (progress.signature && progress.signature !== signature) {
@@ -353,7 +432,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         if (!edit.editable) throw new Error('O lote não pode ser alterado porque já existem registros gravados. Retome o envio com os dados originais.');
         if (edit.order && draft.orderMode !== 'new') throw new Error('O pedido desta tentativa já existe e será reutilizado. Não troque para outro pedido.');
         if (!edit.order) delete progress.orderId;
-        for (const name of ['orderUpdated', 'lines', 'payroll', 'uploadedFiles']) delete progress[name];
+        for (const name of ['orderUpdated', 'lines', 'payroll', 'uploadedFiles', 'fileManifest', 'attachmentSupplierId']) delete progress[name];
       }
       // An earlier PATCH may have failed before committing despite a saved new signature.
       if (!edit && progress.orderEdit) {
@@ -371,6 +450,8 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
       for (const file of draft.files) { const validation = validateAttachment(file); if (!validation.valid) throw new Error(validation.message); }
       const sheets = await loadSheetAssignments(draft.referenceMonth, draft.lines.map(line => line.supplier));
       const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
+      if (column(orders,[MEAL_VOUCHER_CONTROL_COLUMN]).virtual) throw new Error('VALECONTROLE não está disponível. Prepare o controle técnico antes de enviar; nenhum registro financeiro foi criado.');
+      const entries = await attachments.prepare(draft.files,progress.fileManifest);
       const tokenCache = new Map();
       column(launches, ['__PowerAppsId__']);
       column(payroll, ['Title']);
@@ -384,11 +465,7 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         if (key(value(orders, order, ['FILIAL'])) !== key(draft.branch)) throw new Error('O pedido pertence a outra filial.');
         if (!pending(value(orders, order, ['STATUS']))) throw new Error('O pedido não está pendente.');
         if (key(supplier) !== 'DIVERSOS' && (draft.lines.length !== 1 || key(supplier) !== key(draft.lines[0].supplier.label))) throw new Error('O fornecedor do pedido não é compatível com o lote.');
-        if (draft.files.length) {
-          const existingFiles = await repository.listAttachments(siteKey, orders.id, orderId);
-          for (const file of draft.files) if (existingFiles.some(row => row.fileName === file.name) && !progress.uploadedFiles?.[file.name])
-            throw new Error(`O pedido já possui um anexo chamado ${file.name}. Renomeie o novo arquivo antes de enviar.`);
-        }
+        await attachments.check({listId:orders.id,id:orderId},entries);
       } else {
         const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
         const fields = await orderFields(orders, draft, progress.operationId);
@@ -408,26 +485,34 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
           const saved = await get(orders, legacy.id);
           const expectedSupplier = draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS';
           if (key(value(orders, saved, ['FORNECEDOR'])) !== key(expectedSupplier)
-            || !amount(value(orders, saved, ['VALORTOTAL'])).equals(amount(draft.total))
             || !pending(value(orders, saved, ['STATUS'])))
             throw new Error('O pedido da tentativa anterior mudou; confira-o antes de retomar.');
-          const currentObs = value(orders, saved, ['OBS']);
-          if (key(value(orders, saved, ['FILIAL'])) !== key(draft.branch) || !currentObs.includes(marker)) {
-            const nextObs = currentObs.includes(marker) ? currentObs : `${currentObs}${currentObs ? '\n' : ''}${marker}`;
-            const repair = payload(orders, { FILIAL: draft.branch, OBS: nextObs });
+          const currentControl = scalar(saved.fields[control(orders)]);
+          if (key(value(orders, saved, ['FILIAL'])) !== key(draft.branch) || !currentControl.includes(marker) || saved.mealLegacyObs) {
+            const next = currentControl.includes(marker) ? currentControl : `${currentControl}${currentControl ? '\n' : ''}${marker}`;
+            const repair = payload(orders, { FILIAL: draft.branch, [MEAL_VOUCHER_CONTROL_COLUMN]:next,
+              ...(saved.mealLegacyObs ? {OBS:value(orders,saved,['OBS'])} : {}) });
             await repository.updateItem(siteKey, orders.id, legacy.id, repair, { eTag: saved.eTag || saved['@odata.etag'] });
             assertSession();
           }
           const repaired = await get(orders, legacy.id);
-          if (key(value(orders, repaired, ['FILIAL'])) !== key(draft.branch) || !value(orders, repaired, ['OBS']).includes(marker))
+          if (key(value(orders, repaired, ['FILIAL'])) !== key(draft.branch) || !scalar(repaired.fields[control(orders)]).includes(marker))
             throw new Error('O pedido anterior não foi confirmado no SharePoint.');
           orderId = String(legacy.id);
         } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress });
       }
       await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
+      if (draft.orderMode === 'new') await confirmOriginatingOrderTotal(orders,launches,orderId,draft,progress.operationId,tokenCache);
       const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
+      if (entries.length) {
+        const prefix = `APP-vale-alimentacao-${progress.operationId}-`;
+        const hasPreviousLaunch = tokenCache.get(launches.id).some(row=>scalar(row.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix));
+        progress.attachmentSupplierId = await attachmentDestination(orders,orderId,draft,progress,
+          {mayInfer:hadOriginalDraft || !hasPreviousLaunch,replace:edit?.editable === true});
+      }
       progress.orderId = orderId;
       progress.signature = signature;
+      progress.fileManifest = entries.map(entry=>entry.manifest);
       delete progress.orderEdit;
       onProgress();
       progress.lines ??= {};
@@ -439,37 +524,30 @@ export function createMealVoucherData({ repository, tokenProvider, siteConfig = 
         onProgress();
         resultLines.push({ supplier: line.supplier.label, id: launchId, total: line.total });
       }
-      if (draft.orderMode === 'existing' && !progress.orderUpdated) {
+      if (draft.orderMode === 'existing') {
         const current = await get(orders, orderId);
         const previous = amount(value(orders, current, ['VALORTOTAL'], false));
         const marker = `[VALE ALIMENTAÇÃO ${progress.operationId}]`;
-        const obs = value(orders, current, ['OBS']);
-        if (!obs.includes(marker)) {
+        const currentControl = scalar(current.fields[control(orders)]);
+        if (!currentControl.includes(marker)) {
           const target = previous.plus(amount(draft.total)).toDecimalPlaces(2);
-          const update = payload(orders, { VALORTOTAL: orderTotal(orders, target.toNumber()), OBS: `${obs}${obs ? '\n' : ''}${marker}\n${revision}` });
+          const update = payload(orders, { VALORTOTAL: orderTotal(orders, target.toNumber()),
+            [MEAL_VOUCHER_CONTROL_COLUMN]:`${currentControl}${currentControl ? '\n' : ''}${marker}\n${revision}` });
           await repository.updateItem(siteKey, orders.id, orderId, update, { eTag: current.eTag || current['@odata.etag'] });
           assertSession();
           const saved = await get(orders, orderId);
-          if (!amount(value(orders, saved, ['VALORTOTAL'])).equals(target) || !value(orders, saved, ['OBS']).includes(marker)) throw new Error('O total do pedido não foi confirmado.');
+          if (!amount(value(orders, saved, ['VALORTOTAL'])).equals(target) || !scalar(saved.fields[control(orders)]).includes(marker)) throw new Error('O total do pedido não foi confirmado.');
         }
         progress.orderUpdated = true;
         onProgress();
       }
-      if (draft.files.length) {
-        const existing = await repository.listAttachments(siteKey, orders.id, orderId);
-        progress.uploadedFiles ??= {};
-        for (const file of draft.files) {
-          if (existing.some(row => row.fileName === file.name)) {
-            if (!progress.uploadedFiles[file.name]) throw new Error(`O pedido já possui um anexo chamado ${file.name}. Renomeie o arquivo.`);
-            continue;
-          }
-          await repository.uploadAttachment(siteKey, orders.id, orderId, file);
-          assertSession();
-          const verified = await repository.listAttachments(siteKey, orders.id, orderId);
-          if (!verified.some(row => row.fileName === file.name)) throw new Error(`O anexo ${file.name} não foi confirmado.`);
-          progress.uploadedFiles[file.name] = true;
-          onProgress();
-        }
+      if (entries.length) {
+        const launchId = progress.lines[progress.attachmentSupplierId];
+        const destination = await get(launches,launchId);
+        if (value(launches,destination,['AGRUPAR']) !== String(orderId)
+          || scalar(destination.fields[column(launches,['__PowerAppsId__']).name]) !== `APP-vale-alimentacao-${progress.operationId}-${progress.attachmentSupplierId}`)
+          throw new Error('O vínculo do último lançamento mudou. Confira os anexos antes de retomar.');
+        await attachments.submit([{listId:orders.id,id:orderId},{listId:launches.id,id:launchId}],entries,() => onProgress());
       }
       progress.payroll ??= {};
       const sheetDescriptor = await describe('IDFOLHA');

@@ -948,7 +948,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     throwIfAborted(options.signal);
     await authorize("view", siteKey, listId, options.signal ? { signal: options.signal } : {});
     throwIfAborted(options.signal);
-    const cacheKey = `${siteKey}:${listId}`;
+    const cacheKey = `${siteKey}:${listId}${options.includeHidden === true ? ':hidden' : ''}`;
     if (columnCache.has(cacheKey)) return columnCache.get(cacheKey);
     const pending = columnRequests.get(cacheKey);
     if (pending && pending.signal === options.signal) {
@@ -970,7 +970,10 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         columns = fields.map(restColumnMetadata).filter(Boolean);
       } else {
         const site = await getSite(siteKey, options);
-        columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns`, options);
+        const selection = options.includeHidden === true
+          ? '?$select=id,name,displayName,hidden,readOnly,required,indexed,enforceUniqueValues,text,number,currency,dateTime,boolean,choice,lookup,personOrGroup,calculated'
+          : '';
+        columns = await getPaged(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/columns${selection}`, options);
       }
       throwIfAborted(options.signal);
       columnCache.set(cacheKey, columns);

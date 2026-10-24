@@ -10,12 +10,13 @@ try {
   const names = {
     FORNECEDORES:['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'], CADASTROCONTA:['CONTA'], LANCAMENTOOBRA:['ETAPA','FILIAL'],
     IDFOLHA:['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO:['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
-    NOTASPENDENTES:['Title','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL'],
+    NOTASPENDENTES:['Title','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
     LANCAMENTOS:['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS'],
   };
   const columns = Object.fromEntries(Object.entries(names).map(([list, fields]) => [list, fields.map(name => ({ name,
     displayName:list === 'NOTASPENDENTES' && name === 'Title' ? 'FILIAL' : name,
     ...(/DATA/.test(name) ? { dateTime:{} } : { text:{} }) }))]));
+  Object.assign(columns.NOTASPENDENTES.find(c=>c.name==='VALECONTROLE'),{hidden:true,text:{allowMultipleLines:true,textType:'plain',appendChangesToExistingText:false}});
   const rows = {
     FORNECEDORES:[{ id:'1', fields:{ CADASTRO:'Colaborador de teste', STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA TESTE', PROFISSAO:'PEDREIRO' } }],
     CADASTROCONTA:[{ id:'8', fields:{ CONTA:'CAIXA' } },{ id:'9', fields:{ CONTA:'BANCO' } }],

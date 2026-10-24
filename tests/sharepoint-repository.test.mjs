@@ -53,6 +53,20 @@ function createFakeGraph(routes) {
   };
 }
 
+test('metadados ocultos são selecionados explicitamente sem reutilizar o cache público das colunas', async () => {
+  const graph = createFakeGraph([
+    {id:'site-id'}, {value:[{name:'OBS',text:{}}]},
+    {value:[{name:'OBS',text:{}},{name:'VALECONTROLE',hidden:true,text:{allowMultipleLines:true}}]},
+  ]);
+  const repository = createSharePointRepository(graph,{personal:sites.personal});
+  const visible = await repository.getColumns('personal','orders');
+  const complete = await repository.getColumns('personal','orders',{includeHidden:true});
+  assert.equal(visible.length,1); assert.equal(complete.length,2);
+  assert.match(graph.calls[2].path,/\$select=[^&]*hidden/);
+  assert.equal((await repository.getColumns('personal','orders')).length,1);
+  assert.equal(graph.calls.length,3);
+});
+
 test("a configuracao usa Graph nas bases do portal e evita um segundo recurso de autenticacao", () => {
   assert.equal(portalConfig.sharepointSites.personal.readTransport, "graph");
   assert.equal(portalConfig.sharepointSites.personal.writeTransport, "graph");

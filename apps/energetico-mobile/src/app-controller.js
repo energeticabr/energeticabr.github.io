@@ -1,5 +1,6 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
+import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
 import { canDeleteRhidAdjustment } from './chat/rhid-adjustment-ownership.js';
 import { diaryFieldVisitOptionId } from './chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payroll-breakdown.js';
@@ -5894,7 +5895,13 @@ export function createAppController({
           await data.prepare?.();
           assertSession();
           allowAuthorization = false;
-          const panel = await mealVoucherFactory({ data, assertSession, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
+          const attachmentTray = createMealVoucherTray({store,assertSession,
+            pickFiles:()=>queueSelectedFiles(()=>native.pickDocuments(),{preserveFailedFiles:true}),
+            capture:()=>capturePhotoOrScan({preserveFailedFiles:true}),
+            open:openFile, remove:(id,kind)=>kind === 'pending' ? removeFile(id) : removeAttachment(id,{confirm:false}),
+            load:loadAttachment, deleteAttachment:id=>client.deleteAttachment(id),
+          });
+          const panel = await mealVoucherFactory({ data, assertSession, attachmentTray, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
           if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
           mealVoucher = panel;
         }
@@ -9823,7 +9830,7 @@ export function createAppController({
     return true;
   }
 
-  async function uploadFile(fileId) {
+  async function uploadFile(fileId, {preserveFailedFiles = false} = {}) {
     if (!account || stopped || flowBusy() || (recoveryAccountId && !recoveryVerified)) return false;
     cancelAttachmentReminder();
     cancelResponseTransition();
@@ -9950,7 +9957,8 @@ export function createAppController({
       if (!currentUpload()) return false;
       if (operation && store.getState().pendingFiles.some(item => item.operationId === operation.id)
         && error?.code === "NETWORK_UNCERTAIN") recoveryUncertain = true;
-      if (operation) store.failFile(operation, error);
+      if (operation && preserveFailedFiles) store.markFileError(fileId,error);
+      else if (operation) store.failFile(operation, error);
       else setSessionError(error, "Não foi possível enviar o arquivo.");
       return false;
     } finally {
@@ -9961,9 +9969,10 @@ export function createAppController({
     }
   }
 
-  function processFiles(fileIds) {
+  function processFiles(fileIds, {preserveFailedFiles = false} = {}) {
     const ids = [...fileIds];
     const queuedAccount = account;
+    const queuedRevision = sessionRevision;
     uploadQueue = uploadQueue.then(async () => {
       const failures = [];
       let allUploaded = true;
@@ -9992,7 +10001,7 @@ export function createAppController({
             }
             uploaded = true;
           } else {
-            uploaded = await uploadFile(id);
+            uploaded = await uploadFile(id,{preserveFailedFiles});
           }
         } catch (error) {
           if (pending && isConstructionDiaryFlow(store.getState().activeFlow) && isAudioFile(pending.file)) {
@@ -10004,6 +10013,15 @@ export function createAppController({
         if (!uploaded) {
           allUploaded = false;
           const failure = store.getState().error || sessionError;
+          if (preserveFailedFiles && pending && !stopped && account === queuedAccount && sessionRevision === queuedRevision) {
+            let retained = store.getState().pendingFiles.find(item=>item.id === id);
+            if (!retained) {
+              const known = new Set(store.getState().pendingFiles.map(item=>item.id));
+              store.queueFiles([pending.file],{hideFromAttachmentTray:pending.hideFromAttachmentTray === true});
+              retained = store.getState().pendingFiles.find(item=>!known.has(item.id));
+            }
+            if (retained) store.markFileError(retained.id,new Error(`O anexo ${pending.file.name} foi mantido na barra. Tente novamente ou remova-o. ${failure || 'Envio não confirmado.'}`));
+          }
           if (failure) failures.push(String(failure));
         }
       }
@@ -10020,7 +10038,7 @@ export function createAppController({
   }
 
   let cameraSelectionBusy = false;
-  async function capturePhotoOrScan() {
+  async function capturePhotoOrScan(options = {}) {
     if (cameraSelectionBusy || stopped || !account) return false;
     cameraSelectionBusy = true;
     const captureAccount = account;
@@ -10030,7 +10048,7 @@ export function createAppController({
         const mode = typeof view.chooseCaptureMode === 'function' ? await view.chooseCaptureMode() : 'photo';
         if (stopped || account !== captureAccount || sessionRevision !== captureRevision || !['photo','scan'].includes(mode)) return [];
         return mode === 'scan' ? native.scanDocument() : native.capturePhoto();
-      });
+      },options);
     } finally { cameraSelectionBusy = false; }
   }
 
@@ -10051,7 +10069,7 @@ export function createAppController({
       const newIds = store.getState().pendingFiles
         .filter(item => !knownIds.has(item.id))
         .map(item => item.id);
-      return processFiles(newIds);
+      return processFiles(newIds,options);
     } catch (error) {
       if (currentSelection()) setSessionError(error, "Não foi possível adicionar o anexo.");
       return false;

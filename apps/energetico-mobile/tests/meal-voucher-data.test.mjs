@@ -9,10 +9,11 @@ function fixture() {
     FORNECEDORES: ['CADASTRO','STATUS','EMPREITEIRO','FILIAL','PROFISSAO'],
     CADASTROCONTA: ['CONTA'], LANCAMENTOOBRA: ['ETAPA','FILIAL'],
     IDFOLHA: ['MESREFERENCIA','FORNECEDOR'], FOLHAPGTO: ['Title','FORNECEDOR','TIPOPGTO','VALORUNITARIO','QTD','DATA','IDFOLHA','IDLANCAMENTO'],
-    NOTASPENDENTES: ['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL'],
+    NOTASPENDENTES: ['Title','FILIAL','FORNECEDOR','VALORTOTAL','DATA PEDIDO','STATUS','OBS','FORMAPGTO','NOTA FISCAL','VALECONTROLE'],
     LANCAMENTOS: ['__PowerAppsId__','AGRUPAR','FILIAL','TIPO TRANSAÇÃO','DATA','DATA PGTO PREVISTO','DATA PGTO EFETUADO','FORNECEDOR','PRODUTO','ETAPA','QUANTIDADE','VALOR UNITÁRIO','CONTA','FRETE','OBS'],
   };
   const columns = Object.fromEntries(Object.entries(names).map(([list, labels]) => [list, labels.map(label => ({ name: label, displayName: label, ...(/DATA/.test(label) ? { dateTime: {} } : list === 'NOTASPENDENTES' && label === 'VALORTOTAL' ? { number: {} } : { text: {} }) }))]));
+  Object.assign(columns.NOTASPENDENTES.find(c => c.name === 'VALECONTROLE'), { hidden:true, text:{ allowMultipleLines:true, textType:'plain', appendChangesToExistingText:false } });
   const rows = { FORNECEDORES: [
     { id: '1', fields: { CADASTRO: 'Ana', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'PEDREIRO' } },
     { id: '2', fields: { CADASTRO: 'Beto', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'SERVENTE' } },
@@ -20,7 +21,8 @@ function fixture() {
   ], CADASTROCONTA: [{ id: '8', fields: { CONTA: 'CAIXA' } }], LANCAMENTOOBRA: [{ id: '7', fields: { ETAPA: 'FUNDAÇÃO', FILIAL: 'OBRA A' } }],
   IDFOLHA: [{ id: '11', fields: { MESREFERENCIA: '10/2026', FORNECEDOR: 'Ana' } }, { id: '12', fields: { MESREFERENCIA: '10/2026', FORNECEDOR: 'Beto' } }],
   FOLHAPGTO: [], NOTASPENDENTES: [], LANCAMENTOS: [] };
-  const writes = [], uploads = [];
+  const writes = [], uploads = [], deliveries = [], storedFiles = new Map();
+  const seedAttachment = (list, id, name, bytes = new TextEncoder().encode('outro arquivo')) => storedFiles.set(`${list}:${id}:${name}`, bytes);
   let failSecond = false, changeSheetDuringLaunch = false, changeOrderDuringLaunch = false, loseOrderResponse = false, appendOrderObs = false;
   const repo = {
     resolveList: async (_site, aliases) => ({ status: 'resolved', id: aliases[0] }),
@@ -29,10 +31,11 @@ function fixture() {
     getItem: async (_site, list, id) => rows[list].find(row => row.id === String(id)),
     createItem: async (_site, list, fields) => { if (failSecond && list === 'LANCAMENTOS' && rows.LANCAMENTOS.length === 1) throw new Error('rede interrompida'); if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'Title')?.displayName === 'FILIAL' && fields.Title !== 'OBRA A') throw new Error('General exception while processing'); if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL')?.text && typeof fields.VALORTOTAL !== 'string') throw new Error('General exception while processing'); const row = { id: String(rows[list].length + (list === 'FORNECEDORES' ? 10 : 1)), fields: { ...fields }, eTag: '"1"' }; rows[list].push(row); writes.push({ list, fields }); if (appendOrderObs && list === 'NOTASPENDENTES') row.fields.OBS += '\nAuditado automaticamente'; if (loseOrderResponse && list === 'NOTASPENDENTES') { loseOrderResponse = false; throw new Error('General exception while processing'); } if (changeSheetDuringLaunch && list === 'LANCAMENTOS') rows.IDFOLHA[0].fields.MESREFERENCIA = '11/2026'; if (changeOrderDuringLaunch && list === 'LANCAMENTOS') { rows.NOTASPENDENTES[0].fields.VALORTOTAL = 45; changeOrderDuringLaunch = false; } return row; },
     updateItem: async (_site, list, id, fields) => { if (list === 'NOTASPENDENTES' && columns.NOTASPENDENTES.find(c => c.name === 'VALORTOTAL')?.text && fields.VALORTOTAL !== undefined && typeof fields.VALORTOTAL !== 'string') throw new Error('General exception while processing'); const row = rows[list].find(item => item.id === String(id)); Object.assign(row.fields, fields); writes.push({ list, fields, update: true }); return row; },
-    listAttachments: async () => uploads.map(fileName => ({ fileName })),
-    uploadAttachment: async (_site, _list, _id, file) => { uploads.push(file.name); },
+    listAttachments: async (_site, list, id) => [...storedFiles].filter(([key]) => key.startsWith(`${list}:${id}:`)).map(([key, bytes]) => ({ name:key.slice(`${list}:${id}:`.length), size:bytes.byteLength })),
+    downloadAttachment: async (_site, list, id, name) => storedFiles.get(`${list}:${id}:${name}`).slice().buffer,
+    uploadAttachment: async (_site, list, id, file) => { const bytes = new Uint8Array(await file.arrayBuffer()); seedAttachment(list, id, file.name, bytes); uploads.push(file.name); deliveries.push({ list, id:String(id), name:file.name }); },
   };
-  return { repo, columns, rows, writes, uploads, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
+  return { repo, columns, rows, writes, uploads, deliveries, seedAttachment, failSecond: () => { failSecond = true; }, recover: () => { failSecond = false; }, loseOrderResponse: () => { loseOrderResponse = true; }, appendOrderObs: () => { appendOrderObs = true; }, changeSheetDuringLaunch: () => { changeSheetDuringLaunch = true; }, changeOrderDuringLaunch: () => { changeOrderDuringLaunch = true; } };
 }
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
 async function waitForSubmission(doc) {
@@ -98,7 +101,8 @@ test('pedido vazio confirmado libera todos os dados e reaproveita o ID na confir
   assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 360);
   assert.equal(f.rows.NOTASPENDENTES[0].fields['DATA PEDIDO'], '2026-11-02T12:00:00Z');
   assert.equal(f.rows.NOTASPENDENTES[0].fields.FORMAPGTO, 'BANCO');
-  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /^corrigido\n\[VALE ALIMENTAÇÃO empty-order-edit\]/);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS, 'corrigido');
+  assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /VALE ALIMENTAÇÃO empty-order-edit/);
   assert.equal(f.rows.LANCAMENTOS.length, 2); assert.equal(f.rows.FOLHAPGTO.length, 2);
   assert.ok(f.rows.LANCAMENTOS.every(row => row.fields.AGRUPAR === '1' && row.fields.ETAPA === 'ALVENARIA' && row.fields.CONTA === 'BANCO'
     && row.fields.DATA === '2026-11-02T12:00:00Z' && row.fields['DATA PGTO PREVISTO'] === '2026-11-10T12:00:00Z' && row.fields['DATA PGTO EFETUADO'] === '2026-11-03T12:00:00Z'));
@@ -203,7 +207,7 @@ for (const scenario of ['lançamento sem token','folha sem progresso','pedido au
     if (scenario === 'lançamento sem token') f.rows.LANCAMENTOS.push({ id:'9', fields:{ AGRUPAR:'1' } });
     if (scenario === 'folha sem progresso') f.rows.FOLHAPGTO.push({ id:'9', fields:{ Title:'APP-vale-alimentacao-protected-order-folha-1' } });
     if (scenario === 'pedido auditado') f.rows.NOTASPENDENTES[0].fields.STATUS = 'APROVADO';
-    if (scenario === 'anexo gravado') f.uploads.push('comprovante.pdf');
+    if (scenario === 'anexo gravado') f.seedAttachment('NOTASPENDENTES', '1', 'comprovante.pdf');
     if (scenario === 'total alterado') f.rows.NOTASPENDENTES[0].fields.VALORTOTAL = 999;
     if (scenario === 'sem versão') delete f.rows.NOTASPENDENTES[0].eTag;
     if (scenario === 'consulta incompleta') f.repo.getItemsPage = async () => ({ items:[] });
@@ -392,7 +396,7 @@ test('pedido vazio da versão original com token no Title recupera edição e co
   await data.post(corrected, progress); await data.post(corrected, progress);
   assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.NOTASPENDENTES[0].id, '21');
   assert.equal(f.rows.NOTASPENDENTES[0].fields.Title, 'OBRA A'); assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL, 180);
-  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /VALE ALIMENTAÇÃO edit-legacy/);
+  assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /VALE ALIMENTAÇÃO edit-legacy/);
   assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /Conferido pela auditoria$/);
   assert.equal(f.rows.LANCAMENTOS.length, 1); assert.equal(f.rows.LANCAMENTOS[0].fields.AGRUPAR, '21');
   assert.equal(f.rows.FOLHAPGTO.length, 1);
@@ -548,7 +552,8 @@ test('retomada de envio iniciado na versão anterior corrige a filial e não dup
   assert.equal(result.orderId, '21');
   assert.equal(f.rows.NOTASPENDENTES.length, 1);
   assert.equal(f.rows.NOTASPENDENTES[0].fields.Title, 'OBRA A');
-  assert.match(f.rows.NOTASPENDENTES[0].fields.OBS, /VALE ALIMENTAÇÃO legacy-1/);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS, 'outubro');
+  assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /VALE ALIMENTAÇÃO legacy-1/);
 });
 
 test('retomada de pedido legado preserva observações acrescentadas depois da primeira tentativa', async () => {
@@ -658,14 +663,17 @@ test('pedido existente compatível soma o total uma única vez e mantém o mesmo
   assert.equal(f.rows.LANCAMENTOS.length, 2);
 });
 
-test('anexos são vinculados ao pedido e retomada não duplica arquivo', async () => {
+test('contrato real dos anexos confirma o pedido e somente o último lançamento sem duplicar na retomada', async () => {
   const f = fixture(), data = createMealVoucherData({ repository: f.repo });
   const { suppliers } = await data.loadOptions();
   const file = new File(['abc'], 'comprovante.pdf', { type: 'application/pdf' });
   const selected = { ...draft(suppliers), files: [file] }, progress = { operationId: 'files-1' };
   await data.post(selected, progress);
   await data.post(selected, progress);
-  assert.deepEqual(f.uploads, ['comprovante.pdf']);
+  assert.deepEqual(f.deliveries, [
+    { list:'NOTASPENDENTES', id:'1', name:'comprovante.pdf' },
+    { list:'LANCAMENTOS', id:'2', name:'comprovante.pdf' },
+  ]);
 });
 
 test('total de pedido existente é somado com centavos exatos', async () => {
@@ -717,9 +725,140 @@ test('renomeação de conta ou etapa impede gravar rótulos obsoletos', async ()
 
 test('anexo diferente com nome já existente não é descartado silenciosamente', async () => {
   const f = fixture(); f.rows.NOTASPENDENTES.push({ id: '99', fields: { FILIAL: 'OBRA A', FORNECEDOR: 'Ana', STATUS: 'PENDENTE AUDITORIA', VALORTOTAL: 40, OBS: '' }, eTag: '"1"' });
-  f.uploads.push('comprovante.pdf');
+  f.seedAttachment('NOTASPENDENTES', '99', 'comprovante.pdf');
   const data = createMealVoucherData({ repository: f.repo });
   const { suppliers } = await data.loadOptions();
   const file = new File(['novo'], 'comprovante.pdf', { type: 'application/pdf' });
   await assert.rejects(data.post({ ...draft([suppliers[0]]), orderMode: 'existing', orderId: '99', files: [file] }, { operationId: 'same-name' }), /nome|anexo/i);
+});
+
+test('OBS contém somente a nota humana e o controle técnico fica fora dos campos de negócio', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  await data.post({ ...draft(suppliers), obs:'PAGAMENTO VALE REFEIÇÃO EM SEMANA COMUN' }, { operationId:'clean-notes' });
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS, 'PAGAMENTO VALE REFEIÇÃO EM SEMANA COMUN');
+  assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /clean-notes/);
+  assert.ok(f.rows.LANCAMENTOS.every(row => !/\[VALE (?:REVISÃO|ALIMENTAÇÃO)/.test(row.fields.OBS)));
+});
+
+test('resposta de upload perdida é reconciliada por conteúdo após recriar o serviço e o progresso', async () => {
+  const f = fixture(), upload = f.repo.uploadAttachment;
+  let lost = false;
+  f.repo.uploadAttachment = async (...args) => { await upload(...args); if (!lost) { lost = true; throw new Error('resposta perdida'); } };
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const selected = { ...draft(suppliers), files:[new File(['abc'], 'comprovante.pdf', { type:'application/pdf', lastModified:0 })] };
+  await data.post(selected, { operationId:'lost-upload' });
+  await createMealVoucherData({ repository:f.repo }).post(selected, { operationId:'lost-upload' });
+  assert.equal(f.rows.NOTASPENDENTES.length, 1); assert.equal(f.rows.LANCAMENTOS.length, 2); assert.equal(f.rows.FOLHAPGTO.length, 2);
+  assert.equal(f.deliveries.length, 2);
+});
+
+test('arquivos iguais já entregues pela versão anterior são reconhecidos sem booleano local', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const file = new File(['abc'], 'comprovante.pdf', { type:'application/pdf', lastModified:0 });
+  const selected = { ...draft(suppliers), files:[file] }, progress = { operationId:'legacy-file' };
+  const upload = f.repo.uploadAttachment;
+  f.repo.uploadAttachment = async (...args) => { if (args[1] === 'LANCAMENTOS') throw new Error('rede indisponível'); return upload(...args); };
+  await assert.rejects(data.post(selected, progress), /rede/);
+  delete progress.uploadedFiles; f.repo.uploadAttachment = upload;
+  await createMealVoucherData({ repository:f.repo }).post(selected, progress);
+  assert.equal(f.deliveries.length, 2); assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('destino final dos anexos não muda quando a mesma revisão é retomada em outra ordem', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const file = new File(['abc'], 'comprovante.pdf', { type:'application/pdf', lastModified:0 });
+  const selected = { ...draft(suppliers), files:[file] };
+  await data.post(selected, { operationId:'stable-last' });
+  await createMealVoucherData({ repository:f.repo }).post({ ...selected, lines:[...selected.lines].reverse() }, { operationId:'stable-last' });
+  assert.deepEqual(f.deliveries.map(({list,id}) => ({list,id})), [{list:'NOTASPENDENTES',id:'1'},{list:'LANCAMENTOS',id:'2'}]);
+});
+
+test('destino dos anexos é fixado antes da primeira linha mesmo com resposta perdida e progresso local ausente',async()=>{
+  const f=fixture(),create=f.repo.createItem;let lose=true;
+  f.repo.createItem=async(...args)=>{const row=await create(...args);if(args[1]==='LANCAMENTOS'&&lose){lose=false;throw new Error('resposta perdida do lançamento');}return row;};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  const selected={...draft(suppliers),files:[new File(['abc'],'nota.pdf',{type:'application/pdf',lastModified:0})]};
+  await assert.rejects(data.post(selected,{operationId:'lost-destination'}),/resposta perdida/);
+  await createMealVoucherData({repository:f.repo}).post({...selected,lines:[...selected.lines].reverse()},{operationId:'lost-destination'});
+  assert.deepEqual(f.deliveries.map(({list,id})=>({list,id})),[{list:'NOTASPENDENTES',id:'1'},{list:'LANCAMENTOS',id:'2'}]);
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('lote originador retoma depois de outro lote acrescentar ao pedido sem repetir o total',async()=>{
+  const f=fixture(),create=f.repo.createItem;let fail=true;
+  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw new Error('folha indisponível');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-a'};
+  await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
+  await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-b'});
+  await createMealVoucherData({repository:f.repo}).post(selected,progress);
+  assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL,60);
+  assert.equal(f.rows.LANCAMENTOS.length,4);assert.equal(f.rows.FOLHAPGTO.length,4);
+});
+
+test('total acumulado divergente continua bloqueado mesmo quando coincide com o valor só do lote originador',async()=>{
+  const f=fixture(),create=f.repo.createItem;let fail=true;
+  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw new Error('folha indisponível');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-safe'};
+  await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
+  await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-safe'});
+  f.rows.NOTASPENDENTES[0].fields.VALORTOTAL=30;const writes=f.writes.length;
+  await assert.rejects(createMealVoucherData({repository:f.repo}).post(selected,progress),/total acumulado/);assert.equal(f.writes.length,writes);
+});
+
+test('schema técnico ausente bloqueia antes de gravar registros financeiros', async () => {
+  const f = fixture(); f.columns.NOTASPENDENTES = f.columns.NOTASPENDENTES.filter(c => c.name !== 'VALECONTROLE');
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  await assert.rejects(data.post(draft(suppliers), { operationId:'missing-schema' }), /VALECONTROLE|controle técnico/i);
+  assert.equal(f.writes.length, 0);
+});
+
+test('operações de um pedido existente retêm controles independentes sem somar novamente ao retomar', async () => {
+  const f = fixture(); f.rows.NOTASPENDENTES.push({ id:'99', fields:{FILIAL:'OBRA A',FORNECEDOR:'DIVERSOS',STATUS:'PENDENTE AUDITORIA',VALORTOTAL:40,OBS:'Nota anterior'}, eTag:'"1"' });
+  const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();
+  const selected = { ...draft(suppliers), orderMode:'existing', orderId:'99' };
+  await data.post(selected, {operationId:'existing-a'}); await data.post(selected, {operationId:'existing-b'});
+  await createMealVoucherData({repository:f.repo}).post(selected, {operationId:'existing-a'});
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL,100);
+  assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS,'Nota anterior');
+  assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE,/existing-a/); assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE,/existing-b/);
+});
+
+test('retomada migra marcadores legados da OBS sem alterar notas humanas nem repetir registros', async () => {
+  const f = fixture(), data = createMealVoucherData({repository:f.repo}), {suppliers} = await data.loadOptions();
+  const selected = draft(suppliers), progress = {operationId:'legacy-obs-migration'};
+  await data.post(selected,progress);
+  const fields = f.rows.NOTASPENDENTES[0].fields;
+  fields.OBS += `\n${fields.VALECONTROLE}\nConferido pela auditoria`; delete fields.VALECONTROLE;
+  await createMealVoucherData({repository:f.repo}).post(selected,JSON.parse(JSON.stringify(progress)));
+  assert.equal(fields.OBS,'outubro\nConferido pela auditoria'); assert.match(fields.VALECONTROLE,/legacy-obs-migration/);
+  assert.equal(f.rows.NOTASPENDENTES.length,1); assert.equal(f.rows.LANCAMENTOS.length,2); assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+for (const committed of [false,true]) test(`journal de PATCH legado permanece recuperável (${committed ? 'gravado' : 'não gravado'}) sem códigos na OBS`, async () => {
+  const f=fixture(),create=f.repo.createItem,update=f.repo.updateItem;
+  f.repo.createItem=async(...args)=>{if(args[1]==='LANCAMENTOS')throw new Error('lançamento rejeitado');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  const original=draft(suppliers),progress={operationId:`old-edit-${committed}`};
+  await assert.rejects(data.post(original,progress),/rejeitado/);
+  let lose=true;f.repo.updateItem=async(...args)=>{if(lose){lose=false;if(committed)await update(...args);throw new Error('PATCH perdido');}return update(...args);};
+  const correction={...original,date:'2026-10-16'};
+  await assert.rejects(data.post(correction,progress),/PATCH perdido/);
+  const legacy=fields=>{const copy={...fields};copy.OBS=`${copy.OBS}${copy.OBS ? '\n' : ''}${copy.VALECONTROLE}`;delete copy.VALECONTROLE;return copy;};
+  f.rows.NOTASPENDENTES[0].fields=legacy(f.rows.NOTASPENDENTES[0].fields);
+  for(const phase of ['before','after']){progress.orderEdit[phase]=legacy(progress.orderEdit[phase]);progress.orderEdit[`${phase}Obs`]=progress.orderEdit[phase].OBS;}
+  f.repo.createItem=create;f.repo.updateItem=update;
+  const resumed=createMealVoucherData({repository:f.repo});
+  assert.equal(await resumed.canEditPending(correction,progress),true);
+  await resumed.post(correction,progress);
+  assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.NOTASPENDENTES[0].fields.OBS,'outubro');
+  assert.equal(f.rows.NOTASPENDENTES[0].fields['DATA PEDIDO'],'2026-10-16T12:00:00Z');assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('leituras de itens selecionam explicitamente o campo oculto antes de reconciliar o pedido', async () => {
+  const f=fixture(),page=f.repo.getItemsPage,get=f.repo.getItem,columns=f.repo.getColumns,queries=[];
+  f.repo.getColumns=async(site,list,options)=>{if(list==='NOTASPENDENTES')assert.equal(options.includeHidden,true);return columns(site,list,options);};
+  f.repo.getItemsPage=async(...args)=>{if(args[1]==='NOTASPENDENTES'){queries.push(args[2]);assert.match(args[2],/fields\(\$select=[^)]*VALECONTROLE/);}return page(...args);};
+  f.repo.getItem=async(...args)=>{if(args[1]==='NOTASPENDENTES'){queries.push(args[3]);assert.match(args[3],/fields\(\$select=[^)]*VALECONTROLE/);}return get(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();await data.post(draft(suppliers),{operationId:'explicit-hidden'});
+  assert.ok(queries.length>2);
 });
