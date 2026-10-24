@@ -119,9 +119,10 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
   async function orderFields(descriptor, draft, operationId, versioned = true) {
     const marker = `[VALE ALIMENTAÇÃO ${operationId}]`;
     const revision = versioned ? `\n${await revisionMarker(draft, operationId)}` : '';
+    const destination = versioned && draft.files.length ? `\n[VALE DESTINO ${operationId} ${draft.lines.at(-1).supplier.id}]` : '';
     return payload(descriptor, { FILIAL:draft.branch, FORNECEDOR:draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS',
       VALORTOTAL:orderTotal(descriptor, draft.total), 'DATA PEDIDO':draft.date, STATUS:'PENDENTE AUDITORIA',
-      OBS:draft.obs, [MEAL_VOUCHER_CONTROL_COLUMN]:`${marker}${revision}`, FORMAPGTO:draft.account.label, 'NOTA FISCAL':'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
+      OBS:draft.obs, [MEAL_VOUCHER_CONTROL_COLUMN]:`${marker}${revision}${destination}`, FORMAPGTO:draft.account.label, 'NOTA FISCAL':'PENDENTE' }, ['DATA PEDIDO','STATUS','FORMAPGTO','NOTA FISCAL']);
   }
   function matchesFields(descriptor, row, fields) {
     return Object.entries(fields).every(([name, expected]) => {
@@ -257,6 +258,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
   }
   async function ensureOrder(descriptor, fields, marker, tokenCache, edit) {
     const obsName = column(descriptor, ['OBS']).name, controlName = control(descriptor);
+    const totalName = column(descriptor,['VALORTOTAL']).name;
     if (!tokenCache.has(descriptor.id)) tokenCache.set(descriptor.id, await all(descriptor));
     const matches = tokenCache.get(descriptor.id).filter(row => scalar(row.fields?.[controlName]).includes(marker));
     if (matches.length > 1) throw new Error('Foram encontrados pedidos duplicados da operação. Confira os registros antes de retomar.');
@@ -291,6 +293,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     for (const [field, expected] of Object.entries(fields)) {
       const actual = saved.fields?.[field];
       const date = descriptor.columns.find(c => c.name === field)?.dateTime;
+      if (field === totalName) continue; // Verified against all recognized batches before any launch write below.
       if (field === controlName ? !scalar(actual).includes(marker)
         : field === obsName ? !(scalar(actual) === scalar(expected) || scalar(actual).startsWith(`${scalar(expected)}${scalar(expected) ? '\n' : ''}`))
         : !(typeof expected === 'number' ? Number(actual) === expected : scalar(actual) === String(expected) || date && String(actual ?? '').slice(0, 10) === String(expected).slice(0, 10)))
@@ -298,19 +301,42 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     }
     return String(row.id);
   }
-  async function attachmentDestination(orders, orderId, draft, progress) {
+  async function confirmOriginatingOrderTotal(orders,launches,orderId,draft,operationId,tokenCache) {
+    const row = await get(orders,orderId), actual = amount(value(orders,row,['VALORTOTAL']));
+    const controls = scalar(row.fields[control(orders)]).split('\n');
+    const otherOperations = [...new Set(controls.map(line=>line.match(/^\[VALE ALIMENTAÇÃO ([A-Za-z0-9-]{1,80})\]$/)?.[1]).filter(id=>id && id !== operationId))];
+    let expected = amount(draft.total);
+    for (const id of otherOperations) {
+      if (revisions(row.fields[control(orders)],id).length !== 1) throw new Error('O total acumulado do pedido não foi confirmado.');
+      const prefix = `APP-vale-alimentacao-${id}-`;
+      const additions = tokenCache.get(launches.id).filter(item=>value(launches,item,['AGRUPAR'],false) === String(orderId)
+        && scalar(item.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix)
+        && /^\d+$/.test(scalar(item.fields[column(launches,['__PowerAppsId__']).name]).slice(prefix.length)));
+      if (!additions.length) throw new Error('O total acumulado do pedido não foi confirmado.');
+      for (const addition of additions) {
+        const quantity = payrollDecimal(value(launches,addition,['QUANTIDADE'])), unit = payrollDecimal(value(launches,addition,['VALOR UNITÁRIO']));
+        if (!quantity.gt(0) || !unit.gt(0) || !amount(value(launches,addition,['FRETE'],false)).isZero()) throw new Error('Os valores do lote adicional do pedido mudaram.');
+        expected = expected.plus(quantity.times(unit).toDecimalPlaces(2));
+      }
+    }
+    if (!actual.equals(expected)) throw new Error('O SharePoint não confirmou o total acumulado do pedido. Confira os registros antes de retomar.');
+  }
+  async function attachmentDestination(orders, orderId, draft, progress, {mayInfer = true, replace = false} = {}) {
     const row = await get(orders,orderId), name = control(orders);
     const prefix = `[VALE DESTINO ${progress.operationId} `;
     const matches = scalar(row.fields[name]).split('\n').filter(line=>line.startsWith(prefix));
     if (matches.length > 1) throw new Error('O destino dos anexos do lote está ambíguo.');
-    const saved = matches[0]?.slice(prefix.length,-1);
+    let saved = matches[0]?.slice(prefix.length,-1);
+    if (replace) saved = undefined;
+    if (!saved && !mayInfer) throw new Error('Não foi possível recuperar a ordem original deste lote legado. Retome com o rascunho original para definir o último lançamento; nenhum anexo foi enviado.');
     const supplierId = saved || String(draft.lines.at(-1).supplier.id);
     if (saved && matches[0] !== `${prefix}${supplierId}]` || !draft.lines.some(line=>String(line.supplier.id)===supplierId)
       || progress.attachmentSupplierId && progress.attachmentSupplierId !== supplierId) throw new Error('O destino dos anexos deste lote mudou. Confira a tentativa original.');
     if (!saved) {
       const eTag = row.eTag || row['@odata.etag'];
       if (!eTag || eTag === '*') throw new Error('A versão do destino dos anexos não foi confirmada.');
-      await repository.updateItem(siteKey,orders.id,orderId,{[name]:`${scalar(row.fields[name])}\n${prefix}${supplierId}]`},{eTag}); assertSession();
+      const previous = scalar(row.fields[name]).split('\n').filter(line=>!line.startsWith(prefix)).join('\n');
+      await repository.updateItem(siteKey,orders.id,orderId,{[name]:`${previous}\n${prefix}${supplierId}]`},{eTag}); assertSession();
       const confirmed = await get(orders,orderId);
       if (!scalar(confirmed.fields[name]).split('\n').includes(`${prefix}${supplierId}]`)) throw new Error('O destino dos anexos não foi confirmado.');
     }
@@ -375,7 +401,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
         expectedObs:normalizedOrder(orders,{fields:{[obs]:expectedObs}}).fields[obs] });
     }
     const expected = candidates.find(({ fields, expectedObs }) => fields && typeof expectedObs === 'string' && Object.keys(baseline).every(name => Object.hasOwn(fields, name))
-      && matchesFields(orders, row, { ...fields, [obs]:scalar(row.fields[obs]) })
+      && matchesFields(orders, row, { ...fields, [obs]:scalar(row.fields[obs]), [controlName]:scalar(row.fields[controlName]) })
       && JSON.stringify(revisions(row.fields[controlName], progress.operationId)) === JSON.stringify(revisions(fields[controlName], progress.operationId))
       && (!expectedObs || scalar(row.fields[obs]) === expectedObs || scalar(row.fields[obs]).startsWith(`${expectedObs}\n`)));
     if (!expected) return blocked;
@@ -398,6 +424,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
     posting = true;
     try {
       const draft = validateMealVoucherDraft(rawDraft);
+      const hadOriginalDraft = Boolean(progress.signature);
       const signature = JSON.stringify({ ...draft, files: draft.files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })) });
       let edit;
       if (progress.signature && progress.signature !== signature) {
@@ -458,7 +485,6 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
           const saved = await get(orders, legacy.id);
           const expectedSupplier = draft.lines.length === 1 ? draft.lines[0].supplier.label : 'DIVERSOS';
           if (key(value(orders, saved, ['FORNECEDOR'])) !== key(expectedSupplier)
-            || !amount(value(orders, saved, ['VALORTOTAL'])).equals(amount(draft.total))
             || !pending(value(orders, saved, ['STATUS'])))
             throw new Error('O pedido da tentativa anterior mudou; confira-o antes de retomar.');
           const currentControl = scalar(saved.fields[control(orders)]);
@@ -476,7 +502,14 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
         } else orderId = await ensureOrder(orders, fields, marker, tokenCache, edit?.order && { ...edit.order, progress, onProgress });
       }
       await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
+      if (draft.orderMode === 'new') await confirmOriginatingOrderTotal(orders,launches,orderId,draft,progress.operationId,tokenCache);
       const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
+      if (entries.length) {
+        const prefix = `APP-vale-alimentacao-${progress.operationId}-`;
+        const hasPreviousLaunch = tokenCache.get(launches.id).some(row=>scalar(row.fields?.[column(launches,['__PowerAppsId__']).name]).startsWith(prefix));
+        progress.attachmentSupplierId = await attachmentDestination(orders,orderId,draft,progress,
+          {mayInfer:hadOriginalDraft || !hasPreviousLaunch,replace:edit?.editable === true});
+      }
       progress.orderId = orderId;
       progress.signature = signature;
       progress.fileManifest = entries.map(entry=>entry.manifest);
@@ -509,7 +542,6 @@ export function createMealVoucherData({ repository, graph, tokenProvider, siteCo
         onProgress();
       }
       if (entries.length) {
-        progress.attachmentSupplierId = await attachmentDestination(orders,orderId,draft,progress); onProgress();
         const launchId = progress.lines[progress.attachmentSupplierId];
         const destination = await get(launches,launchId);
         if (value(launches,destination,['AGRUPAR']) !== String(orderId)

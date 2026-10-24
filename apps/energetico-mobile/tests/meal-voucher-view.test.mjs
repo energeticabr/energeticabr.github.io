@@ -66,6 +66,16 @@ test('falha na postagem mantém a bandeja intacta e falha de limpeza não apaga 
   assert.match(h.doc.querySelector('[role="alert"]').textContent,/não repita/);
 });
 
+test('fechar durante a leitura dos anexos permite reabrir sem a resposta antiga avançar a tela',async t=>{
+  const file=new File(['abc'],'nota.pdf',{type:'application/pdf'}),h=await extrasPanel(t,{files:[file]});
+  let finish;h.tray.read=()=>new Promise(resolve=>{finish=resolve;});
+  h.doc.querySelector('[data-meal-next]').click();assert.ok(finish);
+  assert.equal(h.panel.close(),true);await h.panel.open();
+  assert.ok(h.doc.querySelector('[name="meal-obs"]'),'a nova abertura não deve ficar presa no carregamento anterior');
+  h.type('[name="meal-obs"]','Texto da nova abertura');finish([file]);await tick();
+  assert.equal(h.doc.querySelector('[name="meal-obs"]').value,'Texto da nova abertura');assert.equal(h.doc.querySelector('[data-meal-confirm]'),null);
+});
+
 function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
   const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };

@@ -773,6 +773,38 @@ test('destino final dos anexos não muda quando a mesma revisão é retomada em 
   assert.deepEqual(f.deliveries.map(({list,id}) => ({list,id})), [{list:'NOTASPENDENTES',id:'1'},{list:'LANCAMENTOS',id:'2'}]);
 });
 
+test('destino dos anexos é fixado antes da primeira linha mesmo com resposta perdida e progresso local ausente',async()=>{
+  const f=fixture(),create=f.repo.createItem;let lose=true;
+  f.repo.createItem=async(...args)=>{const row=await create(...args);if(args[1]==='LANCAMENTOS'&&lose){lose=false;throw new Error('resposta perdida do lançamento');}return row;};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions();
+  const selected={...draft(suppliers),files:[new File(['abc'],'nota.pdf',{type:'application/pdf',lastModified:0})]};
+  await assert.rejects(data.post(selected,{operationId:'lost-destination'}),/resposta perdida/);
+  await createMealVoucherData({repository:f.repo}).post({...selected,lines:[...selected.lines].reverse()},{operationId:'lost-destination'});
+  assert.deepEqual(f.deliveries.map(({list,id})=>({list,id})),[{list:'NOTASPENDENTES',id:'1'},{list:'LANCAMENTOS',id:'2'}]);
+  assert.equal(f.rows.LANCAMENTOS.length,2);assert.equal(f.rows.FOLHAPGTO.length,2);
+});
+
+test('lote originador retoma depois de outro lote acrescentar ao pedido sem repetir o total',async()=>{
+  const f=fixture(),create=f.repo.createItem;let fail=true;
+  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw new Error('folha indisponível');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-a'};
+  await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
+  await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-b'});
+  await createMealVoucherData({repository:f.repo}).post(selected,progress);
+  assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.NOTASPENDENTES[0].fields.VALORTOTAL,60);
+  assert.equal(f.rows.LANCAMENTOS.length,4);assert.equal(f.rows.FOLHAPGTO.length,4);
+});
+
+test('total acumulado divergente continua bloqueado mesmo quando coincide com o valor só do lote originador',async()=>{
+  const f=fixture(),create=f.repo.createItem;let fail=true;
+  f.repo.createItem=async(...args)=>{if(args[1]==='FOLHAPGTO'&&fail)throw new Error('folha indisponível');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft(suppliers),progress={operationId:'origin-safe'};
+  await assert.rejects(data.post(selected,progress),/folha indisponível/);fail=false;
+  await createMealVoucherData({repository:f.repo}).post({...selected,orderMode:'existing',orderId:'1'},{operationId:'addition-safe'});
+  f.rows.NOTASPENDENTES[0].fields.VALORTOTAL=30;const writes=f.writes.length;
+  await assert.rejects(createMealVoucherData({repository:f.repo}).post(selected,progress),/total acumulado/);assert.equal(f.writes.length,writes);
+});
+
 test('schema técnico ausente bloqueia antes de gravar registros financeiros', async () => {
   const f = fixture(); f.columns.NOTASPENDENTES = f.columns.NOTASPENDENTES.filter(c => c.name !== 'VALECONTROLE');
   const data = createMealVoucherData({ repository:f.repo }), { suppliers } = await data.loadOptions();

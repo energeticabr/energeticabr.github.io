@@ -11,6 +11,7 @@ import { createAppController, shouldRemoveSignedSource } from "../src/app-contro
 import { createConversationStore } from "../src/chat/conversation-store.js";
 import { validateAttachment } from "../../../portal/data/attachments.js";
 import { createChatView, renderChatMarkup } from "../src/ui/chat-view.js";
+import { createMealVoucherView } from '../src/ui/meal-voucher-view.js';
 import { createAttachmentPreview } from '../src/web/attachment-preview.js';
 import { createNativePorts } from '../src/native/native-ports.js';
 import { scannedPages } from './helpers/scanned-pages.mjs';
@@ -11338,6 +11339,27 @@ test('vale não libera confirmação com envio pendente ou falho nem com arquivo
 });
 
 async function tickController(){await new Promise(resolve=>setImmediate(resolve));}
+
+for(const mode of ['file','camera'])test(`falha real no ${mode} do vale conserva o anexo e bloqueia postagem até descarte deliberado`,async t=>{
+  const dom=new JSDOM('<body></body>',{url:'https://example.invalid'}),doc=dom.window.document;let posts=0;
+  const h=makeHarness({mealVoucherFactory:async options=>createMealVoucherView({...options,documentRef:doc,storage:dom.window.localStorage}),mealVoucherDataFactory:async()=>({
+    loadOptions:async()=>({suppliers:[{id:'1',label:'Ana',branch:'OBRA A',profession:'PEDREIRO'}],accounts:[{id:'8',label:'CAIXA'}],stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}]}),
+    loadOrders:async()=>[],loadSheetAssignments:async()=>({'1':{id:'11'}}),post:async value=>{posts++;assert.deepEqual(value.files,[]);return {orderId:'5',lines:[],total:50};},
+  })});t.after(()=>{h.controller.stop();dom.window.close();});await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  const type=(selector,value)=>{const input=doc.querySelector(selector);input.value=value;input.dispatchEvent(new dom.window.Event('input',{bubbles:true}));};
+  type('[data-meal-value="1"]','10');doc.querySelector('[data-meal-next]').click();await tickController();doc.querySelector('[data-meal-order-new]').click();
+  for(const [name,value]of [['meal-date','2026-10-15'],['meal-due-date','2026-10-30'],['meal-reference-month','2026-10']])type(`[name="${name}"]`,value);
+  for(const [name,value]of [['meal-account','8'],['meal-stage','7']]){const select=doc.querySelector(`[name="${name}"]`);select.value=value;select.dispatchEvent(new dom.window.Event('change',{bubbles:true}));}
+  doc.querySelector('[data-meal-next]').click();await tickController();
+  const file=new File(['abc'],'comprovante.pdf',{type:'application/pdf'});h.native.pickDocuments=async()=>[file];h.native.capturePhoto=async()=>[file];
+  h.client.sendFile=async()=>{throw new Error('rede interrompida');};
+  doc.querySelector(mode==='file'?'[data-meal-tray-pick]':'[data-meal-tray-capture]').click();await tickController();await tickController();
+  assert.equal(doc.querySelector('[role="alert"]').hidden,false);assert.match(doc.querySelector('[role="alert"]').textContent,/rede interrompida/);
+  assert.match(doc.querySelector('[data-meal-tray]').textContent,/comprovante.pdf/);assert.equal(h.store.getState().pendingFiles[0]?.status,'failed');
+  doc.querySelector('[data-meal-next]').click();await tickController();assert.equal(doc.querySelector('[data-meal-confirm]'),null);assert.equal(posts,0);
+  doc.querySelector('[data-meal-tray-remove]').click();await tickController();doc.querySelector('[data-meal-next]').click();
+  doc.querySelector('[data-meal-confirm]').click();await tickController();assert.equal(posts,1);
+});
 
 test('clipe e câmera da bandeja do vale usam os mesmos caminhos nativos de arquivo e escaneamento', async t => {
   let options;const h=makeHarness({mealVoucherDataFactory:async()=>({}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});

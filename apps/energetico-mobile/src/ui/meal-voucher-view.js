@@ -246,6 +246,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     const obs = el('textarea'); obs.name = 'meal-obs'; obs.rows = 3; obs.value = draft.obs; obs.placeholder = 'Observação opcional'; obs.addEventListener('input', () => { draft.obs = obs.value; }); content.append(field('OBS (opcional)', obs));
     content.append(el('p','','Os arquivos serão incluídos automaticamente pela barra de anexos abaixo.'));
     footer.append(button('Seguir', 'data-meal-next', () => {
+      const readEpoch = epoch;
       const sources = trayAccess.snapshot(), expected = locked() ? expectedFiles.length ? expectedFiles : savedFiles(draft.files) : [];
       const accept = files => {
         if (locked()) {
@@ -256,7 +257,9 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
         draft.files = files; validateMealVoucherDraft(draft); expectedFiles = []; reviewedTray = sources; step = 'summary';
       };
       if (!sources.length && !expected.length) { try { accept([]); render(); } catch (cause) { showError(cause); } return; }
-      return work(async()=>{const files = await trayAccess.read(sources,expected); assertSession(); accept(files);},'Conferindo arquivos da bandeja…');
+      return work(async()=>{const files = await trayAccess.read(sources,expected); assertSession();
+        if (!opened || destroyed || epoch !== readEpoch) return;
+        accept(files);},'Conferindo arquivos da bandeja…');
     }));
   }
   function renderSummary() {
@@ -369,7 +372,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   }
   back.addEventListener('click', navigateBack); home.addEventListener('click', () => { if (close()) onHome(); });
   page.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); navigateBack(); } });
-  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; epoch++; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
+  function close() { if (!opened || destroyed || mutating) return false; if (progress.signature && step !== 'done' && (!storageKey || storage.getItem(storageKey) === pendingSnapshot)) savePending(); opened = false; epoch++; busy = false; detailPickers?.close(); page.hidden = true; previousFocus?.focus?.(); return true; }
   return Object.freeze({
     async open() { if (destroyed) return false; assertSession(); if (opened) return true; if (step === 'done') reset(); previousFocus = doc.activeElement; opened = true; epoch++; page.hidden = false; const inMemory = Boolean(progress.signature); await work(async () => {
       available = await data.loadOptions();

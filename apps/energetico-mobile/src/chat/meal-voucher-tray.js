@@ -46,7 +46,11 @@ export function createMealVoucherTray({ store, assertSession, pickFiles, capture
     }
     if (failures.length) throw new Error(`Os lançamentos e arquivos foram gravados. Não foi possível limpar a cópia temporária de: ${failures.join(', ')}. Não repita o lançamento.`);
   }
-  async function action(callback) { assertSession(); const result = await callback(); assertSession(); return result; }
+  async function action(callback) {
+    assertSession(); const result = await callback(); assertSession();
+    if (result === false) throw new Error(store.getState().error || 'Não foi possível concluir a ação na bandeja. Confira os anexos antes de continuar.');
+    return result;
+  }
   return Object.freeze({ snapshot, read, consume,
     subscribe:listener=>store.subscribe(()=>{try{assertSession();}catch{return;}listener();}),
     pickFiles:()=>action(pickFiles), capture:()=>action(capture),
