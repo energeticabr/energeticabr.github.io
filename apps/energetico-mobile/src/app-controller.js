@@ -1,5 +1,6 @@
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "./chat/supplier-payroll.js";
 import { MEAL_VOUCHER_REPLY_ID } from './chat/meal-voucher.js';
+import { createMealVoucherTray } from './chat/meal-voucher-tray.js';
 import { canDeleteRhidAdjustment } from './chat/rhid-adjustment-ownership.js';
 import { diaryFieldVisitOptionId } from './chat/diary-field-visit-options.js';
 import { PAYROLL_BREAKDOWN_REPLY_ID, isPayrollBreakdownMenu } from './chat/payroll-breakdown.js';
@@ -5894,7 +5895,12 @@ export function createAppController({
           await data.prepare?.();
           assertSession();
           allowAuthorization = false;
-          const panel = await mealVoucherFactory({ data, assertSession, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
+          const attachmentTray = createMealVoucherTray({store,assertSession,
+            pickFiles:()=>queueSelectedFiles(()=>native.pickDocuments()), capture:capturePhotoOrScan,
+            open:openFile, remove:(id,kind)=>kind === 'pending' ? removeFile(id) : removeAttachment(id,{confirm:false}),
+            load:loadAttachment, deleteAttachment:id=>client.deleteAttachment(id),
+          });
+          const panel = await mealVoucherFactory({ data, assertSession, attachmentTray, sessionKey: owner.homeAccountId, onHome: () => { assertSession(); return returnToMainMenu(); } });
           if (stopped || account !== owner || sessionRevision !== revision) { panel.destroy?.(); return false; }
           mealVoucher = panel;
         }

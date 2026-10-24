@@ -2,11 +2,12 @@ import { mealVoucherLines, mealVoucherTotal, mealVoucherKey, validateMealVoucher
 import { createLoadingIndicator } from './loading-indicator.js';
 import { applyScreenNavigation } from './screen-navigation.js';
 import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
+import { sameMealVoucherTray } from '../chat/meal-voucher-tray.js';
 
 const money = amount => Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 let sequence = 0;
 
-export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, sessionKey = '', storage = globalThis.localStorage } = {}) {
+export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, attachmentTray, sessionKey = '', storage = globalThis.localStorage } = {}) {
   if (!data || !documentRef?.createElement) throw new TypeError('A tela exige dados e documento.');
   const doc = documentRef, id = ++sequence;
   const el = (tag, className = '', text) => { const node = doc.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
@@ -15,11 +16,14 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   const back = el('button', 'meal-voucher-navigation', 'Voltar'), home = el('button', 'meal-voucher-navigation', 'Início'); back.type = home.type = 'button';
   applyScreenNavigation({ header, back, home, title });
   const body = el('div', 'meal-voucher-body'), error = el('p', 'meal-voucher-error'), content = el('div', 'meal-voucher-content'), footer = el('footer', 'meal-voucher-footer'); error.hidden = true; error.setAttribute('role', 'alert');
-  body.append(error, content); page.append(header, body, footer); (root || doc.body).append(page);
+  const tray = el('section','meal-voucher-tray'); tray.dataset.mealTray = ''; tray.setAttribute('aria-label','Barra de anexos');
+  body.append(error, content); page.append(header, body, tray, footer); (root || doc.body).append(page);
   let opened = false, destroyed = false, busy = false, mutating = false, epoch = 0, step = 'lines', previousFocus = null;
   let detailPickers = null;
   let available = { suppliers: [], accounts: [], stages: [] }, orders = [], assignments = {}, result = null;
   let progress = {}, draft = {}, expectedFiles = [];
+  const trayAccess = attachmentTray || {snapshot:()=>[],read:async()=>[]};
+  let reviewedTray = null, trayActionBusy = false;
   const storageKey = sessionKey ? `energetico:meal-voucher:pending:${sessionKey}` : '';
   let pendingSnapshot = null;
   function savedFiles(files) { return files.map(file => ({ name: file.name, size: file.size, lastModified: file.lastModified })); }
@@ -52,7 +56,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   function reset() {
     draft = { lines: [], orderMode: '', orderId: '', date: '', dueDate: '', paymentDate: '', referenceMonth: '', account: null, stage: null, obs: '', files: [] };
     progress = { operationId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
-    expectedFiles = []; result = null; step = 'lines';
+    expectedFiles = []; reviewedTray = null; result = null; step = 'lines';
   }
   reset();
   const locked = () => Boolean(progress.signature) && progress.editable !== true;
@@ -83,6 +87,50 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   const button = (label, attribute, action) => { const node = el('button', 'meal-voucher-button', label); node.type = 'button'; if (attribute) node.setAttribute(attribute, ''); node.addEventListener('click', () => { if (!busy && !destroyed) void action(); }); return node; };
   const field = (label, input) => { const wrapper = el('label', 'meal-voucher-field'); wrapper.append(el('span', '', label), input); return wrapper; };
   function showError(cause) { error.textContent = cause?.message || 'Não foi possível concluir. Tente novamente.'; error.hidden = false; }
+  async function trayAction(action) {
+    if (busy || trayActionBusy || destroyed || !opened) return;
+    trayActionBusy = true; error.hidden = true; renderTray();
+    try { assertSession(); await action(); assertSession(); }
+    catch (cause) { if (opened && !destroyed) showError(cause); }
+    finally { trayActionBusy = false; if (opened && !destroyed) { trayChanged(); renderTray(); } }
+  }
+  function renderTray() {
+    tray.replaceChildren(); tray.hidden = step === 'done';
+    if (tray.hidden) return;
+    const sources = trayAccess.snapshot(), top = el('div','meal-voucher-tray-heading');
+    top.append(el('strong','',`📎 Anexos (${sources.length})`));
+    const actions = el('div','meal-voucher-tray-actions');
+    for (const [label,attribute,callback,title] of [
+      ['📎','data-meal-tray-pick',trayAccess.pickFiles,'Selecionar arquivos'],
+      ['📷','data-meal-tray-capture',trayAccess.capture,'Foto / Escanear'],
+    ]) {
+      const control = button(label,attribute,()=>trayAction(()=>callback())); control.title = title; control.setAttribute('aria-label',title);
+      control.disabled = busy || trayActionBusy || !callback; actions.append(control);
+    }
+    top.append(actions); tray.append(top);
+    if (!sources.length) { tray.append(el('p','meal-voucher-tray-empty','Os arquivos da bandeja serão enviados ao pedido e ao último lançamento.')); return; }
+    const list = el('ul','meal-voucher-tray-list');
+    for (const source of sources) {
+      const row = el('li','meal-voucher-tray-file'), details = el('div');
+      details.append(el('strong','',source.fileName),el('small','',source.status === 'failed' ? 'Falha no envio — remova ou tente novamente' : source.status !== 'ready' ? 'Enviando… Aguarde para confirmar.' : 'Será enviado ao pedido e ao último lançamento'));
+      row.append(details);
+      for (const [label,attribute,callback] of [['Visualizar','data-meal-tray-open',trayAccess.open],['Remover','data-meal-tray-remove',trayAccess.remove]]) {
+        const control = button(label,attribute,()=>trayAction(()=>callback(source.id)));
+        control.disabled = busy || trayActionBusy || source.status === 'sending' || !callback; row.append(control);
+      }
+      list.append(row);
+    }
+    tray.append(list);
+  }
+  function trayChanged() {
+    if (!opened || destroyed) return;
+    if (step === 'summary' && !busy && !trayActionBusy && !sameMealVoucherTray(reviewedTray || [],trayAccess.snapshot())) {
+      if (locked()) expectedFiles = savedFiles(draft.files);
+      reviewedTray = null; draft.files = []; step = 'extras'; render();
+      showError(new Error('A bandeja de anexos mudou. Confira os arquivos e avance novamente para revisar.'));
+    } else renderTray();
+  }
+  const unsubscribeTray = trayAccess.subscribe?.(trayChanged);
   function branch() { const lines = mealVoucherLines(draft.lines); const branch = lines[0].supplier.branch; if (lines.some(line => mealVoucherKey(line.supplier.branch) !== mealVoucherKey(branch))) throw new Error('Selecione fornecedores da mesma filial para um pedido.'); return branch; }
   async function work(action, message, mutation = false) {
     if (!opened || destroyed || busy) return false;
@@ -191,17 +239,25 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     }));
   }
   function renderExtras() {
-    content.append(el('h2', '', 'Há alguma OBS ou anexos adicionais?'));
+    content.append(el('h2', '', 'Há alguma OBS?'));
     if (expectedFiles.length) content.append(el('p', 'meal-voucher-warning', locked()
-      ? `Para retomar o envio, selecione novamente estes anexos: ${expectedFiles.map(file => file.name).join(', ')}. Eles só serão enviados se ainda não estiverem no pedido.`
-      : `Selecione novamente os anexos que deseja incluir. Anexos da tentativa anterior: ${expectedFiles.map(file => file.name).join(', ')}.`));
+      ? `Para retomar, mantenha estes arquivos na barra de anexos: ${expectedFiles.map(file => file.name).join(', ')}. Arquivos já confirmados não serão duplicados.`
+      : `Confira a barra de anexos. Arquivos da tentativa anterior: ${expectedFiles.map(file => file.name).join(', ')}.`));
     const obs = el('textarea'); obs.name = 'meal-obs'; obs.rows = 3; obs.value = draft.obs; obs.placeholder = 'Observação opcional'; obs.addEventListener('input', () => { draft.obs = obs.value; }); content.append(field('OBS (opcional)', obs));
-    const files = el('input'); files.type = 'file'; files.multiple = true; files.name = 'meal-files'; files.addEventListener('change', () => { draft.files = [...files.files]; list.textContent = draft.files.length ? draft.files.map(file => file.name).join(', ') : 'Sem anexos'; });
-    content.append(field('Anexos adicionais (opcional; serão anexados ao pedido)', files)); const list = el('p', '', draft.files.length ? draft.files.map(file => file.name).join(', ') : 'Sem anexos'); content.append(list);
-    footer.append(button('Seguir', 'data-meal-next', () => { try {
-      if (locked() && expectedFiles.length && JSON.stringify(savedFiles(draft.files)) !== JSON.stringify(expectedFiles)) throw new Error('Selecione novamente os mesmos anexos antes de retomar.');
-      validateMealVoucherDraft(draft); expectedFiles = []; step = 'summary'; render();
-    } catch (cause) { showError(cause); } }));
+    content.append(el('p','','Os arquivos serão incluídos automaticamente pela barra de anexos abaixo.'));
+    footer.append(button('Seguir', 'data-meal-next', () => {
+      const sources = trayAccess.snapshot(), expected = locked() ? expectedFiles.length ? expectedFiles : savedFiles(draft.files) : [];
+      const accept = files => {
+        if (locked()) {
+          const ordered = expected.map(meta=>files.find(file=>file.name===meta.name && file.size===meta.size && file.lastModified===meta.lastModified));
+          if (ordered.some(file=>!file) || files.length !== expected.length) throw new Error('Mantenha os mesmos anexos na barra antes de retomar o envio.');
+          files = ordered;
+        }
+        draft.files = files; validateMealVoucherDraft(draft); expectedFiles = []; reviewedTray = sources; step = 'summary';
+      };
+      if (!sources.length && !expected.length) { try { accept([]); render(); } catch (cause) { showError(cause); } return; }
+      return work(async()=>{const files = await trayAccess.read(sources,expected); assertSession(); accept(files);},'Conferindo arquivos da bandeja…');
+    }));
   }
   function renderSummary() {
     const verified = validateMealVoucherDraft(draft);
@@ -264,14 +320,18 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     }
     footer.append(button('Voltar', 'data-meal-review-back', navigateBack));
     footer.append(button(locked() ? 'Retomar envio' : 'Confirmar e lançar', 'data-meal-confirm', () => work(async () => {
+      if (!sameMealVoucherTray(reviewedTray || [],trayAccess.snapshot())) { step = 'extras'; throw new Error('A bandeja mudou. Revise os anexos antes de confirmar.'); }
       savePending();
       result = await data.post(verified, progress, savePending);
       clearPending(); step = 'done';
+      try { await trayAccess.consume?.(reviewedTray || []); }
+      catch (cause) { assertSession(); showError(cause); }
     }, 'Gravando pedido e lançamentos…', true)));
   }
   function render(message) {
     detailPickers?.destroy(); detailPickers = null;
     content.replaceChildren(); footer.replaceChildren(); footer.hidden = true; back.disabled = home.disabled = mutating;
+    renderTray();
     if (busy) { content.append(createLoadingIndicator(doc, message || 'Carregando vale-alimentação…')); return; }
     if (step === 'lines') renderLines();
     if (step === 'order') renderOrder();
@@ -289,10 +349,10 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     if (locked() && step !== 'done') content.prepend(el('p', 'meal-voucher-warning', 'Esta tentativa possui registros gravados ou ainda não foi possível conferi-los. Para evitar duplicidade, a edição está protegida. Retomar envia somente os registros pendentes.'));
     if (locked() && step !== 'summary' && step !== 'done') {
       for (const control of content.querySelectorAll('input, select, textarea, button')) {
-        if (step !== 'extras' || !expectedFiles.length || control.type !== 'file') control.disabled = true;
+        control.disabled = true;
       }
       detailPickers?.sync();
-      if (step !== 'extras' || !expectedFiles.length) {
+      if (step !== 'extras') {
         footer.replaceChildren(button('Seguir', 'data-meal-next', () => {
           step = { lines: 'order', order: 'details', details: 'extras', extras: 'summary' }[step];
           render();
@@ -327,6 +387,6 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
       }
     }, 'Carregando fornecedores…'); return true; },
     close,
-    destroy() { destroyed = true; opened = false; epoch++; detailPickers?.destroy(); detailPickers = null; page.remove(); },
+    destroy() { destroyed = true; opened = false; epoch++; unsubscribeTray?.(); detailPickers?.destroy(); detailPickers = null; page.remove(); },
   });
 }

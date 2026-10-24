@@ -66,5 +66,15 @@
 .meal-voucher-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); background: #e2f0f5; border-top: 1px solid #bfd3dc; }
 .meal-voucher-footer .meal-voucher-button { background: #075a70; color: #fff; }
 .meal-voucher-footer [data-meal-review-back] { background: #fff; color: #173b56; }
+.meal-voucher-tray { flex: none; min-height: 0; padding: 8px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left)); border-top: 1px solid #bfd3dc; background: #e2f0f5; }
+.meal-voucher-tray-heading, .meal-voucher-tray-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.meal-voucher-tray-actions .meal-voucher-button { width: 46px; padding: 5px; font-size: 1.35rem; }
+.meal-voucher-tray-empty { margin: 4px 0 0; font-size: .78rem; color: #526a78; }
+.meal-voucher-tray-list { margin: 7px 0 0; padding: 0; list-style: none; max-height: 20dvh; overflow: auto; overscroll-behavior: contain; }
+.meal-voucher-tray-file { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 5px; padding: 8px; border-radius: 10px; background: #fff; }
+.meal-voucher-tray-file > div { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.meal-voucher-tray-file strong { overflow-wrap: anywhere; font-size: .85rem; }
+.meal-voucher-tray-file small { font-size: .72rem; color: #526a78; }
+.meal-voucher-tray-file .meal-voucher-button { padding: 5px; font-size: .73rem; }
 @media (max-width: 600px) { .meal-voucher-table { font-size: .82rem; } .meal-voucher-table th, .meal-voucher-table td { padding: 5px; } .meal-voucher-table td small { font-size: .72rem; } .meal-voucher-header h1 { font-size: .9rem; } .meal-voucher-review { gap: 10px; } .meal-voucher-person-card { padding: 8px; } .meal-voucher-avatar { flex-basis: 38px; height: 38px; font-size: .85rem; } .meal-voucher-metric { padding: 6px 5px; } .meal-voucher-metric small { font-size: .63rem; } .meal-voucher-metric strong { font-size: .74rem; } .meal-voucher-review-total-value { font-size: 1.18rem; } .meal-voucher-footer:has([data-meal-review-back]) .meal-voucher-button { flex: 1; } }
 @media (max-width: 380px) { .meal-voucher-person-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .meal-voucher-people-title { align-items: flex-start; flex-direction: column; } }

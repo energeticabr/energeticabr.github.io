@@ -11303,6 +11303,52 @@ function openPayrollMenu(h) {
   h.store.ingestRemoteMessages([{ type: "poll", question: "COMO DESEJA EFETUAR O LANÇAMENTO?", options: [{ id: "choice:tipo_lancamento:2", label: "LANÇAMENTO MÚLTIPLO" }] }], { activeFlow: { id: "launch", title: "EFETUAR LANÇAMENTO", rows: [{ label: "TIPO DE PEDIDO", value: "NOVO PEDIDO" }] } });
 }
 
+test('vale usa bandeja compartilhada, lê os bytes, consome apenas o lote confirmado e invalida a sessão', async t => {
+  let options; const h=makeHarness({mealVoucherDataFactory:async()=>({prepare:async()=>{}}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop()); await h.controller.start(); openPayrollMenu(h);
+  const receipt={id:'receipt',fileName:'comprovante.pdf',size:3,mimeType:'application/pdf',mediaUrl:'/api/portal-media/receipt'};
+  h.store.syncAttachments([receipt,{id:'existing',fileName:'antigo.pdf',mediaUrl:'/api/portal-media/existing',existing:true}]);
+  await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  const tray=options.attachmentTray; assert.ok(tray,'a tela recebe a bandeja do controlador');
+  h.client.fetchMedia=async()=>new Blob(['abc'],{type:'application/pdf'});
+  let changed=0;const off=tray.subscribe(()=>changed++);const selected=tray.snapshot();
+  assert.deepEqual(selected.map(f=>f.fileName),['comprovante.pdf']);
+  const files=await tray.read(selected);assert.equal(await files[0].text(),'abc');assert.equal(files[0].name,'comprovante.pdf');assert.equal(files[0].lastModified,0);
+  assert.equal(h.store.getState().attachments.length,2,'ler a bandeja não a consome');
+  h.store.syncAttachments([receipt,{id:'new',fileName:'depois.pdf',mediaUrl:'/api/portal-media/new'}]);
+  assert.ok(changed);await assert.rejects(tray.read(selected),/bandeja.*mud|mud.*bandeja/i);
+  await tray.consume(selected);
+  assert.deepEqual(h.store.getState().attachments.map(f=>f.id),['new']);
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='delete-attachment'),[['delete-attachment','receipt']]);
+  off();h.controller.stop();assert.throws(()=>tray.snapshot(),/sessão/);await assert.rejects(tray.read([]),/sessão/);
+});
+
+test('vale não libera confirmação com envio pendente ou falho nem com arquivo removido durante a leitura', async t => {
+  let options;const h=makeHarness({mealVoucherDataFactory:async()=>({}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  const file=new File(['abc'],'local.pdf',{type:'application/pdf'});h.store.queueFiles([file]);
+  const id=h.store.getState().pendingFiles[0].id,operation=h.store.beginFile(id);
+  await assert.rejects(options.attachmentTray.read(options.attachmentTray.snapshot()),/envi|aguarde/i);
+  h.store.markFileError(id,new Error('falhou'));await assert.rejects(options.attachmentTray.read(options.attachmentTray.snapshot()),/falh|remov|tente/i);
+  h.store.discardFile(id);
+  h.store.syncAttachments([{id:'remote',fileName:'nota.pdf',mediaUrl:'/api/portal-media/remote'}]);
+  let finish;h.client.fetchMedia=()=>new Promise(resolve=>{finish=resolve;});const pending=options.attachmentTray.read(options.attachmentTray.snapshot());
+  await tickController();h.store.syncAttachments([]);finish(new Blob(['abc'],{type:'application/pdf'}));
+  await assert.rejects(pending,/bandeja.*mud|mud.*bandeja/i);
+});
+
+async function tickController(){await new Promise(resolve=>setImmediate(resolve));}
+
+test('clipe e câmera da bandeja do vale usam os mesmos caminhos nativos de arquivo e escaneamento', async t => {
+  let options;const h=makeHarness({mealVoucherDataFactory:async()=>({}),mealVoucherFactory:async value=>{options=value;return {open(){},destroy(){}};}});
+  t.after(()=>h.controller.stop());await h.controller.start();openPayrollMenu(h);await h.view.emit('select-reply',{replyId:'action_meal_voucher_launch'});
+  h.native.pickDocuments=async()=>[new File(['pdf'],'arquivo.pdf',{type:'application/pdf'})];
+  h.view.chooseCaptureMode=async()=>'scan';h.native.scanDocument=async()=>[new File(['scan'],'escaneado.pdf',{type:'application/pdf'})];
+  await options.attachmentTray.pickFiles();await options.attachmentTray.capture();
+  assert.deepEqual(options.attachmentTray.snapshot().map(item=>item.fileName),['arquivo.pdf','escaneado.pdf']);
+  assert.deepEqual(h.chatCalls.filter(c=>c[0]==='file').map(c=>c[1]),['arquivo.pdf','escaneado.pdf']);
+});
+
 test("BUSCAR da folha usa seletores nativos sem enviar anexos ao chat e rejeita sessão encerrada", async t => {
   let options;
   const h = makeHarness({
