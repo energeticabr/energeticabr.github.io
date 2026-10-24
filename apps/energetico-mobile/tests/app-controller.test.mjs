@@ -3189,6 +3189,47 @@ test("filtro de banco é automático, preserva a digitação e limpa ao selecion
   assert.equal(h.store.getState().draft, "");
 });
 
+for (const description of ['Limpeza', 'Preparação do pavimento para concretagem', '134']) {
+  test(`descrição própria envia o texto sem convertê-lo em busca: ${description}`, async t => {
+    const h = makeHarness({ databaseFilterDebounceMs: 50 });
+    t.after(() => h.controller.stop());
+    await h.controller.start();
+    h.chatCalls.length = 0;
+    h.store.ingestRemoteMessages([{ type: 'poll', question: 'QUAL É A DESCRIÇÃO DA ATIVIDADE EXECUTADA?',
+      databaseFilter: true, databaseFilterKey: 'atividade_demonstrativo_etapa', acceptsCustomText: true,
+      options: [{ id: 'choice:atividade_demonstrativo_etapa:134', label: '134 - ALVENARIA QA' }] }],
+    { activeFlow: { id: 'construction_stage_demonstrative_create', title: 'VALIDAR PRESENÇAS' } });
+    await h.view.emit('draft-changed', { value: description });
+    await h.view.emit('database-filter-changed', { value: description, filterKey: 'atividade_demonstrativo_etapa' });
+    assert.equal(await h.view.emit('send-text'), true);
+    await new Promise(resolve => setTimeout(resolve, 80));
+    assert.deepEqual(h.chatCalls.filter(call => call[0] === 'text').map(call => call[1]), [{ text: description }]);
+    assert.equal(h.store.getState().draft, '');
+  });
+}
+
+test('descrição própria mantém busca silenciosa e escolha explícita de atividade', async t => {
+  const h = makeHarness({ databaseFilterDebounceMs: 1 });
+  t.after(() => h.controller.stop());
+  await h.controller.start();
+  const poll = { type: 'poll', question: 'QUAL É A DESCRIÇÃO DA ATIVIDADE EXECUTADA?',
+    databaseFilter: true, databaseFilterKey: 'atividade_demonstrativo_etapa', acceptsCustomText: true,
+    options: [{ id: 'choice:atividade_demonstrativo_etapa:134', reply: 'choice:atividade_demonstrativo_etapa:134', label: '134 - ALVENARIA QA' }] };
+  h.store.ingestRemoteMessages([poll]);
+  const payloads = [];
+  h.client.sendText = async payload => {
+    payloads.push(payload);
+    return { status: 'processed', messages: payload.replyId === 'filter_query' ? [poll] : [{ type: 'text', text: 'Próxima pergunta' }] };
+  };
+  await h.view.emit('draft-changed', { value: 'alv' });
+  await h.view.emit('database-filter-changed', { value: 'alv', filterKey: 'atividade_demonstrativo_etapa' });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(payloads, [{ text: 'alv', replyId: 'filter_query' }]);
+  assert.equal(h.store.getState().draft, 'alv');
+  await h.view.emit('select-reply', { replyId: 'choice:atividade_demonstrativo_etapa:134', label: '134 - ALVENARIA QA' });
+  assert.deepEqual(payloads.at(-1), { text: '134 - ALVENARIA QA', replyId: 'choice:atividade_demonstrativo_etapa:134' });
+});
+
 test("filtro remoto mantém CADASTRAR NOVO quando o servidor devolve zero opções", async t => {
   const h = makeHarness({ databaseFilterDebounceMs: 1 });
   t.after(() => h.controller.stop());
