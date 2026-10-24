@@ -25,6 +25,7 @@ const root=document.querySelector('.lg-overlay'),search=root.querySelector('[dat
 search.focus();search.value='Mauro';search.dispatchEvent(new Event('input',{bubbles:true}));search.setSelectionRange(2,4);
 await sleep(220);
 const during={focused:document.activeElement===search,loaderHidden:root.querySelector('.gallery-loading-screen').hidden,
+  focusInNavigation:root.querySelector(':scope > header').contains(document.activeElement),
   interactive:!search.closest('[inert]'),cards:root.querySelectorAll('.lg-record').length,
   caret:[search.selectionStart,search.selectionEnd],status:root.querySelector('.lg-list-status').textContent};
 search.value='Mauro central';search.dispatchEvent(new Event('input',{bubbles:true}));
@@ -40,6 +41,7 @@ const dimensions=[small.width,small.height];small.close();
 document.querySelector('#thumbnail').src=preview;
 document.querySelector('#result').textContent='Busca sem interrupção · miniatura 520 × 347';
 const layout={during,staleIgnored,finalIds:[...root.querySelectorAll('.lg-record')].map(item=>item.dataset.itemId),
-  search:search.value,thumbnail:dimensions,overflow:root.scrollWidth>innerWidth+1};
+  search:search.value,thumbnail:dimensions,overflow:root.scrollWidth>innerWidth+1,
+  ready:root.querySelector('.gallery-loading-screen').hidden && !search.closest('[inert]') && document.activeElement===search};
 document.documentElement.dataset.layout=JSON.stringify(layout);
 </script></body></html>

@@ -65,6 +65,8 @@ test('launch search covers preserved cards until filtered results and totals are
   assert.equal(ctx.pending[1].payload.page, 1);
   assert.equal(ctx.pending[1].payload.pageSize, 20);
   assertRecalculating(ctx);
+  assert.ok(ctx.root.querySelector(':scope > header').contains(ctx.dom.window.document.activeElement),
+    'keyboard focus stays in the available gallery navigation while its search is inert');
   assert.equal(ctx.root.querySelector('.lg-list-status').textContent, status,
     'typing does not replace the result count with a loading/searching message');
   assert.equal(ctx.root.querySelector('.lg-record'), card);
@@ -189,6 +191,33 @@ test('invalid dates release a pending loader and cannot publish an older result'
   assert.match(ctx.root.querySelector('.lg-notice').textContent, /A data final/);
   ctx.pending[1].resolve(snapshot(901)); await settle();
   assert.deepEqual(ctx.rows(), ['17']);
+});
+
+test('pagination after an invalid date range releases the loader when no filter is queued', async t => {
+  const ctx = setup(t); await ctx.open();
+  const start = ctx.root.querySelector('[name="dateStart"]'), end = ctx.root.querySelector('[name="dateEnd"]');
+  start.value = '2026-10-20';
+  start.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  ctx.pending[1].resolve(snapshot()); await settle();
+  end.value = '2026-10-01';
+  end.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  [...ctx.root.querySelectorAll('.lg-pagination button')].find(node => node.textContent === 'Próxima página').click();
+  assert.equal(ctx.pending[2].payload.page, 2);
+  ctx.pending[2].resolve(snapshot(901, { page: 2 })); await settle();
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
+  assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
+  assert.deepEqual(ctx.rows(), ['901']);
+});
+
+test('finishing a search does not steal focus after navigation with Tab', async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.search.focus(); ctx.type('new'); await ctx.tick();
+  const back = ctx.root.querySelector(':scope > header button');
+  back.focus();
+  back.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  ctx.pending[1].resolve(snapshot(901)); await settle();
+  assert.equal(ctx.dom.window.document.activeElement, back);
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
 });
 
 test('initial opening and explicit refresh retain the blocking loader', async t => {

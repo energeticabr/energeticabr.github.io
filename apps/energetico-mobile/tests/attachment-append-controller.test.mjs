@@ -79,6 +79,39 @@ test('cancelled selection, stale flow and close during picker never call replace
   }
 });
 
+for (const mode of ['files', 'camera']) test(`a refreshed flow title does not disable the valid ${mode} append action`, async t => {
+  const h = await harness(t), preview = h.previews[0];
+  h.store.ingestRemoteMessages([], { activeFlow: { id: 'document_create', contextId: 'batch-1', title: 'Adicionar documento' } });
+  const result = await preview.onAppendPages(mode, { blob: h.original, fileName: h.original.name,
+    signal: new AbortController().signal });
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].id, oldId);
+  assert.equal((await PDFDocument.load(await result.blob.arrayBuffer())).getPageCount(), 2);
+  assert.equal(h.store.getState().attachments[0].id, nextId);
+  assert.equal(h.store.getState().draft, 'rascunho preservado');
+});
+
+test('a flow changed before the append choice explains why the picker cannot open', async t => {
+  const h = await harness(t), preview = h.previews[0];
+  let selections = 0;
+  h.native.pickDocuments = async () => { selections++; return [h.extra]; };
+  h.view.chooseCaptureMode = async () => { selections++; return 'scan'; };
+  h.store.ingestRemoteMessages([], { activeFlow: { id: 'document_create', contextId: 'batch-2', title: 'Documento' } });
+  for (const mode of ['files', 'camera']) {
+    await assert.rejects(preview.onAppendPages(mode, { blob: h.original, fileName: h.original.name,
+      signal: new AbortController().signal }), error => error.code === 'ATTACHMENT_PREVIEW_STALE' && /abra.*novamente|reabra/i.test(error.message));
+  }
+  assert.equal(selections, 0, 'a stale preview must not start any picker');
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.store.getState().attachments[0].id, oldId);
+  assert.equal(h.store.getState().pendingFiles.length, 0);
+  await h.view.emit('open-file', { fileId: oldId });
+  const result = await h.previews.at(-1).onAppendPages('files', { blob: h.original, fileName: h.original.name,
+    signal: new AbortController().signal });
+  assert.equal(selections, 1, 'reopening the tray file captures the current context');
+  assert.equal((await PDFDocument.load(await result.blob.arrayBuffer())).getPageCount(), 2);
+});
+
 test('uncertain replacement retry reuses composed PDF and request id instead of opening picker or appending twice', async t => {
   const h = await harness(t), preview = h.previews[0], replace = h.client.replaceAttachment;
   let attempts = 0, selections = 0, failedRequest;

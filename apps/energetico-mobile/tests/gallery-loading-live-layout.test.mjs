@@ -27,7 +27,12 @@ test('all gallery loaders are centered below navigation without leaking content 
       assert.ok(Array.isArray(results), JSON.stringify(results));
       assert.equal(results.length, galleryCases.length);
       for (const result of results) {
-        if (result.name === 'launch') assert.equal(result.filtering.label, 'Recalculando a galeria…');
+        if (result.name === 'launch') {
+          assert.equal(result.filtering.label, 'Recalculando a galeria…');
+          assert.equal(result.filtering.focusInNavigation, true, `${width}px pending search retains dialog focus`);
+          assert.equal(result.filtering.focusRestored, true, `${width}px completed search restores its input`);
+          assert.deepEqual(result.filtering.selection, [1, 2, 'backward']);
+        }
         for (const state of ['initial', 'refreshing', ...(result.filtering ? ['filtering'] : [])]) {
           const layout = result[state], message = `${width}x${height} ${result.name} ${state}: ${JSON.stringify(layout)}`;
           assert.equal(layout.missing, undefined, message);

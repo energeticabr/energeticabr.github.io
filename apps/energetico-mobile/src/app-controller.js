@@ -10679,11 +10679,19 @@ export function createAppController({
   function trayPageAppender(initialItem) {
     let target = initialItem, pendingAttempt = null;
     const owner = account, revision = sessionRevision, flow = store.getState().activeFlow;
+    // A refreshed display title is not a new attachment scope. Keep the title
+    // fallback only for legacy flows without either stable identifier.
+    const flowScope = flow && (flow.id != null || flow.contextId != null)
+      ? { id: flow.id, contextId: flow.contextId } : flow;
     return async (mode, { blob, fileName, signal, onProgress } = {}) => {
       const current = () => !stopped && account === owner && sessionRevision === revision
-        && !signal?.aborted && !isDifferentActiveFlow(flow, store.getState().activeFlow)
+        && !signal?.aborted && !isDifferentActiveFlow(flowScope, store.getState().activeFlow)
         && Boolean(flow) === Boolean(store.getState().activeFlow);
-      if (!current()) return null;
+      if (!current()) {
+        if (stopped || account !== owner || sessionRevision !== revision || signal?.aborted) return null;
+        throw Object.assign(new Error('O fluxo deste anexo mudou. Feche esta prévia e abra o anexo novamente na bandeja para acrescentar páginas.'),
+          { code: 'ATTACHMENT_PREVIEW_STALE' });
+      }
       if (flowBusy() || attachmentSigningBusy) throw new Error('Aguarde a operação atual antes de acrescentar páginas.');
       if (!['files', 'camera'].includes(mode)) return null;
       if (store.getState().pendingFiles.some(item => item.id === target.id)) {

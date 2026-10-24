@@ -224,13 +224,17 @@ export function createAttachmentPreview({
     } catch (error) {
       if (!isCurrent()) return;
       if (error?.name === "AbortError") restoreStatus();
+      else if (error?.code === "ATTACHMENT_PREVIEW_STALE") {
+        session.onAppendPages = undefined;
+        status.textContent = error.message;
+      }
       else status.textContent = `Não foi possível acrescentar páginas. ${error?.message || ""} Tente novamente no botão +.`;
     } finally {
       if (active === session && session.append === operation) {
         session.append = null;
         status.removeAttribute("aria-busy");
         updateAppendControls();
-        appendButton.focus({ preventScroll: true });
+        (appendButton.hidden ? closeButton : appendButton).focus({ preventScroll: true });
       }
     }
   }

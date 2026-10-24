@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../../src/styles.css">
+<link rel="stylesheet" href="../../src/ui/launch-gallery.css">
+</head><body><script type="module">
+import { createLaunchGallery } from '../../src/ui/launch-gallery-view.js';
+const snapshot = { rows: [{ id: 901, hasAttachments: false, fields: { FORNECEDOR: 'FORNECEDOR QA' } }],
+  count: 1, page: 1, pages: 1, totals: { paid: 90 }, filterOptions: {} };
+let requests = 0, release;
+const gallery = createLaunchGallery({ document, request: () => {
+  if (++requests === 1) return Promise.resolve(snapshot);
+  return new Promise(resolve => { release = resolve; });
+} });
+document.addEventListener('qa-release-filter', () => release?.(snapshot));
+await gallery.open();
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
