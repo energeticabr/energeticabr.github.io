@@ -106,6 +106,7 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
     apply: applyNow,
     cancelPending,
     sync,
+    hasPendingApplication() { return timer !== null || composing.size > 0; },
     // A discarded async result must be fetched again even if typing returns to its query.
     invalidate() { lastAppliedValues = null; },
     destroy() {

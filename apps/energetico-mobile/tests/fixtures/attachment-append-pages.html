@@ -7,14 +7,27 @@ import { createChatView } from '../../src/ui/chat-view.js';
 import { createConversationStore } from '../../src/chat/conversation-store.js';
 import { createAppController } from '../../src/app-controller.js';
 import { createAttachmentPreview } from '../../src/web/attachment-preview.js';
+import { createBrowserPorts } from '../../src/web/browser-ports.js';
+import { installAppZoomGuard } from '../../src/web/app-zoom-guard.js';
 import { PDFDocument, rgb } from 'pdf-lib';
 
 // Fictitious picker/camera/server boundaries. Real controller, PDF composition,
 // store, tray, event handlers and PDF renderer. No real uploads or tenant data.
 const params = new URLSearchParams(location.search), root = document.querySelector('#app');
+installAppZoomGuard();
+const browserPorts = createBrowserPorts();
 const store = createConversationStore(), view = createChatView(root), preview = createAttachmentPreview({ canEmbedPdf: () => false });
 const initialId = 'a'.repeat(64), blobs = new Map();
-let replacements = 0, pickerCalls = 0, cameraCalls = 0, networkWrites = 0, sentText = 0, sentFile = 0;
+let replacements = 0, replacementRequests = 0, pickerCalls = 0, cameraCalls = 0, networkWrites = 0, sentText = 0, sentFile = 0;
+let confirmReplacement;
+const confirmation = new Promise(resolve => { confirmReplacement = resolve; });
+const interactions = [];
+for (const capture of [true, false]) document.addEventListener('click', event => {
+  if (!event.target.closest?.('.attachment-preview-dialog, .document-scanner')) return;
+  interactions.push({ capture, trusted: event.isTrusted, action: event.target.dataset.previewAction || event.target.dataset.cameraMode || '',
+    defaultPrevented: event.defaultPrevented, menuHidden: document.querySelector('.attachment-preview-append-menu')?.hidden,
+    modals: [...document.querySelectorAll('dialog:modal')].map(dialog => dialog.className) });
+}, capture);
 const originalFetch = window.fetch;
 window.fetch = (url, options) => { if (options?.method && !['GET','HEAD'].includes(options.method)) networkWrites++; return originalFetch(url, options); };
 async function pdf(title, count = 1) {
@@ -47,14 +60,16 @@ const controller = createAppController({ store, view,
   diaryFieldVisitDataFactory:async () => ({load:async()=>[]}),
   pendingProvisionAttachmentsDataFactory:async () => ({loadUpcomingPayments:async()=>[],listAttachments:async()=>[]}),
   native: { importSharedItems:async()=>[], previewMedia:preview.open, closePreview:preview.close,
-    pickDocuments:async()=>{ pickerCalls++; return [additional,image]; },
-    capturePhoto:async()=>{ cameraCalls++;return [image]; }, scanDocument:async()=>{ cameraCalls++;return [scan]; } },
+    pickDocuments:async()=>{ pickerCalls++; return params.has('browser-picker') ? browserPorts.pickDocuments() : [additional,image]; },
+    capturePhoto:async()=>{ cameraCalls++;return params.has('browser-picker') ? browserPorts.capturePhoto() : [image]; }, scanDocument:async()=>{ cameraCalls++;return [scan]; } },
   client: { fetchMedia:async item=>blobs.get(item.id),
     getAttachments:async()=>attachments,
     sendText:async()=>{ sentText++; return {status:'processed',messages:[question],activeFlow:flow,attachments}; },
     sendFile:async()=>{ sentFile++; throw new Error('Não reenviar no chat'); },
     replaceAttachment:async(id,file,options)=>{
       if(id!==attachments[0].id)throw new Error('Alvo incorreto');
+      replacementRequests++;
+      if(params.has('hold-confirmation')) await confirmation;
       options.onProgress?.({percent:45}); await new Promise(resolve=>setTimeout(resolve,120));
       const replacement={id:(++replacements===1?'b':'c').repeat(64),fileName:file.name,size:file.size,mimeType:file.type,mediaUrl:'/synthetic/replaced'};
       blobs.set(replacement.id,file);attachments=[replacement];
@@ -74,6 +89,29 @@ try {
   store.ingestRemoteMessages([question],{activeFlow:flow,attachments}); store.setDraft('Rascunho preservado');
   const beforeMessages=JSON.stringify(store.getState().messages), initialText=sentText;
   await openTray();
+  if(params.has('manual')) {
+    window.attachmentAppendFixture = {
+      snapshot: () => ({ replacements, replacementRequests, pickerCalls, cameraCalls, interactions, attachments: store.getState().attachments,
+        pendingFiles: store.getState().pendingFiles.length,
+        unchangedQuestion: JSON.stringify(store.getState().messages) === beforeMessages,
+        unchangedDraft: store.getState().draft === 'Rascunho preservado', noReply: sentText === initialText,
+        sentFile, networkWrites }),
+      confirmReplacement,
+      changeFlow() { store.ingestRemoteMessages([], { activeFlow: { ...flow, contextId: 'synthetic-next-batch' } }); },
+      selectFiles(kind = 'files') {
+        const input = document.querySelector('input[type="file"]');
+        if (!input) throw new Error('Seletor não abriu');
+        const selection = new DataTransfer();
+        for (const file of kind === 'files' ? [additional, image] : [image]) selection.items.add(file);
+        input.files = selection.files;
+        input.dispatchEvent(new Event('change'));
+      },
+      async pageCount() {
+        const file = blobs.get(store.getState().attachments[0].id);
+        return file.type === 'application/pdf' ? (await PDFDocument.load(await file.arrayBuffer())).getPageCount() : 1;
+      },
+    };
+  }
   if(!params.has('manual')) {
     document.querySelector('[data-preview-action="append-pages"]').click();
     if(params.get('mode')!=='menu') {

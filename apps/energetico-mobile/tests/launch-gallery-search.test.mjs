@@ -43,7 +43,16 @@ function assertInteractive(ctx) {
   assert.equal(ctx.dom.window.document.activeElement, ctx.search);
 }
 
-test('launch search preserves cards, focus and caret during network filtering of the complete dataset', async t => {
+function assertRecalculating(ctx) {
+  const screen = ctx.root.querySelector('.gallery-loading-screen');
+  assert.equal(screen.hidden, false, 'old gallery stays covered until the current filter finishes');
+  assert.match(screen.textContent, /Recalculando a galeria/);
+  assert.ok(screen.querySelector('.app-loading__mascot'));
+  assert.equal(ctx.root.getAttribute('aria-busy'), 'true');
+  assert.equal(ctx.root.querySelector('.lg-content').inert, true);
+}
+
+test('launch search covers preserved cards until filtered results and totals are rendered', async t => {
   const ctx = setup(t); await ctx.open();
   ctx.root.querySelector('[name="supplier"]').value = 'Mauro';
   ctx.search.focus(); ctx.type('Mauro central'); ctx.search.setSelectionRange(3, 7);
@@ -55,13 +64,16 @@ test('launch search preserves cards, focus and caret during network filtering of
   assert.equal(ctx.pending[1].payload.filters.supplier, 'Mauro');
   assert.equal(ctx.pending[1].payload.page, 1);
   assert.equal(ctx.pending[1].payload.pageSize, 20);
-  assertInteractive(ctx);
+  assertRecalculating(ctx);
+  assert.ok(ctx.root.querySelector(':scope > header').contains(ctx.dom.window.document.activeElement),
+    'keyboard focus stays in the available gallery navigation while its search is inert');
   assert.equal(ctx.root.querySelector('.lg-list-status').textContent, status,
     'typing does not replace the result count with a loading/searching message');
   assert.equal(ctx.root.querySelector('.lg-record'), card);
   assert.equal(ctx.search.selectionStart, 3); assert.equal(ctx.search.selectionEnd, 7);
   ctx.pending[1].resolve(snapshot(901)); await settle();
   assert.deepEqual(ctx.rows(), ['901'], 'server can return a match absent from the current page');
+  assert.match(ctx.root.querySelector('.lg-totals').textContent, /901/);
   assertInteractive(ctx);
   assert.equal(ctx.search.selectionStart, 3); assert.equal(ctx.search.selectionEnd, 7);
 });
@@ -83,6 +95,7 @@ test('typing debounces and suppresses an older response even before the newest q
   await ctx.tick(1); assert.equal(ctx.pending.length, 2);
   ctx.type('abc'); ctx.pending[1].resolve(snapshot(18)); await settle();
   assert.deepEqual(ctx.rows(), ['17'], 'a response for ab cannot replace cards while abc is being typed');
+  assertRecalculating(ctx);
   await ctx.tick();
   assert.equal(ctx.pending[2].payload.filters.search, 'abc');
   ctx.type('abcd'); await ctx.tick();
@@ -101,7 +114,7 @@ test('search errors preserve usable cards and retry without taking the search fo
   assert.match(ctx.root.querySelector('.lg-list-status').textContent, /Offline/);
   const retry = ctx.root.querySelector('.lg-list-status button');
   retry.click(); await settle();
-  assert.equal(ctx.pending[2].payload.filters.search, 'new'); assertInteractive(ctx);
+  assert.equal(ctx.pending[2].payload.filters.search, 'new'); assertRecalculating(ctx);
   ctx.pending[2].resolve(snapshot(901)); await settle();
   assert.deepEqual(ctx.rows(), ['901']); assert.equal(ctx.root.querySelector('.lg-list-status button'), null);
 });
@@ -126,14 +139,85 @@ test('retry after a page failure keeps the requested page', async t => {
   assert.match(ctx.root.querySelector('.lg-pagination').textContent, /Página 2 de 3/);
 });
 
-test('a superseded failure cannot replace newer launch results or leave a retry', async t => {
+test('a superseded success cannot uncover the newest pending launch search', async t => {
   const ctx = setup(t); await ctx.open();
   ctx.type('old'); await ctx.tick(); ctx.type('new'); await ctx.tick();
+  ctx.pending[1].resolve(snapshot(18)); await settle();
+  assertRecalculating(ctx);
   ctx.pending[2].resolve(snapshot(901)); await settle();
-  ctx.pending[1].reject(new Error('obsolete')); await settle();
   assert.deepEqual(ctx.rows(), ['901']);
   assert.doesNotMatch(ctx.root.querySelector('.lg-list-status').textContent, /obsolete/);
   assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
+});
+
+test('a superseded failure cannot uncover the newest pending search or leave a retry', async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.type('old'); await ctx.tick(); ctx.type('new'); await ctx.tick();
+  ctx.pending[1].reject(new Error('obsolete')); await settle();
+  assertRecalculating(ctx);
+  ctx.pending[2].resolve(snapshot(901)); await settle();
+  assert.deepEqual(ctx.rows(), ['901']);
+  assert.doesNotMatch(ctx.root.querySelector('.lg-list-status').textContent, /obsolete/);
+  assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
+});
+
+for (const [name, value, event] of [['id', '349', 'input'], ['supplier', 'Mauro', 'change'],
+  ['pendingApproval', true, 'change'], ['dateStart', '2026-10-01', 'change'], ['sort', 'ID crescente', 'change']]) {
+  test(`launch ${name} filter shows the mascot until the filtered gallery is ready`, async t => {
+    const ctx = setup(t); await ctx.open();
+    const control = ctx.root.querySelector(`[name="${name}"]`);
+    if (control.type === 'checkbox') control.checked = value;
+    else if (control.tagName === 'SELECT' && name === 'sort') control.selectedIndex = 1;
+    else control.value = value;
+    control.dispatchEvent(new ctx.dom.window.Event(event, { bubbles: true }));
+    if (event === 'input') await ctx.tick();
+    assert.equal(ctx.pending.length, 2);
+    assertRecalculating(ctx);
+    ctx.pending[1].resolve(snapshot(901, { rows: [], count: 0, totals: { paid: 0 } })); await settle();
+    assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
+    assert.match(ctx.root.querySelector('.lg-list-status').textContent, /Nenhum lançamento/);
+    assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
+  });
+}
+
+test('invalid dates release a pending loader and cannot publish an older result', async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.type('new'); await ctx.tick();
+  const start = ctx.root.querySelector('[name="dateStart"]'), end = ctx.root.querySelector('[name="dateEnd"]');
+  start.value = '2026-10-20'; end.value = '2026-10-01';
+  end.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
+  assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
+  assert.match(ctx.root.querySelector('.lg-notice').textContent, /A data final/);
+  ctx.pending[1].resolve(snapshot(901)); await settle();
+  assert.deepEqual(ctx.rows(), ['17']);
+});
+
+test('pagination after an invalid date range releases the loader when no filter is queued', async t => {
+  const ctx = setup(t); await ctx.open();
+  const start = ctx.root.querySelector('[name="dateStart"]'), end = ctx.root.querySelector('[name="dateEnd"]');
+  start.value = '2026-10-20';
+  start.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  ctx.pending[1].resolve(snapshot()); await settle();
+  end.value = '2026-10-01';
+  end.dispatchEvent(new ctx.dom.window.Event('change', { bubbles: true }));
+  [...ctx.root.querySelectorAll('.lg-pagination button')].find(node => node.textContent === 'Próxima página').click();
+  assert.equal(ctx.pending[2].payload.page, 2);
+  ctx.pending[2].resolve(snapshot(901, { page: 2 })); await settle();
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
+  assert.equal(ctx.root.getAttribute('aria-busy'), 'false');
+  assert.deepEqual(ctx.rows(), ['901']);
+});
+
+test('finishing a search does not steal focus after navigation with Tab', async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.search.focus(); ctx.type('new'); await ctx.tick();
+  const back = ctx.root.querySelector(':scope > header button');
+  back.focus();
+  back.dispatchEvent(new ctx.dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  ctx.pending[1].resolve(snapshot(901)); await settle();
+  assert.equal(ctx.dom.window.document.activeElement, back);
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
 });
 
 test('initial opening and explicit refresh retain the blocking loader', async t => {

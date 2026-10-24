@@ -180,6 +180,32 @@ test('an append error leaves the original visible and retry still uses that orig
   assert.deepEqual(revoked, ['blob:preview-1']);
 });
 
+test('a stale append context explains how to reopen and retires only that preview append action', async t => {
+  const original = new Blob(['original'], { type: 'image/jpeg' });
+  const exported = [];
+  const { preview, documentRef, revoked } = setupAppendPreview(t, {
+    exportMedia: blob => { exported.push(blob); },
+  });
+  await preview.open(original, 'original.jpg', { onAppendPages: async () => {
+    throw Object.assign(new Error('O fluxo deste anexo mudou. Feche esta prévia e abra o anexo novamente na bandeja.'),
+      { code: 'ATTACHMENT_PREVIEW_STALE' });
+  } });
+  const image = documentRef.querySelector('.attachment-preview-image');
+  chooseAppend(documentRef, 'files'); await afterPreviewAction();
+  assert.match(documentRef.querySelector('.attachment-preview-status').textContent, /abra.*novamente/);
+  assert.doesNotMatch(documentRef.querySelector('.attachment-preview-status').textContent, /tente novamente no botão/i);
+  assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]').hidden, true);
+  assert.equal(documentRef.activeElement, documentRef.querySelector('.attachment-preview-close'),
+    'a retired append action leaves keyboard focus on the visible close control');
+  assert.equal(documentRef.querySelector('.attachment-preview-image'), image);
+  assert.deepEqual(revoked, []);
+  assert.equal(documentRef.querySelector('dialog').open, true);
+  documentRef.querySelector('[data-preview-action="export"]').click(); await afterPreviewAction();
+  assert.deepEqual(exported, [original]);
+  await preview.open(original, 'original.jpg', { onAppendPages: async () => null });
+  assert.equal(documentRef.querySelector('[data-preview-action="append-pages"]').hidden, false);
+});
+
 test('cancelled append restores the image readiness received while the choice was pending', async t => {
   let finish;
   const { preview, documentRef, dom } = setupAppendPreview(t);

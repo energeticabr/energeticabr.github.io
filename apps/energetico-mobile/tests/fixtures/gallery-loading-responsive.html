@@ -26,7 +26,7 @@ try {
     }));
     const opening = gallery.open();
     const root = document.querySelector(entry.root);
-    const measure = async () => {
+    const measure = async ({ checkKeyboard = true } = {}) => {
       await Promise.all([...root.querySelectorAll('.app-loading__mascot')].map(image => image.decode()));
       await frame();
       const screen = root.querySelector('.gallery-loading-screen');
@@ -39,7 +39,7 @@ try {
       const indicatorBackdrop = getComputedStyle(indicator).backgroundColor;
       const indicatorTextColor = getComputedStyle(indicator).color;
       let keyboardSafe = true;
-      if (entry.name === 'launch' || entry.options?.kind) {
+      if (checkKeyboard && (entry.name === 'launch' || entry.options?.kind)) {
         const buttons = [...header.querySelectorAll('button:not(:disabled)')];
         buttons[0].focus();
         root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
@@ -56,6 +56,7 @@ try {
           .every(node => !visible(node) && node.inert && node.getAttribute('aria-hidden') === 'true'),
         headerVisible: visible(header) && h.height > 0 && !header.querySelector('button').disabled,
         loaderVisible: visible(screen) && !screen.hidden && r.width > 0 && r.height > 0,
+        label: indicator.querySelector('.app-loading__text').textContent,
         opaque: backdrop.startsWith('rgb('),
         indicatorBackdrop,
         indicatorTextColor,
@@ -68,15 +69,29 @@ try {
     release(snapshot); await opening; await frame();
     root.querySelector('[data-gallery-refresh]').click();
     const refreshing = await measure();
-    if (preview) {
+    if (preview && !new URLSearchParams(location.search).has('filter')) {
       document.documentElement.dataset.ready = 'true';
       break;
     }
     release(snapshot); await frame(); await frame();
+    let filtering;
+    if (entry.name === 'launch') {
+      const search = root.querySelector('[data-gallery-quick-search]');
+      search.focus();
+      search.value = '349'; search.setSelectionRange(1, 2, 'backward');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 180));
+      filtering = await measure({ checkKeyboard: false });
+      filtering.focusInNavigation = root.querySelector(':scope > header').contains(document.activeElement);
+      if (preview) { document.documentElement.dataset.ready = 'true'; break; }
+      release(snapshot); await frame(); await frame();
+      filtering.focusRestored = document.activeElement === search;
+      filtering.selection = [search.selectionStart, search.selectionEnd, search.selectionDirection];
+    }
     const restored = root.querySelector('.gallery-loading-screen')?.hidden === true
       && [...root.children].filter(node => node.tagName !== 'HEADER' && !node.classList.contains('gallery-loading-screen'))
         .every(node => !node.inert && node.getAttribute('aria-hidden') !== 'true');
-    results.push({ name: entry.name, initial, refreshing, restored });
+    results.push({ name: entry.name, initial, refreshing, filtering, restored });
     gallery.destroy();
   }
   document.documentElement.dataset.layout = JSON.stringify(results);
