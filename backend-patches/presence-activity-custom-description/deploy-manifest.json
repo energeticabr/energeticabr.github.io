@@ -4,7 +4,7 @@
       "destination": "/opt/energetica-whatsapp/worker/workflow.py",
       "candidate": "app/worker/workflow.py",
       "before_sha256": "93c939e16fea9ab361b7970261c0f24eacd5cb87cc810ed6bbfc354ddd144d90",
-      "after_sha256": "c15b1c3629aa5a6bb4895e8479c12ef3e48bd72809135efdd8f9e67af18277b9"
+      "after_sha256": "5381bee49c38d73928c27818579d5da727439d4d43e3c5ea2916c6bcfc7e4521"
     },
     {
       "destination": "/opt/energetica-whatsapp/channel_bridge.py",
@@ -22,7 +22,7 @@
       "destination": "/home/opc/energetica-build/worker/workflow.py",
       "candidate": "build/worker/workflow.py",
       "before_sha256": "aac994185f7b6b540f32497ba79a87bb692509eb087db7c7e4598413d2a3aefd",
-      "after_sha256": "7cecd921977e1e508f71c1a1b2f4b73af4c9996423a4c87f91f03564f2b48080"
+      "after_sha256": "92cfeb7cf370d5f53fb10b9477da420202c24f8f07b26a3d4ef068009cff36e7"
     },
     {
       "destination": "/home/opc/energetica-build/channel_bridge.py",

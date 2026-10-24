@@ -109,6 +109,24 @@ class ActivityDescriptionTests(unittest.TestCase):
         self.assertEqual(self.state['fields']['ATIVIDADEEXECUTADA'], 'ALVENARIA QA')
         self.assertFalse(self.state['selections'][KEY].get('free_text', False))
 
+    def test_submitted_control_words_are_literal_activity_descriptions(self):
+        for value in ['Limpar filtro', 'filter_clear', 'refresh_options']:
+            with self.subTest(value=value):
+                self.setUp()
+                result = self.engine._handle_text({'kind': 'text', 'message_id': 'qa-description', 'text': value},
+                                                 self.state, self.store.version)
+                self.assertEqual(self.state['fields'].get('ATIVIDADEEXECUTADA'), value.upper())
+                self.assertEqual(result.get('field'), 'tem_observacao_demonstrativo_etapa')
+
+    def test_actual_filter_control_replies_keep_their_behavior(self):
+        for control, expected in [('filter_clear', 'filter_cleared'), ('refresh_options', 'options_refreshed')]:
+            with self.subTest(control=control):
+                self.setUp()
+                before = copy.deepcopy(self.state['fields'])
+                self.assertEqual(self.reply('Limpar filtro', control)['status'], expected)
+                self.assertEqual(self.state['fields'], before)
+                self.assertEqual(self.state['step_index'], self.index)
+
     def test_filter_queries_never_write_or_advance_even_for_exact_id_or_no_match(self):
         for query in ['alv', '134', 'Nada correspondente']:
             with self.subTest(query=query):

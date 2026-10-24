@@ -47,6 +47,16 @@ def patch_workflow(source):
             "OU SELECIONE UMA DAS OPÇÕES ABAIXO."
         )).strip()''')
     result = source[:start] + method + source[end:]
+    start = result.index('    def _handle_selection_reply(')
+    end = result.index('\n    def ', start + 1)
+    method = replace_once(result[start:end],
+        '        if control in {"filter_clear", "limpar filtro", "refresh_options"}:',
+        '''        if control in {"filter_clear", "limpar filtro", "refresh_options"} and not (
+            step.get("filter_with_direct_text") is True
+            and event.get("kind") == "text"
+            and not event.get("reply_id")
+        ):''')
+    result = result[:start] + method + result[end:]
     compile(result, 'workflow.py', 'exec')
     return result
 
