@@ -2,6 +2,7 @@ import { persistLancamentoRecord } from "./lancamentos-workflow.js";
 import { normalizeF21RecurringExpenseRules } from "./despesas-recorrentes-powerapps-rules.js";
 import { buildF20SecondaryCadastroProdutoPayload, getF18NextMonthDepreciationDate } from "./imobilizados-powerapps-rules.js";
 import { persistProvisionParentWorkflow } from "./provision-parent-workflow.js";
+import { persistTrackedContractorSupplierEdit } from "./contractor-supplier-edit.js";
 
 function canonicalField(value) {
   return String(value || "")
@@ -73,7 +74,11 @@ export async function persistEntityRecord(repository, entity, list, options = {}
   if (!repository || !list?.id) throw new TypeError("A gravação requer o repositório e a lista SharePoint resolvida.");
   const lancamento = await persistLancamentoRecord(repository, entity, list, options);
   if (lancamento) return lancamento;
-  const fields = normalizedEntityFields(entity, options.fields || {}, options.mode);
+  const normalized = normalizedEntityFields(entity, options.fields || {}, options.mode);
+  const fields = entity?.id === "fornecedores"
+    ? Object.fromEntries(Object.entries(normalized).filter(([name]) => !["DATAADMISSAO", "DATADESLIGAMENTO"].includes(name))) : normalized;
+  const contractor = await persistTrackedContractorSupplierEdit(repository, entity, list, fields, options);
+  if (contractor) return contractor;
   if (options.mode === "edit") {
     const item = options.item;
     const eTag = String(item?.eTag || item?.["@odata.etag"] || "").trim();

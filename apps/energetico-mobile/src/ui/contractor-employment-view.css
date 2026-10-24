@@ -1,0 +1,31 @@
+.ce-overlay[hidden] { display: none; }
+.ce-overlay { overflow-y: auto; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+.ce-toolbar { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(120px, 1fr)) auto; gap: 12px; padding: 12px; }
+.ce-toolbar label, .ce-editor label { display: grid; gap: 6px; min-width: 0; font-size: 14px; }
+.ce-toolbar input, .ce-toolbar select, .ce-editor input, .ce-editor select { width: 100%; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid #bec7cf; border-radius: 8px; background: #fff; color: #172635; font: inherit; box-sizing: border-box; }
+.ce-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; padding: 12px; align-items: start; }
+.ce-card, .ce-editor form { border: 1px solid #c9d2da; border-radius: 12px; background: #fff; color: #172635; padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+.ce-card h2 { font-size: 18px; margin: 0 0 12px; }
+.ce-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; background: #edf4f8; padding: 12px; border-radius: 8px; }
+.ce-highlights dt, .ce-details dt { font-size: 12px; color: #465a68; }
+.ce-highlights dd, .ce-details dd { margin: 4px 0 0; font-weight: 600; }
+.ce-details { display: grid; gap: 12px; }
+.ce-card summary { cursor: pointer; min-height: 36px; }
+.ce-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.ce-regularize { color: #714300; background: #fff3cd; border-radius: 6px; padding: 8px; }
+.ce-status, .ce-error { margin: 0; padding: 0 12px; }
+.ce-error:not(:empty) { color: #a71919; padding: 12px; }
+.ce-editor:empty { display: none; }
+.ce-editor { padding: 12px; }
+.ce-editor form { display: grid; gap: 12px; max-width: 640px; margin: 0 auto; }
+.ce-editor h2 { margin: 0; font-size: 18px; }
+.ce-conflict { max-width: 800px; margin: 0 auto; padding: 16px; border: 1px solid #c9d2da; border-radius: 12px; background: #fff; }
+.ce-conflict-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.ce-conflict-comparison > section { min-width: 0; padding: 12px; background: #edf4f8; border-radius: 8px; overflow-wrap: anywhere; }
+.ce-conflict h3 { margin: 0; font-size: 16px; }
+.ce-conflict .ce-actions button { max-width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .ce-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ce-toolbar > label:first-child { grid-column: 1 / -1; }
+  .ce-conflict-comparison { grid-template-columns: minmax(0, 1fr); }
+}

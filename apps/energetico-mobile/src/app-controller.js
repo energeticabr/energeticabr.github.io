@@ -296,11 +296,19 @@ async function defaultRecurringExpensesGalleryDataFactory(options) {
 }
 
 async function defaultRegistrationGalleryFactory(options) {
+  if (options.kind === "contractorEmployment") {
+    const { createContractorEmploymentView } = await import("./ui/contractor-employment-view.js");
+    return createContractorEmploymentView(options);
+  }
   const { createRegistrationGallery } = await import("./ui/registration-gallery-view.js");
   return createRegistrationGallery(options);
 }
 
 async function defaultRegistrationGalleryDataFactory(options) {
+  if (options.kind === "contractorEmployment") {
+    const { createContractorEmploymentData } = await import("./chat/contractor-employment-data.js");
+    return createContractorEmploymentData(options);
+  }
   const { createRegistrationGalleryData } = await import("./chat/registration-gallery-data.js");
   return createRegistrationGalleryData(options);
 }
@@ -445,6 +453,7 @@ const POWERBI_DASHBOARD_REPLY_ID = "action_powerbi_dashboard";
 const POWERBI_SCOPES = Object.freeze(["https://analysis.windows.net/powerbi/api/Report.Read.All"]);
 const REGISTRATION_GALLERY_KIND = Object.freeze({
   action_hr_gallery_presencas: "presenceDescriptions",
+  action_hr_gallery_funcionarios: "contractorEmployment",
   action_financial_movement_gallery: 'financial_movement',
   action_investment_gallery: 'investment',
   action_institution_gallery: 'institution',
@@ -9129,7 +9138,7 @@ export function createAppController({
     const opening = (async () => {
       try {
         if (!registrationGalleries.has(kind)) {
-          const data = await registrationGalleryDataFactory({ kind,assertSession, userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
+          const data = await registrationGalleryDataFactory({ kind,assertSession, accountKey: galleryAccount.homeAccountId || galleryAccount.localAccountId || galleryAccount.idTokenClaims?.oid || "", userEmail: galleryAccount.username || galleryAccount.email || "", tokenProvider: async scopes => {
             assertSession();
             const token = await auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
@@ -9144,7 +9153,7 @@ export function createAppController({
           assertSession();
           const panel = await registrationGalleryFactory({
             kind, data,
-            onCreate: galleryCreationHandler(replyId, assertSession),
+            ...(kind === "contractorEmployment" ? {} : { onCreate: galleryCreationHandler(replyId, assertSession) }),
             ...(["presenceDescriptions", "provisionDescription", "documents", "asset", "assetFunction", "assetProduct", "assetGroup", "workDiary", "quotes", "contracts", "contractLines", "measurements", "measurementLines", "stageDemonstratives", "constructionStages", "recurringTasks", "delegatedTasks"].includes(kind) ? {
               openMediaCollection: items => {
                 assertSession();
