@@ -843,7 +843,7 @@ function changeTableMarkup(table = {}) {
 }
 
 function changeTableQuestion(message, table) {
-  const question = String(message?.question || message?.prompt || "");
+  const question = String(message?.question || message?.prompt || message?.text || "");
   if (!table) return question;
   return question.replace(/\nMUDANÇA\s*\|[\s\S]*$/i, "").trim();
 }
@@ -882,7 +882,7 @@ function isAutomaticMainMenuMessage(message) {
   return /qual\s+area\s+voce\s+deseja\s+acessar/.test(question);
 }
 
-function isInitialAreaSelectionMenu(message) {
+function hasInitialAreaMenuHeading(message) {
   if (message?.type !== "poll") return false;
   const heading = normalizedDateText(String(message?.question || message?.prompt || message?.text || "")
     .split(/\r?\n/, 1)[0]
@@ -890,6 +890,13 @@ function isInitialAreaSelectionMenu(message) {
     .replace(/\s+/g, " ")
     .trim();
   return heading === "qual area voce deseja acessar";
+}
+
+function isInitialAreaSelectionMenu(message) {
+  return hasInitialAreaMenuHeading(message)
+    || (isAutomaticMainMenuMessage(message)
+      && Array.isArray(message.options)
+      && message.options.some(option => /^group_/i.test(draftReplyId(option).trim())));
 }
 
 function isSuppliesLaunchMenu(message) {
@@ -1628,7 +1635,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     .filter(([replyId]) => replyId.startsWith("draft_delete:"))
     .map(([replyId, option]) => [replyId.slice("draft_delete:".length), option]));
   const seenDrafts = new Set();
-  const initialAreaMenu = isInitialAreaSelectionMenu(message);
+  const initialAreaMenu = hasInitialAreaMenuHeading(message);
   const choices = orderedChoiceOptions.flatMap(option => {
     const replyId = draftReplyId(option);
     if (isDraftMenu && replyId.startsWith("draft_delete:")) return [];

@@ -277,6 +277,82 @@ test("atalho do mascote fica fora do cartão e abre provisões sem selecionar Pe
   assert.equal(selected[0].replyId, 'group_pending');
 });
 
+const returnedHomeNotice = '📎 OS DADOS DO FLUXO FORAM ELIMINADOS. OS ANEXOS FORAM TRANSFERIDOS PARA O PRÓXIMO FLUXO.';
+const returnedHomeQuestion = 'QUAL ÁREA VOCÊ DESEJA ACESSAR?';
+const returnedHomeOptions = [
+  { id: 'group_pending', reply: 'group_pending', label: '⏳ PENDÊNCIAS (55)' },
+  { id: 'group_supplies', reply: 'group_supplies', label: '📦 SUPRIMENTOS' },
+  { id: 'group_demands', reply: 'group_demands', label: '📋 DEMANDAS' },
+];
+const returnedHomeActions = [
+  'open-commercial-receipts', 'open-commercial-milestones', 'open-commercial-documents', 'open-sac-pathologies',
+  'open-pending-provisions', 'open-provision-report', 'open-payment-ledger', 'open-management-report',
+  'open-order-validation-report', 'open-quotation-report', 'open-depreciation-report', 'open-document-control-report',
+  'open-task-association-report', 'open-delegated-deadline-report', 'open-cargos-table', 'open-attendance-summary',
+  'open-stage-progress', 'open-supplier-payroll-report', 'open-supplier-workforce-report', 'open-contractor-control-report',
+  'open-pending-supplier-payments-report', 'open-pending-work-diaries-report',
+];
+
+for (const [variant, field, separator] of [
+  ['parágrafos separados', 'question', '\n\n'], ['mesma linha', 'question', ' '],
+  ['quebra CRLF', 'question', '\r\n'], ['prompt restaurado', 'prompt', '\n'], ['text restaurado', 'text', '\n'],
+]) {
+  test(`retorno ao início com aviso restaura os22 mascotes e preserva bandeja (${variant})`, t => {
+    const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+    const view = createChatView(root);
+    t.after(() => { view.destroy(); dom.window.close(); });
+    const opened = [], selected = [];
+    view.on('open-payment-ledger', () => opened.push('payments'));
+    view.on('select-reply', event => selected.push(event.replyId));
+    const menu = { id: 'returned-home', role: 'assistant', type: 'poll', options: returnedHomeOptions,
+      [field]: returnedHomeNotice + separator + returnedHomeQuestion };
+    const state = signedInState({ messages: [menu], attachments: [{ id: 'transferred-test', fileName: 'Documento transferido.pdf',
+      mimeType: 'application/pdf', size: 19700, mediaUrl: '/api/portal-media/test-document' }] });
+    view.render(signedInState({ messages: [{ ...menu, question: returnedHomeQuestion }] }));
+    view.render(signedInState({ messages: [{ ...menu, question: 'SUPRIMENTOS: QUAL FLUXO VOCÊ DESEJA INICIAR?', options: [{ id: 'add', label: 'Adicionar' }] }] }));
+    view.render(state);
+    for (let render = 0; render < 2; render++) {
+      const article = root.querySelector('.chat-message--assistant');
+      assert.deepEqual([...article.querySelectorAll('button[data-action^="open-"]')].map(button => button.dataset.action), returnedHomeActions);
+      assert.match(article.querySelector('.chat-choice-card > p')?.textContent || '', /OS DADOS DO FLUXO FORAM ELIMINADOS/);
+      assert.match(article.textContent, /OS ANEXOS FORAM TRANSFERIDOS/);
+      assert.match(root.querySelector('.chat-attachments').textContent, /Documento transferido\.pdf/);
+      assert.ok([...article.querySelectorAll('button[data-action^="open-"]')].every(button => !button.disabled && button.closest('.chat-bubble') === null));
+      article.querySelector('[data-action="open-payment-ledger"] img').click();
+      view.render(state);
+    }
+    assert.deepEqual(opened, ['payments', 'payments'], 'um evento por clique, mesmo após re-renderizar');
+    assert.deepEqual(selected, [], 'abrir relatório não responde a uma opção do fluxo');
+  });
+}
+
+test('retorno com aviso preserva restrições de contexto, permissão e busy dos mascotes', t => {
+  const dom = new JSDOM('<main id="app"></main>'), root = dom.window.document.querySelector('#app');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const menu = { id: 'returned-home', role: 'assistant', type: 'poll', question: returnedHomeNotice + '\n\n' + returnedHomeQuestion,
+    options: returnedHomeOptions };
+  const opened = [];
+  view.on('open-payment-ledger', () => opened.push('payments'));
+  for (const state of [
+    { messages: [menu], activeFlow: { id: 'still-active' } },
+    { messages: [menu, { id: 'later', role: 'assistant', type: 'poll', question: 'ESCOLHA UMA OPÇÃO', options: [{ id: 'next', label: 'Prosseguir' }] }] },
+    { messages: [{ ...menu, question: 'Após concluir você verá: ' + returnedHomeQuestion, options: [{ id: 'continue', label: 'Continuar' }] }] },
+  ]) {
+    view.render(signedInState(state));
+    assert.equal(root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]').length, 0);
+  }
+  view.render(signedInState({ messages: [menu], activeText: { id: 'sending' } }));
+  const busyButtons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
+  assert.equal(busyButtons.length, 22);
+  assert.ok(busyButtons.every(button => button.disabled));
+  root.querySelector('[data-action="open-payment-ledger"]').click();
+  assert.deepEqual(opened, []);
+  view.render(signedInState({ messages: [{ ...menu, options: returnedHomeOptions.slice(1) }] }));
+  assert.equal(root.querySelector('[data-action="open-payment-ledger"]'), null, 'não sintetizar acesso financeiro sem Pendências');
+  assert.ok(root.querySelector('[data-action="open-cargos-table"]'));
+});
+
 test("atalho das provisões não aparece em submenus nem em menus antigos e desativa durante leitura", () => {
   const menu = { id: 'home-shortcut', role: 'assistant', type: 'poll', question: 'QUAL ÁREA VOCÊ DESEJA ACESSAR?', options: [
     { id: 'group_pending', label: 'PENDÊNCIAS' },

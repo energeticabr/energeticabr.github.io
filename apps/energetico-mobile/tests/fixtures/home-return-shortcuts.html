@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/src/styles.css"><link rel="stylesheet" href="/src/ui/payment-ledger.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createPaymentLedgerView } from '/src/ui/payment-ledger-view.js';
+
+const question = 'QUAL ÁREA VOCÊ DESEJA ACESSAR?';
+const notice = '📎 OS DADOS DO FLUXO FORAM ELIMINADOS. OS ANEXOS FORAM TRANSFERIDOS PARA O PRÓXIMO FLUXO.';
+const menu = { id: 'home', role: 'assistant', type: 'poll', question, options: [
+  { id: 'group_pending', reply: 'group_pending', label: '⏳ PENDÊNCIAS (55)', tone: 'danger' },
+  ...[['supplies', '📦 SUPRIMENTOS'], ['demands', '📋 DEMANDAS'], ['human_resources', '👥 RECURSOS HUMANOS'],
+    ['construction', '🏗️ ETAPA OBRA'], ['commercial', '📈 COMERCIAL'], ['audit', '🔎 AUDITORIA E DOCUMENTOS'],
+    ['nb', '🏢 NB PARTICIPAÇÕES'], ['personal_expenses', '💰 GASTOS PESSOAIS']]
+    .map(([id, label]) => ({ id: 'group_' + id, reply: 'group_' + id, label })),
+] };
+const state = { sessionStatus: 'authenticated', account: { name: 'Pessoa de teste' }, draft: '', pendingFiles: [], activeFlow: null,
+  messages: [{ ...menu, question: notice + '\n\n' + question }],
+  attachments: [{ id: 'transferred', fileName: 'Documento transferido.pdf', mimeType: 'application/pdf', size: 19700, mediaUrl: '/api/portal-media/test-document' }] };
+const root = document.querySelector('#app'), view = createChatView(root);
+const selected = [], opened = [], reads = [];
+let opening;
+const report = createPaymentLedgerView({ document, data: { async loadPaymentsSnapshot() {
+  reads.push('payments');
+  return { launches: [{ id: '1', paymentDate: '2026-10-24', supplier: 'Fornecedor de teste', branch: 'Filial de teste', product: 'Serviço de teste',
+    description: 'Dado fictício', order: '1', disbursement: 'SIM', account: 'Conta de teste', unit: 45, quantity: 1, freight: 0, total: 45 }] };
+} } });
+view.on('open-payment-ledger', () => { opened.push('payments'); opening = report.open(); });
+view.on('select-reply', event => selected.push(event.replyId));
+view.render({ ...state, attachments: [], messages: [menu] });
+view.render({ ...state, attachments: [], activeFlow: { id: 'submenu' }, messages: [{ ...menu,
+  question: 'SUPRIMENTOS: QUAL FLUXO VOCÊ DESEJA INICIAR?', options: [{ id: 'start', label: 'Iniciar' }] }] });
+const submenuIcons = root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]').length;
+view.render(state);
+await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
+
+let reportReady = false;
+if (new URLSearchParams(location.search).has('probe')) {
+  root.querySelector('[data-action="open-payment-ledger"] img')?.click();
+  await opening;
+  reportReady = !report.element.hidden && report.element.querySelector('.pl-table tbody')?.textContent.includes('Fornecedor de teste');
+  report.close();
+  view.render(state);
+  await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
+}
+const buttons = [...root.querySelectorAll('.chat-message--assistant button[data-action^="open-"]')];
+document.documentElement.dataset.layout = JSON.stringify({
+  submenuIcons, reportReady, opened, reads, selected,
+  count: buttons.length, actions: buttons.map(button => button.dataset.action),
+  buttons: buttons.map(button => { const rect = button.getBoundingClientRect(); return {
+    left: rect.left, right: rect.right, width: rect.width, height: rect.height,
+    external: button.closest('.chat-bubble') === null, loaded: button.querySelector('img')?.naturalWidth > 0,
+  }; }),
+  notice: root.querySelector('.chat-choice-card > p')?.textContent || '',
+  attachment: root.querySelector('.chat-attachments')?.textContent || '',
+  overflow: document.documentElement.scrollWidth > innerWidth + 1,
+});
+document.documentElement.dataset.ready = 'true';
+</script></body></html>
