@@ -112,6 +112,22 @@ test('a flow changed before the append choice explains why the picker cannot ope
   assert.equal((await PDFDocument.load(await result.blob.arrayBuffer())).getPageCount(), 2);
 });
 
+for (const [missing, activeFlow] of [
+  ['contextId', { id: 'document_create', title: 'Outro documento' }],
+  ['id', { contextId: 'batch-1', title: 'Outro documento' }],
+]) for (const mode of ['files', 'camera']) test(`missing captured ${missing} rejects ${mode} append before selection`, async t => {
+  const h = await harness(t), preview = h.previews[0];
+  let selections = 0;
+  h.native.pickDocuments = async () => { selections++; return [h.extra]; };
+  h.view.chooseCaptureMode = async () => { selections++; return 'scan'; };
+  h.store.ingestRemoteMessages([], { activeFlow });
+  await assert.rejects(preview.onAppendPages(mode, { blob: h.original, fileName: h.original.name,
+    signal: new AbortController().signal }), error => error.code === 'ATTACHMENT_PREVIEW_STALE');
+  assert.equal(selections, 0);
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.store.getState().attachments[0].id, oldId);
+});
+
 test('uncertain replacement retry reuses composed PDF and request id instead of opening picker or appending twice', async t => {
   const h = await harness(t), preview = h.previews[0], replace = h.client.replaceAttachment;
   let attempts = 0, selections = 0, failedRequest;

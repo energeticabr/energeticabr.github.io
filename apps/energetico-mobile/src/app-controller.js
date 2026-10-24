@@ -10681,12 +10681,16 @@ export function createAppController({
     const owner = account, revision = sessionRevision, flow = store.getState().activeFlow;
     // A refreshed display title is not a new attachment scope. Keep the title
     // fallback only for legacy flows without either stable identifier.
-    const flowScope = flow && (flow.id != null || flow.contextId != null)
-      ? { id: flow.id, contextId: flow.contextId } : flow;
+    const scopeKeys = flow && (flow.id != null || flow.contextId != null) ? ['id', 'contextId'] : ['title'];
+    const flowScope = scopeKeys.filter(key => flow?.[key] != null)
+      .map(key => [key, String(flow[key]).trim()]);
     return async (mode, { blob, fileName, signal, onProgress } = {}) => {
-      const current = () => !stopped && account === owner && sessionRevision === revision
-        && !signal?.aborted && !isDifferentActiveFlow(flowScope, store.getState().activeFlow)
-        && Boolean(flow) === Boolean(store.getState().activeFlow);
+      const current = () => {
+        const nextFlow = store.getState().activeFlow;
+        return !stopped && account === owner && sessionRevision === revision && !signal?.aborted
+          && Boolean(flow) === Boolean(nextFlow)
+          && flowScope.every(([key, value]) => nextFlow?.[key] != null && String(nextFlow[key]).trim() === value);
+      };
       if (!current()) {
         if (stopped || account !== owner || sessionRevision !== revision || signal?.aborted) return null;
         throw Object.assign(new Error('O fluxo deste anexo mudou. Feche esta prévia e abra o anexo novamente na bandeja para acrescentar páginas.'),
