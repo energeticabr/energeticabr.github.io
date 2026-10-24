@@ -7,12 +7,12 @@ function service(repository, entity, options) {
 }
 function recovery(data, target, selected) {
   return Object.freeze({
-    loadConflict: () => data.loadConflict(target),
+    loadConflict: () => data.loadConflict(target, { sourceEdit: true }),
     async renewBaseline(review) {
       const baseline = await data.renewBaseline(review), operation = data.getPending(baseline);
       return {
         item: { ...selected, ...review.source, fields: { ...selected.fields, ...review.source?.fields } },
-        fields: { ...operation?.sourceFields, DATADESLIGAMENTO: operation?.draft.DATADESLIGAMENTO },
+        fields: { ...operation?.pendingSourceFields, DATADESLIGAMENTO: operation?.draft.DATADESLIGAMENTO },
       };
     },
   });

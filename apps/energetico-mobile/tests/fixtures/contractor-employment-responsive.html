@@ -48,9 +48,20 @@
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const root = document.querySelector('.ce-overlay');
   const controls = [...root.querySelectorAll('input, select, button')].filter(node => node.getClientRects().length);
+  const portalDialog = document.querySelector('dialog[open]');
+  const portalControls = portalDialog ? [...portalDialog.querySelectorAll('input, select, button')].filter(node => node.getClientRects().length) : [];
+  const fits = (bounds, outer) => bounds.left >= outer.left - 1 && bounds.right <= outer.right + 1 && bounds.top >= outer.top - 1 && bounds.bottom <= outer.bottom + 1;
+  const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+  const dialogBounds = portalDialog?.getBoundingClientRect();
   document.documentElement.dataset.layout = JSON.stringify({
     overflow: document.documentElement.scrollWidth > innerWidth + 1 || root.scrollWidth > root.clientWidth + 1,
     controlsFit: controls.every(node => node.getBoundingClientRect().width <= root.clientWidth && node.getBoundingClientRect().height >= 40),
+    portalBoundsFit: !portalDialog || (fits(dialogBounds, viewport) && portalDialog.scrollWidth <= portalDialog.clientWidth + 1 && portalDialog.scrollHeight <= portalDialog.clientHeight + 1),
+    portalControlsFit: portalControls.every(node => {
+      const bounds = node.getBoundingClientRect();
+      return bounds.height >= 40 && fits(bounds, dialogBounds) && fits(bounds, viewport);
+    }),
+    portalControlBounds: portalControls.map(node => ({ control: node.name || node.textContent, height: node.getBoundingClientRect().height, width: node.getBoundingClientRect().width })),
     rows: document.querySelectorAll('[data-employment-row]').length,
     editor: Boolean(document.querySelector('.ce-editor form')),
     portal: Boolean(document.querySelector('dialog[open] input[type="date"]')),

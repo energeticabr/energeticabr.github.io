@@ -205,7 +205,9 @@ export function createItemDetailPage(root, context = {}) {
           section.append(heading, values); details.append(section);
         };
         const rhLabels = [['CARGO', 'Cargo'], ['STATUS', 'Status'], ['DATAADMISSAO', 'Admissão'], ['DATADESLIGAMENTO', 'Desligamento']];
-        if (review.source) appendRecord('Fornecedor #' + review.source.id + ' · versão ' + review.source.eTag, review.source.fields, [['STATUS', 'Status'], ['EMPREITEIRO', 'Empreiteiro']]);
+        const pendingSupplierLabels = Object.keys(review.pendingSourceFields || {}).filter(name => !['STATUS', 'EMPREITEIRO'].includes(name)).map(name => [name, name === 'Title' ? 'Cadastro' : name]);
+        if (review.source) appendRecord('Fornecedor #' + review.source.id + ' · versão ' + review.source.eTag, review.source.fields, [['STATUS', 'Status'], ['EMPREITEIRO', 'Empreiteiro'], ...pendingSupplierLabels]);
+        if (pendingSupplierLabels.length) appendRecord('Alterações do fornecedor ainda pendentes', review.pendingSourceFields, pendingSupplierLabels);
         appendRecord('Cadastro RH #' + review.target.id + ' · versão ' + review.target.eTag, review.target.fields, rhLabels);
         if (review.pendingDraft) appendRecord('Atualização pendente', review.pendingDraft, rhLabels);
         const renew = doc.createElement('button');

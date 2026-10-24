@@ -43,6 +43,7 @@ export function requestContractorTerminationDate({ document: doc = globalThis.do
     label.textContent = 'Data de desligamento';
     const input = doc.createElement('input');
     input.type = 'date'; input.name = 'DATADESLIGAMENTO'; input.required = true;
+    input.style.minHeight = '44px';
     input.min = contractorEmploymentDate(admission);
     const error = doc.createElement('p'); error.setAttribute('role', 'alert');
     const save = doc.createElement('button'); save.type = 'submit'; save.textContent = 'Confirmar desligamento';

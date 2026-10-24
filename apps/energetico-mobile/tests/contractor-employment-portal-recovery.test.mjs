@@ -8,6 +8,30 @@ import { syntheticTransport } from './helpers/contractor-employment-transport.mj
 const entity = ENTITIES.find(e => e.id === 'fornecedores');
 const list = { id: 'source' };
 const tick = () => new Promise(resolve => setImmediate(resolve));
+test('actual portal mixed conflict review shows the individually read stored and pending names before renewal', async t => {
+  const f = syntheticTransport(); f.failSource('unknown');
+  await assert.rejects(persistEntityRecord(f.repository, entity, list, {
+    mode: 'edit', item: structuredClone(f.source), fields: { STATUS: 'INATIVO', Title: 'REQUESTED TITLE', DATADESLIGAMENTO: '2026-02-20' },
+  }), error => error.code === 'CONTRACTOR_EMPLOYMENT_PARTIAL');
+  f.failSource(''); f.source.fields.STATUS = 'INATIVO'; f.source.eTag = '"9"';
+  const dom = new JSDOM('<main></main>'), root = dom.window.document.querySelector('main');
+  const page = createItemDetailPage(root, { entity, itemId: '17', repository: f.repository, can: () => true });
+  t.after(() => { page.cleanup(); dom.window.close(); });
+  await page.ready;
+  const readsBeforeReview = f.calls.length;
+  root.querySelector('[data-contractor-review]').click(); await tick();
+  assert.match(root.querySelector('[data-contractor-conflict]').textContent, /SYNTHETIC SOURCE NAME/);
+  assert.match(root.querySelector('[data-contractor-conflict]').textContent, /REQUESTED TITLE/);
+  const sourceReads = f.calls.slice(readsBeforeReview).filter(call => call.path.includes('/source/items/17'));
+  assert.ok(sourceReads.length > 0);
+  assert.ok(sourceReads.every(call => call.query.get('$expand') === 'fields($select=STATUS,EMPREITEIRO,Title)'));
+  const writesBeforeRenewal = f.writes.length;
+  root.querySelector('[data-contractor-renew]').click(); await tick();
+  assert.equal(f.writes.length, writesBeforeRenewal);
+  root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await tick(); await tick();
+  assert.equal(f.source.fields.Title, 'REQUESTED TITLE');
+  assert.equal(f.target.fields.STATUS, 'INATIVO'); assert.equal(f.storage.entries.size, 0);
+});
 test('actual portal source 412 recovery does not use the generic full-source conflict reload', async t => {
   const f = syntheticTransport(), dom = new JSDOM('<main></main>'), root = dom.window.document.querySelector('main');
   const page = createItemDetailPage(root, { entity, itemId: '17', repository: f.repository, can: () => true });

@@ -11,6 +11,8 @@ function validRecord(record, origin) {
   if (record.sourceFields !== null && (typeof record.sourceFields !== 'object' || Array.isArray(record.sourceFields)
     || record.sourceFields.STATUS !== record.desired.STATUS
     || Object.keys(record.sourceFields).some(name => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || ['CARGO', 'DATAADMISSAO', 'DATADESLIGAMENTO', '__proto__', 'constructor', 'prototype'].includes(name)))) return false;
+  if (record.confirmedSourceFields !== undefined && (!Array.isArray(record.confirmedSourceFields)
+    || record.confirmedSourceFields.some(name => name === 'STATUS' || !Object.hasOwn(record.sourceFields || {}, name)))) return false;
   return record.fingerprint === JSON.stringify({ desired: record.desired, sourceFields: record.sourceFields });
 }
 
