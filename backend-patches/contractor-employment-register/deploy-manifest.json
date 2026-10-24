@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "files": [
+    {
+      "destination": "/opt/energetica-whatsapp/worker/workflow.py",
+      "candidate": "app/worker/workflow.py",
+      "before_sha256": "2c82834954b3e008e242677807db2ec9add12429fcbce6ccbefe2c9b11a95362",
+      "after_sha256": "38e913cbd3ccd31ce81acf07da2066c32e1ea8af185ec3636e6d72dad3fe3c28"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/worker/workflow_config.json",
+      "candidate": "app/worker/workflow_config.json",
+      "before_sha256": "8d3c52efbda61e456405879e2910859acf415c5e781f8e444a3b17ca0f9161c5",
+      "after_sha256": "f1e779cec07c6a175a6481e479123a8d395867507e718320853fa66a3864d066"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/worker/contractor_employment.py",
+      "candidate": "app/worker/contractor_employment.py",
+      "before_sha256": null,
+      "after_sha256": "3033d6865f753d89a00f1579c476d487aa889ae9d9db4cd02d986bbcf8ff4de5"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/worker/supplier_registration_checkpoint.py",
+      "candidate": "app/worker/supplier_registration_checkpoint.py",
+      "before_sha256": null,
+      "after_sha256": "8a44884adb132c7715d4ec3d60be6ee37be27cd5c26656db2d4f399f9e8dcdbe"
+    },
+    {
+      "destination": "/home/opc/energetica-build/worker/workflow.py",
+      "candidate": "build/worker/workflow.py",
+      "before_sha256": "eeb8090314104d021f0dfc9a7b9eb0baff2ff861491454bc7aa6f5e8a8a8fc60",
+      "after_sha256": "692f7de79fd17a817f00de4536b5a1f65f748ef9451abf6790460f307a63f5c5"
+    },
+    {
+      "destination": "/home/opc/energetica-build/worker/workflow_config.json",
+      "candidate": "build/worker/workflow_config.json",
+      "before_sha256": "8d3c52efbda61e456405879e2910859acf415c5e781f8e444a3b17ca0f9161c5",
+      "after_sha256": "f1e779cec07c6a175a6481e479123a8d395867507e718320853fa66a3864d066"
+    },
+    {
+      "destination": "/home/opc/energetica-build/worker/contractor_employment.py",
+      "candidate": "build/worker/contractor_employment.py",
+      "before_sha256": null,
+      "after_sha256": "3033d6865f753d89a00f1579c476d487aa889ae9d9db4cd02d986bbcf8ff4de5"
+    },
+    {
+      "destination": "/home/opc/energetica-build/worker/supplier_registration_checkpoint.py",
+      "candidate": "build/worker/supplier_registration_checkpoint.py",
+      "before_sha256": null,
+      "after_sha256": "8a44884adb132c7715d4ec3d60be6ee37be27cd5c26656db2d4f399f9e8dcdbe"
+    }
+  ],
+  "patch_sha256": "c377414e9e91d05d173a2958c327dbf12836a52301e3530e903f1b0ac84574ba"
+}
