@@ -65,6 +65,34 @@ def test_known_source_id_is_used_when_collection_is_temporarily_empty(tmp_path):
     assert ensure(client(remote),'WA-SYNTHETIC',{'CADASTRO':'SYNTHETIC'},store)==100
     assert remote.posts==1
 
+
+def test_moved_token_cannot_replace_checkpointed_source_or_transfer_future_proof(tmp_path):
+    helper=importlib.import_module('supplier_registration_checkpoint')
+    remote=Transport(); store=SimpleNamespace(directory=tmp_path)
+    token='NEW-TOKEN'; fields={'CADASTRO':'SYNTHETIC'}
+    flow_id=helper.start_future_flow(client(remote),token,state_store=store)
+    assert ensure(client(remote),token,fields,store,future_flow_id=flow_id)==100
+    checkpoints=list(tmp_path.rglob('source-*.json'))
+    assert len(checkpoints)==1
+    directory=checkpoints[0].parent
+    original={p.name:p.read_bytes() for p in directory.glob('*.json')}
+    assert 'submission-100.json' in original and 'submission-101.json' not in original
+    remote.rows[0]['field_7']='TOKEN-MOVED-AWAY'
+    remote.rows.append({'Id':101,'field_7':token,'Title':'SYNTHETIC'})
+
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            ensure(client(remote),token,fields,SimpleNamespace(directory=tmp_path),future_flow_id=flow_id)
+        assert remote.posts==1
+        assert {p.name:p.read_bytes() for p in directory.glob('*.json')}==original
+        assert helper.future_receipt(client(remote),101,flow_id,state_store=store) is None
+        assert helper.future_receipt(client(remote),100,flow_id,state_store=store)['supplier_id']==100
+
+    remote.rows[0]['field_7']=token
+    remote.rows[1]['field_7']='OTHER-TOKEN'
+    assert ensure(client(remote),token,fields,store,future_flow_id=flow_id)==100
+    assert remote.posts==1
+
 def test_old_duplicate_token_is_rejected_instead_of_choosing_an_employee(tmp_path):
     remote=Transport(); remote.rows=[{'Id':100,'field_7':'WA-SYNTHETIC'},{'Id':101,'field_7':'WA-SYNTHETIC'}]
     with pytest.raises(RuntimeError):

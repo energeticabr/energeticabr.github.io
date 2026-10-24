@@ -11,12 +11,14 @@ from uuid import uuid4
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--private-output', type=Path, required=True)
+    parser.add_argument('--candidate-stage', type=Path)
     parser.add_argument('--baseline', action='store_true')
     parser.add_argument('--label')
     parser.add_argument('--reused-77', action='store_true')
     parser.add_argument('pytest_args', nargs='*')
     args = parser.parse_args()
     private = args.private_output.resolve()
+    candidates = (args.candidate_stage or private / 'task2-candidates').resolve()
     tests = Path(__file__).resolve().parent
     results = []
     for scope, filename in [('app', 'workflow-app.py'), ('build', 'workflow.py')]:
@@ -33,7 +35,7 @@ def main():
             shutil.copyfile(private / 'live' / filename, root / 'worker/workflow.py')
             shutil.copyfile(private / 'live/workflow_config.json', root / 'worker/workflow_config.json')
         else:
-            for source in (private / 'task2-candidates' / scope / 'worker').iterdir():
+            for source in (candidates / scope / 'worker').iterdir():
                 shutil.copyfile(source, root / 'worker' / source.name)
         if scope == 'build':
             shutil.copyfile(support / 'mirror-channel_bridge.py', root / 'channel_bridge.py')
@@ -44,6 +46,7 @@ def main():
             temporary = Path('\\\\?\\' + str(temporary))
         env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'TMP': str(temporary), 'TEMP': str(temporary),
             'ENERGETICA_BACKEND_TEST_ROOT': str(root), 'ENERGETICA_PRIVATE_OUTPUT': str(private),
+            'ENERGETICA_CANDIDATE_STAGE': str(candidates),
             'PYTHONPATH': os.pathsep.join(map(str, [private / 'python-test-deps', root, root / 'worker', tests]))}
         test_args = args.pytest_args or [str(tests)]
         if args.reused_77:

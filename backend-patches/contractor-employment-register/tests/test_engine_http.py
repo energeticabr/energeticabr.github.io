@@ -88,6 +88,44 @@ def test_actual_engine_uncertain_target_post_restarts_and_reconciles_exact_origi
     assert run.remote.source_downloads == 0
 
 
+def test_actual_engine_moved_source_token_cannot_authorize_another_supplier_on_restart(tmp_path):
+    run = Recovery(tmp_path)
+    run.remote.target.hide_list = True
+    assert run.commit()['status'] == 'submission_failed'
+    assert run.remote.source_posts == 1 and run.remote.target.posts == 0
+    checkpoints = list((tmp_path / 'state').rglob('source-*.json'))
+    assert len(checkpoints) == 1
+    directory = checkpoints[0].parent
+    original = {p.name: p.read_bytes() for p in directory.glob('*.json')}
+    assert json.loads(checkpoints[0].read_text())['item_id'] == 7
+    assert 'submission-7.json' in original and 'submission-8.json' not in original
+    frozen = copy.deepcopy(run.state['supplier_hr_submission'])
+    run.remote.target.hide_list = False
+    run.remote.source_rows[8] = {**copy.deepcopy(run.remote.source_rows[7]), 'Id': 8}
+    run.remote.source_rows[7]['__PowerAppsId__'] = 'TOKEN-MOVED-AWAY'
+    request = run.remote.request
+
+    def transport(method, url, **kwargs):
+        path = unquote(urlsplit(url).path).casefold()
+        if path.endswith("getbytitle('fornecedores')/items(8)"):
+            assert method == 'GET'
+            return Transport.response(run.remote.source_rows[8])
+        if path.endswith("getbytitle('fornecedores')/items(8)/attachmentfiles"):
+            assert method == 'GET'
+            return Transport.response({'value': []})
+        return request(method, url, **kwargs)
+
+    run.remote.request = transport
+    for _ in range(2):
+        run.restart()
+        assert run.commit()['status'] == 'submission_failed'
+        assert run.remote.source_posts == 1 and run.remote.target.posts == 0
+        assert run.remote.target.rows == {}
+        assert {p.name: p.read_bytes() for p in directory.glob('*.json')} == original
+        assert run.state['supplier_hr_submission'] == frozen
+        assert run.remote.source_downloads == 0
+
+
 @pytest.mark.parametrize('invalid', ['2026-10-01garbage', '2026-02-31', '2026-10-01T99:00:00Z'])
 def test_invalid_restored_admission_routes_to_date_before_any_source_post(tmp_path, invalid):
     run = Recovery(tmp_path)

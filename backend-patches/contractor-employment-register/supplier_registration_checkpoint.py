@@ -61,6 +61,9 @@ def ensure_supplier(client, token, fields, *, state_store=None, future_flow_id=N
                 raise RuntimeError('Duplicate supplier submission identity requires reconciliation')
             return _positive_id(rows[0]['Id']) if rows else None
         item_id = lookup()
+        if (item_id is not None and checkpoint.get('item_id') is not None
+                and item_id != _positive_id(checkpoint['item_id'])):
+            raise RuntimeError('Supplier identity changed; reconcile without overwriting')
         if item_id is None and checkpoint.get('item_id') is not None:
             item_id = _positive_id(checkpoint['item_id'])
             row = client._request('GET', endpoint + '(' + str(item_id) + ')')

@@ -704,7 +704,7 @@
 +        return {'status': 'registered', 'supplier_id': source_id, 'target_id': target_id, 'verified': True}
 --- /dev/null
 +++ b/app/worker/supplier_registration_checkpoint.py
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,99 @@
 +"""Single-POST supplier registration, durable even if its response is lost."""
 +import hashlib
 +import json
@@ -768,6 +768,9 @@
 +                raise RuntimeError('Duplicate supplier submission identity requires reconciliation')
 +            return _positive_id(rows[0]['Id']) if rows else None
 +        item_id = lookup()
++        if (item_id is not None and checkpoint.get('item_id') is not None
++                and item_id != _positive_id(checkpoint['item_id'])):
++            raise RuntimeError('Supplier identity changed; reconcile without overwriting')
 +        if item_id is None and checkpoint.get('item_id') is not None:
 +            item_id = _positive_id(checkpoint['item_id'])
 +            row = client._request('GET', endpoint + '(' + str(item_id) + ')')
@@ -1507,7 +1510,7 @@
 +        return {'status': 'registered', 'supplier_id': source_id, 'target_id': target_id, 'verified': True}
 --- /dev/null
 +++ b/build/worker/supplier_registration_checkpoint.py
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,99 @@
 +"""Single-POST supplier registration, durable even if its response is lost."""
 +import hashlib
 +import json
@@ -1571,6 +1574,9 @@
 +                raise RuntimeError('Duplicate supplier submission identity requires reconciliation')
 +            return _positive_id(rows[0]['Id']) if rows else None
 +        item_id = lookup()
++        if (item_id is not None and checkpoint.get('item_id') is not None
++                and item_id != _positive_id(checkpoint['item_id'])):
++            raise RuntimeError('Supplier identity changed; reconcile without overwriting')
 +        if item_id is None and checkpoint.get('item_id') is not None:
 +            item_id = _positive_id(checkpoint['item_id'])
 +            row = client._request('GET', endpoint + '(' + str(item_id) + ')')

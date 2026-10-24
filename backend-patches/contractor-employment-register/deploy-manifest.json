@@ -23,7 +23,7 @@
       "destination": "/opt/energetica-whatsapp/worker/supplier_registration_checkpoint.py",
       "candidate": "app/worker/supplier_registration_checkpoint.py",
       "before_sha256": null,
-      "after_sha256": "8a44884adb132c7715d4ec3d60be6ee37be27cd5c26656db2d4f399f9e8dcdbe"
+      "after_sha256": "c738c48a818c7ebfcf621c26af25291f15e798de90f4a0fc2a2fc1597a9fcdaa"
     },
     {
       "destination": "/home/opc/energetica-build/worker/workflow.py",
@@ -47,8 +47,8 @@
       "destination": "/home/opc/energetica-build/worker/supplier_registration_checkpoint.py",
       "candidate": "build/worker/supplier_registration_checkpoint.py",
       "before_sha256": null,
-      "after_sha256": "8a44884adb132c7715d4ec3d60be6ee37be27cd5c26656db2d4f399f9e8dcdbe"
+      "after_sha256": "c738c48a818c7ebfcf621c26af25291f15e798de90f4a0fc2a2fc1597a9fcdaa"
     }
   ],
-  "patch_sha256": "c377414e9e91d05d173a2958c327dbf12836a52301e3530e903f1b0ac84574ba"
+  "patch_sha256": "8fb8bd10992d31936f612e15f92a5a921ac75b85937517475e150d1481865852"
 }

@@ -11,6 +11,7 @@ import pytest
 
 HERE = Path(__file__).resolve().parents[1]
 PRIVATE = Path(os.environ['ENERGETICA_PRIVATE_OUTPUT'])
+CANDIDATES = Path(os.environ.get('ENERGETICA_CANDIDATE_STAGE', str(PRIVATE / 'task2-candidates')))
 
 
 def builder():
@@ -85,7 +86,7 @@ def test_either_captured_variant_or_config_drift_aborts_before_output(tmp_path, 
 @pytest.mark.parametrize(('scope', 'filename'), [('app', 'workflow-app.py'), ('build', 'workflow.py')])
 def test_only_reviewed_workflow_methods_change_and_every_other_method_survives(scope, filename):
     original = ast.parse((PRIVATE / 'live' / filename).read_text(encoding='utf-8'))
-    candidate = ast.parse((PRIVATE / 'task2-candidates' / scope / 'worker/workflow.py').read_text(encoding='utf-8'))
+    candidate = ast.parse((CANDIDATES / scope / 'worker/workflow.py').read_text(encoding='utf-8'))
     def methods(tree):
         engine = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'WorkflowEngine')
         return {node.name: ast.dump(node, include_attributes=False) for node in engine.body
@@ -101,7 +102,7 @@ def test_only_reviewed_workflow_methods_change_and_every_other_method_survives(s
 @pytest.mark.parametrize('scope', ['app', 'build'])
 def test_config_changes_are_limited_to_role_and_admission_and_preserve_binary_menus(scope):
     original = json.loads((PRIVATE / 'live/workflow_config.json').read_text(encoding='utf-8'))
-    candidate = json.loads((PRIVATE / 'task2-candidates' / scope / 'worker/workflow_config.json').read_text(encoding='utf-8'))
+    candidate = json.loads((CANDIDATES / scope / 'worker/workflow_config.json').read_text(encoding='utf-8'))
     before = copy.deepcopy(original['sharepoint']['supply_supplier_registration_flow'])
     after = copy.deepcopy(candidate['sharepoint']['supply_supplier_registration_flow'])
     assert {step['key']: step for step in before['steps'] if step['key'] in {
