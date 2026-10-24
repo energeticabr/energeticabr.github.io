@@ -84,7 +84,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     savePending();
     return editable;
   }
-  const button = (label, attribute, action) => { const node = el('button', 'meal-voucher-button', label); node.type = 'button'; if (attribute) node.setAttribute(attribute, ''); node.addEventListener('click', () => { if (!busy && !destroyed) void action(); }); return node; };
+  const button = (label, attribute, action) => { const node = el('button', 'meal-voucher-button', label); node.type = 'button'; node.disabled = busy || trayActionBusy; if (attribute) node.setAttribute(attribute, ''); node.addEventListener('click', () => { if (!busy && !trayActionBusy && !destroyed) void action(); }); return node; };
   const field = (label, input) => { const wrapper = el('label', 'meal-voucher-field'); wrapper.append(el('span', '', label), input); return wrapper; };
   function showError(cause) { error.textContent = cause?.message || 'Não foi possível concluir. Tente novamente.'; error.hidden = false; }
   async function trayAction(action) {
@@ -95,6 +95,7 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
     finally { trayActionBusy = false; if (opened && !destroyed) { trayChanged(); renderTray(); } }
   }
   function renderTray() {
+    for (const control of footer.querySelectorAll('button')) control.disabled = busy || trayActionBusy;
     tray.replaceChildren(); tray.hidden = step === 'done';
     if (tray.hidden) return;
     const sources = trayAccess.snapshot(), top = el('div','meal-voucher-tray-heading');

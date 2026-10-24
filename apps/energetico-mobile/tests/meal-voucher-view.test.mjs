@@ -76,6 +76,19 @@ test('fechar durante a leitura dos anexos permite reabrir sem a resposta antiga 
   assert.equal(h.doc.querySelector('[name="meal-obs"]').value,'Texto da nova abertura');assert.equal(h.doc.querySelector('[data-meal-confirm]'),null);
 });
 
+for(const phase of ['extras','review'])test(`seleção de anexo ainda aberta bloqueia avanço e confirmação no passo ${phase}`,async t=>{
+  const first=new File(['abc'],'primeiro.pdf',{type:'application/pdf'}),second=new File(['xyz'],'segundo.pdf',{type:'application/pdf'});let posts=0,posted;
+  const h=await extrasPanel(t,{files:[first],post:async value=>{posts++;posted=value;return {orderId:'5',lines:[],total:50};}});
+  if(phase==='review'){h.doc.querySelector('[data-meal-next]').click();await tick();}
+  let release;h.tray.pickFiles=()=>new Promise(resolve=>{release=()=>{h.tray.set([first,second]);resolve();};});h.tray.set([first]);
+  h.doc.querySelector('[data-meal-tray-pick]').click();
+  const advance=h.doc.querySelector(phase==='extras'?'[data-meal-next]':'[data-meal-confirm]');advance.click();await tick();
+  h.doc.querySelector('[data-meal-confirm]')?.click();await tick();const earlyPosts=posts;
+  release();await tick();assert.equal(earlyPosts,0,'não grava enquanto o seletor ainda está preparando o arquivo');
+  h.doc.querySelector('[data-meal-next]').click();await tick();h.doc.querySelector('[data-meal-confirm]').click();await tick();
+  assert.deepEqual(posted.files,[first,second]);assert.equal(posts,1);
+});
+
 function recoveryPanel(t, { change = () => {}, canEdit = async () => true, files = [] } = {}) {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
   const supplier = { id:'1', label:'Ana', branch:'OBRA A', profession:'PEDREIRO' };
