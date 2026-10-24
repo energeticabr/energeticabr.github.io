@@ -2789,7 +2789,7 @@ export function renderChatMarkup(state = {}, { showSettings = false, allowDemo =
         <button type="button" data-action="capture-photo" aria-label="Tirar foto"${busy ? " disabled" : ""}>📷</button>
       </div>`}
       <label class="sr-only" for="chatDraft">Mensagem</label>
-      <textarea id="chatDraft" data-role="draft"${diaryActivitiesInput ? ' data-diary-activities-input="true"' : ""}${state.recoveryUncertain ? " disabled" : ""}${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(draftValue)}</textarea>
+      <textarea id="chatDraft" data-role="draft"${diaryActivitiesInput ? ' data-diary-activities-input="true"' : ""}${state.recoveryUncertain ? " disabled" : ""}${databaseFilter?.key ? ` data-database-filter-key="${escapeHtml(databaseFilter.key)}"` : ""}${dateInput ? ' data-date-input="true" inputmode="numeric" maxlength="10"' : documentIdInput ? ' data-document-id-input="true" inputmode="numeric" maxlength="18"' : ""} rows="3" autocomplete="off" placeholder="${databaseFilter ? (databaseFilter.message?.acceptsCustomText === true ? "Filtre ou digite sua descrição…" : "Digite para filtrar…") : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem"}">${escapeHtml(draftValue)}</textarea>
       <section class="voice-recording-panel" data-role="voice-recording-panel" aria-label="Gravação de voz" hidden>
         <div class="voice-recording-panel__heading"><span class="voice-recording-live-dot" aria-hidden="true"></span><strong data-role="voice-recording-status" aria-live="polite">Preparando microfone…</strong><time data-role="voice-recording-time">00:00</time></div>
         <div class="voice-waveform" data-role="voice-waveform" role="img" aria-label="Nível de áudio recebido">${Array.from({ length: 20 }, () => '<i aria-hidden="true"></i>').join("")}</div>
@@ -4049,7 +4049,7 @@ export function createChatView(root, { onOpenSettings, onDemoAccess, onSignOut, 
         draft.removeAttribute("maxlength");
       }
       if (!documentIdInput) delete draft.dataset.documentIdInput;
-      draft.placeholder = databaseFilter ? "Digite para filtrar…" : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
+      draft.placeholder = databaseFilter ? (databaseFilter.message?.acceptsCustomText === true ? "Filtre ou digite sua descrição…" : "Digite para filtrar…") : dateInput ? "DD/MM/AAAA" : documentIdInput ? "Digite o CPF ou CNPJ" : "Digite uma mensagem";
     }
     if (draft) draft.disabled = state.recoveryUncertain === true;
     if (!draftOnly) composerBusy = Boolean(state.activeText || state.attachmentUploadProgress || state.resuming || state.responseTransitionPending || state.recoveryBlocked || state.recoveryUncertain || rhidAttendanceReportBusy)

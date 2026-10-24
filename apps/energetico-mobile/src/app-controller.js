@@ -11036,10 +11036,12 @@ export function createAppController({
       olderReferences = olderReferences.slice(1);
       persistRecovery(); render();
     });
-    bind("send-text", () => sendText(
-      store.getState().draft,
-      latestDatabaseFilter(store.getState().messages) ? "filter_query" : undefined,
-    ));
+    bind("send-text", () => {
+      const filter = latestDatabaseFilter(store.getState().messages);
+      if (filter?.message.acceptsCustomText === true) cancelDatabaseFilter();
+      return sendText(store.getState().draft,
+        filter && filter.message.acceptsCustomText !== true ? "filter_query" : undefined);
+    });
     bind("date-selected", command => {
       const formatted = formatDatePickerValue(command.value);
       return formatted ? sendText(formatted) : false;

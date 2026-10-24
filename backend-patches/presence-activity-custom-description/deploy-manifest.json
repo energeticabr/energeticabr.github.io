@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "destination": "/opt/energetica-whatsapp/worker/workflow.py",
+      "candidate": "app/worker/workflow.py",
+      "before_sha256": "93c939e16fea9ab361b7970261c0f24eacd5cb87cc810ed6bbfc354ddd144d90",
+      "after_sha256": "c15b1c3629aa5a6bb4895e8479c12ef3e48bd72809135efdd8f9e67af18277b9"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/channel_bridge.py",
+      "candidate": "app/channel_bridge.py",
+      "before_sha256": "740b6f3abcf32b0971dfd3ca4ead3415b723a4db347afa8dab749388da118741",
+      "after_sha256": "2b0d9040331eb71ea65260ab38ab31cc006a30e8f99a3520f84e8dbcc6255106"
+    },
+    {
+      "destination": "/opt/energetica-whatsapp/worker/workflow_config.json",
+      "candidate": "app/worker/workflow_config.json",
+      "before_sha256": "80fa8588dc246b6273512b1dd173537a204c4301b12da498a3e2c7d79f1ab37d",
+      "after_sha256": "605496578bd8550c6fc9d6a74b938f96b776b29a52130543d05c6134d1732232"
+    },
+    {
+      "destination": "/home/opc/energetica-build/worker/workflow.py",
+      "candidate": "build/worker/workflow.py",
+      "before_sha256": "aac994185f7b6b540f32497ba79a87bb692509eb087db7c7e4598413d2a3aefd",
+      "after_sha256": "7cecd921977e1e508f71c1a1b2f4b73af4c9996423a4c87f91f03564f2b48080"
+    },
+    {
+      "destination": "/home/opc/energetica-build/channel_bridge.py",
+      "candidate": "build/channel_bridge.py",
+      "before_sha256": "a5a8244d6525f34f53de781caa399570073df1f55ef8148ed4c1c5f9cdfa5e19",
+      "after_sha256": "11ebb5ae1afb95fa7e22b894ac7eaa5a8c7cbdb143ff7262337f62b2822382b7"
+    },
+    {
+      "destination": "/home/opc/energetica-build/worker/workflow_config.json",
+      "candidate": "build/worker/workflow_config.json",
+      "before_sha256": "80fa8588dc246b6273512b1dd173537a204c4301b12da498a3e2c7d79f1ab37d",
+      "after_sha256": "605496578bd8550c6fc9d6a74b938f96b776b29a52130543d05c6134d1732232"
+    }
+  ]
+}

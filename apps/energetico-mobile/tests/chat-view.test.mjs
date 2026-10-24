@@ -5415,6 +5415,32 @@ test("digitação em lista de banco solicita filtro sem precisar enviar", () => 
   dom.window.close();
 });
 
+test('descrição própria mostra compositor de uso duplo e preserva filtro nas atualizações', t => {
+  const dom = new JSDOM('<main></main>'), root = dom.window.document.querySelector('main');
+  const view = createChatView(root);
+  t.after(() => { view.destroy(); dom.window.close(); });
+  const filters = [], submitted = [];
+  view.on('database-filter-changed', command => filters.push(command));
+  view.on('send-text', command => submitted.push(command));
+  const state = signedInState({ messages: [{ id: 'activity', role: 'assistant', type: 'poll',
+    question: 'QUAL É A DESCRIÇÃO DA ATIVIDADE EXECUTADA? DIGITE SUA PRÓPRIA DESCRIÇÃO E CLIQUE EM ENVIAR.',
+    databaseFilter: true, databaseFilterKey: 'atividade_demonstrativo_etapa', acceptsCustomText: true,
+    options: [{ id: 'choice:atividade_demonstrativo_etapa:134', label: '134 - ALVENARIA QA' }] }] });
+  for (const draftValue of ['', 'Limpeza própria']) {
+    view.render({ ...state, draft: draftValue });
+    assert.equal(root.querySelector('[data-role="draft"]').placeholder, 'Filtre ou digite sua descrição…');
+  }
+  const draft = root.querySelector('[data-role="draft"]');
+  draft.value = 'alv';
+  draft.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(filters.at(-1).filterKey, 'atividade_demonstrativo_etapa');
+  assert.equal(filters.at(-1).value, 'alv');
+  root.querySelector('[data-action="send-text"]').click();
+  assert.equal(submitted.length, 1);
+  view.render(signedInState({ messages: [{ ...state.messages[0], id: 'other', acceptsCustomText: false }] }));
+  assert.equal(root.querySelector('[data-role="draft"]').placeholder, 'Digite para filtrar…');
+});
+
 test("filtro preserva a ação de cadastro existente quando não corresponde ao texto digitado", () => {
   const markup = renderChatMarkup(signedInState({
     draft: "Swi",

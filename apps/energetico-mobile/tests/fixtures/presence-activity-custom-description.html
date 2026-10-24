@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/src/styles.css"><title>Descrição da atividade — QA fictício</title></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createConversationStore } from '/src/chat/conversation-store.js';
+import { createAppController } from '/src/app-controller.js';
+try {
+  const store = createConversationStore(), view = createChatView(document.querySelector('#app'));
+  const activeFlow = { id:'construction_stage_demonstrative_create', title:'VALIDAR PRESENÇAS APONTADAS' };
+  const poll = { type:'poll', question:'👉 🛠️ QUAL É A DESCRIÇÃO DA ATIVIDADE EXECUTADA?\nSE PREFERIR, DIGITE SUA PRÓPRIA DESCRIÇÃO E CLIQUE EM ENVIAR PARA USÁ-LA COMO DESCRIÇÃO DA ATIVIDADE. VOCÊ TAMBÉM PODE FILTRAR E SELECIONAR UMA DAS OPÇÕES.',
+    databaseFilter:true, databaseFilterKey:'atividade_demonstrativo_etapa', acceptsCustomText:true,
+    options:[{ id:'choice:atividade_demonstrativo_etapa:134', reply:'choice:atividade_demonstrativo_etapa:134', label:'134 - EXECUÇÃO DE ALVENARIA QA' },
+      { id:'choice:atividade_demonstrativo_etapa:133', reply:'choice:atividade_demonstrativo_etapa:133', label:'133 - EXECUÇÃO FORMA PILARES QA' }] };
+  const sent = [];
+  const client = { async sendText(payload) {
+    if (payload.replyId === 'input_continue') return { status:'processed', messages:[] };
+    sent.push(payload);
+    document.documentElement.dataset.requests = JSON.stringify(sent);
+    if (payload.replyId === 'filter_query') {
+      const query = payload.text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
+      const options = poll.options.filter(option => option.label.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').includes(query));
+      return { status:'processed', activeFlow, messages:[{ ...poll, options }] };
+    }
+    const chosen = poll.options.find(option => option.reply === payload.replyId);
+    const activity = chosen ? chosen.label.replace(/^\d+ - /,'') : payload.text.trim().toLocaleUpperCase('pt-BR');
+    document.documentElement.dataset.accepted = activity;
+    return { status:'processed', activeFlow, messages:[{ type:'poll', question:`✅ DESCRIÇÃO DA ATIVIDADE: ${activity}\n💬 VOCÊ TEM ALGUMA OBSERVAÇÃO SOBRE A ATIVIDADE?`,
+      options:[{id:'sim',label:'✅ SIM',reply:'sim'},{id:'nao',label:'❌ NÃO',reply:'nao'}] }] };
+  } };
+  const controller = createAppController({ store, view, client,
+    auth:{ initialize:async()=>({homeAccountId:'synthetic-qa',name:'Usuário de teste'}), getToken:async()=> 'synthetic-token', signOut:async()=>{} },
+    native:{ importSharedItems:async()=>[], capturePhoto:async()=>[], pickDocuments:async()=>[] },
+    diaryFieldVisitDataFactory:async()=>({load:async()=>[]}), databaseFilterDebounceMs:20 });
+  await controller.start();
+  store.ingestRemoteMessages([poll], { activeFlow });
+  await document.fonts.ready;
+  document.documentElement.dataset.ready = 'true';
+} catch (error) { document.body.textContent = error.stack; document.documentElement.dataset.failed = 'true'; }
+</script></body></html>
