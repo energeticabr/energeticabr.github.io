@@ -400,7 +400,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     const [orders, launches, payroll] = await Promise.all([describe('NOTASPENDENTES'), describe('LANCAMENTOS'), describe('FOLHAPGTO')]);
     const obs = column(orders, ['OBS']).name, controlName = control(orders), title = column(orders, ['Title'], false)?.name;
     const launchToken = column(launches, ['__PowerAppsId__']).name, payrollToken = column(payroll, ['Title']).name;
-    const records = await Promise.all([orders, launches, payroll].map(all));
+    const records = await Promise.all([orders, launches, payroll].map(descriptor=>all(descriptor)));
     if (records.some(rows => rows.some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields))))
       throw new Error('Não foi possível confirmar todos os registros da tentativa anterior.');
     const prefix = `APP-vale-alimentacao-${progress.operationId}`.toUpperCase();

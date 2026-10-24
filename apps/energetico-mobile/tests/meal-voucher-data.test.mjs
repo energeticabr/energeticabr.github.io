@@ -1016,3 +1016,14 @@ test('armazenamento indisponível bloqueia antes de qualquer pedido ou lançamen
   const f=fixture(),data=createMealVoucherData({repository:f.repo,storage:{getItem:()=>null,setItem:()=>{throw new Error('quota');},removeItem:()=>{}}}),{suppliers}=await data.loadOptions();
   await assert.rejects(data.post(draft(suppliers),{operationId:'no-journal'}),/quota|armazenamento/);assert.equal(f.writes.length,0);
 });
+
+test('inspeção de pedido vazio nunca envia índices de Array.map como filtros OData',async()=>{
+  const f=fixture(),create=f.repo.createItem;
+  f.repo.createItem=async(...args)=>{if(args[1]==='LANCAMENTOS')throw rejectedWrite('rejeitado');return create(...args);};
+  const data=createMealVoucherData({repository:f.repo}),{suppliers}=await data.loadOptions(),selected=draft([suppliers[0]]),progress={operationId:'inspect-filter-arity'};
+  await assert.rejects(data.post(selected,progress),/rejeitado/);
+  const page=f.repo.getItemsPage;
+  f.repo.getItemsPage=async(...args)=>{const filter=new URLSearchParams(args[2]).get('$filter');if(filter&&/^[0-9]+$/.test(filter))throw Object.assign(new Error('Filtro OData inválido'),{status:400});return page(...args);};
+  assert.equal(await data.canEditPending(selected,progress),true);
+  assert.equal(f.rows.NOTASPENDENTES.length,1);assert.equal(f.rows.LANCAMENTOS.length,0);
+});
