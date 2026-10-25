@@ -44,9 +44,9 @@
 
 **Interfaces:** `build_definition()` and `build_package(output_dir)` consume Task 1's manifest/payload contract and the existing standard connector pattern. Versioned rules are loaded from a private OneDrive JSON file; missing/expired rules fail closed.
 
-- [ ] Write failing generated-payload tests for schedule, pagination, rule/sheet guards, no off-schedule finance, unique origin keys, exact readback, PDF identity and recovery.
-- [ ] Implement WDL with integer-cent calculations, frozen JSON/PDF recovery, uniqueness and read-after-write; no premium connector.
-- [ ] Run both monthly and existing weekly automation suites; validate package maps and WDL graph; commit.
+- [x] Write failing generated-payload tests for schedule, pagination, rule/sheet guards, no off-schedule finance, unique origin keys, exact readback, PDF identity and recovery.
+- [x] Implement WDL with integer-cent calculations, frozen JSON/PDF recovery, uniqueness and read-after-write; no premium connector.
+- [x] Run both monthly and existing weekly automation suites; validate package maps and WDL graph; commit.
 
 ### Task 3: First load, cloud publication and independent verification
 
@@ -56,6 +56,11 @@
 
 - [x] Re-read actual schema/data and confirmed calculation settings; add only the explicitly supplied Supervisor salary if missing.
 - [x] Preview the actual intended initial changes and PDF before invoking the authorized first load; require ETags/pending state and exact person/month correspondence.
-- [ ] Import one flow using existing connections, validate a no-finance preview, and verify the 01/11 recurrence.
-- [ ] Execute/reconcile the authorized first load only after all financial rules are known; verify each child, payroll row, parent sum and PDF bytes independently.
-- [ ] Obtain one fresh whole-branch review, fix important findings with RED/GREEN tests, run CI, merge and verify live outcome; report any actual input/access blocker without completion claims.
+- [x] Import one flow using existing connections, validate a no-finance preview, and verify the 01/11 recurrence.
+- [x] Execute/reconcile the authorized first load only after all financial rules are known; verify each child, payroll row, parent sum and PDF bytes independently.
+- [x] Obtain one fresh whole-branch review and fix important findings with RED/GREEN tests.
+- [x] Run CI and verify the live outcome without claiming a future scheduled execution has already occurred.
+
+Final integration uses [PR 592](https://github.com/energeticabr/energeticabr.github.io/pull/592).
+GitHub is the authoritative merge/check record; sanitized cloud and initial-load
+evidence is in `docs/verification/monthly-payroll-taxes-20261025.md`.
