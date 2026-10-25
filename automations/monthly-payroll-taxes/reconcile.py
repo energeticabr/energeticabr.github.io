@@ -151,6 +151,10 @@ def _same(field, actual, expected):
         if field in _MONEY:
             return model.money_cents(actual) == model.money_cents(expected)
         if field in _IDS:
+            # SharePoint Number columns deserialize integral references as 3.0.
+            # Normalize only exact integral floats, never fractions/bools/NaN.
+            if isinstance(actual, float) and actual.is_integer(): actual = int(actual)
+            if isinstance(expected, float) and expected.is_integer(): expected = int(expected)
             return model.positive_id(actual) == model.positive_id(expected)
         if field == 'QTD':
             return not isinstance(actual, bool) and Decimal(str(actual)) == Decimal(str(expected))

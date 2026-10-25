@@ -33,10 +33,10 @@
 
 **Interfaces:** `plan_month(employees, suppliers, salaries, sheets, rules, execution_date)` returns `{version, competence, createdDate, dueDate, rulesVersion, rows, totals}`; rows carry `supplierId,name,branch,profession,cargo,admission,sheetId,salaryCents,days,divisor,baseCents,components,inssCents,fgtsCents`. `parent_fields(plan,tax)`, `provision_fields(plan,row,tax,parent_id)`, `payroll_fields(plan,row,tax,provision_id)` produce actual field values. `calculation_html(plan,tax)` and `render_calculation_pdf(plan,tax,path)` share these values.
 
-- [ ] Write failing behavior tests for prior month/year, partial admission, explicit rules, validity, duplicate identities/sheets, exact payloads and escaped/rendered PDF totals.
-- [ ] Run bundled Python unittest; observe missing implementation failures.
-- [ ] Implement Decimal/integer-cent model and reports; test synthetic inputs only.
-- [ ] Verify complete model/report suite and render/reopen PDFs; commit.
+- [x] Write failing behavior tests for prior month/year, partial admission, explicit rules, validity, duplicate identities/sheets, exact payloads and escaped/rendered PDF totals.
+- [x] Run bundled Python unittest; observe missing implementation failures.
+- [x] Implement Decimal/integer-cent model and reports; test synthetic inputs only.
+- [x] Verify complete model/report suite and render/reopen PDFs; commit.
 
 ### Task 2: Native monthly flow and package
 
@@ -54,8 +54,8 @@
 
 **Interfaces:** Frozen plan/payloads from Task 1, package from Task 2, existing service identity and authenticated Power Automate connections.
 
-- [ ] Re-read actual schema/data and confirmed calculation settings; add only the explicitly supplied Supervisor salary if missing.
-- [ ] Preview the actual intended initial changes and PDF before invoking the authorized first load; require ETags/pending state and exact person/month correspondence.
+- [x] Re-read actual schema/data and confirmed calculation settings; add only the explicitly supplied Supervisor salary if missing.
+- [x] Preview the actual intended initial changes and PDF before invoking the authorized first load; require ETags/pending state and exact person/month correspondence.
 - [ ] Import one flow using existing connections, validate a no-finance preview, and verify the 01/11 recurrence.
 - [ ] Execute/reconcile the authorized first load only after all financial rules are known; verify each child, payroll row, parent sum and PDF bytes independently.
 - [ ] Obtain one fresh whole-branch review, fix important findings with RED/GREEN tests, run CI, merge and verify live outcome; report any actual input/access blocker without completion claims.

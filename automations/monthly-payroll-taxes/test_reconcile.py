@@ -315,6 +315,23 @@ class InitialReconcileTests(unittest.TestCase):
                 self.run_reconcile()
             self.assert_no_financial_writes()
 
+    def test_integral_sharepoint_number_foreign_keys_are_verified_without_reposting(self):
+        original_read = self.transport.read
+        def number_read(title, item_id):
+            row = original_read(title, item_id)
+            for field in ('IDFOLHA', 'IDPROVISAO'):
+                if isinstance(row.get(field), int): row[field] = float(row[field])
+            return row
+        self.transport.read = number_read
+        first = self.run_reconcile()
+        writes = len(self.transport.writes)
+        second = self.run_reconcile()
+        self.assertEqual(first, second)
+        self.assertEqual(len(self.transport.writes), writes)
+        self.assertTrue(reconcile._same('IDFOLHA', 610.0, 610))
+        for actual in (610.5, True, float('nan'), float('inf'), -1.0):
+            self.assertFalse(reconcile._same('IDFOLHA', actual, 610))
+
     def test_audited_initial_parent_can_have_blank_status_but_not_payment_references(self):
         for origin in self.snapshot['specified_origins'][PARENTS]:
             origin['STATUS'] = None
