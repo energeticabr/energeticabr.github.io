@@ -8,7 +8,7 @@ import {createGalleryRecordActions} from '../../src/ui/gallery-record-actions.js
 const width=new URLSearchParams(location.search).get('width');
 if(['320','390'].includes(width)) {
  const frame=document.createElement('iframe');frame.title=`Editor em ${width}px`;frame.src=location.pathname;
- frame.style.cssText=`width:${width}px;height:900px;border:0;display:block;margin:auto`;
+ frame.style.cssText=`width:${width}px;height:640px;border:0;display:block;margin:auto`;
  document.body.replaceChildren(frame);
 } else {
 const parentFields={FILIAL:'004',FORNECEDOR:'FORNECEDOR FICTÍCIO',VALORTOTAL:'30'};

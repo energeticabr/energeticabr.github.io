@@ -37,7 +37,11 @@ function fixture({ single = false, parentDates = {}, withTarget = false } = {}) 
     async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
     async getColumns(_site, list) { return structuredClone(columns[list]); },
     async getItemsPage(_site, list) { return { items: [...records[list].values()].map(row => structuredClone(row)), hasMore: false }; },
-    async getItem(_site, list, id) { return structuredClone(records[list].get(String(id))); },
+    async getItem(_site, list, id) {
+      const row = records[list].get(String(id));
+      if (!row) throw Object.assign(new Error('Registro não encontrado'), { status: 404 });
+      return structuredClone(row);
+    },
     async updateItem(_site, list, id, fields, { eTag }) {
       const row = records[list].get(String(id));
       assert.equal(eTag, row.eTag);
@@ -227,6 +231,58 @@ test('relinking includes exact decimal quantity and freight and catches a siblin
   await f.data.saveEditor(await f.data.loadEditor('2'),{DESCRITIVOPROVISAO:'99'});
   assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
   assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'60.3');
+});
+
+test('destination deletion during the child scan is caught before the move write', async () => {
+  const f = fixture({ withTarget: true });
+  const context = await f.data.loadEditor('2');
+  const page = f.repository.getItemsPage;
+  let deleted = false;
+  f.repository.getItemsPage = async (...args) => {
+    const result = await page(...args);
+    if (args[1] === 'children' && !deleted) { deleted = true; f.records.parents.delete('99'); }
+    return result;
+  };
+  await assert.rejects(f.data.saveEditor(context,{DESCRITIVOPROVISAO:'99'}));
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'42');
+  assert.deepEqual(f.writes,[]);
+});
+
+test('destination deletion after the confirmed move conditionally restores its original link and totals', async () => {
+  const f = fixture({ withTarget: true });
+  const context = await f.data.loadEditor('2');
+  const update = f.repository.updateItem;
+  let deleted = false;
+  f.repository.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (args[1] === 'children' && !deleted) { deleted = true; f.records.parents.delete('99'); }
+    return result;
+  };
+  await assert.rejects(f.data.saveEditor(context,{DESCRITIVOPROVISAO:'99',VALORTOTAL:'5'}));
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'42');
+  assert.equal(f.records.children.get('2').fields.VALORTOTAL,'10');
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'30');
+});
+
+test('an intervening move does not prevent repairing totals from an earlier confirmed move', async () => {
+  const f = fixture({ withTarget: true });
+  f.records.parents.set('123',{id:'123',eTag:'p123',fields:{...structuredClone(f.records.parents.get('99').fields),VALORTOTAL:'0'}});
+  const first = await f.data.loadEditor('2');
+  const update = f.repository.updateItem;
+  let failed = false;
+  f.repository.updateItem = (...args) => {
+    if (args[1] === 'parents' && args[2] === '42' && !failed) { failed = true; throw new Error('offline'); }
+    return update(...args);
+  };
+  await assert.rejects(f.data.saveEditor(first,{DESCRITIVOPROVISAO:'99'}),/offline/);
+  const other = createPaymentProgrammingGalleryData({ repository:f.repository });
+  await other.saveEditor(await other.loadEditor('2'),{DESCRITIVOPROVISAO:'123'});
+  await assert.rejects(f.data.saveEditor(first,{DESCRITIVOPROVISAO:'99'}),/v[ií]nculo|mudou/i);
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'123');
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'40');
+  assert.equal(f.records.parents.get('123').fields.VALORTOTAL,'10');
+  assert.equal(f.writes.filter(write=>write.list==='children').length,2);
 });
 
 test('a changed payment date reaches the parent only when this is its sole child and payment dates are blank', async () => {
