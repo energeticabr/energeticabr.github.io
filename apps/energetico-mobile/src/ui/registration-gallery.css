@@ -167,7 +167,17 @@
 .rg-row--provision-description .rg-row-main { padding: 0; }
 .rg-provision-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; align-content: start; gap: 7px; width: calc(100% - 54px); min-height: max(44px, var(--compact-control-height, 44px)); margin-bottom: 12px; }
 .rg-provision-heading .rg-row-title { flex: 1 1 auto; max-width: 100%; margin: 5px 0 0; color: #123b77; font-size: 1.04rem; font-weight: 800; line-height: 1.25; text-transform: uppercase; overflow-wrap: break-word; }
-.rg-provision-heading .rg-document-id { margin-top: 4px; padding: 5px 7px; white-space: nowrap; }
+.rg-provision-heading .rg-row-title { flex: 1 1 85px; }
+.rg-provision-id-cluster { display: grid; flex: 0 1 auto; align-content: center; justify-items: center; gap: 2px; min-width: 64px; min-height: 68px; max-width: 100%; padding: 6px; border-radius: 9px; background: #c31b30; color: #fff; }
+.rg-provision-id-cluster > span { font-size: .68rem; font-weight: 750; }
+.rg-provision-id-cluster > strong { max-width: 100%; font-family: ui-monospace, monospace; font-size: var(--rg-provision-id-font, 1.7rem); font-weight: 850; line-height: 1.15; overflow-wrap: anywhere; }
+.rg-provision-linked-cluster { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 72px; margin: 0 0 12px; padding: 12px; border: 1px solid #a9cddd; border-radius: 10px; background: #dbeefa; color: #123b63; text-align: left; }
+.rg-provision-linked-cluster:focus-visible { outline: 3px solid #1565c0; outline-offset: 2px; }
+.rg-provision-linked-copy { display: grid; flex: 1; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.rg-provision-linked-copy > strong { font-size: .96rem; }
+.rg-provision-linked-copy > span { font-size: .78rem; }
+.rg-provision-linked-cluster > .rg-provision-icon { flex: none; color: #1680bb; }
+.rg-provision-linked-arrow { flex: none; font-size: 1.8rem; }
 .rg-provision-icon { display: block; width: 24px; height: 24px; color: #71859a; }
 .rg-overlay[data-gallery-kind="provisionDescription"] .gallery-filter-button .rg-provision-icon,
 .rg-overlay[data-gallery-kind="provisionDescription"] .gallery-refresh-button .rg-provision-icon { color: #123b77; }

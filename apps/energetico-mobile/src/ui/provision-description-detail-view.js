@@ -3,7 +3,7 @@ import { createLoadingIndicator } from './loading-indicator.js';
 
 /** Read-only modal owned by the payment gallery; no editor or mutation actions. */
 export function createProvisionDescriptionDetail({ document: doc, host, background, loadGroup,
-  field, format, lineTotal, timeoutMs = 30_000 }) {
+  field, format, lineTotal, timeoutMs = 30_000, resolveTrigger = (_id, trigger) => trigger }) {
   let current = null, destroyed = false;
   const el = (tag, className = '', label) => {
     const node = doc.createElement(tag); node.className = className;
@@ -28,7 +28,9 @@ export function createProvisionDescriptionDetail({ document: doc, host, backgrou
       if (ariaHidden == null) node.removeAttribute('aria-hidden'); else node.setAttribute('aria-hidden', ariaHidden);
     }
     state.trigger.setAttribute('aria-expanded', 'false');
-    if (state.trigger.isConnected && !host.hidden) state.trigger.focus({ preventScroll: true });
+    const trigger = resolveTrigger(state.id, state.trigger) || state.trigger;
+    trigger.setAttribute('aria-expanded', 'false');
+    if (!host.hidden) (trigger.isConnected ? trigger : host).focus({ preventScroll: true });
   }
   function groupContent(result, id) {
     if (String(result?.description?.id) !== id || !Array.isArray(result.provisions)) throw new Error('Grupo inválido.');

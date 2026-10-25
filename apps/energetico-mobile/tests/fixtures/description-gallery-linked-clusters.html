@@ -1,0 +1,69 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Descritivo provisão — prévia fictícia</title></head><body><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/orders-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import '../../src/ui/registration-gallery.css';
+import '../../src/ui/searchable-filter-selects.css';
+import { createRegistrationGalleryData } from '../../src/chat/registration-gallery-data.js';
+import { createRegistrationGallery } from '../../src/ui/registration-gallery-view.js';
+const params = new URLSearchParams(location.search), width = params.get('width');
+if (['320','390'].includes(width)) {
+  const frame = document.createElement('iframe'); frame.title = `Descritivos em ${width}px`;
+  frame.src = `${location.pathname}${params.has('detail') ? '?detail=1' : ''}`;
+  frame.style.cssText = `width:${width}px;height:740px;border:0;display:block;margin:auto`;
+  document.body.append(frame);
+} else {
+  const parents = ['42','999999999999999','4'].map(id => ({ id, hasAttachments: false, fields: {
+    ID: Number(id), FORNECEDOR: 'FORNECEDOR FICTÍCIO COM NOME LONGO PARA CONFERIR O CARTÃO',
+    DATAPREVISTOPGTO: '2026-11-10', VALORTOTAL: '999', STATUS: 'PAGAMENTO PREVISTO',
+    FILIAL: '004 - FILIAL FICTÍCIA', OBS: 'Dados de exemplo, sem conexão ao SharePoint.',
+    Created: '2026-10-25', Modified: '2026-10-25',
+  } }));
+  const child = (id, group, fields = {}) => ({ id, fields: { ID: Number(id), DESCRITIVOPROVISAO: group,
+    FORNECEDOR: 'FORNECEDOR FICTÍCIO', DESCRICAOPGTO: 'Material de exemplo',
+    QTD: '2', VALORTOTAL: '10', FRETE: '5', STATUS: 'PAGAMENTO PREVISTO', ...fields } });
+  const pages = [[child('350','42'),child('999','4')],[child('371','42',{QTD:'1',VALORTOTAL:'20',FRETE:'0',STATUS:'PAGO'})]];
+  const repository = {
+    async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
+    async getColumns(_site,list) { return list === 'children' ? [{ name: 'DESCRITIVOPROVISAO',text:{} }] : []; },
+    async getItem(_site,_list,id) { return structuredClone(parents.find(row=>row.id===id)); },
+    async getItemsPage(_site,list,_query,{pageNumber}) { return list === 'parents' ? {items:structuredClone(parents),hasMore:false}
+      : {items:structuredClone(pages[pageNumber-1]),hasMore:pageNumber===1,nextLink:pageNumber===1?'second-page':''}; },
+    async listAttachments() { return []; },
+    updateItem() { throw new Error('Prévia somente leitura.'); },
+  };
+  const actual = createRegistrationGalleryData({kind:'provisionDescription',repository});
+  const gallery = createRegistrationGallery({document,kind:'provisionDescription',onHome(){},onCreate(){},data:{...actual,getFilterSource:()=>null}});
+  await gallery.open(); await document.fonts.ready; await new Promise(requestAnimationFrame);
+  const bounds = node => node.getBoundingClientRect();
+  const cards = [...document.querySelectorAll('[data-registration-row]')];
+  const clusters = cards.map(card => {
+    const badge = card.querySelector('.rg-provision-id-cluster'), title = card.querySelector('.rg-provision-heading .rg-row-title');
+    const trigger = card.querySelector('[data-action="description-provisions"]'), main = card.querySelector('.rg-row-main');
+    const id = bounds(badge), name = bounds(title), action = bounds(card.querySelector('.gallery-record-actions'));
+    return { id:card.dataset.registrationRow, width:id.width, height:id.height,
+      text:badge.querySelector('strong').textContent, beforeName:id.right<=name.left+1||id.bottom<=name.top+1,
+      editClear:bounds(card.querySelector('.rg-provision-heading')).right<=action.left+1,
+      touchHeight:bounds(trigger).height, fullWidth:Math.abs(bounds(trigger).width-bounds(main).width)<=1 };
+  });
+  if (params.has('detail')) {
+    const search=document.querySelector('.gallery-quick-search'); search.value='42'; search.dispatchEvent(new Event('input',{bubbles:true}));
+    document.querySelector('[data-description-id="42"]').click();
+    const deadline=performance.now()+5000;
+    while(!document.querySelector('[data-provision-id="371"]')) {
+      if(performance.now()>deadline) throw new Error('Detalhamento não carregou.');
+      await new Promise(requestAnimationFrame);
+    }
+  }
+  const dialog=document.querySelector('[data-provision-description-detail]');
+  const overflow=[...document.querySelectorAll('.rg-overlay,.rg-overlay *')].filter(node=>!node.classList.contains('screen-nav-label')&&node.clientWidth&&node.scrollWidth>node.clientWidth+1).map(node=>node.className);
+  document.documentElement.dataset.layout=JSON.stringify({clusters,overflow,
+    count:document.querySelectorAll('[data-provision-id]').length,
+    wrongGroup:Boolean(document.querySelector('[data-provision-id="999"]')),
+    total:document.querySelector('[data-description-total]')?.textContent||'',
+    dialogFits:!dialog||bounds(dialog).left>=0&&bounds(dialog).right<=innerWidth,
+    colors:[...document.querySelectorAll('.pg-description-line')].slice(0,2).map(node=>getComputedStyle(node).backgroundColor),
+  });
+  window.addEventListener('pagehide',()=>gallery.destroy(),{once:true});
+}
+</script></body></html>

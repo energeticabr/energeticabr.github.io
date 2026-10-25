@@ -23,10 +23,20 @@ export function provisionDescriptionIcon(doc,name){
 }
 
 /** Presentation only. All source values remain escaped text and all fields are retained. */
-export function renderProvisionDescriptionCard({document:doc,container,rowId,title,value}){
+export function renderProvisionDescriptionCard({document:doc,container,rowId,title,value,onDetails}){
  const el=(tag,className,text)=>{const node=doc.createElement(tag);node.className=className;if(text!==undefined)node.textContent=text;return node;};
  const heading=el('div','rg-provision-heading');
- heading.append(el('strong','rg-row-title',title),el('span','rg-document-id',`ID ${rowId}`));container.append(heading);
+ const id=String(rowId),badge=el('div','rg-provision-id-cluster');
+ badge.style.setProperty('--rg-provision-id-font',`${Math.max(1,Math.min(1.7,5.4/id.length))}rem`);
+ badge.append(el('span','','ID'),el('strong','',id));
+ heading.append(badge,el('strong','rg-row-title',title));container.append(heading);
+ const linked=el('button','rg-provision-linked-cluster');linked.type='button';linked.dataset.action='description-provisions';linked.dataset.descriptionId=id;
+ linked.disabled=!/^[1-9]\d{0,14}$/.test(id);linked.setAttribute('aria-label',`Ver provisões vinculadas ao descritivo #${id}`);
+ linked.setAttribute('aria-haspopup','dialog');linked.setAttribute('aria-expanded','false');
+ const copy=el('span','rg-provision-linked-copy');copy.append(el('strong','','Provisões vinculadas'),el('span','','Ver detalhamento'));
+ const arrow=el('span','rg-provision-linked-arrow','›');arrow.setAttribute('aria-hidden','true');
+ linked.append(provisionDescriptionIcon(doc,'document'),copy,arrow);
+ linked.addEventListener('click',()=>{if(!linked.disabled)onDetails?.(id,linked);});container.append(linked);
  const pair=(parent,field,label,icon,tone='',fallback='—')=>{const row=el('div',`rg-provision-detail${tone?` rg-provision-detail--${tone}`:''}`);row.dataset.field=field;row.append(provisionDescriptionIcon(doc,icon),el('dt','',label),el('dd','',String(value(field)||fallback)));parent.append(row);};
  const core=el('dl','rg-provision-core');
  pair(core,'STATUS','Status','status','status');
