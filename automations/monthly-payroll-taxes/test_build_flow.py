@@ -221,6 +221,26 @@ class MonthlyFlowTests(unittest.TestCase):
         fixture['lists'][flow.CHILD].append(extra)
         with self.assertRaises(PreflightRejected): self.preflight(fixture)
 
+    def test_settlement_before_payroll_creation_blocks_before_its_post(self):
+        children = flow.build_definition()['actions']['Somente_Dia_01']['actions']['Cada_Encargo']['actions']['Cada_Fornecedor']['actions']
+        claim = children['Criar_Se_Ausente_Folha']['actions']
+        for change in ({'IDLANCAMENTOS':'999'}, {'DATAPGTOEFETUADO':'2026-10-20T12:00:00Z'}, {'VALORTOTAL':'999.00'}):
+            fixture = preflight_fixture()
+            fixture['lists'][flow.PAYROLL].pop(0)
+            engine = self.preflight(fixture)
+            engine.items.update(Cada_Encargo='INSS',Cada_Fornecedor=fixture['plan']['rows'][0])
+            engine.bodies['Reler_Descritivo'] = {'value':[fixture['lists'][flow.PARENT][0]]}
+            engine.bodies['Reler_Provisao'] = {'value':[deepcopy(fixture['lists'][flow.CHILD][0])]}
+            engine.values['Campos_Folha'] = engine.evaluate(children['Campos_Folha']['inputs'])
+            engine.data['lists'][flow.CHILD][0].update(change)
+            engine.statuses['Intencao_Propria_Folha'] = 'Succeeded'
+            selected, active = {}, False
+            for name,action in claim.items():
+                if active: selected[name] = action
+                if name == 'Intencao_Propria_Folha': active = True
+            with self.subTest(change=change), self.assertRaises(PreflightRejected): engine.run(selected)
+            self.assertFalse(any(op == 'HttpRequest' and params['parameters/method']=='POST' for op,params in engine.calls))
+
     def test_settlement_after_payroll_blocks_before_any_attachment_upload(self):
         definition = flow.build_definition()
         types = definition['actions']['Somente_Dia_01']['actions']['Cada_Encargo']['actions']

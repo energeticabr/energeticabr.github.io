@@ -131,7 +131,7 @@ def payroll_payload(row, tax, provision_id):
         'VALORUNITARIO':'@'+amount,'QTD':'1','DATA':"@concat(variables('Manifesto')?['dueDate'], 'T12:00:00Z')",'IDFOLHA':"@string("+row+"?['sheetId'])",'IDPROVISAO':'@'+provision_id}
 
 
-def ensure(guid, label, fields, field, value, previous=None, numeric=False):
+def ensure(guid, label, fields, field, value, previous=None, numeric=False, source_record=None):
     """Unique-key create + durable write-ahead claim + exact authoritative readback."""
     uri = lookup(guid, field, value, numeric)
     fields_name, get_name, create_branch = 'Campos_'+label,'Buscar_Criacao_'+label,'Criar_Se_Ausente_'+label
@@ -159,7 +159,14 @@ def ensure(guid, label, fields, field, value, previous=None, numeric=False):
     claim[read_claim]['runAfter'] = {reserve:['Succeeded','Failed','TimedOut']}
     own = 'Intencao_Propria_'+label
     claim[own] = require("@and(equals(json(base64ToString(body('"+read_claim+"')?['$content']))?['run'], workflow()?['run']?['name']), equals(string(json(base64ToString(body('"+read_claim+"')?['$content']))?['fields']), string(outputs('"+fields_name+"'))))",read_claim)
-    claim['Criar_'+label] = http(f"_api/web/lists(guid'{guid}')/items",own,method='POST',body="@string(outputs('"+fields_name+"'))")
+    before_create = own
+    if source_record is not None:
+        source_guid, source_id, source_fields = source_record
+        read_source, valid_source = 'Provisao_Atual_Para_'+label, 'Estado_Provisao_Para_'+label
+        claim[read_source] = http("@concat('_api/web/lists(guid''"+source_guid+"'')/items(', string("+source_id[1:]+"), ')')",own)
+        claim[valid_source] = validate(record_checks("body('"+read_source+"')",source_fields),read_source,'Provisão de origem alterada ou baixada; não criar o vínculo FOLHAPGTO.')
+        before_create = valid_source
+    claim['Criar_'+label] = http(f"_api/web/lists(guid'{guid}')/items",before_create,method='POST',body="@string(outputs('"+fields_name+"'))")
     acts[create_branch] = {'type':'If','expression':"@equals(length(body('"+get_name+"')?['value']), 0)",'actions':claim,
         'else':{'actions':{'Reutilizar_'+label:compose('Conferir o registro já gravado, sem editar')}},'runAfter':after(state)}
     acts[reread] = http(uri); acts[reread]['runAfter'] = {create_branch:['Succeeded','Failed','TimedOut']}
@@ -410,7 +417,7 @@ def financial_actions():
     provision = provision_payload(row,tax,parent_id[1:])
     children,child_prev,child_id = ensure(CHILD,'Provisao',provision,'FOLHAOPERACAO',provision['FOLHAOPERACAO'][1:])
     fields = payroll_payload(row,tax,child_id[1:])
-    new,child_prev,_ = ensure(PAYROLL,'Folha',fields,'IDPROVISAO',child_id[1:],child_prev,numeric=True); children.update(new)
+    new,child_prev,_ = ensure(PAYROLL,'Folha',fields,'IDPROVISAO',child_id[1:],child_prev,numeric=True,source_record=(CHILD,child_id,provision)); children.update(new)
     new,child_prev = attachments(CHILD,'Provisao',child_id,child_prev,provision); children.update(new)
     children['Guardar_ID_Provisao'] = append('IDsDesteEncargo',child_id,child_prev)
     types['Cada_Fornecedor'] = loop("@variables('Manifesto')?['rows']",children,prev)
