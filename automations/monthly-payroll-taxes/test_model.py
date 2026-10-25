@@ -129,16 +129,16 @@ class MonthlyTaxModelTests(unittest.TestCase):
         args = inputs()
         args['rules']['employerComponents'] = [dict(code='TEST-S', label='Componente teste', rateBps=100)]
         args['employees'] = [] ; args['suppliers'] = []; args['salaries'] = []; args['sheets'] = []
-        for index, salary in enumerate(['4933', '1800', '2625', '2625', '2958'], 1):
+        for index, salary in enumerate(['4101', '1963', '2517', '2711', '3159'], 1):
             args['employees'].append(dict(Id=index, IDFORNECEDORORIGEM=str(index), CARGO=f'CARGO {index}', STATUS='ATIVO',
                 EMPREITEIRO='SIM', VINCULO='CLT', DATAADMISSAO='2026-09-23', DATADESLIGAMENTO=None))
             args['suppliers'].append(dict(Id=index, Title=f'PESSOA {index}', FILIAL='FILIAL TESTE', PROFISSAO='SERVIÇO', STATUS='ATIVO', EMPREITEIRO='SIM'))
             args['salaries'].append(dict(CARGO=f'CARGO {index}', SALARIO=salary, DATAREFERENCIA='2026-09-01'))
             args['sheets'].append(dict(Id=index, FORNECEDOR=f'PESSOA {index}', MESREFERENCIA='09/2026'))
         rows = model.plan_month(**args)['rows']
-        self.assertEqual([row['components']['TEST-S'] for row in rows], [1315, 480, 700, 700, 789])
-        self.assertEqual(sum(row['components']['TEST-S'] for row in rows), 3984)
-        self.assertEqual(sum(row['fgtsCents'] for row in rows), 31873)
+        self.assertEqual([row['components']['TEST-S'] for row in rows], [1094, 523, 671, 723, 842])
+        self.assertEqual(sum(row['components']['TEST-S'] for row in rows), 3853)
+        self.assertEqual(sum(row['fgtsCents'] for row in rows), 30826)
 
     def test_payroll_payload_uses_individual_provision_and_not_a_paid_launch(self):
         result = model.plan_month(**inputs()); row = result['rows'][0]
