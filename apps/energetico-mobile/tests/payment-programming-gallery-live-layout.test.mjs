@@ -110,6 +110,7 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
           identifierContainsDeadline: !!card.querySelector('.pg-id-badge .pg-deadline'),
           decorativeIcons: [...card.querySelectorAll('svg.pg-card-icon[aria-hidden="true"]')].filter(n=>n.getBoundingClientRect().width>0).length >= 10,
           fieldCount: fields.length,
+          descriptionCluster: card.querySelector('[data-field="DESCRITIVO DA PROVISÃO"]')?.textContent.includes('Não vinculado') === true,
           valueClustersAligned,
           total: card.querySelector('.pg-card-total strong').textContent.replace(/\\s+/g, ' '),
           attachedTotal: attached.querySelector('.pg-card-total strong').textContent.replace(/\\s+/g, ' '),
@@ -126,7 +127,8 @@ test("G28 mantém o cartão de provisão legível a 390px, 320px e no desktop", 
         !layout.contentOverflow && !layout.cardOverflow && !layout.attachedCardOverflow && layout.attachedChildrenOutside.length === 0,
         `G28 extrapola a tela ${width}px: ${JSON.stringify(layout)}`);
       assert.ok(layout.metricsTogether && layout.pairsTogether, `grade financeira e pares de ${width}px: ${JSON.stringify(layout)}`);
-      assert.equal(layout.fieldCount, 7);
+      assert.equal(layout.fieldCount, 8);
+      assert.equal(layout.descriptionCluster, true, 'o oitavo campo é o novo cluster de descritivo, sem inventar vínculo');
       assert.deepEqual(layout.identifiers.map(id => id.text), ['316', '350', '1234']);
       assert.ok(layout.identifiers.every(id => id.lines === 1 && id.fits && id.separateFromSupplier),
         `IDs inteiros em uma linha, sem invadir o fornecedor em ${width}px: ${JSON.stringify(layout.identifiers)}`);
