@@ -50,7 +50,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     version(row);
     return row;
   }
-  async function linked(list, linkName, parentId, signal) {
+  async function allRows(list, signal) {
     const found = [], seen = new Set();
     let cursor = '';
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
@@ -63,7 +63,6 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         throw new Error('A consulta completa das provisões está indisponível.');
       }
       for (const row of page.items) {
-        if (String(row.fields?.[linkName] ?? '').trim() !== parentId) continue;
         const childId = id(row.id);
         if (seen.has(childId)) throw new Error('A consulta retornou provisão duplicada.');
         seen.add(childId);
@@ -82,12 +81,101 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     throw new Error('A consulta das provisões excedeu o limite seguro de páginas.');
   }
 
+  async function linked(list, linkName, parentId, signal) {
+    return (await allRows(list, signal)).filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId);
+  }
+
+  async function parentSource(signal) {
+    active(signal);
+    const list = await repository.resolveList(siteKey, PARENT_LIST, signal ? { signal } : {});
+    active(signal);
+    if (list?.status !== 'resolved' || !list.id) throw new Error('Os descritivos de provisão não estão disponíveis.');
+    return list;
+  }
+
+  async function prepareColumns({ columns, rawColumns, item, signal }) {
+    if (!rawColumns.some(column => key(column.name) === 'DESCRITIVOPROVISAO')) return columns;
+    const name = field(rawColumns, 'DESCRITIVOPROVISAO');
+    if (rawColumns.find(column => column.name === name).readOnly) return columns;
+    const list = await parentSource(signal);
+    const parents = (await allRows(list.id, signal)).sort((a,b) => Number(b.id) - Number(a.id));
+    const choices = parents.map(row => id(row.id));
+    const optionLabels = Object.fromEntries(parents.map(row => [id(row.id),
+      [`ID ${row.id}`, row.fields?.FORNECEDOR, row.fields?.OBS].filter(value => !blank(value)).join(' · ')]));
+    const current = String(item.fields?.[name] ?? '').trim();
+    if (current && !choices.includes(current)) {
+      choices.push(id(current));
+      optionLabels[current] = `ID ${current} · vínculo atual`;
+    }
+    const descriptor = { name, label: 'Descritivo da provisão', control: 'select',
+      editable: true, readOnly: false, disabled: false, hidden: false, required: Boolean(current),
+      choices, optionLabels, powerApps: { closed: true, preserveCurrentValue: true } };
+    return [...columns.filter(column => key(column.name) !== 'DESCRITIVOPROVISAO'), descriptor];
+  }
+
+  async function relink({ childList, childColumns, childId, item, fields, linkName, currentLink, targetId, signal }) {
+    const parents = await parentSource(signal);
+    if (parents.id === childList.id) throw new Error('A lista do descritivo não corresponde à origem esperada.');
+    const parentColumns = await repository.getColumns(siteKey, parents.id, signal ? { signal } : {});
+    active(signal);
+    if (!Array.isArray(parentColumns)) throw new Error('Metadados do descritivo indisponíveis.');
+    const totalName = field(parentColumns, 'VALORTOTAL', ['text', 'number', 'currency']);
+    const amounts = Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name => [name, field(childColumns,name,['text','number','currency'])]));
+    const parentIds = [...new Set([...(currentLink ? [id(currentLink)] : []), targetId])];
+    for (const parentId of parentIds) await read(parents.id, parentId, signal);
+    const current = await read(childList.id, childId, signal);
+    const matches = row => Object.entries(fields).every(([name,value]) => sameValue(row.fields?.[name],value,
+      childColumns.some(column => column.name === name && column.dateTime)));
+    const liveLink = String(current.fields?.[linkName] ?? '').trim();
+    if (liveLink !== currentLink && !(liveLink === targetId && matches(current))) throw new Error('O vínculo da provisão mudou. Reabra o registro.');
+    if (version(current) !== version(item) && !matches(current)) throw new Error('A provisão mudou. Recarregue antes de editar.');
+    const before = await allRows(childList.id, signal);
+    const listed = before.find(row => id(row.id) === childId);
+    if (!listed || String(listed.fields?.[linkName] ?? '').trim() !== liveLink) throw new Error('O vínculo da provisão mudou durante a consulta.');
+    const projected = before.map(row => id(row.id) === childId ? { ...row, fields: { ...current.fields, ...fields } } : row);
+    for (const parentId of parentIds) provisionChildrenTotal(projected.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts);
+    if (!matches(current)) {
+      active(signal);
+      try { await repository.updateItem(siteKey,childList.id,childId,fields,{eTag:version(current),...(signal?{signal}:{})}); }
+      catch (error) { if (!matches(await read(childList.id,childId,signal))) throw error; }
+    }
+    const saved = await read(childList.id, childId, signal);
+    if (!matches(saved)) throw new Error('A nova vinculação da provisão não foi confirmada.');
+    const totalsNow = async () => {
+      const rows = await allRows(childList.id, signal);
+      const child = rows.find(row => id(row.id) === childId);
+      if (!child || String(child.fields?.[linkName] ?? '').trim() !== targetId) throw new Error('O vínculo mudou durante a sincronização dos descritivos.');
+      return new Map(parentIds.map(parentId => [parentId, provisionChildrenTotal(rows.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts)]));
+    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (const parentId of parentIds) {
+        const parent = await read(parents.id,parentId,signal);
+        const total = (await totalsNow()).get(parentId);
+        if (String(parent.fields?.[totalName] ?? '') === total) continue;
+        const patch = { [totalName]: parentColumns.find(column => column.name === totalName).text ? total : Number(total) };
+        active(signal);
+        try { await repository.updateItem(siteKey,parents.id,parentId,patch,{eTag:version(parent),...(signal?{signal}:{})}); }
+        catch (error) {
+          const confirmed = await read(parents.id,parentId,signal);
+          if (String(confirmed.fields?.[totalName] ?? '') !== total && Number(error?.status) !== 412) throw error;
+        }
+      }
+      const totals = await totalsNow();
+      let confirmed = true;
+      for (const parentId of parentIds) {
+        if (String((await read(parents.id,parentId,signal)).fields?.[totalName] ?? '') !== totals.get(parentId)) confirmed = false;
+      }
+      if (confirmed) return saved;
+    }
+    throw new Error('Os totais dos descritivos não foram confirmados. Tente salvar novamente para concluir a sincronização.');
+  }
+
   async function save({ list, item, fields, signal } = {}) {
     active(signal);
     const childId = id(item?.id);
     if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('Informe os campos editados da provisão.');
-    if (Object.keys(fields).some(name => ['FILIAL', 'FORNECEDOR', 'DESCRITIVOPROVISAO'].includes(key(name)))) {
-      throw new Error('FILIAL, FORNECEDOR e o vínculo devem ser editados em DESCRITIVOPROVISAO.');
+    if (Object.keys(fields).some(name => ['FILIAL', 'FORNECEDOR'].includes(key(name)))) {
+      throw new Error('FILIAL e FORNECEDOR devem ser editados em DESCRITIVOPROVISAO.');
     }
     if (busy.has(childId)) throw new Error('Esta provisão já está sendo sincronizada.');
     busy.add(childId);
@@ -103,6 +191,10 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
       if (!Array.isArray(childColumns)) throw new Error('Metadados da provisão indisponíveis.');
       const linkName = field(childColumns, 'DESCRITIVOPROVISAO');
       const currentLink = String(item.fields?.[linkName] ?? '').trim();
+      if (Object.hasOwn(fields,linkName)) {
+        const targetId = id(fields[linkName]);
+        if (targetId !== currentLink) return await relink({ childList,childColumns,childId,item,fields:{...fields,[linkName]:targetId},linkName,currentLink,targetId,signal });
+      }
       const hasAmount = Object.keys(fields).some(name => ['VALORTOTAL', 'QTD', 'FRETE'].includes(key(name)));
       const changedDates = DATE_FIELDS.filter(name => Object.keys(fields).some(candidate => key(candidate) === name));
       let parentList, parentColumns, parentId, parentTotalName, childTotals;
@@ -199,5 +291,5 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
       return saved;
     } finally { busy.delete(childId); }
   }
-  return Object.freeze({ save });
+  return Object.freeze({ save, prepareColumns });
 }

@@ -309,7 +309,7 @@ export function createPaymentProgrammingGalleryData(options = {}) {
   return createSharePointListData({
     ...options,
     provisionPaymentSync: true,
-    readOnlyEditFields: ['FILIAL', 'FORNECEDOR', 'DESCRITIVOPROVISAO'],
+    readOnlyEditFields: ['FILIAL', 'FORNECEDOR'],
     siteKey: options.siteKey || SITE_KEY,
     listAliases: options.listAliases || PENDING_PROVISION_LIST_ALIASES,
     listName: options.listName || "PROVISÃO PGTOS",
@@ -810,7 +810,7 @@ function createSharePointListData({
     return editorDataPromise ||= import("./gallery-record-data.js").then(({ createGalleryRecordData }) =>
       createGalleryRecordData({ repository, siteKey, listAliases, listName, resolveList, assertSession,
         readOnlyEditFields,
-        ...(paymentEditor ? { persistEdit: paymentEditor.save } : {}) }));
+        ...(paymentEditor ? { persistEdit: paymentEditor.save, prepareEditColumns: paymentEditor.prepareColumns } : {}) }));
   }
   const loadEditor = async (id, options) => (await editorData()).loadEditor(id, options);
   const saveEditor = async (context, fields, options) => (await editorData()).saveEditor(context, fields, options);

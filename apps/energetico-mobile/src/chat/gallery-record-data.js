@@ -128,7 +128,7 @@ function typedColumns(rawColumns, entity, metadataOnly) {
 }
 
 /** Edit contexts belong to one service instance; their loaded ETag is never refreshed on save. */
-export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{}, persistEdit, readOnlyEditFields = [] } = {}) {
+export function createGalleryRecordData({ repository, siteKey = "personal", listAliases = [], listName, resolveList, metadataOnly = false, entity: suppliedEntity, now=()=>new Date(), assertSession=()=>{}, persistEdit, prepareEditColumns, readOnlyEditFields = [] } = {}) {
   const aliases = new Set([listName, ...listAliases].map(key));
   const entity = suppliedEntity || ENTITIES.find(candidate => candidate.listNames.some(name => aliases.has(key(name))))
     || (metadataOnly ? Object.freeze({ id: `gallery-${key(listName).toLowerCase()}`, title: listName, siteKey, immutableFields: [], messageFields: [] }) : null);
@@ -181,7 +181,7 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
       launchColumn && !provisionLinked && !taxIdentityLocked ? payrollLaunches.options({signal}):[],
     ]);
     abort(signal);
-    const formColumns = isPayrollSheet ? contract.formColumns.map(column =>
+    let formColumns = isPayrollSheet ? contract.formColumns.map(column =>
       (key(column.name) === 'STATUS' || key(column.label) === 'STATUS') && !column.allowMultipleValues
         && ['text', 'textarea', 'select'].includes(column.control)
         ? { ...column, control: 'select', allowMultipleValues: false, choices: ['ATIVO', 'INATIVO'],
@@ -191,6 +191,8 @@ export function createGalleryRecordData({ repository, siteKey = "personal", list
               ? { [item.fields[column.name]]: item.fields[column.name].trim() || 'Sem status' } : {}) },
           powerApps: { closed: true, preserveCurrentValue: true } }
         : column) : contract.formColumns;
+    if (prepareEditColumns) formColumns = await prepareEditColumns({ columns:formColumns,rawColumns,item,signal });
+    abort(signal);
     const locked = new Set(readOnlyEditFields.map(key));
     const columns = frozenCopy((isPayroll ? payrollEditorColumns(formColumns,sheetOptions,launchOptions,{lockTaxIdentity:taxIdentityLocked}) : formColumns)
       .filter(column => key(column.name) !== 'FOLHAOPERACAO')
