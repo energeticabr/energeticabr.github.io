@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirmação do diário — prévia fictícia</title>
+<style>
+html,body{margin:0;min-height:100%;background:#e7f2f5;font-family:system-ui,sans-serif}
+p{margin:0;padding:5px;text-align:center;color:#294c5b;font-size:12px}
+iframe{display:block;margin:auto;max-width:100%;height:calc(100vh - 28px);border:0;background:white}
+</style></head><body><p>Prévia com dados fictícios — nenhuma postagem</p><script type="module">
+const params = new URLSearchParams(location.search);
+const requestedWidth = Number(params.get('width'));
+const width = [320,390,1024,1365].includes(requestedWidth) ? requestedWidth : 390;
+const sample = params.get('sample') === 'diary-creation' ? 'diary-creation' : 'construction-visit';
+document.body.style.width = `${width}px`;
+document.body.style.maxWidth = '100%';
+const frame = document.createElement('iframe');
+frame.title = `Confirmação de teste em ${width}px`;
+frame.style.width = `${width}px`;
+frame.style.height = `${width === 320 ? 740 : width === 390 ? 844 : 900}px`;
+frame.src = `./posting-completion.html?sample=${sample}`;
+document.body.append(frame);
+</script></body></html>
