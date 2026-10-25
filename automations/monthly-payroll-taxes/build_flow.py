@@ -77,9 +77,10 @@ def paginated(label, guid, fields, previous, target=None):
     return actions, 'Completo_'+label
 
 
-def lookup(guid, field, value, numeric=False):
+def lookup(guid, field, value, numeric=False, top=2):
     right = 'string('+value+')' if numeric else "concat(decodeUriComponent('%27'), uriComponent("+value+"), decodeUriComponent('%27'))"
-    return "@concat('_api/web/lists(guid''"+guid+"'')/items?$filter="+field+"%20eq%20', "+right+", '&$top=2')"
+    tail = "'&$top="+str(top)+"'" if isinstance(top,int) else "concat('&$top=', string("+top+"))"
+    return "@concat('_api/web/lists(guid''"+guid+"'')/items?$filter="+field+"%20eq%20', "+right+", "+tail+")"
 
 
 def record_checks(actual, fields):
@@ -167,10 +168,13 @@ def ensure(guid, label, fields, field, value, previous=None, numeric=False):
     return acts, verified, "@first(body('"+reread+"')?['value'])?['Id']"
 
 
-def attachments(guid, label, item_id, previous):
+def attachments(guid, label, item_id, previous, fields):
     """Use the frozen PDF, preserve originals and verify the returned bytes."""
     params = {'dataset':SITE,'table':guid,'itemId':item_id}
-    acts = {'Anexos_'+label:api('shared_sharepointonline','GetItemAttachments',params,previous)}
+    read, guarded = 'Item_Atual_Para_Anexo_'+label, 'Estado_Atual_Para_Anexo_'+label
+    acts = {read:http("@concat('_api/web/lists(guid''"+guid+"'')/items(', string("+item_id[1:]+"), ')')",previous)}
+    acts[guarded] = validate(record_checks("body('"+read+"')",fields),read,'Item alterado ou baixado após o preflight; não anexar nem sobrescrever.')
+    acts['Anexos_'+label] = api('shared_sharepointonline','GetItemAttachments',params,guarded)
     selected = 'Anexo_Deste_Lote_'+label
     acts[selected] = query("@body('Anexos_"+label+"')","@equals(item()?['DisplayName'], variables('Manifesto')?['pdfs']?[items('Cada_Encargo')]?['fileName'])",'Anexos_'+label)
     gate = 'Anexar_Se_Ausente_'+label
@@ -340,7 +344,7 @@ def current_people_actions():
     actions = {'RH_Atual':query("@variables('Cadastros')","@equals(string(item()?['IDFORNECEDORORIGEM']), string("+row+"?['supplierId']))"),
         'RH_Atual_Unico':validate("@equals(length(body('RH_Atual')), 1)",'RH_Atual','Vínculo RH/origem ausente ou duplicado na retomada.')}
     checks = ["equals(toUpper(trim(coalesce("+hr+"?['"+field+"'], ''))), '"+value+"')" for field,value in [('VINCULO','CLT'),('STATUS','ATIVO'),('EMPREITEIRO','SIM')]]
-    checks += ["empty("+hr+"?['DATADESLIGAMENTO'])", "or(empty("+row+"?['employeeId']), equals(string("+hr+"?['Id']), string("+row+"?['employeeId'])))"]
+    checks += ["empty("+hr+"?['DATADESLIGAMENTO'])", "or(equals("+row+"?['employeeId'], null), equals(string("+hr+"?['Id']), string("+row+"?['employeeId'])))"]
     checks += ["equals(trim(coalesce("+hr+"?['"+field+"'], '')), trim("+row+"?['"+frozen+"']))" for field,frozen in [('Title','name'),('CARGO','cargo')]]
     checks.append("equals(substring(coalesce("+hr+"?['DATAADMISSAO'], '0000-00-00'), 0, 10), "+row+"?['admission'])")
     actions['Identidade_RH_Atual'] = validate('@and('+', '.join(checks)+')','RH_Atual_Unico','Elegibilidade, identidade, cargo ou admissão RH mudou; não recalcular nem gravar.')
@@ -377,8 +381,14 @@ def global_preflight_actions():
     tax,row = "items('Conferir_Tipos')","items('Conferir_Pessoas')"
     parent = parent_payload(tax,"body('Filiais_Preflight')")
     types,prev,parent_id = preflight_record(PARENT,'Descritivo',parent,'FOLHAOPERACAO',parent['FOLHAOPERACAO'][1:])
+    types['Filhos_Do_Pai_Preflight'] = query("@variables('Provisoes')","@and(greater("+parent_id+", 0), equals(string(coalesce(item()?['DESCRITIVOPROVISAO'], '')), string("+parent_id+")))",prev)
+    types['Filhos_Estranhos_Preflight'] = query("@body('Filhos_Do_Pai_Preflight')","@not(contains(if(equals("+tax+", 'INSS'), body('Chaves_Planejadas_INSS'), body('Chaves_Planejadas_FGTS')), coalesce(item()?['FOLHAOPERACAO'], '')))",'Filhos_Do_Pai_Preflight')
+    types['Somente_Filhos_Planejados'] = validate("@equals(length(body('Filhos_Estranhos_Preflight')), 0)",'Filhos_Estranhos_Preflight','Descritivo contém filho estranho ao manifesto; nenhuma linha adicional será criada.')
+    prev = 'Somente_Filhos_Planejados'
     child = provision_payload(row,tax,parent_id)
-    people,child_prev,child_id = preflight_record(CHILD,'Provisao',child,'FOLHAOPERACAO',child['FOLHAOPERACAO'][1:],parent_id=parent_id)
+    people = {'Provisoes_Externas_Da_Folha':query("@variables('Provisoes')","@and(equals(float(if(empty(trim(string(item()?['IDFOLHA']))), -1, item()?['IDFOLHA'])), float("+row+"?['sheetId'])), or(contains(toUpper(coalesce(item()?['OBS'], '')), "+tax+"), equals(toUpper(trim(coalesce(item()?['PRODUTO'], ''))), "+tax+"), equals(toUpper(trim(coalesce(item()?['TIPOPGTO'], ''))), "+tax+")), not(equals(coalesce(item()?['FOLHAOPERACAO'], ''), "+child['FOLHAOPERACAO'][1:]+")))"),
+        'Sem_Provisao_Externa_Da_Folha':validate("@equals(length(body('Provisoes_Externas_Da_Folha')), 0)",'Provisoes_Externas_Da_Folha','Já existe provisão externa desse encargo/IDFOLHA, mesmo sem vencimento ou FOLHAPGTO; não duplicar.')}
+    new,child_prev,child_id = preflight_record(CHILD,'Provisao',child,'FOLHAOPERACAO',child['FOLHAOPERACAO'][1:],'Sem_Provisao_Externa_Da_Folha',parent_id=parent_id); people.update(new)
     payment = payroll_payload(row,tax,child_id)
     new,child_prev,_ = preflight_record(PAYROLL,'Folha',payment,'IDPROVISAO',child_id,child_prev,numeric=True,parent_id=child_id); people.update(new)
     people['Pagamentos_Existentes_Do_Tipo'] = query("@variables('Pagamentos')","@or(and(equals(toUpper(trim(coalesce(item()?['TIPOPGTO'], ''))), "+tax+"), equals(float(if(empty(trim(string(item()?['IDFOLHA']))), -1, item()?['IDFOLHA'])), float("+row+"?['sheetId']))), and(greater("+child_id+", 0), equals(float(if(empty(trim(string(item()?['IDPROVISAO']))), -1, item()?['IDPROVISAO'])), float("+child_id+"))))",child_prev)
@@ -391,18 +401,26 @@ def global_preflight_actions():
 def financial_actions():
     a = {'Preflight_Global':{'type':'Scope','actions':global_preflight_actions(),'runAfter':{}}}
     tax,row = "items('Cada_Encargo')","items('Cada_Fornecedor')"
-    types = {'PDF_Validado_Para_Escrita':variable('PDFBase64',"@variables('PDFsValidados')?[items('Cada_Encargo')]"),
+    types = {'Zerar_IDs_Encargo':variable('IDsDesteEncargo',[]),
+        'PDF_Validado_Para_Escrita':variable('PDFBase64',"@variables('PDFsValidados')?[items('Cada_Encargo')]",'Zerar_IDs_Encargo'),
         'Filiais_Do_Lote':select("@variables('Manifesto')?['rows']","@item()?['branch']",'PDF_Validado_Para_Escrita')}
     parent = parent_payload(tax,"body('Filiais_Do_Lote')")
     new,prev,parent_id = ensure(PARENT,'Descritivo',parent,'FOLHAOPERACAO',parent['FOLHAOPERACAO'][1:],'Filiais_Do_Lote'); types.update(new)
-    new,prev = attachments(PARENT,'Descritivo',parent_id,prev); types.update(new)
-    fields = provision_payload(row,tax,parent_id[1:])
-    children,child_prev,child_id = ensure(CHILD,'Provisao',fields,'FOLHAOPERACAO',fields['FOLHAOPERACAO'][1:])
+    new,prev = attachments(PARENT,'Descritivo',parent_id,prev,parent); types.update(new)
+    provision = provision_payload(row,tax,parent_id[1:])
+    children,child_prev,child_id = ensure(CHILD,'Provisao',provision,'FOLHAOPERACAO',provision['FOLHAOPERACAO'][1:])
     fields = payroll_payload(row,tax,child_id[1:])
     new,child_prev,_ = ensure(PAYROLL,'Folha',fields,'IDPROVISAO',child_id[1:],child_prev,numeric=True); children.update(new)
-    new,child_prev = attachments(CHILD,'Provisao',child_id,child_prev); children.update(new)
+    new,child_prev = attachments(CHILD,'Provisao',child_id,child_prev,provision); children.update(new)
+    children['Guardar_ID_Provisao'] = append('IDsDesteEncargo',child_id,child_prev)
     types['Cada_Fornecedor'] = loop("@variables('Manifesto')?['rows']",children,prev)
-    types['Resumo_Encargo'] = compose({'tipo':'@'+tax,'descritivo':parent_id,'linhas':"@length(variables('Manifesto')?['rows'])",'totalCentavos':"@variables('Manifesto')?['totals']?[items('Cada_Encargo')]",'competencia':"@variables('Manifesto')?['competence']",'vencimento':"@variables('Manifesto')?['dueDate']"},'Cada_Fornecedor')
+    # N+1 is intentional: any extra child fails the count, and a continuation
+    # link is rejected instead of accepting a truncated set as complete.
+    types['Filhos_Finais_Do_Descritivo'] = http(lookup(CHILD,'DESCRITIVOPROVISAO','string('+parent_id[1:]+')',top="add(length(variables('Manifesto')?['rows']), 1)"),'Cada_Fornecedor')
+    pending = record_checks('item()',{'STATUS':'PAGAMENTO PREVISTO','PGTOAGENDADO':'PENDENTE'})[1:]
+    types['Filhos_Finais_Divergentes'] = query("@body('Filhos_Finais_Do_Descritivo')?['value']","@or(not(contains(variables('IDsDesteEncargo'), item()?['Id'])), not("+pending+"))",'Filhos_Finais_Do_Descritivo')
+    types['Conjunto_Final_De_Filhos'] = validate("@and(equals(length(body('Filhos_Finais_Do_Descritivo')?['value']), length(variables('Manifesto')?['rows'])), equals(length(variables('IDsDesteEncargo')), length(variables('Manifesto')?['rows'])), equals(length(union(variables('IDsDesteEncargo'), variables('IDsDesteEncargo'))), length(variables('IDsDesteEncargo'))), empty(body('Filhos_Finais_Divergentes')), empty(coalesce(body('Filhos_Finais_Do_Descritivo')?['odata.nextLink'], body('Filhos_Finais_Do_Descritivo')?['@odata.nextLink'], '')))",'Filhos_Finais_Divergentes','Conjunto final de filhos divergente, incompleto ou baixado; não confirmar conclusão.')
+    types['Resumo_Encargo'] = compose({'tipo':'@'+tax,'descritivo':parent_id,'linhas':"@length(variables('Manifesto')?['rows'])",'totalCentavos':"@variables('Manifesto')?['totals']?[items('Cada_Encargo')]",'competencia':"@variables('Manifesto')?['competence']",'vencimento':"@variables('Manifesto')?['dueDate']"},'Conjunto_Final_De_Filhos')
     a['Cada_Encargo'] = loop("@createArray('INSS','FGTS')",types,'Preflight_Global')
     return a
 
@@ -420,6 +438,7 @@ def build_definition():
                  'LinhasBrutas':('array',[]),'Linhas':('array',[]),'Empregado':('integer',0),'LimiteAnterior':('integer',0),'BaseGrupo':('integer',0),'PisosGrupo':('integer',0),'IndiceResiduo':('integer',0),'INSSLinha':('integer',0),'TotalINSS':('integer',0),'TotalFGTS':('integer',0),'HTMLRows':('string',''),'HTMLComponentes':('string',''),'PDFBase64':('string','')}
     for label in ['Cadastros','Salarios','Folhas','Provisoes','Pagamentos']:
         variables.update({label:('array',[]),'Pagina'+label:('string',''),'Visitadas'+label:('array',[])})
+    variables['IDsDesteEncargo'] = ('array',[])
     for label in ['Cadastros_Recuperacao','Folhas_Recuperacao']:
         variables.update({'Pagina'+label:('string',''),'Visitadas'+label:('array',[])})
     prev = 'Caminho_Reserva'

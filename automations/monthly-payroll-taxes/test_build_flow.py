@@ -28,6 +28,13 @@ class PreflightRejected(Exception):
     pass
 
 
+def native_empty(value):
+    if value is None: return True
+    if not isinstance(value, (str, list, dict)):
+        raise TypeError('empty requires a string, array or object, not a number/boolean')
+    return len(value) == 0
+
+
 class NativePreflight:
     """Execute the generated guard subset, with data at the connector boundary.
 
@@ -63,7 +70,7 @@ class NativePreflight:
             args = [self.node(argument) for argument in node.args]
             functions = {
                 'wdl_and':lambda *values:all(values), 'wdl_or':lambda *values:any(values), 'wdl_not':lambda value:not value,
-                'equals':lambda left,right:left == right, 'empty':lambda value:value is None or value == '' or value == [] or value == {},
+                'equals':lambda left,right:left == right, 'empty':native_empty,
                 'string':lambda value:'' if value is None else json.dumps(value, separators=(',',':')) if isinstance(value,(dict,list)) else str(value),
                 'coalesce':lambda *values:next((value for value in values if value is not None),None),
                 'trim':lambda value:value.strip(), 'toUpper':lambda value:value.upper(), 'length':len,
@@ -73,6 +80,7 @@ class NativePreflight:
                 'concat':lambda *values:''.join(str(value) for value in values), 'substring':lambda value,start,size:value[start:start+size],
                 'createArray':lambda *values:list(values), 'union':lambda a,b:list(dict.fromkeys(a+b)),
                 'div':lambda a,b:a/b, 'formatNumber':lambda value,pattern,locale:format(value,'.2f'),
+                'add':lambda a,b:a+b, 'base64ToBinary':lambda value:base64.b64decode(value,validate=True),
                 'json':json.loads, 'uriComponent':lambda value:quote(str(value),safe=''), 'decodeUriComponent':unquote,
                 'base64':lambda value:value['$content'] if isinstance(value,dict) else base64.b64encode(value if isinstance(value,bytes) else value.encode()).decode(),
                 'setProperty':lambda value,key,item:{**value,key:item},
@@ -98,7 +106,8 @@ class NativePreflight:
                     rows = [row for row in rows if str(row.get(condition[1],'')) == condition[2]]
                 else:
                     rows = [row for row in rows if row.get(condition[1]) is not None and float(row[condition[1]]) == float(condition[3])]
-            return 200, {'value':deepcopy(rows[:2])}
+            limit = re.search(r'\$top=(\d+)',uri)
+            return 200, {'value':deepcopy(rows[:int(limit[1]) if limit else 500])}
         if operation in ('GetFileMetadataByPath','GetFileContentByPath'):
             entry = self.data['files'].get(params['path'])
             if entry is None: return 404, None
@@ -189,6 +198,77 @@ class MonthlyFlowTests(unittest.TestCase):
         engine = NativePreflight(fixture)
         engine.run(financial['Preflight_Global']['actions'])
         return engine
+
+    def test_native_empty_contract_does_not_silently_accept_numbers(self):
+        for value in (1, 3.0, True, False):
+            with self.subTest(value=value), self.assertRaises(TypeError): native_empty(value)
+        self.preflight(preflight_fixture())
+
+    def test_undated_external_tax_with_same_sheet_and_no_payroll_is_not_duplicated(self):
+        for tax in ('INSS','FGTS'):
+            fixture = preflight_fixture()
+            extra = deepcopy(fixture['lists'][flow.CHILD][-1])
+            extra.update(Id=9999,Title='EXTERNO',FOLHAOPERACAO='EXTERNO',DESCRITIVOPROVISAO='7777',
+                         PRODUTO=tax,OBS=tax+' externo',DATAPREVISTOPGTO=None)
+            fixture['lists'][flow.CHILD].append(extra)
+            with self.subTest(tax=tax), self.assertRaises(PreflightRejected): self.preflight(fixture)
+
+    def test_foreign_child_is_detected_by_parent_even_without_tax_or_owned_key(self):
+        fixture = preflight_fixture()
+        extra = deepcopy(fixture['lists'][flow.CHILD][0])
+        extra.update(Id=9999,Title='OUTRO',FOLHAOPERACAO='MANUAL-OUTRO',OBS='OUTRO',
+                     PRODUTO='OUTRO SERVICO',IDFOLHA=None,DATAPREVISTOPGTO=None)
+        fixture['lists'][flow.CHILD].append(extra)
+        with self.assertRaises(PreflightRejected): self.preflight(fixture)
+
+    def test_settlement_after_payroll_blocks_before_any_attachment_upload(self):
+        definition = flow.build_definition()
+        types = definition['actions']['Somente_Dia_01']['actions']['Cada_Encargo']['actions']
+        for label,guid in [('Descritivo',flow.PARENT),('Provisao',flow.CHILD)]:
+            for change in ({'IDLANCAMENTO':'999'}, {'DATAPGTOEFETUADO':'2026-10-20T12:00:00Z'}):
+                fixture = preflight_fixture(); engine = self.preflight(fixture)
+                engine.items.update(Cada_Encargo='INSS',Cada_Fornecedor=fixture['plan']['rows'][0])
+                engine.bodies['Filiais_Do_Lote'] = ['FILIAL TESTE']*5
+                engine.bodies['Reler_Descritivo'] = {'value':[fixture['lists'][flow.PARENT][0]]}
+                engine.bodies['Reler_Provisao'] = {'value':[fixture['lists'][flow.CHILD][0]]}
+                engine.variables['PDFBase64'] = engine.variables['PDFsValidados']['INSS']
+                engine.data['lists'][guid][0].update(change)
+                source = types if label == 'Descritivo' else types['Cada_Fornecedor']['actions']
+                selected, active = {}, False
+                for name,action in source.items():
+                    if name == ('Cada_Fornecedor' if label == 'Descritivo' else 'Guardar_ID_Provisao'): break
+                    if active: selected[name] = action
+                    if name == ('Verificar_'+label if label == 'Descritivo' else 'Verificar_Folha'):
+                        active = True; engine.statuses[name] = 'Succeeded'
+                with self.subTest(label=label,change=change), self.assertRaises(PreflightRejected): engine.run(selected)
+                self.assertFalse(any(op == 'CreateAttachment' for op,_ in engine.calls))
+
+    def test_final_parent_child_set_and_pending_state_are_read_back_in_full(self):
+        types = flow.build_definition()['actions']['Somente_Dia_01']['actions']['Cada_Encargo']['actions']
+        for change in ('extra','missing','replaced','settled',None):
+            fixture = preflight_fixture(); engine = self.preflight(fixture)
+            parent = fixture['lists'][flow.PARENT][0]
+            expected = [row['Id'] for row in fixture['lists'][flow.CHILD] if row['DESCRITIVOPROVISAO']==str(parent['Id'])]
+            engine.variables['IDsDesteEncargo'] = expected
+            engine.items['Cada_Encargo'] = 'INSS'
+            engine.bodies['Reler_Descritivo'] = {'value':[parent]}
+            engine.statuses['Cada_Fornecedor'] = 'Succeeded'
+            if change == 'extra':
+                engine.data['lists'][flow.CHILD].append({**deepcopy(fixture['lists'][flow.CHILD][0]),'Id':9999,'FOLHAOPERACAO':'MANUAL'})
+            if change == 'missing': engine.data['lists'][flow.CHILD].pop(0)
+            if change == 'replaced': engine.data['lists'][flow.CHILD][0]['Id'] = 9999
+            if change == 'settled': engine.data['lists'][flow.CHILD][0]['IDLANCAMENTOS'] = '999'
+            final, active = {}, False
+            for name,action in types.items():
+                if name == 'Resumo_Encargo': break
+                if active: final[name] = action
+                if name == 'Cada_Fornecedor': active = True
+            with self.subTest(change=change):
+                if change is not None:
+                    with self.assertRaises(PreflightRejected): engine.run(final)
+                else:
+                    previous = len(engine.calls); engine.run(final)
+                    self.assertGreater(len(engine.calls),previous)
 
     def test_recovery_paginates_current_hr_and_sheets_without_recalculating_salary(self):
         recovery = flow.build_definition()['actions']['Recuperar_Ou_Calcular']['actions']
