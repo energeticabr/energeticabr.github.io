@@ -1,0 +1,7 @@
+# Keep reviewed package bytes identical across Windows and Linux checkouts.
+.gitattributes text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+# Unified diffs contain a significant single-space marker on context blank lines.
+*.patch text eol=lf whitespace=-blank-at-eol
+*.md text eol=lf

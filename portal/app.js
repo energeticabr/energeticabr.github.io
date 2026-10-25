@@ -106,6 +106,14 @@ function createPortalAccessRepository() {
   sharepointRepository = createSharePointRepository(graph, portalConfig.sharepointSites, {
     attachmentTransport: restTransport,
     restTransport,
+    getLifecycleContext: siteKey => {
+      const owner = microsoftAuthClient.getAccount();
+      const accountKey = owner?.homeAccountId || owner?.localAccountId || owner?.idTokenClaims?.oid || '';
+      const site = portalConfig.sharepointSites[siteKey];
+      return { accountKey, siteIdentity: site ? site.host + site.path : '', assertSession() {
+        if (!owner || microsoftAuthClient.getAccount() !== owner) throw new Error('A sessão da atualização RH foi encerrada.');
+      } };
+    },
   });
   return createAccessRepository({
     sharepoint: sharepointRepository,

@@ -741,7 +741,7 @@ export class SharePointConflictError extends Error {
   }
 }
 
-export function createSharePointRepository(graph, siteConfig, { attachmentTransport, restTransport = attachmentTransport } = {}) {
+export function createSharePointRepository(graph, siteConfig, { attachmentTransport, restTransport = attachmentTransport, getLifecycleContext } = {}) {
   if (!graph || typeof graph.request !== "function") {
     throw new TypeError("O repositorio SharePoint requer um cliente Graph.");
   }
@@ -1420,14 +1420,23 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     return Object.freeze(values);
   }
 
+  function restrictedItemQuery(fields) {
+    if (fields === undefined) return null;
+    if (!Array.isArray(fields) || !fields.length || fields.length > 32) throw new TypeError("Seleção restrita de campos inválida.");
+    const names = [...new Set(fields.map(graphFieldName))];
+    return "$select=id,eTag&$expand=fields($select=" + names.join(",") + ")";
+  }
+
   async function getItem(siteKey, listId, itemId, query = "$expand=fields", options = {}) {
+    const restricted = restrictedItemQuery(options.restrictedFields);
+    if (restricted) query = restricted;
     await authorize("view", siteKey, listId, { itemId: String(itemId || "") });
     const config = getSiteConfig(siteKey);
     if (siteTransport(config, "read") === "rest") {
       if (!restTransport?.request) throw new Error("O transporte REST de leitura SharePoint nao foi configurado.");
       const collectionPath = restItemsCollectionPath(listId);
       const item = restItemNumber(itemId);
-      const parameters = restItemsQuery(query);
+      const parameters = restricted ? new URLSearchParams({ "$select": ["ID", ...options.restrictedFields].join(",") }) : restItemsQuery(query);
       const payload = await restTransport.request(config, `${collectionPath}(${item})?${parameters}`, {
         method: "GET",
         permission: "read",
@@ -1523,6 +1532,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
   }
 
   async function writeItem(action, siteKey, listId, itemId, fields, options = {}) {
+    const readback = restrictedItemQuery(options.readbackFields);
     throwIfAborted(options.signal);
     await authorize(action, siteKey, listId, { itemId: String(itemId || "") });
     throwIfAborted(options.signal);
@@ -1544,7 +1554,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
           },
           ...(options.signal ? { signal: options.signal } : {}),
         });
-        return getItem(siteKey, listId, itemId, "$expand=fields", options);
+        return getItem(siteKey, listId, itemId, "$expand=fields", { ...options, ...(readback ? { restrictedFields: options.readbackFields } : {}) });
       } catch (error) {
         throw asConcurrencyError(error);
       }
@@ -1559,7 +1569,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
         body: fields,
         ...(options.signal ? { signal: options.signal } : {}),
       });
-      return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}?$expand=fields`, {
+      return graph.request(`/sites/${site.id}/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}?${readback || "$expand=fields"}`, {
         method: "GET",
         ...(options.signal ? { signal: options.signal } : {}),
       });
@@ -2176,6 +2186,7 @@ export function createSharePointRepository(graph, siteConfig, { attachmentTransp
     getColumns,
     getItems,
     getItemsPage,
+    ...(getLifecycleContext ? { getLifecycleContext } : {}),
     getFilterOptionValues,
     getPowerAppsGalleryFilterValues,
     searchItemsPage,

@@ -9,6 +9,7 @@ import { renderAttachmentsPanel } from "./attachments-panel.js?v=20260906-suprim
 import { renderDynamicForm } from "./dynamic-form.js?v=20260920-presence-description-sync-v1";
 import { formPersistenceRetryItem, formRetryAttachmentChanges, mergeFailedFormRetryState, persistEntityRecordWithAttachments } from "../forms/entity-submit.js?v=20260906-suprimentos-parity-v1";
 import { powerAppsFormDeclaresAttachments } from "../forms/form-attachments.js?v=20260831-image-preview-v1";
+import { loadTrackedContractorSupplierRecovery } from "../forms/contractor-supplier-edit.js";
 
 export function itemDetailMarkup({ entity, item, columns = [], actions = {}, message = "", error = "", activity = {} } = {}) {
   const fields = item?.fields || {};
@@ -91,7 +92,7 @@ export function createItemDetailPage(root, context = {}) {
     message: "", error: "", editing: false, formValues: null, formRelationshipLabels: {}, formRetryState: null, formVariantId: "", conflict: null,
     attachments: { availability: "missing", files: [], diagnostic: "" },
     activity: { availability: "available", history: [] },
-    versions: [],
+    versions: [], contractorRecovery: null,
   };
 
   const current = value => !disposed && value === generation;
@@ -152,6 +153,7 @@ export function createItemDetailPage(root, context = {}) {
         },
         onSubmit: save,
       });
+      renderContractorRecovery();
       return;
     }
     root.innerHTML = itemDetailMarkup({ entity, item, columns, actions: actions(), activity: state.activity, ...state });
@@ -168,6 +170,65 @@ export function createItemDetailPage(root, context = {}) {
       onChanged: refreshAttachments,
       diagnostic: state.attachments.diagnostic,
       showDiagnostics: context.isSuperAdmin === true,
+    });
+    renderContractorRecovery();
+  }
+
+  function renderContractorRecovery() {
+    if (!state.contractorRecovery || disposed) return;
+    const doc = root.ownerDocument;
+    if (!doc) return;
+    const panel = doc.createElement('section');
+    panel.dataset.contractorConflict = '';
+    panel.setAttribute('aria-label', 'Atualização RH pendente');
+    const notice = doc.createElement('p');
+    notice.textContent = 'A atualização RH permanece pendente. Confira RH e status do fornecedor antes de retomar os mesmos dados.';
+    const reviewButton = doc.createElement('button');
+    reviewButton.className = 'button-secondary';
+    reviewButton.type = 'button'; reviewButton.dataset.contractorReview = ''; reviewButton.textContent = 'Conferir versões atuais de RH e fornecedor';
+    panel.append(notice, reviewButton); root.querySelector('.entity-page')?.append(panel);
+    reviewButton.addEventListener('click', async () => {
+      const token = generation, operation = state.contractorRecovery;
+      reviewButton.disabled = true;
+      try {
+        const review = await operation.loadConflict();
+        if (!current(token) || state.contractorRecovery !== operation) return;
+        const details = doc.createElement('div');
+        const appendRecord = (caption, fields, definitions) => {
+          const section = doc.createElement('section'), heading = doc.createElement('h3'), values = doc.createElement('dl');
+          heading.textContent = caption; values.className = 'item-fields';
+          for (const [name, label] of definitions) {
+            const pair = doc.createElement('div'), term = doc.createElement('dt'), value = doc.createElement('dd');
+            pair.className = 'item-field'; term.textContent = label; value.textContent = String(fields[name] ?? 'Não informado');
+            pair.append(term, value); values.append(pair);
+          }
+          section.append(heading, values); details.append(section);
+        };
+        const rhLabels = [['CARGO', 'Cargo'], ['STATUS', 'Status'], ['DATAADMISSAO', 'Admissão'], ['DATADESLIGAMENTO', 'Desligamento']];
+        const pendingSupplierLabels = Object.keys(review.pendingSourceFields || {}).filter(name => !['STATUS', 'EMPREITEIRO'].includes(name)).map(name => [name, name === 'Title' ? 'Cadastro' : name]);
+        if (review.source) appendRecord('Fornecedor #' + review.source.id + ' · versão ' + review.source.eTag, review.source.fields, [['STATUS', 'Status'], ['EMPREITEIRO', 'Empreiteiro'], ...pendingSupplierLabels]);
+        if (pendingSupplierLabels.length) appendRecord('Alterações do fornecedor ainda pendentes', review.pendingSourceFields, pendingSupplierLabels);
+        appendRecord('Cadastro RH #' + review.target.id + ' · versão ' + review.target.eTag, review.target.fields, rhLabels);
+        if (review.pendingDraft) appendRecord('Atualização pendente', review.pendingDraft, rhLabels);
+        const renew = doc.createElement('button');
+        renew.className = 'button-primary';
+        renew.type = 'button'; renew.dataset.contractorRenew = ''; renew.textContent = 'Usar versões conferidas e retomar edição'; renew.disabled = !review.canRenew;
+        panel.replaceChildren(notice, details, renew);
+        if (!review.canRenew) notice.textContent = 'A tentativa anterior permanece incerta. Retome os mesmos dados; a pendência será preservada.';
+        renew.addEventListener('click', async () => {
+          renew.disabled = true;
+          try {
+            const resumed = await operation.renewBaseline(review);
+            if (!current(token)) return;
+            item = resumed.item;
+            state.editing = true;
+            state.formValues = { ...item.fields, ...resumed.fields };
+            state.formRelationshipLabels = {}; state.formRetryState = null; state.conflict = null;
+            state.contractorRecovery = null; state.error = '';
+            render();
+          } catch (error) { if (current(token)) { notice.textContent = error.message; renew.disabled = false; } }
+        });
+      } catch (error) { if (current(token)) { notice.textContent = error.message; reviewButton.disabled = false; } }
     });
   }
 
@@ -271,6 +332,11 @@ export function createItemDetailPage(root, context = {}) {
         return;
       }
       columns = mapSharePointColumns(columns, entity);
+      if (entity.id === 'fornecedores') {
+        try { state.contractorRecovery = await loadTrackedContractorSupplierRecovery(repository, entity, item); }
+        catch (error) { state.error = error.message; }
+        if (!current(token)) return;
+      }
       uiContract = resolvePowerAppsUiContract(entity, columns, { mode: "edit" });
       formColumns = uiContract.formColumns;
       state.formVariantId = uiContract.formVariant?.id || "";
@@ -294,6 +360,7 @@ export function createItemDetailPage(root, context = {}) {
         item,
         fields,
         attachments,
+        document: root.ownerDocument,
         retryItem: formPersistenceRetryItem(state.formRetryState),
       });
       if (!current(token)) return;
@@ -308,11 +375,12 @@ export function createItemDetailPage(root, context = {}) {
     } catch (error) {
       if (!current(token)) return;
       state.error = error?.message || "Não foi possível atualizar o registro.";
+      if (error.contractorRecovery) state.contractorRecovery = error.contractorRecovery;
       state.editing = true;
       state.formValues = rawValues;
       state.formRelationshipLabels = relationshipLabels;
       state.formRetryState = mergeFailedFormRetryState(retryState, error, state.formRetryState, attachments);
-      if (error?.code === "concurrent_change" && typeof repository.getItem === "function") {
+      if (error?.code === "concurrent_change" && !error.contractorRecovery && typeof repository.getItem === "function") {
         try {
           const serverItem = await repository.getItem(entity.siteKey, list.id, item.id, "$expand=fields");
           if (!current(token)) return;
