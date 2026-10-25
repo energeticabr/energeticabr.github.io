@@ -342,7 +342,7 @@ test("G28 apresenta provisão sem anexos no cartão compacto da segunda referên
   assert.equal(card.querySelector(".pg-description-label").textContent, "Descrição");
   assert.equal(card.querySelector(".pg-description strong").textContent, "SEGURO PARA 7 TRABALHADORES CONFORME CCT");
   assert.deepEqual([...card.querySelectorAll(".pg-card-grid .pg-card-field")].map(field => field.dataset.field), [
-    "VALOR UNITÁRIO", "QTD", "FRETE", "DATA PREVISTA PGTO", "FILIAL", "IMÓVEL", "AGENDAMENTO",
+    "VALOR UNITÁRIO", "QTD", "FRETE", "DATA PREVISTA PGTO", "FILIAL", "IMÓVEL", "AGENDAMENTO", "DESCRITIVO DA PROVISÃO",
   ]);
   assert.equal(card.querySelector('.pg-card-field[data-field="DATA PREVISTA PGTO"] dt').textContent, "Data prevista pgto");
   assert.equal(card.querySelector('.pg-card-field[data-field="QTD"] dt').textContent, "Qtd.");

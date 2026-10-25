@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Descritivo da provisão — dados fictícios</title></head>
+<body><main>Prévia local, sem conexão ao SharePoint.</main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/orders-gallery.css';
+import '../../src/ui/gallery-record-actions.css';
+import { createPaymentProgrammingGalleryData } from '../../src/chat/orders-gallery-data.js';
+import { createPaymentProgrammingGallery } from '../../src/ui/payment-programming-gallery-view.js';
+const params = new URLSearchParams(location.search), width = params.get('width');
+if (['320', '390'].includes(width)) {
+  const frame = document.createElement('iframe'); frame.title = `Galeria em ${width}px`;
+  frame.src = `${location.pathname}${params.has('detail') ? '?detail=1' : ''}`;
+  frame.style.cssText = `width:${width}px;height:740px;border:0;display:block;margin:auto`;
+  document.body.replaceChildren(frame);
+} else {
+  const child = (id, fields = {}) => ({ id, hasAttachments: false, fields: { ID: Number(id), DESCRITIVOPROVISAO: '42',
+    FORNECEDOR: 'FORNECEDOR FICTÍCIO DA ETAPA DE ACABAMENTO', DESCRICAOPGTO: 'MATERIAL DE EXEMPLO',
+    QTD: '3', VALORTOTAL: '10', FRETE: '5', STATUS: 'PAGAMENTO PREVISTO',
+    'DATA PREVISTO PGTO': '2026-10-30', FILIAL: '004 - FILIAL FICTÍCIA', IMOVEL: 'TODOS', 'Tem anexos': false, ...fields } });
+  const rows = [child('350'), child('371', { QTD: '2', VALORTOTAL: '20', FRETE: '0', OBS: 'Observação fictícia' }),
+    child('372', { QTD: '1', VALORTOTAL: '50', FRETE: '0', STATUS: 'PAGO' }), child('999', { DESCRITIVOPROVISAO: '99' })];
+  const repository = {
+    async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
+    async getColumns() { return [{ name: 'DESCRITIVOPROVISAO', text: {} }]; },
+    async getItem(_site, _list, id) { return { id, fields: { ID: Number(id), FORNECEDOR: 'GRUPO FICTÍCIO', OBS: 'Exemplo local de provisões vinculadas', VALORTOTAL: '125' } }; },
+    async getItemsPage(_site, _list, _query, { pageNumber }) { return { items: structuredClone(rows.slice((pageNumber - 1) * 2, pageNumber * 2)),
+      hasMore: pageNumber * 2 < rows.length, nextLink: pageNumber * 2 < rows.length ? 'page-2' : '' }; },
+    updateItem() { throw new Error('Esta prévia é somente leitura.'); },
+  };
+  const data = createPaymentProgrammingGalleryData({ repository });
+  const gallery = createPaymentProgrammingGallery({ document, data, now: () => new Date('2026-10-25T12:00:00Z') });
+  await gallery.open();
+  const search = document.querySelector('[name="search"]'); search.value = '350'; search.dispatchEvent(new Event('change', { bubbles: true }));
+  if (params.has('detail')) {
+    document.querySelector('[data-action="description-provisions"]').click();
+    const deadline = performance.now() + 5000;
+    while (!document.querySelector('[data-provision-id="372"]')) {
+      if (performance.now() > deadline) throw new Error('O detalhamento fictício não apareceu.');
+      await new Promise(requestAnimationFrame);
+    }
+  }
+  await document.fonts.ready; await new Promise(requestAnimationFrame);
+  const dialog = document.querySelector('.pg-description-detail');
+  let stickyClose = true;
+  if (dialog) {
+    dialog.scrollTop = dialog.scrollHeight; await new Promise(requestAnimationFrame);
+    const bounds = dialog.querySelector('[data-action="close-description"]').getBoundingClientRect();
+    stickyClose = bounds.top >= 0 && bounds.bottom <= innerHeight;
+    dialog.scrollTop = 0;
+  }
+  const colors = [...document.querySelectorAll('.pg-description-line')].slice(0, 2).map(node => getComputedStyle(node).backgroundColor);
+  document.documentElement.dataset.layout = JSON.stringify({
+    overflow: document.documentElement.scrollWidth > innerWidth + 1 || Boolean(dialog && dialog.scrollWidth > dialog.clientWidth + 1),
+    cluster: Boolean(document.querySelector('[data-action="description-provisions"]')),
+    count: document.querySelectorAll('[data-provision-id]').length,
+    total: document.querySelector('[data-description-total]')?.textContent || '',
+    wrongGroup: Boolean(document.querySelector('[data-provision-id="999"]')), colors, stickyClose,
+  });
+  window.addEventListener('pagehide', () => gallery.destroy(), { once: true });
+}
+</script></body></html>
