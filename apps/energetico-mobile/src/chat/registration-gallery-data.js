@@ -1,4 +1,5 @@
-import { createOrdersGalleryData } from "./orders-gallery-data.js";
+import { createOrdersGalleryData, normalizeGalleryItem } from "./orders-gallery-data.js";
+import { loadProvisionDescriptionGroup } from './provision-description-detail-data.js';
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
@@ -251,7 +252,11 @@ function galleryRepository(options) {
           ? Promise.resolve(repository.getColumns(site, list, args[1]?.signal ? { signal: args[1].signal } : {})).catch(error => { columnCache.delete(list); throw error; }) : Promise.resolve([]));
         const [page, columns] = await Promise.all([repository.getItemsPage(site, list, ...args), columnCache.get(list)]);
         if (page?.hasMore === true && (typeof page.nextLink !== "string" || !page.nextLink)) throw new Error("A paginação da galeria não retornou o próximo cursor.");
+        if (!Array.isArray(page?.items)) return page;
         const items = (Array.isArray(page?.items) ? page.items : []).map(item => {
+          // Preserve invalid shapes so the complete-group reader can reject
+          // them instead of treating a malformed response as an empty group.
+          if (!item?.fields || typeof item.fields !== "object" || Array.isArray(item.fields)) return item;
           const fields = { ...item.fields };
           for (const column of Array.isArray(columns) ? columns : []) {
             if (column.name && column.displayName && Object.hasOwn(fields, column.name) && !Object.hasOwn(fields, column.displayName)) fields[column.displayName] = fields[column.name];
@@ -350,6 +355,10 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
   }
   return Object.freeze({ ...data,
     ...filters,
+    ...(descriptionEditor ? { loadDescriptionGroup: (id, loadOptions) => loadProvisionDescriptionGroup({
+      repository, siteKey: options.siteKey || 'personal', normalizeItem: normalizeGalleryItem,
+      assertSession: options.assertSession || (() => {}),
+    }, id, loadOptions) } : {}),
     ...(kind === "recurringTasks" ? { getFilterPolicy(field) {
       if (registrationFieldKey(field) !== "fornecedor") return null;
       const email = String(options.userEmail || "").trim().toLowerCase();

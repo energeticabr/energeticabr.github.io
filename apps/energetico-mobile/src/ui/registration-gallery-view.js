@@ -11,6 +11,8 @@ import Decimal from "decimal.js";
 import { renderWorkDiaryCardDetails } from './work-diary-card.js';
 import { renderAssetGalleryCard } from './asset-gallery-card.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
+import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
+import { field, displayValue, paymentTotal } from './provision-payment-format.js';
 
 const PAGE_SIZE = 20;
 
@@ -130,7 +132,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
     throw new TypeError("Galeria de cadastro, documento e serviço de dados são obrigatórios.");
@@ -232,6 +234,12 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   pagination.append(previous, pageText, next);
   root.append(header, createShortcut.toolbar, filterDisclosure, ...(sortBar ? [sortBar] : []), feedback, list, pagination);
   doc.body.append(root);
+  const descriptionDetail = kind === 'provisionDescription' ? createProvisionDescriptionDetail({
+    document: doc, host: root, background: [header, createShortcut.toolbar, filterDisclosure, sortBar, feedback, list, pagination].filter(Boolean),
+    loadGroup: (id, options) => data.loadDescriptionGroup(id, options), field, format: displayValue, lineTotal: paymentTotal,
+    timeoutMs: descriptionTimeoutMs,
+    resolveTrigger: (id, original) => root.querySelector(`[data-action="description-provisions"][data-description-id="${id}"]`) || original,
+  }) : null;
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando registros…' });
   const searchableFilters = bindSearchableFilterSelects(toolbar);
   const recordActions = createGalleryRecordActions({
@@ -676,7 +684,10 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         const main = el("div", "rg-row-main");
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'asset') renderAssetGalleryCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
-        else if (kind === 'provisionDescription') renderProvisionDescriptionCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
+        else if (kind === 'provisionDescription') renderProvisionDescriptionCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field),
+          onDetails: (id, trigger) => {
+            if (!destroyed && !root.hidden && !attachmentLoading && !pendingMutations && root.getAttribute('aria-busy') !== 'true') descriptionDetail.open(id, trigger);
+          } });
         else if (model.nativeCard) renderNativeDetails(main, row, primary);
         else renderDocumentDetails(main, row, primary);
         layout.append(fileRail, main);
@@ -752,6 +763,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
 
   async function load({ refresh = hasLoaded } = {}) {
+    descriptionDetail?.close();
     const current = ++request;
     filterEpoch += 1;
     filterErrors.clear();
@@ -806,6 +818,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
 
   function hide() {
     if (root.hidden) return;
+    descriptionDetail?.close();
     loadingScreen.sync(false);
     recordActions.close();
     searchableFilters.close();
@@ -843,6 +856,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   return {
     async open() { if (destroyed) return; attachmentRequest += 1; attachmentLoading = false; returnFocus = doc.activeElement; root.hidden = false; root.focus(); await load(); },
     close: hide,
-    destroy() { loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }
