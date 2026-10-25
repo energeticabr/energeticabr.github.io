@@ -1,0 +1,34 @@
+.chat-message:has([data-provision-settlement-review]) { justify-content: center; gap: 0; }
+.chat-message:has([data-provision-settlement-review]) > .chat-avatar { display: none; }
+.chat-message.chat-message--assistant:has([data-provision-settlement-review]) > .chat-bubble { box-sizing: border-box; width: min(100%, 720px); max-width: 720px; min-width: 0; }
+.provision-review {
+  min-width: 0;
+  max-width: 100%;
+  color: #102f3c;
+}
+.provision-review h3 { margin: 0 0 10px; font-size: 1.03rem; line-height: 1.35; overflow-wrap: anywhere; }
+.provision-review p { margin: 8px 0; font-size: .86rem; line-height: 1.45; }
+.provision-review__notice { padding: 10px; background: #fff5d9; border: 1px solid #e4c774; border-radius: 10px; }
+.provision-review__scroll { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid #cadce4; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+.provision-review__scroll:focus-visible { outline: 2px solid #087052; outline-offset: 2px; }
+.provision-review table { width: 100%; min-width: 360px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 1.4; }
+.provision-review__product-col { width: 40%; }
+.provision-review__quantity-col { width: 10%; }
+.provision-review th, .provision-review td { padding: 10px 8px; border-bottom: 1px solid #d7e3eb; vertical-align: top; overflow-wrap: anywhere; }
+.provision-review thead th { color: #fff; background: #07566b; font-size: 12px; text-align: right; }
+.provision-review thead th:first-child { text-align: left; position: sticky; left: 0; z-index: 2; }
+.provision-review tbody tr { --provision-review-row: #fff; }
+.provision-review tbody tr:nth-child(even) { --provision-review-row: #e8f3ff; }
+.provision-review tbody th, .provision-review tbody td { background: var(--provision-review-row); }
+.provision-review tbody th { text-align: left; position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 #d7e3eb; }
+.provision-review tbody td { text-align: right; font-variant-numeric: tabular-nums; }
+.provision-review__product { display: block; }
+.provision-review small { display: block; margin-top: 5px; color: #435d68; font-size: 12px; font-weight: 500; }
+.provision-review .provision-review__paid { padding: 3px 5px; background: #edf0f2; border: 1px solid #d4dfe5; border-radius: 6px; }
+.provision-review__total { font-weight: 750; }
+.provision-review tfoot th, .provision-review tfoot td { color: #14543e; background: #e2f3e9; font-weight: 800; border-bottom: 0; }
+.provision-review tfoot th { text-align: left; }
+.provision-review tfoot td { text-align: right; }
+.provision-review .provision-review__scroll-hint, .provision-review .provision-review__readonly, .provision-review .provision-review__next { font-size: 12px; color: #435d68; }
+.provision-review__pending { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px; background: #e8f3ff; border-radius: 9px; }
+@media (min-width: 680px) { .provision-review__scroll-hint { display: none; } }
