@@ -9,6 +9,7 @@ import { createOrdersLinkedReportData } from './orders-linked-report-data.js';
 import { createPayrollSourceReader } from './payroll-editor-policy.js';
 import { filterPayrollRows, payrollFilterOptions, validatePayrollFilters } from './payroll-gallery-filters.js';
 import { createRegistrationGalleryFilterData } from './registration-gallery-filter-data.js';
+import { loadProvisionDescriptionGroup, provisionDescriptionLinkColumn } from './provision-description-detail-data.js';
 
 const SITE_KEY = "personal";
 const LIST_ALIASES = Object.freeze(["NOTASPENDENTES"]);
@@ -731,6 +732,20 @@ function createSharePointListData({
     }
   }
 
+  async function normalizeDescriptionLinks(rows, listId, signal) {
+    if (!provisionPaymentSync || !rows.length || typeof repository.getColumns !== 'function') return rows;
+    assertSession();
+    if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+    const columns = await readSnapshot(() => repository.getColumns(siteKey, listId, signal ? { signal } : {}), signal);
+    assertSession();
+    if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
+    const linkName = provisionDescriptionLinkColumn(columns, { required: false });
+    if (!linkName) return rows;
+    return rows.map(row => Object.freeze({ ...row, fields: Object.freeze({ ...row.fields,
+      DESCRITIVOPROVISAO: row.fields[linkName] ?? '',
+    }) }));
+  }
+
   async function loadSnapshot({ signal, refresh = false } = {}) {
     if (retrySnapshotReads) {
       if (signal?.aborted) throw signal.reason || new DOMException('Consulta cancelada.', 'AbortError');
@@ -759,7 +774,7 @@ function createSharePointListData({
       if (!page?.hasMore || !page?.nextLink) {
         if (!preserveSourceOrder) rows.sort((left, right) => Number(right.id) - Number(left.id));
         retryBlockedUntil = 0; retryBlockedError = undefined;
-        return Object.freeze({ listName, rows: Object.freeze(rows) });
+        return Object.freeze({ listName, rows: Object.freeze(await normalizeDescriptionLinks(rows, list.id, signal)) });
       }
       cursor = page.nextLink;
     }
@@ -782,7 +797,7 @@ function createSharePointListData({
     if (item == null) return null;
     const row = normalizeItem(item);
     if (!row || row.id !== id) throw new OrdersGalleryDataError("orders_item_invalid", "O SharePoint não devolveu o pedido solicitado.");
-    return row;
+    return (await normalizeDescriptionLinks([row], list.id, signal))[0];
   }
 
   async function currentItemForMutation(rawId) {
@@ -960,6 +975,9 @@ function createSharePointListData({
 
   return Object.freeze({ loadSnapshot, loadItem, listAttachments, downloadAttachment, uploadAttachment, updateItem,
     loadEditor, saveEditor, deleteItem, updateDueDate, loadUpcomingPayments,
+    ...(provisionPaymentSync ? { loadDescriptionGroup: (id, options) => loadProvisionDescriptionGroup({
+      repository, siteKey, normalizeItem, assertSession,
+    }, id, options) } : {}),
     ...(descriptionEditor ? { previewDeletion: async id => (await deletionService()).preview(id),
       deleteDescription: async (context, options) => (await deletionService()).remove(context, options) } : {}),
     ...(filters ? { loadFilterOptions: filters.loadFilterOptions } : {}) });

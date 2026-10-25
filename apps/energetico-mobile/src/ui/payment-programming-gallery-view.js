@@ -11,6 +11,7 @@ import { bindAutoFilterForm } from './auto-filter-form.js';
 import { createGalleryAttachmentCounts, knownGalleryAttachmentCount } from './gallery-attachment-counts.js';
 import { provisionTotal } from '../chat/pending-provision-dates.js';
 import { launchGalleryIcon } from './launch-gallery-icons.js';
+import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
 
 const PAGE_SIZES = [10, 20, 50, 100];
 const DEFAULT_STATUS = "PAGAMENTO PREVISTO";
@@ -176,6 +177,7 @@ export function createPaymentProgrammingGallery({
   onClose,
   onHome,
   onCreate,
+  descriptionTimeoutMs = 30_000,
   now = () => new Date(),
 } = {}) {
   if (!documentRef?.body || typeof data?.loadSnapshot !== "function") {
@@ -308,6 +310,9 @@ export function createPaymentProgrammingGallery({
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando programação de pagamentos…' });
   const loadingLayer = loadingScreen.element;
   loadingLayer.classList.add('pg-loading-layer');
+  const descriptionDetail = createProvisionDescriptionDetail({ document: doc, host: root, background: [header, body],
+    loadGroup: (id, options) => data.loadDescriptionGroup(id, options), field, format: displayValue,
+    lineTotal: paymentTotal, timeoutMs: descriptionTimeoutMs });
   const searchableSort = bindSearchableFilterSelects(listToolbar);
   const recordActions = createGalleryRecordActions({
     document: doc, host: root,
@@ -317,6 +322,7 @@ export function createPaymentProgrammingGallery({
     saveEditor: (context, fields, options) => runMutation(() => data.saveEditor(context, fields, options)),
     deleteItem: (id, options) => runMutation(() => data.deleteItem(id, options)),
     onChanged: () => {
+      descriptionDetail.close();
       detail.hidden = true; detail.replaceChildren();
       return loadSnapshot({ refresh: true });
     },
@@ -485,7 +491,7 @@ export function createPaymentProgrammingGallery({
     symbol.append(cardIcon(icon));
     const visibleLabel = {
       "DATA PREVISTA PGTO": "Data prevista pgto", "VALOR UNITÁRIO": "Valor unitário", FRETE: "Frete", QTD: "Qtd.",
-      FILIAL: "Filial", "IMÓVEL": "Imóvel", AGENDAMENTO: "Agendamento",
+      FILIAL: "Filial", "IMÓVEL": "Imóvel", AGENDAMENTO: "Agendamento", "DESCRITIVO DA PROVISÃO": "Descritivo da provisão",
     }[label] || label;
     pair.append(symbol, el("dt", "", visibleLabel), el("dd", "", displayValue(label, value)));
     list.append(pair);
@@ -546,6 +552,21 @@ export function createPaymentProgrammingGallery({
     appendSummaryField(summary, "FILIAL", field(fields, ["FILIAL"]), "branch");
     appendSummaryField(summary, "IMÓVEL", field(fields, ["IMOVEL", "IMÓVEL"]), "property");
     appendSummaryField(summary, "AGENDAMENTO", paymentScheduleSummary(fields), "clock");
+    const descriptionId = text(field(fields, ['DESCRITIVOPROVISAO'])).trim();
+    const descriptionCluster = appendSummaryField(summary, 'DESCRITIVO DA PROVISÃO', 'Não vinculado', 'order', { wide: true });
+    descriptionCluster.classList.add('pg-description-cluster');
+    if (/^[1-9]\d{0,14}$/.test(descriptionId)) {
+      const trigger = el('button', 'pg-description-trigger');
+      trigger.type = 'button'; trigger.dataset.action = 'description-provisions';
+      trigger.setAttribute('aria-label', `Detalhar descritivo da provisão #${descriptionId}`);
+      trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-expanded', 'false');
+      const arrow = el('span', 'pg-description-arrow', '›'); arrow.setAttribute('aria-hidden', 'true');
+      trigger.append(el('strong', '', `ID ${descriptionId}`), el('span', 'pg-description-hint', 'Ver provisões vinculadas'), arrow);
+      trigger.addEventListener('click', () => {
+        if (opened && !destroyed && !listLoading && !attachmentLoading) descriptionDetail.open(descriptionId, trigger);
+      });
+      descriptionCluster.querySelector('dd').replaceChildren(trigger);
+    } else descriptionCluster.classList.add('pg-description-cluster--unlinked');
     const observation = text(field(fields, ["OBS", "OBSERVACAO", "OBSERVAÇÃO"]) || "").trim();
     main.append(heading, values);
     main.append(summary);
@@ -618,6 +639,7 @@ export function createPaymentProgrammingGallery({
 
   async function loadSnapshot({ refresh = false } = {}) {
     if (!opened || destroyed) return false;
+    descriptionDetail.close();
     attachmentCounts.reset();
     const current = session;
     controller?.abort();
@@ -675,6 +697,7 @@ export function createPaymentProgrammingGallery({
 
   function close() {
     if (!opened) return;
+    descriptionDetail.close();
     recordActions.close();
     searchableSort.close();
     autoFilters.cancelPending();
@@ -694,6 +717,7 @@ export function createPaymentProgrammingGallery({
 
   function destroy() {
     if (destroyed) return;
+    descriptionDetail.destroy();
     loadingScreen.destroy();
     createShortcut.destroy();
     refreshShortcut.destroy();

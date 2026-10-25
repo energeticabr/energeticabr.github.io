@@ -9025,7 +9025,7 @@ export function createAppController({
     const opening = Promise.resolve().then(async () => {
       try {
         if (!paymentProgrammingGallery) {
-          const data = await paymentProgrammingGalleryDataFactory({ tokenProvider: scopes => {
+          const data = await paymentProgrammingGalleryDataFactory({ assertSession, tokenProvider: scopes => {
             assertSession();
             return auth.getToken(scopes).catch(async error => {
               if (error?.code !== "AUTH_REQUIRED" || typeof auth.authorize !== "function") throw error;
