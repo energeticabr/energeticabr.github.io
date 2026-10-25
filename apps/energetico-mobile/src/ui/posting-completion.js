@@ -19,7 +19,7 @@ export function postingCompletionMarkup(receipt, notesMarkup = '', sender = null
   const orderAttachments = receipt.kind === 'order-attachments';
   const provisionAttachments = receipt.kind === 'provision-attachments';
   const attachmentCompletion = orderAttachments || provisionAttachments;
-  const diary = receipt.kind === 'diary';
+  const diary = receipt.kind === 'diary' || receipt.kind === 'diary-creation' || receipt.kind === 'construction-visit';
   const brandedReceipt = settlement || attachmentCompletion || diary;
   const taskCompletion = receipt.kind === 'task-completion';
   const deletion = receipt.kind === 'deletion';
@@ -29,7 +29,7 @@ export function postingCompletionMarkup(receipt, notesMarkup = '', sender = null
     ${brandedReceipt && sender ? `<div class="launch-completion-sender"><div class="launch-completion-sender__identity"><strong>${escapeHtml(sender.name)}</strong><time>${escapeHtml(receipt.time)}</time></div><img src="${escapeHtml(sender.mascotUrl)}" alt="Mascote Energético"></div>` : ''}
     <header class="launch-completion__success">
       <span class="launch-completion__check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>
-      <div><h2>${settlement ? 'PAGAMENTO AGENDADO' : orderAttachments ? 'ANEXOS DO PEDIDO' : provisionAttachments ? 'ANEXOS DA PROVISÃO' : diary ? 'DIÁRIO DE OBRA PREENCHIDO' : `${escapeHtml(receipt.title)}!`}</h2><p>${edition ? `Edição concluída com sucesso · ${escapeHtml(receipt.database)}` : deletion ? `Exclusão concluída com sucesso · ${escapeHtml(receipt.database)}` : settlement ? 'Baixado na base de dados' : attachmentCompletion ? 'Adicionados na base de dados' : diary ? 'Registrado na base de dados' : taskCompletion ? `Conclusão registrada na base de dados ${escapeHtml(receipt.database)}.` : `Operação concluída com sucesso na base de dados ${escapeHtml(receipt.database)} às ${escapeHtml(receipt.time)}.`}</p></div>
+      <div><h2>${settlement ? 'PAGAMENTO AGENDADO' : orderAttachments ? 'ANEXOS DO PEDIDO' : provisionAttachments ? 'ANEXOS DA PROVISÃO' : diary ? escapeHtml(receipt.title) : `${escapeHtml(receipt.title)}!`}</h2><p>${edition ? `Edição concluída com sucesso · ${escapeHtml(receipt.database)}` : deletion ? `Exclusão concluída com sucesso · ${escapeHtml(receipt.database)}` : settlement ? 'Baixado na base de dados' : attachmentCompletion ? 'Adicionados na base de dados' : diary ? 'Registrado na base de dados' : taskCompletion ? `Conclusão registrada na base de dados ${escapeHtml(receipt.database)}.` : `Operação concluída com sucesso na base de dados ${escapeHtml(receipt.database)} às ${escapeHtml(receipt.time)}.`}</p></div>
     </header>
     ${brandedReceipt ? `<div class="launch-completion__operation">${icon('clock')}<div><strong>${escapeHtml(receipt.database)}</strong> <span>ÀS ${escapeHtml(receipt.time)}</span></div></div>` : ''}
     <h3 class="launch-completion__title"><span aria-hidden="true">${brandedReceipt ? icon('database') : '🆔'}</span> ${edition ? 'RESUMO DA EDIÇÃO' : deletion ? 'RESUMO DO REGISTRO EXCLUÍDO' : 'REGISTROS CONFIRMADOS'}</h3>
