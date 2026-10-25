@@ -38,6 +38,7 @@ function sameValue(actual, expected, date) {
 
 export function createProvisionPaymentEditor({ repository, siteKey = 'personal', assertSession = () => {} } = {}) {
   const busy = new Set();
+  const pendingRepairs = new Map();
   function active(signal) {
     assertSession();
     if (signal?.aborted) throw signal.reason || new DOMException('Sincronização cancelada.', 'AbortError');
@@ -50,7 +51,7 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     version(row);
     return row;
   }
-  async function linked(list, linkName, parentId, signal) {
+  async function allRows(list, signal) {
     const found = [], seen = new Set();
     let cursor = '';
     for (let pageNumber = 1; pageNumber <= 100; pageNumber++) {
@@ -63,7 +64,6 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
         throw new Error('A consulta completa das provisões está indisponível.');
       }
       for (const row of page.items) {
-        if (String(row.fields?.[linkName] ?? '').trim() !== parentId) continue;
         const childId = id(row.id);
         if (seen.has(childId)) throw new Error('A consulta retornou provisão duplicada.');
         seen.add(childId);
@@ -82,12 +82,162 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
     throw new Error('A consulta das provisões excedeu o limite seguro de páginas.');
   }
 
+  async function linked(list, linkName, parentId, signal) {
+    return (await allRows(list, signal)).filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId);
+  }
+
+  async function parentSource(signal) {
+    active(signal);
+    const list = await repository.resolveList(siteKey, PARENT_LIST, signal ? { signal } : {});
+    active(signal);
+    if (list?.status !== 'resolved' || !list.id) throw new Error('Os descritivos de provisão não estão disponíveis.');
+    return list;
+  }
+
+  async function prepareColumns({ columns, rawColumns, item, signal }) {
+    if (!rawColumns.some(column => key(column.name) === 'DESCRITIVOPROVISAO')) return columns;
+    const name = field(rawColumns, 'DESCRITIVOPROVISAO');
+    if (rawColumns.find(column => column.name === name).readOnly) return columns;
+    const list = await parentSource(signal);
+    const parents = (await allRows(list.id, signal)).sort((a,b) => Number(b.id) - Number(a.id));
+    const choices = parents.map(row => id(row.id));
+    const optionLabels = Object.fromEntries(parents.map(row => [id(row.id),
+      [`ID ${row.id}`, row.fields?.FORNECEDOR, row.fields?.OBS].filter(value => !blank(value)).join(' · ')]));
+    const current = String(item.fields?.[name] ?? '').trim();
+    if (current && !choices.includes(current)) {
+      choices.push(id(current));
+      optionLabels[current] = `ID ${current} · vínculo atual`;
+    }
+    const descriptor = { name, label: 'Descritivo da provisão', control: 'select',
+      editable: true, readOnly: false, disabled: false, hidden: false, required: Boolean(current),
+      choices, optionLabels, powerApps: { closed: true, preserveCurrentValue: true } };
+    return [...columns.filter(column => key(column.name) !== 'DESCRITIVOPROVISAO'), descriptor];
+  }
+
+  async function synchronizeTotals(record, { signal, expectedLink, skipMissing = false } = {}) {
+    const { parents, parentIds, childList, childId, linkName, totalName, amounts, parentColumns } = record;
+    const parent = async parentId => {
+      try { return await read(parents.id,parentId,signal); }
+      catch (error) { if (skipMissing && Number(error?.status) === 404) return null; throw error; }
+    };
+    const totalsNow = async () => {
+      const rows = await allRows(childList.id, signal);
+      if (expectedLink !== undefined) {
+        const child = rows.find(row => id(row.id) === childId);
+        if (!child || String(child.fields?.[linkName] ?? '').trim() !== expectedLink) throw new Error('O vínculo mudou durante a sincronização dos descritivos.');
+      }
+      return new Map(parentIds.map(parentId => [parentId, provisionChildrenTotal(rows.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts)]));
+    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (const parentId of parentIds) {
+        const current = await parent(parentId);
+        if (!current) continue;
+        const total = (await totalsNow()).get(parentId);
+        if (String(current.fields?.[totalName] ?? '') === total) continue;
+        const patch = { [totalName]: parentColumns.find(column => column.name === totalName).text ? total : Number(total) };
+        active(signal);
+        try { await repository.updateItem(siteKey,parents.id,parentId,patch,{eTag:version(current),...(signal?{signal}:{})}); }
+        catch (error) {
+          const confirmed = await parent(parentId);
+          if (!confirmed) continue;
+          if (String(confirmed.fields?.[totalName] ?? '') !== total && Number(error?.status) !== 412) throw error;
+        }
+      }
+      const totals = await totalsNow();
+      let confirmed = true;
+      for (const parentId of parentIds) {
+        const current = await parent(parentId);
+        if (current && String(current.fields?.[totalName] ?? '') !== totals.get(parentId)) confirmed = false;
+      }
+      if (confirmed) return;
+    }
+    throw new Error('Os totais dos descritivos não foram confirmados. Tente salvar novamente para concluir a sincronização.');
+  }
+
+  async function destinationMissing(record, signal) {
+    try { await read(record.parents.id,record.targetId,signal); return false; }
+    catch (error) { if (Number(error?.status) === 404) return true; throw error; }
+  }
+
+  async function repair(record, signal) {
+    let restored = false;
+    if (await destinationMissing(record,signal)) {
+      const current = await read(record.childList.id,record.childId,signal);
+      if (String(current.fields?.[record.linkName] ?? '').trim() === record.targetId && record.matches(current)) {
+        // Compensate only our still-current fields, never a later user's move.
+        if (record.currentLink) await read(record.parents.id,id(record.currentLink),signal);
+        active(signal);
+        try { await repository.updateItem(siteKey,record.childList.id,record.childId,record.original,{eTag:version(current),...(signal?{signal}:{})}); }
+        catch (error) { if (!record.matchesOriginal(await read(record.childList.id,record.childId,signal))) throw error; }
+        if (!record.matchesOriginal(await read(record.childList.id,record.childId,signal))) throw new Error('Não foi possível confirmar a restauração do vínculo anterior.');
+        restored = true;
+      }
+    }
+    // Historical repair is independent of where another session moved the child.
+    // A deleted parent has no remaining total to patch; other read errors fail.
+    await synchronizeTotals(record,{signal,skipMissing:true});
+    pendingRepairs.delete(record.childId);
+    return { restored, current:await read(record.childList.id,record.childId,signal) };
+  }
+
+  async function relink({ childList, childColumns, childId, item, fields, linkName, currentLink, targetId, signal }) {
+    const parents = await parentSource(signal);
+    if (parents.id === childList.id) throw new Error('A lista do descritivo não corresponde à origem esperada.');
+    const parentColumns = await repository.getColumns(siteKey, parents.id, signal ? { signal } : {});
+    active(signal);
+    if (!Array.isArray(parentColumns)) throw new Error('Metadados do descritivo indisponíveis.');
+    const totalName = field(parentColumns, 'VALORTOTAL', ['text', 'number', 'currency']);
+    const amounts = Object.fromEntries(['QTD','VALORTOTAL','FRETE'].map(name => [name, field(childColumns,name,['text','number','currency'])]));
+    const parentIds = [...new Set([...(currentLink ? [id(currentLink)] : []), targetId])];
+    for (const parentId of parentIds) await read(parents.id, parentId, signal);
+    const current = await read(childList.id, childId, signal);
+    const equal = (row,values) => Object.entries(values).every(([name,value]) => sameValue(row.fields?.[name],value,
+      childColumns.some(column => column.name === name && column.dateTime)));
+    const matches = row => equal(row,fields);
+    const liveLink = String(current.fields?.[linkName] ?? '').trim();
+    if (liveLink !== currentLink && !(liveLink === targetId && matches(current))) throw new Error('O vínculo da provisão mudou. Reabra o registro.');
+    if (version(current) !== version(item) && !matches(current)) throw new Error('A provisão mudou. Recarregue antes de editar.');
+    const before = await allRows(childList.id, signal);
+    const listed = before.find(row => id(row.id) === childId);
+    if (!listed || String(listed.fields?.[linkName] ?? '').trim() !== liveLink) throw new Error('O vínculo da provisão mudou durante a consulta.');
+    const projected = before.map(row => id(row.id) === childId ? { ...row, fields: { ...current.fields, ...fields } } : row);
+    for (const parentId of parentIds) provisionChildrenTotal(projected.filter(row => String(row.fields?.[linkName] ?? '').trim() === parentId), amounts);
+    // The child scan is asynchronous: prove destination/source existence again
+    // at the actual write boundary, not just before starting that scan.
+    for (const parentId of parentIds) await read(parents.id,parentId,signal);
+    const original = Object.fromEntries(Object.keys(fields).map(name=>[name,item.fields?.[name] ?? null]));
+    const record = {parents,parentIds,childList,childId,linkName,targetId,currentLink,totalName,amounts,parentColumns,
+      original,matches,matchesOriginal:row=>equal(row,original)};
+    pendingRepairs.set(childId,record);
+    try {
+      if (!matches(current)) {
+        active(signal);
+        try { await repository.updateItem(siteKey,childList.id,childId,fields,{eTag:version(current),...(signal?{signal}:{})}); }
+        catch (error) { if (!matches(await read(childList.id,childId,signal))) throw error; }
+      }
+      const saved = await read(childList.id, childId, signal);
+      if (!matches(saved)) throw new Error('A nova vinculação da provisão não foi confirmada.');
+      await synchronizeTotals(record,{signal,expectedLink:targetId});
+      const confirmed = await read(childList.id,childId,signal);
+      if (!matches(confirmed)) throw new Error('O vínculo da provisão mudou durante a conferência.');
+      await read(parents.id,targetId,signal);
+      pendingRepairs.delete(childId);
+      return confirmed;
+    } catch (error) {
+      if (await destinationMissing(record,signal)) {
+        const outcome = await repair(record,signal);
+        if (outcome.restored) throw new Error('O descritivo de destino foi removido. O vínculo anterior foi restaurado; reabra o editor e selecione outro descritivo.');
+      }
+      throw error;
+    }
+  }
+
   async function save({ list, item, fields, signal } = {}) {
     active(signal);
     const childId = id(item?.id);
     if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('Informe os campos editados da provisão.');
-    if (Object.keys(fields).some(name => ['FILIAL', 'FORNECEDOR', 'DESCRITIVOPROVISAO'].includes(key(name)))) {
-      throw new Error('FILIAL, FORNECEDOR e o vínculo devem ser editados em DESCRITIVOPROVISAO.');
+    if (Object.keys(fields).some(name => ['FILIAL', 'FORNECEDOR'].includes(key(name)))) {
+      throw new Error('FILIAL e FORNECEDOR devem ser editados em DESCRITIVOPROVISAO.');
     }
     if (busy.has(childId)) throw new Error('Esta provisão já está sendo sincronizada.');
     busy.add(childId);
@@ -103,6 +253,18 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
       if (!Array.isArray(childColumns)) throw new Error('Metadados da provisão indisponíveis.');
       const linkName = field(childColumns, 'DESCRITIVOPROVISAO');
       const currentLink = String(item.fields?.[linkName] ?? '').trim();
+      if (pendingRepairs.has(childId)) {
+        const outcome = await repair(pendingRepairs.get(childId),signal);
+        if (outcome.restored) throw new Error('O descritivo de destino foi removido. O vínculo anterior foi restaurado; reabra o editor.');
+        const matches = Object.entries(fields).every(([name,value]) => sameValue(outcome.current.fields?.[name],value,
+          childColumns.some(column=>column.name===name&&column.dateTime)));
+        if (matches) return outcome.current;
+        if (version(item) !== version(outcome.current)) throw new Error('O vínculo ou os dados da provisão mudaram. Os totais anteriores foram reconciliados; reabra o registro.');
+      }
+      if (Object.hasOwn(fields,linkName)) {
+        const targetId = id(fields[linkName]);
+        if (targetId !== currentLink) return await relink({ childList,childColumns,childId,item,fields:{...fields,[linkName]:targetId},linkName,currentLink,targetId,signal });
+      }
       const hasAmount = Object.keys(fields).some(name => ['VALORTOTAL', 'QTD', 'FRETE'].includes(key(name)));
       const changedDates = DATE_FIELDS.filter(name => Object.keys(fields).some(candidate => key(candidate) === name));
       let parentList, parentColumns, parentId, parentTotalName, childTotals;
@@ -199,5 +361,5 @@ export function createProvisionPaymentEditor({ repository, siteKey = 'personal',
       return saved;
     } finally { busy.delete(childId); }
   }
-  return Object.freeze({ save });
+  return Object.freeze({ save, prepareColumns });
 }

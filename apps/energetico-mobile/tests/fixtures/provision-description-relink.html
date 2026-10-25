@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Editar vínculo da provisão — dados fictícios</title></head>
+<body><main id="app"><h1>Editar provisão fictícia</h1><p>Prévia local, sem conexão com SharePoint.</p><output id="totals"></output></main><script type="module">
+import '../../src/styles.css';
+import '../../src/ui/gallery-record-actions.css';
+import {createPaymentProgrammingGalleryData} from '../../src/chat/orders-gallery-data.js';
+import {createGalleryRecordActions} from '../../src/ui/gallery-record-actions.js';
+const width=new URLSearchParams(location.search).get('width');
+if(['320','390'].includes(width)) {
+ const frame=document.createElement('iframe');frame.title=`Editor em ${width}px`;frame.src=location.pathname;
+ frame.style.cssText=`width:${width}px;height:640px;border:0;display:block;margin:auto`;
+ document.body.replaceChildren(frame);
+} else {
+const parentFields={FILIAL:'004',FORNECEDOR:'FORNECEDOR FICTÍCIO',VALORTOTAL:'30'};
+const rows={parents:new Map([
+  ['42',{id:'42',eTag:'p42',fields:{...parentFields,OBS:'Materiais da etapa A'}}],
+  ['99',{id:'99',eTag:'p99',fields:{...parentFields,OBS:'Materiais da etapa B',VALORTOTAL:'0'}}],
+]),children:new Map([
+  ['2',{id:'2',eTag:'c2',fields:{DESCRITIVOPROVISAO:'42',FILIAL:'004',FORNECEDOR:'FORNECEDOR FICTÍCIO',QTD:'1',VALORTOTAL:'10',FRETE:'0',OBS:'Preservar esta observação'}}],
+  ['3',{id:'3',eTag:'c3',fields:{DESCRITIVOPROVISAO:'42',FILIAL:'004',FORNECEDOR:'FORNECEDOR FICTÍCIO',QTD:'1',VALORTOTAL:'20',FRETE:'0'}}],
+])};
+const columns={parents:['FILIAL','FORNECEDOR','VALORTOTAL','OBS'].map(name=>({name,text:{}})),
+ children:['DESCRITIVOPROVISAO','FILIAL','FORNECEDOR','QTD','VALORTOTAL','FRETE','OBS'].map(name=>({name,text:{}}))};
+const repository={
+ async resolveList(_site,aliases){return {status:'resolved',id:aliases.includes('DESCRITIVOPROVISAO')?'parents':'children'};},
+ async getColumns(_site,list){return structuredClone(columns[list]);},
+ async getItem(_site,list,id){return structuredClone(rows[list].get(String(id)));},
+ async getItemsPage(_site,list){return {items:[...rows[list].values()].map(row=>structuredClone(row)),hasMore:false};},
+ async updateItem(_site,list,id,fields,{eTag}){
+  const row=rows[list].get(String(id)); if(row.eTag!==eTag)throw new Error('Versão mudou');
+  Object.assign(row.fields,fields);row.eTag+='n';return structuredClone(row);
+ }
+};
+const data=createPaymentProgrammingGalleryData({repository});
+const summary=()=>{document.querySelector('#totals').textContent=`Vínculo: ${rows.children.get('2').fields.DESCRITIVOPROVISAO}; Total 42: ${rows.parents.get('42').fields.VALORTOTAL}; Total 99: ${rows.parents.get('99').fields.VALORTOTAL}`;};
+summary();
+const actions=createGalleryRecordActions({document,host:document.querySelector('main'),galleryTitle:'PROVISÕES — EXEMPLO FICTÍCIO',
+ loadEditor:data.loadEditor,saveEditor:data.saveEditor,onChanged:summary});
+document.querySelector('main').append(actions.render(rows.children.get('2')));
+document.querySelector('[data-gallery-action="edit"]').click();
+}
+</script></body></html>

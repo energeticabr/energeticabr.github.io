@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPaymentProgrammingGalleryData, createPendingProvisionAttachmentsData } from '../src/chat/orders-gallery-data.js';
 import { createProvisionPaymentEditor } from '../../../portal/forms/provision-payment-edit.js';
+import { JSDOM } from 'jsdom';
+import { createGalleryRecordActions } from '../src/ui/gallery-record-actions.js';
 
-function fixture({ single = false, parentDates = {} } = {}) {
+function fixture({ single = false, parentDates = {}, withTarget = false } = {}) {
   const records = {
     parents: new Map([['42', { id: '42', eTag: 'p1', fields: {
       FILIAL: '004', FORNECEDOR: 'A', VALORTOTAL: '30', DATAPREVISTOPGTO: null,
@@ -16,6 +18,14 @@ function fixture({ single = false, parentDates = {} } = {}) {
     ]),
   };
   if (single) records.parents.get('42').fields.VALORTOTAL = '10';
+  if (withTarget) {
+    records.parents.set('99', { id: '99', eTag: 'p99', fields: {
+      ...structuredClone(records.parents.get('42').fields), FILIAL: '000', FORNECEDOR: 'B', OBS: 'Destino de teste', VALORTOTAL: '40',
+    } });
+    records.children.set('4', { id: '4', eTag: 'c4', fields: {
+      DESCRITIVOPROVISAO: '99', FILIAL: '000', FORNECEDOR: 'B', QTD: '2', VALORTOTAL: '20', FRETE: '0',
+    } });
+  }
   const columns = {
     parents: [...['FILIAL', 'FORNECEDOR', 'VALORTOTAL'].map(name => ({ name, text: {} })),
       ...['DATAPREVISTOPGTO', 'DATAPGTOEFETUADO', 'DATAPGTOAGENDADO', 'DATAEXECUCAOAGENDAMENTO', 'PGTOAGENDADO'].map(name => ({ name, dateTime: {} }))],
@@ -27,7 +37,11 @@ function fixture({ single = false, parentDates = {} } = {}) {
     async resolveList(_site, aliases) { return { status: 'resolved', id: aliases.includes('DESCRITIVOPROVISAO') ? 'parents' : 'children' }; },
     async getColumns(_site, list) { return structuredClone(columns[list]); },
     async getItemsPage(_site, list) { return { items: [...records[list].values()].map(row => structuredClone(row)), hasMore: false }; },
-    async getItem(_site, list, id) { return structuredClone(records[list].get(String(id))); },
+    async getItem(_site, list, id) {
+      const row = records[list].get(String(id));
+      if (!row) throw Object.assign(new Error('Registro não encontrado'), { status: 404 });
+      return structuredClone(row);
+    },
     async updateItem(_site, list, id, fields, { eTag }) {
       const row = records[list].get(String(id));
       assert.equal(eTag, row.eTag);
@@ -61,14 +75,214 @@ test('payment editor displays FILIAL and FORNECEDOR as locked and rejects direct
   assert.deepEqual(f.writes, []);
 });
 
-test('payment editor cannot relink a child to another provision description', async () => {
-  const f = fixture();
+test('payment editor offers existing descriptions and the current link as an editable closed selection', async () => {
+  const f = fixture({ withTarget: true });
   const context = await f.data.loadEditor('2');
-  await assert.rejects(f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' }), /v[ií]nculo|descritivo/i);
-  await assert.rejects(createProvisionPaymentEditor({ repository: f.repository }).save({
-    list: { id: 'children' }, item: context.item, fields: { DESCRITIVOPROVISAO: '99' },
-  }), /v[ií]nculo|descritivo/i);
+  const column = context.columns.find(candidate => candidate.name === 'DESCRITIVOPROVISAO');
+  assert.equal(column?.control, 'select');
+  assert.equal(column.readOnly, false);
+  assert.equal(column.editable, true);
+  assert.equal(column.label, 'Descritivo da provisão');
+  assert.deepEqual(column.choices, ['99', '42']);
+  assert.match(column.optionLabels['99'], /99.*B.*Destino de teste/);
+  assert.equal(context.item.fields.DESCRITIVOPROVISAO, '42');
   assert.deepEqual(f.writes, []);
+});
+
+test('relinking a provision recalculates both parents and preserves every unrelated identity', async () => {
+  const f = fixture({ withTarget: true });
+  Object.assign(f.records.children.get('2').fields, { IDFOLHA: 7, FOLHAOPERACAO: 'TEST-ORIGIN', OBS: 'Manter', Attachments: true });
+  const before = structuredClone(f.records.children.get('2').fields);
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DESCRITIVOPROVISAO: '99' });
+  assert.deepEqual(f.records.children.get('2').fields, { ...before, DESCRITIVOPROVISAO: '99' });
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL, '20');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL, '50');
+  assert.equal(f.records.children.size, 3);
+  assert.deepEqual(f.writes.find(write => write.list === 'children').fields, { DESCRITIVOPROVISAO: '99' });
+});
+
+test('moving the sole child zeros the old description without deleting it', async () => {
+  const f = fixture({ single: true, withTarget: true });
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DESCRITIVOPROVISAO: '99', VALORTOTAL: '5' });
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL, '0');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL, '45');
+  assert.equal(f.records.parents.size, 2);
+});
+
+test('an initially unlinked provision can acquire an existing description', async () => {
+  const f = fixture({ withTarget: true });
+  f.records.children.get('2').fields.DESCRITIVOPROVISAO = '';
+  f.records.parents.get('42').fields.VALORTOTAL = '20';
+  await f.data.saveEditor(await f.data.loadEditor('2'), { DESCRITIVOPROVISAO: '99' });
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL, '50');
+  assert.equal(f.writes.some(write => write.list === 'parents' && write.id === '42'), false);
+});
+
+test('missing or invalid target descriptions never write a provision or a parent', async () => {
+  for (const target of ['', '0', '-2', '99x', '888']) {
+    const f = fixture({ withTarget: true });
+    await assert.rejects(f.data.saveEditor(await f.data.loadEditor('2'), { DESCRITIVOPROVISAO: target }));
+    assert.deepEqual(f.writes, []);
+  }
+  const f = fixture({ withTarget: true });
+  const context = await f.data.loadEditor('2');
+  f.records.parents.delete('99');
+  await assert.rejects(f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' }));
+  assert.deepEqual(f.writes, []);
+});
+
+test('a failed parent synchronization retries only missing totals after the confirmed move', async () => {
+  for (const failedId of ['42', '99']) {
+    const f = fixture({ withTarget: true });
+    const context = await f.data.loadEditor('2');
+    const update = f.repository.updateItem;
+    let fail = true;
+    f.repository.updateItem = (...args) => {
+      if (args[1] === 'parents' && args[2] === failedId && fail) { fail = false; throw new Error('offline'); }
+      return update(...args);
+    };
+    await assert.rejects(f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' }), /offline/);
+    assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO, '99');
+    await f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' });
+    assert.equal(f.records.parents.get('42').fields.VALORTOTAL, '20');
+    assert.equal(f.records.parents.get('99').fields.VALORTOTAL, '50');
+    assert.equal(f.writes.filter(write => write.list === 'children').length, 1);
+  }
+});
+
+test('a provision moved elsewhere since the editor opened is not stolen by a stale relink', async () => {
+  const f = fixture({ withTarget: true });
+  const context = await f.data.loadEditor('2');
+  f.records.children.get('2').fields.DESCRITIVOPROVISAO = '123';
+  f.records.children.get('2').eTag = 'changed';
+  await assert.rejects(f.data.saveEditor(context, { DESCRITIVOPROVISAO: '99' }), /v[ií]nculo|mudou/i);
+  assert.deepEqual(f.writes, []);
+});
+
+test('description options include later pages and incomplete pages do not become valid choices', async () => {
+  const f = fixture({ withTarget: true });
+  const pages = f.repository.getItemsPage;
+  f.repository.getItemsPage = async (site, list, query, options) => list !== 'parents' ? pages(site,list,query,options)
+    : options.pageNumber === 1 ? { items: [structuredClone(f.records.parents.get('42'))], hasMore: true, nextLink: 'parents-page-2' }
+      : { items: [structuredClone(f.records.parents.get('99'))], hasMore: false };
+  const context = await f.data.loadEditor('2');
+  assert.deepEqual(context.columns.find(column => column.name === 'DESCRITIVOPROVISAO')?.choices, ['99','42']);
+  f.repository.getItemsPage = async () => ({ items: [], hasMore: false, complete: false });
+  await assert.rejects(f.data.loadEditor('2'), /completa|consulta|p.gina/i);
+  assert.deepEqual(f.writes, []);
+});
+
+test('the real provision form selects a description and submits the new link with a visible receipt', async t => {
+  const f = fixture({ withTarget: true });
+  const dom = new JSDOM('<main id="gallery"></main>', { url: 'https://example.test' });
+  const previous = globalThis.FormData;
+  globalThis.FormData = dom.window.FormData;
+  const actions = createGalleryRecordActions({ document: dom.window.document, host: dom.window.document.querySelector('main'),
+    loadEditor: f.data.loadEditor, saveEditor: f.data.saveEditor });
+  t.after(() => { actions.destroy(); dom.window.close(); globalThis.FormData = previous; });
+  const buttons = actions.render({ id:'2',fields:structuredClone(f.records.children.get('2').fields) });
+  dom.window.document.querySelector('main').append(buttons);
+  buttons.querySelector('[data-gallery-action="edit"]').click();
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle(); await settle();
+  const document = dom.window.document, stored = document.querySelector('[name="DESCRITIVOPROVISAO"]');
+  assert.equal(stored?.value, '42');
+  const input = stored.closest('.dynamic-field').querySelector('[role="combobox"]');
+  assert.match(input.value,/42.*A/);
+  input.click();
+  const option = [...document.querySelectorAll('[role="option"]')].find(node => /ID 99/.test(node.textContent));
+  assert.ok(option); option.click();
+  assert.equal(stored.value,'99');
+  document.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+  await settle(); await settle();
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'99');
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'50');
+  assert.match(document.querySelector('[data-gallery-edit-success]')?.textContent || '',/REGISTRO EDITADO/);
+});
+
+test('a lost move response is read back and never moves the provision twice', async () => {
+  const f = fixture({ withTarget: true });
+  const update = f.repository.updateItem;
+  f.repository.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (args[1] === 'children') throw new Error('response lost');
+    return result;
+  };
+  await f.data.saveEditor(await f.data.loadEditor('2'),{DESCRITIVOPROVISAO:'99'});
+  assert.equal(f.writes.filter(write => write.list === 'children').length,1);
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'50');
+});
+
+test('relinking includes exact decimal quantity and freight and catches a sibling race', async () => {
+  const f = fixture({ withTarget: true });
+  Object.assign(f.records.children.get('2').fields,{QTD:'2.5',VALORTOTAL:'0.1',FRETE:'0.05'});
+  f.records.parents.get('42').fields.VALORTOTAL = '20.3';
+  const update = f.repository.updateItem;
+  let raced = false;
+  f.repository.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (args[1] === 'parents' && args[2] === '99' && !raced) {
+      raced = true; f.records.children.get('4').fields.VALORTOTAL = '30';
+    }
+    return result;
+  };
+  await f.data.saveEditor(await f.data.loadEditor('2'),{DESCRITIVOPROVISAO:'99'});
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'60.3');
+});
+
+test('destination deletion during the child scan is caught before the move write', async () => {
+  const f = fixture({ withTarget: true });
+  const context = await f.data.loadEditor('2');
+  const page = f.repository.getItemsPage;
+  let deleted = false;
+  f.repository.getItemsPage = async (...args) => {
+    const result = await page(...args);
+    if (args[1] === 'children' && !deleted) { deleted = true; f.records.parents.delete('99'); }
+    return result;
+  };
+  await assert.rejects(f.data.saveEditor(context,{DESCRITIVOPROVISAO:'99'}));
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'42');
+  assert.deepEqual(f.writes,[]);
+});
+
+test('destination deletion after the confirmed move conditionally restores its original link and totals', async () => {
+  const f = fixture({ withTarget: true });
+  const context = await f.data.loadEditor('2');
+  const update = f.repository.updateItem;
+  let deleted = false;
+  f.repository.updateItem = async (...args) => {
+    const result = await update(...args);
+    if (args[1] === 'children' && !deleted) { deleted = true; f.records.parents.delete('99'); }
+    return result;
+  };
+  await assert.rejects(f.data.saveEditor(context,{DESCRITIVOPROVISAO:'99',VALORTOTAL:'5'}));
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'42');
+  assert.equal(f.records.children.get('2').fields.VALORTOTAL,'10');
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'30');
+});
+
+test('an intervening move does not prevent repairing totals from an earlier confirmed move', async () => {
+  const f = fixture({ withTarget: true });
+  f.records.parents.set('123',{id:'123',eTag:'p123',fields:{...structuredClone(f.records.parents.get('99').fields),VALORTOTAL:'0'}});
+  const first = await f.data.loadEditor('2');
+  const update = f.repository.updateItem;
+  let failed = false;
+  f.repository.updateItem = (...args) => {
+    if (args[1] === 'parents' && args[2] === '42' && !failed) { failed = true; throw new Error('offline'); }
+    return update(...args);
+  };
+  await assert.rejects(f.data.saveEditor(first,{DESCRITIVOPROVISAO:'99'}),/offline/);
+  const other = createPaymentProgrammingGalleryData({ repository:f.repository });
+  await other.saveEditor(await other.loadEditor('2'),{DESCRITIVOPROVISAO:'123'});
+  await assert.rejects(f.data.saveEditor(first,{DESCRITIVOPROVISAO:'99'}),/v[ií]nculo|mudou/i);
+  assert.equal(f.records.children.get('2').fields.DESCRITIVOPROVISAO,'123');
+  assert.equal(f.records.parents.get('42').fields.VALORTOTAL,'20');
+  assert.equal(f.records.parents.get('99').fields.VALORTOTAL,'40');
+  assert.equal(f.records.parents.get('123').fields.VALORTOTAL,'10');
+  assert.equal(f.writes.filter(write=>write.list==='children').length,2);
 });
 
 test('a changed payment date reaches the parent only when this is its sole child and payment dates are blank', async () => {
