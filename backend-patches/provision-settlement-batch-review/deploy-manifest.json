@@ -1,0 +1,26 @@
+{
+  "files": {
+    "worker/provision_description_review.py": {
+      "before": null,
+      "mirrorBefore": null,
+      "after": "df02b171380dec5dd349e980e49044a1644767b0ac77c1e888f687992182acca"
+    },
+    "worker/provision_description_settlement.py": {
+      "before": "39c0dc1c93adbb85b974a124c2974ed5ec01cf4abae6a973cf1d99961380c502",
+      "mirrorBefore": "39c0dc1c93adbb85b974a124c2974ed5ec01cf4abae6a973cf1d99961380c502",
+      "after": "a4d47659c26d540fa2772ed5c0d105eb4e00d699087b9e18a55a8b5c542b6dac"
+    },
+    "worker/workflow.py": {
+      "before": "38e913cbd3ccd31ce81acf07da2066c32e1ea8af185ec3636e6d72dad3fe3c28",
+      "mirrorBefore": "692f7de79fd17a817f00de4536b5a1f65f748ef9451abf6790460f307a63f5c5",
+      "after": "376f600b50af2611604a540d0e92e7a3ed2da92d1bbb3328e869aea3c25990f2"
+    },
+    "channel_bridge.py": {
+      "before": "2b0d9040331eb71ea65260ab38ab31cc006a30e8f99a3520f84e8dbcc6255106",
+      "mirrorBefore": "11ebb5ae1afb95fa7e22b894ac7eaa5a8c7cbdb143ff7262337f62b2822382b7",
+      "after": "5443e696694487f01ea768f1aab0d77a5d31eb525cb9547fe2084819228a4b61"
+    }
+  },
+  "patch": "eac2b93d152c6ba4967f0d4afe26d04a8a405086a70073b106fa9926fc5f4a9f",
+  "archive": "62a0a8ed054610e501c3be09d2ca2b62d04f94c22cff0a9b87fde4c5d18fdfd8"
+}

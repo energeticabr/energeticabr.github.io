@@ -3,6 +3,7 @@ import { createCameraChooser } from './document-scanner.js';
 import { canDeleteRhidAdjustment } from '../chat/rhid-adjustment-ownership.js';
 import { postingCompletion } from "../chat/posting-completion.js";
 import { postingCompletionMarkup } from "./posting-completion.js";
+import { provisionSettlementReviewMarkup } from './provision-settlement-review.js';
 import { reportNavigationMarkup } from "./report-navigation.js";
 import { pendingReportPrintMarkup } from "./report-print.js";
 import { PAYROLL_LAUNCH_REPLY_ID, isSupplierPayrollMenu } from "../chat/supplier-payroll.js";
@@ -1675,6 +1676,7 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     ? rawChangeTable
     : null;
   const presenceTable = message.detail_table || message.detailTable;
+  const provisionReview = provisionSettlementReviewMarkup(presenceTable);
   const rhidAttendanceReport = presenceTable?.kind === "rhid_attendance";
   const calendarPicker = isDateQuestion(message, options);
   const isPendingAttendanceList = message?.presentation === "accordion";
@@ -1831,10 +1833,10 @@ function renderPoll(message, busy, draft = "", databaseFilterMessage = null, act
     return `<div class="chat-launch-payroll-select">${selectAll}${records.join("")}${unavailableWarning}<button class="chat-launch-payroll-select__proceed" type="button" data-action="launch-payroll-select-proceed"${busy || !launchPayrollCurrent ? " disabled" : ""}>${proceedLabel}</button></div>`;
   })() : "";
   return `<div class="chat-choice-card${isPendingAttendanceList ? " chat-choice-card--pending-attendance" : ""}${isHrGalleryMenu ? " chat-choice-card--hr-galleries" : ""}">
-    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu ? "" : `<p>${attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
+    ${launchPaymentSummary || rhidAttendanceReport || initialAreaMenu || isLaunchMenu || provisionReview ? "" : `<p>${attendanceDayQuestionMarkup(message) ?? formatQuestionText(presenceSummaryQuestion(changeTableQuestion(message, changeTable), presenceTable) || "Escolha uma opção")}</p>`}
     ${currentPoll ? singleLaunchConfirmationMarkup(message, activeFlow) : ""}
     ${changeTableMarkup(changeTable)}
-    ${presenceDetailTableMarkup(presenceTable)}
+    ${provisionReview || presenceDetailTableMarkup(presenceTable)}
     ${rhidAttendanceTableMarkup(presenceTable, message.id, rhidRefresh, activeFlow)}
     ${paymentAuditTableMarkup(paymentAuditTable)}
     ${launchPresencePaymentSummaryMarkup(launchPaymentSummary)}

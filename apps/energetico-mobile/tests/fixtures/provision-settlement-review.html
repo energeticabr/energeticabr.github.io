@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revisão de provisões — prévia fictícia</title><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+import { createConversationStore } from '/src/chat/conversation-store.js';
+import { reviewTable, reviewMessage, reviewState } from '/tests/helpers/provision-settlement-review-fixture.mjs';
+const params = new URLSearchParams(location.search), sample = params.get('sample') || 'basic';
+const table = reviewTable();
+if (sample === 'long') {
+  table.rows[0] = { ...table.rows[0], product: 'PRODUTO-SEM-ESPAÇOS-'.repeat(12),
+    quantityDisplay: '1.234.567,123456', unitPriceDisplay: 'R$ 1.234.567,123456789', totalDisplay: 'R$ 1.234.567.890,12' };
+  table.totalDisplay = 'R$ 1.234.567.931,12';
+}
+if (sample === 'pending') {
+  table.rows[1] = { ...table.rows[1], quantityDisplay: 'PENDENTE', totalDisplay: 'PENDENTE' };
+  table.canSubmit = false;
+  table.totalDisplay = table.pendingTotalDisplay = 'VALOR PENDENTE';
+  table.notice = 'PREENCHA OS VALORES PENDENTES EM EDITAR ALGUMA LINHA ANTES DE SUBMETER.';
+}
+const message = reviewMessage(table), root = document.querySelector('#app');
+const view = createChatView(root), store = createConversationStore({ historyMode: 'current-step' });
+const replies = [];
+view.on('select-reply', event => replies.push(event.replyId));
+store.subscribe(state => view.render({ ...reviewState(message), ...state, sessionStatus: 'authenticated', account: { name: 'Prévia fictícia' } }));
+store.ingestRemoteMessages([message], { activeFlow: reviewState().activeFlow });
+await document.fonts.ready;
+await Promise.all([...document.images].map(image => image.complete ? Promise.resolve() : new Promise(done => {
+  image.addEventListener('load', done, { once: true }); image.addEventListener('error', done, { once: true });
+})));
+const frame = () => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+await frame();
+if (params.get('test') === '1') {
+  const review = root.querySelector('[data-provision-settlement-review]');
+  if (!review) document.documentElement.dataset.layout = JSON.stringify({ missing: true });
+  else {
+    const rect = node => { const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, width: box.width, height: box.height }; };
+    const scroll = review.querySelector('.provision-review__scroll'), transcript = root.querySelector('.chat-transcript');
+    const pageOverflow = document.documentElement.scrollWidth > innerWidth + 1;
+    const scrollBox = rect(scroll), horizontalOverflow = scroll.scrollWidth > scroll.clientWidth + 1;
+    const text = [...review.querySelectorAll('th,td,small,p')];
+    const minFontSize = Math.min(...text.map(node => parseFloat(getComputedStyle(node).fontSize)));
+    const rowBackgrounds = [...review.querySelectorAll('tbody tr')].map(row => getComputedStyle(row.querySelector('td')).backgroundColor);
+    scroll.scrollLeft = scroll.scrollWidth;
+    await frame();
+    const total = rect(review.querySelector('tbody tr td:last-child')), sticky = rect(review.querySelector('tbody th'));
+    const totalFullyVisible = total.right <= rect(scroll).right + 1 && total.x >= sticky.right - 1;
+    transcript.scrollTop = transcript.scrollHeight;
+    await frame();
+    const composer = rect(root.querySelector('[data-chat-form]'));
+    const buttons = ['description_review_submit', 'description_review_edit'].map(id => root.querySelector(`[data-reply-id="${id}"]`));
+    const buttonBoxes = buttons.map(rect);
+    const controlsReachable = buttons.every(button => { const box = rect(button), hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); return box.y >= 0 && box.bottom <= composer.y + 1 && (hit === button || button.contains(hit)); });
+    buttons.forEach(button => button.click());
+    const result = { missing: false, width: innerWidth, sample, rowCount: review.querySelectorAll('tbody tr').length,
+      pageOverflow, scrollBox, horizontalOverflow, minFontSize, rowBackgrounds, totalFullyVisible, total, sticky,
+      controlsReachable, buttonBoxes, replies, scrollHintVisible: getComputedStyle(review.querySelector('.provision-review__scroll-hint')).display !== 'none',
+      submitDisabled: buttons[0].disabled, editDisabled: buttons[1].disabled };
+    view.render(reviewState(message, { activeText: { id: 'synthetic-request' } }));
+    result.busyDisabled = ['description_review_submit', 'description_review_edit'].every(id => root.querySelector(`[data-reply-id="${id}"]`).disabled);
+    document.documentElement.dataset.layout = JSON.stringify(result);
+  }
+}
+</script></body></html>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Provisões — prévia com dados fictícios</title><style>
+html,body{margin:0;min-height:100%;background:#e7f2f5;font-family:system-ui,sans-serif}
+p{margin:0;padding:5px;text-align:center;color:#294c5b;font-size:12px}
+iframe{display:block;border:0;background:white;max-width:100%}
+</style></head><body><p>Prévia com dados fictícios — nenhuma baixa</p><script type="module">
+const params = new URLSearchParams(location.search), desired = Number(params.get('width'));
+const width = [320,390,1024,1365].includes(desired) ? desired : 390;
+document.body.style.width = width + 'px'; document.body.style.maxWidth = '100%';
+const frame = document.createElement('iframe'); frame.title = 'Revisão de provisões com dados fictícios';
+frame.style.width = width + 'px'; frame.style.height = (width === 320 ? 740 : width === 390 ? 844 : 900) + 'px';
+frame.src = './provision-settlement-review.html?sample=' + (['long','pending'].includes(params.get('sample')) ? params.get('sample') : 'basic');
+document.body.append(frame);
+</script></body></html>

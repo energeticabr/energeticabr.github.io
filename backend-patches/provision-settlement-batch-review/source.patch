@@ -1,0 +1,390 @@
+--- /dev/null
++++ b/worker/provision_description_review.py
+@@ -0,0 +1,60 @@
++"""Exact, presentation-only projection of a grouped settlement draft."""
++from decimal import Decimal
++
++try:
++    from .payment_provision_group import _number, _currency, _canonical, _sum, provision_line_total
++except ImportError:
++    from payment_provision_group import _number, _currency, _canonical, _sum, provision_line_total
++
++
++def unit_display(value):
++    text = format(Decimal(_canonical(value)), ',f').translate(str.maketrans({',': '.', '.': ','}))
++    whole, separator, fraction = text.partition(',')
++    return 'R$ ' + whole + ',' + fraction.ljust(2, '0')
++
++
++def review_table(group):
++    entries = {str(entry['fields']['ID PROVISÃO']): entry['fields']
++               for entry in group.get('entries') or []}
++    pending = {str(row['Id']) for row in group['children']}
++    rows, totals, pending_totals = [], [], []
++    valid_total = valid_pending = True
++    for index, original in enumerate(sorted(group['original_children'], key=lambda row: int(row['Id'])), 1):
++        item_id = str(original['Id'])
++        fields = entries.get(item_id, original)
++        values = {}
++        for field in ('QTD', 'VALOR TOTAL', 'FRETE'):
++            raw = fields.get(field)
++            if field == 'FRETE' and raw in (None, ''):
++                raw = '0'
++            try:
++                values[field] = _number(raw, field, positive=(field == 'QTD'
++                    or (field == 'VALOR TOTAL' and item_id in pending)))
++            except ValueError:
++                values[field] = None
++        amount = None
++        if all(value is not None for value in values.values()):
++            amount = provision_line_total(values)
++            totals.append(amount)
++            if item_id in pending:
++                pending_totals.append(amount)
++        else:
++            valid_total = False
++            if item_id in pending:
++                valid_pending = False
++        quantity, unit, freight = (values[field] for field in ('QTD', 'VALOR TOTAL', 'FRETE'))
++        rows.append({'id': item_id, 'index': index,
++            'product': str(fields.get('PRODUTO') or 'EM BRANCO'),
++            'quantityDisplay': _canonical(quantity).replace('.', ',') if quantity is not None else 'PENDENTE',
++            'unitPriceDisplay': unit_display(unit) if unit is not None else 'PENDENTE',
++            'totalDisplay': _currency(amount) if amount is not None else 'PENDENTE',
++            'freightDisplay': _currency(freight) if freight else '',
++            'paid': item_id not in pending})
++    return {'kind': 'provision_settlement_review', 'descriptionId': str(group['parent_id']),
++        'title': f"DETALHAMENTO — DESCRITIVO {group['parent_id']}",
++        'notice': '' if valid_total and valid_pending else
++            'PREENCHA OS VALORES PENDENTES EM EDITAR ALGUMA LINHA ANTES DE SUBMETER.',
++        'rows': rows, 'totalDisplay': _currency(_sum(totals)) if valid_total else 'VALOR PENDENTE',
++        'pendingTotalDisplay': _currency(_sum(pending_totals)) if valid_pending else 'VALOR PENDENTE',
++        'hasPaidRows': any(row['paid'] for row in rows),
++        'canSubmit': bool(pending) and valid_total and valid_pending}
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -12,15 +12,17 @@
+ from requests import HTTPError
+ 
+ try:
+-    from .payment_provision_group import provision_line_total, _currency, _canonical, _sum
++    from .payment_provision_group import provision_line_total, _currency, _canonical, _sum, _number
+     from .document_item_lock import document_item_lock
+     from .logic import resolve_option, filter_options
+     from .payroll_row_attachments import propagate as propagate_payroll_row_attachments
++    from .provision_description_review import review_table
+ except ImportError:
+-    from payment_provision_group import provision_line_total, _currency, _canonical, _sum
++    from payment_provision_group import provision_line_total, _currency, _canonical, _sum, _number
+     from document_item_lock import document_item_lock
+     from logic import resolve_option, filter_options
+     from payroll_row_attachments import propagate as propagate_payroll_row_attachments
++    from provision_description_review import review_table
+ 
+ SOURCE_KIND = 'provision-description'
+ PARENT_LIST = 'DESCRITIVOPROVISAO'
+@@ -187,6 +189,11 @@
+         if not group or state.get('_description_child_commit'):
+             return base
+         flow = copy.deepcopy(base)
++        if (group.get('review_version') == 1 and group.get('review_phase') == 'overview'
++                and group.get('editing_phase') != 'field'):
++            flow['steps'] = [flow['steps'][0], self._description_review_step(state)]
++            flow['attachments_after_fields'] = False
++            return flow
+         if group.get('choose_amount_line'):
+             options = [{
+                 'id': 'description_amount_line:' + _identity(item['Id']),
+@@ -223,6 +230,18 @@
+                 if step['key'] in {'data_pgto_efetuado_baixa', 'forma_pgto_baixa', 'observacao_grupo_baixa'}:
+                     step['when'] = {'field': '__description_common_not_asked_again__', 'equals': 'SIM'}
+         flow['blank_review_fields'] = [item for item in flow.get('blank_review_fields', []) if item['field'] != 'OBS']
++        if group.get('review_version') == 1:
++            flow['steps'].append({'key': 'editar_frete_descritivo', 'kind': 'number',
++                'target_field': 'FRETE', 'edit_label': 'FRETE', 'edit_only': True,
++                'allow_zero': True, 'number_style': 'currency',
++                'prompt': 'INFORME O FRETE DESTA LINHA. USE ZERO SE NÃO HOUVER FRETE.',
++                'invalid_message': 'INFORME UM FRETE VÁLIDO, IGUAL OU MAIOR QUE ZERO.'})
++            if group.get('review_phase') == 'overview':
++                flow['blank_review_fields'] = []
++            elif group.get('editing_phase') != 'field':
++                for step in flow['steps']:
++                    if step['key'] in {'validar_qtd_baixa', 'validar_valor_total_baixa'}:
++                        step['when'] = {'field': '__description_hidden_step__', 'equals': 'SIM'}
+         flow['confirmation_prompt'] = ('CONFIRMA A BAIXA DE TODOS OS ITENS PENDENTES '
+                                        f"DO DESCRITIVO {group['parent_id']}?")
+         launch_phase = group.get('launch_phase') == 'choosing'
+@@ -354,7 +373,7 @@
+             "NENHUM PAGAMENTO FOI ALTERADO.")
+         return None
+ 
+-    def _description_start(self, state, source, *, first_child_id=None):
++    def _description_start(self, state, source, *, first_child_id=None, batch_review=True):
+         parent_id = _identity(source['Id'])
+         all_children = copy.deepcopy(source.get('CHILDREN') or [])
+         # Already paid children contribute to the complete total but cannot be
+@@ -376,6 +395,18 @@
+             'original_children': all_children, 'children': children,
+             'index': 0, 'entries': [], 'common': None, 'prepared': False,
+         }
++        if batch_review:
++            group = state['provision_description']
++            group.update(review_version=1, review_phase='overview', common={})
++            for child in children:
++                fields = {key: copy.deepcopy(value) for key, value in child.items()
++                          if key in CHILD_FIELDS or key == 'TIPO DESPESA'}
++                fields['ID PROVISÃO'] = _identity(child['Id'])
++                group['entries'].append({'fields': fields, 'answers': {},
++                    'display_values': {key: _text(value) or 'EM BRANCO' for key, value in fields.items()},
++                    'relink_authorized': False})
++            self._description_load_child(state, 0, announce=False)
++            return
+         if source.get('settlementBlocked') and len(children) > 1 and first_child_id is None:
+             state['provision_description']['choose_amount_line'] = True
+             state['step_index'], state['options'] = 1, []
+@@ -404,14 +435,70 @@
+             self._send_text(state, 'A LINHA ESCOLHIDA NÃO ESTÁ MAIS PENDENTE NESTE DESCRITIVO. A LISTA FOI ATUALIZADA.')
+             self._description_start(state, source)
+             return self._prompt_next_or_summary(state, etag)
+-        self._description_start(state, source, first_child_id=selected_id)
++        self._description_start(state, source, first_child_id=selected_id, batch_review=False)
+         return self._prompt_next_or_summary(state, etag)
+ 
+-    def _description_load_child(self, state, index):
++    def _description_review_step(self, state):
++        table = review_table(state['provision_description'])
++        lines = [f"DESCRITIVO {table['descriptionId']} — CONFIRA AS PROVISÕES.",
++                 'PRODUTO | QTD | VALOR UNITÁRIO | VALOR TOTAL']
++        for row in table['rows']:
++            lines.append(f"{row['index']}. {row['product']} (PROVISÃO {row['id']}) | "
++                f"{row['quantityDisplay']} | {row['unitPriceDisplay']} | {row['totalDisplay']}"
++                + (' — JÁ BAIXADA, SOMENTE CONSULTA' if row['paid'] else '')
++                + (f" — FRETE {row['freightDisplay']} INCLUÍDO" if row['freightDisplay'] else ''))
++        lines.append('TOTAL GERAL: ' + table['totalDisplay'])
++        if table['hasPaidRows']:
++            lines.append('TOTAL PENDENTE A BAIXAR: ' + table['pendingTotalDisplay'])
++        lines.append(table['notice'] or 'SUBMETA OS VALORES OU ESCOLHA UMA LINHA PARA EDITAR.')
++        return {'key': 'description_review', 'kind': 'selection', 'persist': False,
++            'prompt': '\n'.join(lines), 'button_label': 'REVISAR PROVISÕES',
++            'accepts_direct_text': True, 'detail_table': table,
++            'source': {'type': 'static', 'options': [
++                {'id': 'description_review_submit', 'title': '✅ SUBMETER', 'value': 'submit',
++                 'disabled': not table['canSubmit']},
++                {'id': 'description_review_edit', 'title': '✏️ EDITAR ALGUMA LINHA', 'value': 'edit'}]}}
++
++    def _description_review_prompt(self, state, etag):
++        group = state['provision_description']
++        for key in ('editing_phase', 'editing_index', 'editing_common'):
++            group.pop(key, None)
++        state.pop('edit_step_indices', None)
++        state['stage'] = 'selecting_fields'
++        self._description_load_child(state, 0, announce=False)
++        etag = self._save(state, etag)
++        return self._prompt_next_or_summary(state, etag)
++
++    def _description_review_selection(self, state, etag, selected):
++        group = state['provision_description']
++        if selected.get('value') == 'edit':
++            return self._prompt_description_edit_choice(state, etag)
++        if selected.get('value') != 'submit' or not review_table(group)['canSubmit']:
++            return self._description_review_prompt(state, etag)
++        # JSON floats may stringify as 1e-05, which the final user-input parser
++        # deliberately rejects. Accept the exact reviewed Decimal value once,
++        # in ordinary notation, leaving both original source snapshots intact.
++        for entry in group['entries']:
++            for field in ('QTD', 'VALOR TOTAL', 'FRETE'):
++                raw = entry['fields'].get(field)
++                if field == 'FRETE' and raw in (None, ''):
++                    raw = '0'
++                entry['fields'][field] = _canonical(_number(raw, field, positive=field != 'FRETE'))
++        group['review_phase'] = 'submitted'
++        self._description_load_child(state, 0, announce=False)
++        etag = self._save(state, etag)
++        return self._prompt_next_or_summary(state, etag)
++
++    def _description_load_child(self, state, index, *, announce=True):
+         group = state['provision_description']
+         child = group['children'][index]
+         if _identity(child.get('DESCRITIVOPROVISAO')) != group['parent_id']:
+             raise RuntimeError('Uma provisão não pertence ao descritivo selecionado.')
++        if group.get('review_version') == 1:
++            entry = next((entry for entry in group['entries']
++                if _text(entry['fields'].get('ID PROVISÃO')) == _identity(child['Id'])), None)
++            if entry:
++                child = {**child, **copy.deepcopy(entry['fields'])}
+         group['index'] = index
+         state['fields'] = {key: copy.deepcopy(value) for key, value in child.items()
+                            if key in CHILD_FIELDS or key == 'TIPO DESPESA'}
+@@ -429,17 +516,31 @@
+         state['step_index'] = 1
+         state['options'] = []
+         state['confirm_or_replace_number_modes'] = {}
++        if group.get('review_version') == 1 and group.get('review_phase') == 'submitted':
++            state['answers'].update({'validar_qtd_baixa': state['fields'].get('QTD'),
++                                     'validar_valor_total_baixa': state['fields'].get('VALOR TOTAL')})
+         for key in ('payment_settlement_blank_review_done', 'payment_settlement_blank_fill_active',
+                     'payment_settlement_blank_fields', 'payment_settlement_relink_authorized',
+                     'payment_settlement_password_attempts', 'edit_step_indices', 'option_pagination'):
+             state.pop(key, None)
+-        self._send_text(state, f"DESCRITIVO {group['parent_id']} — PROVISÃO {_identity(child['Id'])} "
+-                        f"({index + 1} DE {len(group['children'])}).")
++        if announce:
++            self._send_text(state, f"DESCRITIVO {group['parent_id']} — PROVISÃO {_identity(child['Id'])} "
++                            f"({index + 1} DE {len(group['children'])}).")
+ 
+     def _description_after_fields(self, state, etag):
+         group = state.get('provision_description')
+         if not group or state.get('flow') != 'payment_settlement':
+             return None
++        if group.get('review_version') == 1 and group.get('review_phase') == 'overview':
++            if group.get('editing_phase') == 'field':
++                index = group['index']
++                entry = {key: copy.deepcopy(state.get(key) or {})
++                         for key in ('fields', 'answers', 'display_values')}
++                entry['relink_authorized'] = False
++                if _text(entry['fields'].get('PRODUTO')) != _text(group['entries'][index]['fields'].get('PRODUTO')):
++                    entry['fields']['TIPO DESPESA'] = None
++                group['entries'][index] = entry
++            return self._description_review_prompt(state, etag)
+         if (group.get('prepared') and group.get('editing_common')
+                 and not group.get('launch_settings') and not (group.get('journal') or {}).get('intent')):
+             group['common'] = _common(state['fields'])
+@@ -478,6 +579,18 @@
+                 group.pop(key, None)
+             return None
+         if index + 1 < len(group['children']):
++            if group.get('review_version') == 1:
++                for next_index in range(index + 1, len(group['children'])):
++                    self._description_load_child(state, next_index, announce=False)
++                    if self._payment_settlement_blank_review_items(state):
++                        self._send_text(state, f"PROVISÃO {state['fields']['ID PROVISÃO']} — CAMPOS EM BRANCO.")
++                        etag = self._save(state, etag)
++                        return self._prompt_next_or_summary(state, etag)
++                    entry = {key: copy.deepcopy(state.get(key) or {})
++                             for key in ('fields', 'answers', 'display_values')}
++                    entry['relink_authorized'] = False
++                    group['entries'][next_index] = entry
++                return self._description_begin_launch_choice(state, etag)
+             self._description_load_child(state, index + 1)
+             etag = self._save(state, etag)
+             return self._prompt_next_or_summary(state, etag)
+@@ -494,12 +607,18 @@
+         options = [{'id': 'description_edit_back', 'title': '↩️ VOLTAR AO RESUMO', 'value': '__back_to_summary__'},
+                    {'id': 'description_edit_common', 'title': 'DADOS COMUNS — DATA, FORMA PGTO, OBS, LANÇAMENTOS E ETAPA', 'value': '__common__'},
+                    {'id': 'description_edit_attachments', 'title': '📎 ANEXOS DO DESCRITIVO', 'value': '__edit_attachments__'}]
++        overview = group.get('review_version') == 1 and group.get('review_phase') == 'overview'
++        if overview:
++            options = [{'id': 'description_edit_back', 'title': '↩️ VOLTAR À TABELA', 'value': '__back_to_summary__'}]
+         for index, entry in enumerate(group['entries']):
+             fields = entry['fields']
+             options.append({'id': 'description_edit_child:' + str(fields['ID PROVISÃO']), 'value': index,
+                 'title': f"PROVISÃO {fields['ID PROVISÃO']} — {_text(fields.get('FORNECEDOR'))} — {_text(fields.get('PRODUTO'))}"})
+         state['stage'], state['options'] = 'editing_field_choice', options
+-        self._send_options(state, self._description_edit_step(), options)
++        step = self._description_edit_step()
++        if overview:
++            step = {**step, 'prompt': 'QUAL LINHA VOCÊ DESEJA EDITAR?'}
++        self._send_options(state, step, options)
+         etag = self._save(state, etag)
+         return {'status': 'awaiting_description_edit_choice', 'batch_id': state['batch_id'], 'etag': etag}
+ 
+@@ -535,6 +654,14 @@
+         if group.get('editing_phase') != 'field':
+             return options
+         steps = self._flow_config(state)['steps']
++        if group.get('review_version') == 1 and group.get('review_phase') == 'overview':
++            result = [{'id': 'description_review_field_back', 'title': '↩️ VOLTAR À TABELA',
++                       'value': '__back_to_summary__'}]
++            for field, key, label in (('PRODUTO', 'product', 'PRODUTO'), ('QTD', 'quantity', 'QTD'),
++                    ('VALOR TOTAL', 'unit', 'VALOR UNITÁRIO'), ('FRETE', 'freight', 'FRETE')):
++                index = next(i for i, step in enumerate(steps) if i > 0 and step.get('target_field') == field)
++                result.append({'id': 'description_review_field:' + key, 'title': label, 'value': index})
++            return result
+         result = []
+         for option in options:
+             index = option.get('value')
+@@ -765,6 +892,7 @@
+                     child_state['attachments'] = []
+                     child_state['payment_settlement_relink_authorized'] = entry['relink_authorized']
+                     child_state['_description_child_commit'] = True
++                    child_state['_description_batch_review'] = group.get('review_version') == 1
+                     child_state['_description_parent_id'] = group['parent_id']
+                     child_state['_description_child_etag'] = child_etag
+                     if shared_order:
+@@ -782,6 +910,8 @@
+                     expected_update = {**common, 'PGTOAGENDADO': 'PAGO', 'QTD': child_state['fields']['QTD'],
+                                        'VALOR TOTAL': child_state['fields']['VALOR TOTAL'],
+                                        'FRETE': child_state['fields'].get('FRETE') or '0'}
++                    if group.get('review_version') == 1:
++                        expected_update['PRODUTO'] = child_state['fields'].get('PRODUTO')
+                     for key, ref in (('IDPEDIDO', 'related_item'), ('IDLANCAMENTOS', 'launch_item')):
+                         if record.get(ref):
+                             expected_update[key] = str(record[ref]['item_id'])
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -22100,6 +22100,9 @@
+ 
+         description_source = None
+         if (state.get("flow") == "payment_settlement"
++                and step.get("key") == "description_review"):
++            return self._description_review_selection(state, etag, selected)
++        if (state.get("flow") == "payment_settlement"
+                 and step.get("key") == "description_amount_line"):
+             return self._description_choose_amount_line(state, etag, selected)
+         if (state.get("flow") == "payment_settlement" and step.get("key") == "provisao_para_baixa"
+@@ -28849,6 +28852,9 @@
+         return card
+ 
+     def _summarize_and_confirm(self, state: dict, etag: str | None) -> dict:
++        description = state.get('provision_description') or {}
++        if description.get('review_version') == 1 and description.get('review_phase') == 'overview':
++            return self._description_review_prompt(state, etag)
+         provision_discount = self._provision_discount_before_review(state, etag)
+         if provision_discount is not None:
+             return provision_discount
+@@ -30329,7 +30335,8 @@
+ 
+     def _prompt_edit_field(self, state: dict, etag: str | None) -> dict:
+         description = state.get('provision_description') or {}
+-        if description.get('prepared') and description.get('editing_phase') != 'field':
++        if (description.get('editing_phase') == 'choose'
++                or (description.get('prepared') and description.get('editing_phase') != 'field')):
+             return self._prompt_description_edit_choice(state, etag)
+         self._migrate_supplier_employment_steps(state)
+         if (
+@@ -33546,6 +33553,8 @@
+             required_update["FRETE"] = _decimal_storage(freight)
+             if state.get("_description_child_commit"):
+                 required_update["OBS"] = context.get("OBS")
++                if state.get("_description_batch_review"):
++                    required_update["PRODUTO"] = context.get("PRODUTO")
+ 
+             create_launch_requested = normalize_text(
+                 str(context.get("submeter_lancamentos", ""))
+@@ -36105,6 +36114,8 @@
+ 
+     def _display_step(self, state: dict, step: dict) -> dict:
+         """Resolve o valor automático exibido em perguntas de confirmação."""
++        if step.get('key') == 'description_review' and state.get('flow') == 'payment_settlement':
++            state['_outbound_detail_table'] = copy.deepcopy(step['detail_table'])
+         if step.get("kind") == "date":
+             step = {
+                 **step,
+--- a/channel_bridge.py
++++ b/channel_bridge.py
+@@ -969,7 +969,14 @@
+         detail_rows = detail_table.get("rows") if isinstance(detail_table, dict) else None
+         if (
+             isinstance(detail_table, dict)
+-            and detail_table.get("kind") == "presence"
++            and (detail_table.get("kind") == "presence" or (
++                detail_table.get("kind") == "provision_settlement_review"
++                and state.get("flow") == "payment_settlement"
++                and (state.get("provision_description") or {}).get("review_version") == 1
++                and (state.get("provision_description") or {}).get("review_phase") == "overview"
++                and str(detail_table.get("descriptionId")) == str((state.get("provision_description") or {}).get("parent_id"))
++                and str(question).startswith("DESCRITIVO " + str(detail_table.get("descriptionId")) + " —")
++            ))
+             and isinstance(detail_rows, list)
+             and detail_rows
+         ):
