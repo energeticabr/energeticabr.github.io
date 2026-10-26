@@ -1,0 +1,408 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -1,7 +1,7 @@
+ """Read contracts and durable preparation/settlement of a provision description.
+ 
+ No remote writes before confirmation. Financial children retain their individual
+-amounts; launch choice, stage and one aggregate order belong to the group.
++amounts; launch choice and stage belong to the group, orders to each owner.
+ """
+ from __future__ import annotations
+ 
+@@ -131,6 +131,39 @@
+ 
+ 
+ class ProvisionDescriptionSettlement:
++    def _description_order_plan(self, group):
++        """One order for the description; launches retain each original owner."""
++        original = {str(row['Id']): row for row in group['original_children']}
++        entries = sorted(group['entries'], key=lambda e: int(e['fields']['ID PROVISÃO']))
++        for entry in entries:
++            fields = entry['fields']
++            ident = str(fields['ID PROVISÃO'])
++            owner = tuple(_text(fields.get(key)) for key in ('FILIAL', 'FORNECEDOR'))
++            if not all(owner) or any(_text(fields.get(key)) != _text(original[ident].get(key))
++                                     for key in ('FILIAL', 'FORNECEDOR')):
++                raise RuntimeError('Fornecedor ou filial da provisão mudou. Revise o descritivo antes de baixar.')
++        branches = {_text(row.get('FILIAL')).casefold() for row in group['original_children']}
++        if len(branches) != 1 or next(iter(branches)) != _text(group['parent'].get('FILIAL')).casefold():
++            raise RuntimeError('Um único pedido exige a mesma filial em todas as linhas e no descritivo.')
++        suppliers = {_text(entry['fields']['FORNECEDOR']).casefold() for entry in entries}
++        declared_diversos = _text(group['parent'].get('FORNECEDOR')).casefold() == 'diversos'
++        if len(suppliers) > 1 and not declared_diversos:
++            raise RuntimeError('O descritivo de fornecedores diferentes precisa indicar fornecedor DIVERSOS.')
++        common = _common(group['common'])
++        fields = entries[0]['fields']
++        supplier = 'DIVERSOS' if declared_diversos else fields['FORNECEDOR']
++        prior = ((group.get('journal') or {}).get('order_intent') or {}).get('fields') or {}
++        if len(suppliers) == 1 and _text(prior.get('FORNECEDOR')).casefold() in suppliers:
++            supplier = prior['FORNECEDOR']  # Preserve a previously frozen homogeneous order.
++        total = _sum(provision_line_total({**e['fields'], 'FRETE': e['fields'].get('FRETE') or '0'}) for e in entries)
++        order = {'FILIAL': fields['FILIAL'], 'FORNECEDOR': supplier,
++                 'VALORTOTAL': _canonical(total), 'DATA PEDIDO': common['DATA PGTO EFETUADO'],
++                 'STATUS': 'PENDENTE AUDITORIA', 'FORMAPGTO': common['FORMAPGTO'], 'NOTA FISCAL': 'PENDENTE'}
++        if common['OBS']:
++            order['OBS'] = common['OBS']
++        return [{'token': f"WA-BAIXA-PEDIDO-DESCRITIVO-{group['parent_id']}", 'fields': order,
++                 'children': [str(e['fields']['ID PROVISÃO']) for e in entries]}]
++
+     def _provision_attachments_locked(self, state):
+         journal = ((state or {}).get('provision_description') or {}).get('journal') or {}
+         return bool(journal.get('intent')) or super()._provision_attachments_locked(state)
+@@ -151,6 +184,13 @@
+     def _handle_frozen_provision(self, event, state, etag):
+         group = (state or {}).get('provision_description') or {}
+         command = _text(event.get('reply_id') or event.get('text')).casefold()
++        if (group and state.get('stage') == 'submission_failed'
++                and not (group.get('journal') or {}).get('intent')
++                and event.get('kind') == 'text' and command in {'error_retry', 'retry_after_error'}):
++            if event.get('message_id') in state.get('processed_message_ids', []):
++                return {'status': 'duplicate', 'batch_id': state['batch_id']}
++            self._mark_processed(state, event.get('message_id'))
++            return self._retry_after_error(state, etag)
+         if (group.get('review_required') and not (group.get('journal') or {}).get('intent')
+                 and command == 'description_review_again'):
+             self._mark_processed(state, event.get('message_id'))
+@@ -170,7 +210,7 @@
+         if state.get('stage') == 'notifying':
+             return self._notify_completed(state, etag)
+         self._mark_processed(state, event.get('message_id'))
+-        if event.get('kind') == 'text' and command in {'error_retry', 'retry_submission',
++        if event.get('kind') == 'text' and command in {'error_retry', 'retry_after_error', 'retry_submission',
+                                                        'tentar novamente', 'confirm_yes', 'sim'}:
+             if self._sharepoint_storage_retry_is_blocked(state):
+                 return self._storage_retry_blocked_result(state, etag)
+@@ -698,6 +738,13 @@
+                     detail += f" | {key}: {_text(fields.get(key)) or 'EM BRANCO'}"
+             rows.append({'label': 'PROVISÃO ID ' + str(item['Id']), 'value': detail})
+         rows.append({'label': 'VALOR TOTAL', 'value': _currency(_sum(totals))})
++        if (group.get('launch_settings') or {}).get('submeter_lancamentos') == 'SIM':
++            try:
++                plans = self._description_order_plan(group)
++                value = f"1 — FORNECEDOR {plans[0]['fields']['FORNECEDOR']}; FILIAL CONFERIDA"
++            except RuntimeError as error:
++                value = 'BLOQUEADO — ' + str(error)
++            rows.append({'label': 'PEDIDOS A GERAR', 'value': value})
+         return rows
+ 
+     def _description_preflight(self, state):
+@@ -753,10 +800,13 @@
+                 self._description_sync_launch_settings(group)
+                 if group['launch_settings']['submeter_lancamentos'] == 'SIM':
+                     fields = [entry['fields'] for entry in group['entries']]
+-                    for key in ('FILIAL', 'FORNECEDOR'):
+-                        values = {_text(row.get(key)).casefold() for row in fields}
+-                        if len(values) != 1 or not next(iter(values)):
+-                            raise RuntimeError('Um único pedido exige a mesma filial e fornecedor em todas as linhas.')
++                    order_plan = self._description_order_plan(group)
++                    prior = group.get('journal') or {}
++                    if prior.get('order_plan') is not None and prior['order_plan'] != order_plan:
++                        raise RuntimeError('Os pedidos por fornecedor mudaram durante a retomada. Dados preservados.')
++                    if prior.get('order_intent') and (len(order_plan) != 1 or
++                            prior['order_intent'] != {key: order_plan[0][key] for key in ('token', 'fields')}):
++                        raise RuntimeError('O pedido comum já iniciado não corresponde às linhas revisadas.')
+                     if not _text(group['launch_settings'].get('ETAPA')):
+                         raise RuntimeError('A etapa comum é obrigatória para os lançamentos.')
+                     if any(_text(row.get('IDLANCAMENTOS')) for row in fields) and not group['launch_settings'].get('relink_authorized'):
+@@ -774,6 +824,8 @@
+                 had_intent = bool(journal.get('intent'))
+                 if journal.get('intent'):
+                     self._provision_validate_frozen_attachments(state)
++                if (group.get('launch_settings') or {}).get('submeter_lancamentos') == 'SIM':
++                    journal['order_plan'] = copy.deepcopy(order_plan)
+                 common = _common(group['common'])
+                 group['common'] = common
+                 if not common.get('DATA PGTO EFETUADO') or not _text(common.get('FORMAPGTO')):
+@@ -825,9 +877,10 @@
+                         raise
+                 names = []
+                 for attachment in state.get('attachments') or []:
+-                    self.sharepoint.ensure_attachment(int(group['parent_id']), attachment['sharepoint_name'],
+-                                                     self.media_repository.read(attachment), attachment.get('mime_type'),
+-                                                     target_list=PARENT_LIST)
++                    # The generic upload hook has no frozen per-row owners.
++                    # Store locally first, then run the scoped fanout below.
++                    self.sharepoint._ensure_attachment_local(int(group['parent_id']), attachment['sharepoint_name'],
++                                                              self.media_repository.read(attachment), target_list=PARENT_LIST)
+                     names.append(attachment['sharepoint_name'])
+                 parent_verification = self.sharepoint.verify_item(int(group['parent_id']), parent_fields, names,
+                                                                   target_list=PARENT_LIST)
+@@ -839,34 +892,34 @@
+                     from .provision_attachment_sync import sync_parent_attachments
+                 except ImportError:
+                     from provision_attachment_sync import sync_parent_attachments
+-                sync_parent_attachments(self.sharepoint, int(group['parent_id']))
++                expected_owners = {str(row['Id']): {key: row.get(key) for key in ('FORNECEDOR', 'FILIAL')}
++                                   for row in group['original_children']}
++                parent_owner = {key: group['parent'].get(key) for key in ('FORNECEDOR', 'FILIAL')}
++                sync_parent_attachments(self.sharepoint, int(group['parent_id']), expected_owners=expected_owners,
++                                        expected_parent_owner=parent_owner)
+                 journal['parent'] = {'item_id': int(group['parent_id']), 'target_list': PARENT_LIST,
+                                      'verified': parent_verification, 'attachment_names': names}
+                 etag = self._save(state, etag)
+-                shared_order = None
++                child_orders = {}
+                 if (group.get('launch_settings') or {}).get('submeter_lancamentos') == 'SIM':
+-                    first = group['entries'][0]['fields']
+-                    order_total = _sum(provision_line_total({**e['fields'], 'FRETE':e['fields'].get('FRETE') or '0'})
+-                                       for e in group['entries'])
+-                    order_fields = {'FILIAL':first['FILIAL'], 'FORNECEDOR':first['FORNECEDOR'],
+-                                    'VALORTOTAL':_canonical(order_total), 'DATA PEDIDO':common['DATA PGTO EFETUADO'],
+-                                    'STATUS':'PENDENTE AUDITORIA', 'FORMAPGTO':common['FORMAPGTO'], 'NOTA FISCAL':'PENDENTE'}
+-                    if _text(common['OBS']):
+-                        order_fields['OBS'] = common['OBS']
+-                    intent = {'token':f"WA-BAIXA-PEDIDO-DESCRITIVO-{group['parent_id']}", 'fields':order_fields}
+-                    if journal.get('order_intent') and journal['order_intent'] != intent:
+-                        raise RuntimeError('Os dados do pedido comum mudaram durante a retomada.')
+-                    journal['order_intent'] = copy.deepcopy(intent)
++                    if len(order_plan) == 1:
++                        journal['order_intent'] = {key: copy.deepcopy(order_plan[0][key]) for key in ('token', 'fields')}
+                     etag = self._save(state, etag)
+-                    order_id = self.sharepoint.ensure_item(intent['token'], order_fields,
+-                        target_list='NOTASPENDENTES', idempotency_field='Title', merge_existing=False)
+-                    verified = self.sharepoint.verify_item(order_id, order_fields, [], target_list='NOTASPENDENTES')
+-                    if not _verified(verified):
+-                        raise RuntimeError('Não foi possível confirmar o pedido único do descritivo.')
+-                    shared_order = {'item_id':order_id, 'target_list':'NOTASPENDENTES',
+-                                    'expected_fields':copy.deepcopy(order_fields), 'verified':verified}
+-                    journal['shared_order'] = copy.deepcopy(shared_order)
+-                    etag = self._save(state, etag)
++                    for intent in order_plan:
++                        order_fields = intent['fields']
++                        order_id = self.sharepoint.ensure_item(intent['token'], order_fields,
++                            target_list='NOTASPENDENTES', idempotency_field='Title', merge_existing=False)
++                        verified = self.sharepoint.verify_item(order_id, order_fields, [], target_list='NOTASPENDENTES')
++                        if not _verified(verified):
++                            raise RuntimeError('Não foi possível confirmar um pedido do descritivo.')
++                        shared_order = {'item_id': order_id, 'target_list': 'NOTASPENDENTES',
++                                        'expected_fields': copy.deepcopy(order_fields), 'verified': verified}
++                        journal.setdefault('shared_orders', {})[intent['token']] = copy.deepcopy(shared_order)
++                        if len(order_plan) == 1:
++                            journal['shared_order'] = copy.deepcopy(shared_order)
++                        for ident in intent['children']:
++                            child_orders[ident] = shared_order
++                        etag = self._save(state, etag)
+                 for item_id in sorted(entries, key=int):
+                     if item_id in journal['children']:
+                         saved = journal['children'][item_id]
+@@ -895,8 +948,8 @@
+                     child_state['_description_batch_review'] = group.get('review_version') == 1
+                     child_state['_description_parent_id'] = group['parent_id']
+                     child_state['_description_child_etag'] = child_etag
+-                    if shared_order:
+-                        child_state['_description_shared_order'] = copy.deepcopy(shared_order)
++                    if item_id in child_orders:
++                        child_state['_description_shared_order'] = copy.deepcopy(child_orders[item_id])
+                     journal['in_flight'] = {'id': item_id, 'expected_fields': copy.deepcopy(child_state['fields'])}
+                     etag = self._save(state, etag)
+                     def checkpoint(expected_fields, prepared_record):
+@@ -918,6 +971,11 @@
+                     journal['children'][item_id] = {**record, 'target_list': CHILD_LIST, 'expected_fields': expected_update}
+                     journal.pop('in_flight', None)
+                     etag = self._save(state, etag)
++                # New owner-specific financial destinations exist only now.
++                # Reconcile group originals to every confirmed order without
++                # promoting row-origin files into group-wide documents.
++                sync_parent_attachments(self.sharepoint, int(group['parent_id']), expected_owners=expected_owners,
++                                        expected_parent_owner=parent_owner)
+         except Exception as exc:
+             result = self._submission_failed(state, etag, exc)
+             if group.get('review_required') and not (group.get('journal') or {}).get('intent'):
+--- a/worker/provision_parent_fanout.py
++++ b/worker/provision_parent_fanout.py
+@@ -4,7 +4,12 @@
+ row-scoped. Callers share the existing description attachment lock.
+ """
+ from pathlib import Path
++import copy
++import json
++import os
+ import re
++import stat
++import tempfile
+ import time
+ 
+ try:
+@@ -18,8 +23,61 @@
+ FIELDS = (*OWNER, 'DESCRITIVOPROVISAO', 'IDPEDIDO', 'IDLANCAMENTOS')
+ 
+ 
++def _scope_path(directory, parent):
++    return Path(directory) / 'settlement-owners' / f'parent-{mirror.item_id(parent)}.json'
++
++
++def _load_scope(directory, parent, owner):
++    path = _scope_path(directory, parent)
++    try:
++        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW)
++    except FileNotFoundError:
++        return None
++    with os.fdopen(fd, 'r') as stream:
++        info = os.fstat(stream.fileno())
++        if not stat.S_ISREG(info.st_mode) or info.st_size > 10_000_000 or info.st_mode & 0o022:
++            raise RuntimeError('Contexto privado de anexos inválido.')
++        scope = json.load(stream)
++    if (not isinstance(scope, dict) or set(scope) != {'parent', 'owner', 'rows'}
++            or scope['parent'] != parent or scope['owner'] != owner
++            or not isinstance(scope['rows'], dict) or not scope['rows']):
++        raise RuntimeError('O descritivo mudou desde a confirmação dos anexos.')
++    for ident, fields in scope['rows'].items():
++        if (str(mirror.item_id(ident)) != ident or not isinstance(fields, dict)
++                or set(fields) != set(OWNER) or any(not text(fields[k]) for k in OWNER)):
++            raise RuntimeError('Contexto de proprietários dos anexos inválido.')
++    return scope['rows']
++
++
++def _save_scope(directory, parent, snapshot):
++    path = _scope_path(directory, parent)
++    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
++    scope = {'parent': parent, 'owner': snapshot['owner'],
++             'rows': {str(ident): {key: row[key] for key in OWNER}
++                      for ident, row in snapshot['rows'].items()}}
++    fd, temporary = tempfile.mkstemp(prefix='.owners-', dir=path.parent)
++    try:
++        with os.fdopen(fd, 'w') as stream:
++            json.dump(scope, stream, ensure_ascii=False, sort_keys=True)
++            stream.flush()
++            os.fsync(stream.fileno())
++        os.replace(temporary, path)
++    finally:
++        if os.path.exists(temporary):
++            os.unlink(temporary)
++
++
+ def text(value):
+     return '' if value is None else str(value).strip()
++
++
++def order_owner_matches(live, row, parent_owner):
++    if any(text(live.get(key)) != text(row.get(key)) for key in ('FILIAL',)):
++        return False
++    return (text(live.get('FORNECEDOR')) == text(row.get('FORNECEDOR')) or
++            (text(live.get('FORNECEDOR')).casefold() == 'diversos'
++             and text(parent_owner.get('FORNECEDOR')).casefold() == 'diversos'
++             and text(row.get('FILIAL')) == text(parent_owner.get('FILIAL'))))
+ 
+ 
+ def children(store, parent):
+@@ -32,17 +90,26 @@
+     return sorted(ids)
+ 
+ 
+-def snapshot(client, store, parent):
++def snapshot(client, store, parent, expected_owners=None, directory=None, expected_parent_owner=None):
+     owner, version = client.get_item_fields_with_etag(parent, OWNER, target_list=PARENT)
+     if any(not text(owner.get(k)) for k in OWNER):
+         raise RuntimeError('Fornecedor/filial ausente no descritivo.')
++    if expected_owners is not None and (expected_parent_owner is None or
++            any(text(owner.get(key)) != text(expected_parent_owner.get(key)) for key in OWNER)):
++        raise RuntimeError('O fornecedor/filial do descritivo mudou durante a baixa.')
++    if expected_owners is None:
++        expected_owners = _load_scope(directory if directory is not None else mirror.STATE_DIR, parent, owner)
+     ids = children(store, parent)
+     if not ids:
+         raise mirror.MissingLink('Anexo preservado no descritivo; aguardando provisão vinculada.')
+-    rows, targets = {}, {}
++    if expected_owners is not None and {str(ident) for ident in ids} != set(expected_owners):
++        raise RuntimeError('As provisões do descritivo mudaram antes da cópia de anexos.')
++    rows, targets, financial = {}, {}, {}
+     for ident in ids:
+         row, _ = client.get_item_fields_with_etag(ident, FIELDS, target_list=CHILD)
+-        if any(text(row.get(k)) != text(owner[k]) for k in OWNER) or text(row.get('DESCRITIVOPROVISAO')) != str(parent):
++        row_owner = owner if expected_owners is None else expected_owners[str(ident)]
++        if (any(not text(row_owner.get(k)) or text(row.get(k)) != text(row_owner[k]) for k in OWNER)
++                or text(row.get('DESCRITIVOPROVISAO')) != str(parent)):
+             raise RuntimeError('Vínculo/fornecedor/filial da provisão divergente.')
+         rows[ident] = row
+         links = tuple(text(row.get(k)) for k in ('IDPEDIDO', 'IDLANCAMENTOS'))
+@@ -54,20 +121,24 @@
+         # One launch per existing order is sufficient for group-wide documents.
+         if order not in targets:
+             targets[order] = (ident, launch)
+-        expected = {**owner, 'IDPGTOAGENDADO': str(ident), 'AGRUPAR': str(order)}
+-        for kind, target, fields in ((LAUNCH, launch, expected), (ORDER, order, owner)):
++        expected = {**row_owner, 'IDPGTOAGENDADO': str(ident), 'AGRUPAR': str(order)}
++        for kind, target, fields in ((LAUNCH, launch, expected), (ORDER, order, row_owner)):
+             live, _ = client.get_item_fields_with_etag(target, tuple(fields), target_list=kind)
+-            if any(text(live.get(k)) != text(v) for k, v in fields.items()):
++            if (not order_owner_matches(live, fields, owner) if kind == ORDER else
++                    any(text(live.get(k)) != text(v) for k, v in fields.items())):
+                 raise RuntimeError('Vínculo financeiro divergente antes da cópia de anexos.')
+-    return {'owner': owner, 'version': version, 'rows': rows, 'targets': targets}
+-
+-
+-def sync(client, parent, filenames=None, dry_run=False, directory=None):
++            financial[f'{kind}:{target}'] = live
++    return {'owner': owner, 'version': version, 'rows': rows, 'targets': targets, 'financial': financial}
++
++
++def sync(client, parent, filenames=None, dry_run=False, directory=None, expected_owners=None, expected_parent_owner=None):
+     parent = mirror.item_id(parent)
+     directory = Path(directory) if directory is not None else mirror.STATE_DIR
++    expected_owners = copy.deepcopy(expected_owners)
++    expected_parent_owner = copy.deepcopy(expected_parent_owner)
+     store = mirror.SharePointStore(client)
+     with mirror.parent_lock(directory / 'locks', parent):
+-        before = snapshot(client, store, parent)
++        before = snapshot(client, store, parent, expected_owners, directory, expected_parent_owner)
+         names = store.names(PARENT, parent)
+         selected = names if filenames is None else set(filenames)
+         if not selected <= names:
+@@ -78,7 +149,7 @@
+             destinations.extend(((LAUNCH, launch), (ORDER, order)))
+ 
+         def guard():
+-            if snapshot(client, store, parent) != before or store.names(PARENT, parent) != names:
++            if snapshot(client, store, parent, expected_owners, directory, expected_parent_owner) != before or store.names(PARENT, parent) != names:
+                 raise RuntimeError('Vínculo ou coleção de anexos alterado durante a cópia.')
+ 
+         target_children = {(CHILD, carrier): carrier}
+@@ -96,9 +167,7 @@
+             if row != before['rows'][child]:
+                 raise RuntimeError('Vínculo da provisão alterado durante a cópia.')
+             if kind != CHILD:
+-                expected = dict(owner)
+-                if kind == LAUNCH:
+-                    expected.update(IDPGTOAGENDADO=str(child), AGRUPAR=text(row['IDPEDIDO']))
++                expected = before['financial'][f'{kind}:{ident}']
+                 live, _ = client.get_item_fields_with_etag(ident, tuple(expected), target_list=kind)
+                 if any(text(live.get(k)) != text(v) for k, v in expected.items()):
+                     raise RuntimeError('Destino financeiro divergente durante a cópia.')
+@@ -160,6 +229,10 @@
+             if not dry_run and store.digest(entry['target_list'], entry['item_id'], entry['name']) != entry['sha256']:
+                 raise RuntimeError('Destino alterado na conferência SHA-256 final.')
+         guard()
++        if expected_owners is not None and not dry_run:
++            # Only a completed, guarded settlement fanout can authorize later
++            # upload hooks/timer repairs for these exact linked owners.
++            _save_scope(directory, parent, before)
+         return report
+ 
+ 
+--- a/worker/payroll_row_attachments.py
++++ b/worker/payroll_row_attachments.py
+@@ -64,8 +64,24 @@
+     launch_fields = {key: source[key] for key in ('FORNECEDOR', 'FILIAL')}
+     launch_fields.update({'IDPGTOAGENDADO': str(child), 'AGRUPAR': str(order_id)})
+     order_fields = {key: source[key] for key in ('FORNECEDOR', 'FILIAL')}
++    parent_owner = parent_version = None
++    if parent is not None:
++        live_order, _ = client.get_item_fields_with_etag(order_id, tuple(order_fields), target_list=ORDER)
++        if _text(live_order.get('FORNECEDOR')).casefold() == 'diversos':
++            parent_owner, parent_version = client.get_item_fields_with_etag(
++                item_id(parent), tuple(order_fields), target_list='DESCRITIVOPROVISAO')
++            if (_text(parent_owner.get('FORNECEDOR')).casefold() != 'diversos'
++                    or _text(parent_owner.get('FILIAL')) != _text(source.get('FILIAL'))
++                    or _text(live_order.get('FILIAL')) != _text(source.get('FILIAL'))):
++                raise RuntimeError('O pedido DIVERSOS não corresponde ao descritivo e à filial da provisão.')
++            order_fields['FORNECEDOR'] = live_order['FORNECEDOR']
+ 
+     def guard():
++        if parent_owner is not None:
++            current_parent, current_parent_version = client.get_item_fields_with_etag(
++                item_id(parent), tuple(parent_owner), target_list='DESCRITIVOPROVISAO')
++            if current_parent != parent_owner or current_parent_version != parent_version:
++                raise RuntimeError('O descritivo DIVERSOS mudou durante a cópia de anexos.')
+         current, current_version = client.get_item_fields_with_etag(child, source_fields, target_list=CHILD)
+         if current != source or current_version != version:
+             raise RuntimeError('Provisão alterada durante a cópia de anexos.')
