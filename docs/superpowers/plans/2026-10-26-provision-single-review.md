@@ -10,8 +10,8 @@
 
 - [x] Reproduce with the real conversation engine and three synthetic files; observe failing tests before implementation.
 - [x] Preserve overview stage/options during uploads; recover explicit actions in legacy collection states.
-- [ ] Verify overview editing, attachment finalization, final confirmation, duplicate events and legacy recovery, using isolated attachment-control storage.
-- [ ] Package with exact source hashes, run installer tests, and obtain a fresh reviewer assessment.
+- [x] Verify overview editing, attachment finalization, final confirmation, duplicate events and legacy recovery, using isolated attachment-control storage.
+- [x] Package with exact source hashes, run installer tests, and obtain a fresh reviewer assessment.
 - [ ] Merge the reviewed patch and deploy the shared backend with backup, health checks and hash verification.
 - [ ] Open the authenticated app without submitting a real financial draft; record release evidence.
 

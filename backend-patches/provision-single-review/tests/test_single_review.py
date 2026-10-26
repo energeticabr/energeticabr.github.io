@@ -61,6 +61,19 @@ class SingleReviewTests(test_batch_review.BatchReviewTests):
         self.assertEqual(self.state(), state)
         self.no_writes()
 
+    def test_upload_limit_keeps_review_actions_and_existing_files(self):
+        self.open()
+        self.h.engine.config['limits']['max_attachments_per_batch'] = 2
+        self.h.attachment('limit-1', 'first.pdf', b'first')
+        self.h.attachment('limit-2', 'second.pdf', b'second')
+        result = self.h.attachment('limit-3', 'third.pdf', b'third')
+        self.assertEqual(result.get('status'), 'limit_reached')
+        self.assertEqual(len(self.state()['attachments']), 2)
+        self.assertEqual(self.state()['stage'], 'selecting_fields')
+        result = self.h.reply(reply_id='description_review_submit')
+        self.assertEqual(result.get('field'), 'data_pgto_efetuado_baixa')
+        self.no_writes()
+
     def test_persisted_collection_accepts_visible_submit_without_repeating_table(self):
         self.open()
         self.upload_three()
