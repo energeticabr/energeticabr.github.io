@@ -1,0 +1,40 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -21477,6 +21477,7 @@
+         if (state.get("flow") == "supply_supplier_registration"
+                 and step.get("key") in {
+                     "homologacao_fornecedor_suprimentos", "whatsapp_fornecedor_suprimentos",
++                    "status_fornecedor_suprimentos",
+                 }):
+             state["options"] = self._selection_options(state, step)
+         if (state.get("flow") == "attendance_validation"
+--- a/worker/workflow_config.json
++++ b/worker/workflow_config.json
+@@ -2895,8 +2895,8 @@
+           "kind": "selection",
+           "target_field": "STATUS",
+           "prompt": "📌 QUAL É O STATUS DO FORNECEDOR?",
+-          "button_label": "CONFIRMAR STATUS",
+-          "confirm_recommended": true,
++          "button_label": "ESCOLHER STATUS",
++          "confirm_recommended": false,
+           "when": {
+             "field": "TIPO",
+             "not_in": [
+@@ -2908,13 +2908,12 @@
+             "options": [
+               {
+                 "id": 1,
+-                "title": "⭐ ATIVO",
+-                "value": "ATIVO",
+-                "recommended": true
++                "title": "ATIVO",
++                "value": "ATIVO"
+               },
+               {
+                 "id": 2,
+-                "title": "⛔ INATIVO",
++                "title": "INATIVO",
+                 "value": "INATIVO"
+               }
+             ]
