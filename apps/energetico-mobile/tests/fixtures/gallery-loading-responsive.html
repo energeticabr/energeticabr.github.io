@@ -29,9 +29,12 @@ try {
     const measure = async ({ checkKeyboard = true } = {}) => {
       await Promise.all([...root.querySelectorAll('.app-loading__mascot')].map(image => image.decode()));
       await frame();
-      const screen = root.querySelector('.gallery-loading-screen');
+      const screen = root.querySelector('.gallery-loading-screen:not([hidden])');
       if (!screen) return { missing: true };
       const header = root.querySelector(':scope > header'), h = header.getBoundingClientRect();
+      const scoped = screen.classList.contains('gallery-loading-screen--scoped');
+      const region = scoped ? root.querySelector('.lg-results') : root;
+      const bounds = screen.getBoundingClientRect();
       const indicator = screen.querySelector('.app-loading'), r = indicator.getBoundingClientRect();
       const image = indicator.querySelector('img').getBoundingClientRect();
       const visible = node => getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none';
@@ -51,8 +54,9 @@ try {
       return {
         keyboardSafe,
         imageCenterX: image.left + image.width / 2, indicatorCenterY: r.top + r.height / 2,
-        desiredCenterY: (h.bottom + innerHeight) / 2,
-        covered: [...root.children].filter(node => node !== header && node !== screen)
+        desiredCenterX: scoped ? bounds.left + bounds.width / 2 : innerWidth / 2,
+        desiredCenterY: scoped ? bounds.top + bounds.height / 2 : (h.bottom + innerHeight) / 2,
+        covered: [...region.children].filter(node => node !== header && node !== screen)
           .every(node => !visible(node) && node.inert && node.getAttribute('aria-hidden') === 'true'),
         headerVisible: visible(header) && h.height > 0 && !header.querySelector('button').disabled,
         loaderVisible: visible(screen) && !screen.hidden && r.width > 0 && r.height > 0,
@@ -60,7 +64,7 @@ try {
         opaque: backdrop.startsWith('rgb('),
         indicatorBackdrop,
         indicatorTextColor,
-        centeredHit: Boolean(document.elementFromPoint(innerWidth / 2, (h.bottom + innerHeight) / 2)?.closest('.gallery-loading-screen')),
+        centeredHit: Boolean(document.elementFromPoint(innerWidth / 2, scoped ? bounds.top + bounds.height / 2 : (h.bottom + innerHeight) / 2)?.closest('.gallery-loading-screen')),
         fits: r.left >= 0 && r.right <= innerWidth && r.top >= h.bottom && r.bottom <= innerHeight,
         overflow: root.scrollWidth > root.clientWidth + 1,
       };
@@ -80,9 +84,14 @@ try {
       search.focus();
       search.value = '349'; search.setSelectionRange(1, 2, 'backward');
       search.dispatchEvent(new Event('input', { bubbles: true }));
-      await new Promise(resolve => setTimeout(resolve, 180));
+      await new Promise(resolve => setTimeout(resolve, 3100));
       filtering = await measure({ checkKeyboard: false });
       filtering.focusInNavigation = root.querySelector(':scope > header').contains(document.activeElement);
+      filtering.searchFocused = document.activeElement === search;
+      const toolbar = root.querySelector('.gallery-create-toolbar'), toolbarRect = toolbar.getBoundingClientRect();
+      const localScreen = root.querySelector('.gallery-loading-screen--scoped');
+      filtering.controlsVisible = getComputedStyle(toolbar).visibility === 'visible' && !search.closest('[inert]');
+      filtering.scopedBelowControls = localScreen.getBoundingClientRect().top >= toolbarRect.bottom;
       if (preview) { document.documentElement.dataset.ready = 'true'; break; }
       release(snapshot); await frame(); await frame();
       filtering.focusRestored = document.activeElement === search;

@@ -2,7 +2,7 @@ import { placeGalleryQuickSearch } from './gallery-quick-search.js';
 import { applyScreenNavigation } from "./screen-navigation.js";
 import { createGalleryCreationToolbar } from './gallery-create-shortcut.js';
 import { attachGalleryRefreshButton } from './gallery-refresh.js';
-import { createLoadingIndicator, updateLoadingIndicator } from "./loading-indicator.js";
+import { createLoadingIndicator } from "./loading-indicator.js";
 import { createGalleryLoadingScreen } from './gallery-loading-screen.js';
 import { createGalleryRecordActions } from './gallery-record-actions.js';
 import { galleryDeletionFields } from './gallery-deletion-receipt.js';
@@ -204,7 +204,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   let opened = false, destroyed = false, suspended = false, busy = false;
   let session = 0, listVersion = 0, detailVersion = 0;
   let listLoading = false, listBlocking = false, detailLoading = false, returnFocus;
-  let listReturnFocus = null;
   let current = null, selectedId = null, editor = null, review = null;
   let page = 1, pages = 0, needsDetailRefresh = false, pendingAttachmentName = null;
   let clusterVersion = 0, clusterReturnFocus = null, clusterAbortController = null, clusterTimer = null;
@@ -293,11 +292,9 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     return `${context}: ${error?.message || 'não foi possível concluir'}. Tente novamente; se persistir, confira a conexão e atualize os dados.`;
   }
   function updateBusy() {
-    updateLoadingIndicator(loadingScreen.element, {
-      label: listBlocking ? 'Carregando lançamentos…' : 'Recalculando a galeria…',
-    });
-    if (opened && listLoading && !header.contains(doc.activeElement)) focus(back);
-    loadingScreen.sync(opened && listLoading);
+    if (opened && listLoading && listBlocking && !header.contains(doc.activeElement)) focus(back);
+    loadingScreen.sync(opened && listLoading && listBlocking);
+    recalculatingScreen.sync(opened && listLoading && !listBlocking);
     root.setAttribute('aria-busy', String(opened && (listLoading || detailLoading || busy)));
     for (const control of root.querySelectorAll('[data-lg-lock]')) {
       control.disabled = busy || control.dataset.lgDisabled === 'true';
@@ -306,14 +303,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     next.disabled = listLoading || page >= pages;
     createShortcut.sync();
     refreshControl.sync();
-    if (!listLoading && listReturnFocus) {
-      const saved = listReturnFocus;
-      listReturnFocus = null;
-      if (active(saved.epoch) && !suspended && saved.node.isConnected && doc.activeElement === back) {
-        focus(saved.node);
-        if (saved.selection) saved.node.setSelectionRange(...saved.selection);
-      }
-    }
   }
   function active(epoch) { return opened && !destroyed && root.isConnected && epoch === session; }
   function focus(node) { if (opened && !suspended && node?.isConnected) node.focus({ preventScroll: true }); }
@@ -377,7 +366,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }, { locked: false }));
   filterForm.append(filterGrid,
     element('p', 'lg-hint', 'Período de empenho: as datas inicial e final são incluídas.'), filterActions);
-  const autoFilters = bindAutoFilterForm(filterForm, applyFilters, { externalControls: [search] });
+  const autoFilters = bindAutoFilterForm(filterForm, applyFilters,
+    { externalControls: [search], debounceMs: 3000, strictTextDebounce: true });
   const totals = element('dl', 'lg-totals');
   const notice = element('p', 'lg-notice'); notice.hidden = true;
   const listStatus = element('div', 'lg-list-status'); listStatus.setAttribute('aria-live', 'polite');
@@ -396,10 +386,14 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   reviewHost.setAttribute('role', 'dialog'); reviewHost.setAttribute('aria-modal', 'true');
   reviewHost.setAttribute('aria-label', 'Revisão e confirmação'); reviewHost.tabIndex = -1;
   filterDisclosure.append(filterForm);
-  content.append(createShortcut.toolbar, filterDisclosure, totals, notice, listStatus, cards, pagination);
+  const results = element('div', 'lg-results');
+  results.append(totals, listStatus, cards, pagination);
+  content.append(createShortcut.toolbar, filterDisclosure, notice, results);
   root.append(header, content, panel, clusterPanel);
   doc.body.append(root);
   const loadingScreen = createGalleryLoadingScreen({ root, header, label: 'Carregando lançamentos…' });
+  root.insertBefore(loadingScreen.element, content);
+  const recalculatingScreen = createGalleryLoadingScreen({ root: results, header, viewport: content, label: 'Recalculando a galeria…' });
   const recordActions = createGalleryRecordActions({
     document: doc, host: root, actions: ['edit', 'delete'],
     galleryTitle: 'GALERIA LANÇAMENTOS',
@@ -483,14 +477,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       return data.sort === latest.sort && JSON.stringify(data.filters) === JSON.stringify(latest.filters);
     };
     listBlocking = blocking;
-    const origin = doc.activeElement;
-    if (!blocking && (origin === search || filterForm.contains(origin))) {
-      listReturnFocus = { node: origin, epoch,
-        selection: typeof origin.selectionStart === 'number'
-          ? [origin.selectionStart, origin.selectionEnd, origin.selectionDirection] : null };
-      // Move focus before the shared mask makes filter controls inert.
-      focus(back);
-    }
     listLoading = true;
     if (blocking) listStatus.textContent = '';
     updateBusy();
@@ -1698,7 +1684,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
       close(); return;
     }
     if (event.key !== 'Tab') return;
-    if (listLoading) listReturnFocus = null;
     const activeModal = !reviewHost.hidden ? reviewHost : !clusterPanel.hidden ? clusterPanel : !panel.hidden ? panel : root;
     const controls = [...activeModal.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')]
       .filter(node => !node.disabled && !node.closest('[hidden], [inert], [aria-hidden="true"]') && (node.tagName === 'SUMMARY' || !node.closest('details:not([open])')));
@@ -1719,7 +1704,6 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
     attachmentCounts.reset();
     recordActions.close();
     autoFilters.cancelPending();
-    listReturnFocus = null;
     cancelClusterLoad();
     opened = false; ++session; ++listVersion; ++detailVersion; ++clusterVersion;
     if (detailLoading) needsDetailRefresh = true;
@@ -1733,11 +1717,11 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   function destroy() {
     if (destroyed) return;
     loadingScreen.destroy();
+    recalculatingScreen.destroy();
     createShortcut.destroy();
     refreshControl.destroy();
     recordActions.destroy(); recordItems.clear();
     autoFilters.destroy();
-    listReturnFocus = null;
     attachmentCounts.destroy();
     cancelClusterLoad();
     opened = false; destroyed = true; ++session; ++listVersion; ++detailVersion; ++clusterVersion;

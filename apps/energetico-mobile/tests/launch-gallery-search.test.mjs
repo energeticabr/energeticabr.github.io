@@ -26,7 +26,7 @@ function setup(t) {
     search.value = value;
     search.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
   };
-  const tick = async (ms = 180) => { t.mock.timers.tick(ms); await settle(); };
+  const tick = async (ms = 3000) => { t.mock.timers.tick(ms); await settle(); };
   const rows = () => [...root.querySelectorAll('.lg-cards > [data-item-id]')].map(node => node.dataset.itemId);
   async function open() {
     const opening = gallery.open(); pending.at(-1).resolve(snapshot()); await opening;
@@ -35,6 +35,7 @@ function setup(t) {
 }
 function assertInteractive(ctx) {
   assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen--scoped').hidden, true);
   for (let node = ctx.search; node && node !== ctx.root; node = node.parentElement) {
     assert.notEqual(node.inert, true, 'search ancestors remain interactive');
     assert.notEqual(node.getAttribute('aria-hidden'), 'true');
@@ -44,12 +45,16 @@ function assertInteractive(ctx) {
 }
 
 function assertRecalculating(ctx) {
-  const screen = ctx.root.querySelector('.gallery-loading-screen');
+  const screen = ctx.root.querySelector('.gallery-loading-screen--scoped');
+  assert.ok(screen, 'recalculation has a results-only loader');
   assert.equal(screen.hidden, false, 'old gallery stays covered until the current filter finishes');
   assert.match(screen.textContent, /Recalculando a galeria/);
   assert.ok(screen.querySelector('.app-loading__mascot'));
   assert.equal(ctx.root.getAttribute('aria-busy'), 'true');
-  assert.equal(ctx.root.querySelector('.lg-content').inert, true);
+  assert.notEqual(ctx.root.querySelector('.lg-content').inert, true);
+  assert.equal(ctx.root.querySelector('.lg-cards').inert, true);
+  assert.equal(ctx.root.querySelector(':scope > .gallery-loading-screen').hidden, true);
+  assert.equal(ctx.search.closest('[inert], [aria-hidden="true"]'), null);
 }
 
 test('launch search covers preserved cards until filtered results and totals are rendered', async t => {
@@ -65,8 +70,8 @@ test('launch search covers preserved cards until filtered results and totals are
   assert.equal(ctx.pending[1].payload.page, 1);
   assert.equal(ctx.pending[1].payload.pageSize, 20);
   assertRecalculating(ctx);
-  assert.ok(ctx.root.querySelector(':scope > header').contains(ctx.dom.window.document.activeElement),
-    'keyboard focus stays in the available gallery navigation while its search is inert');
+  assert.equal(ctx.dom.window.document.activeElement, ctx.search, 'recalculation never takes typing focus');
+  assert.equal(ctx.root.querySelector('[data-gallery-quick-search]'), ctx.search, 'search DOM is not rebuilt');
   assert.equal(ctx.root.querySelector('.lg-list-status').textContent, status,
     'typing does not replace the result count with a loading/searching message');
   assert.equal(ctx.root.querySelector('.lg-record'), card);
@@ -90,8 +95,9 @@ test('focus, click and unchanged input do not reload launch data', async t => {
 
 test('typing debounces and suppresses an older response even before the newest query is sent', async t => {
   const ctx = setup(t); await ctx.open();
-  ctx.type('a'); await ctx.tick(100); ctx.type('ab'); await ctx.tick(179);
+  ctx.type('a'); await ctx.tick(2999); ctx.type('ab'); await ctx.tick(2999);
   assert.equal(ctx.pending.length, 1);
+  assert.equal(ctx.root.querySelector('.gallery-loading-screen--scoped').hidden, true);
   await ctx.tick(1); assert.equal(ctx.pending.length, 2);
   ctx.type('abc'); ctx.pending[1].resolve(snapshot(18)); await settle();
   assert.deepEqual(ctx.rows(), ['17'], 'a response for ab cannot replace cards while abc is being typed');
@@ -230,6 +236,42 @@ test('initial opening and explicit refresh retain the blocking loader', async t 
   assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, false);
   ctx.pending[1].resolve(snapshot(901)); await settle();
   assert.equal(ctx.root.querySelector('.gallery-loading-screen').hidden, true);
+});
+
+for (const event of ['change', 'search']) test(`native text ${event} does not bypass the three-second quiet period`, async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.search.focus(); ctx.type('Ma'); await ctx.tick(1800);
+  ctx.search.dispatchEvent(new ctx.dom.window.Event(event, { bubbles: true }));
+  await ctx.tick(1199);
+  assert.equal(ctx.pending.length, 1);
+  assertInteractive(ctx);
+  await ctx.tick(1);
+  assert.equal(ctx.pending.length, 2);
+  assertRecalculating(ctx);
+  ctx.pending[1].resolve(snapshot(901)); await settle();
+});
+
+test('typing another query while the local loader is active preserves the new caret and controls', async t => {
+  const ctx = setup(t); await ctx.open();
+  const toolbar = ctx.search.parentElement;
+  ctx.search.focus(); ctx.type('Ma'); await ctx.tick();
+  ctx.type('Mauro'); ctx.search.setSelectionRange(1, 4); await ctx.tick(2999);
+  assert.equal(ctx.pending.length, 2);
+  ctx.pending[1].resolve(snapshot(18)); await settle();
+  assert.deepEqual(ctx.rows(), ['17']); assertRecalculating(ctx);
+  const filters = ctx.root.querySelector('.gallery-filter-button'); filters.click();
+  assert.equal(ctx.root.querySelector('.lg-filters').open, true);
+  assert.equal(ctx.search.parentElement, toolbar);
+  assert.equal(ctx.root.querySelector('.lg-filter-form').closest('[inert]'), null);
+  await ctx.tick(1); ctx.pending[2].resolve(snapshot(901)); await settle();
+  assertInteractive(ctx);
+  assert.deepEqual([ctx.search.selectionStart, ctx.search.selectionEnd], [1, 4]);
+});
+
+for (const action of ['close', 'destroy']) test(`${action} cancels a search before its three-second timer expires`, async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.type('Mauro'); await ctx.tick(2999); ctx.gallery[action](); await ctx.tick(5000);
+  assert.equal(ctx.pending.length, 1);
 });
 
 for (const action of ['close', 'destroy']) test(`pending launch search ignores completion after ${action}`, async t => {

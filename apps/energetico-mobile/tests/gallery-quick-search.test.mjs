@@ -64,6 +64,8 @@ for (const kind of ['group', 'quotes', 'recurringTasks', 'delegatedTasks']) {
 test('launch quick search resets pagination and sends text alongside selected filters', async t => {
   const entry = galleryCases.find(value => value.name === 'launch');
   const dom = new JSDOM('<body></body>', { url: 'https://example.test' });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  dom.window.setTimeout = globalThis.setTimeout; dom.window.clearTimeout = globalThis.clearTimeout;
   const calls = [];
   const gallery = entry.factory(galleryOptions(entry, dom.window.document, { request: async (operation, payload) => {
     calls.push({ operation, payload });
@@ -78,13 +80,13 @@ test('launch quick search resets pagination and sends text alongside selected fi
   supplier.value = 'Mauro';
   search.value = 'CENTRAL 08/10/2026';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  await settle();
+  t.mock.timers.tick(3000); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.at(-1).payload.filters.search, 'CENTRAL 08/10/2026');
   assert.equal(calls.at(-1).payload.filters.supplier, 'Mauro');
   assert.equal(calls.at(-1).payload.page, 1);
   search.value = '';
   search.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-  await settle();
+  t.mock.timers.tick(3000); await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.at(-1).payload.filters.search, '');
   assert.equal(calls.at(-1).payload.filters.supplier, 'Mauro');
 });
