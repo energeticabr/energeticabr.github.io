@@ -1939,7 +1939,8 @@ export function createAppController({
       const data = await getPendingProvisionAttachmentsData(context.targetAccount, context.targetRevision, context.snapshot?.sourceKind);
       const items = await data.listAttachments(id);
       if (!pendingProvisionAttachmentLoadIsCurrent(context)) return false;
-      const safeItems = (Array.isArray(items) ? items : []).filter(item => item?.fileName);
+      const safeItems = (Array.isArray(items) ? items : [])
+        .filter(item => typeof item?.fileName === 'string' && item.fileName.trim());
       setPendingProvisionAttachmentState(id, {
         status: safeItems.length ? "available" : "empty",
         items: safeItems,
@@ -1953,7 +1954,7 @@ export function createAppController({
       setPendingProvisionAttachmentState(id, {
         status: "error",
         items: [],
-        error: "Não foi possível consultar os anexos. Toque na seta para tentar novamente.",
+        error: "Não foi possível consultar os anexos. Use Tentar novamente para repetir a consulta.",
         actionError: "",
       });
       render();
@@ -3814,9 +3815,10 @@ export function createAppController({
     const id = String(paymentId || "").trim();
     if (!id || !pendingProvisionSnapshot.rows?.some(row => String(row.id ?? "").trim() === id)) return false;
     const entry = pendingProvisionAttachmentStates.get(id);
+    if (entry?.status !== 'available' || !Array.isArray(entry.items)
+      || !entry.items.some(item => typeof item?.fileName === 'string' && item.fileName.trim())) return false;
     pendingProvisionExpandedPaymentId = pendingProvisionExpandedPaymentId === id ? "" : id;
     render();
-    if (pendingProvisionExpandedPaymentId === id && entry?.status === "error") retryPendingProvisionAttachments(id);
     return true;
   }
 
