@@ -2,14 +2,14 @@ import { bindSearchableFilterSelects } from './searchable-filter-selects.js';
 
 const FILTER_CONTROL = 'input:not([type="button"]):not([type="submit"]):not([type="reset"]), select, textarea';
 
-export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalControls = [] } = {}) {
+export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalControls = [], strictTextDebounce = false } = {}) {
   if (!form?.addEventListener || typeof apply !== 'function') {
     throw new TypeError('A filter form and its apply callback are required.');
   }
 
   const view = form.ownerDocument?.defaultView || globalThis;
   const delay = Number.isFinite(Number(debounceMs)) ? Math.max(0, Number(debounceMs)) : 180;
-  let timer = null;
+  let timer = null, pendingValues = null;
   const searchableSelects = bindSearchableFilterSelects(form);
   const external = new Set(externalControls.filter(control => !form.contains(control)));
   const composing = new Set();
@@ -23,10 +23,15 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
 
   let lastAppliedValues = values();
 
-  function cancelPending() {
-    searchableSelects.close();
+  function cancelTimer() {
     if (timer !== null) view.clearTimeout(timer);
     timer = null;
+    pendingValues = null;
+  }
+
+  function cancelPending() {
+    searchableSelects.close();
+    cancelTimer();
   }
 
   function sync() {
@@ -44,7 +49,8 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
   }
 
   function applyIfChanged() {
-    cancelPending();
+    if (strictTextDebounce) cancelTimer();
+    else cancelPending();
     if (composing.size) return;
     const nextValues = values();
     if (nextValues === lastAppliedValues) return;
@@ -63,11 +69,17 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
     cancelPending();
     if (event.isComposing) composing.add(event.target);
     if (composing.size) return;
+    pendingValues = values();
     timer = view.setTimeout(applyIfChanged, delay);
   }
 
   function onChange(event) {
     if (!isFilterEvent(event)) return;
+    if (strictTextDebounce && event.target.matches('textarea, input:not([type]), input[type="text"], input[type="search"], input[type="number"], input[type="tel"], input[type="email"], input[type="url"]')) {
+      // Blur and the native search event must not shortcut the typing delay.
+      if (timer === null || pendingValues !== values()) onInput(event);
+      return;
+    }
     applyIfChanged();
   }
 
