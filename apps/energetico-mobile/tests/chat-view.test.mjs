@@ -2489,7 +2489,7 @@ test("grouped provisions blocked popup explains each invalid amount and disables
     assert.ok(row.textContent.includes(`Não foi possível conferir: valor inválido no filho de ${id}.`));
     assert.equal(row.querySelector('[data-field="total"] strong').textContent, "—");
     assert.equal(row.querySelector('[data-action="edit-pending-provision-due-date"]').disabled, false);
-    assert.equal(row.querySelector('[data-action="toggle-pending-provision-attachments"]').disabled, false);
+    assert.equal(row.querySelector('[data-action="toggle-pending-provision-attachments"]').disabled, id !== '306');
   }
   assert.equal(root.querySelector('[data-action="open-pending-provision-attachment"]').disabled, false);
   assert.equal(root.querySelector('[data-action="print-pending-provisions"]').disabled, false);
@@ -2521,11 +2521,11 @@ test("popup de vencimentos apresenta data e valor destacados e os dados em linha
   assert.equal(payment.querySelector('[data-field="dueDate"] strong')?.textContent, "30/09/2026");
   assert.equal(payment.querySelector('[data-field="total"] strong')?.textContent.replace(/\s/g, " "), "R$ 150,00");
   assert.equal(payment.querySelector('.chat-pending-provision__timing')?.textContent, "VENCE HOJE");
-  for (const [field, value] of [["supplier", "TRANSPIO"], ["product", "MOVIMENTAÇÃO DE TERRA"], ["branch", "XAVANTE"], ["property", "TODOS"]]) {
+  for (const [field, value] of [["supplier", "TRANSPIO"], ["product", "MOVIMENTAÇÃO DE TERRA"], ["branch", "XAVANTE"], ["branch", "TODOS"]]) {
     assert.ok(payment.querySelector(`[data-field="${field}"]`)?.textContent.includes(value));
   }
-  assert.equal(payment.querySelector('[data-field="supplier"] [data-action="edit-pending-provision-due-date"]')?.dataset.paymentId, "306");
-  assert.equal(payment.querySelector('[data-field="supplier"] [data-action="settle-pending-provision"]')?.dataset.paymentId, "306");
+  assert.equal(payment.querySelector('[data-field="summary"] [data-action="edit-pending-provision-due-date"]')?.dataset.paymentId, "306");
+  assert.equal(payment.querySelector('[data-field="summary"] [data-action="settle-pending-provision"]')?.dataset.paymentId, "306");
   dom.window.close();
 });
 
@@ -9472,35 +9472,37 @@ test("relatório RHID mostra estado de carregamento e erro sem remover a data", 
   errorDom.window.close();
 });
 
-test('filial e imóvel da provisão ficam recolhidos e a seta funciona mesmo sem anexos', () => {
+test('filial e imóvel da provisão ficam visíveis juntos e a seta abre somente anexos', () => {
   for (const status of ['available', 'empty', 'loading', 'error']) {
     const state = signedInState({ pendingProvisions: { due: true, rows: [{ id: '306', branch: 'Obra A', property: 'Imóvel A' }] },
       pendingProvisionAttachments: { 306: { status, items: status === 'available' ? [{ fileName: 'nota.pdf' }] : [] } } });
     const collapsed = new JSDOM(renderChatMarkup(state));
     const branch = collapsed.window.document.querySelector('[data-field="branch"]');
-    assert.equal(branch.hidden, true, `filial recolhida com anexos ${status}`);
-    assert.equal(collapsed.window.document.querySelector('[data-field="property"]').hidden, true, `imóvel recolhido com anexos ${status}`);
+    assert.equal(branch.closest('[hidden]'), null, `filial visível com anexos ${status}`);
+    assert.equal(branch.querySelector('strong').textContent, 'Obra A (Imóvel A)');
+    assert.equal(collapsed.window.document.querySelector('[data-field="property"]'), null);
     const arrow = collapsed.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]');
-    assert.ok(arrow, `seta disponível com anexos ${status}`);
-    assert.equal(arrow.disabled, false);
+    assert.ok(arrow, `seta presente com anexos ${status}`);
+    assert.equal(arrow.disabled, status !== 'available');
     assert.equal(arrow.getAttribute('aria-expanded'), 'false');
-    assert.equal(commandFromTarget(arrow).paymentId, '306');
-    assert.ok(arrow.getAttribute('aria-controls').split(' ').includes(branch.id));
-    assert.ok(arrow.getAttribute('aria-controls').split(' ').includes(collapsed.window.document.querySelector('[data-field="property"]').id));
+    if (status === 'available') assert.equal(commandFromTarget(arrow).paymentId, '306');
+    else assert.equal(commandFromTarget(arrow), null);
+    assert.equal(arrow.getAttribute('aria-controls'), status === 'available' ? 'pending-provision-attachments-306' : null);
     collapsed.window.close();
     const expanded = new JSDOM(renderChatMarkup({ ...state, pendingProvisionExpandedPaymentId: '306' }));
     assert.equal(expanded.window.document.querySelector('[data-field="branch"]').hidden, false);
-    assert.equal(expanded.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]').getAttribute('aria-expanded'), 'true');
-    assert.equal(expanded.window.document.querySelector('[data-field="property"]').hidden, false);
+    assert.equal(expanded.window.document.querySelector('[data-action="toggle-pending-provision-attachments"]').getAttribute('aria-expanded'), String(status === 'available'));
+    assert.equal(expanded.window.document.querySelector('[data-field="property"]'), null);
     expanded.window.close();
   }
 });
 
 
-test('filial e imóvel ficam recolhidos também em provisões legadas sem ID', () => {
+test('filial continua visível em provisões legadas sem ID e sem imóvel', () => {
   const dom = new JSDOM(renderChatMarkup(signedInState({pendingProvisions: {due: true, rows: [{supplier: 'Fornecedor', branch: 'Obra A'}]}})));
-  assert.equal(dom.window.document.querySelector('[data-field="branch"]').hidden, true);
-  assert.equal(dom.window.document.querySelector('[data-field="property"]').hidden, true);
+  assert.equal(dom.window.document.querySelector('[data-field="branch"]').closest('[hidden]'), null);
+  assert.equal(dom.window.document.querySelector('[data-field="branch"] strong').textContent, 'Obra A');
+  assert.equal(dom.window.document.querySelector('[data-field="property"]'), null);
   dom.window.close();
 });
 

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prévia fictícia — provisões pendentes</title><link rel="stylesheet" href="/src/styles.css"></head>
+<body><main id="app"></main><script type="module">
+import { createChatView } from '/src/ui/chat-view.js';
+const root = document.querySelector('#app'), view = createChatView(root);
+const rows = [
+  { id:'306', supplier:'FORNECEDOR FICTÍCIO DE MATERIAIS E SERVIÇOS PARA CONSTRUÇÃO', product:'MATERIAL DE TESTE',
+    branch:'004 - EDIFÍCIO DE TESTE', property:'TORRE A / APARTAMENTO 101', dueDate:'2026-10-26', totalDisplay:'R$ 150,00', childCount:2 },
+  { id:'307', supplier:'SWILE FICTÍCIO', product:'VALE ALIMENTAÇÃO', branch:'000 - ESCRITÓRIO', property:'TODOS',
+    dueDate:'2026-10-28', totalDisplay:'R$ 225,00', childCount:1 },
+  { id:'308', supplier:'CONSULTA FICTÍCIA EM ANDAMENTO', product:'ITEM DE TESTE', branch:'004 - OBRA', property:'TORRE B',
+    dueDate:'2026-10-28', totalDisplay:'R$ 35,00', childCount:1 },
+  { id:'309', supplier:'CONSULTA FICTÍCIA COM FALHA', product:'ITEM DE TESTE', branch:'004 - OBRA', property:'TORRE C',
+    dueDate:'2026-10-28', totalDisplay:'R$ 60,00', childCount:1 },
+];
+const initial = () => ({
+  306:{status:'available',items:[{fileName:'nota-ficticia.pdf',mimeType:'application/pdf',size:1200}]},
+  307:{status:'empty',items:[]},308:{status:'loading',items:[]},
+  309:{status:'error',items:[],error:'Falha fictícia na consulta de anexos.'},
+});
+const state = {sessionStatus:'authenticated',account:{name:'Teste'},messages:[],draft:'',pendingFiles:[],
+  pendingProvisions:{due:true,sourceKind:'provision-description',rows}, pendingProvisionAttachments:initial(),
+  pendingProvisionExpandedPaymentId:'',pendingProvisionAttachmentRevision:0};
+const actions = { toggles:[], retries:[] };
+const render = () => { view.render({...state}); document.documentElement.dataset.actions=JSON.stringify(actions); };
+view.on('toggle-pending-provision-attachments', ({paymentId}) => {
+  actions.toggles.push(paymentId);
+  state.pendingProvisionExpandedPaymentId = state.pendingProvisionExpandedPaymentId === paymentId ? '' : paymentId;
+  render();
+});
+view.on('retry-pending-provision-attachments', ({paymentId}) => {
+  actions.retries.push(paymentId);
+  state.pendingProvisionAttachments = {...state.pendingProvisionAttachments,[paymentId]:{status:'available',items:[{fileName:'reconsulta-ficticia.pdf',size:100}]}};
+  state.pendingProvisionAttachmentRevision++;
+  render();
+});
+render();
+const frame = () => new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+await document.fonts.ready; await frame();
+const cards = [...root.querySelectorAll('.chat-pending-provision--payment')];
+const geometry = cards.map(card=>{
+  const supplier=card.querySelector('[data-field="supplier"]'), due=card.querySelector('[data-field="dueDate"]');
+  const branch=card.querySelector('[data-field="branch"]'), blue=card.querySelector('.chat-pending-provision__supplier');
+  const s=supplier.getBoundingClientRect(),d=due.getBoundingClientRect(),b=branch.getBoundingClientRect(),box=blue.getBoundingClientRect();
+  return {id:card.dataset.paymentId,supplierAbove:s.bottom<=d.top+1,locationInBlue:b.top>=box.top&&b.bottom<=box.bottom,
+    locationVisible:branch.checkVisibility(),location:branch.querySelector('strong').textContent,
+    horizontalOverflow:card.scrollWidth>card.clientWidth+1,arrowDisabled:card.querySelector('.chat-pending-provision__arrow').disabled};
+});
+for(const id of ['307','308','309']) root.querySelector(`[data-payment-id="${id}"] .chat-pending-provision__arrow`).click();
+const disabledInvocations=actions.toggles.length;
+root.querySelector('[data-payment-id="306"] .chat-pending-provision__arrow').click(); await frame();
+const expanded=root.querySelector('.chat-pending-provision__attachments').hidden===false;
+const controls=root.querySelector('[data-payment-id="306"] .chat-pending-provision__arrow').getAttribute('aria-controls');
+root.querySelector('[data-payment-id="306"] .chat-pending-provision__arrow').click(); await frame();
+root.querySelector('[data-action="retry-pending-provision-attachments"]').click(); await frame();
+const retryEnables=!root.querySelector('[data-payment-id="309"] .chat-pending-provision__arrow').disabled;
+state.pendingProvisionAttachments=initial();state.pendingProvisionAttachmentRevision++;state.pendingProvisionExpandedPaymentId='';render();await frame();
+const panel=root.querySelector('[role="dialog"]'),rect=panel.getBoundingClientRect();
+document.documentElement.dataset.layout=JSON.stringify({geometry,disabledInvocations,expanded,controls,retryEnables,
+  fits:rect.left>=0&&rect.right<=innerWidth+1&&rect.top>=0&&rect.bottom<=innerHeight+1,
+  horizontalOverflow:panel.scrollWidth>panel.clientWidth+1});
+document.documentElement.dataset.ready='true';
+</script></body></html>

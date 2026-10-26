@@ -302,6 +302,8 @@ button:disabled { cursor: wait; opacity: .55; }
 .chat-pending-provision__due > div, .chat-pending-provision__total { display: grid; gap: 3px; min-width: 0; }
 .chat-pending-provision__amounts span:not(.chat-pending-provision__icon) { color: var(--muted); font-weight: 650; }
 .chat-pending-provision__amounts strong { font-size: clamp(1.18rem, 4.5vw, 2.3rem); line-height: 1.2; overflow-wrap: anywhere; }
+.chat-pending-provision__amounts > .chat-pending-provision__supplier-name { grid-column: 1 / -1; color: #123f50; font-size: clamp(1.05rem, 3.6vw, 1.5rem); font-weight: 850; }
+.chat-pending-provision__retry { justify-self: start; min-height: 44px; margin-top: 6px; padding: 8px 12px; border: 1px solid #d78b22; border-radius: 10px; color: #8b5300; background: #fff4dd; font: inherit; font-weight: 700; }
 .chat-pending-provision__total { align-self: stretch; align-content: center; padding-left: 14px; border-left: 1px solid var(--due-border); }
 .chat-pending-provision__timing { justify-self: start; margin-top: 4px; padding: 3px 10px; border-radius: 20px; background: var(--due-border); font-size: .72rem; font-weight: 850; }
 .chat-pending-provision__icon { flex: 0 0 44px; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; color: #315a6b; background: #eaf1f5; }

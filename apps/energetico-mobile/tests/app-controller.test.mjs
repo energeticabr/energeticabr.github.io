@@ -11300,18 +11300,46 @@ test('nova tentativa ressincroniza seleção recebida pela VM após NETWORK_UNCE
   assert.equal(h.view.renders.at(-1).pendingConstructionDiaries, null);
 });
 
-test('seta da provisão expande e recolhe a filial quando não existem anexos', async t => {
+test('seta da provisão não expande quando não existem anexos', async t => {
   const h = makeHarness();
   t.after(() => h.controller.stop());
   h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', branch: 'Obra A' }] });
   await h.controller.start();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.view.renders.at(-1).pendingProvisionAttachments['306'].status, 'empty');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), false);
+  assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '999' }), false);
+});
+
+test('seta da provisão aguarda anexos confirmados e o retry de consulta é separado da expansão', async t => {
+  let resolveFirst, attempts = 0;
+  const h = makeHarness({ pendingProvisionAttachmentsDataFactory: async () => ({
+    downloadAttachment: async () => new Blob(['teste'], { type: 'application/pdf' }),
+    listAttachments: async () => {
+      if (++attempts === 1) return new Promise((resolve, reject) => { resolveFirst = () => reject(new Error('Offline')); });
+      return [{ fileName: 'nota.pdf', mimeType: 'application/pdf' }];
+    },
+  }) });
+  t.after(() => h.controller.stop());
+  h.client.getPendingProvisionSnapshot = async () => ({ due: true, rows: [{ id: '306', branch: 'Obra A', property: 'Torre B' }] });
+  await h.controller.start(); await new Promise(resolve => setImmediate(resolve));
+  const before = h.chatCalls.length;
+  assert.equal(h.view.renders.at(-1).pendingProvisionAttachments['306'].status, 'loading');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), false);
+  resolveFirst(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionAttachments['306'].status, 'error');
+  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), false);
+  assert.equal(attempts, 1, 'disabled disclosure cannot silently retry');
+  assert.doesNotMatch(h.view.renders.at(-1).pendingProvisionAttachments['306'].error, /seta/);
+  assert.equal(await h.view.emit('retry-pending-provision-attachments', { paymentId: '306' }), true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.view.renders.at(-1).pendingProvisionAttachments['306'].status, 'available');
   assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), true);
   assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '306');
   assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '306' }), true);
   assert.equal(h.view.renders.at(-1).pendingProvisionExpandedPaymentId, '');
-  assert.equal(await h.view.emit('toggle-pending-provision-attachments', { paymentId: '999' }), false);
+  assert.equal(h.chatCalls.length, before, 'consulting attachments never posts chat/financial answers');
 });
 
 
