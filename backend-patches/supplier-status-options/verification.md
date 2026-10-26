@@ -10,4 +10,10 @@
 - Candidate configuration SHA-256: `ac33ee260f925589fd8824f8fbe9e8e94c0f60887074dd8e7c4bab39c89267f4`.
 - Installer check succeeded with healthy shared services and exact candidates. Full backend sources and source archive remain private.
 
-Rollout evidence is recorded after publication. The authenticated app was opened without submitting a registration or selecting a supplier status.
+## Published runtime
+
+- Released at `2026-10-26T13:27:30Z` with backup receipt `supplier-status-options-20261026T132730133239Z`. Installer returned `deployed` and health `ok`.
+- Independent live and build-mirror SHA-256 reads match both reviewed candidate hashes. Channel bridge and WhatsApp services are active.
+- PR installer and both signature-guard checks passed for source revision `c1c2d7e2`.
+- The authenticated app opened connected to the VM. The current session had returned to the Supplies menu, so the supplier-status step was verified through the real engine fixture rather than recreating or submitting a real registration. No status was selected on the user's behalf.
+- Existing clients obtain the direct choices when the question is reopened/resumed. No native/client changes or app-store distribution are required for this server update.

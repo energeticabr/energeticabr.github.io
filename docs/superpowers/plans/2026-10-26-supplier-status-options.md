@@ -9,4 +9,4 @@
 - [x] Reproduce the real status prompt, inactive selection and old cached-menu behavior using synthetic resumed drafts.
 - [x] Apply the scoped configuration change and refresh stale options without changing other selections.
 - [x] Validate both values, stale controls, resume and preserved parent context; validate JSON deployment artifacts and rollback.
-- [ ] Review, publish with drift pins and backup, and visually verify the user's status screen without selecting a status or submitting a registration.
+- [x] Review and publish with drift pins and backup. Open the authenticated app and verify connectivity without selecting a status or submitting a registration. The live session was at the Supplies menu; the exact status choices were verified by the real workflow fixture.
