@@ -43,8 +43,8 @@
 **Interfaces:** build_definition(private_config) produces standard-connector WDL matching Task1. Existing flow/connection configuration is backed up privately and retained during update.
 
 - [x] Test actual generated payloads, recurrence, pagination/unique-field gates and mutation/readback boundaries; implement and run all automation suites.
-- [ ] Obtain one fresh read-only branch review, address substantive findings with RED/GREEN, and verify no secrets/protected app changes.
-- [ ] Update the existing flow only after authenticated live readback; run and independently verify two dated groups and all individual links/totals, then rerun with zero duplicates.
+- [x] Obtain one fresh read-only branch review, address substantive findings with RED/GREEN, and verify no secrets/protected app changes.
+- [x] Update the existing flow only after authenticated live readback; run and independently verify two dated groups and all individual links/totals, then rerun with zero duplicates.
 
 ### Task3: Retire legacy recurrence and publish
 
@@ -52,5 +52,5 @@
 
 **Interfaces:** execute only reviewed cleanup candidates after Task2 production verification, using existing server authentication without exposing credentials.
 
-- [ ] Persist backups, inactivate36 conditionally, delete only verified unpaid candidates and exclusive empty parents, and verify paid/unrelated snapshots remain unchanged.
+- [x] Persist backups, inactivate36 conditionally, delete only verified unpaid candidates and exclusive empty parents, and verify paid/unrelated snapshots remain unchanged.
 - [ ] Read back the enabled daily flow and full fourteen-day coverage. Commit/PR/CI/merge the tested automation and record actual cloud/data receipts. Native clients use existing shared sources without an additional binary build.
