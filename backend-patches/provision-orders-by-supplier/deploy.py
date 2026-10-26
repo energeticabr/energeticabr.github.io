@@ -18,7 +18,8 @@ ROOTS = (Path('/opt/energetica-whatsapp'), Path('/home/opc/energetica-build'))
 STAGE = Path('/home/opc/provision-post-confirmation-20261025')
 BACKUPS = Path('/var/backups/energetica-whatsapp')
 SHARED_RUNNER_SHA = '01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2'
-FILES = ('worker/provision_description_settlement.py', 'worker/provision_parent_fanout.py')
+FILES = ('worker/provision_description_settlement.py', 'worker/provision_parent_fanout.py',
+         'worker/payroll_row_attachments.py')
 NEW_HELPERS = ()
 
 

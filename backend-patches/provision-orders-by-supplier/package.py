@@ -7,7 +7,8 @@ import io
 import tarfile
 from pathlib import Path
 
-FILES = ('worker/provision_description_settlement.py', 'worker/provision_parent_fanout.py')
+FILES = ('worker/provision_description_settlement.py', 'worker/provision_parent_fanout.py',
+         'worker/payroll_row_attachments.py')
 
 
 def digest(data):

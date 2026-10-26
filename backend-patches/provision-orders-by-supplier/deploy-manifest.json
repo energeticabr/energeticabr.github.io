@@ -2,17 +2,23 @@
   "files": {
     "worker/provision_description_settlement.py": {
       "sourceBefore": "a4d47659c26d540fa2772ed5c0d105eb4e00d699087b9e18a55a8b5c542b6dac",
-      "before": "0523141074c45009e1b60ca0b9c37a50692f898cdf6c940543eacda69ab24571",
-      "mirrorBefore": "0523141074c45009e1b60ca0b9c37a50692f898cdf6c940543eacda69ab24571",
-      "after": "99f886b6a8de65c58dc29825788124d3a2ba32e36219f2a834f90a3618c80950"
+      "before": "a4d47659c26d540fa2772ed5c0d105eb4e00d699087b9e18a55a8b5c542b6dac",
+      "mirrorBefore": "a4d47659c26d540fa2772ed5c0d105eb4e00d699087b9e18a55a8b5c542b6dac",
+      "after": "e8c1c36098b988a760a47243c64070d7073ec2bffd2ee59ec5e09a3f15488c5e"
     },
     "worker/provision_parent_fanout.py": {
       "sourceBefore": "7a59018a31428e5d91611b325b417f63ecc5d6e760f0a9c50a78f69822fd8eaf",
-      "before": "b2122f96bbe1c4a57160ec751f303d1130f29df3b1a3ffd8d67707a8c177827d",
-      "mirrorBefore": "b2122f96bbe1c4a57160ec751f303d1130f29df3b1a3ffd8d67707a8c177827d",
-      "after": "b2122f96bbe1c4a57160ec751f303d1130f29df3b1a3ffd8d67707a8c177827d"
+      "before": "7a59018a31428e5d91611b325b417f63ecc5d6e760f0a9c50a78f69822fd8eaf",
+      "mirrorBefore": "7a59018a31428e5d91611b325b417f63ecc5d6e760f0a9c50a78f69822fd8eaf",
+      "after": "06aa5f3b7aeb6c74b0ee1411ed442d162e67a74f2bf8a790d3cb781820f8d409"
+    },
+    "worker/payroll_row_attachments.py": {
+      "sourceBefore": "935186b4ee54ae3ae903d34617edc1478ea8e6019acbfe5e75ef9c301c2b2f84",
+      "before": "935186b4ee54ae3ae903d34617edc1478ea8e6019acbfe5e75ef9c301c2b2f84",
+      "mirrorBefore": "935186b4ee54ae3ae903d34617edc1478ea8e6019acbfe5e75ef9c301c2b2f84",
+      "after": "5439944608a983d677552e7619ac12592c08c018e9af75204ddbdc51f2e07580"
     }
   },
-  "patch": "6a673fb87572c327a60189d87f13f8675c94c86650d3ac0f835f484434b77486",
-  "archive": "db4f8d3c499ecab40eba70a00ac67fa5f791f2588d14ae708fc7d9837e397cdf"
+  "patch": "4a367d48702757af0a9e1eb8f56e71d5e9b6ade9c986e5f4397e46c61b07924a",
+  "archive": "176ac302d297d00524fc4be8fd8932ec9d7c9682df2e260fd35c937fa53ac6e4"
 }

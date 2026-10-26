@@ -98,6 +98,37 @@ class ScopedFanoutTests(unittest.TestCase):
             self.sync(expected_owners=self.owners)
         self.assertEqual(scope_file.read_bytes(), before)
 
+    def test_diversos_shared_order_keeps_launch_owners_individual(self):
+        self.client.items[fixtures.PARENT, 7]['FORNECEDOR'] = 'DIVERSOS'
+        self.parent_owner = copy.deepcopy(self.client.items[fixtures.PARENT, 7])
+        self.client.items[fixtures.CHILD, 12]['IDPEDIDO'] = '50'
+        self.client.items[fixtures.LAUNCH, 61]['AGRUPAR'] = '50'
+        self.client.items[fixtures.ORDER, 50]['FORNECEDOR'] = 'DIVERSOS'
+        self.sync(expected_owners=self.owners)
+        self.assertIn(b'parent proof', self.client.files[fixtures.ORDER, 50].values())
+        self.assertEqual(self.client.items[fixtures.LAUNCH, 60]['FORNECEDOR'], 'Supplier')
+        self.assertEqual(self.client.items[fixtures.LAUNCH, 61]['FORNECEDOR'], 'Second supplier')
+        self.client.files[fixtures.ORDER, 50].clear()
+        self.sync()
+        self.assertIn(b'parent proof', self.client.files[fixtures.ORDER, 50].values())
+
+    def test_diversos_order_without_diversos_parent_is_refused(self):
+        self.client.items[fixtures.ORDER, 50]['FORNECEDOR'] = 'DIVERSOS'
+        with self.assertRaisesRegex(RuntimeError, 'financeiro divergente'):
+            self.sync(expected_owners=self.owners)
+        self.assertFalse(self.client.uploads)
+
+    def test_order_owner_cannot_change_to_diversos_during_copy(self):
+        self.client.items[fixtures.PARENT, 7]['FORNECEDOR'] = 'DIVERSOS'
+        self.parent_owner = copy.deepcopy(self.client.items[fixtures.PARENT, 7])
+        def change_owner(kind, ident, name):
+            if kind == fixtures.PARENT:
+                self.client.items[fixtures.ORDER, 50]['FORNECEDOR'] = 'DIVERSOS'
+        self.client.on_read = change_owner
+        with self.assertRaisesRegex(RuntimeError, 'alterad'):
+            self.sync(expected_owners=self.owners)
+        self.assertFalse(self.client.uploads)
+
 
 if __name__ == '__main__':
     unittest.main()

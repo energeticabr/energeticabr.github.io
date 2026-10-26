@@ -12,6 +12,7 @@ if not os.getenv('ENERGETICA_BACKEND_TEST_ROOT'):
 ROOT = Path(os.environ['ENERGETICA_BACKEND_TEST_ROOT'])
 sys.path[:0] = [str(ROOT), str(ROOT / 'worker'), str(ROOT / 'tests')]
 import test_batch_review as review_fixture
+from workflow import ERROR_RETRY_ID
 
 
 class SupplierOrderTests(unittest.TestCase):
@@ -27,6 +28,8 @@ class SupplierOrderTests(unittest.TestCase):
         self.f.h.engine._submission_failed = record_failure
 
     def mixed(self, suppliers=('Fornecedor A', 'Fornecedor B', 'Fornecedor A'), branches=None):
+        if len({value.casefold() for value in suppliers}) > 1:
+            self.f.h.sharepoint.items[7]['fields']['FORNECEDOR'] = 'DIVERSOS'
         for index, ident in enumerate((11, 12, 13)):
             fields = self.f.h.sharepoint.items[ident]['fields']
             fields['FORNECEDOR'] = suppliers[index]
@@ -50,7 +53,9 @@ class SupplierOrderTests(unittest.TestCase):
             result['synthetic_diagnostic'] = self.failures[-1]
         return result
 
-    def assert_links(self, order_count, line_count=3):
+    def assert_links(self, order_count, line_count=3, order_supplier=None):
+        if self.f.state()['provision_description']['parent'].get('FORNECEDOR') == 'DIVERSOS':
+            order_supplier = 'DIVERSOS'
         orders, launches = self.rows('NOTASPENDENTES'), self.rows('LANCAMENTOS')
         self.assertEqual(len(orders), order_count)
         self.assertEqual(len(launches), line_count)
@@ -60,7 +65,8 @@ class SupplierOrderTests(unittest.TestCase):
             child = self.f.h.sharepoint.items[int(fields['IDPGTOAGENDADO'])]['fields']
             order_id = int(fields['AGRUPAR'])
             order = orders[order_id]['fields']
-            self.assertEqual(order['FORNECEDOR'].strip().casefold(), child['FORNECEDOR'].strip().casefold())
+            self.assertEqual(order['FORNECEDOR'].strip().casefold(), (order_supplier or child['FORNECEDOR']).strip().casefold())
+            self.assertEqual(fields['FORNECEDOR'], child['FORNECEDOR'])
             self.assertEqual(order['FILIAL'].strip().casefold(), child['FILIAL'].strip().casefold())
             self.assertEqual(child['IDPEDIDO'], str(order_id))
             number = lambda value: Decimal(str(value).replace(',', '.'))
@@ -68,21 +74,22 @@ class SupplierOrderTests(unittest.TestCase):
         for ident, expected in sums.items():
             self.assertEqual(Decimal(str(orders[ident]['fields']['VALORTOTAL']).replace(',', '.')), expected)
 
-    def test_mixed_suppliers_finish_with_one_order_per_supplier(self):
+    def test_mixed_suppliers_finish_with_one_diversos_order(self):
         self.mixed()
         self.ready()
         paid_before = copy.deepcopy(self.f.h.sharepoint.items[14])
         result = self.confirm()
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assert_links(1)
         self.assertEqual(self.f.h.sharepoint.items[14], paid_before)
 
-    def test_same_supplier_in_two_branches_uses_separate_orders(self):
+    def test_same_supplier_in_two_branches_is_refused_before_writes(self):
         self.mixed(('Fornecedor A',) * 3, ('Filial A', 'Filial B', 'Filial A'))
         self.ready()
         result = self.confirm()
-        self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assertEqual(result.get('status'), 'submission_failed', result)
+        self.assertFalse(self.f.h.sharepoint.update_calls)
+        self.assertFalse(self.rows('NOTASPENDENTES'))
 
     def test_five_different_suppliers_match_reported_failure(self):
         self.mixed(('Fornecedor A', 'Fornecedor B', 'Fornecedor C'))
@@ -95,7 +102,7 @@ class SupplierOrderTests(unittest.TestCase):
         self.ready()
         result = self.confirm()
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(5, 5)
+        self.assert_links(1, 5)
 
     def test_same_supplier_keeps_legacy_single_order_key(self):
         self.ready()
@@ -117,9 +124,10 @@ class SupplierOrderTests(unittest.TestCase):
             return result
         self.f.h.sharepoint.ensure_item = create_then_lose
         self.assertEqual(self.confirm().get('status'), 'submission_failed')
-        result = self.f.h.reply(reply_id='error_retry')
+        from workflow import ERROR_RETRY_ID
+        result = self.f.h.reply(reply_id=ERROR_RETRY_ID)
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assert_links(1)
 
     def test_lost_paid_child_response_does_not_repeat_writes(self):
         self.mixed()
@@ -134,9 +142,9 @@ class SupplierOrderTests(unittest.TestCase):
             return result
         self.f.h.sharepoint.update_item_with_etag = update_then_lose
         self.assertEqual(self.confirm().get('status'), 'submission_failed')
-        result = self.f.h.reply(reply_id='error_retry')
+        result = self.f.h.reply(reply_id=ERROR_RETRY_ID)
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assert_links(1)
         self.assertEqual(len(self.f.h.sharepoint.update_calls), 4)
 
     def test_declining_launches_never_creates_orders_for_mixed_suppliers(self):
@@ -157,13 +165,13 @@ class SupplierOrderTests(unittest.TestCase):
         self.assertFalse(self.f.h.sharepoint.update_calls)
         self.assertFalse(self.rows('NOTASPENDENTES'))
 
-    def test_summary_explains_separate_orders_before_confirmation(self):
+    def test_summary_explains_one_diversos_order_before_confirmation(self):
         self.mixed()
         self.ready()
         rows = self.f.h.engine._description_summary_rows(self.f.state())
         row = next((row for row in rows if row['label'] == 'PEDIDOS A GERAR'), None)
         self.assertIsNotNone(row)
-        self.assertIn('2', row['value'])
+        self.assertTrue(row['value'].startswith('1'))
         self.assertIn('FORNECEDOR', row['value'].upper())
 
     def test_original_group_attachment_reaches_every_owner_order_and_row_file_stays_scoped(self):
@@ -173,11 +181,14 @@ class SupplierOrderTests(unittest.TestCase):
         self.ready()
         result = self.confirm()
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assert_links(1)
         for row in self.rows('NOTASPENDENTES').values():
             contents = set(row['attachments'].values())
             self.assertIn(b'synthetic group proof', contents)
-            self.assertEqual(b'synthetic row proof' in contents, row['fields']['FORNECEDOR'] == 'Fornecedor B')
+            self.assertIn(b'synthetic row proof', contents)
+        for row in self.rows('LANCAMENTOS').values():
+            self.assertEqual(b'synthetic row proof' in row['attachments'].values(),
+                             row['fields']['FORNECEDOR'] == 'Fornecedor B')
 
     def test_frozen_partition_cannot_be_changed_during_retry(self):
         self.mixed()
@@ -217,7 +228,7 @@ class SupplierOrderTests(unittest.TestCase):
         self.f.h.state.save(state['key'], state, etag)
         result = self.confirm()
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assert_links(1)
         for row in self.rows('NOTASPENDENTES').values():
             self.assertIn(b'synthetic new proof', row['attachments'].values())
 
@@ -239,10 +250,61 @@ class SupplierOrderTests(unittest.TestCase):
         self.assertEqual(self.confirm().get('status'), 'submission_failed')
         self.assertNotIn('journal', self.f.state()['provision_description'])
         engine._description_order_plan = original_plan
-        result = self.f.h.reply(reply_id='error_retry')
+        result = self.f.h.reply(reply_id=ERROR_RETRY_ID)
         self.assertEqual(result.get('status'), 'completed', result)
-        self.assert_links(2)
+        self.assert_links(1)
+
+    def test_explicit_diversos_parent_creates_one_order_and_preserves_row_suppliers(self):
+        self.mixed(('Fornecedor A', 'Fornecedor B', 'Fornecedor C'))
+        self.f.h.sharepoint.items[7]['fields']['FORNECEDOR'] = 'DIVERSOS'
+        self.ready()
+        result = self.confirm()
+        self.assertEqual(result.get('status'), 'completed', result)
+        self.assert_links(1, order_supplier='DIVERSOS')
+        self.assertEqual({row['fields']['FORNECEDOR'] for row in self.rows('LANCAMENTOS').values()},
+                         {'Fornecedor A', 'Fornecedor B', 'Fornecedor C'})
+
+    def test_diversos_order_receives_group_and_each_rows_evidence(self):
+        self.mixed()
+        self.f.h.sharepoint.items[7]['fields']['FORNECEDOR'] = 'DIVERSOS'
+        self.f.h.sharepoint.items[7]['attachments']['grupo.pdf'] = b'synthetic group proof'
+        self.f.h.sharepoint.items[12]['attachments']['linha.pdf'] = b'synthetic row proof'
+        self.ready()
+        result = self.confirm()
+        self.assertEqual(result.get('status'), 'completed', result)
+        self.assert_links(1, order_supplier='DIVERSOS')
+        order = next(iter(self.rows('NOTASPENDENTES').values()))
+        self.assertIn(b'synthetic group proof', order['attachments'].values())
+        self.assertIn(b'synthetic row proof', order['attachments'].values())
+
+    def test_diversos_never_merges_different_branches(self):
+        self.mixed(branches=('Filial A', 'Filial B', 'Filial A'))
+        self.f.h.sharepoint.items[7]['fields'].update(FORNECEDOR='DIVERSOS', FILIAL='Filial A')
+        self.ready()
+        result = self.confirm()
+        self.assertEqual(result.get('status'), 'submission_failed', result)
+        self.assertFalse(self.f.h.sharepoint.update_calls)
+        self.assertFalse(self.rows('NOTASPENDENTES'))
+
+    def test_diversos_summary_explains_the_single_aggregate_order(self):
+        self.mixed()
+        self.f.h.sharepoint.items[7]['fields']['FORNECEDOR'] = 'DIVERSOS'
+        self.ready()
+        rows = self.f.h.engine._description_summary_rows(self.f.state())
+        row = next(row for row in rows if row['label'] == 'PEDIDOS A GERAR')
+        self.assertTrue(row['value'].startswith('1'))
+        self.assertIn('DIVERSOS', row['value'])
+
+    def test_already_paid_row_in_another_branch_blocks_the_aggregate_order(self):
+        self.mixed()
+        self.f.h.sharepoint.items[14]['fields']['FILIAL'] = 'Outra filial'
+        self.ready()
+        result = self.confirm()
+        self.assertEqual(result.get('status'), 'submission_failed', result)
+        self.assertFalse(self.f.h.sharepoint.update_calls)
+        self.assertFalse(self.rows('NOTASPENDENTES'))
 
 
 if __name__ == '__main__':
     unittest.main()
+

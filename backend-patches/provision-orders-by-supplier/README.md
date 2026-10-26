@@ -4,12 +4,12 @@ A confirmação de um descritivo com fornecedores diferentes falhava antes de
 gravar porque a conversão exigia um único fornecedor/filial para todo o grupo.
 O aviso genérico não explicava essa restrição.
 
-A baixa agora cria um pedido por combinação de fornecedor e filial, somando
-somente suas linhas pendentes. Cada lançamento e provisão apontam ao pedido
-correto. Grupos homogêneos mantêm a chave anterior. O resumo informa quantos
+A baixa agora cria um único pedido com fornecedor DIVERSOS, somando
+somente suas linhas pendentes e conferindo a filial comum. Cada lançamento e provisão apontam ao pedido
+comum; somente LANÇAMENTOS mantém o fornecedor de cada linha. Grupos homogêneos mantêm a chave anterior. O resumo informa quantos
 pedidos serão gerados. A decisão NÃO continua sem criar pedidos/lançamentos.
 
-O plano completo fica congelado no journal antes das gravações. Perdas de
+Filiais diferentes são recusadas antes das gravações. O plano completo fica congelado no journal antes das gravações. Perdas de
 resposta e falhas parciais reutilizam as mesmas chaves e conferem os registros
 existentes. Fornecedor/filial adulterados, vínculos preexistentes conflitantes,
 alteração concorrente ou pedidos não confirmados interrompem a operação.
@@ -38,7 +38,7 @@ de código e às fixtures herdadas `test_workflow.py`, `test_batch_review.py` e
 `test_parent_fanout.py`. Não usam credenciais nem gravações no SharePoint.
 Os testes do instalador são independentes e rodam em diretórios temporários.
 
-`package.py` gera o diff de apenas dois módulos e o manifesto por raiz.
+`package.py` gera o diff de apenas três módulos e o manifesto por raiz.
 `sourceBefore` identifica a origem do diff cumulativo; os hashes `before` e
 `mirrorBefore` fixam separadamente o runtime atual em uma implantação de seguimento.
 O arquivo completo `source-files.tar` permanece privado e ignorado pelo Git.
@@ -52,3 +52,4 @@ A alteração é no serviço comum a Android, iOS e Windows/web. Nenhum binário
 contrato de cliente foi alterado; os aplicativos instalados consomem a correção
 na próxima interação com o serviço. A implantação não reenvia confirmações,
 não modifica rascunhos e não realiza pagamentos bancários.
+
