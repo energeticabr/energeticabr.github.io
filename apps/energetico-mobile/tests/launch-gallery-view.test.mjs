@@ -635,13 +635,17 @@ test('all filters, inclusive date endpoints, server sorts, totals and paging rea
 
 test('typing in launch filters automatically and coalesces rapid keystrokes into one snapshot', async t => {
   const ctx = await setup(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ctx.dom.window.setTimeout = globalThis.setTimeout; ctx.dom.window.clearTimeout = globalThis.clearTimeout;
   await ctx.gallery.open();
   const id = ctx.root().querySelector('[name="id"]');
   id.value = '2';
   id.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
   id.value = '22';
   id.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
-  await new Promise(resolve => setTimeout(resolve, 250));
+  t.mock.timers.tick(2999); await settle();
+  assert.equal(ctx.calls.filter(call => call.operation === 'snapshot').length, 1);
+  t.mock.timers.tick(1); await settle();
 
   const snapshots = ctx.calls.filter(call => call.operation === 'snapshot');
   assert.equal(snapshots.length, 2);
@@ -1913,16 +1917,21 @@ test('summary omits unavailable PowerApps fields instead of rendering empty labe
 test('late snapshots cannot replace newer rows or user filter edits and close invalidates loads', async t => {
   const pending = [];
   const ctx = await setup(t, { request: () => { const d = deferred(); pending.push(d); return d.promise; } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ctx.dom.window.setTimeout = globalThis.setTimeout; ctx.dom.window.clearTimeout = globalThis.clearTimeout;
   const first = ctx.gallery.open();
   input(ctx, 'id', '22');
+  t.mock.timers.tick(3000); await settle();
   input(ctx, 'id', 'unsubmitted');
   pending[1].resolve(snapshot({ rows: [row(22)] })); await settle();
   pending[0].resolve(snapshot({ rows: [row(17)] })); await first;
   assert.equal(ctx.root().querySelector('[name="id"]').value, 'unsubmitted');
   assert.doesNotMatch(ctx.root().querySelector('.lg-cards').textContent, /#22\b|#17\b/);
+  t.mock.timers.tick(3000); await settle();
   pending[2].resolve(snapshot({ rows: [row(23)] })); await settle();
   assert.deepEqual([...ctx.root().querySelectorAll('.lg-record-id')].map(node => node.textContent), ['23']);
   input(ctx, 'id', '99');
+  t.mock.timers.tick(3000); await settle();
   ctx.gallery.close(); pending[3].resolve(snapshot({ rows: [row(99)] })); await settle();
   assert.equal(ctx.root().hidden, true);
   assert.doesNotMatch(ctx.root().querySelector('.lg-cards').textContent, /#99\b/);

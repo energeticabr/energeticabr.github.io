@@ -29,7 +29,10 @@ test('all gallery loaders are centered below navigation without leaking content 
       for (const result of results) {
         if (result.name === 'launch') {
           assert.equal(result.filtering.label, 'Recalculando a galeria…');
-          assert.equal(result.filtering.focusInNavigation, true, `${width}px pending search retains dialog focus`);
+          assert.equal(result.filtering.focusInNavigation, false, `${width}px pending search does not move focus`);
+          assert.equal(result.filtering.searchFocused, true);
+          assert.equal(result.filtering.controlsVisible, true);
+          assert.equal(result.filtering.scopedBelowControls, true);
           assert.equal(result.filtering.focusRestored, true, `${width}px completed search restores its input`);
           assert.deepEqual(result.filtering.selection, [1, 2, 'backward']);
         }
@@ -38,7 +41,7 @@ test('all gallery loaders are centered below navigation without leaking content 
           assert.equal(layout.missing, undefined, message);
           assert.ok(layout.covered && layout.headerVisible && layout.loaderVisible && layout.opaque && layout.centeredHit && layout.keyboardSafe, message);
           assert.match(layout.indicatorBackdrop, /^rgba\([^)]*, 0\.[5-9][0-9]*\)$/, `mascot loader must keep a translucent card: ${message}`);
-          assert.ok(Math.abs(layout.imageCenterX - width / 2) <= 2, message);
+          assert.ok(Math.abs(layout.imageCenterX - layout.desiredCenterX) <= 2, message);
           assert.ok(Math.abs(layout.indicatorCenterY - layout.desiredCenterY) <= 2, message);
           assert.ok(layout.fits && !layout.overflow, message);
         }

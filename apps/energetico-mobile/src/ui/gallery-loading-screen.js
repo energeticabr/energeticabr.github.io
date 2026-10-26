@@ -1,22 +1,36 @@
 import { createLoadingIndicator } from './loading-indicator.js';
 
-// Keep list loading outside toolbars and scrolling content. A refresh preserves
-// the old DOM underneath, but never exposes partial data or interactive controls.
-export function createGalleryLoadingScreen({ root, header, label }) {
+// Default loading covers the gallery body; an optional viewport confines it to
+// a result region without masking the toolbar or rebuilding native controls.
+export function createGalleryLoadingScreen({ root, header, label, viewport }) {
   const doc = root.ownerDocument, win = doc.defaultView;
   const element = doc.createElement('div');
-  element.className = 'gallery-loading-screen';
+  element.className = `gallery-loading-screen${viewport ? ' gallery-loading-screen--scoped' : ''}`;
   element.hidden = true;
   element.append(createLoadingIndicator(doc, label));
   root.append(element);
   let loading = false, destroyed = false;
   const saved = new Map();
   const position = () => {
-    if (loading && !destroyed) element.style.top = `${Math.max(0, header.getBoundingClientRect().bottom)}px`;
+    if (!loading || destroyed) return;
+    const headerBottom = Math.max(0, header.getBoundingClientRect().bottom);
+    if (!viewport) { element.style.top = `${headerBottom}px`; return; }
+    const region = root.getBoundingClientRect(), clip = viewport.getBoundingClientRect();
+    const top = Math.max(headerBottom, region.top, clip.top);
+    const left = Math.max(0, region.left, clip.left);
+    Object.assign(element.style, { top: `${top}px`, left: `${left}px`,
+      width: `${Math.max(0, Math.min(region.right, clip.right, win.innerWidth) - left)}px`,
+      height: `${Math.max(0, Math.min(region.bottom, clip.bottom, win.innerHeight) - top)}px` });
   };
   const observer = win?.ResizeObserver ? new win.ResizeObserver(position) : null;
   observer?.observe(header);
+  if (viewport) {
+    observer?.observe(viewport);
+    // Disclosure panels above the results change their position, not their size.
+    for (const sibling of viewport.children) observer?.observe(sibling);
+  }
   win?.addEventListener('resize', position);
+  viewport?.addEventListener('scroll', position, { passive: true });
 
   function sync(value) {
     if (destroyed) return;
@@ -46,6 +60,7 @@ export function createGalleryLoadingScreen({ root, header, label }) {
     destroyed = true;
     observer?.disconnect();
     win?.removeEventListener('resize', position);
+    viewport?.removeEventListener('scroll', position);
     element.remove();
   }
   return Object.freeze({ element, sync, destroy });
