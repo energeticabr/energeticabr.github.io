@@ -1,0 +1,16 @@
+{
+  "files": {
+    "worker/provision_description_settlement.py": {
+      "before": "a4d47659c26d540fa2772ed5c0d105eb4e00d699087b9e18a55a8b5c542b6dac",
+      "mirrorBefore": "a4d47659c26d540fa2772ed5c0d105eb4e00d699087b9e18a55a8b5c542b6dac",
+      "after": "0523141074c45009e1b60ca0b9c37a50692f898cdf6c940543eacda69ab24571"
+    },
+    "worker/provision_parent_fanout.py": {
+      "before": "7a59018a31428e5d91611b325b417f63ecc5d6e760f0a9c50a78f69822fd8eaf",
+      "mirrorBefore": "7a59018a31428e5d91611b325b417f63ecc5d6e760f0a9c50a78f69822fd8eaf",
+      "after": "b2122f96bbe1c4a57160ec751f303d1130f29df3b1a3ffd8d67707a8c177827d"
+    }
+  },
+  "patch": "e488f74bdb7c2602b81a011e1b86d711f3926d920c6e2928528b4adac3b49f72",
+  "archive": "6ff3f374a5cccd3da540d68575db6bde811266efe222fd25d5d51d0d2c7856d6"
+}

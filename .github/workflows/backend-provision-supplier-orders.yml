@@ -1,0 +1,24 @@
+name: Backend provision supplier orders
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/provision-orders-by-supplier/**'
+      - '.github/workflows/backend-provision-supplier-orders.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/provision-orders-by-supplier/**'
+      - '.github/workflows/backend-provision-supplier-orders.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: pip install 'pytest>=8,<9'
+      - run: python -B -m pytest -q backend-patches/provision-orders-by-supplier/tests/test_deploy.py
