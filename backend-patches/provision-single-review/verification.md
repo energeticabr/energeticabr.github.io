@@ -10,4 +10,11 @@
 - Manifest SHA-256: `3c95a9835b3944af8e4289b43ee95a6e194814c1e6a2c114119f13ec11f69a70`.
 - Reviewed module SHA-256: `afe507b5bf32f2000a8797616bebbdcfd068a52d1146cfce916f47c8162ad8dc`.
 
-Deployment and final application verification are recorded after rollout. No real financial draft is submitted for testing.
+## Published runtime and application verification
+
+- Released at `2026-10-26T03:22:00Z`; installer returned `deployed`, health `ok`. Recoverable backup receipt: `provision-single-review-20261026T032200317893Z`.
+- Independent SHA-256 reads confirmed both live and build-mirror modules match the reviewed `afe507...2ad8dc` artifact. Channel bridge and WhatsApp services are active.
+- GitHub installer and both signature-guard checks passed for source revision `8cd16862`.
+- The authenticated Windows browser app reloaded and restored the initial grouped review with three attachments. One click on SUBMETER removed the review actions and displayed the payment-date question with HOJE / OUTRA DATA. All three attachments remained visible, with no posting error.
+- A private screenshot records this visible result. No payment date or final confirmation was entered, and no financial record was submitted for testing.
+- This server update is effective for Android, iOS and Windows clients; there is no native binary change to distribute.
