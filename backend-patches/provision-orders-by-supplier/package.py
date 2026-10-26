@@ -14,7 +14,7 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def package(baseline, candidate, output, mirror_hashes, archive_output=None):
+def package(baseline, candidate, output, mirror_hashes, archive_output=None, runtime_hashes=None):
     diff, manifest = [], {}
     for relative in FILES:
         before_path, after_path = baseline / relative, candidate / relative
@@ -25,7 +25,9 @@ def package(baseline, candidate, output, mirror_hashes, archive_output=None):
         diff.extend(difflib.unified_diff(before.decode('utf-8').splitlines(True),
             after.decode('utf-8').splitlines(True),
             fromfile='a/' + relative if before else '/dev/null', tofile='b/' + relative))
-        manifest[relative] = {'before': digest(before) if before else None,
+        source_before = digest(before) if before else None
+        manifest[relative] = {'sourceBefore': source_before,
+                              'before': (runtime_hashes or {}).get(relative, source_before),
                               'mirrorBefore': mirror_hashes.get(relative), 'after': digest(after)}
     patch = ''.join(diff).encode('utf-8')
     output.mkdir(parents=True, exist_ok=True)
@@ -52,6 +54,8 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mirror-hashes', type=Path, required=True)
     parser.add_argument('--archive-output', type=Path, required=True)
+    parser.add_argument('--runtime-hashes', type=Path)
     args = parser.parse_args()
     print(json.dumps(package(args.baseline, args.candidate, args.output,
-                             json.loads(args.mirror_hashes.read_text(encoding='utf-8')), args.archive_output), indent=2))
+                             json.loads(args.mirror_hashes.read_text(encoding='utf-8')), args.archive_output,
+                             json.loads(args.runtime_hashes.read_text(encoding='utf-8')) if args.runtime_hashes else None), indent=2))

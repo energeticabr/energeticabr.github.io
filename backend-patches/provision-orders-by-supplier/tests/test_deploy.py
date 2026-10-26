@@ -56,6 +56,23 @@ def test_assemble_exact_hashes_and_new_helpers(tmp_path, monkeypatch):
     assert (roots[0] / deploy.FILES[0]).read_text() == 'VALUE = 1\n'
 
 
+def test_followup_preserves_cumulative_diff_and_pins_current_runtime(tmp_path, monkeypatch):
+    deploy, package, roots, stage = setup(tmp_path, monkeypatch)
+    live_hashes, mirror_hashes = {}, {}
+    for relative in deploy.FILES:
+        (roots[0] / relative).write_text('VALUE = 3\n', encoding='utf-8')
+        live_hashes[relative] = deploy.digest(roots[0] / relative)
+        mirror_hashes[relative] = deploy.digest(roots[1] / relative)
+    package.package(tmp_path / 'before', tmp_path / 'after', stage, mirror_hashes,
+                    runtime_hashes=live_hashes)
+    manifest = deploy.checked_manifest(deploy.digest(stage / 'deploy-manifest.json'))
+    for relative in deploy.FILES:
+        assert manifest['files'][relative]['sourceBefore'] != live_hashes[relative]
+        assert manifest['files'][relative]['before'] == live_hashes[relative]
+    assert '-VALUE = 1' in (stage / 'source.patch').read_text()
+    assert '+VALUE = 2' in (stage / 'source.patch').read_text()
+
+
 def test_assemble_requires_no_system_git_or_patch(tmp_path, monkeypatch):
     deploy, package, roots, stage = setup(tmp_path, monkeypatch)
     def no_external_tools(*args, **kwargs):

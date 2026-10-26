@@ -5,13 +5,15 @@ All business records, attachments and delivery boundaries in tests are synthetic
 
 - Reported five-supplier conversation reproduced on the unchanged baseline:
   final confirmation returned submission_failed before financial writes.
-- Candidate: 13 conversation regressions passed (five suppliers, supplier/branch
+- Candidate: 14 conversation regressions passed (five suppliers, supplier/branch
   partitions, exact totals and links, paid rows unchanged, no-launch answer,
-  frozen intent, lost order/child responses, real upload hook and file scope).
+  frozen intent, lost order/child responses, real upload hook, file scope and
+  the original failed draft's retry button before any write).
 - Candidate: 10 scoped-fanout regressions passed, including later repair, saved
   context tampering, concurrent parent change, and dry-run without persistence.
 - Existing fanout suite: 27 passed. Existing batch-review suite: 29 passed.
-- Installer suite: 9 passed, including drift, scope, archive and rollback checks.
+- Installer suite: 10 passed, including drift, scope, archive, rollback and
+  follow-up runtime pins while preserving the cumulative reviewed diff.
 - Archived settlement/provision workflow tests: baseline and candidate both ran
   the same 23 tests with the identical 20 failures and no errors/new failing IDs.
   This is not a green historical full suite; old expectations/configuration do

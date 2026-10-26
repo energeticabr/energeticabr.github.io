@@ -48,7 +48,21 @@
      def _provision_attachments_locked(self, state):
          journal = ((state or {}).get('provision_description') or {}).get('journal') or {}
          return bool(journal.get('intent')) or super()._provision_attachments_locked(state)
-@@ -698,6 +730,10 @@
+@@ -151,6 +183,13 @@
+     def _handle_frozen_provision(self, event, state, etag):
+         group = (state or {}).get('provision_description') or {}
+         command = _text(event.get('reply_id') or event.get('text')).casefold()
++        if (group and state.get('stage') == 'submission_failed'
++                and not (group.get('journal') or {}).get('intent')
++                and event.get('kind') == 'text' and command == 'error_retry'):
++            if event.get('message_id') in state.get('processed_message_ids', []):
++                return {'status': 'duplicate', 'batch_id': state['batch_id']}
++            self._mark_processed(state, event.get('message_id'))
++            return self._retry_after_error(state, etag)
+         if (group.get('review_required') and not (group.get('journal') or {}).get('intent')
+                 and command == 'description_review_again'):
+             self._mark_processed(state, event.get('message_id'))
+@@ -698,6 +737,10 @@
                      detail += f" | {key}: {_text(fields.get(key)) or 'EM BRANCO'}"
              rows.append({'label': 'PROVISÃO ID ' + str(item['Id']), 'value': detail})
          rows.append({'label': 'VALOR TOTAL', 'value': _currency(_sum(totals))})
@@ -59,7 +73,7 @@
          return rows
  
      def _description_preflight(self, state):
-@@ -753,10 +789,13 @@
+@@ -753,10 +796,13 @@
                  self._description_sync_launch_settings(group)
                  if group['launch_settings']['submeter_lancamentos'] == 'SIM':
                      fields = [entry['fields'] for entry in group['entries']]
@@ -77,7 +91,7 @@
                      if not _text(group['launch_settings'].get('ETAPA')):
                          raise RuntimeError('A etapa comum é obrigatória para os lançamentos.')
                      if any(_text(row.get('IDLANCAMENTOS')) for row in fields) and not group['launch_settings'].get('relink_authorized'):
-@@ -774,6 +813,8 @@
+@@ -774,6 +820,8 @@
                  had_intent = bool(journal.get('intent'))
                  if journal.get('intent'):
                      self._provision_validate_frozen_attachments(state)
@@ -86,7 +100,7 @@
                  common = _common(group['common'])
                  group['common'] = common
                  if not common.get('DATA PGTO EFETUADO') or not _text(common.get('FORMAPGTO')):
-@@ -825,9 +866,10 @@
+@@ -825,9 +873,10 @@
                          raise
                  names = []
                  for attachment in state.get('attachments') or []:
@@ -100,7 +114,7 @@
                      names.append(attachment['sharepoint_name'])
                  parent_verification = self.sharepoint.verify_item(int(group['parent_id']), parent_fields, names,
                                                                    target_list=PARENT_LIST)
-@@ -839,34 +881,34 @@
+@@ -839,34 +888,34 @@
                      from .provision_attachment_sync import sync_parent_attachments
                  except ImportError:
                      from provision_attachment_sync import sync_parent_attachments
@@ -158,7 +172,7 @@
                  for item_id in sorted(entries, key=int):
                      if item_id in journal['children']:
                          saved = journal['children'][item_id]
-@@ -895,8 +937,8 @@
+@@ -895,8 +944,8 @@
                      child_state['_description_batch_review'] = group.get('review_version') == 1
                      child_state['_description_parent_id'] = group['parent_id']
                      child_state['_description_child_etag'] = child_etag
@@ -169,7 +183,7 @@
                      journal['in_flight'] = {'id': item_id, 'expected_fields': copy.deepcopy(child_state['fields'])}
                      etag = self._save(state, etag)
                      def checkpoint(expected_fields, prepared_record):
-@@ -918,6 +960,11 @@
+@@ -918,6 +967,11 @@
                      journal['children'][item_id] = {**record, 'target_list': CHILD_LIST, 'expected_fields': expected_update}
                      journal.pop('in_flight', None)
                      etag = self._save(state, etag)

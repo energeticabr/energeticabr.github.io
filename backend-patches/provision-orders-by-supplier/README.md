@@ -13,6 +13,8 @@ O plano completo fica congelado no journal antes das gravações. Perdas de
 resposta e falhas parciais reutilizam as mesmas chaves e conferem os registros
 existentes. Fornecedor/filial adulterados, vínculos preexistentes conflitantes,
 alteração concorrente ou pedidos não confirmados interrompem a operação.
+O botão TENTAR NOVAMENTE também retoma o rascunho que falhou antes de criar
+a primeira intenção, mantendo a proteção de duplicatas e o cooldown existente.
 
 ## Anexos e retomada
 
@@ -37,6 +39,8 @@ de código e às fixtures herdadas `test_workflow.py`, `test_batch_review.py` e
 Os testes do instalador são independentes e rodam em diretórios temporários.
 
 `package.py` gera o diff de apenas dois módulos e o manifesto por raiz.
+`sourceBefore` identifica a origem do diff cumulativo; os hashes `before` e
+`mirrorBefore` fixam separadamente o runtime atual em uma implantação de seguimento.
 O arquivo completo `source-files.tar` permanece privado e ignorado pelo Git.
 Preparar `/home/opc/provision-post-confirmation-20261025` com manifesto, patch,
 bundle, `deploy.py` e o instalador compartilhado hash-pinned

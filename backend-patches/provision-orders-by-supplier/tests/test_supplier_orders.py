@@ -228,6 +228,21 @@ class SupplierOrderTests(unittest.TestCase):
         self.assertEqual(len(plan), 1)
         self.assertEqual(plan[0]['token'], 'WA-BAIXA-PEDIDO-DESCRITIVO-7')
 
+    def test_original_failed_draft_retry_button_works_before_first_write(self):
+        self.mixed()
+        self.ready()
+        engine = self.f.h.engine
+        original_plan = engine._description_order_plan
+        def reject_previous_version(group):
+            raise RuntimeError('synthetic previous homogeneous-supplier restriction')
+        engine._description_order_plan = reject_previous_version
+        self.assertEqual(self.confirm().get('status'), 'submission_failed')
+        self.assertNotIn('journal', self.f.state()['provision_description'])
+        engine._description_order_plan = original_plan
+        result = self.f.h.reply(reply_id='error_retry')
+        self.assertEqual(result.get('status'), 'completed', result)
+        self.assert_links(2)
+
 
 if __name__ == '__main__':
     unittest.main()
