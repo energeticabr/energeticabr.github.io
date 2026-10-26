@@ -23,11 +23,15 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
 
   let lastAppliedValues = values();
 
-  function cancelPending() {
-    searchableSelects.close();
+  function cancelTimer() {
     if (timer !== null) view.clearTimeout(timer);
     timer = null;
     pendingValues = null;
+  }
+
+  function cancelPending() {
+    searchableSelects.close();
+    cancelTimer();
   }
 
   function sync() {
@@ -45,7 +49,8 @@ export function bindAutoFilterForm(form, apply, { debounceMs = 180, externalCont
   }
 
   function applyIfChanged() {
-    cancelPending();
+    if (strictTextDebounce) cancelTimer();
+    else cancelPending();
     if (composing.size) return;
     const nextValues = values();
     if (nextValues === lastAppliedValues) return;

@@ -274,6 +274,34 @@ for (const action of ['close', 'destroy']) test(`${action} cancels a search befo
   assert.equal(ctx.pending.length, 1);
 });
 
+test('local loading relocates focus from controls that are about to become inert or disabled', async t => {
+  const ctx = setup(t); await ctx.open();
+  for (const selector of ['.lg-record [data-gallery-action="edit"]', '[data-gallery-refresh]']) {
+    ctx.type(selector); const control = ctx.root.querySelector(selector); control.focus(); await ctx.tick();
+    assert.equal(ctx.dom.window.document.activeElement, ctx.search);
+    ctx.pending.at(-1).resolve(snapshot()); await settle();
+  }
+});
+
+test('pending global search preserves an active supplier filter edit through loading and option refresh', async t => {
+  const ctx = setup(t); await ctx.open();
+  ctx.type('central'); await ctx.tick(1000);
+  ctx.root.querySelector('.gallery-filter-button').click();
+  const picker = ctx.root.querySelector('[name="supplier"]').nextElementSibling;
+  const combo = picker.querySelector('.sfs-search'); combo.click();
+  combo.value = 'Mau'; combo.dispatchEvent(new ctx.dom.window.Event('input', { bubbles: true }));
+  combo.setSelectionRange(1, 2); await ctx.tick(2000);
+  const preserved = () => {
+    assert.equal(combo.value, 'Mau'); assert.equal(combo.getAttribute('aria-expanded'), 'true');
+    assert.equal(picker.querySelector('.sfs-popup').hidden, false);
+    assert.equal(ctx.dom.window.document.activeElement, combo);
+    assert.deepEqual([combo.selectionStart, combo.selectionEnd], [1, 2]);
+  };
+  assert.equal(ctx.pending.length, 2); preserved();
+  ctx.pending[1].resolve(snapshot(901, { filterOptions: { supplier: ['Mauro', 'Outro fornecedor'] } }));
+  await settle(); preserved();
+});
+
 for (const action of ['close', 'destroy']) test(`pending launch search ignores completion after ${action}`, async t => {
   const ctx = setup(t); await ctx.open();
   ctx.type('new'); await ctx.tick(); ctx.gallery[action]();

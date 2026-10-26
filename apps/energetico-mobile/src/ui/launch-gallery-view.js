@@ -293,6 +293,8 @@ export function createLaunchGallery({ document: documentRef = globalThis.documen
   }
   function updateBusy() {
     if (opened && listLoading && listBlocking && !header.contains(doc.activeElement)) focus(back);
+    if (opened && listLoading && !listBlocking && (results.contains(doc.activeElement)
+      || doc.activeElement === createShortcut.button || doc.activeElement === refreshControl.button)) focus(search);
     loadingScreen.sync(opened && listLoading && listBlocking);
     recalculatingScreen.sync(opened && listLoading && !listBlocking);
     root.setAttribute('aria-busy', String(opened && (listLoading || detailLoading || busy)));

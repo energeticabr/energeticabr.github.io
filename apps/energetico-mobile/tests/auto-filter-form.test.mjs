@@ -21,7 +21,7 @@ for (const event of ['change', 'search']) test(`strict text debounce waits for i
   assert.deepEqual(applied, ['Ma', 'Ma'], 'explicit select remains immediate');
 });
 
-for (const external of [false, true]) test(`auto filters wait for composition to finish (${external ? 'external search' : 'form field'})`, t => {
+for (const strict of [false, true]) for (const external of [false, true]) test(`auto filters wait for composition to finish (${external ? 'external search' : 'form field'}, strict=${strict})`, t => {
   const dom = new JSDOM('<form></form><input name="search" type="search"><output></output>');
   const doc = dom.window.document, form = doc.querySelector('form'), input = doc.querySelector('input');
   if (!external) form.append(input);
@@ -29,7 +29,7 @@ for (const external of [false, true]) test(`auto filters wait for composition to
   dom.window.setTimeout = globalThis.setTimeout;
   dom.window.clearTimeout = globalThis.clearTimeout;
   const binding = bindAutoFilterForm(form, () => { doc.querySelector('output').textContent = input.value; },
-    { externalControls: external ? [input] : [] });
+    { externalControls: external ? [input] : [], ...(strict ? { debounceMs: 3000, strictTextDebounce: true } : {}) });
   t.after(() => { binding.destroy(); dom.window.close(); });
   input.value = 's'; input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
   input.dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true }));
@@ -39,6 +39,6 @@ for (const external of [false, true]) test(`auto filters wait for composition to
   assert.equal(doc.querySelector('output').textContent, '', 'unfinished composition is not applied');
   input.value = 'São'; input.dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }));
   input.dispatchEvent(new dom.window.InputEvent('input', { bubbles: true }));
-  t.mock.timers.tick(179); assert.equal(doc.querySelector('output').textContent, '');
+  t.mock.timers.tick(strict ? 2999 : 179); assert.equal(doc.querySelector('output').textContent, '');
   t.mock.timers.tick(1); assert.equal(doc.querySelector('output').textContent, 'São');
 });
