@@ -1,0 +1,12 @@
+{
+  "files": {
+    "worker/provision_description_settlement.py": {
+      "sourceBefore": "e8c1c36098b988a760a47243c64070d7073ec2bffd2ee59ec5e09a3f15488c5e",
+      "before": "e8c1c36098b988a760a47243c64070d7073ec2bffd2ee59ec5e09a3f15488c5e",
+      "mirrorBefore": "e8c1c36098b988a760a47243c64070d7073ec2bffd2ee59ec5e09a3f15488c5e",
+      "after": "afe507b5bf32f2000a8797616bebbdcfd068a52d1146cfce916f47c8162ad8dc"
+    }
+  },
+  "patch": "94e0aa533c51740cf986f236b8462894691d49b30b9a91002c8e849a1e86e1ec",
+  "archive": "42492e4faa17d83c8673d8c67ada987b4d4ba366ab14091151dab2fe3e7dad37"
+}

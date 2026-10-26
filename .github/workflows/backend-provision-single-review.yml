@@ -1,0 +1,24 @@
+name: Backend provision single review
+on:
+  pull_request:
+    paths:
+      - 'backend-patches/provision-single-review/**'
+      - '.github/workflows/backend-provision-single-review.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-patches/provision-single-review/**'
+      - '.github/workflows/backend-provision-single-review.yml'
+permissions:
+  contents: read
+jobs:
+  installer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: pip install 'pytest>=8,<9'
+      - run: python -B -m pytest -q backend-patches/provision-single-review/tests/test_deploy.py

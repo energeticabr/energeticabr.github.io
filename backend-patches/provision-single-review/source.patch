@@ -1,0 +1,48 @@
+--- a/worker/provision_description_settlement.py
++++ b/worker/provision_description_settlement.py
+@@ -184,6 +184,34 @@
+     def _handle_frozen_provision(self, event, state, etag):
+         group = (state or {}).get('provision_description') or {}
+         command = _text(event.get('reply_id') or event.get('text')).casefold()
++        limit = int(self.config.get('limits', {}).get('max_attachments_per_batch', 20))
++        if (state and state.get('flow') == 'payment_settlement'
++                and state.get('stage') == 'selecting_fields'
++                and group.get('review_version') == 1
++                and group.get('review_phase') == 'overview'
++                and not (group.get('journal') or {}).get('intent')
++                and event.get('kind') == 'attachment'
++                and event.get('message_id') not in state.get('processed_message_ids', [])
++                and len(state.get('attachments', [])) >= limit):
++            # Form uploads return before the generic count guard. Reject here,
++            # before staging bytes, while retaining the active review question.
++            self._send_text(state, f'O LOTE ATINGIU O LIMITE DE {limit} ANEXOS.')
++            result = self._resend_current_prompt(state, etag)
++            return {**result, 'status': 'limit_reached'}
++        # Older drafts entered attachment collection when a file arrived at
++        # the overview, while its review buttons remained visible in the app.
++        # Restore only those explicit actions; FINALIZAR alone is not approval.
++        if (state and state.get('flow') == 'payment_settlement'
++                and state.get('stage') == 'collecting_attachments'
++                and group.get('review_version') == 1
++                and group.get('review_phase') == 'overview'
++                and not group.get('editing_phase')
++                and not (group.get('journal') or {}).get('intent')
++                and event.get('kind') == 'text'
++                and command in {'description_review_submit', 'description_review_edit'}
++                and event.get('message_id') not in state.get('processed_message_ids', [])):
++            state['stage'] = 'selecting_fields'
++            state['options'] = self._description_review_step(state)['source']['options']
+         if (group and state.get('stage') == 'submission_failed'
+                 and not (group.get('journal') or {}).get('intent')
+                 and event.get('kind') == 'text' and command in {'error_retry', 'retry_after_error'}):
+@@ -232,7 +260,9 @@
+         if (group.get('review_version') == 1 and group.get('review_phase') == 'overview'
+                 and group.get('editing_phase') != 'field'):
+             flow['steps'] = [flow['steps'][0], self._description_review_step(state)]
+-            flow['attachments_after_fields'] = False
++            # Stage uploads without replacing the active review question with
++            # attachment collection. SUBMETER must still advance to payment.
++            flow['attachments_after_fields'] = True
+             return flow
+         if group.get('choose_amount_line'):
+             options = [{
